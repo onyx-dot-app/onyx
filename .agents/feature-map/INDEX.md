@@ -118,12 +118,11 @@ Ways to reach Onyx that are not the web chat UI.
 
 ## Domain: Craft
 
-The agentic coding product. It has its own deep documentation under `docs/craft/`;
-these components are the map into it.
+The agentic coding product.
 
 | | Component | What it covers |
 |---|---|---|
-| ✅ | [craft-admin](components/craft-admin.md) | The three Craft admin pages: access, apps, preferences. Map into `docs/craft/`. |
+| ✅ | [craft-admin](components/craft-admin.md) | The three Craft admin pages: access, apps, preferences. |
 | ✅ | [skills](components/skills.md) | Capability bundles pushed into a Craft sandbox. Surfaced at `/craft/v1/skills`, tied to external apps. |
 | ✅ | [craft-sessions](components/craft-sessions.md) | Craft session lifecycle, turns, history. |
 | ✅ | [craft-sandboxes](components/craft-sandboxes.md) | Kubernetes sandbox provisioning, snapshot and restore. |

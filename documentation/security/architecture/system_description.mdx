@@ -1,0 +1,78 @@
+---
+title: "System Description"
+description: "High level view of Onyx components"
+icon: "sitemap"
+---
+
+## Overview
+
+Onyx is a set of containers that you can deploy on any infrastructure and at any scale.
+
+## System Architecture
+
+<img className="rounded-image" src="/assets/security/OnyxArchitecture.webp" alt="Onyx Architecture"/>
+
+## Core Components
+
+### Application Layer
+
+- **Web server**: Next.js web application that provides the Onyx user interface
+- **API Server**: Python FastAPI server that handles business logic and requests
+- **Background Workers**: Python workers that handle asynchronous jobs such as fetching and indexing
+  documents, syncing permissions, and running scheduled Craft tasks
+- **MCP Server**: exposes Onyx search to external LLM clients that authenticate with a personal access
+  token or API key
+
+### Model Servers
+
+- **Inference Model Server**: embeds user queries at search time so that Onyx can retrieve matching
+  chunks
+- **Indexing Model Server**: a dedicated model server that embeds documents during indexing. It keeps
+  heavy indexing workloads away from live query traffic
+
+Both servers run a local, open-source embedding model. Admins can instead select an API-based embedding provider.
+
+### Data Layer
+
+- **Relational Database**: Postgres database for application data, user sessions, and system state
+- **Search Engine**: OpenSearch for keyword (BM25) search and vector search over document chunks
+- **In-Memory Cache**: Redis for sessions, task queues, and short-lived state
+- **File Store**: the object store (SeaweedFS) for user uploaded files and documents pulled from
+  connectors
+
+### Infrastructure Layer
+
+- **Request Router**: Nginx reverse proxy for request routing. Kubernetes deployments typically use an
+  Ingress instead
+
+### Optional Components
+
+- **Code Interpreter**: a separate container that runs the Python code the LLM writes. Admins can turn
+  it off under **Admin Panel > Code Interpreter**
+- **Craft sandboxes and sandbox proxy**: per-user sandboxes for Craft, plus a proxy that controls their
+  network egress. See [Craft Architecture](/security/architecture/craft)
+
+### Onyx Lite
+
+Onyx Lite is a minimal deployment with only the API server, web server, and Postgres.
+Postgres replaces Redis and the object store. Connectors and internal search are off, but chat, tools, file uploads,
+Projects, and the code interpreter work. See [Deployment Overview](/deployment/overview).
+
+## Component Replacements
+
+The **object store** can be replaced with S3, Google Cloud Storage, Azure Blob Storage,
+or any S3-compatible object storage service.
+
+**Redis** can be replaced with a managed Redis service such as AWS ElastiCache or Google Cloud Memorystore for Redis.
+Other in-memory caches would require code changes.
+
+**Postgres** can be replaced with a managed Postgres service such as AWS RDS.
+Switching to a different relational database is much harder and not advised,
+because Onyx uses Postgres-specific features and optimizations.
+
+**OpenSearch** can be replaced with a multi-node OpenSearch cluster (usually not necessary)
+or a managed OpenSearch service such as Amazon OpenSearch Service.
+OpenSearch is tightly integrated with context retrieval.
+Switching to a different search engine would require significant development effort to keep the same functionality.
+
+**Nginx** can be removed and replaced with your own routing proxy.

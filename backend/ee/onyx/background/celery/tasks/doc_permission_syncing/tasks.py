@@ -25,7 +25,10 @@ from ee.onyx.db.connector_credential_pair import (
     get_perm_sync_pending_cc_pair_sources,
 )
 from ee.onyx.db.document import upsert_document_external_perms
-from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
+from ee.onyx.external_permissions.sync_params import (
+    doc_permission_sync_seconds,
+    get_source_perm_sync_config,
+)
 from onyx.access.models import DocExternalAccess, ElementExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import (
@@ -62,10 +65,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
 )
-from onyx.db.enums import (
-    CapabilityCheckTrigger,
-    ConnectorCredentialPairStatus,
-)
+from onyx.db.enums import CapabilityCheckTrigger
 from onyx.db.hierarchy import (
     update_hierarchy_node_permissions as db_update_hierarchy_node_permissions,
 )
@@ -77,6 +77,7 @@ from onyx.db.permission_sync_attempt import (
     fail_expired_doc_permission_sync_attempts,
     fail_not_started_doc_permission_sync_attempts,
     get_cc_pair_ids_with_open_doc_permission_sync_attempt,
+    get_doc_permission_sync_retry_after,
     get_not_started_doc_permission_sync_attempts_older_than,
     lock_doc_permission_sync_attempt_if_owned,
     mark_doc_permission_sync_attempt_failed,
@@ -187,7 +188,8 @@ def fail_lost_queued_doc_permission_sync_attempts(app: Celery) -> None:
     lost task (e.g. a Redis restart without persistence) does not hold the
     pair's lock until the task would have expired. A task that a worker has
     already taken also looks lost here; its claim then fails and the beat
-    dispatches the pair again, so the check errs only toward a redispatch."""
+    dispatches the pair again once the retry backoff for that failure ends,
+    so the check errs only toward a later redispatch."""
     with get_session_with_current_tenant() as db_session:
         candidates = get_not_started_doc_permission_sync_attempts_older_than(
             db_session, timedelta(seconds=PERMISSION_SYNC_LOST_TASK_GRACE)
@@ -226,25 +228,20 @@ def is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bo
     if not cc_pair.access_type.is_perm_synced():
         return False
 
-    # skip doc permissions sync if not active
-    if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
-        return False
-
-    sync_config = get_source_perm_sync_config(cc_pair.connector.source)
-    if sync_config is None:
+    if get_source_perm_sync_config(cc_pair.connector.source) is None:
         logger.error("No sync config found for %s", cc_pair.connector.source)
         return False
 
-    if sync_config.doc_sync_config is None:
-        logger.error("No doc sync config found for %s", cc_pair.connector.source)
-        return False
-
-    # if indexing also does perm sync, don't start running doc_sync until at
-    # least one indexing is done
-    if (
-        sync_config.doc_sync_config.initial_index_should_sync
-        and cc_pair.last_successful_index_time is None
-    ):
+    # None while the pair is not active, while a source whose indexing also
+    # syncs permissions waits for the pair's first successful index, and for a
+    # source without doc sync, such as Salesforce, which censors at query time.
+    # Fleet telemetry reports the same period.
+    source_sync_period = doc_permission_sync_seconds(
+        cc_pair.connector.source,
+        cc_pair.status,
+        indexed=cc_pair.last_successful_index_time is not None,
+    )
+    if source_sync_period is None:
         return False
 
     # If the last sync is None, it has never been run so we run the sync
@@ -258,7 +255,6 @@ def is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bo
     if pending_since is not None and last_perm_sync < pending_since:
         return True
 
-    source_sync_period = sync_config.doc_sync_config.doc_sync_frequency
     source_sync_period *= int(OnyxRuntime.get_doc_permission_sync_multiplier())
 
     # If the last sync is greater than the full fetch period, we run the sync
@@ -300,12 +296,25 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                 db_session
             )
 
-            cc_pair_ids_to_sync.extend(
-                cc_pair.id
-                for cc_pair in cc_pairs
-                if cc_pair.id not in running_cc_pair_ids
-                and is_external_doc_permissions_sync_due(cc_pair)
-            )
+            now = datetime.now(timezone.utc)
+            for cc_pair in cc_pairs:
+                if cc_pair.id in running_cc_pair_ids:
+                    continue
+
+                if not is_external_doc_permissions_sync_due(cc_pair):
+                    continue
+
+                retry_after = get_doc_permission_sync_retry_after(
+                    cc_pair_id=cc_pair.id, db_session=db_session
+                )
+                if retry_after is not None and now < retry_after:
+                    task_logger.debug(
+                        f"Skipping doc permission sync for cc_pair={cc_pair.id}: "
+                        f"backing off after failures until {retry_after}"
+                    )
+                    continue
+
+                cc_pair_ids_to_sync.append(cc_pair.id)
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever doc-permission sync has any due cc_pairs to dispatch.
@@ -383,7 +392,7 @@ def try_creating_permissions_sync_task(
 ) -> int | None:
     """Creates a NOT_STARTED attempt and dispatches the task that runs it.
     Returns the attempt ID, or None when nothing was dispatched: the cc_pair
-    already has an open attempt, or it is being deleted or pruned."""
+    already has an open attempt, or it is paused, being deleted or pruned."""
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.delete.fenced or redis_connector.prune.fenced:
         return None

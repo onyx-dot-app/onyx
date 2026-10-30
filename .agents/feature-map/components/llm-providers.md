@@ -409,7 +409,8 @@ name; deltas carry only new `arguments_delta` text. Ends carry the finalized
 The accumulator parses arguments at completion. Consumers must wait for completion
 before executing a call. Raw provider streaming and its chat consumers are unchanged.
 
-Both response converters use `model_response.py:_usage_from_usage_data` to normalize
+Both response converters validate provider payloads through `_ProviderResponse` and use
+`model_response.py:_ProviderUsage.to_usage` to normalize
 usage for cost accounting and tracing. A missing or null `cache_read_input_tokens`
 falls back to `prompt_tokens_details.cached_tokens`. An explicit zero takes precedence
 over the nested count. Missing counts become zero.
@@ -457,6 +458,25 @@ Shared messages can carry an identity and local metadata/token estimates. Metada
 estimates are excluded from serialization. ToolResult adds typed details and error/termination
 flags; raw message dumps include their defaults. Provider serialization forwards only the
 existing provider message fields, not execution identities or result details.
+
+### Provider validation and prompt accounting
+
+Provider response validation preserves usage-only chunks, optional tool calls, and
+signed or redacted thinking blocks. Shared request serialization rejects tool results
+without a call ID. Recovery retains non-text content beside recovered tool calls.
+The raw response and streaming interfaces remain available to existing engines and gateways.
+
+Shared-client spans record cacheable prefix length and prepared-message count.
+Token estimates use prepared metadata and never reload image contents for tracing.
+If a complex prefix lacks estimates, tracing omits its token count instead of using
+an incomplete text-only estimate. Token counters cache up to 1,024 text values per
+counter. Different counters do not share prompt contents or cached counts.
+
+Explicitly classified model failures retain safe tool-choice and finish-reason diagnostics across saved runs.
+Generic provider API failures return a fixed public message; raw upstream payloads remain in the exception.
+
+Streamed tool-call fragments may have a null `type` in LiteLLM. The response adapter
+normalizes null to `function`; unsupported non-null types still fail validation.
 
 ### 4.7 Tracing
 
@@ -582,7 +602,7 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 |---|---|
 | adds a new `LLMModelFlowType` value | No database migration is required (the column is a plain `VARCHAR` with no `CHECK` constraint); but you must seed or backfill an `LLMModelFlow` row for it, pass the new flow to `fetch_default_model` where needed, and decide the fallback behavior when no row exists yet (see §9) |
 | adds a provider | `llm/well_known_providers/`, `_build_provider_extra_headers` if it needs special header handling, `PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING` if it needs a synthesized Authorization header, the admin UI catalogue, and a `/admin/llm/{provider}/available-models` endpoint if it supports live model discovery |
-| changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`llm_step.py`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
+| changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`backend/onyx/agents/runtime.py`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
 | changes default resolution (`fetch_default_model`, `update_default_model`) | the partial unique index still holds after a migration or backfill; `get_default_llm` and every `get_default_*` factory still returns a model, not `None`, where callers assume one exists |
 | adds a new LLM call site | tag it with an `LLMFlow` via `llm_generation_span` or `traced_llm_call`; verify in a Braintrust/Langfuse trace that it does not show up as `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` |
 | changes retry behavior in `LitellmLLM.stream_raw` | the `yielded_any` gate must still prevent post-first-chunk retries; confirm against the retryable exception tuple, which is intentionally narrow |

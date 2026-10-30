@@ -1,0 +1,284 @@
+---
+title: "CLI"
+description: "Interact with Onyx from the command line"
+icon: "terminal"
+---
+
+<img src="/assets/overview/cli/cli_hero.webp" alt="Onyx CLI terminal interface" />
+
+The Onyx CLI is a terminal interface for chatting with your Onyx Agents and searching your knowledge base.
+It provides an interactive chat TUI for people and non-interactive commands for scripts and AI coding agents.
+The CLI is available on all editions.
+
+## Installation
+
+### PyPI (recommended)
+
+```shell
+uv tool install onyx-cli
+```
+
+Or with pip:
+
+```shell
+pip install onyx-cli
+```
+
+<Card title="PyPI Package" icon="python" href="https://pypi.org/project/onyx-cli/">
+  uv tool install onyx-cli
+</Card>
+
+### Standalone Binaries
+
+Standalone binaries for Linux, macOS, and Windows (amd64 and arm64)
+are attached to each [`cli/v*` GitHub release](https://github.com/onyx-dot-app/onyx/releases?q=cli%2Fv).
+
+### Build from Source
+
+Requires [Go 1.27+](https://go.dev/dl/).
+
+```shell
+git clone --depth 1 https://github.com/onyx-dot-app/onyx.git
+cd onyx/cli
+go build -o onyx-cli .
+sudo mv onyx-cli /usr/local/bin/
+```
+
+## Setup
+
+Launch the interactive chat TUI — on first run it guides you through setup:
+
+```shell
+onyx-cli chat
+```
+
+This prompts for your Onyx server URL and personal access token (PAT), tests the connection,
+and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set).
+To reconfigure later, use the `/configure` slash command inside the TUI.
+
+### Generating an Access Token
+
+Navigate to **Settings > Accounts & Access > Access Tokens** (`/app/settings/accounts-access`)
+and select **New Access Token** to create an access token for the CLI.
+
+<Note>
+  On Onyx Cloud, access tokens require an active paid subscription.
+</Note>
+
+<img src="/assets/overview/cli/access_tokens.webp" alt="Accounts & Access page showing the Access Tokens section" width="600" />
+
+<img src="/assets/overview/cli/create_access_token.webp" alt="Create Access Token modal with token name and expiration options" width="500" />
+
+### Environment Variables
+
+Environment variables override config file values.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.onyx.app`) |
+| `ONYX_API_PREFIX` | No | API path prefix (default: `/api`) |
+| `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
+| `ONYX_PERSONA_ID` | No | Default Agent ID |
+| `ONYX_STREAM_MARKDOWN` | No | Turn progressive Markdown rendering on or off (`true` or `false`) |
+
+### Validate Configuration
+
+Verify that your configuration is correct and the server is reachable:
+
+```shell
+onyx-cli validate-config
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `onyx-cli chat` | Launch the interactive chat TUI (includes first-time setup) |
+| `onyx-cli ask` | Ask a one-shot question (non-interactive) |
+| `onyx-cli search` | Search company knowledge and return ranked documents |
+| `onyx-cli agents` | List available Agents |
+| `onyx-cli image` | Generate or edit images with the configured image provider |
+| `onyx-cli validate-config` | Validate configuration and test connection |
+| `onyx-cli install-skill` | Install the Onyx CLI skill file for AI coding agents |
+| `onyx-cli experiments` | List experimental features and their status |
+| `onyx-cli serve` | Serve the chat TUI over SSH |
+| `onyx-cli deploy` | Install and manage a self-hosted Onyx deployment |
+
+Use `--version` to print the client and server versions, and `--debug` for verbose logging.
+
+### Interactive Chat
+
+```shell
+onyx-cli chat
+```
+
+Use `--agent-id` or `--agent-name` to start the session with a specific Agent,
+and `--no-stream-markdown` to turn off progressive Markdown rendering.
+
+### One-Shot Questions
+
+Ask a question and get a response without entering the TUI:
+
+```shell
+onyx-cli ask "What is our company's PTO policy?"
+```
+
+Use `--agent-id` to target a specific agent:
+
+```shell
+onyx-cli ask --agent-id 5 "Summarize our Q4 roadmap"
+```
+
+| Flag | Description |
+|------|-------------|
+| `--agent-id <int>` | Agent ID to use (overrides default) |
+| `--agent-name <string>` | Agent name to use (exact or unique substring) |
+| `--json` | Output NDJSON events instead of plain text |
+| `--prompt <string>` | Question text, for use with piped stdin context |
+| `--quiet` | Buffer output and print once at the end |
+| `--max-output <int>` | Max bytes before truncating (0 to disable) |
+
+### Search Documents
+
+Search your indexed knowledge and get ranked documents without an answer:
+
+```shell
+onyx-cli search "deployment rollback procedure"
+onyx-cli search --source slack,google_drive --days 30 "release checklist"
+```
+
+| Flag | Description |
+|------|-------------|
+| `--source <list>` | Filter by source type (comma-separated, such as `slack,google_drive`) |
+| `--days <int>` | Only return results from the last N days |
+| `--agent-id <int>` / `--agent-name <string>` | Search with an Agent's knowledge scope |
+| `--raw` | Output the full API response |
+| `--no-query-expansion` | Skip query expansion (faster, less comprehensive) |
+
+### Generate Images
+
+```shell
+onyx-cli image generate --prompt "A diagram of our deployment pipeline" --output pipeline.png
+onyx-cli image edit --input-image logo.png --prompt "Make the background transparent"
+```
+
+Image commands use the image generation provider your admin configured in Onyx.
+
+### List Agents
+
+```shell
+onyx-cli agents
+onyx-cli agents --json
+```
+
+Prints a table of available Agent IDs, names, and descriptions.
+
+### Serve over SSH
+
+Share the chat TUI with people who do not have the CLI installed:
+
+```shell
+onyx-cli serve --host 0.0.0.0 --port 2222
+```
+
+Users connect with `ssh your-host -p 2222` and paste their own personal access token at the login prompt.
+
+### Self-Hosted Deployment
+
+The `deploy` command group installs and manages a self-hosted Docker Compose deployment of Onyx — a guided installer
+plus `upgrade`, `status`, `logs`, `stop`, and `uninstall` commands:
+
+```shell
+onyx-cli deploy install
+```
+
+<Card title="Deploy with the Onyx CLI" icon="server" href="/deployment/local/onyx_cli">
+  Full documentation for `onyx-cli deploy` and its lifecycle commands.
+</Card>
+
+## Slash Commands (Interactive TUI)
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help message |
+| `/clear` or `/new` | Clear chat and start a new session |
+| `/agent` | List and switch Agents (by ID or name) |
+| `/model` | List and switch models |
+| `/attach <path>` | Attach a file to the next message |
+| `/sessions` or `/resume` | Browse and resume previous sessions |
+| `/configure` | Re-run connection setup |
+| `/connectors` | Open connectors in browser |
+| `/settings` | Open settings in browser |
+| `/experiments` | List experimental features |
+| `/quit` | Exit Onyx CLI |
+
+## Using as an AI Coding Assistant Skill
+
+The Onyx CLI can be used as a tool by AI coding assistants (such as Claude Code and Cursor)
+to query your knowledge base directly from within your development environment.
+Install the bundled skill file into your project so your coding agent can discover the CLI:
+
+```shell
+onyx-cli install-skill
+onyx-cli install-skill --global
+onyx-cli install-skill --agent claude-code
+```
+
+The skill is written to `.agents/skills/onyx-cli/`. Use `--global` to install it in your home directory,
+`--copy` to copy files instead of symlinking, and `--agent` to target a specific agent's skill directory.
+You can also read it in the Onyx repository at
+[`cli/internal/embedded/SKILL.md`](https://github.com/onyx-dot-app/onyx/blob/main/cli/internal/embedded/SKILL.md).
+
+### When the skill is invoked
+
+The skill is triggered when you ask your AI assistant about:
+
+- Company-specific information (policies, processes, documentation)
+- Internal knowledge bases or connected data sources
+- Anything referencing Onyx, "search Onyx", or querying company documents
+
+It is **not** used for general programming questions or questions about code in the current repository.
+
+### Non-interactive behavior
+
+When the CLI runs without a terminal, for example from an AI agent or a pipe,
+it prints results to stdout and progress to stderr, uses no ANSI codes or prompts,
+and truncates long `ask` output at 50000 bytes (use `--max-output 0` to disable). Exit codes identify the failure:
+`3` not configured, `4` authentication failed, `5` server unreachable, `6` rate limited.
+
+### Configuration for agents
+
+Run `onyx-cli chat` once to complete first-time setup, or set environment variables,
+which override the config file and are useful for CI/CD or sandboxed environments:
+
+```shell
+export ONYX_SERVER_URL="https://your-onyx-server.com"
+export ONYX_PAT="your-pat"
+```
+
+### JSON output for structured parsing
+
+Use `--json` to get NDJSON event output, which is easier for agents to parse programmatically:
+
+```shell
+onyx-cli ask --json "List all active API integrations"
+```
+
+| Event Type | Description |
+|------------|-------------|
+| `message_delta` | Content token — concatenate all `content` fields for the full answer |
+| `stop` | Stream complete |
+| `error` | Error with `error` message field |
+| `search_tool_start` | Onyx started searching documents |
+| `citation_info` | Source citation with `citation_number` and `document_id` |
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Send message |
+| `Escape` | Cancel current generation |
+| `Ctrl+O` | Toggle source citations |
+| `Ctrl+D` | Quit (press twice) |
+| `Scroll` / `Shift+Up/Down` | Scroll chat history |
+| `Page Up` / `Page Down` | Scroll half page |

@@ -29,6 +29,7 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.tools.models import CustomToolCallSummary
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -178,6 +179,9 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
         )
 
     def enrich(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        assert isinstance(result.details, CustomToolCallSummary)
+        assert isinstance(result.details.tool_result, dict)
+        result.details.tool_result["phase"] = "final"
         finalizing.set()
         assert release.wait(3)
         result.content = "final"
@@ -189,7 +193,14 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
         tools=[
             AgentTool(
                 definition=ToolDefinition(name="lookup", description="", parameters={}),
-                execute=lambda _invocation: ToolResult(content="raw"),
+                execute=lambda _invocation: ToolResult(
+                    content="raw",
+                    details=CustomToolCallSummary(
+                        tool_name="lookup",
+                        response_type="json",
+                        tool_result={"phase": "raw"},
+                    ),
+                ),
             )
         ],
         after_tool_call=enrich,
@@ -199,6 +210,10 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
         assert finalizing.wait(3)
         snapshot = run.snapshot()
         assert snapshot.messages[-1].text == "raw"
+        recorded = snapshot.steps[0].tools["call"].result
+        assert recorded is not None
+        assert isinstance(recorded.details, CustomToolCallSummary)
+        assert recorded.details.tool_result == {"phase": "raw"}
         assert snapshot.steps[0].tools["call"].status == ExecutionStatus.COMPLETE
         assert not next_generation.is_set()
         assert not run.wait_for_idle(0)
@@ -210,6 +225,10 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
         assert run.wait_for_idle(3)
     assert next_generation.is_set()
     assert run.snapshot().messages[1].text == "final"
+    recorded = run.snapshot().steps[0].tools["call"].result
+    assert recorded is not None
+    assert isinstance(recorded.details, CustomToolCallSummary)
+    assert recorded.details.tool_result == {"phase": "final"}
 
 
 def test_result_copies_output_without_copying_run_history() -> None:

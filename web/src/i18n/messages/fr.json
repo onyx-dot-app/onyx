@@ -5831,6 +5831,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {# fichier téléversé} other {# fichiers téléversés}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {# fichier téléversé} other {# fichiers téléversés}}, incomplet : {error}"
         }
       },
       "sensitiveWarning": {
@@ -12117,6 +12120,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {Un fichier a échoué et a été supprimé : {names}} other {Des fichiers ont échoué et ont été supprimés : {names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "Chargement de la discussion"
+      },
       "newChatButton": {
         "label": "Démarrer une nouvelle discussion"
       },
@@ -12351,7 +12357,9 @@
           "speakingPlaceholder": "{appName} parle..."
         },
         "sendButton": {
-          "processingFilesTooltip": "En attente de la fin du traitement des fichiers joints"
+          "processingFilesTooltip": "En attente de la fin du traitement des fichiers joints",
+          "stoppingLabel": "Arrêt en cours…",
+          "reloadLabel": "Vérifier à nouveau"
         },
         "tabReadingButton": {
           "readLabel": "Lire cet onglet",
@@ -13656,6 +13664,10 @@
       "incognito": {
         "title": "Vous êtes en navigation privée"
       }
+    },
+    "readiness": {
+      "stopFailed": "Impossible d’arrêter la réponse. Réessayez.",
+      "checkFailed": "Impossible de confirmer la fin de la réponse. Vérifiez à nouveau avant d’envoyer un autre message."
     }
   },
   "common": {
@@ -15852,6 +15864,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Terminer la configuration"
+      },
+      "nextButton": {
+        "label": "Suivant"
+      },
       "progress": {
         "label": "Étape {current} sur {total}"
       }
@@ -15863,13 +15881,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# modèle connecté} other {# modèles connectés}}"
       },
-      "customProvider": {
-        "subtitle": "API compatibles LiteLLM",
-        "title": "Fournisseur de LLM personnalisé"
-      },
       "description": "{appName} prend en charge les modèles auto-hébergés et les fournisseurs populaires.",
       "edit": {
         "ariaLabel": "Modifier les fournisseurs de LLM"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "Voir"
+        },
+        "description": "Configurer dans le panneau d'administration",
+        "title": "Plus de fournisseurs"
       },
       "providerCard": {
         "connect": {
@@ -15877,7 +15898,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Paramètres du fournisseur"
-        }
+        },
+        "settingsLoadError": "Impossible de charger les paramètres de ce fournisseur. Réessayez."
       },
       "title": "Connectez vos modèles LLM"
     },
@@ -15904,28 +15926,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "Terminer la configuration"
-        },
-        "title": "Tout est prêt. Consultez les paramètres facultatifs ou cliquez sur Terminer la configuration"
-      },
       "llmSetup": {
-        "button": {
-          "label": "Suivant"
-        },
-        "title": "Presque terminé ! Connectez vos modèles pour commencer à discuter."
+        "title": "Connectez un modèle pour commencer à discuter."
       },
       "name": {
-        "button": {
-          "label": "Suivant"
-        },
-        "title": "Prenons un moment pour vous configurer."
+        "title": "Dites-nous comment vous appeler."
       },
-      "welcome": {
-        "button": {
-          "label": "C'est parti"
-        },
+      "optionalSetup": {
+        "title": "Configurez quelques options supplémentaires."
+      },
+      "postStep": {
+        "title": "Tout est prêt."
+      },
+      "preStep": {
         "title": "Prenons un moment pour vous configurer."
       }
     }

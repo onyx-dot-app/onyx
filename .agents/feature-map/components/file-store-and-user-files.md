@@ -204,7 +204,7 @@ dispatch by extension:
 
 | Extension | Function | Notes |
 |---|---|---|
-| `.pdf` | `read_pdf_file` (via `pdf_to_text` for text-only callers) | Runs in an isolated subprocess by default (`isolate_pdfium=True`); embedded images extracted via `pdf_image_utils.py:iter_pdf_extracted_images`. |
+| `.pdf` | `read_pdf_file` (via `pdf_to_text` for text-only callers) | Runs in an isolated subprocess by default (`isolate_pdfium=True`); embedded images extracted via `pdf_image_utils.py:iter_pdf_extracted_images`. An image failure is logged and keeps the text. |
 | `.docx` | `read_docx_file` | Embedded images via `extract_docx_images`. |
 | `.pptx` | `read_pptx_file` / `pptx_to_text` | Embedded images via `extract_pptx_images`; chart-to-markdown conversion is patched to a no-op for performance (`image_summarization.py:get_markitdown_converter`). |
 | `.xlsx` | `xlsx_sheet_extraction` / `xlsx_to_text` | Streams rows; `stage_xlsx_sheets` materializes large tabular sections to a staged file rather than holding them in memory. |
@@ -224,7 +224,7 @@ and `_extract_text_and_images`).
 text-extracted; `_extract_text_and_images` returns empty text for image
 extensions and the model receives the raw image bytes directly as a vision
 input (`ChatFileType.IMAGE`, consumed in
-`files.py:extract_context_files`). Embedded images inside a PDF or
+`process_message.py:extract_context_files`). Embedded images inside a PDF or
 DOCX, by contrast, are decoded and sent through a **vision LLM** captioning
 pipeline, `file_processing/image_summarization.py:summarize_image_with_error_handling`
 → `summarize_image_pipeline` → `_summarize_image`, gated by
@@ -244,7 +244,7 @@ empty text, except for a PDF or DOCX that has detected embedded images (see §5)
 ### 4.4 The two consumption paths
 
 Every project/context file goes through
-`files.py:extract_context_files`, which decides per-turn whether the
+`process_message.py:extract_context_files`, which decides per-turn whether the
 aggregate token count of eligible files fits under
 `(llm_max_context_window - reserved_token_count) * 0.6`
 ([[context-assembly]] §4.3 owns this ceiling and the reasoning behind 60%).
@@ -410,6 +410,19 @@ access-control consequence of this.
   paths.
 
 ---
+
+### Checkpoint file snapshots
+
+`backend/onyx/tools/file_snapshot.py` captures files for later execution restoration.
+`SavedChatFile` keeps a stored file ID without reading its bytes.
+Inline snapshots encode binary content as base64 for JSON round trips.
+`SavedContextFiles` preserves context metadata and restores image bytes lazily from the file store.
+`ChatSearchResult` in `chat/models.py` uses these snapshots for staged files.
+Existing tools can still construct eager files without an ID.
+
+These values do not authorize file access or persist new blobs.
+Application integration must authorize references and store large files before publishing a checkpoint.
+The current chat engines do not use checkpoint restoration yet.
 
 ## 5. Contracts and invariants
 

@@ -45,7 +45,7 @@ Onyx 可连接 50 多种应用，为其中的知识建立索引并提供检索�
 > curl -fsSL https://onyx.app/install_onyx.sh | bash
 > ```
 
-![Onyx 聊天界面回答关于使用场景的问题](docs/assets/onyx-chat-use-cases.png)
+![Onyx 聊天界面回答关于使用场景的问题](.github/assets/onyx-chat-use-cases.png)
 
 ---
 
@@ -78,7 +78,7 @@ Onyx 支持所有主流 LLM 提供商，包括自托管方案（如 Ollama、Lit
 
 ## 安全与数据处理
 
-![Onyx 架构：所有组件均在你的环境中运行](docs/assets/architecture.png)
+![Onyx 架构：所有组件均在你的环境中运行](.github/assets/architecture.png)
 
 连接组织知识时，必须防止敏感的知识产权信息泄露给组织内外未经授权的人员。
 

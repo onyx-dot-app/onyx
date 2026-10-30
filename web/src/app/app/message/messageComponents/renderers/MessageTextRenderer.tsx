@@ -10,7 +10,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 import { useTypewriter } from "@/hooks/useTypewriter";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   ChatPacket,
   PacketType,
@@ -37,21 +37,6 @@ import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { getLatestMessageChain } from "@/app/app/services/messageTree";
-
-/** True when the session still waits for this node to render: the
- *  queue gate is closed and the node is the newest message. */
-function isAwaitedLatestMessage(
-  sessionId: string | null,
-  messageNodeId: number | undefined
-): boolean {
-  if (!sessionId || messageNodeId === undefined) return false;
-  const session = useChatSessionStore.getState().sessions.get(sessionId);
-  if (!session || session.latestMessageRenderComplete) return false;
-  return (
-    getLatestMessageChain(session.messageTree).at(-1)?.nodeId === messageNodeId
-  );
-}
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -116,15 +101,13 @@ export const MessageTextRenderer: MessageRenderer<
   onComplete,
   renderType,
   animate,
+  restoredTextLength = 0,
   stopPacketSeen,
   stopReason,
   children,
 }) => {
   const t = useTranslations("chat.messages");
   const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
-  );
   const setIsStreamDraining = useChatSessionStore(
     (state) => state.setIsStreamDraining
   );
@@ -288,7 +271,8 @@ export const MessageTextRenderer: MessageRenderer<
   const { displayed: displayedContent, isDraining } = useTypewriter(
     content,
     isStreamingAnimationEnabled,
-    isStreamFinished
+    isStreamFinished,
+    restoredTextLength
   );
 
   // One-way signal: stream done AND typewriter caught up. Do NOT derive
@@ -316,49 +300,16 @@ export const MessageTextRenderer: MessageRenderer<
   // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
   // ever goes true→false during a renderer's lifetime, so its mount-time
   // value distinguishes "actively-streaming renderer" (animate=true) from
-  // "historical mount" (animate=false). Used to gate the drain-state
-  // write below.
+  // "historical mount" (animate=false) for scroll draining below.
   const wasEverAnimatingRef = useRef(animate);
 
-  // Bind sessionId at mount so a navigation while the typewriter is still
-  // draining doesn't write the completion flag to the newly-active session.
+  // Keep scroll-draining updates on the session that mounted this renderer.
   const sessionIdAtMountRef = useRef(
     useChatSessionStore.getState().currentSessionId
   );
-
-  // The renderer that releases the queue gate. Usually the one that
-  // animated. If the whole answer arrived before this renderer mounted
-  // (a fast stream, or text held back by tool pacing until the stop
-  // packet), it mounts with animate=false, so also release when the
-  // session still waits for this node. Otherwise the gate stays closed
-  // and queued messages never send.
-  const [releasesQueueGate] = useState(
-    () =>
-      animate ||
-      isAwaitedLatestMessage(sessionIdAtMountRef.current, messageNodeId)
-  );
-
-  // Fire onComplete exactly once per mount. `onComplete` is an inline
-  // arrow in AgentMessage so its identity changes on every parent render;
-  // without this guard, each new identity would re-fire the effect once
-  // `streamFullyDisplayed` is true.
-  const onCompleteFiredRef = useRef(false);
   useEffect(() => {
-    if (streamFullyDisplayed && !onCompleteFiredRef.current) {
-      onCompleteFiredRef.current = true;
-      onComplete();
-      // Historical mounts leave the flag alone so they don't release the
-      // queue while a newer stream is still in flight.
-      if (releasesQueueGate && sessionIdAtMountRef.current) {
-        setLatestMessageRenderComplete(sessionIdAtMountRef.current, true);
-      }
-    }
-  }, [
-    streamFullyDisplayed,
-    onComplete,
-    setLatestMessageRenderComplete,
-    releasesQueueGate,
-  ]);
+    if (streamFullyDisplayed) onComplete();
+  }, [streamFullyDisplayed, onComplete]);
 
   // Mirror the typewriter's drain state into the chat-session store so
   // ChatScrollContainer can pause auto-scroll while the drain runs. Only
@@ -414,9 +365,7 @@ export const MessageTextRenderer: MessageRenderer<
         );
       },
       p: ({ children, dir }) => (
-        <MemoizedParagraph dir={dir} className="font-main-content-body">
-          {children}
-        </MemoizedParagraph>
+        <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
       ),
       pre: ({ children }) => <>{children}</>,
       b: ({ className, children }) => (
@@ -490,9 +439,11 @@ export const MessageTextRenderer: MessageRenderer<
       status: null,
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
-          <Text as="span" secondaryBody text04 className="italic">
-            {t("text.thinkingPlaceholder.text")}
-          </Text>
+          <span className="italic">
+            <Text font="secondary-body" color="text-04">
+              {t("text.thinkingPlaceholder.text")}
+            </Text>
+          </span>
         ) : displayedContent.length > 0 ? (
           <div
             dir="auto"

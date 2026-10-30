@@ -226,11 +226,16 @@ def test_thread_uses_explicit_empty_context() -> None:
         test_var.reset(token)
 
 
-def test_thread_future_preserves_context_and_result() -> None:
+@pytest.mark.parametrize("daemon", [False, True])
+def test_thread_future_preserves_context_and_result(daemon: bool) -> None:
     token: contextvars.Token[str] = test_var.set("future")
+
+    def read_context() -> tuple[str, bool]:
+        return test_var.get(), threading.current_thread().daemon
+
     try:
-        future: Future[str] = start_thread_future(test_var.get, name="test-result")
-        assert future.result(timeout=2) == "future"
+        future = start_thread_future(read_context, name="test-result", daemon=daemon)
+        assert future.result(timeout=2) == ("future", daemon)
     finally:
         test_var.reset(token)
 

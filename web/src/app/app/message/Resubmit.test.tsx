@@ -1,6 +1,6 @@
 import { act, render, screen } from "@tests/setup/test-utils";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { RATE_LIMITED_ERROR_CODE } from "@/app/app/interfaces";
+import { RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
 
 describe("rate-limit error banner", () => {
   beforeEach(() => {

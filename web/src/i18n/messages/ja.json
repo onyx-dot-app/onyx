@@ -5831,6 +5831,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {#件のファイルをアップロードしました} other {#件のファイルをアップロードしました}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {#件のファイルをアップロードしました} other {#件のファイルをアップロードしました}}、不完全: {error}"
         }
       },
       "sensitiveWarning": {
@@ -12117,6 +12120,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {ファイルの処理に失敗したため削除しました：{names}} other {ファイルの処理に失敗したため削除しました：{names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "チャットを読み込んでいます"
+      },
       "newChatButton": {
         "label": "新しいチャットを開始"
       },
@@ -12351,7 +12357,9 @@
           "speakingPlaceholder": "{appName} が話しています..."
         },
         "sendButton": {
-          "processingFilesTooltip": "添付ファイルの処理が完了するのを待っています"
+          "processingFilesTooltip": "添付ファイルの処理が完了するのを待っています",
+          "stoppingLabel": "停止中…",
+          "reloadLabel": "もう一度確認"
         },
         "tabReadingButton": {
           "readLabel": "このタブを読み取る",
@@ -13656,6 +13664,10 @@
       "incognito": {
         "title": "シークレットモードです"
       }
+    },
+    "readiness": {
+      "stopFailed": "応答を停止できませんでした。もう一度お試しください。",
+      "checkFailed": "応答の完了を確認できませんでした。次のメッセージを送信する前に、もう一度確認してください。"
     }
   },
   "common": {
@@ -15852,6 +15864,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "セットアップを完了"
+      },
+      "nextButton": {
+        "label": "次へ"
+      },
       "progress": {
         "label": "ステップ {current}/{total}"
       }
@@ -15863,13 +15881,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# 個のモデルを接続済み} other {# 個のモデルを接続済み}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM 互換 API",
-        "title": "カスタム LLM プロバイダー"
-      },
       "description": "{appName} はセルフホストのモデルと主要なプロバイダーの両方に対応しています。",
       "edit": {
         "ariaLabel": "LLM プロバイダーを編集"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "表示"
+        },
+        "description": "管理パネルで設定",
+        "title": "その他のプロバイダー"
       },
       "providerCard": {
         "connect": {
@@ -15877,7 +15898,8 @@
         },
         "settingsButton": {
           "ariaLabel": "プロバイダー設定"
-        }
+        },
+        "settingsLoadError": "このプロバイダーの設定を読み込めませんでした。もう一度お試しください。"
       },
       "title": "LLM モデルを接続"
     },
@@ -15904,28 +15926,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "セットアップを完了"
-        },
-        "title": "準備が完了しました。任意の設定を確認するか、「セットアップを完了」をクリックしてください"
-      },
       "llmSetup": {
-        "button": {
-          "label": "次へ"
-        },
-        "title": "あと少しです。モデルを接続してチャットを始めましょう。"
+        "title": "モデルを接続してチャットを始めましょう。"
       },
       "name": {
-        "button": {
-          "label": "次へ"
-        },
-        "title": "少しだけお時間をいただき、セットアップを行いましょう。"
+        "title": "呼び名を教えてください。"
       },
-      "welcome": {
-        "button": {
-          "label": "はじめる"
-        },
+      "optionalSetup": {
+        "title": "いくつかのオプション機能を設定しましょう。"
+      },
+      "postStep": {
+        "title": "準備が整いました。"
+      },
+      "preStep": {
         "title": "少しだけお時間をいただき、セットアップを行いましょう。"
       }
     }

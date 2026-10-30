@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_edit_requests import request_retry_delay
-from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import ConnectorCredentialPairStatus, PermissionSyncStatus
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
@@ -28,10 +28,16 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 # Enough consecutive failures to reach the longest retry delay.
-_GROUP_SYNC_BACKOFF_LOOKBACK = 8
+_SYNC_BACKOFF_LOOKBACK = 8
 
 _FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
 _OPEN_STATUSES = (PermissionSyncStatus.NOT_STARTED, PermissionSyncStatus.IN_PROGRESS)
+# The terminal statuses the retry backoff reads; see _get_sync_retry_after.
+_SYNC_OUTCOME_STATUSES = (
+    PermissionSyncStatus.SUCCESS,
+    PermissionSyncStatus.COMPLETED_WITH_ERRORS,
+    PermissionSyncStatus.FAILED,
+)
 
 _AttemptModel = (
     type[DocPermissionSyncAttempt] | type[ExternalGroupPermissionSyncAttempt]
@@ -181,16 +187,18 @@ def _open_cc_pair_ids(model: _AttemptModel, db_session: Session) -> set[int]:
     }
 
 
-def _cancel_open_attempt(
+def _cancel_open_attempt_where__no_commit(
     model: _AttemptModel,
     connector_credential_pair_id: int,
     db_session: Session,
+    condition: ColumnElement[bool],
     reason: str,
 ) -> int | None:
-    attempt_id = db_session.execute(
+    return db_session.execute(
         update(model)
         .where(model.connector_credential_pair_id == connector_credential_pair_id)
         .where(model.status.in_(_OPEN_STATUSES))
+        .where(condition)
         .values(
             status=PermissionSyncStatus.CANCELED,
             time_finished=func.now(),
@@ -198,6 +206,17 @@ def _cancel_open_attempt(
         )
         .returning(model.id)
     ).scalar_one_or_none()
+
+
+def _cancel_open_attempt(
+    model: _AttemptModel,
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    attempt_id = _cancel_open_attempt_where__no_commit(
+        model, connector_credential_pair_id, db_session, true(), reason
+    )
     db_session.commit()
     return attempt_id
 
@@ -208,8 +227,18 @@ def try_create_doc_permission_sync_attempt(
     db_session: Session,
 ) -> int | None:
     """Creates a NOT_STARTED attempt for a doc permission sync about to be
-    dispatched. Returns None when the cc_pair already has an open attempt: the
-    partial unique index on open attempts is the per-cc_pair sync lock."""
+    dispatched. Returns None when the cc_pair already has an open attempt (the
+    partial unique index on open attempts is the per-cc_pair sync lock) or is
+    paused. The status read waits for a pause that holds the pair's row lock,
+    so a pause either cancels this attempt or is seen here."""
+    status = db_session.scalar(
+        select(ConnectorCredentialPair.status)
+        .where(ConnectorCredentialPair.id == connector_credential_pair_id)
+        .with_for_update(read=True, key_share=True)
+    )
+    if status == ConnectorCredentialPairStatus.PAUSED:
+        db_session.commit()
+        return None
     return _try_create_attempt(
         DocPermissionSyncAttempt,
         connector_credential_pair_id,
@@ -248,6 +277,50 @@ def cancel_open_doc_permission_sync_attempt(
     A worker still running it loses its lease and stops. Returns its ID."""
     return _cancel_open_attempt(
         DocPermissionSyncAttempt, connector_credential_pair_id, db_session, reason
+    )
+
+
+def lock_open_doc_permission_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    db_session: Session,
+) -> int | None:
+    """Row-locks the cc_pair's open attempt, if any, until the caller commits,
+    and returns its ID. Waits for the sync's writes in flight, which hold a
+    share lock on it. The row stays unchanged, so a dispatch that meets it
+    still sees an open attempt and creates none, without waiting."""
+    return db_session.execute(
+        select(DocPermissionSyncAttempt.id)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id
+            == connector_credential_pair_id
+        )
+        .where(DocPermissionSyncAttempt.status.in_(_OPEN_STATUSES))
+        # FOR NO KEY UPDATE, the lock the cancel's UPDATE takes
+        .with_for_update(key_share=True)
+    ).scalar_one_or_none()
+
+
+def cancel_locked_or_queued_doc_permission_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    locked_attempt_id: int | None,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks CANCELED the attempt the caller locked with
+    lock_open_doc_permission_sync_attempt__no_commit, or the cc_pair's queued
+    attempt. A running attempt the caller did not lock is left alone, so this
+    never waits on a sync's writes. Until the caller commits the row stays
+    locked, so a worker that writes a failure waits and then keeps the cancel.
+    Returns its ID."""
+    target = DocPermissionSyncAttempt.status == PermissionSyncStatus.NOT_STARTED
+    if locked_attempt_id is not None:
+        target = or_(target, DocPermissionSyncAttempt.id == locked_attempt_id)
+    return _cancel_open_attempt_where__no_commit(
+        DocPermissionSyncAttempt,
+        connector_credential_pair_id,
+        db_session,
+        target,
+        reason,
     )
 
 
@@ -432,10 +505,11 @@ def is_doc_permission_sync_attempt_resumable(
     attempt_id: int,
     current_attempt_id: int,
 ) -> bool:
-    """Whether the checkpoint a failed attempt left may continue: the attempt
-    started after any requested full refresh (perm_sync_pending_since), and
-    only failures came after it. An attempt that dies before its first save
-    leaves the older checkpoint resumable."""
+    """Whether the checkpoint a stopped attempt left may continue: the attempt
+    failed or was canceled (both stop mid-crawl), it started after any
+    requested full refresh (perm_sync_pending_since), and only failed or
+    canceled attempts came after it. An attempt that dies before its first
+    save leaves the older checkpoint resumable."""
     holder = db_session.execute(
         select(DocPermissionSyncAttempt)
         .join(
@@ -446,7 +520,7 @@ def is_doc_permission_sync_attempt_resumable(
         .where(
             DocPermissionSyncAttempt.id == attempt_id,
             DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
-            DocPermissionSyncAttempt.status == PermissionSyncStatus.FAILED,
+            DocPermissionSyncAttempt.status.in_(_FAILURE_STATUSES),
             or_(
                 ConnectorCredentialPair.perm_sync_pending_since.is_(None),
                 DocPermissionSyncAttempt.time_created
@@ -463,7 +537,7 @@ def is_doc_permission_sync_attempt_resumable(
             DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
             DocPermissionSyncAttempt.id != current_attempt_id,
             DocPermissionSyncAttempt.time_created > holder.time_created,
-            DocPermissionSyncAttempt.status != PermissionSyncStatus.FAILED,
+            DocPermissionSyncAttempt.status.not_in(_FAILURE_STATUSES),
         )
         .limit(1)
     ).scalar_one_or_none()
@@ -568,6 +642,22 @@ def cancel_open_external_group_sync_attempt(
     )
 
 
+def cancel_queued_external_group_sync_attempt__no_commit(
+    connector_credential_pair_id: int,
+    db_session: Session,
+    reason: str,
+) -> int | None:
+    """Marks the cc_pair's NOT_STARTED attempt CANCELED, so its task skips it,
+    and leaves a running one alone. The caller commits. Returns its ID."""
+    return _cancel_open_attempt_where__no_commit(
+        ExternalGroupPermissionSyncAttempt,
+        connector_credential_pair_id,
+        db_session,
+        ExternalGroupPermissionSyncAttempt.status == PermissionSyncStatus.NOT_STARTED,
+        reason,
+    )
+
+
 def get_external_group_sync_attempt(
     db_session: Session,
     attempt_id: int,
@@ -595,63 +685,6 @@ def get_external_group_sync_attempt(
         )
 
     return db_session.scalars(stmt).first()
-
-
-def get_recent_external_group_sync_attempts_for_cc_pair(
-    cc_pair_id: int | None,
-    limit: int,
-    db_session: Session,
-) -> list[ExternalGroupPermissionSyncAttempt]:
-    """Get recent external group sync attempts for a cc pair, most recent first.
-    If cc_pair_id is None, gets global group sync attempts."""
-    stmt = select(ExternalGroupPermissionSyncAttempt)
-
-    if cc_pair_id is not None:
-        stmt = stmt.where(
-            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
-            == cc_pair_id
-        )
-    else:
-        stmt = stmt.where(
-            ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.is_(None)
-        )
-
-    return list(
-        db_session.execute(
-            stmt.order_by(ExternalGroupPermissionSyncAttempt.time_created.desc()).limit(
-                limit
-            )
-        ).scalars()
-    )
-
-
-def get_external_group_sync_retry_after(
-    cc_pair_id: int,
-    db_session: Session,
-) -> datetime | None:
-    """The time before which the beat must not start the pair's group sync
-    again, from its consecutive FAILED attempts. None when the latest finished
-    attempt did not fail. A manual sync ignores this, and its success clears
-    it."""
-    attempts = get_recent_external_group_sync_attempts_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        limit=_GROUP_SYNC_BACKOFF_LOOKBACK,
-        db_session=db_session,
-    )
-    failure_count = 0
-    last_failed_at: datetime | None = None
-    for attempt in attempts:
-        if not attempt.status.is_terminal():
-            continue
-        if attempt.status != PermissionSyncStatus.FAILED:
-            break
-        failure_count += 1
-        if last_failed_at is None:
-            last_failed_at = attempt.time_finished or attempt.time_created
-
-    if last_failed_at is None:
-        return None
-    return last_failed_at + request_retry_delay(failure_count)
 
 
 def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:
@@ -809,6 +842,83 @@ def complete_external_group_sync_attempt(
         db_session.rollback()
         logger.exception("complete_external_group_sync_attempt exceptioned.")
         raise
+
+
+# =============================================================================
+# RETRY BACKOFF
+# =============================================================================
+
+
+def _get_sync_retry_after(
+    model: _AttemptModel, cc_pair_id: int, db_session: Session
+) -> datetime | None:
+    """The time before which the beat must not start the pair's sync again:
+    request_retry_delay(N) after the last of its N consecutive FAILED
+    attempts. None when the newest attempt that counts did not fail. A manual
+    sync ignores this, and its success clears it.
+
+    A CANCELED attempt neither adds a failure nor ends a run of them: a
+    cancel comes from outside the sync, so it says nothing about the source.
+    A FAILED attempt counts whatever ended it, including a lost task, an
+    expired lease, or the stop signal. Attempts created before the pair began
+    to wait for its first permission sync (perm_sync_pending_since) are
+    ignored, so failures from before the access change do not delay that
+    sync."""
+    outcomes = (
+        db_session.execute(
+            select(model.status, model.time_finished, model.time_created)
+            .join(
+                ConnectorCredentialPair,
+                ConnectorCredentialPair.id == model.connector_credential_pair_id,
+            )
+            .where(
+                model.connector_credential_pair_id == cc_pair_id,
+                model.status.in_(_SYNC_OUTCOME_STATUSES),
+                or_(
+                    ConnectorCredentialPair.perm_sync_pending_since.is_(None),
+                    model.time_created
+                    >= ConnectorCredentialPair.perm_sync_pending_since,
+                ),
+            )
+            .order_by(model.time_created.desc(), model.id.desc())
+            .limit(_SYNC_BACKOFF_LOOKBACK)
+        )
+        .tuples()
+        .all()
+    )
+
+    failure_count = 0
+    last_failed_at: datetime | None = None
+    for status, time_finished, time_created in outcomes:
+        if status != PermissionSyncStatus.FAILED:
+            break
+        failure_count += 1
+        if last_failed_at is None:
+            last_failed_at = time_finished or time_created
+
+    if last_failed_at is None:
+        return None
+    return last_failed_at + request_retry_delay(failure_count)
+
+
+def get_doc_permission_sync_retry_after(
+    cc_pair_id: int,
+    db_session: Session,
+) -> datetime | None:
+    """The time before which the beat must not start the pair's doc
+    permission sync again. See _get_sync_retry_after."""
+    return _get_sync_retry_after(DocPermissionSyncAttempt, cc_pair_id, db_session)
+
+
+def get_external_group_sync_retry_after(
+    cc_pair_id: int,
+    db_session: Session,
+) -> datetime | None:
+    """The time before which the beat must not start the pair's group sync
+    again. See _get_sync_retry_after."""
+    return _get_sync_retry_after(
+        ExternalGroupPermissionSyncAttempt, cc_pair_id, db_session
+    )
 
 
 # =============================================================================

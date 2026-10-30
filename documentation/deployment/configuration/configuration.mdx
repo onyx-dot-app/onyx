@@ -1,0 +1,859 @@
+---
+title: "Configure Onyx"
+description: "How to configure Onyx using environment variables and deployment files"
+icon: "sliders"
+---
+
+<Warning>
+  This page is for configuring your **deployment**.
+
+  To find out more about configuring the Onyx app, checkout our [Admin docs](/admins/overview)!
+</Warning>
+
+## Onyx Lite
+
+Onyx Lite is a minimal deployment of Onyx designed for teams that only need the core LLM chat experience without
+connectors or RAG search. It is ideal for resource-constrained environments, quick evaluations,
+or use cases where you want to bring your own LLM and tools without ingesting external data sources.
+
+### What's Included
+
+Onyx Lite retains the following capabilities:
+- LLM chat conversations
+- Tools (including code interpreter when its service is enabled)
+- User file uploads
+- Projects
+- Agent knowledge
+- Agents (without RAG retrieval)
+
+### What's Removed
+
+Onyx Lite disables or does not use:
+- **Vector indexing and RAG search**: `DISABLE_VECTOR_DB=true` prevents use of OpenSearch, even if it is running
+- **Redis**: PostgreSQL handles caching and session management instead
+- **Indexing model server**: no document embeddings; Docker Compose Lite also skips the inference model server
+- **Background workers**: the API server handles background work directly
+- **Object store / S3 file storage**: PostgreSQL handles file storage instead, even if the object store is running
+- **Connectors**: all data source connectors are disabled
+
+### How It Works
+
+Onyx Lite is not a separate application. It uses the same Onyx images with a configuration that stores files,
+cache data, and sessions in PostgreSQL and disables vector database access.
+The key environment variables that drive this are:
+
+| Variable             | Lite Value   | Full Onyx Default | Purpose                                      |
+|----------------------|--------------|-------------------|----------------------------------------------|
+| `DISABLE_VECTOR_DB`  | `true`       | `false`           | Disables vector indexing, connectors, and RAG search |
+| `CACHE_BACKEND`      | `postgres`   | `redis`           | Uses PostgreSQL for caching instead of Redis |
+| `AUTH_BACKEND`       | `postgres`   | `redis`           | Uses PostgreSQL for sessions instead of Redis|
+| `FILE_STORE_BACKEND` | `postgres`   | `s3`              | Uses PostgreSQL for file storage instead of S3 or the object store |
+
+<Note>
+  Onyx Lite cannot be used with the Craft feature (`ENABLE_CRAFT`).
+</Note>
+
+<AccordionGroup>
+  <Accordion title="Configuring Docker Deployments">
+    If you don't have a `.env` file:
+
+    ```bash
+    cd onyx/deployment/docker_compose
+    cp env.prod.template .env
+
+    # If applicable
+    cp env.nginx.template .env.nginx
+    ```
+
+    The template files have a subset of common environment variables provided for you.
+    You can add more environment variables (listed below) to these `.env` files.
+
+    Some configuration options must be set in your Docker Compose file.
+
+    <Note>
+
+      The Docker Compose file you use to launch Onyx is the one you will need to modify.
+      Likely either `docker-compose.dev.yml` or `docker-compose.prod.yml`.
+    </Note>
+
+### Deploying Onyx Lite with Docker Compose
+
+    Onyx Lite is deployed using a Docker Compose override file that layers on top of your base Compose file.
+    The override moves unused services into Docker Compose [profiles](https://docs.docker.com/compose/how-tos/profiles/)
+    so they do not start by default.
+
+    **Quick start:**
+
+    ```bash
+    cd onyx/deployment/docker_compose
+    docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml up -d
+    ```
+
+    With development ports exposed:
+
+    ```bash
+    docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml \
+                   -f docker-compose.dev.yml up -d --wait
+    ```
+
+    Services started in Lite mode:
+    | Service | Description |
+    |------------------|-----------------------------------|
+    | api_server | Onyx API server (also handles background work) |
+    | web_server | Next.js frontend |
+    | relational_db | PostgreSQL database |
+    | nginx | Reverse proxy |
+    | code-interpreter | Python tool service |
+
+    <Note>
+      The .env file setup is the same as a standard Docker deployment.
+      Lite-specific environment variables (DISABLE_VECTOR_DB, CACHE_BACKEND, AUTH_BACKEND, FILE_STORE_BACKEND)
+      are set automatically by the override file, so you do not need to add them to your .env.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Configuring Kubernetes Deployments">
+    Kubernetes deployments are configured using Helm charts.
+    We have provided a `values.yaml` file where you can set all environment variables.
+
+    ```bash
+    cd onyx/deployment/helm/charts/onyx
+    vim values.yaml
+    ```
+
+    Add environment variables and secrets to the `configMap` and `auth.secrets` sections.
+    A subset of common configuration options are provided for you. You can add more environment variables (listed below)
+    to these sections.
+
+    To use external model servers, set `MODEL_SERVER_HOST` and `INDEXING_MODEL_SERVER_HOST` in `configMap`.
+    The chart then skips its own defaults for those values (chart 0.8.10 or later).
+
+### Deploying Onyx Lite with Helm
+
+    The values-lite.yaml file disables vector database access, Redis, Celery workers, and the indexing model server.
+    Unlike the Docker Compose overlay, it does not disable OpenSearch, the object store, the inference model server,
+    or the Slack bot. These workloads still start with the chart defaults. The code interpreter also remains enabled.
+
+    For a minimal install that omits those unused workloads, add explicit overrides:
+
+    ```bash
+    helm install onyx ./deployment/helm/charts/onyx \
+      -f ./deployment/helm/charts/onyx/values-lite.yaml \
+      --set opensearch.enabled=false \
+      --set objectStore.enabled=false \
+      --set minio.enabled=false \
+      --set inferenceCapability.replicaCount=0 \
+      --set slackbot.enabled=false
+    ```
+
+    To merge with your own overrides (custom domain, auth, LLM config, etc.):
+
+    ```bash
+    helm install onyx ./deployment/helm/charts/onyx \
+      -f ./deployment/helm/charts/onyx/values-lite.yaml \
+      -f my-overrides.yaml \
+      --set opensearch.enabled=false \
+      --set objectStore.enabled=false \
+      --set minio.enabled=false \
+      --set inferenceCapability.replicaCount=0 \
+      --set slackbot.enabled=false
+    ```
+
+    <Tip>
+      To upgrade from Lite to a full deployment,
+      use the chart defaults without values-lite.yaml or the minimal-install overrides. This enables vector indexing,
+      Redis, and background workers.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+## Commonly Configured Options
+
+### Authentication
+
+<CardGroup>
+  <Card title="Basic Authentication" icon="shield-check" href="/deployment/authentication/basic">
+    Set up email and password authentication.
+  </Card>
+
+  <Card title="Google OAuth" icon="google" href="/deployment/authentication/oauth">
+    Authenticate with Google accounts.
+  </Card>
+
+  <Card title="OIDC" icon="shield-check" href="/deployment/authentication/oidc">
+    Single-sign on with OpenID Connect (OIDC)
+  </Card>
+
+  <Card title="SAML" icon="shield-check" href="/deployment/authentication/saml">
+    Single-sign on with Security Assertion Markup Language (SAML)
+  </Card>
+</CardGroup>
+
+### Custom Domain
+
+To host Onyx on a custom domain,
+set the `WEB_DOMAIN` environment variable and update your DNS records to point to your public Onyx deployment IP.
+
+For additional instructions, read the [EC2 Deployment Guide](/deployment/cloud/aws/ec2)!
+
+### SSL
+
+If using Docker,
+the `init-letsencrypt.sh` script in `onyx/deployment/docker_compose` will automatically generate a Let's Encrypt
+certificate and launch Onyx with SSL enabled.
+
+### Web Search
+
+To enable the Web Search Tool, set the `EXA_API_KEY` environment variable.
+
+### Logging
+
+If using Docker, set `LOG_LEVEL` to `debug` in each container of your Docker Compose file.
+
+If using Kubernetes, set `LOG_LEVEL` to `debug` in your `values.yaml` file.
+
+### Observability
+
+We support the following observability providers:
+
+**Braintrust (recommended)**
+
+Braintrust is what we use internally for the cloud version of Onyx. Set the following environment variables:
+
+```bash
+BRAINTRUST_PROJECT="Your project name"
+BRAINTRUST_API_KEY="sk-..."
+```
+
+**Langfuse**
+
+```bash
+LANGFUSE_SECRET_KEY="sk-..."
+LANGFUSE_PUBLIC_KEY="pk-..."
+LANGFUSE_BASE_URL="https://cloud.langfuse.com" # Or "https://us.cloud.langfuse.com"
+```
+
+**Prometheus metrics**
+
+The API server exposes Prometheus metrics at `GET /metrics`. The endpoint requires a bearer token:
+
+```bash
+METRICS_AUTH_TOKEN="<random-secret>"   # scrapers send: Authorization: Bearer <random-secret>
+```
+
+If `METRICS_AUTH_TOKEN` is unset, the endpoint rejects every request.
+Set `DISABLE_METRICS_AUTH=true` only on networks where the API server is not reachable from outside. For the metrics,
+the worker ports, and example alerts, see [Monitoring](/deployment/production/monitoring).
+
+### Craft
+
+Craft is enabled with `ENABLE_CRAFT=true` and requires a supported sandbox backend.
+Use `SANDBOX_BACKEND=docker` for Docker Compose deployments and `SANDBOX_BACKEND=kubernetes` for Helm deployments.
+
+Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-hosted deployments.
+
+## Onyx Environment Variables
+
+<Info>
+  This is not an exhaustive list of all Onyx environment variables.
+</Info>
+
+<AccordionGroup>
+  <Accordion title="App Configuration">
+    `SKIP_WARM_UP`: Skip application warm-up process for hot-reloading the `API server`.
+    Only set this for development purposes.
+
+    `WEB_DOMAIN`: Set this if you are deploying Onyx on a custom domain.
+
+    `DISABLE_USER_KNOWLEDGE`: Controls whether users can use the My Documents feature with Agents.
+
+    `ONYX_QUERY_HISTORY_TYPE`: Controls query history reports (show user emails, anonymous, no queries)
+
+    `ONYX_AIRGAPPED`: Set to `true` on deployments with no internet access.
+    Onyx then skips the outbound fetches for the recommended-model catalog, the model price table,
+    and release notes from GitHub.
+  </Accordion>
+
+  <Accordion title="Craft Configuration">
+    `ENABLE_CRAFT`: Enables Craft APIs and UI. Defaults to `false`.
+
+    `SANDBOX_BACKEND`: Craft sandbox backend. Valid values are `docker` and `kubernetes`. Defaults to `kubernetes`.
+
+    `ONYX_SERVER_URL`: Full Onyx API base URL reachable from inside Craft sandboxes,
+    including any `/api` path prefix (for example `https://onyx.example.com/api`).
+    Docker Compose defaults it to `http://onyx-craft-api:8080` and Helm defaults it to the chart's internal API Service.
+    Set it only when sandboxes must reach Onyx through a public URL.
+
+    `SANDBOX_IDLE_TIMEOUT_SECONDS`: Idle timeout before sandbox sleep or cleanup. Defaults to `3600`.
+
+    `BUILD_MAX_UPLOAD_FILE_SIZE_MB`: Maximum Craft session attachment size. Defaults to `50`.
+
+    `BUILD_MAX_UPLOAD_FILES_PER_SESSION`: Maximum number of files attached to one Craft session. Defaults to `20`.
+
+    `BUILD_MAX_TOTAL_UPLOAD_SIZE_MB`: Maximum total attachment size for one Craft session. Defaults to `200`.
+
+    `USER_LIBRARY_MAX_FILE_SIZE_MB`: Maximum User Library file size. Defaults to `500`.
+
+    `USER_LIBRARY_MAX_FILES_PER_UPLOAD`: Maximum files in one User Library upload. Defaults to `100`.
+
+    `USER_LIBRARY_MAX_TOTAL_SIZE_GB`: Maximum User Library storage per user. Defaults to `10`.
+
+    Docker backend variables:
+
+    - `SANDBOX_DOCKER_MEMORY_LIMIT`: Per-sandbox Docker memory limit. Defaults to `2g`.
+    - `SANDBOX_DOCKER_CPU_LIMIT`: Per-sandbox Docker CPU limit. Defaults to `1.0`.
+
+    Docker Compose Craft uses the `onyx_craft_sandbox` bridge network created by the installer and referenced by the
+    Craft compose overlay.
+  </Accordion>
+
+  <Accordion title="Authentication & Security">
+    `AUTH_TYPE`: Legacy (pre-`v4.4.0`). Authentication is always enabled and SSO is configured in the admin panel,
+    so the variable is inert. Planned for full removal in `v4.5`.
+
+    `PASSWORD_MIN_LENGTH`: For basic auth. The minimum password length requirement
+
+    `PASSWORD_MAX_LENGTH`: For basic auth. The maximum password length requirement
+
+    `PASSWORD_REQUIRE_UPPERCASE`: For basic auth. Require uppercase letters in passwords
+
+    `PASSWORD_REQUIRE_LOWERCASE`: For basic auth. Require lowercase letters in passwords
+
+    `PASSWORD_REQUIRE_DIGIT`: For basic auth. Require digits in passwords
+
+    `PASSWORD_REQUIRE_SPECIAL_CHAR`: For basic auth. Require special characters in passwords
+
+    `ENCRYPTION_KEY_SECRET`: Key that Onyx uses to AES-encrypt connector credentials, API keys,
+    and other secrets at rest. Encryption is on whenever the key is set. Keep it stable:
+    changing it makes stored credentials unreadable.
+
+    `MASK_CREDENTIAL_PREFIX`: Mask connector credentials in the admin UI.
+    Turn off if admins should see the credentials in the admin panel.
+
+    `SESSION_EXPIRE_TIME_SECONDS`: Session expiration time in seconds.
+
+    `AUTH_COOKIE_EXPIRE_TIME_SECONDS`: JWT token validity duration in seconds.
+
+    `VALID_EMAIL_DOMAINS`: Comma-separated list of allowed email domains.
+
+    `REQUIRE_EMAIL_VERIFICATION`: Require email verification for registration
+
+    `TRACK_EXTERNAL_IDP_EXPIRY`: Honor the `expires_at` field returned by the external identity provider.
+    Disabled be default because many auth providers have very short expiry times.
+
+    `JWT_PUBLIC_KEY_URL`: JWKS or PEM endpoint for verifying API bearer JWTs.
+    See [JWT Header Auth](/deployment/authentication/jwt).
+
+    `JWT_EXPECTED_AUDIENCE`: Reject bearer JWTs whose `aud` claim does not match. Empty disables the check.
+
+    `JWT_EXPECTED_ISSUER`: Reject bearer JWTs whose `iss` claim does not match. Empty disables the check.
+  </Accordion>
+
+  <Accordion title="OAuth & OIDC Configuration">
+    `OAUTH_CLIENT_ID`: For both Google OAuth and OIDC.
+
+    `OAUTH_CLIENT_SECRET`: For both Google OAuth and OIDC.
+
+    `OPENID_CONFIG_URL`: For OIDC.
+
+    `GOOGLE_OAUTH_SCOPE_OVERRIDE`: For Google login.
+    Comma-separated list of scopes to request from Google instead of the defaults (`openid,email,profile`).
+    Useful when the access token from login needs to be passed through to tool calls that require additional Google API
+    scopes (i.e. when using Pass-Through OAuth for an MCP server).
+    Any scopes added here must also be enabled on the OAuth client in Google Cloud Console.
+
+    `OIDC_SCOPE_OVERRIDE`: For OIDC login.
+    Comma-separated list of scopes to request from the OIDC provider instead of the defaults.
+    Same use case as `GOOGLE_OAUTH_SCOPE_OVERRIDE`.
+
+    `OIDC_PKCE_ENABLED`: For OIDC login. Set to `true` to enable PKCE in the OIDC login flow.
+    Disabled by default for backwards compatibility.
+  </Accordion>
+
+  <Accordion title="JWT Header Auth">
+    `JWT_PUBLIC_KEY_URL`: URL that serves the public key material (JWKS or PEM) for an external token issuer. When set,
+    Onyx accepts an RS256 JWT in the `Authorization: Bearer` header and resolves the user from the token's email claim.
+    See [JWT Header Auth](/deployment/authentication/jwt) for the full behavior.
+  </Accordion>
+
+  <Accordion title="Email Configuration">
+    <Info>
+
+      Set the following for basic auth email verification and invites.
+    </Info>
+
+    `SMTP_SERVER`: SMTP server hostname
+
+    `SMTP_PORT`: SMTP server port
+
+    `SMTP_USER`: SMTP username
+
+    `SMTP_PASS`: SMTP password
+
+    `EMAIL_FROM`: From email address
+
+    `SENDGRID_API_KEY`: Alternative to SMTP for email delivery.
+
+    `ENABLE_EMAIL_INVITES`: Enable email invitations
+  </Accordion>
+
+  <Accordion title="Slack Configuration">
+    `OAUTH_SLACK_CLIENT_ID`: Slack OAuth client ID for Slack bot.
+
+    `OAUTH_SLACK_CLIENT_SECRET`: Slack OAuth client secret for Slack bot.
+  </Accordion>
+
+  <Accordion title="Postgres Configuration">
+    `POSTGRES_USER`: PostgreSQL username
+
+    `POSTGRES_PASSWORD`: PostgreSQL password
+
+    `POSTGRES_HOST`: PostgreSQL host
+
+    `POSTGRES_PORT`: PostgreSQL port
+
+    `POSTGRES_DB`: PostgreSQL database name
+
+    `POSTGRES_API_SERVER_POOL_SIZE`: API server connection pool size
+
+    `POSTGRES_API_SERVER_POOL_OVERFLOW`: API server pool overflow
+
+    `POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE`: Read-only pool size
+
+    `POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW`: Read-only pool overflow
+
+    `POSTGRES_USE_NULL_POOL`: Use null connection pool
+
+    `POSTGRES_POOL_PRE_PING`: Enable connection pre-ping
+
+    `POSTGRES_POOL_RECYCLE`: Pool recycle timeout in seconds
+
+    `USE_IAM_AUTH`: Use IAM authentication for database
+
+    `DB_READONLY_USER`: Read-only database user
+
+    `DB_READONLY_PASSWORD`: Read-only database password
+
+    `POSTGRES_SSLMODE`: libpq SSL mode (`disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`).
+    Ignored when `USE_IAM_AUTH` is set.
+
+    `POSTGRES_SSLROOTCERT`: Path to the CA certificate used to verify the server (`verify-ca` / `verify-full`).
+
+    `POSTGRES_SSLCERT`: Path to the client certificate for mutual TLS
+
+    `POSTGRES_SSLKEY`: Path to the client private key for mutual TLS
+
+    `POSTGRES_SSLKEY_PASSWORD`: Passphrase for `POSTGRES_SSLKEY`, if encrypted
+
+    In Helm, set `postgresTls.enabled:
+    true` with `postgresTls.caSecretName` or `postgresTls.caConfigMapName` to mount a CA certificate and configure these
+    settings on every backend workload.
+  </Accordion>
+
+  <Accordion title="Redis Configuration">
+    `REDIS_SSL`: Enable SSL for Redis connections
+
+    `REDIS_HOST`: Redis host
+
+    `REDIS_PORT`: Redis port
+
+    `REDIS_PASSWORD`: Redis password
+
+    `REDIS_REPLICA_HOST`: Redis replica host
+
+    `REDIS_DB_NUMBER`: Redis database number
+
+    `REDIS_DB_NUMBER_CELERY_RESULT_BACKEND`: Celery result backend database number
+
+    `REDIS_DB_NUMBER_CELERY`: Celery broker database number
+
+    `REDIS_HEALTH_CHECK_INTERVAL`: Health check interval
+
+    `REDIS_POOL_MAX_CONNECTIONS`: Maximum pool connections
+
+    `REDIS_SSL_CERT_REQS`: SSL certificate requirements
+
+    `REDIS_SSL_CA_CERTS`: SSL CA certificates
+
+    `REDIS_SSL_CERTFILE`: Client certificate for mutual TLS (set together with `REDIS_SSL_KEYFILE`)
+
+    `REDIS_SSL_KEYFILE`: Client private key for mutual TLS
+
+    `REDIS_SENTINEL_HOSTS`: Comma-separated `host:port` list of Redis Sentinel nodes. When set,
+    Onyx and Celery discover the current master through Sentinel instead of `REDIS_HOST` / `REDIS_PORT`.
+    Cannot be combined with `USE_REDIS_IAM_AUTH`.
+
+    `REDIS_SENTINEL_MASTER_NAME`: Sentinel master name. Defaults to `mymaster`.
+
+    `REDIS_SENTINEL_PASSWORD`: Password for the Sentinel nodes, if they require separate auth from the data nodes.
+  </Accordion>
+
+  <Accordion title="OpenSearch Configuration">
+    `OPENSEARCH_HOST`: OpenSearch host
+
+    `OPENSEARCH_REST_API_PORT`: OpenSearch REST API port (default `9200`)
+
+    `OPENSEARCH_ADMIN_USERNAME`: OpenSearch admin username
+
+    `OPENSEARCH_ADMIN_PASSWORD`: OpenSearch admin password
+
+    `OPENSEARCH_USE_SSL`: Use TLS when connecting to OpenSearch (default `true`)
+
+    `OPENSEARCH_VERIFY_CERTS`: Verify the OpenSearch server certificate
+
+    `OPENSEARCH_CA_CERTS`: CA bundle used to verify the server certificate
+
+    `OPENSEARCH_CLIENT_CERT`: Client certificate for mutual TLS
+
+    `OPENSEARCH_CLIENT_KEY`: Client key for mutual TLS
+
+    `OPENSEARCH_AUTH_METHOD`: `basic` (default) or `iam` (AWS SigV4 signing for managed domains)
+
+    `OPENSEARCH_AWS_REGION`: AWS region of the managed OpenSearch domain (required for `iam`)
+
+    `OPENSEARCH_AWS_SERVICE`: SigV4 service name, `es` (default) or `aoss` for OpenSearch Serverless
+
+    `USING_AWS_MANAGED_OPENSEARCH`: Set to `true` when using an AWS managed OpenSearch domain
+
+    `DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S`: Client request timeout in seconds
+
+    `DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S`: Query timeout in seconds
+
+    `OPENSEARCH_TEXT_ANALYZER`: Text analyzer for keyword search (default `english`)
+
+    `OPENSEARCH_INDEX_NUM_SHARDS`: Number of primary shards per index
+
+    `OPENSEARCH_INDEX_NUM_REPLICAS`: Number of replicas per index
+
+    `PIT_KEEP_ALIVE`: Point-in-time keep-alive used when scanning an index (default `5m`)
+
+    `OPENSEARCH_PROFILING_DISABLED`: Disable OpenSearch query profiling (default `true`)
+
+    `OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED`: Disable match highlights in search results (default `true`)
+
+    `OPENSEARCH_EXPLAIN_ENABLED`: Return per-hit score breakdowns for relevance debugging (large performance cost)
+
+    `ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH`: Use OpenSearch keyword search for the Search UI
+  </Accordion>
+
+  <Accordion title="Celery Configuration">
+    `CELERY_RESULT_EXPIRES`: Result expiration time in seconds
+
+    `CELERY_BROKER_POOL_LIMIT`: Broker connection pool limit
+
+    `CELERY_WORKER_LIGHT_CONCURRENCY`: Light worker concurrency
+
+    `CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER`: Light worker prefetch multiplier
+
+    `CELERY_WORKER_DOCPROCESSING_CONCURRENCY`: Document processing worker concurrency
+
+    `CELERY_WORKER_DOCFETCHING_CONCURRENCY`: Document fetching worker concurrency
+
+    `CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT`: Document-index sync lock TTL in seconds. Defaults to `120`.
+    Raise it if the sync pass aborts with "no longer owned" or "Lock not owned on completion".
+  </Accordion>
+
+  <Accordion title="Rate Limiting">
+    <Info>
+
+      These rate limits apply to auth endpoints
+    </Info>
+
+    `RATE_LIMIT_WINDOW_SECONDS`: Rate limiting window in seconds
+
+    `RATE_LIMIT_MAX_REQUESTS`: Maximum requests per window
+
+    `REQUEST_TIMEOUT_SECONDS`: Default request timeout
+  </Accordion>
+
+  <Accordion title="Indexing Configuration">
+    `INDEX_BATCH_SIZE`: Batch size during indexing
+
+    `DISABLE_INDEX_UPDATE_ON_SWAP`: Disable primary index updates during embedding model swaps
+
+    `ENABLE_MULTIPASS_INDEXING`: Enable multipass indexing for better accuracy
+
+    `ENABLE_CONTEXTUAL_RAG`: Enable contextual retrieval
+
+    `SKIP_METADATA_IN_CHUNK`: Skip metadata in chunks
+
+    `INDEXING_SIZE_WARNING_THRESHOLD`: Size warning threshold in bytes
+
+    `INDEXING_EMBEDDING_MODEL_NUM_THREADS`: Embedding model threads
+
+    `CONTINUE_ON_CONNECTOR_FAILURE`: Continue indexing on connector failures
+
+    `MAX_DOCUMENT_CHARS`: Maximum document characters
+
+    `MAX_FILE_SIZE_BYTES`: Maximum file size in bytes
+
+    `USE_DOCUMENT_SUMMARY`: Use document summary for contextual RAG
+
+    `USE_CHUNK_SUMMARY`: Use chunk summary for contextual RAG
+  </Accordion>
+
+  <Accordion title="Connector Configuration">
+    <Note>
+
+      Most of the settings below can be configured in the admin UI.
+    </Note>
+
+    **General Connector Settings**
+
+    `ENABLED_CONNECTOR_TYPES`: Comma-separated list of enabled connector types
+
+    `LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE`: Keep connector active on init failure
+
+    **Web Connector**
+
+    `WEB_CONNECTOR_VALIDATE_URLS`: Validate URLs in web connector
+
+    `HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY`: Link transformation strategy
+
+    `PARSE_WITH_TRAFILATURA`: Use Trafilatura for HTML parsing
+
+    **Confluence Connector**
+
+    `OAUTH_CONFLUENCE_CLOUD_CLIENT_ID`: Confluence Cloud OAuth client ID
+
+    `OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET`: Confluence Cloud OAuth client secret
+
+    `CONFLUENCE_CONNECTOR_LABELS_TO_SKIP`: Labels to skip during indexing
+
+    `CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD`: Attachment size threshold
+
+    `CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD`: Attachment character threshold
+
+    `CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE`: User profiles override JSON
+
+    `CONFLUENCE_TIMEZONE_OFFSET`: Timezone offset for CQL queries
+
+    **Google Drive Connector**
+
+    `OAUTH_GOOGLE_DRIVE_CLIENT_ID`: Google Drive OAuth client ID
+
+    `OAUTH_GOOGLE_DRIVE_CLIENT_SECRET`: Google Drive OAuth client secret
+
+    `GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD`: File size threshold for Google Drive
+
+    **SharePoint Connector**
+
+    `SHAREPOINT_CONNECTOR_SIZE_THRESHOLD`: File size threshold for SharePoint
+
+    **Jira Connector**
+
+    `JIRA_CONNECTOR_LABELS_TO_SKIP`: Labels to skip during indexing
+
+    `JIRA_CONNECTOR_MAX_TICKET_SIZE`: Maximum ticket size in bytes
+
+    **GitHub Connector**
+
+    `GITHUB_CONNECTOR_BASE_URL`: GitHub base URL (for enterprise)
+
+    **GitLab Connector**
+
+    `GITLAB_CONNECTOR_INCLUDE_CODE_FILES`: Include code files in indexing
+
+    **Gong Connector**
+
+    `GONG_CONNECTOR_START_TIME`: Start time for Gong connector
+
+    **Notion Connector**
+
+    `NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP`: Disable recursive page lookup
+
+    **Zendesk Connector**
+
+    `ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS`: Article labels to skip
+
+    **Egnyte Integration**
+
+    `EGNYTE_CLIENT_ID`: Egnyte OAuth client ID
+
+    `EGNYTE_CLIENT_SECRET`: Egnyte OAuth client secret
+
+    **Linear Integration**
+
+    `LINEAR_CLIENT_ID`: Linear OAuth client ID
+
+    `LINEAR_CLIENT_SECRET`: Linear OAuth client secret
+  </Accordion>
+
+  <Accordion title="Pruning Configuration">
+    `ALLOW_SIMULTANEOUS_PRUNING`: Allow simultaneous pruning operations
+
+    `MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE`: Maximum document retrieval rate during pruning
+  </Accordion>
+
+  <Accordion title="Logging Configuration">
+    `LOG_ONYX_MODEL_INTERACTIONS`: Log Onyx model interactions
+
+    `LOG_ENDPOINT_LATENCY`: Log endpoint latency
+
+    `LOG_POSTGRES_LATENCY`: Log PostgreSQL latency
+
+    `LOG_POSTGRES_CONN_COUNTS`: Log PostgreSQL connection counts
+
+    `LOG_THIRD_PARTY_DEBUG`: Third-party libraries (LiteLLM, httpcore, botocore)
+    are capped at `INFO` even when `LOG_LEVEL=debug`. Set to `true` to let them log at `LOG_LEVEL`.
+  </Accordion>
+
+  <Accordion title="Image Processing Configuration">
+    `IMAGE_MODEL_NAME`: Image model name
+
+    `AZURE_IMAGE_API_VERSION`: Azure OpenAI image API version
+
+    `AZURE_IMAGE_API_KEY`: Azure OpenAI key used for image generation
+
+    `AZURE_IMAGE_API_BASE`: Azure OpenAI endpoint base URL for image generation
+
+    `AZURE_IMAGE_DEPLOYMENT_NAME`: Azure OpenAI image deployment namespace
+
+    `IMAGE_SUMMARIZATION_SYSTEM_PROMPT`: System prompt for image summarization
+
+    `IMAGE_SUMMARIZATION_USER_PROMPT`: User prompt for image summarization
+
+    `IMAGE_SUMMARIZATION_TIMEOUT`: Timeout in seconds for image summarization LLM calls during indexing.
+    Defaults to `300`.
+
+    `CONTEXTUAL_RAG_LLM_TIMEOUT`: Timeout in seconds for contextual RAG summary LLM calls during indexing.
+    Defaults to `180`.
+  </Accordion>
+
+  <Accordion title="File Storage Configuration">
+    `FILE_STORE_BACKEND`: File store backend. Use `s3` (default) for AWS S3, the object store,
+    and other S3-compatible storage, `gcs` for Google Cloud Storage, `azure` for Azure Blob Storage,
+    or `postgres` to keep files in PostgreSQL.
+
+    **S3 and the object store** (`FILE_STORE_BACKEND=s3`)
+
+    `S3_FILE_STORE_BUCKET_NAME`: S3 bucket name for file storage
+
+    `S3_FILE_STORE_PREFIX`: S3 prefix for file storage
+
+    `S3_ENDPOINT_URL`: S3 endpoint URL. `http://object-store:8333` for the object store,
+    or the endpoint of another S3-compatible service.
+
+    `S3_VERIFY_SSL`: Verify SSL for S3 connections
+
+    `S3_AWS_ACCESS_KEY_ID`: AWS access key ID for S3. The object store uses it as its admin key.
+
+    `S3_AWS_SECRET_ACCESS_KEY`: AWS secret access key for S3
+
+    `S3_LEGACY_ENDPOINT_URL`, `S3_LEGACY_AWS_ACCESS_KEY_ID`, `S3_LEGACY_AWS_SECRET_ACCESS_KEY`,
+    `LEGACY_COPY_SETTLE_SECONDS`, `LEGACY_COPY_WORKERS`, `MINIO_REPLICAS`:
+    Used only during the one-time [move to the object store](/admins/advanced_configs/object_store_migration)
+    from a release before `v5.0.0`. Leave unset on a fresh install or with external storage.
+
+    **Google Cloud Storage** (`FILE_STORE_BACKEND=gcs`)
+
+    `GCS_FILE_STORE_BUCKET_NAME`: Cloud Storage bucket name for file storage. Required.
+
+    `GCS_FILE_STORE_PREFIX`: Object prefix for file storage. Defaults to `onyx-files`.
+
+    `GCS_PROJECT_ID`: GCP project of the bucket. If you do not set it, Onyx gets the project from the credentials.
+
+    `GCS_SERVICE_ACCOUNT_KEY_PATH`: Path to a service account JSON key file
+
+    `GCS_SERVICE_ACCOUNT_KEY_JSON`: Service account JSON key as a string
+
+    Onyx uses the first credentials it finds, in this order: `GCS_SERVICE_ACCOUNT_KEY_PATH`,
+    then `GCS_SERVICE_ACCOUNT_KEY_JSON`, then Application Default Credentials.
+    Application Default Credentials include GKE Workload Identity, the Compute Engine metadata server,
+    and `gcloud auth application-default login`. On GKE, use Workload Identity and do not set a key.
+    The identity needs `roles/storage.objectAdmin` and `roles/storage.legacyBucketReader` on the bucket,
+    because Onyx reads the bucket when it starts.
+
+    **Azure Blob Storage** (`FILE_STORE_BACKEND=azure`)
+
+    `AZURE_FILE_STORE_CONTAINER_NAME`: Blob container name for file storage
+
+    `AZURE_FILE_STORE_PREFIX`: Blob prefix for file storage. Defaults to `onyx-files`.
+
+    `AZURE_STORAGE_ACCOUNT_NAME`: Storage account name
+
+    `AZURE_STORAGE_ACCOUNT_URL`: Blob endpoint URL. If you do not set it,
+    Onyx uses `https://<account>.blob.core.windows.net`. Set it for Azurite or sovereign clouds.
+
+    `AZURE_STORAGE_CONNECTION_STRING`: Storage account connection string
+
+    `AZURE_STORAGE_ACCOUNT_KEY`: Storage account key
+
+    Onyx uses the first credentials it finds, in this order: `AZURE_STORAGE_CONNECTION_STRING`,
+    then `AZURE_STORAGE_ACCOUNT_KEY`, then `DefaultAzureCredential`.
+    `DefaultAzureCredential` includes AKS Workload Identity, managed identity, and `az login`.
+  </Accordion>
+
+  <Accordion title="Telemetry & Analytics">
+    `DISABLE_TELEMETRY`: Disable anonymous usage telemetry
+
+    `CUSTOM_ANSWER_VALIDITY_CONDITIONS`: Custom answer validity conditions
+  </Accordion>
+
+  <Accordion title="API Configuration">
+    `API_PREFIX`: Used to prepend a base path for all API routes.
+    Set this to `/api` if you are running Onyx behind a reverse proxy that doesn't support stripping the `/api` prefix
+    from requests to the `API server`.
+
+    `LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS`: Custom error message mappings (JSON)
+
+    `GEN_AI_MODEL_FALLBACK_MAX_TOKENS`: Maximum token limit for generative AI model fallback
+  </Accordion>
+
+  <Accordion title="Enterprise Configuration">
+    <Tip>
+
+      [Contact us](/deployment/miscellaneous/contact_us) to enable Enterprise Edition features!
+    </Tip>
+
+    `DATA_PLANE_SECRET`: Secret for secure control/data plane communication
+
+    `EXPECTED_API_KEY`: Additional security check for control plane API
+
+    `CONTROL_PLANE_API_BASE_URL`: Control plane API base URL
+  </Accordion>
+
+  <Accordion title="Development & Testing">
+    `DEV_MODE`: Enable development mode
+
+    `INTEGRATION_TESTS_MODE`: Enable integration tests mode
+  </Accordion>
+
+  <Accordion title="Deployment Configuration">
+    `POD_NAME`: Kubernetes pod name
+
+    `POD_NAMESPACE`: Kubernetes pod namespace
+
+    `AWS_REGION_NAME`: AWS region name
+
+    `TARGET_AVAILABLE_TENANTS`: Number of pre-provisioned tenants to maintain
+
+    `SYSTEM_RECURSION_LIMIT`: System recursion limit
+  </Accordion>
+</AccordionGroup>
+
+## Enterprise Edition Environment Variables
+
+<AccordionGroup>
+  <Accordion title="ENV_SEED_CONFIGURATION">
+    Setting this variable allows you to start your Onyx instance with pre-configured options that persist across
+    restarts.
+
+    `ENV_SEED_CONFIGURATION` accepts a JSON string with the following options:
+    - `llms`: List of LLM configurations (name, provider, api_key, api_base, api_version, custom_config, default_model_name, fast_default_model_name)
+    - `admin_user_emails`: List of email addresses for automatic admin role assignment
+    - `seeded_name`: Pre-set name for your Onyx instance
+    - `seeded_logo_path`: Path to your logo within the assets folder
+  </Accordion>
+
+  <Accordion title="API_KEY_HASH_ROUNDS">
+    This variable allows you to configure the number of rounds used in the SHA-256 Crypt hashing algorithm for API keys.
+    - Default value: `535000`
+    - Allowed range: `1000` to `999999999`
+
+    <Info>
+
+      Increasing this value enhances security but may impact performance.
+    </Info>
+  </Accordion>
+</AccordionGroup>

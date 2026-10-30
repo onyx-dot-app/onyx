@@ -110,6 +110,50 @@ or written, and the docstring says so. **Do not treat `UserRole.ADMIN` /
   A route with `allow_scope=True` and no GATE 2 check hands scoped managers
   global access.
 
+#### Scoped group-manager rules
+
+A group manager holds the `SCOPED_MANAGER_PERMISSIONS` bundle
+(`auth/permissions.py`) only inside the groups they manage. The bundle is never
+written to `permission_grant` and never merged into `effective_permissions`,
+which stays global-only. The rules, as the code enforces them:
+
+- **Scope is live; only the "is a manager" flag is cached.** GATE 1 reads the
+  cached `User.is_group_manager` so the route check needs no query. GATE 2 reads
+  the managed group ids live (`get_scoped_groups`), so a group rename, move, or
+  delete cannot leave a stale scope.
+- **A scoped write stays private and inside the managed groups.**
+  `assert_within_scope` passes only when the union of the current and requested
+  group ids is a subset of the managed set and the resource is not public. On
+  update, pass the current groups read from the database, never from the client.
+  This stops a manager from moving a resource out of scope, or from capturing a
+  public resource into scope. Call it before any broad `try/except`, or its 403
+  becomes a 500.
+- **Only a global `MANAGE_USER_GROUPS` holder creates or deletes a group.** Those
+  routes omit `allow_scope`. A manager may assign or remove managers only in a
+  group they manage (`set_group_manager` → `assert_manages_group`).
+- **Delete and publish rights differ by resource type.** Managers edit, share,
+  and attach in their groups. Delete and publish follow these rules (`auth/permission_projection.py`):
+  - Agents: owner or global admin (`can_delete_persona`). Being a manager never
+    removes a right the user holds as an owner, so a manager may delete what
+    they created.
+  - Connectors: a manager whose group has `ConnectorManageRole.EDITOR` may
+    delete the connector (`/admin/deletion-attempt` needs
+    `CCPairAccessLevel.EDIT`). Publish is global `MANAGE_CONNECTORS` only.
+  - Document sets: delete is global `MANAGE_DOCUMENT_SETS`, or the creator of a
+    private set with no groups (`delete_document_set`). Publish is global only.
+- **Custom actions and MCP servers are owner-or-admin, not agent-scoped.**
+  A scoped `MANAGE_ACTIONS` holder may create actions and manage the ones they
+  created (`db/tools.py:can_manage_own_tool`,
+  `server/features/mcp/api.py:_ensure_mcp_server_owner_or_admin`). Agents that reference an action do not
+  widen this.
+- **Sharing an agent with a group requires `MANAGE_AGENTS` on that group.**
+  `ADD_AGENTS` alone lets a user create agents but not share them with a group
+  (`ee/onyx/db/persona.py`).
+- **Adding a member must not amplify the actor's own permissions.** A member
+  inherits the group's grants, so `_assert_no_privilege_amplification`
+  (`ee/onyx/db/user_group.py`) blocks a `MANAGE_USER_GROUPS` holder who would
+  otherwise join the seeded Admin group and become admin.
+
 This `Permission`/group-manager system governs **who can administer** groups,
 document sets, and connectors. It is a different axis from the document-level ACL
 this document otherwise describes, which governs **who can retrieve which

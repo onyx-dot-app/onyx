@@ -81,6 +81,15 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
             ConnectorCredentialPair.access_type.in_(
                 (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
             ).label("permission_sync_enabled"),
+            ConnectorCredentialPair.last_time_perm_sync.label(
+                "last_permission_sync_at"
+            ),
+            ConnectorCredentialPair.last_time_external_group_sync.label(
+                "last_group_sync_at"
+            ),
+            ConnectorCredentialPair.perm_sync_pending_since.label(
+                "permission_sync_pending_since"
+            ),
             Connector.connector_specific_config.label("config"),
         )
         .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)
@@ -492,6 +501,16 @@ def email_domain_rows(db_session: Session) -> list[dict[str, Any]]:
         .limit(ROW_LIMIT)
     )
     return [dict(row) for row in db_session.execute(statement).mappings()]
+
+
+def standard_user_count(db_session: Session) -> int:
+    """How many standard accounts exist. Never who they are."""
+    statement = (
+        select(func.count())
+        .select_from(User)
+        .where(User.account_type == AccountType.STANDARD)
+    )
+    return db_session.execute(statement).scalar_one()
 
 
 def license_row(db_session: Session) -> dict[str, Any]:

@@ -24,12 +24,11 @@ import {
   SvgPlusCircle,
   SvgUserShield,
 } from "@opal/icons";
-import { markdown } from "@opal/utils";
+import { markdown, richNodes } from "@opal/utils";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { InputTypeIn, Text } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { AccountType } from "@/lib/types";
@@ -635,7 +634,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiBody text04>
+                <Text font="main-ui-body" color="text-04">
                   {t("form.name.label")}
                 </Text>
                 <InputTypeIn
@@ -823,15 +822,17 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             </Button>
           }
         >
-          <Text as="p" text03>
-            {t.rich("edit.deleteModal.description", {
-              name: group?.name ?? "",
-              highlight: (chunks) => (
-                <Text as="span" text05>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("edit.deleteModal.description", {
+                name: group?.name ?? "",
+                highlight: (chunks) => (
+                  <Text as="span" color="text-05">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         </ConfirmationModalLayout>
       )}

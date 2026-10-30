@@ -28,9 +28,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
+from onyx.background.celery.tasks.docfetching.task_creation_utils import (
+    docfetching_priority,
+)
 from onyx.background.celery.tasks.docprocessing.utils import should_index
 from onyx.background.celery.tasks.port import tasks as port_task
-from onyx.background.celery.tasks.port.tasks import run_check_for_port, run_port_attempt
+from onyx.background.celery.tasks.port.tasks import (
+    _enqueue_run_port_attempt,
+    run_check_for_port,
+    run_port_attempt,
+)
 from onyx.background.celery.tasks.shared.tasks import (
     _clear_port_orphan_candidate_for_live_doc,
 )
@@ -39,7 +46,7 @@ from onyx.configs.app_configs import (
     MAX_CONCURRENT_PORT_ATTEMPTS,
     MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE,
 )
-from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import port_attempt as port_attempt_db
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
@@ -57,6 +64,7 @@ from onyx.db.enums import (
     IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
+    SwitchoverType,
 )
 from onyx.db.index_attempt import (
     count_unique_active_cc_pairs_with_successful_index_attempts,
@@ -77,6 +85,7 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.port_attempt import (
     cancel_active_port_attempts,
     commit_port_cursor,
+    connector_ports_complete,
     count_consecutive_failed_port_attempts_no_progress,
     create_port_attempt,
     fail_unstarted_port_attempt,
@@ -86,6 +95,7 @@ from onyx.db.port_attempt import (
     mark_port_terminal,
     pause_port_attempt,
     port_backfill_has_pending_work,
+    reindex_finalizing,
     request_port_cancel,
     resume_paused_port_attempt,
 )
@@ -2423,4 +2433,101 @@ def test_streak_counts_beyond_default_cap_when_limit_allows(
                 db_session, cc_pair.id, future_id
             )
             == 12
+        )
+
+
+# --- finalizing phase: FUTURE attempts first ---------------------------------------
+
+
+def test_port_task_enqueued_at_highest_priority() -> None:
+    """The port queue shares its worker with docprocessing, which kombu drains first
+    at the same priority; HIGHEST keeps a port task from expiring unread."""
+    celery_app = MagicMock()
+    _enqueue_run_port_attempt(celery_app, port_attempt_id=1, tenant_id="public")
+    kwargs = celery_app.send_task.call_args.kwargs
+    assert kwargs["queue"] == OnyxCeleryQueues.PORT
+    assert kwargs["priority"] == OnyxCeleryPriority.HIGHEST
+    assert kwargs["expires"] == BEAT_EXPIRES_DEFAULT
+
+
+def test_reindex_finalizing_needs_every_connector_port_success(
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The reindex finalizes only once every connector's latest port is SUCCESS,
+    and only for a port-flow FUTURE that does not swap INSTANT."""
+    cc_pair, future_id = cc_pair_and_port_future
+    future = db_session.get(SearchSettings, future_id)
+    assert future is not None
+    with patch.object(
+        port_attempt_db,
+        "fetch_indexable_standard_connector_credential_pair_ids",
+        lambda *_, **__: [cc_pair.id],
+    ):
+        assert reindex_finalizing(db_session, None) is False
+        # no port attempt yet
+        assert reindex_finalizing(db_session, future) is False
+
+        attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+        mark_port_in_progress(db_session, attempt.id)
+        assert connector_ports_complete(db_session, future_id, [cc_pair.id]) is False
+        assert reindex_finalizing(db_session, future) is False
+
+        mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
+        assert connector_ports_complete(db_session, future_id, [cc_pair.id]) is True
+        assert reindex_finalizing(db_session, future) is True
+
+        # a legacy FUTURE and an INSTANT switchover have no finalizing phase
+        future.use_port_flow = False
+        db_session.commit()
+        assert reindex_finalizing(db_session, future) is False
+        future.use_port_flow = True
+        future.switchover_type = SwitchoverType.INSTANT
+        db_session.commit()
+        assert reindex_finalizing(db_session, future) is False
+
+
+def test_docfetching_priority_finalizing(
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """FUTURE fetch tasks go out HIGH while the reindex finalizes; PRESENT
+    refreshes keep MEDIUM, and first-time indexing stays HIGH."""
+    cc_pair, future_id = cc_pair_and_port_future
+    future = db_session.get(SearchSettings, future_id)
+    assert future is not None
+    present = get_current_search_settings(db_session)
+    with patch.object(
+        port_attempt_db,
+        "fetch_indexable_standard_connector_credential_pair_ids",
+        lambda *_, **__: [cc_pair.id],
+    ):
+        # first-time indexing always goes first
+        cc_pair.last_successful_index_time = None
+        db_session.commit()
+        assert (
+            docfetching_priority(db_session, cc_pair, present)
+            == OnyxCeleryPriority.HIGH
+        )
+
+        # port still running: refreshes on both settings share the queue
+        cc_pair.last_successful_index_time = datetime.now(timezone.utc)
+        db_session.commit()
+        assert (
+            docfetching_priority(db_session, cc_pair, present)
+            == OnyxCeleryPriority.MEDIUM
+        )
+        assert (
+            docfetching_priority(db_session, cc_pair, future)
+            == OnyxCeleryPriority.MEDIUM
+        )
+
+        # finalizing: FUTURE goes first, PRESENT refreshes keep their place
+        attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+        mark_port_in_progress(db_session, attempt.id)
+        mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
+        assert (
+            docfetching_priority(db_session, cc_pair, future) == OnyxCeleryPriority.HIGH
+        )
+        assert (
+            docfetching_priority(db_session, cc_pair, present)
+            == OnyxCeleryPriority.MEDIUM
         )

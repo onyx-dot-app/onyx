@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { Message } from "@/app/app/interfaces";
+import { Message } from "@/app/app/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
@@ -9,7 +9,7 @@ import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
-import { MultiModelResponse } from "@/app/app/message/interfaces";
+import { MultiModelResponse } from "@/app/app/message/types";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
@@ -24,12 +24,13 @@ import {
 import { cn } from "@opal/utils";
 
 /** Width constraint for normal (non-multi-model) messages. */
-// Reading-width cap only applies at md and up — below that the window is too
-// narrow for it to matter, so chat is always full width (and the top-bar
-// toggle is hidden).
-const MSG_MAX_W = "md:max-w-chat-message";
-// Full width keeps a max-width (100%), so the switch animates instead of jumping.
-const MSG_FULL_W = "md:max-w-full";
+// The chat column's width comes from the page (`--app-chat-column-width`, set
+// by AppPage for its compact and full-width modes). A page that does not set
+// it gets the compact reading width. The cap only applies at md and up — below
+// that the window is too narrow for it to matter, so chat is always full width
+// (and the top-bar toggle is hidden).
+const MSG_W =
+  "md:max-w-[var(--app-chat-column-width,var(--width-chat-message-max))]";
 
 /** Animates the full-width toggle; every surface it widens uses this. */
 export const FULL_WIDTH_TRANSITION =
@@ -71,7 +72,11 @@ export interface ChatUIProps {
   /** Currently selected models for multi-model comparison. */
   selectedModels?: SelectedModel[];
 
-  /** When on, messages drop the reading-width cap and fill the window. */
+  /**
+   * When on, the chat is in full-width mode: messages use its padding layout.
+   * Their width comes from the page's `--app-chat-column-width`, not from
+   * this prop.
+   */
   fullWidthChat?: boolean;
 }
 
@@ -100,11 +105,8 @@ const ChatUI = React.memo(
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
 
-    // Reading-width cap on messages; full-width mode widens it to 100%.
-    const msgWidth = cn(
-      fullWidthChat ? MSG_FULL_W : MSG_MAX_W,
-      FULL_WIDTH_TRANSITION
-    );
+    // Reading-width cap on messages, from the page's chat column width.
+    const msgWidth = cn(MSG_W, FULL_WIDTH_TRANSITION);
 
     // Lookup: model identifier → provider slug (for icon resolution).
     const modelProviderLookup = useMemo(
@@ -244,25 +246,10 @@ const ChatUI = React.memo(
                   )}
                 </div>
               );
-            } else if (message.type === "assistant") {
-              if ((error || loadError) && i === messages.length - 1) {
-                return (
-                  <div
-                    key={`error-${message.nodeId}`}
-                    className={cn("p-4 w-full self-center", msgWidth)}
-                  >
-                    <ErrorBanner
-                      resubmit={onResubmit}
-                      error={error || loadError || ""}
-                      errorCode={message.errorCode || undefined}
-                      isRetryable={message.isRetryable ?? true}
-                      details={message.errorDetails || undefined}
-                      stackTrace={message.stackTrace || undefined}
-                    />
-                  </div>
-                );
-              }
-
+            } else if (
+              message.type === "assistant" ||
+              message.type === "error"
+            ) {
               const previousMessage = i !== 0 ? messages[i - 1] : null;
 
               // Skip assistant messages already rendered in MultiModelResponseView
@@ -288,52 +275,55 @@ const ChatUI = React.memo(
                   key={messageReactComponentKey}
                   className={cn("w-full self-center", msgWidth)}
                 >
-                  <AgentMessage
-                    fullWidthChat={fullWidthChat}
-                    rawPackets={message.packets}
-                    packetCount={message.packetCount}
-                    chatState={chatStateData}
-                    nodeId={message.nodeId}
-                    messageId={message.messageId}
-                    currentFeedback={message.currentFeedback}
-                    llmManager={llmManager}
-                    otherMessagesCanSwitchTo={
-                      parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                    }
-                    onMessageSelection={onMessageSelection}
-                    onRegenerate={createRegenerator}
-                    parentMessage={previousMessage}
-                    processingDurationSeconds={
-                      message.processingDurationSeconds
-                    }
-                  />
+                  {(message.type !== "error" || message.packets.length > 0) && (
+                    <AgentMessage
+                      fullWidthChat={fullWidthChat}
+                      rawPackets={message.packets}
+                      packetCount={message.packetCount}
+                      restoredPacketCount={message.restoredPacketCount}
+                      chatState={chatStateData}
+                      nodeId={message.nodeId}
+                      messageId={message.messageId}
+                      currentFeedback={message.currentFeedback}
+                      llmManager={llmManager}
+                      otherMessagesCanSwitchTo={
+                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                      }
+                      onMessageSelection={onMessageSelection}
+                      onRegenerate={createRegenerator}
+                      parentMessage={previousMessage}
+                      processingDurationSeconds={
+                        message.processingDurationSeconds
+                      }
+                      hideFooter={message.type === "error"}
+                      disableTTS={message.type === "error"}
+                    />
+                  )}
+                  {message.type === "error" && (
+                    <ErrorBanner
+                      resubmit={
+                        chatState === "input" && i === messages.length - 1
+                          ? onResubmit
+                          : undefined
+                      }
+                      error={message.errorMessage ?? ""}
+                      errorCode={message.errorCode ?? undefined}
+                      isRetryable={message.isRetryable ?? true}
+                      details={message.errorDetails ?? undefined}
+                      stackTrace={message.stackTrace}
+                    />
+                  )}
                 </div>
               );
             }
             return null;
           })}
 
-          {/* Error banner when last message is user message or error type.
-              Skip for multi-model per-panel errors — those are shown in
-              their own panel, not as a global banner. */}
-          {(((error !== null || loadError !== null) &&
-            messages[messages.length - 1]?.type === "user") ||
-            (messages[messages.length - 1]?.type === "error" &&
-              !messages[messages.length - 1]?.modelDisplayName)) && (
+          {(error || loadError) && (
             <div className={cn("p-4 w-full self-center", msgWidth)}>
               <ErrorBanner
-                resubmit={onResubmit}
+                resubmit={chatState === "input" ? onResubmit : undefined}
                 error={error || loadError || ""}
-                errorCode={
-                  messages[messages.length - 1]?.errorCode || undefined
-                }
-                isRetryable={messages[messages.length - 1]?.isRetryable ?? true}
-                details={
-                  messages[messages.length - 1]?.errorDetails || undefined
-                }
-                stackTrace={
-                  messages[messages.length - 1]?.stackTrace || undefined
-                }
               />
             </div>
           )}

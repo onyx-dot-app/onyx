@@ -1,0 +1,126 @@
+---
+title: "Plugins"
+description: "Use MCP servers, OpenAPI plugins, and Craft Apps to work with live data and take actions"
+icon: "plug"
+---
+
+import BuiltInActionsTable from '/snippets/built-in-actions-table.mdx';
+
+Plugins connect Onyx agents to the tools that your team uses. With a plugin, an agent can read live data,
+such as a Linear issue, or take an action, such as post a Slack reply.
+
+Your admin adds plugins for the workspace. You connect your account and choose where to use each plugin.
+
+<Note>
+  In Onyx 5.0, MCP and OpenAPI actions became plugins. Find them in **Plugins** in the sidebar,
+  and in Chat under **Actions → Plugins**. Craft Apps moved from **Craft → Apps** to **Plugins** in the Craft sidebar.
+</Note>
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins page with an MCP server and a Slack Craft App"/>
+
+## Plugin types
+
+| Type | What it does | Where you can use it |
+| --- | --- | --- |
+| **MCP** | Connects to a [Model Context Protocol](https://modelcontextprotocol.io/) server, such as Linear, Notion, or Atlassian | Chat, custom agents, and Craft |
+| **OpenAPI** | Calls a REST API that your admin describes with an OpenAPI schema | Chat and custom agents |
+| **Craft App** | Lets Craft act as you in Slack, Gmail, Google Calendar, Google Drive, Notion, Linear, GitHub, HubSpot, or Zendesk | Craft only |
+
+For Craft Apps, see [Craft Apps](/overview/core_features/craft_apps).
+
+### Plugins and Onyx knowledge
+
+Plugins and [connectors](/overview/core_features/connectors) give agents different access.
+
+- **Onyx knowledge** is an index of company documents. Onyx applies the source permissions,
+  so you find only documents that you can access. Search is read only.
+- **Plugins** call the external service live. When you connect your own account, the service applies your permissions.
+  The plugin can read only what your account can read,
+  and it can change content only if your account and your admin allow it.
+
+## Connect a plugin
+
+Select **Plugins** in the Chat sidebar or the Craft sidebar.
+
+The status icon on each plugin shows where you can use it: **Main Chat**, **Custom agents**, and **Craft**.
+
+<Steps>
+  <Step title="Connect your account">
+    Click a plugin. The **Connection** tab shows what the plugin needs:
+
+    | Status | What to do |
+    | --- | --- |
+    | **Ready to use** | Nothing. The plugin does not need an account. |
+    | **Workspace connection** | Nothing. Your workspace provides the connection. |
+    | **Uses your sign-in** | Nothing. The plugin uses your Onyx sign-in. |
+    | **Connect your account** | Click **Connect**, then sign in with the service. |
+    | **Add your credentials** | Enter the values that your admin asks for, such as a personal API key. |
+    | **Workspace setup required** | Ask an admin to finish the plugin setup. |
+
+    Sign in with the account that the agent should use. The agent acts as that account.
+  </Step>
+
+  <Step title="Choose where to use it">
+    Set your personal defaults:
+
+    | Setting | Effect |
+    | --- | --- |
+    | **Enable in default Chat** | Makes the plugin available in your chats without a custom agent. |
+    | **Enable in Craft** | Makes the plugin available in your Craft sessions and scheduled tasks. Your organization's tool permissions still apply. |
+
+    <img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="Plugin details with Ready to use, Enable in default Chat, and Enable in Craft"/>
+  </Step>
+</Steps>
+
+If a setting says **Disabled by admin**, your admin turned off the plugin for that surface. You cannot turn it on.
+Custom agents that use the plugin can still use it.
+
+## Review tools
+
+The **Tools** tab lists the tools that the plugin gives the agent. For MCP plugins in Craft,
+**Approval settings** shows which tools run automatically, which ask for your approval, and which are disabled.
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_tools.webp" alt="The Tools tab for an MCP plugin with three tools"/>
+
+If your admin lets users manage approval settings, you can change the policy for tools that the admin did not disable.
+
+## Use plugins in Chat
+
+Click the actions button in the message bar, then select **Plugins**. Turn a plugin on or off for the current chat.
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/chat_actions_plugins_flyout.webp" alt="The actions menu in Chat with the Plugins menu open"/>
+
+The agent decides when to call a plugin tool. To guide it, name the plugin or the service in your message. For example:
+"Use DeepWiki to explain how the `onyx-dot-app/onyx` repository handles authentication."
+
+In Chat, the agent calls plugin tools without an approval prompt. Check the result in the service after a change.
+
+<Note>
+  Custom agents use the plugins that the agent builder selected. Your default Chat settings do not change them.
+  See [Agents](/overview/core_features/agents).
+</Note>
+
+## Disconnect a plugin
+
+Open the plugin and click **Disconnect**. Onyx removes your account connection. Workspace availability stays the same.
+
+If more than one plugin uses the same OAuth configuration, they share one connection.
+Disconnecting one of them disconnects all of them.
+
+## Built-in actions
+
+Onyx also includes built-in actions that do not need a plugin:
+
+<BuiltInActionsTable />
+
+## For admins
+
+<CardGroup cols={2}>
+  <Card title="Manage plugins" icon="plug" href="/admins/plugins/overview">
+    Add plugins and set workspace availability.
+  </Card>
+
+  <Card title="Craft Apps" icon="hammer" href="/overview/core_features/craft_apps">
+    Let Craft act as you in Slack, Gmail, Notion, and more.
+  </Card>
+</CardGroup>

@@ -5831,6 +5831,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {파일 #개 업로드됨} other {파일 #개 업로드됨}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {파일 #개 업로드됨} other {파일 #개 업로드됨}}, 불완전: {error}"
         }
       },
       "sensitiveWarning": {
@@ -12117,6 +12120,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {파일 처리에 실패하여 제거되었습니다: {names}} other {파일 처리에 실패하여 제거되었습니다: {names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "채팅을 불러오는 중"
+      },
       "newChatButton": {
         "label": "새 채팅 시작"
       },
@@ -12351,7 +12357,9 @@
           "speakingPlaceholder": "{appName}가 말하는 중..."
         },
         "sendButton": {
-          "processingFilesTooltip": "첨부 파일 처리가 끝나기를 기다리는 중"
+          "processingFilesTooltip": "첨부 파일 처리가 끝나기를 기다리는 중",
+          "stoppingLabel": "중지 중…",
+          "reloadLabel": "다시 확인"
         },
         "tabReadingButton": {
           "readLabel": "이 탭 읽기",
@@ -13656,6 +13664,10 @@
       "incognito": {
         "title": "시크릿 모드입니다"
       }
+    },
+    "readiness": {
+      "stopFailed": "응답을 중지하지 못했습니다. 다시 시도하세요.",
+      "checkFailed": "응답이 완료되었는지 확인하지 못했습니다. 다른 메시지를 보내기 전에 다시 확인하세요."
     }
   },
   "common": {
@@ -15852,6 +15864,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "설정 완료"
+      },
+      "nextButton": {
+        "label": "다음"
+      },
       "progress": {
         "label": "{total}단계 중 {current}단계"
       }
@@ -15863,13 +15881,16 @@
       "connectedCount": {
         "label": "{count, plural, one {모델 #개 연결됨} other {모델 #개 연결됨}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM 호환 API",
-        "title": "사용자 지정 LLM 제공자"
-      },
       "description": "{appName}는 자체 호스팅 모델과 널리 쓰이는 제공자를 모두 지원합니다.",
       "edit": {
         "ariaLabel": "LLM 제공자 편집"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "보기"
+        },
+        "description": "관리자 패널에서 설정",
+        "title": "더 많은 제공업체"
       },
       "providerCard": {
         "connect": {
@@ -15877,7 +15898,8 @@
         },
         "settingsButton": {
           "ariaLabel": "제공자 설정"
-        }
+        },
+        "settingsLoadError": "이 공급자의 설정을 불러올 수 없습니다. 다시 시도하세요."
       },
       "title": "LLM 모델 연결"
     },
@@ -15904,28 +15926,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "설정 완료"
-        },
-        "title": "모든 준비가 끝났습니다. 선택 설정을 확인하거나 설정 완료를 클릭하세요"
-      },
       "llmSetup": {
-        "button": {
-          "label": "다음"
-        },
-        "title": "거의 다 됐습니다! 모델을 연결하고 채팅을 시작하세요."
+        "title": "모델을 연결해 채팅을 시작하세요."
       },
       "name": {
-        "button": {
-          "label": "다음"
-        },
-        "title": "잠시 설정을 진행하겠습니다."
+        "title": "어떻게 불러 드릴지 알려 주세요."
       },
-      "welcome": {
-        "button": {
-          "label": "시작하기"
-        },
+      "optionalSetup": {
+        "title": "몇 가지 선택 기능을 설정하세요."
+      },
+      "postStep": {
+        "title": "모든 준비가 끝났습니다."
+      },
+      "preStep": {
         "title": "잠시 설정을 진행하겠습니다."
       }
     }

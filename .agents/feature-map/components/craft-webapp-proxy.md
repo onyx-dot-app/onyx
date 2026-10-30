@@ -14,9 +14,9 @@
 `web/src/app/craft/components/output-panel/`,
 `web/src/app/craft/components/OutputPanel.tsx`
 
-**Read first:** `docs/craft/lazy-webapp-provisioning.md`. It is the design
-plan for on-demand dev-server startup and the tamper-hardened bootstrap
-script this document's provisioning section maps to code.
+**Read first:** §4.5 for on-demand dev-server startup and the
+tamper-hardened bootstrap script, and `[[craft-sandboxes]]` for the pod the
+dev server runs in.
 
 ---
 
@@ -214,7 +214,23 @@ runs it the first time a web app is actually being built:
 3. On snapshot restore, `build_webapp_restore_script` rewrites the script
    with the re-allocated port and auto-starts it only if the restored
    snapshot's `outputs/web/package.json` exists
-   (`kubernetes_sandbox_manager.py` `restore_snapshot`).
+   (`kubernetes_sandbox_manager.py` `restore_snapshot`). It runs the start in
+   the background, because snapshots exclude `node_modules` and a cold
+   `bun install` would otherwise block wake.
+
+Design rules for this path:
+
+- **The `webapp` tool is a convenience, not the correctness path.** The start
+  script exports the managed port and base path, so a hand-run `bun run dev`
+  still serves on the right port.
+- **Tamper hardening is one read-only file.** `start-webapp.sh` is `chmod 444`,
+  so a rewrite must unlink it first. `sandbox/util/opencode_config.py` denies
+  agent edits to it and allows only `bash start-webapp.sh` in bash. If the
+  script is deleted, setup or restore writes it again.
+- **No supervisor and no port auto-heal.** A crashed dev server stays down so
+  the agent reads `nextjs.log` and fixes its code. The managed port is the
+  proxy's routing contract, so the script never moves the server to another
+  port: the proxy could not reach it there.
 
 Port allocation is per-user and per-session: `reserve_nextjs_port__no_commit`
 (`db/build_session.py`) allocates one port from

@@ -3,7 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 export default function LoginText() {
   const t = useTranslations("auth");
@@ -13,10 +13,10 @@ export default function LoginText() {
     t("login.welcomeSubtitle.text");
   return (
     <div className="w-full flex flex-col ">
-      <Text as="p" headingH2 text05>
+      <Text as="p" font="heading-h2" color="text-05">
         {t("login.welcomeHeading.title", { appName })}
       </Text>
-      <Text as="p" text03 mainUiMuted>
+      <Text as="p" font="main-ui-muted" color="text-03">
         {subtitle}
       </Text>
     </div>

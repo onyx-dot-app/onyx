@@ -3,7 +3,7 @@
 > The three admin-panel surfaces that govern Onyx Craft: who may use it, which
 > external services a sandbox may reach, and what instructions and default
 > model it runs with. This document does not cover sandboxes, snapshots,
-> streaming, or the webapp proxy; it maps into `docs/craft/` for those.
+> streaming, or the webapp proxy; see "Where to go next" for those.
 
 **Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
@@ -19,9 +19,9 @@
 `backend/onyx/db/external_app.py`, `backend/onyx/db/action_policy.py`,
 `backend/onyx/db/user_preferences.py`, `backend/onyx/server/settings/api.py`
 
-**Read first:** `docs/craft/craft-main-plan.md` for the overview of Craft as a
-product, and `docs/craft/features/external-apps/` for the four documents this
-page maps to code.
+**Read first:** `[[craft-sessions]]` for the overview of Craft as a product,
+and `[[craft-external-apps]]` for the enforcement of the policies this page
+configures.
 
 ---
 
@@ -296,25 +296,18 @@ still resolves, so an admin can see and clear it even after it is hidden.
 This document stops at the admin surface. For the parts it deliberately does
 not cover:
 
-- **Sandboxes** (isolation, egress lockdown mechanics, network policy):
-  `docs/craft/sandbox/image-and-spinup.md`,
-  `docs/craft/sandbox/sandbox-podtemplate.md`,
-  `docs/craft/infra/sandbox-worker-network-policy.md`.
-- **Snapshots** (session persistence across restarts):
-  `docs/craft/infra/snapshot-retention.md`.
-- **Streaming** (turn execution and event delivery):
-  `docs/craft/sandbox/sandbox-exec-sidecar.md`,
-  `docs/craft/ui/packet-rendering-overhaul.md`.
+- **Sandboxes** (isolation, egress lockdown mechanics, network policy) and
+  **snapshots** (session persistence across restarts): `[[craft-sandboxes]]`.
+- **Streaming** (turn execution and event delivery): `[[craft-streaming]]`.
 - **The webapp proxy** (previewing a sandbox's running app):
-  `docs/craft/lazy-webapp-provisioning.md`.
+  `[[craft-webapp-proxy]]`.
 - **Scheduled tasks** (the `/build/admin` surface does not cover these; they
   are user-configured, not admin-configured):
-  `backend/onyx/server/features/build/scheduled_tasks/`.
+  `[[craft-scheduled-tasks]]`.
 - **Approvals** (the `ASK` hold/prompt UX referenced in §4.2):
   `backend/onyx/server/features/build/approvals/api.py`,
-  `docs/craft/features/external-apps/action-policies.md`.
-- **OAuth token refresh** for connected apps:
-  `docs/craft/features/external-apps/oauth-token-refresh.md`.
+  `[[craft-external-apps]]` §4.5.
+- **OAuth token refresh** for connected apps: `[[craft-external-apps]]` §4.6.
 
 ---
 
@@ -515,7 +508,7 @@ there.
   blanks `organization_credentials`, `auth_template`, and
   `upstream_url_patterns` in the admin response; an admin on Cloud can only
   toggle enablement and edit policy for these, by design
-  (`docs/craft/features/external-apps/cloud-managed-app-credentials.md`).
+  (`[[craft-external-apps]]` §4.7).
 - **Per-account providers own their gateway host.** The database write path
   restores masked credentials, then asks the provider to resolve its patterns.
   Zendesk validates one subdomain and uses it for OAuth, skill files, and the

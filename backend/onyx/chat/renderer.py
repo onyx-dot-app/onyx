@@ -5,8 +5,9 @@ from collections.abc import Mapping
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.models import CitationMode, MessageRendering, PresentationMode
 from onyx.chat.response import thinking_tool_text, tool_arguments_for_display
-from onyx.chat.response_models import CitationMode, MessageRendering, PresentationMode
+from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
     CODING_AGENT_TOOL_NAME,
@@ -14,6 +15,7 @@ from onyx.coding_agent.tool_definitions import (
 )
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
@@ -34,9 +36,7 @@ from onyx.llm.models import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import ToolExecutionException
-from onyx.tools.results import (
-    CodingAgentCallResult,
+from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     FileReadResult,
@@ -44,8 +44,8 @@ from onyx.tools.results import (
     LlmPythonExecutionResult,
     MemoryUpdated,
     PythonExecutionDelta,
-    ResearchAgentCallResult,
     ToolExecutionError,
+    ToolExecutionException,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
@@ -235,11 +235,6 @@ class MessageRenderer:
 
     def tool_placement(self, call_id: str) -> Placement:
         if call_id not in self.tool_placements:
-            if self.settings.mode == PresentationMode.CODING_THINKING:
-                if self._answer_placement is None:
-                    self._answer_placement = self.layout.next_section(self.parent)
-                self.tool_placements[call_id] = self._answer_placement
-                return self._answer_placement
             previous = self._last_tool_placement
             placement = (
                 previous.model_copy(update={"tab_index": previous.tab_index + 1})
@@ -730,8 +725,6 @@ class ToolRenderer:
                 self.update(result.details, "" if result.is_error else result.text)
             )
         self._finished = True
-        # Only explicitly public failures become error packets. Other errors allow
-        # model recovery and can contain internal execution details.
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
                 packets.Packet(

@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, nullcontext
 from http import HTTPStatus
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, NoReturn, TypeVar
 
 from opensearchpy import (
     NotFoundError,
@@ -14,6 +14,7 @@ from opensearchpy import (
     Urllib3AWSV4SignerAuth,
 )
 from opensearchpy.helpers import bulk
+from opensearchpy.helpers.errors import BulkIndexError
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import (
@@ -203,10 +204,19 @@ def is_cluster_block_error(e: Exception) -> bool:
 
 
 class OpenSearchIndexWriteBlockedError(Exception):
-    """An existing index rejected a metadata write because of a block (e.g.
-    read_only_allow_delete applied at the disk flood-stage watermark). The
-    index is still fully readable — callers that can serve degraded may catch
-    this. Never raised for a missing index or a blocked index creation."""
+    """An existing index rejected a write because of a block (e.g.
+    read_only_allow_delete at the disk flood-stage watermark, or the write block
+    a managed service applies under storage or heap pressure). The index is
+    still fully readable — callers that can serve degraded may catch this.
+    Never raised for a missing index or a blocked index creation."""
+
+
+class SummarizedBulkIndexError(BulkIndexError):
+    """BulkIndexError whose message is the per-item summary. The base class
+    prints every item error, and their reasons can echo document content."""
+
+    def __str__(self) -> str:
+        return str(self.args[0])
 
 
 class OpenSearchServerSideTimeout(Exception):
@@ -215,26 +225,58 @@ class OpenSearchServerSideTimeout(Exception):
     """
 
 
-def _summarize_bulk_errors(errors: list[dict[str, Any]]) -> str:
-    """Reduce raw bulk per-item errors to (op, status, type) counts.
+def _summarize_write_errors(errors: list[dict[str, Any]]) -> str:
+    """Reduce raw per-item write errors to (op, status, type) counts.
 
-    error.reason / caused_by echo a preview of the offending document's field
-    values; dumping them into an exception message would leak indexed content
-    into logs, so only op/status/type are surfaced.
+    Accepts bulk item errors ({op: {"status", "error"}}) and by-query failures
+    ({"id", "status", "cause"}). A reason can echo the offending document's
+    field values, so only op/status/type are surfaced — except a cluster
+    block's reason, which the server builds from the index name and the block.
     """
     counts: Counter[tuple[str, Any, str]] = Counter()
+    block_reason = ""
     for error in errors:
-        op, item = next(iter(error.items()), ("", {}))
-        item = item if isinstance(item, dict) else {}
-        err_obj = item.get("error")
-        err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
-        counts[(op, item.get("status", 0), err_type)] += 1
-    return ", ".join(
+        if "cause" in error:
+            op, status, err_obj = "by_query", error.get("status", 0), error["cause"]
+        else:
+            op, item = next(iter(error.items()), ("", {}))
+            item = item if isinstance(item, dict) else {}
+            status, err_obj = item.get("status", 0), item.get("error")
+        err_obj = err_obj if isinstance(err_obj, dict) else {}
+        err_type = err_obj.get("type", "")
+        if err_type == _CLUSTER_BLOCK_ERROR_TYPE and not block_reason:
+            block_reason = str(err_obj.get("reason", ""))
+        counts[(op, status, err_type)] += 1
+    summary = ", ".join(
         f"{count}x op={op or 'unknown'} status={status} type={err_type or 'unknown'}"
         for (op, status, err_type), count in sorted(
             counts.items(), key=lambda kv: str(kv)
         )
     )
+    return f"{summary} ({block_reason})" if block_reason else summary
+
+
+def _raise_summarized_by_query_error(e: TransportError, index_name: str) -> NoReturn:
+    """Re-raise a rejected by-query request with a compact message.
+
+    When every item fails, OpenSearch answers a by-query request with an error
+    status whose body lists each failed chunk, and the client puts that whole
+    body into the exception text (thousands of entries per document).
+    """
+    info = e.info if isinstance(e.info, dict) else {}
+    failures = info.get("failures")
+    if not isinstance(failures, list):
+        raise e
+    message = (
+        f"By-query write to index {index_name} was rejected (status "
+        f"{e.status_code}, total={info.get('total')}, "
+        f"deleted={info.get('deleted')}, updated={info.get('updated')}): "
+        f"{_summarize_write_errors(failures)}"
+    )
+    # from None: the cause's text is the full per-chunk body this replaces.
+    if is_cluster_block_error(e):
+        raise OpenSearchIndexWriteBlockedError(message) from None
+    raise RuntimeError(message) from None
 
 
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
@@ -1160,13 +1202,24 @@ class OpenSearchIndexClient(OpenSearchClient):
         else:
             # any error fails the batch (the caller may refresh-retry
             # on the BulkIndexError that bulk raises)
-            successes, _ = bulk(
-                self._client,
-                data,
-                max_retries=3,
-                raise_on_error=True,
-                raise_on_exception=True,
-            )
+            try:
+                successes, _ = bulk(
+                    self._client,
+                    data,
+                    max_retries=3,
+                    raise_on_error=True,
+                    raise_on_exception=True,
+                )
+            except BulkIndexError as e:
+                message = (
+                    f"{len(e.errors)} chunk(s) failed to index into {self._index_name}: "
+                    f"{_summarize_write_errors(e.errors)}"
+                )
+                # from None: the cause's text lists every item error. A block
+                # skips the caller's refresh-retry, which cannot succeed.
+                if f"type={_CLUSTER_BLOCK_ERROR_TYPE}" in message:
+                    raise OpenSearchIndexWriteBlockedError(message) from None
+                raise SummarizedBulkIndexError(message, e.errors) from None
             benign_conflicts = 0
 
         _report_written_chunks(
@@ -1209,7 +1262,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         if fatal:
             raise OpenSearchIndexError(
                 f"Failed to bulk index documents for index {self._index_name}. "
-                f"{len(fatal)} fatal error(s) occurred: {_summarize_bulk_errors(fatal)}"
+                f"{len(fatal)} fatal error(s) occurred: {_summarize_write_errors(fatal)}"
             )
         return benign
 
@@ -1299,14 +1352,18 @@ class OpenSearchIndexClient(OpenSearchClient):
             params["refresh"] = True
         if max_docs is not None:
             params["max_docs"] = max_docs
-        result = self._client.delete_by_query(**params)
+        try:
+            result = self._client.delete_by_query(**params)
+        except TransportError as e:
+            _raise_summarized_by_query_error(e, self._index_name)
         if result.get("timed_out", False):
             raise RuntimeError(
                 f"Delete by query timed out for index {self._index_name}."
             )
-        if len(result.get("failures", [])) > 0:
+        if failures := result.get("failures"):
             raise RuntimeError(
-                f"Failed to delete some or all of the documents for index {self._index_name}."
+                f"Failed to delete some or all of the documents for index {self._index_name}: "
+                f"{_summarize_write_errors(failures)}"
             )
 
         num_deleted = result.get("deleted", 0)
@@ -1339,21 +1396,24 @@ class OpenSearchIndexClient(OpenSearchClient):
         Returns:
             The number of documents updated.
         """
-        result = self._client.update_by_query(
-            index=self._index_name,
-            body=query_body,
-            refresh=True,
-            conflicts="proceed",
-            request_timeout=_UPDATE_BY_QUERY_TIMEOUT_S,
-        )
+        try:
+            result = self._client.update_by_query(
+                index=self._index_name,
+                body=query_body,
+                refresh=True,
+                conflicts="proceed",
+                request_timeout=_UPDATE_BY_QUERY_TIMEOUT_S,
+            )
+        except TransportError as e:
+            _raise_summarized_by_query_error(e, self._index_name)
         if result.get("timed_out", False):
             raise RuntimeError(
                 f"Update by query timed out for index {self._index_name}."
             )
-        if result.get("failures"):
+        if failures := result.get("failures"):
             raise RuntimeError(
                 f"Failed to update some or all of the documents for index {self._index_name}: "
-                f"{result['failures']}"
+                f"{_summarize_write_errors(failures)}"
             )
         return int(result.get("updated", 0))
 
@@ -1597,7 +1657,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 raise OpenSearchUpdateError(
                     f"Failed to bulk update document chunks for index {self._index_name}. "
                     f"{len(fatal_errors)} fatal error(s) occurred: "
-                    f"{_summarize_bulk_errors(fatal_errors)}"
+                    f"{_summarize_write_errors(fatal_errors)}"
                 )
 
             data = []

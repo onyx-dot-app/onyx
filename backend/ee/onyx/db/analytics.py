@@ -33,6 +33,7 @@ def fetch_query_analytics(
             ),
             cast(ChatMessage.time_sent, Date),
         )
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
         .join(
             ChatMessageFeedback,
             ChatMessageFeedback.chat_message_id == ChatMessage.id,
@@ -45,6 +46,7 @@ def fetch_query_analytics(
             ChatMessage.time_sent <= end,
         )
         .where(ChatMessage.message_type == MessageType.ASSISTANT)
+        .where(ChatSession.spawned_by_message_id.is_(None))
         .group_by(cast(ChatMessage.time_sent, Date))
         .order_by(cast(ChatMessage.time_sent, Date))
     )
@@ -84,6 +86,7 @@ def fetch_per_user_query_analytics(
             ChatMessage.time_sent <= end,
         )
         .where(ChatMessage.message_type == MessageType.ASSISTANT)
+        .where(ChatSession.spawned_by_message_id.is_(None))
         .group_by(cast(ChatMessage.time_sent, Date), ChatSession.user_id)
         .order_by(cast(ChatMessage.time_sent, Date), ChatSession.user_id)
     )
@@ -118,6 +121,7 @@ def fetch_onyxbot_analytics(
         )
         .where(
             ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatSession.spawned_by_message_id.is_(None),
         )
         .group_by(ChatMessage.chat_session_id)
         .subquery()
@@ -201,6 +205,7 @@ def fetch_persona_message_analytics(
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatSession.spawned_by_message_id.is_(None),
         )
         .group_by(cast(ChatMessage.time_sent, Date))
         .order_by(cast(ChatMessage.time_sent, Date))
@@ -230,6 +235,7 @@ def fetch_persona_unique_users(
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatSession.spawned_by_message_id.is_(None),
         )
         .group_by(cast(ChatMessage.time_sent, Date))
         .order_by(cast(ChatMessage.time_sent, Date))
@@ -261,6 +267,7 @@ def fetch_assistant_message_analytics(
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatSession.spawned_by_message_id.is_(None),
         )
         .group_by(cast(ChatMessage.time_sent, Date))
         .order_by(cast(ChatMessage.time_sent, Date))
@@ -292,6 +299,7 @@ def fetch_assistant_unique_users(
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatSession.spawned_by_message_id.is_(None),
         )
         .group_by(cast(ChatMessage.time_sent, Date))
         .order_by(cast(ChatMessage.time_sent, Date))
@@ -322,6 +330,7 @@ def fetch_assistant_unique_users_total(
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatSession.spawned_by_message_id.is_(None),
         )
     )
 

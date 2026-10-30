@@ -1,7 +1,7 @@
 """Collector rows become safe events with stable IDs. A failed read never escapes."""
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -32,6 +32,9 @@ def _connector_row(**overrides: Any) -> dict[str, Any]:
         "prune_seconds": None,
         "auto_sync_enabled": False,
         "permission_sync_enabled": True,
+        "last_permission_sync_at": _NOW - timedelta(minutes=3),
+        "last_group_sync_at": _NOW - timedelta(minutes=10),
+        "permission_sync_pending_since": None,
         "config": {
             "include_shared_drives": True,
             "batch_size": 16,
@@ -118,6 +121,7 @@ class _Source:
             {"domain": "localhost", "first_signup_at": _NOW},
         ]
         self.license: dict[str, Any] = {"license_present": False, "first_set_at": None}
+        self.users: int = 3
         self.attempts: list[dict[str, Any]] = [_attempt_row()]
         self.stages: list[dict[str, Any]] = [_stage_row()]
         self.jobs: list[dict[str, Any]] = [_job_row()]
@@ -147,6 +151,9 @@ class _Source:
             collector, "email_domain_rows", lambda _session: self.domains
         )
         monkeypatch.setattr(collector, "license_row", lambda _session: self.license)
+        monkeypatch.setattr(
+            collector, "standard_user_count", lambda _session: self.users
+        )
         monkeypatch.setattr(collector, "attempt_rows", attempts)
         monkeypatch.setattr(
             collector, "stage_rows", lambda _session, _ids, _since: self.stages
@@ -185,7 +192,9 @@ def _only_event(sender: fleet.BoundedTelemetry, event_type: str) -> dict[str, An
 
 
 def test_connector_data_keeps_reviewed_settings_and_counts_only() -> None:
-    data: dict[str, Any] = collector.connector_data(_connector_row())
+    data: dict[str, Any] = collector.connector_data(
+        _connector_row(), cadences=(300, None)
+    )
     assert data["connector_type"] == "google_drive" and data["state"] == "active"
     assert data["metadata"] == {
         "include_shared_drives": True,
@@ -200,9 +209,96 @@ def test_connector_data_keeps_reviewed_settings_and_counts_only() -> None:
     assert fleet.sanitize_data("connector", data) == data
     # The hash follows the reported settings.
     changed: dict[str, Any] = collector.connector_data(
-        _connector_row(refresh_seconds=3600)
+        _connector_row(refresh_seconds=3600), cadences=(300, None)
     )
     assert changed["config_hash"] != data["config_hash"]
+
+
+def test_connector_data_reports_permission_sync_times_for_synced_pairs_only() -> None:
+    synced: dict[str, Any] = collector.connector_data(
+        _connector_row(permission_sync_pending_since=_NOW), cadences=(300, None)
+    )
+    assert (
+        synced["last_permission_sync_at"] == (_NOW - timedelta(minutes=3)).isoformat()
+    )
+    assert synced["last_group_sync_at"] == (_NOW - timedelta(minutes=10)).isoformat()
+    assert synced["permission_sync_pending_since"] == _NOW.isoformat()
+    # A sync the source does not have, or that cannot run here, has no cadence.
+    assert synced["permission_sync_seconds"] == 300
+    assert "group_sync_seconds" not in synced
+    assert fleet.sanitize_data("connector", synced) == synced
+    public: dict[str, Any] = collector.connector_data(
+        _connector_row(permission_sync_enabled=False), cadences=(300, 300)
+    )
+    assert (
+        not {
+            "last_permission_sync_at",
+            "last_group_sync_at",
+            "permission_sync_seconds",
+            "group_sync_seconds",
+        }
+        & public.keys()
+    )
+
+
+def test_permission_sync_cadences_follow_the_schedulers_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unindexed: dict[str, Any] = _connector_row(last_success_at=None)
+    # Onyx Lite runs no permission syncs, and a build without Enterprise code has none.
+    monkeypatch.setattr(collector, "DISABLE_VECTOR_DB", True)
+    assert collector.permission_sync_cadence_reader()(_connector_row()) == (None, None)
+    monkeypatch.setattr(collector, "DISABLE_VECTOR_DB", False)
+    assert collector.permission_sync_cadence_reader()(_connector_row()) == (None, None)
+    calls: list[tuple[object, ...]] = []
+
+    def doc_seconds(
+        source: DocumentSource, status: ConnectorCredentialPairStatus, indexed: bool
+    ) -> int | None:
+        calls.append((source, status, indexed))
+        return 300 if indexed else None
+
+    def group_seconds(
+        source: DocumentSource, status: ConnectorCredentialPairStatus
+    ) -> int | None:
+        calls.append((source, status))
+        return 600
+
+    helpers: dict[str, Callable[..., int | None]] = {
+        "doc_permission_sync_seconds": doc_seconds,
+        "external_group_sync_seconds": group_seconds,
+    }
+    monkeypatch.setattr(
+        collector,
+        "fetch_ee_implementation_or_noop",
+        lambda _module, attribute: helpers[attribute],
+    )
+    reads: list[float] = []
+
+    def multiplier() -> float:
+        reads.append(2.0)
+        return 2.0
+
+    monkeypatch.setattr(
+        collector.OnyxRuntime,
+        "get_doc_permission_sync_multiplier",
+        staticmethod(multiplier),
+    )
+    read_cadences = collector.permission_sync_cadence_reader()
+    public: dict[str, Any] = _connector_row(permission_sync_enabled=False)
+    assert read_cadences(public) == (None, None)
+    assert calls == [] and reads == []
+    assert read_cadences(unindexed) == (None, 600)
+    assert calls == [
+        (DocumentSource.GOOGLE_DRIVE, ConnectorCredentialPairStatus.ACTIVE, False),
+        (DocumentSource.GOOGLE_DRIVE, ConnectorCredentialPairStatus.ACTIVE),
+    ]
+    # The doc sync scheduler's runtime multiplier applies to doc syncs only. A pass
+    # reads it once, and only once a permission-synced pair's doc sync can run.
+    assert reads == []
+    assert read_cadences(_connector_row()) == (600, 600)
+    assert read_cadences(_connector_row(cc_pair_id=4)) == (600, 600)
+    assert reads == [2.0]
 
 
 def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
@@ -334,8 +430,10 @@ def test_first_run_sends_work_then_inventory_and_sets_the_cursor(
         "connector",
         "tenant_domain",
         "license",
+        "users",
     ]
     assert events[5]["data"]["domain"] == "example.com"
+    assert events[7]["data"] == {"total": 3}
     stage: dict[str, Any] = events[1]
     # The service requires a stage event at the time of its last update.
     assert stage["occurred_at"] == (_NOW - timedelta(minutes=1)).isoformat()
@@ -364,9 +462,85 @@ def test_repeated_runs_repeat_event_ids_and_skip_unchanged_inventory(
     source.connectors = [_connector_row(doc_count=41)]
     collector.collect_snapshots("public")
     third: dict[str, str] = _event_ids(sender)
-    # A running job's progress and a changed inventory go out again.
+    # A running job's progress and a changed connector go out again, alone.
     assert third["job"] != first["job"] and third["attempt"] == first["attempt"]
-    assert {"connector", "tenant_domain", "license"} <= third.keys()
+    assert (
+        "connector" in third
+        and not {"tenant_domain", "license", "users"} & third.keys()
+    )
+
+
+_INVENTORY: tuple[str, ...] = ("connector", "tenant_domain", "license", "users")
+
+
+def _inventory_sent(sender: fleet.BoundedTelemetry) -> list[str]:
+    return [
+        event["event_type"]
+        for event in sender._take_batch()
+        if event["event_type"] in _INVENTORY
+    ]
+
+
+def _sent_items(source: _Source) -> dict[str, dict[str, Any]]:
+    stored: bytes | None = source.cache.get(collector._INVENTORY_ITEMS_KEY)
+    return json.loads(stored) if stored is not None else {}
+
+
+def test_inventory_items_go_out_when_they_change_or_their_last_send_is_old(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    collector.collect_snapshots("public")
+    assert _inventory_sent(sender) == ["connector", "tenant_domain", "license", "users"]
+    collector.collect_snapshots("public")
+    assert _inventory_sent(sender) == []
+    # A permission sync moves the connector's sync time, and only it goes out.
+    source.connectors = [_connector_row(last_permission_sync_at=_NOW)]
+    collector.collect_snapshots("public")
+    assert _inventory_sent(sender) == ["connector"]
+    # Six hours after its own last send, an unchanged item goes out again.
+    items: dict[str, dict[str, Any]] = _sent_items(source)
+    items["license"]["sent_at"] -= collector._INVENTORY_SECONDS
+    source.cache.set(collector._INVENTORY_ITEMS_KEY, json.dumps(items))
+    collector.collect_snapshots("public")
+    assert _inventory_sent(sender) == ["license"]
+    # A connector no longer read drops out of the record.
+    source.connectors = []
+    collector.collect_snapshots("public")
+    assert "connector:3" not in _sent_items(source)
+
+
+@pytest.mark.usefixtures("source")
+def test_a_partly_sent_inventory_sends_the_rest_next_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Room for the work, the heartbeat, and the connector only.
+    small: fleet.BoundedTelemetry = make_sender(capacity=5)
+    monkeypatch.setattr(collector, "get_sender", lambda: small)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(small) == ["connector"]
+    roomy: fleet.BoundedTelemetry = make_sender(capacity=256)
+    monkeypatch.setattr(collector, "get_sender", lambda: roomy)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(roomy) == ["tenant_domain", "license", "users"]
+
+
+def test_items_after_a_refusal_keep_their_last_send(
+    source: _Source, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roomy: fleet.BoundedTelemetry = make_sender(capacity=256)
+    monkeypatch.setattr(collector, "get_sender", lambda: roomy)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(roomy) == ["connector", "tenant_domain", "license", "users"]
+    source.connectors = [_connector_row(doc_count=41)]
+    # Room for the work and the heartbeat only, so the changed connector is refused.
+    small: fleet.BoundedTelemetry = make_sender(capacity=4)
+    monkeypatch.setattr(collector, "get_sender", lambda: small)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(small) == []
+    monkeypatch.setattr(collector, "get_sender", lambda: roomy)
+    collector.collect_snapshots("public")
+    # The other items were neither changed nor due.
+    assert _inventory_sent(roomy) == ["connector"]
 
 
 def test_a_finished_attempt_is_sent_at_its_end_and_again_only_for_late_batches(
@@ -505,7 +679,7 @@ def test_a_full_queue_resumes_at_the_first_unsent_row(
     assert [event["data"]["attempt_id"] for event in small._take_batch()] == [0, 1]
     assert _cursor(source) == recent + timedelta(minutes=2)
     # The inventory did not fit either, so the next run sends it again.
-    assert collector._INVENTORY_KEY not in source.cache.store
+    assert _sent_items(source) == {}
 
 
 @pytest.mark.parametrize("refusal", ["closed", "drained"])
@@ -527,7 +701,7 @@ def test_a_refused_row_is_read_again(
     collector.collect_snapshots("public")
     # The refused row is the first row of the window. The next run reads it again.
     assert _cursor(source) == since
-    assert collector._INVENTORY_KEY not in source.cache.store
+    assert _sent_items(source) == {}
 
 
 @pytest.mark.usefixtures("sender")

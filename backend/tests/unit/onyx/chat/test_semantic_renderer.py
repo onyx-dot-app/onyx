@@ -1,7 +1,7 @@
 """The packet view cannot drive model requests or tool execution."""
 
+import threading
 from collections.abc import Mapping
-from queue import Queue
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -24,19 +24,21 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
-from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
-from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
-from onyx.chat.response import response_record, tool_arguments_for_display
-from onyx.chat.response_models import (
+from onyx.chat.models import (
     ChatMessageMetadata,
     CitationMode,
     MessageRendering,
     PresentationMode,
     ResponseRecord,
 )
+from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
+from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
+from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -91,12 +93,10 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolCallArgumentDelta,
     ToolCallDebug,
 )
-from onyx.tools.results import (
-    CodingAgentCallResult,
+from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolErrorInfo,
     LlmBashExecutionResult,
-    ResearchAgentCallResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
@@ -104,24 +104,8 @@ from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
-class _PacketQueue(Queue[tuple[int, Packet | Exception | object]]):
-    def __init__(self, packets: list[Packet]) -> None:
-        super().__init__()
-        self.packets = packets
-
-    def put(
-        self,
-        item: tuple[int, Packet | Exception | object],
-        block: bool = True,
-        timeout: float | None = None,
-    ) -> None:
-        del block, timeout
-        assert isinstance(item[1], Packet)
-        self.packets.append(item[1])
-
-
 def _emitter(packets: list[Packet]) -> Emitter:
-    return Emitter(_PacketQueue(packets))
+    return Emitter(packets.append)
 
 
 class _Execution(BaseModel):
@@ -172,7 +156,7 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
         )
         listener = None
         if render:
-            presentation = ResponsePresenter(Emitter(Queue()))
+            presentation = ResponsePresenter(Emitter(lambda _packet: None))
             listener = presentation.consume
         run_agent(
             agent,
@@ -846,6 +830,96 @@ def test_coding_thinking_uses_coding_packets(
     )
 
 
+@pytest.mark.parametrize("live", [False, True])
+def test_parallel_coding_commands_keep_separate_output_sections(live: bool) -> None:
+    calls = [
+        ToolCall(id=str(index), name="bash", arguments={"cmd": f"command-{index}"})
+        for index in range(2)
+    ]
+    message = AssistantMessage(
+        id="coding", content=[ThinkingContent(text="Inspect both files"), *calls]
+    )
+    settings = MessageRendering(mode=PresentationMode.CODING_THINKING)
+    parent = Placement(turn_index=3, tab_index=1)
+    results = {
+        call.id: ToolResultMessage(
+            tool_call_id=call.id,
+            tool_name=call.name,
+            content=f"output-{call.id}",
+            details=LlmBashExecutionResult(
+                stdout=f"output-{call.id}",
+                stderr="",
+                exit_code=int(call.id),
+                timed_out=False,
+            ),
+        )
+        for call in calls
+    }
+    if live:
+        renderer = MessageRenderer(settings, {}, ResponseLayout(), parent)
+        output = renderer.consume(
+            ThinkingDeltaEvent(content_index=0, text="Inspect both files")
+        )
+        for index, call in enumerate(calls, 1):
+            output.extend(
+                renderer.consume(
+                    ToolCallStartEvent(
+                        content_index=index, tool_call_id=call.id, tool_name=call.name
+                    )
+                )
+            )
+        output.extend(renderer.complete(message))
+        tools = [ToolRenderer(call, renderer.tool_placement(call.id)) for call in calls]
+        for tool in tools:
+            output.extend(tool.start())
+        for tool, call in zip(reversed(tools), reversed(calls), strict=True):
+            output.extend(tool.complete(results[call.id]))
+    else:
+        output = replay_response(
+            ResponseRecord(
+                run_id="child",
+                parent_run_id="root",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=message,
+                        generation_status=ExecutionStatus.COMPLETE,
+                        tools={
+                            call.id: ToolExecutionRecord(
+                                status=ExecutionStatus.COMPLETE, result=results[call.id]
+                            )
+                            for call in calls
+                        },
+                    )
+                ],
+            ),
+            {},
+            {"coding": settings},
+            {},
+            parent=parent,
+        )
+    starts = {
+        packet.obj.cmd: packet.placement
+        for packet in output
+        if isinstance(packet.obj, BashToolStart)
+    }
+    assert starts["command-0"] != starts["command-1"]
+    for index in range(2):
+        delta = next(
+            packet
+            for packet in output
+            if isinstance(packet.obj, BashToolDelta)
+            and packet.obj.stdout == f"output-{index}"
+        )
+        assert delta.placement == starts[f"command-{index}"]
+        assert isinstance(delta.obj, BashToolDelta)
+        assert delta.obj.exit_code == index
+    thinking = next(
+        packet for packet in output if isinstance(packet.obj, CodingAgentThinkingDelta)
+    )
+    assert all(thinking.placement != placement for placement in starts.values())
+
+
 @pytest.mark.parametrize("tool_first", [False, True])
 def test_replay_preserves_live_text_and_tool_section_order(tool_first: bool) -> None:
     call = ToolCall(id="search", name="internal_search", arguments={"queries": ["q"]})
@@ -1270,3 +1344,75 @@ def test_completed_agent_tool_output_matches_replay(coding: bool) -> None:
                 for packet in packets
                 if isinstance(packet.obj, IntermediateReportDelta)
             ] == ["Final report"]
+
+
+def test_parallel_search_packets_complete_without_waiting_for_an_earlier_call() -> None:
+    release_internal = threading.Event()
+    internal_started = threading.Event()
+    web_completed = threading.Event()
+    packets: list[Packet] = []
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="internal",
+                        name="internal_search",
+                        arguments={"queries": ["policy"]},
+                    ),
+                    ToolCall(
+                        id="web", name="web_search", arguments={"queries": ["policy"]}
+                    ),
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ]
+    )
+
+    def internal(_invocation: ToolInvocation) -> ToolResult:
+        internal_started.set()
+        assert release_internal.wait(10)
+        return ToolResult(content="Internal result")
+
+    def publish(packet: Packet) -> None:
+        packets.append(packet)
+        if isinstance(packet.obj, SectionEnd) and packet.placement.tab_index == 1:
+            web_completed.set()
+
+    presenter = ResponsePresenter(Emitter(publish))
+    run = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="internal_search", description="", parameters={}
+                ),
+                execute=internal,
+            ),
+            AgentTool(
+                definition=ToolDefinition(
+                    name="web_search", description="", parameters={}
+                ),
+                execute=lambda _: ToolResult(content="Web result"),
+            ),
+        ],
+    ).start(max_steps=2, on_event=presenter.consume)
+    try:
+        assert internal_started.wait(10)
+        assert web_completed.wait(10)
+        starts = [
+            packet for packet in packets if isinstance(packet.obj, SearchToolStart)
+        ]
+        assert {packet.placement.tab_index for packet in starts} == {0, 1}
+        assert len({packet.placement.turn_index for packet in starts}) == 1
+        assert not any(
+            isinstance(packet.obj, SectionEnd) and packet.placement.tab_index == 0
+            for packet in packets
+        )
+        release_internal.set()
+        assert run.result(10).output.text == "Answer"
+    finally:
+        release_internal.set()
+        run.cancel()
+        assert run.wait_for_idle(10)

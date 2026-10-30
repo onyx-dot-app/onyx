@@ -1,0 +1,6333 @@
+{
+  "pages": [
+    {
+      "page": "changelog.mdx",
+      "tab": "Changelog",
+      "in_nav": true,
+      "title": "Release Notes",
+      "words": 27091,
+      "last_commit": "2026-10-23",
+      "components": [],
+      "images": [
+        {
+          "src": "/assets/changelog/v4.0/index_stage_metrics.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v3.2/multi_modal_chat.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v3.2/hook_extensions_page.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v3.1/voice_page.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v3.1/users_page.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v3.1/file_attachment_size_limit_page.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.12/showcase_agent_message_timeline.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.12/showcase_brave_web_search.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.11/showcase_custom_backgrounds_dark.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.11/showcase_custom_backgrounds_light.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.11/showcase_user_settings.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/admins/discord_bot/register_server.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/changelog/v2.10/showcase_nano_banana.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.10/showcase_multilingual_dr.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.9/showcase_chrome_extension.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.9/showcase_widget.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.8/onyx_x_opensearch.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.7/showcase_agent_creation.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.7/showcase_image_generation_configuration.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.7/showcase_llm_configuration_forms.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.6/showcase_new_chat_flow.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.6/showcase_dynamic_model_management.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.6/showcase_onyx_mcp_server.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.6/showcase_onyx_desktop_app.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.6/showcase_improved_file_handling.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.5/showcase_additional_web_search.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.5/showcase_45_opus.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.5/showcase_code_interpreter_alpha.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.4/showcase_slack_federated_scoped_search.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.4/showcase_llm_rbac.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.3/showcase_personal_access_tokens.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.3/showcase_frontend_performance.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.2/showcase_onboarding.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.2/showcase_agents_navigation.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.2/showcase_braintrust.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.1/showcase_oauth_actions.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.1/showcase_code_rendering.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.1/showcase_personal_name.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.0/showcase_projects.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.0/basic_org_info.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.0/basic_personalization.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.0/showcase_curator_actions.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.0/showcase_filters_1.png",
+          "kind": "changelog"
+        },
+        {
+          "src": "/assets/changelog/v2.0/showcase_filters_2.png",
+          "kind": "changelog"
+        }
+      ]
+    },
+    {
+      "page": "welcome.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Welcome to Onyx!",
+      "words": 379,
+      "last_commit": "2026-10-20",
+      "components": [],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/chat_ui.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "snippets/agents-personas-assistants-note.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 17,
+      "last_commit": "2025-09-08",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/built-in-actions-table.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 113,
+      "last_commit": "2026-06-02",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/contact-us.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 18,
+      "last_commit": "2025-10-06",
+      "components": [],
+      "images": [
+        {
+          "src": "/assets/logo/onyx_logo.svg",
+          "kind": "brand"
+        }
+      ]
+    },
+    {
+      "page": "snippets/custom-domain.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 83,
+      "last_commit": "2026-01-11",
+      "components": [],
+      "images": [
+        {
+          "src": "/assets/deployment/arecord.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/cname.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "snippets/deployment-next-steps.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 25,
+      "last_commit": "2025-09-08",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/enterprise-edition-info.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 17,
+      "last_commit": "2026-03-11",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/enterprise-edition.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 241,
+      "last_commit": "2026-08-22",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/how-to-use-onyxbot.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 185,
+      "last_commit": "2025-09-08",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/install-onyx.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 224,
+      "last_commit": "2026-10-21",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/navigate-to-ai-models.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 16,
+      "last_commit": "2026-04-06",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/quickstart.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 247,
+      "last_commit": "2026-07-30",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/resourcing-overview.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 158,
+      "last_commit": "2026-04-16",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "snippets/standard-ai-model-configs.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": null,
+      "words": 79,
+      "last_commit": "2026-04-13",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "security/contact_us.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Contact Us",
+      "words": 17,
+      "last_commit": "2025-09-08",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/onyx_cloud/compliance.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Compliance",
+      "words": 25,
+      "last_commit": "2025-09-08",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/onyx_cloud/multi_tenant.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Multi Tenant",
+      "words": 131,
+      "last_commit": "2026-09-30",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/onyx_cloud/single_tenant.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Single Tenant",
+      "words": 160,
+      "last_commit": "2025-09-08",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/architecture/access_controls.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Access Controls",
+      "words": 253,
+      "last_commit": "2026-08-25",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/architecture/craft.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Craft Architecture",
+      "words": 1618,
+      "last_commit": "2026-10-20",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": [
+        {
+          "src": "/assets/security/OnyxCraftArchitecture.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "security/architecture/data_flows.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Data Flows",
+      "words": 399,
+      "last_commit": "2026-10-09",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": [
+        {
+          "src": "/assets/security/OnyxIndexingFlow.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/security/OnyxQueryFlow.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "security/architecture/data_storage.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Data Storage",
+      "words": 303,
+      "last_commit": "2026-09-30",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/architecture/faq.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "FAQ",
+      "words": 305,
+      "last_commit": "2025-10-19",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/architecture/system_description.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "System Description",
+      "words": 402,
+      "last_commit": "2026-09-30",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": [
+        {
+          "src": "/assets/security/OnyxArchitecture.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "security/self_hosted/data_processing.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "Data Processing",
+      "words": 288,
+      "last_commit": "2025-09-08",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "security/self_hosted/faq.mdx",
+      "tab": "Security",
+      "in_nav": true,
+      "title": "FAQ",
+      "words": 246,
+      "last_commit": "2025-09-08",
+      "components": ["auth-and-identity", "access-control", "observability"],
+      "images": []
+    },
+    {
+      "page": "overview/getting_started/faq.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "FAQ",
+      "words": 366,
+      "last_commit": "2026-09-22",
+      "components": ["chat-frontend", "core-chat-loop"],
+      "images": []
+    },
+    {
+      "page": "overview/getting_started/first_look.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "First Look",
+      "words": 998,
+      "last_commit": "2026-10-23",
+      "components": ["chat-frontend", "core-chat-loop"],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/chat_ui.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/start_chat.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/chat_first_message.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/chat_response.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/follow_up.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/side_panel_rectangle.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/chat_options.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/onyx_ui_starting_page.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/start_chat.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/chat_ui.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/search_ui.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/side_panel_rectangle.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/getting_started/quickstart.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Quickstart",
+      "words": 18,
+      "last_commit": "2026-04-02",
+      "components": ["chat-frontend", "core-chat-loop"],
+      "images": []
+    },
+    {
+      "page": "overview/getting_started/use_cases.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Use Cases",
+      "words": 399,
+      "last_commit": "2026-09-22",
+      "components": ["chat-frontend", "core-chat-loop"],
+      "images": [
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/GENERIC_PLACEHOLDER.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/agents.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Custom Agents",
+      "words": 603,
+      "last_commit": "2026-10-20",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/agent.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/chat.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Chat UI",
+      "words": 609,
+      "last_commit": "2026-10-20",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/chat_ui.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/files.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/actions.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/deep_research.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/model_selector.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/projects.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/code_interpreter.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Code Execution",
+      "words": 219,
+      "last_commit": "2026-04-02",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/code_interpreter.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/coding_agent.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Coding Agent",
+      "words": 355,
+      "last_commit": "2026-06-02",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": []
+    },
+    {
+      "page": "overview/core_features/connectors.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Connectors",
+      "words": 218,
+      "last_commit": "2026-01-14",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/connectors.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/craft.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Overview",
+      "words": 1328,
+      "last_commit": "2026-07-14",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/craft_overview.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/craft_workspace_clean.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/craft_start.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/craft_agent_loop.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/craft_files.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/craft_apps.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Craft Apps",
+      "words": 1409,
+      "last_commit": "2026-10-20",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/plugins/craft_plugins_directory.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/plugins/member_plugin_slack_detail.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/plugins/craft_plugin_slack_skills.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/craft_approval_card.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/craft_scheduled_tasks.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Scheduled Tasks",
+      "words": 1494,
+      "last_commit": "2026-10-20",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/craft_scheduled_task_new.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/craft_skills.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Skills",
+      "words": 1362,
+      "last_commit": "2026-07-15",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/craft_skills.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/image_generation.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Image Generation",
+      "words": 201,
+      "last_commit": "2026-01-27",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/image_generation.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/internal_search.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "RAG and Search",
+      "words": 267,
+      "last_commit": "2026-04-02",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/search_ui.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/search_filters_1.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/search_filters_2.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/plugins.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Plugins",
+      "words": 798,
+      "last_commit": "2026-10-20",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/plugins/member_plugins_directory.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/plugins/member_plugin_mcp_detail.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/plugins/member_plugin_mcp_tools.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/plugins/chat_actions_plugins_flyout.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/voice_mode.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Voice Mode",
+      "words": 270,
+      "last_commit": "2026-05-13",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/voice_onyx_listening.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/voice_onyx_speaking.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/voice_read_aloud.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/core_features/voice_user_settings.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/web_search.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Web Search",
+      "words": 385,
+      "last_commit": "2026-10-09",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/core_features/web_search.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/core_features/workflows.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Workflows (Coming Soon)",
+      "words": 98,
+      "last_commit": "2025-09-08",
+      "components": [
+        "core-chat-loop",
+        "chat-frontend",
+        "internal-search",
+        "projects",
+        "citations",
+        "file-store-and-user-files",
+        "agents-personas"
+      ],
+      "images": []
+    },
+    {
+      "page": "overview/miscellaneous/contact_us.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Contact Us",
+      "words": 17,
+      "last_commit": "2025-09-08",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "overview/miscellaneous/open_source_statement.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Open Source Statement",
+      "words": 539,
+      "last_commit": "2026-04-02",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "overview/onyx_anywhere/chrome_extension.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Chrome Extension",
+      "words": 315,
+      "last_commit": "2026-01-29",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/onyx_anywhere/onyx_chrome_extension.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/onyx_anywhere/cli.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "CLI",
+      "words": 952,
+      "last_commit": "2026-09-23",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/cli/cli_hero.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/cli/access_tokens.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/cli/create_access_token.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/onyx_anywhere/desktop_app.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Desktop App",
+      "words": 135,
+      "last_commit": "2026-08-05",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/onyx_anywhere/desktop_app.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/onyx_anywhere/discord_bot.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Discord Bot",
+      "words": 114,
+      "last_commit": "2026-01-30",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/onyx_anywhere/discordbot.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/onyx_anywhere/mcp_server.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Onyx MCP server",
+      "words": 2887,
+      "last_commit": "2026-10-20",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/onyx_anywhere/mcp/oauth_consent.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/onyx_anywhere/mcp/connected_apps.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/onyx_anywhere/mcp/disconnect_confirmation.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/onyx_anywhere/mobile_app.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Mobile App (Coming Soon)",
+      "words": 93,
+      "last_commit": "2026-09-22",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": []
+    },
+    {
+      "page": "overview/onyx_anywhere/slack.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Slack Bot",
+      "words": 164,
+      "last_commit": "2026-01-30",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": [
+        {
+          "src": "/assets/overview/onyx_anywhere/slack.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/overview/onyx_anywhere/onyxbot.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "overview/onyx_anywhere/web_interface.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Web App",
+      "words": 98,
+      "last_commit": "2026-10-20",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": []
+    },
+    {
+      "page": "overview/onyx_anywhere/website_widget.mdx",
+      "tab": "Overview",
+      "in_nav": true,
+      "title": "Website Widget",
+      "words": 740,
+      "last_commit": "2026-03-30",
+      "components": [
+        "slack-bot",
+        "discord-bot",
+        "desktop-widget-extensions",
+        "mobile-app",
+        "mcp-server",
+        "onyx-api"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Overview",
+      "words": 165,
+      "last_commit": "2026-10-20",
+      "components": [],
+      "images": [
+        {
+          "src": "/assets/admins/admin_panel_overview.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/plugins/craft_apps.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Craft Apps",
+      "words": 2395,
+      "last_commit": "2026-10-20",
+      "components": [
+        "mcp-and-custom-tools",
+        "craft-external-apps",
+        "craft-admin"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/plugins/craft_app_catalog.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/craft_app_slack_auth.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/craft_app_slack_tools.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/craft_custom_app.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/craft_custom_app_authentication.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/plugins/mcp.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "MCP",
+      "words": 1088,
+      "last_commit": "2026-10-20",
+      "components": [
+        "mcp-and-custom-tools",
+        "craft-external-apps",
+        "craft-admin"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/plugins/add_mcp_catalog.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_custom_filled.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_linear_setup.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_auth_methods.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_linear_oauth.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_api_key.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_advanced.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_tab_tools.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_tools_approval.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/mcp_after_connect.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/plugins/openapi.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "OpenAPI",
+      "words": 983,
+      "last_commit": "2026-10-20",
+      "components": [
+        "mcp-and-custom-tools",
+        "craft-external-apps",
+        "craft-admin"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/plugins/openapi_add_filled.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/openapi_auth_custom_authorization_header.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/openapi_auth_oauth.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/openapi_tab_tools.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/plugins/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Overview",
+      "words": 1443,
+      "last_commit": "2026-10-20",
+      "components": [
+        "mcp-and-custom-tools",
+        "craft-external-apps",
+        "craft-admin"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/plugins/plugins_directory.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/plugins/plugins_add_menu.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Overview",
+      "words": 861,
+      "last_commit": "2026-10-19",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/add_connector.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/connectors/generic_credentials.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/connectors/generic_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/connectors/generic_advanced_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/connectors/indexing_status.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/connectors/connector_details.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/connectors/indexing_attempts.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/airtable.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Airtable",
+      "words": 406,
+      "last_commit": "2026-02-13",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/asana.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Asana",
+      "words": 249,
+      "last_commit": "2025-11-25",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/axero.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Axero",
+      "words": 21,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/bitbucket.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Bitbucket Connector",
+      "words": 378,
+      "last_commit": "2025-11-25",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/bitbucket/BitbucketConnectorCred.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/bitbucket/BitbucketConnector.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/bookstack.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "BookStack",
+      "words": 219,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/bookstack/BookstackApiTokenList.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/bookstack/BookstackApiToken.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/bookstack/BookstackAuth.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/bookstack/BookstackIndex.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/box.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Box",
+      "words": 1297,
+      "last_commit": "2026-07-31",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/braintrust.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Braintrust",
+      "words": 662,
+      "last_commit": "2026-09-17",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/braintrust/BraintrustCredential.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/canvas.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Canvas",
+      "words": 1367,
+      "last_commit": "2026-09-17",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/canvas/CanvasCredential.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/canvas/CanvasConnector.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/clickup.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "ClickUp",
+      "words": 331,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/clickup/ClickUp_Hierarchy.gif",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/clickup/ClickupToken.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/clickup/ClickupToken.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/clickup/ClickupAuth.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/clickup/ClickupListid.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/coda.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Coda",
+      "words": 680,
+      "last_commit": "2026-09-17",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/coda/CodaCredential.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/confluence-cloud.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Confluence Cloud",
+      "words": 747,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/confluence/atlassian-api-tokens.jpg",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/confluence/atlassian-scopes.jpg",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/confluence/credential-form.jpg",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/confluence/connector-form-cloud.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/confluence-data-center.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Confluence Data Center and Server",
+      "words": 893,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/confluence/credential-form.jpg",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/confluence/connector-form-data-center.jpg",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/confluence.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Confluence overview",
+      "words": 899,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/confluence/credential-form.jpg",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/confluence/connector-form-cloud.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/discord.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Discord",
+      "words": 376,
+      "last_commit": "2025-11-25",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/discourse.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Discourse",
+      "words": 161,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/discourse/discourse_1.gif",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/discourse/discourse_2.gif",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/discourse/discourse_3.gif",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/discourse/discourse_4.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/document360.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Document360",
+      "words": 152,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/document360/Document360Token.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/document360/Document360Auth.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/document360/Document360.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/dropbox.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Dropbox",
+      "words": 254,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/dropbox/dropbox-connector-1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/dropbox/dropbox-connector-2.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/dropbox/dropbox-connector-3.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/dropbox/dropbox-connector-4.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/dropbox/dropbox-connector-5.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/drupal_wiki.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Drupal Wiki",
+      "words": 420,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/drupal_wiki/OnyxDrupalWikiConfig.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/egnyte.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Egnyte",
+      "words": 167,
+      "last_commit": "2025-11-25",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/file.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "File",
+      "words": 513,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/file/FileConnector.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/fireflies.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Fireflies",
+      "words": 140,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/fireflies/fireflies1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/fireflies/fireflies2.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/fireflies/fireflies3.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/freshdesk.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Freshdesk",
+      "words": 185,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/freshdesk/freshdesk_1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/freshdesk/freshdesk_2.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/gitbook.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "GitBook",
+      "words": 131,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/gitbook/gitbook_1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/gitbook/gitbook_2.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/gitbook/gitbook_3.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/github.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "GitHub",
+      "words": 1620,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/gitlab.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "GitLab",
+      "words": 212,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/gitlab/GitlabConnectorAuth.gif",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/gitlab/GitlabConnector.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/gong.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Gong",
+      "words": 1474,
+      "last_commit": "2026-09-23",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/gong/AdminPanel.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/gong/GongEcosystem.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/google_sites.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Google Sites",
+      "words": 134,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/google_sites/GoogleSites.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/google_storage.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Google Cloud Storage",
+      "words": 243,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/blob/google/interoperability.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/google/new_service_account.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/google/service_account_config.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/google/service_account_perms.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/google/hmac_keys.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/google/onyx_1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/google/onyx_2.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/guru.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Guru",
+      "words": 93,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/guru/GuruConnectorAuth.gif",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/guru/GuruConnector.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/highspot.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Highspot",
+      "words": 279,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/highspot/highspot_enable_developer.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/highspot/highspot_generate_api.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/hubspot.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "HubSpot",
+      "words": 698,
+      "last_commit": "2026-10-12",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/hubspot/HubSpotApp.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/hubspot/HubSpotScope.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/hubspot/HubSpotChecks.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/imap.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Email (IMAP)",
+      "words": 22,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/jira.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Jira",
+      "words": 1597,
+      "last_commit": "2026-09-14",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/jira/JiraCredential.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/jira/JiraProject.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/jira/JiraPermissionSync.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/jira/JiraAdvanced.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/linear.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Linear",
+      "words": 940,
+      "last_commit": "2026-10-12",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/loopio.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Loopio",
+      "words": 23,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/lumapps.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "LumApps",
+      "words": 870,
+      "last_commit": "2026-09-17",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/lumapps/LumAppsCredential.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/mediawiki.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "MediaWiki",
+      "words": 21,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/notion.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Notion",
+      "words": 1143,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/notion/notion-create-connection.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/notion/notion-token-location.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/notion/onyx-notion-credential.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/notion/onyx-notion-indexed.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/oci_storage.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Oracle Cloud Storage",
+      "words": 317,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/blob/oci/topbar.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/oci/apikeys.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/oci/secretkeys.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/oci/hoverkey.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/oci/Onyx1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/oci/Onyx2.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/outline.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Outline",
+      "words": 20,
+      "last_commit": "2025-11-25",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/productboard.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Productboard",
+      "words": 91,
+      "last_commit": "2025-11-25",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/r2.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Cloudflare R2",
+      "words": 234,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/blob/r2/manageapi.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/r2/newtoken.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/r2/readonly.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/r2/id.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/r2/Onyx1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/r2/Onyx2.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/requesttracker.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "RequestTracker",
+      "words": 137,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/requesttracker/RequestTrackerAuth.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/requesttracker/RequestTrackerConnect.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/salesforce.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Salesforce",
+      "words": 1680,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/salesforce/SalesforceExternalClientAppManager.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/salesforce/salesforce_1.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/salesforce/salesforce_2.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/salesforce/salesforce_3.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/slab.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Slab",
+      "words": 92,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/slab/SlabBotToken.gif",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/testrail.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "TestRail",
+      "words": 691,
+      "last_commit": "2026-09-17",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/testrail/TestRailCredential.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/web.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Web",
+      "words": 1491,
+      "last_commit": "2026-09-18",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/web/WebConnectorForm.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/web/WebConnectorAdvanced.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/wikipedia.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Wikipedia",
+      "words": 21,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/xenforo.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "XenForo",
+      "words": 86,
+      "last_commit": "2025-11-25",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/youtrack.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "YouTrack",
+      "words": 947,
+      "last_commit": "2026-10-19",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/zendesk.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Zendesk",
+      "words": 322,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/zendesk/ZendeskAPI.gif",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/zoom.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Zoom",
+      "words": 836,
+      "last_commit": "2026-10-14",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/zoom/build_app.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zoom/app_credentials.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zoom/add_scopes.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zoom/activation.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zoom/onyx_credential.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zoom/onyx_content.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zoom/onyx_access.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zoom/link_access.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/zulip.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Zulip",
+      "words": 136,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/zulip/ZulipBot.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zulip/ZulipRC.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zulip/ZulipRealmURL.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/zulip/OnyxZulipConfig.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/slack/slack_federated.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Slack Federated",
+      "words": 531,
+      "last_commit": "2026-09-22",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/slack/SlackApp.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/slack/FederatedSlackCredentials.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/slack/SlackFederatedConnectorSetting.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/slack/FederatedSlackOauth.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/slack/slack_indexed.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Slack Indexed",
+      "words": 978,
+      "last_commit": "2026-05-14",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/slack/SlackApp.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/slack/SlackBotToken.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/slack/SlackConnectorSetting.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/slack/SlackId.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/microsoft-365/onedrive.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "OneDrive",
+      "words": 1095,
+      "last_commit": "2026-09-28",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/microsoft-365/outlook.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Outlook",
+      "words": 1691,
+      "last_commit": "2026-10-07",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/microsoft-365/setup.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Microsoft 365 Setup",
+      "words": 2582,
+      "last_commit": "2026-10-06",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/microsoft-365/sharepoint.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "SharePoint",
+      "words": 1816,
+      "last_commit": "2026-09-28",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/microsoft-365/teams.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Microsoft Teams",
+      "words": 2440,
+      "last_commit": "2026-09-23",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/google_drive/oauth.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Google Drive OAuth",
+      "words": 885,
+      "last_commit": "2026-10-06",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/google_drive/GoogleDriveEnableAPI.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/GoogleDriveScopes.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/GoogleDriveCredential.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/DriveCredentials.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/DriveDownloadCredentials.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/OAuthCredential.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/google_drive/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Google Drive Overview",
+      "words": 205,
+      "last_commit": "2026-07-08",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/google_drive/service_account.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Google Drive Service Account",
+      "words": 593,
+      "last_commit": "2026-10-06",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/google_drive/GoogleDriveEnableAPI.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/ServiceAccountCredential.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/gmail/oauth.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Gmail OAuth",
+      "words": 712,
+      "last_commit": "2026-10-06",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/gmail/GmailScopes.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/GoogleDriveCredential.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/gmail/GmailCredentials.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/google_drive/DriveDownloadCredentials.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/gmail/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Gmail Overview",
+      "words": 158,
+      "last_commit": "2026-07-08",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/connectors/official/gmail/service_account.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Gmail Service Account",
+      "words": 520,
+      "last_commit": "2026-10-06",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/google_drive/GoogleDriveEnableAPI.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/s3/access-keys.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "S3 Access Keys",
+      "words": 214,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/blob/s3/iam.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/s3/accesskeyspage.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/s3/onyx-access-key.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/s3/assume-role.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "S3 Assume Role",
+      "words": 271,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/blob/s3/onyx-assume-role.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/s3/iam-role.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "S3 IAM Role",
+      "words": 373,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/blob/s3/role-arn.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/s3/iam-role.png",
+          "kind": "connector-mixed"
+        },
+        {
+          "src": "/assets/admins/connectors/blob/s3/onyx-iam-role.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/connectors/official/s3/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "S3 Overview",
+      "words": 340,
+      "last_commit": "2026-01-11",
+      "components": [
+        "connectors",
+        "cc-pairs-and-credentials",
+        "indexing-pipeline",
+        "permission-sync"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/connectors/blob/s3/connector.png",
+          "kind": "connector-mixed"
+        }
+      ]
+    },
+    {
+      "page": "admins/managing_features/chat.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Chat UI",
+      "words": 779,
+      "last_commit": "2026-04-16",
+      "components": [
+        "editions-and-gating",
+        "whitelabelling-and-theme",
+        "notifications",
+        "chat-preferences"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/chat_preferences/chat_preferences.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/chat_preferences/chat_preferences_features.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/chat_preferences/chat_preferences_team_context.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/chat_preferences/chat_preferences_connectors_actions_tools.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/chat_preferences/chat_preferences_advanced_options.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/managing_features/connectors.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Connectors",
+      "words": 16,
+      "last_commit": "2026-04-02",
+      "components": [
+        "editions-and-gating",
+        "whitelabelling-and-theme",
+        "notifications",
+        "chat-preferences"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/managing_features/connectors_link.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Connectors",
+      "words": 26,
+      "last_commit": "2026-04-02",
+      "components": [
+        "editions-and-gating",
+        "whitelabelling-and-theme",
+        "notifications",
+        "chat-preferences"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/managing_features/craft.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Overview",
+      "words": 766,
+      "last_commit": "2026-10-20",
+      "components": [
+        "editions-and-gating",
+        "whitelabelling-and-theme",
+        "notifications",
+        "chat-preferences"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/managing_features/craft_skills.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Skills",
+      "words": 1660,
+      "last_commit": "2026-10-20",
+      "components": [
+        "editions-and-gating",
+        "whitelabelling-and-theme",
+        "notifications",
+        "chat-preferences"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/managing_features/document_sets.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Document Sets",
+      "words": 153,
+      "last_commit": "2026-04-16",
+      "components": [
+        "editions-and-gating",
+        "whitelabelling-and-theme",
+        "notifications",
+        "chat-preferences"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/document_sets/document_sets.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/document_sets/new_document_set.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/document_sets/add_connectors.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/managing_features/rag_and_search.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "RAG and Search",
+      "words": 21,
+      "last_commit": "2026-04-02",
+      "components": [
+        "editions-and-gating",
+        "whitelabelling-and-theme",
+        "notifications",
+        "chat-preferences"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/billing/manage.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Manage Your Subscription",
+      "words": 617,
+      "last_commit": "2026-10-07",
+      "components": ["billing", "rate-and-usage-limits"],
+      "images": []
+    },
+    {
+      "page": "admins/billing/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Plans & Billing",
+      "words": 282,
+      "last_commit": "2026-10-13",
+      "components": ["billing", "rate-and-usage-limits"],
+      "images": []
+    },
+    {
+      "page": "admins/billing/subscribing.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Subscribe to a Plan",
+      "words": 196,
+      "last_commit": "2026-03-16",
+      "components": ["billing", "rate-and-usage-limits"],
+      "images": []
+    },
+    {
+      "page": "admins/billing/troubleshooting.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Troubleshooting",
+      "words": 545,
+      "last_commit": "2026-10-07",
+      "components": ["billing", "rate-and-usage-limits"],
+      "images": []
+    },
+    {
+      "page": "admins/analytics/custom_analytics.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Custom Analytics",
+      "words": 114,
+      "last_commit": "2026-04-02",
+      "components": ["observability"],
+      "images": []
+    },
+    {
+      "page": "admins/analytics/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Usage Analytics",
+      "words": 83,
+      "last_commit": "2026-04-02",
+      "components": ["observability"],
+      "images": [
+        {
+          "src": "/assets/admins/analytics/usage_statistics.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/analytics/query_history.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Query History",
+      "words": 75,
+      "last_commit": "2026-04-02",
+      "components": ["observability"],
+      "images": [
+        {
+          "src": "/assets/admins/analytics/query_history.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/getting_started/enterprise_edition.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Enterprise Edition",
+      "words": 16,
+      "last_commit": "2025-11-25",
+      "components": ["auth-and-identity", "llm-providers", "connectors"],
+      "images": []
+    },
+    {
+      "page": "admins/getting_started/slack_bot_setup.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Slack Bot",
+      "words": 684,
+      "last_commit": "2026-04-02",
+      "components": ["auth-and-identity", "llm-providers", "connectors"],
+      "images": [
+        {
+          "src": "/assets/admins/slackbot/slackbot_response.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/slackbot/slackbot_app_token.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/slackbot/slackbot_bot_token.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/slackbot/slackbot_onyx_setup.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/slackbot/slackbot_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/miscellaneous/contact_us.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Contact Us",
+      "words": 17,
+      "last_commit": "2025-11-25",
+      "components": [],
+      "images": []
+    },
+    {
+      "page": "admins/miscellaneous/discord_bot.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Discord Bot",
+      "words": 919,
+      "last_commit": "2026-10-06",
+      "components": [],
+      "images": [
+        {
+          "src": "/assets/admins/discord_bot/install_discordbot.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/discord_private_channel_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/register_server.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/configured_discord_server.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/discord_channel_configs.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/new_discord_app.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/installation_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/privileged_gateway_intents.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/discord_private_channel_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/bot_token_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/configure_discord_bot_token.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/register_server.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/configured_discord_server.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/discord_bot/discord_channel_configs.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/user_management/api_keys.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Service Accounts",
+      "words": 521,
+      "last_commit": "2026-08-25",
+      "components": ["access-control", "auth-and-identity"],
+      "images": []
+    },
+    {
+      "page": "admins/user_management/api_keys_legacy.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Service Accounts before v4.7",
+      "words": 344,
+      "last_commit": "2026-08-25",
+      "components": ["access-control", "auth-and-identity"],
+      "images": [
+        {
+          "src": "/assets/admins/user_management/legacy/create_api_key.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/user_management/users_and_groups.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Users and Groups",
+      "words": 634,
+      "last_commit": "2026-08-22",
+      "components": ["access-control", "auth-and-identity"],
+      "images": [
+        {
+          "src": "/assets/admins/user_management/manage_users.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/user_management/manage_groups.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/user_management/group_detail.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/user_management/users_and_groups_legacy.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Users and Groups before v4.7",
+      "words": 232,
+      "last_commit": "2026-08-22",
+      "components": ["access-control", "auth-and-identity"],
+      "images": [
+        {
+          "src": "/assets/admins/user_management/legacy/user_management.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/user_management/legacy/invite_users_warning.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/user_management/legacy/group_overview.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/user_management/legacy/group_management.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/advanced_configs/hook_extensions.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Hook Extensions",
+      "words": 3221,
+      "last_commit": "2026-05-20",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/advanced_configs/add_hook.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/icons/check_circle.svg",
+          "kind": "brand"
+        },
+        {
+          "src": "/assets/icons/alert_triangle.svg",
+          "kind": "brand"
+        },
+        {
+          "src": "/assets/icons/x_octagon.svg",
+          "kind": "brand"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/hook_card_connected.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/hook_one_hour_errors.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/hook_card_connection_lost.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/hook_thirty_days_errors.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/document_ingestion_file_connector.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/document_ingestion_add_file.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/document_ingestion_test.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/query_processing_test.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/advanced_configs/llm_access_controls.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Language Model Access Controls",
+      "words": 572,
+      "last_commit": "2026-04-06",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/advanced_configs/llm_access_controls.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/advanced_configs/object_store_migration.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Object Store Migration",
+      "words": 1637,
+      "last_commit": "2026-10-21",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/advanced_configs/opensearch_document_index_migration.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "OpenSearch Document Index Migration",
+      "words": 575,
+      "last_commit": "2026-05-13",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/advanced_configs/search_configs.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Index Settings",
+      "words": 2518,
+      "last_commit": "2026-10-22",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_overview.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_reindex_options.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_reindex_progress.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_cloud_models.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/google-authentication-methods.jpg",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/google-gke-configuration.jpg",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_self_hosted_models.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_vector_quantization.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_retrieval_optimization.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_image_processing.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/index_settings_embedding_rate_limit.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/advanced_configs/security_hardening.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Security & Hardening",
+      "words": 1432,
+      "last_commit": "2026-09-04",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/advanced_configs/spending_limits.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Spending Limits",
+      "words": 51,
+      "last_commit": "2026-04-16",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/advanced_configs/spending_limits.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/advanced_configs/terraform_provider.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Terraform Provider",
+      "words": 1577,
+      "last_commit": "2026-09-08",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/advanced_configs/tracing.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Tracing",
+      "words": 454,
+      "last_commit": "2026-07-01",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/advanced_configs/white_labeling.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "White Labeling",
+      "words": 254,
+      "last_commit": "2026-04-16",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/advanced_configs/whitelabeling_logo_name.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/whitelabeling_message_header_footer.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/advanced_configs/whitelabeling_first_visit_notice.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/advanced_configs/workspace_settings.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Workspace Settings",
+      "words": 87,
+      "last_commit": "2026-01-11",
+      "components": [
+        "editions-and-gating",
+        "rate-and-usage-limits",
+        "background-jobs"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/advanced_configs/workspace_settings.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/agents/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Custom Agents",
+      "words": 536,
+      "last_commit": "2026-10-20",
+      "components": ["agents-personas", "chat-preferences"],
+      "images": [
+        {
+          "src": "/assets/admins/agents/agents_dashboard.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/agents/create_agent_1.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/agents/create_agent_2.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/agents/agent_hierarchy_knowledge.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/agents/agent_actions.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/agents/agent_advanced.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/agents/explore_agents.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/permissions/understanding_permissions.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Understanding Permissions",
+      "words": 1884,
+      "last_commit": "2026-08-22",
+      "components": ["access-control"],
+      "images": [
+        {
+          "src": "/assets/admins/user_management/group_permission_toggle.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/user_management/group_manager_row.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/permissions/whats_changing.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "What's Changing in Permissions",
+      "words": 606,
+      "last_commit": "2026-08-22",
+      "components": ["access-control"],
+      "images": []
+    },
+    {
+      "page": "admins/auditing/audit_logs.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Audit Logs & SIEM Integration",
+      "words": 1639,
+      "last_commit": "2026-07-01",
+      "components": ["observability"],
+      "images": []
+    },
+    {
+      "page": "admins/ai_models/anthropic.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Anthropic",
+      "words": 53,
+      "last_commit": "2026-04-06",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/anthropic_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/azure_openai.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Azure OpenAI",
+      "words": 234,
+      "last_commit": "2026-04-13",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/azure_oai_service.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/azure_oai_deployment.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/azure_oai_deployed_home.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/azure_oai_deploy_model.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/azure_oai_deployed_model_details.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/azure_oai_content_filter.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/azure_oai_provider_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/bedrock.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Amazon Bedrock",
+      "words": 525,
+      "last_commit": "2026-01-11",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/bedrock_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/bifrost.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Bifrost",
+      "words": 172,
+      "last_commit": "2026-04-06",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": []
+    },
+    {
+      "page": "admins/ai_models/custom_inference_provider.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Custom Inference Provider",
+      "words": 170,
+      "last_commit": "2026-04-16",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/litellm_provider_name.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/google_ai.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Google Vertex AI",
+      "words": 1701,
+      "last_commit": "2026-10-01",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/gcs_service_acc.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/gcs_service_acc_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/vertex_gke_workload_identity.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/vertex_gke_metadata_server.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/vertex_auth_method_dropdown.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/ai_models/vertex_workload_identity_selected.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/litellm_proxy.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "LiteLLM Proxy",
+      "words": 168,
+      "last_commit": "2026-04-06",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": []
+    },
+    {
+      "page": "admins/ai_models/lm_studio.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "LM Studio",
+      "words": 276,
+      "last_commit": "2026-05-20",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/lm_studio_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/ollama.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Ollama",
+      "words": 102,
+      "last_commit": "2026-01-11",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/ollama_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/openai.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "OpenAI",
+      "words": 52,
+      "last_commit": "2026-04-06",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/openai_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/openrouter.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "OpenRouter",
+      "words": 72,
+      "last_commit": "2026-01-11",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/openrouter_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/ai_models/overview.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Overview",
+      "words": 473,
+      "last_commit": "2026-04-16",
+      "components": ["llm-providers", "llm-gateway", "document-index"],
+      "images": [
+        {
+          "src": "/assets/admins/ai_models/ai_config_overview.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/actions/code_interpreter.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Code Execution",
+      "words": 238,
+      "last_commit": "2026-04-16",
+      "components": [
+        "tools-framework",
+        "web-search",
+        "image-generation",
+        "code-execution",
+        "voice",
+        "mcp-and-custom-tools"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/actions/code_interpreter.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/actions/coding_agent.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Coding Agent",
+      "words": 356,
+      "last_commit": "2026-06-02",
+      "components": [
+        "tools-framework",
+        "web-search",
+        "image-generation",
+        "code-execution",
+        "voice",
+        "mcp-and-custom-tools"
+      ],
+      "images": []
+    },
+    {
+      "page": "admins/actions/image_generation.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Image Generation",
+      "words": 344,
+      "last_commit": "2026-01-27",
+      "components": [
+        "tools-framework",
+        "web-search",
+        "image-generation",
+        "code-execution",
+        "voice",
+        "mcp-and-custom-tools"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/actions/image_generation_overview.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/actions/voice_mode.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Voice Mode",
+      "words": 318,
+      "last_commit": "2026-04-16",
+      "components": [
+        "tools-framework",
+        "web-search",
+        "image-generation",
+        "code-execution",
+        "voice",
+        "mcp-and-custom-tools"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/actions/voice-mode/voice_mode_dashboard.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/actions/voice-mode/stt.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/actions/voice-mode/tts.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/actions/voice-mode/voice_selection.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/actions/voice-mode/set_default.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "admins/actions/web_search.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "Web Search",
+      "words": 357,
+      "last_commit": "2026-10-09",
+      "components": [
+        "tools-framework",
+        "web-search",
+        "image-generation",
+        "code-execution",
+        "voice",
+        "mcp-and-custom-tools"
+      ],
+      "images": [
+        {
+          "src": "/assets/admins/actions/web_search/web_search.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/actions/web_search/search_engines.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/actions/web_search/crawlers.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/admins/actions/web_search/set_default_provider.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/overview.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Overview",
+      "words": 313,
+      "last_commit": "2026-09-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/craft.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Deploying Craft",
+      "words": 401,
+      "last_commit": "2026-10-20",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/craft_docker_compose.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Docker Compose",
+      "words": 1018,
+      "last_commit": "2026-07-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/craft_kubernetes.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Kubernetes",
+      "words": 1049,
+      "last_commit": "2026-09-02",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/desktop_app.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Desktop App",
+      "words": 440,
+      "last_commit": "2026-08-05",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/deployment/onyx_desktop_app.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/local/docker.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Docker",
+      "words": 215,
+      "last_commit": "2026-07-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/kubernetes.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Kubernetes",
+      "words": 287,
+      "last_commit": "2026-09-25",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/object_store.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Object Store",
+      "words": 462,
+      "last_commit": "2026-09-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/onyx_cli.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Onyx CLI",
+      "words": 1846,
+      "last_commit": "2026-07-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/opensearch.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "OpenSearch",
+      "words": 478,
+      "last_commit": "2026-05-13",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/local/terraform.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Terraform",
+      "words": 2049,
+      "last_commit": "2026-09-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/authentication/basic.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Basic Auth",
+      "words": 247,
+      "last_commit": "2026-07-27",
+      "components": ["auth-and-identity"],
+      "images": []
+    },
+    {
+      "page": "deployment/authentication/jwt.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "JWT Header Auth",
+      "words": 1361,
+      "last_commit": "2026-08-25",
+      "components": ["auth-and-identity"],
+      "images": []
+    },
+    {
+      "page": "deployment/authentication/oauth.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Google OAuth",
+      "words": 884,
+      "last_commit": "2026-07-27",
+      "components": ["auth-and-identity"],
+      "images": [
+        {
+          "src": "/assets/deployment/gcc_project_creation.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/gcc_people_api.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/gcc_oauth_consent.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/gcc_oauth_client.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/gcc_oauth_client_details.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/authentication/oidc.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "OIDC",
+      "words": 758,
+      "last_commit": "2026-07-27",
+      "components": ["auth-and-identity"],
+      "images": [
+        {
+          "src": "/assets/deployment/oidc_create_integration.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/oidc_config.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/oidc_secrets.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/authentication/saml.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "SAML",
+      "words": 535,
+      "last_commit": "2026-07-22",
+      "components": ["auth-and-identity"],
+      "images": [
+        {
+          "src": "/assets/deployment/oidc_create_integration.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/saml_config.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/authentication/scim.mdx",
+      "tab": "Admins",
+      "in_nav": true,
+      "title": "SCIM",
+      "words": 748,
+      "last_commit": "2026-04-16",
+      "components": ["auth-and-identity"],
+      "images": []
+    },
+    {
+      "page": "deployment/authentication/sso_providers.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "SSO Providers",
+      "words": 1198,
+      "last_commit": "2026-08-18",
+      "components": ["auth-and-identity"],
+      "images": [
+        {
+          "src": "/assets/deployment/sso_providers_page.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/sso_providers_modal.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/cloud/azure.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Azure",
+      "words": 207,
+      "last_commit": "2026-09-25",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/deployment/setup_guides/azure/create-vm.png",
+          "kind": "cloud-console"
+        },
+        {
+          "src": "/assets/deployment/setup_guides/azure/create-vm-2.png",
+          "kind": "cloud-console"
+        },
+        {
+          "src": "/assets/deployment/setup_guides/azure/create-vm-3.png",
+          "kind": "cloud-console"
+        },
+        {
+          "src": "/assets/deployment/setup_guides/azure/instance-ip.png",
+          "kind": "cloud-console"
+        }
+      ]
+    },
+    {
+      "page": "deployment/cloud/digital_ocean.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Digital Ocean",
+      "words": 153,
+      "last_commit": "2026-01-11",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/deployment/setup_guides/do/InstanceIp.png",
+          "kind": "cloud-console"
+        }
+      ]
+    },
+    {
+      "page": "deployment/cloud/gcp.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "GCP",
+      "words": 4310,
+      "last_commit": "2026-10-05",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/deployment/setup_guides/gcp/CreateVmInstance.png",
+          "kind": "cloud-console"
+        },
+        {
+          "src": "/assets/deployment/setup_guides/gcp/Instance.png",
+          "kind": "cloud-console"
+        },
+        {
+          "src": "/assets/deployment/setup_guides/gcp/Firewall.png",
+          "kind": "cloud-console"
+        }
+      ]
+    },
+    {
+      "page": "deployment/cloud/aws/ec2.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "EC2",
+      "words": 192,
+      "last_commit": "2026-01-11",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/deployment/ec2_create_instance.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/ec2_https.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/ec2_ipv4.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/cloud/aws/eks.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "EKS",
+      "words": 828,
+      "last_commit": "2026-09-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/deployment/eks_cluster_create.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/cloud/aws/rds.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "RDS",
+      "words": 671,
+      "last_commit": "2025-09-24",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/getting_started/quickstart.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Quickstart",
+      "words": 18,
+      "last_commit": "2026-04-02",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/getting_started/resourcing.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Resourcing",
+      "words": 920,
+      "last_commit": "2026-09-25",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/miscellaneous/contact_us.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Contact Us",
+      "words": 21,
+      "last_commit": "2025-09-08",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/enterprise_edition.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Enterprise Edition",
+      "words": 17,
+      "last_commit": "2025-09-08",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/miscellaneous/release_process.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Release Process & Updates",
+      "words": 579,
+      "last_commit": "2025-09-16",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/production/code_interpreter.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Code Interpreter",
+      "words": 1254,
+      "last_commit": "2026-09-29",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/production/external_services.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "External Services",
+      "words": 1097,
+      "last_commit": "2026-09-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/production/high_availability.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "High Availability and Scaling",
+      "words": 1126,
+      "last_commit": "2026-09-25",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/production/security.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Security Hardening",
+      "words": 1334,
+      "last_commit": "2026-09-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/configuration/chrome_extension.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Chrome Extension",
+      "words": 643,
+      "last_commit": "2026-09-23",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/overview/onyx_anywhere/onyx_chrome_extension.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/chrome_extension.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/extension_settings.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/deployment/root_domain.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "deployment/configuration/configuration.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Configure Onyx",
+      "words": 3574,
+      "last_commit": "2026-10-21",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/configuration/mcp_server.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Configure the Onyx MCP server",
+      "words": 1795,
+      "last_commit": "2026-10-20",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": []
+    },
+    {
+      "page": "deployment/configuration/website_widget.mdx",
+      "tab": "Deployment",
+      "in_nav": true,
+      "title": "Website Widget",
+      "words": 706,
+      "last_commit": "2026-03-30",
+      "components": ["editions-and-gating", "multi-tenancy", "background-jobs"],
+      "images": [
+        {
+          "src": "/assets/deployment/widget_api_key.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "developers/contact_us.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Contact Us",
+      "words": 17,
+      "last_commit": "2025-09-08",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "developers/core_concepts.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Core Concepts",
+      "words": 1872,
+      "last_commit": "2026-10-20",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "developers/overview.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Overview & Auth",
+      "words": 951,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "developers/overview_legacy.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Overview & Auth before v4.7",
+      "words": 517,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/associate_credential_to_connector.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Associate Credential To Connector",
+      "words": 37,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/connector_run_once.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Connector Run Once",
+      "words": 35,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/create_connector_from_model.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Connector From Model",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/create_credential_from_model.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Credential From Model",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/create_credential_with_private_key.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Credential With Private Key",
+      "words": 37,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/create_deletion_attempt_for_connector_id.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Deletion Attempt For Connector Id",
+      "words": 39,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/delete_connector_by_id.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Connector By Id",
+      "words": 21,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/delete_credential_by_id.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Credential By Id",
+      "words": 29,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/delete_credential_by_id_admin.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Credential By Id Admin",
+      "words": 22,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/dissociate_credential_from_connector.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Dissociate Credential From Connector",
+      "words": 33,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/force_delete_credential_by_id.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Force Delete Credential By Id",
+      "words": 30,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_basic_connector_indexing_status.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Basic Connector Indexing Status",
+      "words": 26,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_cc_pair_full_info.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get CC Pair Full Info",
+      "words": 45,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_cc_pair_index_attempts.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get CC Pair Index Attempts",
+      "words": 45,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_cc_pair_indexing_errors.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get CC Pair Indexing Errors",
+      "words": 29,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_cc_source_full_info.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Cc Source Full Info",
+      "words": 37,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_connector_by_id.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Connector By Id",
+      "words": 28,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_connector_indexing_status.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Connector Indexing Status",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_connector_status.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Connector Status",
+      "words": 42,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_connectors.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Connectors",
+      "words": 26,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_connectors_by_credential.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Connectors By Credential",
+      "words": 21,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_credential_by_id.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Credential By Id",
+      "words": 29,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_currently_failed_indexing_status.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Currently Failed Indexing Status",
+      "words": 22,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_docs_by_connector_credential_pair.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Docs By Connector Credential Pair",
+      "words": 39,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/get_indexed_sources.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Indexed Sources",
+      "words": 21,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/list_connector_files.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List Connector Files",
+      "words": 20,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/list_credentials.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List Credentials",
+      "words": 42,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/list_credentials_admin.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List Credentials Admin",
+      "words": 35,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/prune_cc_pair.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Prune Cc Pair",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/swap_credentials_for_connector.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Swap Credentials For Connector",
+      "words": 21,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/update_cc_pair_status.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update CC Pair Status",
+      "words": 37,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/update_connector_files.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Connector Files",
+      "words": 20,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/update_connector_from_model.mdx",
+      "tab": null,
+      "in_nav": false,
+      "title": "Update Connector From Model",
+      "words": 21,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/update_credential_data.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Credential Data",
+      "words": 20,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/update_credential_from_model.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Credential From Model",
+      "words": 29,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/update_credential_private_key.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Credential Private Key",
+      "words": 21,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/files_connectors/upload_files_api.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Upload Files Api",
+      "words": 20,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/create_new_chat_session.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create New Chat Session",
+      "words": 55,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/delete_all_chat_sessions.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete All Chat Sessions",
+      "words": 29,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/delete_chat_session_by_id.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Chat Session By Id",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/fetch_chat_file.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Fetch Chat File",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/get_chat_session.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Chat Session",
+      "words": 45,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/get_user_chat_sessions.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get User Chat Sessions",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/handle_send_chat_message.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Handle Send Chat Message",
+      "words": 96,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/search_chats.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Search Chats",
+      "words": 34,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/chat/stop_chat_session.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Stop Chat Session",
+      "words": 44,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/miscellaneous/create_global_token_limit_settings.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Global Token Limit Settings",
+      "words": 19,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/miscellaneous/delete_token_limit_settings.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Token Limit Settings",
+      "words": 18,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/miscellaneous/get_global_token_limit_settings.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Global Token Limit Settings",
+      "words": 19,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/miscellaneous/get_version.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Backend Version",
+      "words": 12,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/miscellaneous/get_versions.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Latest App Version Tags",
+      "words": 14,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/miscellaneous/healthcheck.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Healthcheck",
+      "words": 10,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/miscellaneous/update_token_limit_settings.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Token Limit Settings",
+      "words": 18,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/activate_user_api.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Activate User Api",
+      "words": 13,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/bulk_invite_users.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Bulk Invite Users",
+      "words": 13,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/deactivate_user_api.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Deactivate User Api",
+      "words": 13,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/delete_user.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete User",
+      "words": 12,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/get_auth_type.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Auth Type",
+      "words": 12,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/get_current_user_permissions.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Current User Permissions",
+      "words": 104,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/get_user_role.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get User Role",
+      "words": 28,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/list_accepted_users.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List Accepted Users",
+      "words": 13,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/list_all_users.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List All Users",
+      "words": 37,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/list_all_users_basic_info.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List All Users Basic Info",
+      "words": 41,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/list_invited_users.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List Invited Users",
+      "words": 13,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/remove_invited_user.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Remove Invited User",
+      "words": 13,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/set_user_admin_access.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Set User Admin Access",
+      "words": 161,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/set_user_role.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Set User Role",
+      "words": 46,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/user_management/verify_user_logged_in.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Verify User Logged In",
+      "words": 32,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/create_persona.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Agent",
+      "words": 39,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/delete_persona.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Agent",
+      "words": 39,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/get_agents_admin_paginated.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Agents Admin Paginated",
+      "words": 40,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/get_agents_paginated.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Agents Paginated",
+      "words": 24,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/get_persona.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Agent",
+      "words": 13,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/list_personas_admin.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List Agents Admin",
+      "words": 39,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/undelete_persona.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Undelete Agent",
+      "words": 12,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/agents/update_persona.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Agent",
+      "words": 38,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/search/execute_open_urls.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Execute Open Urls",
+      "words": 35,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/search/execute_web_search.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Execute Web Search",
+      "words": 35,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/search/execute_web_search_lite.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Execute Web Search Lite",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/search/get_search_history.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Search History",
+      "words": 80,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/search/handle_send_search_message.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Handle Send Search Message",
+      "words": 98,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/search/search.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Search",
+      "words": 136,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/search/search_flow_classification.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Search Flow Classification",
+      "words": 97,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/create_project.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Project",
+      "words": 30,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/delete_project.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Project",
+      "words": 30,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/delete_user_file.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete User File",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_chat_session_project_files.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Chat Session Project Files",
+      "words": 33,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_files_in_project.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Files In Project",
+      "words": 32,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_project.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Project",
+      "words": 30,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_project_details.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Project Details",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_project_instructions.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Project Instructions",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_projects.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Projects",
+      "words": 30,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_user_file.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get User File",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/get_user_file_statuses.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get User File Statuses",
+      "words": 32,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/link_user_file_to_project.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Link User File To Project",
+      "words": 33,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/unlink_user_file_from_project.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Unlink User File From Project",
+      "words": 33,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/update_project.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Project",
+      "words": 30,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/upload_user_files.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Upload User Files",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/projects/upsert_project_instructions.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Upsert Project Instructions",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/actions/create_custom_tool.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Custom Tool",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/actions/delete_custom_tool.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Custom Tool",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/actions/get_custom_tool.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Custom Tool",
+      "words": 21,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/actions/list_openapi_tools.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List OpenAPI Tools",
+      "words": 32,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/actions/list_tools.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "List Tools",
+      "words": 31,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/actions/update_custom_tool.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Update Custom Tool",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/actions/validate_tool.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Validate Tool",
+      "words": 35,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/ingestion/delete_ingestion_doc.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Delete Ingestion Doc",
+      "words": 36,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/ingestion/get_ingestion_docs.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Get Ingestion Docs",
+      "words": 20,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/api_reference/ingestion/upsert_ingestion_doc.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Upsert Ingestion Doc",
+      "words": 49,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api"],
+      "images": []
+    },
+    {
+      "page": "developers/guides/chat_new_guide.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Send a Message to Onyx",
+      "words": 1263,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "developers/guides/create_connector.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Create Connectors",
+      "words": 1413,
+      "last_commit": "2026-08-25",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "developers/guides/index_files_ingestion_api.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Index Files with the Ingestion API",
+      "words": 2164,
+      "last_commit": "2026-09-22",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "developers/guides/llm_gateway.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "LLM Gateway",
+      "words": 1135,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api", "mcp-server"],
+      "images": [
+        {
+          "src": "/assets/developers/llm_gateway_add_provider.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/developers/llm_gateway_available_models.png",
+          "kind": "onyx-ui"
+        },
+        {
+          "src": "/assets/developers/llm_gateway_spending_limits.png",
+          "kind": "onyx-ui"
+        }
+      ]
+    },
+    {
+      "page": "developers/guides/search_api_guide.mdx",
+      "tab": "Developers",
+      "in_nav": true,
+      "title": "Search with the API",
+      "words": 1200,
+      "last_commit": "2026-09-02",
+      "components": ["onyx-api", "mcp-server"],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/quickstart.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Quickstart",
+      "words": 352,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/welcome.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Welcome to Agent Wiki",
+      "words": 206,
+      "last_commit": "2026-07-29",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/language_models.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Language Models",
+      "words": 296,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/notifications.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Notifications",
+      "words": 208,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/onyx_integration.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Onyx Integration",
+      "words": 717,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/overview.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Admin Overview",
+      "words": 241,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/status.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Status & Usage",
+      "words": 267,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/templates.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Document Templates",
+      "words": 260,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/users_and_groups.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Users & Groups",
+      "words": 284,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/admin/web_search.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Web Search",
+      "words": 204,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/automate/agents_and_actions.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Agents & Actions",
+      "words": 346,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/automate/auto_organize.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Auto Organize",
+      "words": 567,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/automate/chats.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Chats",
+      "words": 22,
+      "last_commit": "2026-07-29",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/automate/mcp.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Connect an Agent (MCP)",
+      "words": 1093,
+      "last_commit": "2026-10-20",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/automate/triggers.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Triggers",
+      "words": 1162,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/using/account_settings.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Account Settings",
+      "words": 184,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/using/editor.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Editor",
+      "words": 22,
+      "last_commit": "2026-07-29",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/using/trash.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Trash",
+      "words": 327,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/using/update_policies.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Update Policies",
+      "words": 727,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/using/wiki.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "The Wiki",
+      "words": 23,
+      "last_commit": "2026-07-29",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/deployment/configuration.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Configuration",
+      "words": 533,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/deployment/docker_compose.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Docker Compose",
+      "words": 652,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    },
+    {
+      "page": "agent-wiki/deployment/kubernetes.mdx",
+      "tab": "Agent Wiki",
+      "in_nav": true,
+      "title": "Kubernetes",
+      "words": 578,
+      "last_commit": "2026-08-13",
+      "components": [
+        "craft-admin",
+        "craft-sessions",
+        "craft-sandboxes",
+        "craft-scheduled-tasks",
+        "skills"
+      ],
+      "images": []
+    }
+  ]
+}

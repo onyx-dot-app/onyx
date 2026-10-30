@@ -5831,6 +5831,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {# Datei hochgeladen} other {# Dateien hochgeladen}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {# Datei hochgeladen} other {# Dateien hochgeladen}}, unvollständig: {error}"
         }
       },
       "sensitiveWarning": {
@@ -12117,6 +12120,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {Eine Datei ist fehlgeschlagen und wurde entfernt: {names}} other {Dateien sind fehlgeschlagen und wurden entfernt: {names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "Chat wird geladen"
+      },
       "newChatButton": {
         "label": "Neuen Chat starten"
       },
@@ -12351,7 +12357,9 @@
           "speakingPlaceholder": "{appName} spricht..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Warten, bis die angehängten Dateien verarbeitet sind"
+          "processingFilesTooltip": "Warten, bis die angehängten Dateien verarbeitet sind",
+          "stoppingLabel": "Wird gestoppt…",
+          "reloadLabel": "Erneut prüfen"
         },
         "tabReadingButton": {
           "readLabel": "Diesen Tab lesen",
@@ -13656,6 +13664,10 @@
       "incognito": {
         "title": "Sie sind inkognito"
       }
+    },
+    "readiness": {
+      "stopFailed": "Die Antwort konnte nicht gestoppt werden. Versuche es erneut.",
+      "checkFailed": "Das Ende der Antwort konnte nicht bestätigt werden. Prüfe erneut, bevor du eine weitere Nachricht sendest."
     }
   },
   "common": {
@@ -15852,6 +15864,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Einrichtung abschließen"
+      },
+      "nextButton": {
+        "label": "Weiter"
+      },
       "progress": {
         "label": "Schritt {current} von {total}"
       }
@@ -15863,13 +15881,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# Modell verbunden} other {# Modelle verbunden}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM-kompatible APIs",
-        "title": "Benutzerdefinierter LLM-Anbieter"
-      },
       "description": "{appName} unterstützt sowohl selbst gehostete Modelle als auch gängige Anbieter.",
       "edit": {
         "ariaLabel": "LLM-Anbieter bearbeiten"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "Anzeigen"
+        },
+        "description": "Im Admin-Bereich einrichten",
+        "title": "Weitere Anbieter"
       },
       "providerCard": {
         "connect": {
@@ -15877,7 +15898,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Anbieter-Einstellungen"
-        }
+        },
+        "settingsLoadError": "Die Einstellungen dieses Anbieters konnten nicht geladen werden. Versuche es erneut."
       },
       "title": "Verbinden Sie Ihre LLM-Modelle"
     },
@@ -15904,28 +15926,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "Einrichtung abschließen"
-        },
-        "title": "Alles bereit. Prüfen Sie die optionalen Einstellungen oder klicken Sie auf „Einrichtung abschließen“"
-      },
       "llmSetup": {
-        "button": {
-          "label": "Weiter"
-        },
-        "title": "Fast geschafft! Verbinden Sie Ihre Modelle, um mit dem Chatten zu beginnen."
+        "title": "Verbinden Sie ein Modell, um zu chatten."
       },
       "name": {
-        "button": {
-          "label": "Weiter"
-        },
-        "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
+        "title": "Sagen Sie uns, wie wir Sie nennen sollen."
       },
-      "welcome": {
-        "button": {
-          "label": "Los geht’s"
-        },
+      "optionalSetup": {
+        "title": "Richten Sie einige optionale Extras ein."
+      },
+      "postStep": {
+        "title": "Alles ist bereit."
+      },
+      "preStep": {
         "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
       }
     }

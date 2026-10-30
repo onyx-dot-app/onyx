@@ -26,10 +26,7 @@
 
 **Read first:** `[[craft-sandboxes]]` for the sandbox this component pushes
 files into, `[[craft-external-apps]]` for the credential and policy layer some
-skills depend on, and
-`docs/craft/features/external-apps/external-app-skill-action-availability.md`
-for the design rationale behind per-action availability rendering (already
-shipped; see §4.2).
+skills depend on. §4.2 covers per-action availability rendering.
 
 ---
 
@@ -310,9 +307,12 @@ here because the skill body already covers them and `ASK` is handled at call
 time by the sandbox proxy (`[[craft-external-apps]]`). An unresolved
 `{{...}}` placeholder in rendered `SKILL.md` raises rather than shipping broken
 markup to the agent (`rendering.py:render_external_app_skill`, the trailing
-`if "{{" in rendered` check). This whole mechanism matches
-`docs/craft/features/external-apps/external-app-skill-action-availability.md`
-- that plan has already shipped; it is not a stale doc.
+`if "{{" in rendered` check). The rendered list is a hint for the agent, not
+the enforcement boundary: the proxy gate enforces policy on every request, and
+the file can lag a policy change until the next push. Converting a skill's
+`SKILL.md` to `SKILL.md.template` must ship with its renderer dispatch: the
+static copy skips `.template` sources, so without the renderer the skill ships
+no `SKILL.md`.
 
 ### 4.3 Pushing the active set into a sandbox
 

@@ -1,6 +1,7 @@
 from collections.abc import Callable
-from typing import Any
+from functools import lru_cache
 
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -15,7 +16,7 @@ from onyx.db.llm import (
     fetch_user_group_ids,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Persona, SearchSettings, User
+from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.decisions.factory import build_decision_client
@@ -23,6 +24,7 @@ from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.token_budget import TOKEN_COUNT_CACHE_SIZE
 from onyx.llm.utils import (
     get_max_input_tokens_from_llm_provider,
     model_supports_image_input,
@@ -79,8 +81,8 @@ def _get_model_configuration(
 def _build_model_kwargs(
     provider: str,
     configured_max_input_tokens: int | None,
-) -> dict[str, Any]:
-    model_kwargs: dict[str, Any] = {}
+) -> dict[str, JsonValue]:
+    model_kwargs: dict[str, JsonValue] = {}
     if (
         provider == LlmProviderNames.OLLAMA_CHAT
         and configured_max_input_tokens
@@ -362,8 +364,6 @@ def llm_from_provider(
 
 
 def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
-    from onyx.db.models import ModelConfiguration
-
     with get_session_with_current_tenant() as db_session:
         mc = db_session.get(ModelConfiguration, model_configuration_id)
         if not mc:
@@ -495,9 +495,9 @@ def get_llm(
     custom_config: dict[str, str] | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
-    model_kwargs: dict[str, Any] | None = None,
+    model_kwargs: dict[str, JsonValue] | None = None,
     policy_headers: dict[str, str] | None = None,
-    policy_model_kwargs: dict[str, Any] | None = None,
+    policy_model_kwargs: dict[str, JsonValue] | None = None,
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
@@ -572,4 +572,10 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
 
 def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
     tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
-    return lambda text: len(tokenizer_encode_func(text))
+
+    # Keep prompt content local to this counter, never in a process-wide cache.
+    @lru_cache(maxsize=TOKEN_COUNT_CACHE_SIZE)
+    def count(text: str) -> int:
+        return len(tokenizer_encode_func(text))
+
+    return count

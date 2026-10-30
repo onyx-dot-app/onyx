@@ -1,0 +1,128 @@
+---
+title: "Overview"
+description: "Configure Craft access, Apps, instructions, and models"
+icon: "hammer"
+---
+
+The Admin Panel has a dedicated **Craft** section for the settings that apply across your workspace.
+
+| Setting | Where to find it |
+| --- | --- |
+| User access | **Admin Panel → Craft → Access** |
+| Apps, MCP servers, and action policies | **Admin Panel → Plugins** |
+| Default model and workspace instructions | **Admin Panel → Craft → Preferences** |
+| Models and provider visibility | **Admin Panel → Language Models** |
+| Custom Skill sharing and management | **Craft → Skills** |
+
+Craft needs a Business or Enterprise plan, or Onyx Cloud.
+On the Community Edition the Craft section shows an upgrade page.
+
+If you self-host Onyx, first configure the runtime described in [Deploying Craft](/deployment/local/craft).
+
+## Control access
+
+Open **Admin Panel → Craft → Access**.
+
+| Control | Effect |
+| --- | --- |
+| **Enable Craft by default** | Turns Craft on or off for users who do not have an individual override. |
+| **Per-user access** | Creates an exception to the workspace default for that user. |
+
+For a limited rollout, turn off **Enable Craft by default**, then enable the users who should have access.
+Per-user exceptions remain in place if you later change the workspace default.
+
+<Info>
+  Removing access prevents the user from starting new Craft work and skips future Scheduled Task runs they own.
+  It does not stop a turn already in progress or delete their sessions, files, Skills, Apps, or Scheduled Tasks.
+  Anonymous users never get Craft.
+</Info>
+
+## Set the default model
+
+Open **Admin Panel → Craft → Preferences** and pick a **Default model**.
+Craft uses this model for new sessions and Scheduled Tasks. When unset,
+Craft uses the workspace default chat model and the picker shows **Workspace default**.
+
+Craft can use any provider you configure under **Language Models**.
+Users also need access to the provider and at least one visible model.
+Give users provider access publicly or through a group. Agent whitelists apply to Onyx Agents, not Craft.
+See [Language Model Access Controls](/admins/advanced_configs/llm_access_controls) for provider visibility settings.
+
+## Add workspace instructions
+
+On the same **Preferences** page, add **Workspace instructions** that every Craft agent in your workspace follows.
+Onyx appends these instructions to Craft's built-in instructions as an **Organization instructions** section.
+
+Good workspace instructions describe stable expectations that apply to all Craft work:
+
+| Use workspace instructions for | Keep elsewhere |
+| --- | --- |
+| Brand voice, terminology, and formatting conventions | Instructions for one workflow—put these in a Skill |
+| Organization-wide handling rules for generated content | Credentials or secrets—configure these through Apps |
+| Standard output requirements, such as citations or disclaimers | Details that change for every request—include these in the prompt |
+
+For example:
+
+```md
+For client-facing deliverables:
+
+- Use the company name "Acme" rather than "Acme, Inc."
+- Use concise, direct language and avoid unsupported performance claims.
+- Add "Confidential" to draft materials unless the user requests otherwise.
+```
+
+The editor accepts up to 4,000 characters. **Reset to default** removes the workspace instructions for everyone.
+
+<Warning>
+  Workspace instructions supplement Craft's built-in behavior. They cannot override its hard rules, App policies,
+  user permissions, or other enforced controls.
+</Warning>
+
+Changes apply when a Craft session starts or is restored. They do not alter a session while it is actively running.
+
+## Configure Apps and Skills
+
+<CardGroup cols={2}>
+  <Card title="Apps" icon="plug" href="/admins/plugins/craft_apps">
+    In **Admin Panel → Plugins**, configure Craft Apps, MCP servers for Craft, credentials, and action policies.
+  </Card>
+
+  <Card title="Skills" icon="wand-magic-sparkles" href="/admins/managing_features/craft_skills">
+    In **Craft → Skills**, review reusable instructions and share custom Skills with users or groups.
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The Craft section does not appear in the Admin Panel">
+    Confirm you are signed in as an Admin. The section is hidden when Craft is unavailable on the deployment.
+    Self-hosted operators should review [Deploying Craft](/deployment/local/craft).
+  </Accordion>
+
+  <Accordion title="A user has access but cannot start a session">
+    Confirm the user can access a provider with at least one visible model.
+    A provider limited only to an Agent whitelist is not available in Craft.
+  </Accordion>
+
+  <Accordion title="A user still has different access after the default changes">
+    Check the user's setting under **Admin Panel → Craft → Access**.
+    A per-user exception takes precedence over the workspace default until you change it.
+  </Accordion>
+
+  <Accordion title="Craft shows an upgrade page or every message fails with “Payment Required”">
+    Craft needs a Business or Enterprise plan. Deployments without one see an upgrade page,
+    and older releases return `FEATURE_NOT_AVAILABLE` on every message.
+    Add a license or upgrade to the latest patch release for your Onyx version.
+  </Accordion>
+</AccordionGroup>
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="server" href="/deployment/local/craft">
+    Configure the runtime required for self-hosted Craft.
+  </Card>
+
+  <Card title="Architecture" icon="diagram-project" href="/security/architecture/craft">
+    Review sandbox isolation, credential injection, approvals, and sharing boundaries.
+  </Card>
+</CardGroup>

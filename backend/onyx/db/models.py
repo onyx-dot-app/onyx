@@ -56,6 +56,7 @@ from typing_extensions import TypedDict  # noreorder
 
 from onyx.agents.models import ExecutionStatus, RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
+from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
@@ -132,7 +133,7 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
-from onyx.deep_research.models import ResearchConfiguration
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchConfiguration
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
@@ -144,14 +145,12 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
-from onyx.tools.results import (
-    CodingAgentCallResult,
+from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
-    ResearchAgentCallResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
@@ -957,6 +956,9 @@ class ToolCall__SearchDoc(Base):
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id", ondelete="CASCADE"), primary_key=True
     )
+    # The order the tool call returned this doc in. Rows saved before the
+    # column existed have none.
+    position: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Document__Tag(Base):
@@ -3179,6 +3181,16 @@ class IndexAttemptError(Base):
     # This is the reverse side of the relationship
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
 
+    # Each docprocessing batch resolves its documents' open errors.
+    __table_args__ = (
+        Index(
+            "ix_index_attempt_errors_unresolved_cc_pair_document",
+            "connector_credential_pair_id",
+            "document_id",
+            postgresql_where=text("NOT is_resolved"),
+        ),
+    )
+
 
 class CCPairRunResolution(Base):
     """A failed run, or a run with errors, an admin marked resolved. It keeps
@@ -3590,7 +3602,7 @@ class ChatMessage(Base):
     model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Requested reasoning effort plus the kwargs actually sent to the provider.
-    request_params: Mapped[dict[str, Any] | None] = mapped_column(
+    request_params: Mapped[dict[str, JsonValue] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
 
@@ -3798,8 +3810,18 @@ class ToolCall(Base):
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     # For "Agents" like the Research Agent for Deep Research -
     # the argument and final report are stored as the argument and response.
-    tool_call_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
-    tool_call_response: Mapped[str] = mapped_column(Text, default="")
+    tool_call_arguments: Mapped[dict[str, JsonValue]] = mapped_column(
+        postgresql.JSONB()
+    )
+    legacy_response: Mapped[str] = mapped_column("tool_call_response", Text, default="")
+
+    @property
+    def tool_call_response(self) -> str:
+        return self.result.text if self.result is not None else self.legacy_response
+
+    @tool_call_response.setter
+    def tool_call_response(self, value: str) -> None:
+        self.legacy_response = value
 
     # This just counts the number of tokens in the arg because it's all that's kept for the history
     # Only the top level tools (the ones with a parent_chat_message_id) have token counts that are counted
@@ -3838,6 +3860,9 @@ class ToolCall(Base):
         back_populates="tool_calls",
         cascade="all, delete-orphan",
         single_parent=True,
+        # The order the tool returned them in, which a fetch call's replay
+        # shows. Rows saved before `position` existed fall back to id order.
+        order_by=lambda: [ToolCall__SearchDoc.position, SearchDoc.id],
     )
 
 
@@ -4861,7 +4886,7 @@ class SlackChannelConfig(Base):
             "slack_bot_id",
             "is_default",
             unique=True,
-            postgresql_where=(is_default is True),
+            postgresql_where=text("is_default IS TRUE"),
         ),
     )
 

@@ -1,6 +1,5 @@
-import { OverflowText } from "@opal/components";
+import { OverflowText, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
 import { IconProps } from "@opal/types";
 import React from "react";
 
@@ -55,14 +54,17 @@ function CardItemLayout({
 
       {description && (
         <div className="pb-1 px-2 flex self-stretch">
-          <Text
-            as="p"
-            secondaryBody
-            text03
-            className="line-clamp-2 truncate whitespace-normal h-[2.2rem] wrap-break-word"
-          >
-            {description}
-          </Text>
+          <div className="h-[2.2rem]">
+            <Text
+              as="p"
+              font="secondary-body"
+              color="text-03"
+              maxLines={2}
+              wordWrap="wrap-break-word"
+            >
+              {description}
+            </Text>
+          </div>
         </div>
       )}
     </div>
