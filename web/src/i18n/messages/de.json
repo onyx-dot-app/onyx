@@ -154,7 +154,7 @@
         "title": "Zugriffssteuerung",
         "description": "Wählen Sie, wer diesen MCP verwenden kann.",
         "public": {
-          "label": "Öffentlich",
+          "label": "Organisation",
           "description": "Alle in Ihrer Organisation können diesen MCP verwenden"
         },
         "groups": {
@@ -1646,7 +1646,7 @@
             "label": "Privat"
           },
           "public": {
-            "label": "Öffentlich"
+            "label": "Organisation"
           },
           "shared": {
             "label": "Geteilt"
@@ -1920,7 +1920,7 @@
             "text": "Zugriffskontrollen werden aus dieser Bereitstellung entfernt. **Dies startet eine Neuindexierung**, damit die Suchergebnisse die Änderung widerspiegeln, was bei einem großen Index eine Weile dauern kann."
           },
           "madePublic": {
-            "text": "**Öffentlich gemacht:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
+            "text": "**Für Ihre Organisation freigegeben:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
           },
           "reset": {
             "text": "**Auf Standard zurückgesetzt:** Benutzerdefiniertes Branding und Chat-Aufbewahrungsrichtlinie."
@@ -3685,7 +3685,7 @@
         "documentAccess": {
           "description": "Legen Sie fest, wer auf die von diesem Konnektor indexierten Dokumente zugreifen kann.",
           "everyone": {
-            "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation öffentlich.",
+            "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation verfügbar.",
             "title": "Alle in Ihrer Organisation"
           },
           "specificGroups": {
@@ -5622,7 +5622,7 @@
             "label": "Privat"
           },
           "public": {
-            "label": "Öffentlich"
+            "label": "Organisation"
           }
         },
         "connector": {
@@ -5743,7 +5743,7 @@
             "header": "Name"
           },
           "public": {
-            "header": "Öffentlich"
+            "header": "Zugriff"
           },
           "status": {
             "header": "Status"
@@ -7407,7 +7407,7 @@
           "deleting": "{count, plural, one {# Konnektor wird gelöscht} other {# Konnektoren werden gelöscht}}"
         },
         "access": {
-          "public": "Öffentlich",
+          "public": "Organisation",
           "private": "Privat",
           "sync": "Auto-Sync",
           "sync_restricted": "Auto-Sync, eingeschränkt"
@@ -9035,8 +9035,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "Gesamtes öffentliches Wissen",
-            "sublabel": "OnyxBot antwortet auf Basis der Informationen aus allen öffentlichen Konnektoren"
+            "label": "Gesamtes organisationsweites Wissen",
+            "sublabel": "OnyxBot antwortet auf Basis der Informationen aus allen organisationsweiten Konnektoren"
           },
           "documentSets": {
             "label": "Bestimmte Dokumentensätze",
@@ -11413,7 +11413,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "Öffentliche Berechtigung ändern"
+          "ariaLabel": "Organisationsberechtigung ändern"
         },
         "row": {
           "updateAccess": {
@@ -11497,7 +11497,7 @@
           "title": "Prompt-Erinnerungen"
         },
         "public": {
-          "label": "Öffentlich für Ihre Organisation"
+          "label": "Für Ihre Organisation verfügbar"
         }
       }
     },
@@ -14068,11 +14068,11 @@
         "text": "Wird geladen..."
       },
       "makePublic": {
-        "label": "Diesen {objectName} öffentlich machen?",
+        "label": "Diesen {objectName} für Ihre Organisation verfügbar machen?",
         "subtext": "Wenn aktiviert, kann dieser {objectName} von <b>allen {publicToWhom}</b> verwendet werden. Andernfalls haben nur <b>Administratoren</b> und <b>{publicToWhom}</b>, denen explizit Zugriff auf diesen {objectName} gewährt wurde (z. B. über eine Benutzergruppe), Zugriff."
       },
       "publicDisabled": {
-        "message": "Dieser {objectName} ist öffentlich und für alle Benutzer verfügbar."
+        "message": "Dieser {objectName} ist für alle in Ihrer Organisation verfügbar."
       },
       "usersFallback": {
         "text": "Benutzer"
@@ -16416,7 +16416,7 @@
       "row": {
         "contentPlaceholder": "Geben Sie eine kurze Zusammenfassung des Folgenden in 1–2 Sätzen an:",
         "promptPlaceholder": "Zusammenfassen",
-        "publicTooltip": "Öffentliche Prompt-Shortcuts können nicht gelöscht werden.",
+        "publicTooltip": "Organisationsweite Prompt-Shortcuts können nicht gelöscht werden.",
         "removeAriaLabel": "Shortcut entfernen"
       },
       "title": "Prompt-Shortcuts",

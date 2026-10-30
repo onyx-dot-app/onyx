@@ -154,7 +154,7 @@
         "title": "액세스 제어",
         "description": "이 MCP를 사용할 수 있는 사용자를 선택하세요.",
         "public": {
-          "label": "공개",
+          "label": "조직",
           "description": "조직의 누구나 이 MCP를 사용할 수 있습니다"
         },
         "groups": {
@@ -1646,7 +1646,7 @@
             "label": "비공개"
           },
           "public": {
-            "label": "공개"
+            "label": "조직"
           },
           "shared": {
             "label": "공유됨"
@@ -1920,7 +1920,7 @@
             "text": "이 배포에서 액세스 제어가 제거됩니다. **재인덱싱이 시작되어** 검색 결과에 변경 사항이 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
           },
           "madePublic": {
-            "text": "**공개:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
+            "text": "**조직에 개방:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
           },
           "reset": {
             "text": "**기본값으로 재설정:** 사용자 지정 브랜딩과 채팅 보존 정책"
@@ -3685,7 +3685,7 @@
         "documentAccess": {
           "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
           "everyone": {
-            "description": "이 커넥터가 색인한 문서는 조직의 모든 사용자에게 공개됩니다.",
+            "description": "이 커넥터로 인덱싱된 문서는 조직의 모든 구성원이 사용할 수 있습니다.",
             "title": "조직의 모든 사용자"
           },
           "specificGroups": {
@@ -5622,7 +5622,7 @@
             "label": "비공개"
           },
           "public": {
-            "label": "공개"
+            "label": "조직"
           }
         },
         "connector": {
@@ -5743,7 +5743,7 @@
             "header": "이름"
           },
           "public": {
-            "header": "공개"
+            "header": "액세스"
           },
           "status": {
             "header": "상태"
@@ -7407,7 +7407,7 @@
           "deleting": "{count, plural, other {커넥터 #개 삭제 중}}"
         },
         "access": {
-          "public": "공개",
+          "public": "조직",
           "private": "비공개",
           "sync": "자동 동기화",
           "sync_restricted": "자동 동기화(제한됨)"
@@ -9035,8 +9035,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "모든 공개 지식",
-            "sublabel": "OnyxBot이 모든 공개 커넥터의 정보를 바탕으로 응답하도록 합니다"
+            "label": "조직 전체의 모든 지식",
+            "sublabel": "OnyxBot이 조직 전체의 모든 커넥터 정보를 바탕으로 응답하도록 합니다"
           },
           "documentSets": {
             "label": "특정 문서 세트",
@@ -11413,7 +11413,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "공개 권한 변경"
+          "ariaLabel": "조직 권한 변경"
         },
         "row": {
           "updateAccess": {
@@ -11497,7 +11497,7 @@
           "title": "프롬프트 리마인더"
         },
         "public": {
-          "label": "조직에 공개"
+          "label": "조직에서 사용 가능"
         }
       }
     },
@@ -14068,11 +14068,11 @@
         "text": "불러오는 중..."
       },
       "makePublic": {
-        "label": "이 {objectName}을(를) 공개하시겠습니까?",
+        "label": "이 {objectName}을(를) 조직에서 사용할 수 있게 하시겠습니까?",
         "subtext": "설정하면 이 {objectName}은(는) <b>모든 {publicToWhom}</b>이 사용할 수 있습니다. 그렇지 않으면 <b>관리자</b>와 (예: 사용자 그룹을 통해) 이 {objectName}에 대한 액세스 권한을 명시적으로 부여받은 <b>{publicToWhom}</b>만 액세스할 수 있습니다."
       },
       "publicDisabled": {
-        "message": "이 {objectName}은(는) 공개되어 모든 사용자가 사용할 수 있습니다."
+        "message": "이 {objectName}은(는) 조직의 모든 구성원이 사용할 수 있습니다."
       },
       "usersFallback": {
         "text": "사용자"
@@ -16416,7 +16416,7 @@
       "row": {
         "contentPlaceholder": "다음 내용을 1~2문장으로 간결하게 요약하세요:",
         "promptPlaceholder": "요약",
-        "publicTooltip": "공개 프롬프트 단축어는 삭제할 수 없습니다.",
+        "publicTooltip": "조직 전체 프롬프트 단축어는 삭제할 수 없습니다.",
         "removeAriaLabel": "단축어 제거"
       },
       "title": "프롬프트 단축어",
