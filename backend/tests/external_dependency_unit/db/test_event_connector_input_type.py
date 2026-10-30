@@ -12,11 +12,10 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
 from onyx.connectors.event_inbox.source_registry import (
-    _SPECS,
-    WebhookRequest,
-    WebhookSourceSpec,
     register_webhook_source,
+    unregister_webhook_source,
 )
 from onyx.connectors.event_models import EventParseResult
 from onyx.connectors.models import InputType
@@ -34,7 +33,7 @@ def _parse(request: WebhookRequest) -> EventParseResult:  # noqa: ARG001
 
 @pytest.fixture
 def registered_event_source() -> Generator[None, None, None]:
-    _SPECS.pop("input-type-test", None)
+    unregister_webhook_source("input-type-test")
     register_webhook_source(
         WebhookSourceSpec(
             source=EVENT_SOURCE,
@@ -47,7 +46,7 @@ def registered_event_source() -> Generator[None, None, None]:
     try:
         yield
     finally:
-        _SPECS.pop("input-type-test", None)
+        unregister_webhook_source("input-type-test")
 
 
 def _create(db_session: Session, source: DocumentSource, name: str) -> Connector:
