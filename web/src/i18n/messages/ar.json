@@ -5808,6 +5808,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {تم رفع # ملف} other {تم رفع # ملفات}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {تم رفع # ملف} other {تم رفع # ملفات}}, غير مكتمل: {error}"
         }
       },
       "sensitiveWarning": {
@@ -12094,6 +12097,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {فشل ملف وتمت إزالته: {names}} other {فشلت ملفات وتمت إزالتها: {names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "جارٍ تحميل المحادثة"
+      },
       "newChatButton": {
         "label": "بدء محادثة جديدة"
       },
@@ -12328,7 +12334,9 @@
           "speakingPlaceholder": "{appName} يتحدث..."
         },
         "sendButton": {
-          "processingFilesTooltip": "في انتظار انتهاء معالجة الملفات المرفقة"
+          "processingFilesTooltip": "في انتظار انتهاء معالجة الملفات المرفقة",
+          "stoppingLabel": "جارٍ الإيقاف…",
+          "reloadLabel": "تحقق مجددًا"
         },
         "tabReadingButton": {
           "readLabel": "قراءة هذا التبويب",
@@ -13633,6 +13641,10 @@
       "incognito": {
         "title": "أنت في وضع التخفي"
       }
+    },
+    "readiness": {
+      "stopFailed": "تعذر إيقاف الرد. حاول مرة أخرى.",
+      "checkFailed": "تعذر التأكد من انتهاء الرد. تحقق مجددًا قبل إرسال رسالة أخرى."
     }
   },
   "common": {
@@ -15829,6 +15841,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "إنهاء الإعداد"
+      },
+      "nextButton": {
+        "label": "التالي"
+      },
       "progress": {
         "label": "الخطوة {current} من {total}"
       }
@@ -15840,13 +15858,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# نموذج متصل} other {# نماذج متصلة}}"
       },
-      "customProvider": {
-        "subtitle": "واجهات برمجة متوافقة مع LiteLLM",
-        "title": "موفر LLM مخصص"
-      },
       "description": "يدعم {appName} النماذج المستضافة ذاتيًا والموفرين الشائعين.",
       "edit": {
         "ariaLabel": "تعديل موفري LLM"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "عرض"
+        },
+        "description": "الإعداد في لوحة الإدارة",
+        "title": "مزوّدون آخرون"
       },
       "providerCard": {
         "connect": {
@@ -15854,7 +15875,8 @@
         },
         "settingsButton": {
           "ariaLabel": "إعدادات المزوّد"
-        }
+        },
+        "settingsLoadError": "تعذّر تحميل إعدادات هذا المزوّد. حاول مرة أخرى."
       },
       "title": "اربط نماذج LLM الخاصة بك"
     },
@@ -15881,28 +15903,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "إنهاء الإعداد"
-        },
-        "title": "كل شيء جاهز، راجع الإعدادات الاختيارية أو انقر على إنهاء الإعداد"
-      },
       "llmSetup": {
-        "button": {
-          "label": "التالي"
-        },
-        "title": "أوشكنا على الانتهاء! اربط نماذجك لبدء المحادثة."
+        "title": "اربط نموذجًا لبدء المحادثة."
       },
       "name": {
-        "button": {
-          "label": "التالي"
-        },
-        "title": "لنأخذ لحظة لإعدادك."
+        "title": "أخبرنا بماذا نناديك."
       },
-      "welcome": {
-        "button": {
-          "label": "هيا بنا"
-        },
+      "optionalSetup": {
+        "title": "اضبط بعض الإضافات الاختيارية."
+      },
+      "postStep": {
+        "title": "كل شيء جاهز."
+      },
+      "preStep": {
         "title": "لنأخذ لحظة لإعدادك."
       }
     }

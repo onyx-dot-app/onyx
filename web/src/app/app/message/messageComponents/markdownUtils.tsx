@@ -27,6 +27,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
+import type { TextColor, TextFont } from "@opal/components";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 
@@ -128,15 +129,20 @@ export const processContent = (content: string): string => {
 export const useMarkdownComponents = (
   state: FullChatState | undefined,
   processedContent: string,
-  className?: string
+  paragraphFont?: TextFont,
+  paragraphColor?: TextColor
 ) => {
   const paragraphCallback = useCallback(
     (props: React.ComponentProps<"p"> & ExtraProps) => (
-      <MemoizedParagraph dir={props.dir} className={className}>
+      <MemoizedParagraph
+        dir={props.dir}
+        font={paragraphFont}
+        color={paragraphColor}
+      >
         {props.children}
       </MemoizedParagraph>
     ),
-    [className]
+    [paragraphFont, paragraphColor]
   );
 
   const anchorCallback = useCallback(
@@ -268,11 +274,7 @@ export const useMarkdownRenderer = (
   textSize: string
 ) => {
   const processedContent = useMemo(() => processContent(content), [content]);
-  const markdownComponents = useMarkdownComponents(
-    state,
-    processedContent,
-    textSize
-  );
+  const markdownComponents = useMarkdownComponents(state, processedContent);
   const highlightLanguages = useHighlightLanguages();
 
   const renderedContent = useMemo(

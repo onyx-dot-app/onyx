@@ -1,10 +1,12 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
+import { Presence, type PresenceSwapDirection } from "@opal/components";
 import OnboardingHeader from "@/lib/onboarding/components/OnboardingHeader";
 import NameStep from "@/lib/onboarding/components/NameStep";
 import LLMStep from "@/lib/onboarding/components/LLMStep";
 import FinalStep from "@/lib/onboarding/components/FinalStep";
+import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingState,
@@ -21,6 +23,27 @@ type OnboardingFlowProps = {
   actions: OnboardingActions;
 };
 
+interface StepContentProps {
+  step: OnboardingStep;
+  state: OnboardingState;
+  actions: OnboardingActions;
+}
+
+/** The card for one step. The pre-step and post-step have none, so moving to
+ *  the post-step animates the last card out and leaves nothing behind. */
+function StepContent({ step, state, actions }: StepContentProps) {
+  switch (step) {
+    case OnboardingStep.Name:
+      return <NameStep state={state} actions={actions} />;
+    case OnboardingStep.LlmSetup:
+      return <LLMStep state={state} actions={actions} />;
+    case OnboardingStep.OptionalSetup:
+      return <FinalStep />;
+    default:
+      return null;
+  }
+}
+
 const OnboardingFlowInner = ({
   showOnboarding,
   handleHideOnboarding,
@@ -30,9 +53,20 @@ const OnboardingFlowInner = ({
 }: OnboardingFlowProps) => {
   const { user, isAdmin } = useUser();
 
-  if (!user) return null;
+  // One step shows at a time. The swap direction follows the step order.
+  const [lastStep, setLastStep] = useState(onboardingState.currentStep);
+  const [direction, setDirection] = useState<PresenceSwapDirection>("forward");
+  if (onboardingState.currentStep !== lastStep) {
+    setDirection(
+      STEP_CONFIG[onboardingState.currentStep].index >
+        STEP_CONFIG[lastStep].index
+        ? "forward"
+        : "back"
+    );
+    setLastStep(onboardingState.currentStep);
+  }
 
-  const hasStarted = onboardingState.currentStep !== OnboardingStep.Welcome;
+  if (!user) return null;
 
   return isAdmin ? (
     showOnboarding ? (
@@ -46,32 +80,18 @@ const OnboardingFlowInner = ({
           handleHideOnboarding={handleHideOnboarding}
           handleFinishOnboarding={handleFinishOnboarding}
         />
-        {hasStarted && (
-          <div className="relative w-full overflow-hidden">
-            <div className="flex flex-col gap-2 animate-in slide-in-from-right rtl:slide-in-from-left duration-500 ease-out">
-              <NameStep state={onboardingState} actions={onboardingActions} />
-              <LLMStep
-                state={onboardingState}
-                actions={onboardingActions}
-                disabled={
-                  onboardingState.currentStep !== OnboardingStep.LlmSetup
-                }
-              />
-              <div
-                className={
-                  "transition-all duration-500 ease-out " +
-                  (onboardingState.currentStep === OnboardingStep.Complete
-                    ? "opacity-100 translate-x-0"
-                    : "opacity-0 translate-x-full rtl:-translate-x-full")
-                }
-              >
-                {onboardingState.currentStep === OnboardingStep.Complete && (
-                  <FinalStep />
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Mounted from Welcome on (with no content), so the first step
+            also opens its height and fades in. */}
+        <Presence.Swap
+          swapKey={onboardingState.currentStep}
+          direction={direction}
+        >
+          <StepContent
+            step={onboardingState.currentStep}
+            state={onboardingState}
+            actions={onboardingActions}
+          />
+        </Presence.Swap>
       </div>
     ) : (
       // When showOnboarding is false, the parent only renders this component

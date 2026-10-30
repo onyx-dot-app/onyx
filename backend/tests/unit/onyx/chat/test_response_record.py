@@ -1,9 +1,10 @@
 """Response capture preserves accepted output and excludes live application objects."""
 
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from onyx.agents.models import (
     AgentState,
@@ -13,10 +14,14 @@ from onyx.agents.models import (
     RunStatus,
     StepRecord,
     ToolCallContext,
+    ToolExecutionRecord,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
+from onyx.chat.models import ChatSearchResult
 from onyx.chat.response import response_record, response_snapshot
+from onyx.context.search.models import SearchDocsResponse
+from onyx.db.models import StoredToolResult
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -28,9 +33,11 @@ from onyx.llm.models import (
     ToolCall,
     ToolDefinition,
     ToolResult,
+    ToolResultMessage,
     Usage,
     UserMessage,
 )
+from onyx.tools.models import ChatFile, CustomToolCallSummary
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
@@ -187,3 +194,137 @@ def test_captured_and_restored_usage_is_isolated_from_mutation() -> None:
         isinstance(saved_message, AssistantMessage) and saved_message.usage is not None
     )
     assert saved_message.usage.total_tokens == 10
+
+
+def test_result_order_hook_updates_and_durable_details() -> None:
+    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        result.content = f"updated {result.content}"
+        return result
+
+    tool = AgentTool(
+        definition=ToolDefinition(name="work", description="", parameters={}),
+        execute=lambda invocation: ToolResult(
+            content=invocation.call_id,
+            details=CustomToolCallSummary(
+                tool_name="work",
+                response_type="json",
+                tool_result={"id": invocation.call_id},
+            ),
+            metadata=ApplicationData(),
+        ),
+    )
+    agent = Agent(
+        FakeModelClient(
+            lambda _context, _signal: AssistantMessage(
+                content=[
+                    ToolCall(id="a", name="work", arguments={}),
+                    ToolCall(id="b", name="work", arguments={}),
+                ]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool],
+        after_tool_call=finalize,
+    )
+    runs: list[Run] = []
+    run_agent(agent, max_steps=1, runs=runs)
+    transcript = runs[0].snapshot()
+    assert transcript.status == RunStatus.LIMIT
+    assert [
+        message.content
+        for message in transcript.messages
+        if isinstance(message, ToolResultMessage)
+    ] == ["updated a", "updated b"]
+    canonical = response_record(transcript)
+    serialized = canonical.model_dump_json()
+    assert "application-only" not in serialized
+    for call_id in ("a", "b"):
+        result = canonical.steps[0].tools[call_id].result
+        assert result is not None
+        stored_result = StoredToolResult.model_validate_json(result.model_dump_json())
+        assert isinstance(stored_result.details, CustomToolCallSummary)
+        assert stored_result.details.tool_result == {"id": call_id}
+        assert stored_result.content == f"updated {call_id}"
+
+
+def test_storage_rejects_unsupported_result_details() -> None:
+    result = ToolResultMessage(
+        tool_call_id="call",
+        tool_name="tool",
+        content="result",
+        details=ApplicationData(),
+    )
+    with pytest.raises(ValidationError, match="Unable to extract tag"):
+        StoredToolResult.model_validate(result, from_attributes=True)
+
+
+def test_capture_excludes_staged_files_and_metadata_before_copying() -> None:
+    private = ApplicationData()
+    search = ChatSearchResult(
+        queries=["query"],
+        search_docs=[],
+        citation_mapping={},
+        displayed_docs=[],
+        staged_files=[ChatFile(filename="source.txt", content=b"private content")],
+    )
+    result = ToolResultMessage(
+        tool_call_id="call",
+        tool_name="search",
+        content="passage",
+        details=search,
+        metadata=private,
+        cacheable=True,
+        is_error=True,
+        terminate=True,
+    )
+    state = RunState(
+        run_id="run",
+        status=RunStatus.COMPLETE,
+        input_messages=[UserMessage(content="question", metadata=private), result],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    content=[ToolCall(id="call", name="search", arguments={})]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "call": ToolExecutionRecord(
+                        status=ExecutionStatus.ERROR, result=result
+                    )
+                },
+            )
+        ],
+    )
+    with (
+        patch.object(
+            ApplicationData,
+            "__deepcopy__",
+            side_effect=AssertionError("Private metadata copied"),
+        ),
+        patch.object(
+            ChatFile,
+            "__deepcopy__",
+            side_effect=AssertionError("Staged file copied"),
+        ),
+    ):
+        record = response_record(state)
+    restored = response_snapshot(record)
+    for retained in (restored.input_messages[1], restored.messages[1]):
+        assert isinstance(retained, ToolResultMessage)
+        assert type(retained.details) is SearchDocsResponse
+        assert retained.details.queries == ["query"]
+        assert retained.details.displayed_docs == []
+        assert retained.metadata is None
+        assert retained.cacheable and retained.is_error and retained.terminate
+        assert retained.content == "passage"
+        retained.content = "changed"
+        retained.details.queries.append("changed")
+    assert restored.input_messages[0].metadata is None
+    assert result.content == "passage"
+    assert result.details is search and result.metadata is private
+    assert search.queries == ["query"]
+    assert b"private content" == search.staged_files[0].content
+    for retained in (record.input_messages[1], record.messages[1]):
+        assert isinstance(retained, ToolResultMessage)
+        assert isinstance(retained.details, SearchDocsResponse)
+        assert retained.details.queries == ["query"]

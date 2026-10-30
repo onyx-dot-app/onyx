@@ -10,6 +10,7 @@ import {
   InputTypeIn,
   InputSwitch,
   Table,
+  Text,
   type TableColumn,
 } from "@opal/components";
 import {
@@ -22,7 +23,6 @@ import {
 
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -203,7 +203,7 @@ export default function CraftPage() {
                 onCheckedChange={(checked) => setPendingDefault(checked)}
               />
             </InputHorizontal>
-            <Text as="p" secondaryBody text03>
+            <Text as="p" font="secondary-body" color="text-03">
               {isLoading
                 ? " "
                 : t("accessSummary.description", {
@@ -228,7 +228,7 @@ export default function CraftPage() {
             </div>
           )}
           {error ? (
-            <Text as="p" secondaryBody text03>
+            <Text as="p" font="secondary-body" color="text-03">
               {t("usersLoadError.description")}
             </Text>
           ) : null}
@@ -283,7 +283,7 @@ export default function CraftPage() {
             </Button>
           }
         >
-          <Text as="p" text03>
+          <Text as="p" color="text-03">
             {pendingDefault
               ? explicitlyDisabled > 0
                 ? t("confirmModal.enableBody.withExclusions.description", {

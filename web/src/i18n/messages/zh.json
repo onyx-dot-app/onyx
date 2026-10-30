@@ -5808,6 +5808,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {已上传 # 个文件} other {已上传 # 个文件}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {已上传 # 个文件} other {已上传 # 个文件}}，不完整：{error}"
         }
       },
       "sensitiveWarning": {
@@ -12094,6 +12097,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "正在加载聊天"
+      },
       "newChatButton": {
         "label": "开始新聊天"
       },
@@ -12328,7 +12334,9 @@
           "speakingPlaceholder": "{appName} 正在朗读..."
         },
         "sendButton": {
-          "processingFilesTooltip": "正在等待附件处理完成"
+          "processingFilesTooltip": "正在等待附件处理完成",
+          "stoppingLabel": "正在停止…",
+          "reloadLabel": "再次检查"
         },
         "tabReadingButton": {
           "readLabel": "读取此标签页",
@@ -13633,6 +13641,10 @@
       "incognito": {
         "title": "您处于无痕模式"
       }
+    },
+    "readiness": {
+      "stopFailed": "无法停止回复。请重试。",
+      "checkFailed": "无法确认回复是否已完成。请再次检查后再发送消息。"
     }
   },
   "common": {
@@ -15829,6 +15841,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "完成设置"
+      },
+      "nextButton": {
+        "label": "下一步"
+      },
       "progress": {
         "label": "第 {current} 步，共 {total} 步"
       }
@@ -15840,13 +15858,16 @@
       "connectedCount": {
         "label": "{count, plural, one {已连接 # 个模型} other {已连接 # 个模型}}"
       },
-      "customProvider": {
-        "subtitle": "兼容 LiteLLM 的 API",
-        "title": "自定义 LLM 提供商"
-      },
       "description": "{appName} 同时支持自托管模型和主流提供商。",
       "edit": {
         "ariaLabel": "编辑 LLM 提供商"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "查看"
+        },
+        "description": "在管理面板中设置",
+        "title": "更多提供商"
       },
       "providerCard": {
         "connect": {
@@ -15854,7 +15875,8 @@
         },
         "settingsButton": {
           "ariaLabel": "提供商设置"
-        }
+        },
+        "settingsLoadError": "无法加载此提供商的设置。请重试。"
       },
       "title": "连接您的 LLM 模型"
     },
@@ -15881,28 +15903,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "完成设置"
-        },
-        "title": "全部设置完成，请查看可选设置或点击“完成设置”"
-      },
       "llmSetup": {
-        "button": {
-          "label": "下一步"
-        },
-        "title": "就快好了！连接您的模型即可开始对话。"
+        "title": "连接一个模型即可开始聊天。"
       },
       "name": {
-        "button": {
-          "label": "下一步"
-        },
-        "title": "花点时间来完成设置吧。"
+        "title": "告诉我们该如何称呼您。"
       },
-      "welcome": {
-        "button": {
-          "label": "开始吧"
-        },
+      "optionalSetup": {
+        "title": "设置一些可选功能。"
+      },
+      "postStep": {
+        "title": "一切就绪。"
+      },
+      "preStep": {
         "title": "花点时间来完成设置吧。"
       }
     }

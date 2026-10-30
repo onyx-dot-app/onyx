@@ -1,0 +1,217 @@
+---
+title: "EKS"
+description: "Deploy Onyx on AWS EKS"
+---
+
+import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
+
+Run Onyx on Amazon EKS when you need Kubernetes scheduling, autoscaling, or an existing cluster.
+This guide creates the cluster in the AWS console and installs Onyx with Helm.
+
+<Tip>
+  To create the VPC, EKS cluster, RDS, ElastiCache, and S3 with code,
+  use the [Terraform modules](/deployment/local/terraform). They set sane production defaults (private API endpoint,
+  gp3 storage class, cluster autoscaler) and install the Helm chart for you.
+</Tip>
+
+## Guide
+
+<Steps>
+  <Step title="Install requirements">
+    - Download and install the [AWS CLI](https://aws.amazon.com/cli/)
+    - Download and install [kubectl](https://kubernetes.io/docs/tasks/tools/)
+    - Download and install [Helm](https://helm.sh/docs/intro/install/)
+  </Step>
+
+  <Step title="Create the cluster">
+    This guide uses standard settings with the EBS CSI driver.
+
+    - Navigate to Elastic Kubernetes Service (EKS) and create a new cluster
+    - For **Cluster service role**, create a new IAM role with a descriptive name like `onyx-eks-cluster-role`
+    - For **Kubernetes version**, select a version with standard support
+    - Choose **Standard** upgrade policy
+    - Add the **Amazon EBS CSI Driver** add-on. Onyx uses persistent volumes for PostgreSQL, OpenSearch,
+    and the object store
+    - Keep the other default add-ons enabled
+
+    The cluster can take several minutes to become ready.
+
+    <img className="rounded-image" src="/assets/deployment/eks_cluster_create.webp" alt="EKS Cluster Creation"/>
+  </Step>
+
+  <Step title="Add nodes">
+    Once the cluster is active, add worker nodes where Onyx services run.
+
+    - On the **Cluster** page, select the **Compute** tab and click **Add node group**
+    - For **Node IAM role**, select an existing role or create a new one
+
+    <Note>
+      The role needs the `AmazonEBSCSIDriverPolicy` so the cluster can create persistent volumes. If you create a role,
+      add this policy in addition to the default policies.
+    </Note>
+
+    - Replace the **Instance types** with `m7i.2xlarge` machines (or `m7i.4xlarge` for more than 200 users or more than 100k documents)
+    - Set **Volume size** in the 200GB - 800GB range depending on your document count
+
+    <Tip>
+      See the [Resourcing guide](/deployment/getting_started/resourcing) for more details on storage requirements.
+    </Tip>
+
+    - For most setups, set the **Desired size** and **Minimum size** to 1. You can increase these later to scale up
+
+    It can take up to 15 minutes for the compute nodes to come online.
+  </Step>
+
+  <Step title="Grant cluster access">
+    Your AWS identity needs admin access to the cluster.
+
+    - On the cluster page, select **Access** and then **Create access entry**
+    - In **IAM principal**, select the IAM role or user you use with the AWS CLI
+    - For **Policy name**, select `AmazonEKSClusterAdminPolicy`
+
+    <Note>
+      Prefer an IAM role (for example, through AWS SSO) over a long-lived IAM user with access keys.
+    </Note>
+  </Step>
+
+  <Step title="Fetch kubeconfig">
+    Log in to the AWS CLI:
+
+    ```bash
+    aws configure
+    ```
+
+    Configure your kubeconfig to connect to the cluster. Fill in the `region-code` and `cluster-name`:
+
+    ```bash
+    aws eks update-kubeconfig --region region-code --name cluster-name
+    ```
+
+    <Info>
+      Reference [AWS EKS kubeconfig docs](https://docs.aws.amazon.com/eks/latest/userguide/create-kubeconfig.html).
+    </Info>
+  </Step>
+
+  <Step title="Set a default storage class">
+    The Onyx chart creates persistent volume claims without a storage class. The cluster must have a default.
+    Check for one:
+
+    ```bash
+    kubectl get storageclass
+    ```
+
+    If no class is marked `(default)`, mark `gp2` or `gp3` as the default:
+
+    ```bash
+    kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+    ```
+  </Step>
+
+  <Step title="Install Onyx">
+    The Onyx Helm chart packages all the required services (API, web, PostgreSQL, Redis, OpenSearch, object store)
+    into a single release. By default, the chart creates persistent volumes for the stateful services.
+
+    Add the Onyx Helm repository:
+
+    ```bash
+    helm repo add onyx https://onyx-dot-app.github.io/onyx/
+    helm repo update
+    helm search repo onyx
+    ```
+
+    Create a `values.yaml` with the object store credentials. The chart refuses to install with empty keys:
+
+    ```yaml values.yaml
+    auth:
+      objectstorage:
+        values:
+          s3_aws_access_key_id: "<generate a random access key>"
+          s3_aws_secret_access_key: "<generate a random secret key>"
+    ```
+
+    Create a dedicated namespace and install Onyx:
+
+    ```bash
+    kubectl create namespace onyx
+    helm install onyx onyx/onyx -n onyx -f values.yaml
+    ```
+
+    <Tip>
+      To use RDS, ElastiCache, or S3 instead of the bundled services, see [RDS](/deployment/cloud/aws/rds)
+      and [External services](/deployment/production/external_services).
+      Full chart options are on the [Kubernetes](/deployment/local/kubernetes) page.
+    </Tip>
+  </Step>
+
+  <Step title="Verify the installation">
+    ```bash
+    helm list -n onyx
+    kubectl get pods -n onyx
+    ```
+
+    Wait until all pods are in a `Running` state before you open Onyx.
+
+    The API server is often the last pod to become ready. Follow its logs:
+
+    ```bash
+    kubectl -n onyx logs deployment/onyx-api-server -f
+    ```
+  </Step>
+
+  <Step title="Access Onyx">
+    The chart creates a `LoadBalancer` service named `onyx-nginx`. Get its hostname:
+
+    ```bash
+    kubectl -n onyx get service onyx-nginx
+    ```
+
+    Point your DNS record at the `EXTERNAL-IP` hostname and set `WEB_DOMAIN` in `values.yaml` under `configMap`.
+
+    For local testing, port-forward instead:
+
+    ```bash
+    kubectl -n onyx port-forward service/onyx-nginx 8080:80
+    ```
+
+    Then open [http://localhost:8080](http://localhost:8080). The first user to sign up becomes the admin.
+  </Step>
+</Steps>
+
+## Upgrading
+
+To upgrade Onyx, update the Helm repository and reuse your values:
+
+```bash
+helm repo update
+helm upgrade onyx onyx/onyx -n onyx -f values.yaml
+```
+
+To upgrade to a specific chart version, use:
+
+```bash
+helm upgrade onyx onyx/onyx -n onyx -f values.yaml --version <CHART_VERSION>
+```
+
+<Note>
+  Chart versions differ from Onyx release versions.
+  Run `helm search repo onyx --versions` to see which Onyx version (`APP VERSION`) each chart ships.
+</Note>
+
+## Uninstalling
+
+To remove the Onyx services:
+
+```bash
+helm uninstall onyx -n onyx
+```
+
+OpenSearch, PostgreSQL, and the object store leave behind persistent volume claims. List and delete them:
+
+```bash
+kubectl -n onyx get pvc
+kubectl -n onyx delete pvc onyx-opensearch-master-onyx-opensearch-master-0
+kubectl -n onyx delete pvc onyx-object-store
+kubectl -n onyx delete pvc onyx-pg-1
+```
+
+<DeploymentNextSteps />

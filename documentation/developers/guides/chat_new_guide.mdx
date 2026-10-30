@@ -1,0 +1,201 @@
+---
+title: "Send a Message to Onyx"
+description: "Sending messages programmatically to Onyx"
+icon: "bolt"
+---
+
+<Note>
+  `/chat/send-message` and `/chat/send-message-simple-api` have been removed. Use this API instead.
+</Note>
+
+Use the `/chat/send-chat-message` API to send a message to Onyx.
+It is the same API that the Onyx web app uses to send and receive messages.
+You can receive a streaming response or one complete response.
+
+<Note>
+  Authenticate with an API key or a Personal Access Token. A limited-access token needs the **Chat &mdash;
+  Write** scope. See [Authentication](/developers/overview#authentication).
+</Note>
+
+## Request Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `message` | The user message to send to the Agent. |
+| `llm_override` | Pass an object to override the default LLM settings for this request. If `None`, you will get the default Onyx behavior. <br/><br/>You can pass or exclude any of the following fields: <br/>• `model_configuration_id` – the exact model configuration to use. Preferred over the name-based fields, since provider display names are not unique <br/>• `model_provider` <br/>• `model_version` <br/>• `temperature` <br/>• `display_name` – label shown for the model in the UI; falls back to `model_version` <br/><br/>If you pass an invalid configuration (e.g., specifying `claude-sonnet-4.5` when the default `model_provider` is OpenAI), your request will fail. |
+| `llm_overrides` | Two or three `llm_override` objects to run in parallel (multi-model mode), one per model. <br/><br/>**Requires `stream=true`.** Sending more than one entry with `stream=false` fails with `400 {"error_code": "INVALID_INPUT"}`. A list with a single entry is ignored — use `llm_override` for an ordinary single-model request. |
+| `allowed_tool_ids` | Each Agent has a set of Actions (built-in tools, MCP Actions, and OpenAPI Actions from **Admin Panel** > **Plugins**) that it can invoke. Use this parameter to narrow that set for this request. List the Actions and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint. Pass an empty list to disable all Actions. Omit the field or pass `null` to allow every Action configured for the Agent. |
+| `forced_tool_id` | Force the Agent to use one specific Action for this request. The Agent can run other Actions before it returns its final response, but it always runs this one. Leave empty to let the Agent decide. |
+| `file_descriptors` | A list of files to include with your request. Each entry is `{"id": ..., "type": ..., "name": ...}`. Upload files with [POST /user/projects/file/upload](/developers/api_reference/projects/upload_user_files) and read them back with [GET /user/projects/file/{file_id}](/developers/api_reference/projects/get_user_file). |
+| `internal_search_filters` | Filters to narrow down the internal search results used by the Agent. All filter arguments are optional and can be combined: <br/><br/>• `source_type` – Source types like `web`, `slack`, `google_drive`, `confluence` <br/>• `document_set` – The name of the document sets to search within <br/>• `created_at_range` / `updated_at_range` – An inclusive window, `{"start": ..., "end": ...}`, in ISO 8601 format: `YYYY-MM-DDTHH:MM:SSZ`. Either bound may be omitted to leave that side open; naive timestamps are treated as UTC <br/>• `tags` – A list of `{"tag_key": ..., "tag_value": ...}` objects <br/><br/>**Note:** `time_cutoff` is still accepted as a deprecated alias for the start of `updated_at_range`. |
+| `deep_research` | Enables Deep Research mode for this request. <br/><br/>**Note:** This mode uses many more tokens than a normal request. |
+| `mcp_headers` | Headers forwarded to MCP tool calls made while answering this message, e.g. `{"Authorization": "Bearer <user_jwt>"}`. Use this to pass end-user credentials through to MCP servers that require them. |
+| `parent_message_id` | The ID of the parent message in the chat history. Omit it (or pass `-1`) to place the new message after the latest message in the session. Pass a specific message ID to branch from that point. <br/><br/>**Warning:** If set to `null`, the new message starts from the root of the session, as the first message. |
+| `chat_session_id` | To continue an existing conversation, pass the chat session ID. If left blank, Onyx creates a new chat session from `chat_session_info`. Pass only one of `chat_session_id` and `chat_session_info`. |
+| `chat_session_info` | Settings for a new chat session. They apply to every message in the session. Leave fields blank to use defaults. <br/><br/>• `persona_id` – The ID of the Agent to use. Defaults to `0`, the default Agent <br/>• `project_id` – ID of a Project if the chat should be scoped to a Project <br/>• `incognito` – Start the session in incognito mode. The request fails with an error when incognito is not available to the user. It is never silently downgraded to an ordinary chat <br/>• `incognito_session_id` – The session ID you already used when uploading files, so the new session owns those files. Ignored unless `incognito` is true |
+| `stream` | Defaults to `true`. If true, Onyx responds with an SSE stream of packets, the same set the Onyx UI uses. You assemble the answer, reasoning tokens, and tool calls from the streamed packets. If false, Onyx returns one `ChatFullResponse` JSON object. |
+| `include_citations` | Defaults to `true`. If false, Onyx removes citation markers such as `[1]` from the answer text and does not emit `citation_info` packets. |
+| `additional_context` | A string of extra context injected into the LLM call for this request. The model sees it, but Onyx does **not store it** and it does not appear in chat history.<br></br>Use it for request-scoped information such as the user's current page URL or session metadata.<br></br>Pass `null` or omit the field to send no additional context. |
+| `origin` | Where the message comes from, for usage reporting. Set it to `api` for scripts and integrations. Other values: `webapp`, `chrome_extension`, `slackbot`, `widget`, `discordbot`, `mobile`. Defaults to `unset`. |
+
+## Response Format
+
+### Streaming Response
+
+Onyx returns different packet types in the streaming response, depending on what the Agent does.
+Each packet is one JSON object with a `type` field.
+
+See our
+[streaming_models.py](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/server/query_and_chat/streaming_models.py)
+on GitHub for the complete list of packet types and their corresponding fields.
+
+```python expandable
+class StreamingType(Enum):
+    """Enum defining all streaming packet types. This is the single source of truth for type strings."""
+
+    SECTION_END = "section_end"
+    STOP = "stop"
+    ERROR = "error"
+    CHAT_HEARTBEAT = "chat_heartbeat"
+
+    MESSAGE_START = "message_start"
+    MESSAGE_DELTA = "message_delta"
+    SEARCH_TOOL_START = "search_tool_start"
+    SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
+    SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta"
+    SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
+    OPEN_URL_START = "open_url_start"
+    OPEN_URL_URLS = "open_url_urls"
+    OPEN_URL_DOCUMENTS = "open_url_documents"
+    IMAGE_GENERATION_START = "image_generation_start"
+    IMAGE_GENERATION_HEARTBEAT = "image_generation_heartbeat"
+    IMAGE_GENERATION_FINAL = "image_generation_final"
+    PYTHON_TOOL_START = "python_tool_start"
+    PYTHON_TOOL_DELTA = "python_tool_delta"
+    CUSTOM_TOOL_START = "custom_tool_start"
+    CUSTOM_TOOL_ARGS = "custom_tool_args"
+    CUSTOM_TOOL_DELTA = "custom_tool_delta"
+    FILE_READER_START = "file_reader_start"
+    FILE_READER_RESULT = "file_reader_result"
+    REASONING_START = "reasoning_start"
+    REASONING_DELTA = "reasoning_delta"
+    REASONING_DONE = "reasoning_done"
+    CITATION_INFO = "citation_info"
+    TOOL_CALL_DEBUG = "tool_call_debug"
+    TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta"
+
+    MEMORY_TOOL_START = "memory_tool_start"
+    MEMORY_TOOL_DELTA = "memory_tool_delta"
+    MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access"
+
+    DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
+    DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
+    RESEARCH_AGENT_START = "research_agent_start"
+    INTERMEDIATE_REPORT_START = "intermediate_report_start"
+    INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
+    INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
+
+    CODING_AGENT_START = "coding_agent_start"
+    CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta"
+    CODING_AGENT_FINAL = "coding_agent_final"
+
+    BASH_TOOL_START = "bash_tool_start"
+    BASH_TOOL_DELTA = "bash_tool_delta"
+```
+
+### Non-streaming Response
+
+```python
+class ChatFullResponse(BaseModel):
+    """Complete non-streaming response with all available data."""
+
+    # Core response fields
+    answer: str
+    answer_citationless: str
+    pre_answer_reasoning: str | None = None
+    tool_calls: list[ToolCallResponse] = []
+
+    # Documents & citations
+    top_documents: list[SearchDoc]
+    citation_info: list[CitationInfo]
+
+    # Metadata
+    message_id: int
+    chat_session_id: UUID | None = None
+    incognito: bool = False
+    error_msg: str | None = None
+```
+
+## Sample Request
+
+<CodeGroup>
+  ```python Python expandable
+  import requests
+
+  API_BASE_URL = "https://cloud.onyx.app/api"  # or your own domain
+  API_KEY = "YOUR_KEY_HERE"
+
+  headers = {
+      "Authorization": f"Bearer {API_KEY}",
+      "Content-Type": "application/json"
+  }
+
+  response = requests.post(
+      f"{API_BASE_URL}/chat/send-chat-message",
+      headers=headers,
+      json={
+          "message": "What is Onyx?",
+      }
+  )
+
+  data = response.json()
+  print("Answer:", data["answer"])
+  print("Message ID:", data["message_id"])
+  ```
+
+  ```bash Shell expandable
+  #!/bin/bash
+
+  API_BASE_URL="https://cloud.onyx.app/api"  # or your own domain
+  API_KEY="YOUR_KEY_HERE"
+
+  RESPONSE=$(curl -s -X POST "${API_BASE_URL}/chat/send-chat-message" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "message": "What is Onyx?"
+    }'
+  )
+
+  echo "Answer:" $(echo "$RESPONSE" | jq -r '.answer')
+  echo "Message ID:" $(echo "$RESPONSE" | jq -r '.message_id')
+  ```
+</CodeGroup>
+
+## Other ways to integrate
+
+- To get ranked documents without an answer, use the [Search API](/developers/guides/search_api_guide).
+- To let an external LLM client such as Claude Code or Codex search Onyx,
+  connect it to the [Onyx MCP server](/overview/onyx_anywhere/mcp_server).
+- To call your organization's models through Onyx from your own application,
+  use the [LLM Gateway](/developers/guides/llm_gateway).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Guide: Search with the API" icon="magnifying-glass" href="/developers/guides/search_api_guide">
+    Get ranked documents back instead of an answer
+  </Card>
+
+  <Card title="Guide: Use the Ingestion API" icon="upload" href="/developers/guides/index_files_ingestion_api">
+    Use the lightweight ingestion API to index documents
+  </Card>
+
+  <Card title="Guide: Create a Connector" icon="link" href="/developers/guides/create_connector">
+    Learn how to create and configure Connectors programmatically
+  </Card>
+
+  <Card title="Onyx MCP server" icon="plug" href="/overview/onyx_anywhere/mcp_server">
+    Search Onyx from MCP clients
+  </Card>
+</CardGroup>

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import builtins
+from collections.abc import Collection
+
 from onyx.cache.interface import CacheBackend, CacheLock
 
 
@@ -32,6 +35,7 @@ class FakeLock(CacheLock):
 class FakeCache(CacheBackend):
     def __init__(self) -> None:
         self.store: dict[str, bytes] = {}
+        self.sets: dict[str, set[bytes]] = {}
         self.expiries: dict[str, int] = {}
         self.locks: dict[str, FakeLock] = {}
 
@@ -66,6 +70,29 @@ class FakeCache(CacheBackend):
     def delete(self, key: str) -> None:
         self.store.pop(key, None)
         self.expiries.pop(key, None)
+
+    def delete_prefix(self, prefix: str) -> None:
+        if not prefix:
+            raise ValueError("Cache deletion requires a nonempty prefix")
+        for key in list(self.store):
+            if key.startswith(prefix):
+                self.delete(key)
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        return {key for key in keys if key in self.store}
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.setdefault(key, set()).add(value)
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.get(key, set()).discard(value)
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        return list(self.sets.get(key, set()))[:limit]
 
     def exists(self, key: str) -> bool:
         return key in self.store

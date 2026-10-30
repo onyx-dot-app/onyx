@@ -8,7 +8,6 @@ Tests the priority logic for OAuth tokens when constructing custom tools:
 All external HTTP calls are mocked, but Postgres and Redis are running.
 """
 
-import queue
 from typing import Any
 from unittest.mock import Mock, patch
 from uuid import uuid4
@@ -16,7 +15,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
 from onyx.db.models import OAuthAccount, OAuthConfig, Persona, Tool, User
 from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
 from onyx.db.tools import capture_persona_tool_configuration
@@ -168,7 +166,6 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=search_tool_config,
@@ -226,7 +223,6 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )
@@ -278,7 +274,6 @@ class TestOAuthToolIntegrationPriority:
             tool_dict = construct_tools(
                 configuration=capture_persona_tool_configuration(persona),
                 db_session=db_session,
-                emitter=Emitter(merged_queue=queue.Queue()),
                 user=user,
                 llm=llm,
             )
@@ -339,7 +334,6 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )
@@ -410,7 +404,6 @@ class TestOAuthToolIntegrationPriority:
             tool_dict = construct_tools(
                 configuration=capture_persona_tool_configuration(persona),
                 db_session=db_session,
-                emitter=Emitter(merged_queue=queue.Queue()),
                 user=user,
                 llm=llm,
             )
@@ -477,7 +470,6 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )
@@ -530,7 +522,6 @@ class TestOAuthToolIntegrationPriority:
         tool_dict = construct_tools(
             configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
         )

@@ -173,9 +173,3 @@ Rules of thumb:
 - `RichNodes` is accepted **only** by `Text` children. Props typed `string | RichStr`
   (`title`, `description`, `tooltip`, …) must stay plain-string-derivable for truncation and
   aria labels, so do not widen them.
-
-## Compatibility
-
-`@/refresh-components/texts/Text` is an independent legacy component that implements the same
-font/color presets via a boolean-flag API. It is **not** a wrapper around this component. New
-code should import directly from `@opal/components`.

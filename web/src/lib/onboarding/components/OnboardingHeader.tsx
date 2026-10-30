@@ -1,16 +1,39 @@
 "use client";
 
-import { memo } from "react";
+import { createContext, memo, useContext, useState } from "react";
 import { useTranslations } from "next-intl";
-import { STEP_CONFIG } from "@/lib/onboarding/constants";
+import {
+  STEP_CONFIG,
+  STEP_NAVIGATION,
+  TOTAL_STEPS,
+  stepNumber,
+  stepProgress,
+} from "@/lib/onboarding/constants";
 import {
   OnboardingActions,
   OnboardingState,
   OnboardingStep,
 } from "@/lib/onboarding/types";
-import { Button, Card, Text } from "@opal/components";
-import { SvgProgressCircle, SvgX } from "@opal/icons";
-import { ContentAction, Section } from "@opal/layouts";
+import {
+  Button,
+  Card,
+  IconContainer,
+  Presence,
+  Text,
+  type PresenceSwapDirection,
+} from "@opal/components";
+import { SvgChevronLeft, SvgProgressCircle, SvgX } from "@opal/icons";
+import { Section } from "@opal/layouts";
+import type { IconProps } from "@opal/types";
+
+// The progress icon is one stable component that reads its value from
+// context. An inline icon function would remount the svg on each render, and
+// the pie would not animate.
+const ProgressContext = createContext(0);
+
+function ProgressIcon(props: IconProps) {
+  return <SvgProgressCircle value={useContext(ProgressContext)} {...props} />;
+}
 
 interface OnboardingHeaderProps {
   state: OnboardingState;
@@ -26,17 +49,37 @@ function OnboardingHeader({
   handleFinishOnboarding,
 }: OnboardingHeaderProps) {
   const t = useTranslations("onboarding");
-  const iconPercentage =
-    STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-  const stepButtonText = t(
-    STEP_CONFIG[onboardingState.currentStep].buttonTextKey
-  );
-  const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
-  const isCompleteStep =
-    onboardingState.currentStep === OnboardingStep.Complete;
+  const tCommon = useTranslations("common");
+  const progress = stepProgress(onboardingState.currentStep);
+  const currentNumber = stepNumber(onboardingState.currentStep);
+  const isPostStep = onboardingState.currentStep === OnboardingStep.PostStep;
+  // The main button reads Next on every step but the post-step.
+  const stepButtonText = isPostStep
+    ? t("header.finishButton.label")
+    : t("header.nextButton.label");
+  // The counter shows on the numbered steps only. While it fades out on the
+  // pre-step or post-step, it keeps the last number it showed.
+  const [counterNumber, setCounterNumber] = useState(currentNumber ?? 1);
+  if (currentNumber !== null && currentNumber !== counterNumber) {
+    setCounterNumber(currentNumber);
+  }
+  // The prompt swaps in the direction of the step change.
+  const [lastStep, setLastStep] = useState(onboardingState.currentStep);
+  const [direction, setDirection] = useState<PresenceSwapDirection>("forward");
+  if (onboardingState.currentStep !== lastStep) {
+    setDirection(
+      STEP_CONFIG[onboardingState.currentStep].index >
+        STEP_CONFIG[lastStep].index
+        ? "forward"
+        : "back"
+    );
+    setLastStep(onboardingState.currentStep);
+  }
+  const hasPreviousStep =
+    STEP_NAVIGATION[onboardingState.currentStep].prev !== undefined;
 
   function handleButtonClick() {
-    if (isCompleteStep) handleFinishOnboarding();
+    if (isPostStep) handleFinishOnboarding();
     else onboardingActions.nextStep();
   }
 
@@ -47,45 +90,76 @@ function OnboardingHeader({
       data-label="onboarding-header"
       rounding={4}
     >
-      <Section alignItems="start" height="fit">
-        <ContentAction
-          icon={(props) => (
-            <SvgProgressCircle value={iconPercentage} {...props} />
-          )}
-          title={t(STEP_CONFIG[onboardingState.currentStep].titleKey)}
-          sizePreset="main-ui"
-          variant="body"
-          color="muted"
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        alignItems="center"
+        gap={2}
+        height="fit"
+      >
+        {/* The prompt: the step's progress and one sentence, which comes in
+            again on each step. */}
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="center"
+          gap={1}
           padding={1}
-          center
-          rightChildren={
-            stepButtonText ? (
-              <Section flexDirection="row">
-                {!isWelcomeStep && (
-                  <Text as="p" font="main-ui-body" color="text-03">
-                    {t("header.progress.label", {
-                      current: onboardingState.stepIndex,
-                      total: onboardingState.totalSteps,
-                    })}
-                  </Text>
-                )}
+          height="fit"
+        >
+          <ProgressContext value={progress}>
+            <IconContainer icon={ProgressIcon} />
+          </ProgressContext>
+          {/* Block axis: a long prompt wraps instead of pushing the buttons
+              off a narrow header. */}
+          <Presence.Swap
+            swapKey={onboardingState.currentStep}
+            direction={direction}
+          >
+            <Text font="main-ui-body" color="text-03">
+              {t(STEP_CONFIG[onboardingState.currentStep].titleKey)}
+            </Text>
+          </Presence.Swap>
+        </Section>
+        {stepButtonText ? (
+          <Section flexDirection="row" justifyContent="end" width="fit">
+            {/* The step counter shows on the numbered steps only. */}
+            <Presence show={currentNumber !== null} from="end" width="fit">
+              <Text as="p" font="main-ui-body" color="text-03">
+                {t("header.progress.label", {
+                  current: counterNumber,
+                  total: TOTAL_STEPS,
+                })}
+              </Text>
+            </Presence>
+            <Section flexDirection="row" gap={1} width="fit">
+              <Presence show={hasPreviousStep} from="end" width="fit">
                 <Button
-                  disabled={!onboardingState.isButtonActive}
-                  onClick={handleButtonClick}
-                >
-                  {stepButtonText}
-                </Button>
-              </Section>
-            ) : (
+                  prominence="secondary"
+                  icon={SvgChevronLeft}
+                  tooltip={tCommon("backButton.label")}
+                  aria-label={tCommon("backButton.label")}
+                  onClick={onboardingActions.prevStep}
+                />
+              </Presence>
+              {/* Next turns into Finish Setup on the final step; the
+                  button animates its own label and width. */}
               <Button
-                prominence="tertiary"
-                size="sm"
-                icon={SvgX}
-                onClick={handleHideOnboarding}
-              />
-            )
-          }
-        />
+                disabled={!onboardingState.isButtonActive}
+                onClick={handleButtonClick}
+              >
+                {stepButtonText}
+              </Button>
+            </Section>
+          </Section>
+        ) : (
+          <Button
+            prominence="tertiary"
+            size="sm"
+            icon={SvgX}
+            onClick={handleHideOnboarding}
+          />
+        )}
       </Section>
     </Card>
   );

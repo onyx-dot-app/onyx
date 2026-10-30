@@ -1276,6 +1276,58 @@ ods trace --project admin
 ods trace --list
 ```
 
+### `deploy edge` - Deploy main or a Branch to Edge
+
+Build images from `origin/main` or a pushed branch, then deploy them to the
+edge environment.
+
+```shell
+ods deploy edge [flags]
+```
+
+Without `--ref`, or with `--ref main`, the command force-pushes the `edge` tag
+to `origin/main`. With `--ref <branch or commit>`, it pushes the tag
+`dev-build-<branch>-<short-sha>` on that commit. The tag starts
+`deployment.yml`, which publishes the images to Docker Hub. When the build
+succeeds, the command dispatches the configured deploy workflow with
+`version_tag=<tag>`.
+
+A `dev-build-` tag never moves. If the tag already points at the commit, the
+command waits for its build and does not push again. If the tag points at
+another commit, the command stops.
+
+On first run, the command asks for the deploy target repo and the workflow
+filename, and saves them in the ods config file.
+
+| Flag                | Default | Description                                                         |
+| ------------------- | ------- | ------------------------------------------------------------------- |
+| `--ref`             | `main`  | Branch name or full commit SHA on origin to build                   |
+| `--tag`             |         | Tag for `--ref` instead of the derived tag; must start `dev-build-`, and must not contain `cloud` or end in `-dev` |
+| `--dry-run`         | `false` | Resolve the ref and tag only; push and dispatch nothing             |
+| `--yes`             | `false` | Skip the confirmation prompt                                        |
+| `--no-wait-deploy`  | `false` | Do not wait for the deploy workflow to finish                       |
+| `--verify`          | `false` | Run pre-push hooks when you push the tag                            |
+| `--target-repo`     |         | Deploy workflow repo (owner/name); overrides saved config           |
+| `--target-workflow` |         | Deploy workflow filename; overrides saved config                    |
+
+> [!IMPORTANT]
+> For a branch deploy, the onyx repo's `release` environment must admit tags
+> that match `dev-build-*` (Settings > Environments > release > Deployment
+> branches and tags). Without this rule, GitHub rejects the build jobs. The
+> images are public on Docker Hub. The scheduled nightly deploy replaces a
+> branch deployment.
+
+```shell
+# Build and deploy origin/main
+ods deploy edge
+
+# Build and deploy a pushed branch
+ods deploy edge --ref user/my-feature
+
+# Show the tag, push nothing
+ods deploy edge --ref user/my-feature --dry-run
+```
+
 ### Testing Changes Locally (Dry Run)
 
 Both `run-ci` and `cherry-pick` support `--dry-run` to test without making remote changes:

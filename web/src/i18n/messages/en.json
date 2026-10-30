@@ -5808,6 +5808,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {uploaded # file} other {uploaded # files}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {uploaded # file} other {uploaded # files}}, incomplete: {error}"
         }
       },
       "sensitiveWarning": {
@@ -12094,6 +12097,9 @@
       "failedFiles": {
         "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
       },
+      "firstOpenLoader": {
+        "ariaLabel": "Loading chat"
+      },
       "newChatButton": {
         "label": "Start a new chat"
       },
@@ -12328,7 +12334,9 @@
           "speakingPlaceholder": "{appName} is speaking..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Waiting for attached file(s) to finish processing"
+          "processingFilesTooltip": "Waiting for attached file(s) to finish processing",
+          "stoppingLabel": "Stopping…",
+          "reloadLabel": "Check again"
         },
         "tabReadingButton": {
           "readLabel": "Read this tab",
@@ -13633,6 +13641,10 @@
       "incognito": {
         "title": "You're incognito"
       }
+    },
+    "readiness": {
+      "stopFailed": "Could not stop the response. Try again.",
+      "checkFailed": "Could not confirm that the response finished. Check again before sending another message."
     }
   },
   "common": {
@@ -15811,24 +15823,30 @@
           "label": "Image Generation"
         },
         "description": "Set up models to create images in your chats.",
-        "title": "Enable image generation"
+        "title": "Enable Image Generation"
       },
       "inviteTeam": {
         "button": {
           "label": "Manage Users"
         },
         "description": "Manage users and permissions for your team",
-        "title": "Invite your team"
+        "title": "Invite Your Team"
       },
       "webSearch": {
         "button": {
           "label": "Web Search"
         },
         "description": "Enable {appName} to search the internet for information.",
-        "title": "Select web search provider"
+        "title": "Select Web Search Provider"
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Finish Setup"
+      },
+      "nextButton": {
+        "label": "Next"
+      },
       "progress": {
         "label": "Step {current} of {total}"
       }
@@ -15840,13 +15858,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# model connected} other {# models connected}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM Compatible APIs",
-        "title": "Custom LLM Provider"
-      },
       "description": "{appName} supports both self-hosted models and popular providers.",
       "edit": {
         "ariaLabel": "Edit LLM providers"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "View"
+        },
+        "description": "Set up in Admin Panel",
+        "title": "More Providers"
       },
       "providerCard": {
         "connect": {
@@ -15854,7 +15875,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Provider settings"
-        }
+        },
+        "settingsLoadError": "Couldn't load this provider's settings. Try again."
       },
       "title": "Connect your LLM models"
     },
@@ -15881,28 +15903,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "Finish Setup"
-        },
-        "title": "You're all set, review the optional settings or click Finish Setup"
-      },
       "llmSetup": {
-        "button": {
-          "label": "Next"
-        },
-        "title": "Almost there! Connect your models to start chatting."
+        "title": "Connect a model to start chatting."
       },
       "name": {
-        "button": {
-          "label": "Next"
-        },
-        "title": "Let's take a moment to get you set up."
+        "title": "Tell us what to call you."
       },
-      "welcome": {
-        "button": {
-          "label": "Let's Go"
-        },
+      "optionalSetup": {
+        "title": "Set up a few optional extras."
+      },
+      "postStep": {
+        "title": "You're all set."
+      },
+      "preStep": {
         "title": "Let's take a moment to get you set up."
       }
     }

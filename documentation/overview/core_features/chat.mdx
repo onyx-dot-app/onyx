@@ -1,0 +1,104 @@
+---
+title: "Chat UI"
+description: "Overview of Onyx's primary user interface"
+icon: "comment"
+---
+
+<img className="rounded-image" src="/assets/overview/core_features/chat_ui.webp" alt="Onyx Chat Interface"/>
+
+## Input Bar
+
+### Attach Files
+
+<img className="rounded-image" src="/assets/overview/core_features/files.webp" alt="Files Input"/>
+
+Click **Attach Files** to add files to the chat. You can also drag files into the chat or paste an image.
+Onyx processes each file before you can send the message.
+Attached files appear under **User Files** in the sources sidebar.
+
+<Note>
+  To use a web page, paste its link in your message. The **Open URL** action reads it. Pages behind logins, captchas,
+  or paywalls are not accessible. Use a [Connector](/overview/core_features/connectors) instead.
+</Note>
+
+### Actions
+
+<img className="rounded-image" src="/assets/overview/core_features/actions.webp" alt="Actions Input"/>
+
+The actions button opens a menu where you force or block actions for the current chat. The built-in actions are:
+- **[Internal Search](/overview/core_features/internal_search)**:
+  Searches the knowledge indexed from [Connectors](/overview/core_features/connectors).
+  Expand it to limit the search to selected sources.
+- **[Web Search](/overview/core_features/web_search)**: Searches the internet.
+  Appears after an admin connects a search engine.
+- **[Code Interpreter](/overview/core_features/code_interpreter)**:
+  Runs Python in a sandbox for calculations and data analysis.
+- **[Coding Agent](/overview/core_features/coding_agent)**: Investigates a GitHub repository and answers questions
+  about its code. Appears after an admin turns it on.
+- **[Image Generation](/overview/core_features/image_generation)**: Creates images.
+  Appears after an admin connects an image provider.
+
+Select **Plugins** in the same menu to turn MCP and OpenAPI plugins on or off for the chat.
+See [Plugins](/overview/core_features/plugins).
+
+### Deep Research
+
+<img className="rounded-image" src="/assets/overview/core_features/deep_research.webp" alt="Deep Research"/>
+
+Click **Deep Research** to turn it on for the next message. The LLM then runs many cycles of thinking, research,
+and actions to give the best answer. Use it for complex questions that need many sources or significant reasoning.
+
+<Note>
+  Deep Research can take several minutes and can cost more than 10x the tokens of a normal answer.
+  An admin can turn it off at **Admin Panel → Chat Preferences**. It is not available in multi-model mode.
+</Note>
+
+### Model Selector
+
+<img className="rounded-image" src="/assets/overview/core_features/model_selector.webp" alt="Model Selector"/>
+
+Onyx supports all major LLM providers and self-hosted options such as Ollama and vLLM. The model selector offers:
+- **Auto** (optional): Onyx picks a model for each message through a router model. It appears only after an admin
+  turns on **Auto Mode** and selects a **Router Model** from a gateway provider that offers one, such as OpenRouter.
+  See [Auto Mode](/admins/ai_models/overview#workspace-model-settings).
+- **Reasoning Level** and **Temperature** for models that support them. Admins can hide these controls.
+- **Add Model**: Generate answers from several models side by side. An admin turns **Multi-Model Generation**
+  on at **Admin Panel → Chat Preferences**.
+
+Set your default model, reasoning level, and temperature under **Settings → Chats**.
+
+## Sources Panel
+
+<img className="rounded-image" src="/assets/overview/core_features/sources_sidebar.webp" alt="Sources panel with Cited Sources and More"/>
+
+When an answer used **Internal Search** or **Web Search**, a **Sources** button appears under it.
+Select it to open the sources panel on the right. Answers that ran no search have no **Sources** button.
+
+The panel lists the documents from that search:
+- **Cited Sources**: documents the answer cites, in citation order.
+- **Found Sources** (or **More** when there are also cited documents): the other documents the search returned.
+
+Select a document in the panel to include its full content in your next message.
+
+## Projects
+
+<img className="rounded-image" src="/assets/overview/core_features/projects.webp" alt="Projects"/>
+
+A **Project** groups chats with a shared set of **Files** and **Instructions**. Use Projects to organize ongoing work,
+or to reuse files and instructions without creating an Agent.
+
+Chats started in the Project use its files and instructions.
+Use **Move to Project** in the chat header menu to move an existing chat.
+
+When the Project files do not fit in the model's context window, Onyx searches them and uses the relevant parts.
+
+## Incognito Chat
+
+Start an **Incognito Chat** from the chat header before you send the first message.
+An incognito chat is not saved in your history and is not used to update your memories.
+Your admin's data policy still applies. An admin can turn Incognito Chats off at **Admin Panel → Security**.
+
+## Memory
+
+Onyx can store facts from your chats and use them in later answers. Manage this under **Settings → Memory**:
+turn **Reference Stored Memories** and **Update Memories** on or off, and use **View/Add** to edit the stored lines.

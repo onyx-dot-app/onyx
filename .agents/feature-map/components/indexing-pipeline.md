@@ -87,7 +87,6 @@ is already local.
 | `STRICT_CHUNK_TOKEN_LIMIT` (`shared_configs/configs.py`) | see configs | Forces an oversized split chunk to be re-split at token boundaries in `text_section_chunker.py`. |
 | `INDEXING_WORKER_HEARTBEAT_INTERVAL` (`configs/constants.py`) | see configs | Cadence of the DB heartbeat counter increment (§4.7). |
 | `INDEXING_WORKER_MEMORY_LIMIT_MB` | see configs | Docfetching watchdog kills the subprocess if RSS exceeds this. |
-| `CELERY_INDEXING_LOCK_TIMEOUT` | see configs | TTL of the cross-batch Redis lock, scoped to one connector pair and search settings (§4.5). |
 | `NUM_DAYS_TO_KEEP_CHECKPOINTS`, `NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS` | see configs | Retention windows for the two cleanup beat tasks. |
 | `DOCUMENT_PUSH_ENDPOINT_URL`, `DOCUMENT_PUSH_API_KEY`, `DOCUMENT_PUSH_TIMEOUT_SECONDS` | unset | Config-driven external sink; see §4.4 and `document_push.py`. Single-tenant only. |
 | `CONNECTOR_CHECKS_ENABLED` | false | When true, a cc-pair's first index attempt waits for its required capability checks (§4.1). Pair it with `NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED`. |
@@ -112,9 +111,10 @@ seed, not a real connector run).
 ### `IndexAttemptError` (`onyx/db/index_attempt.py:create_index_attempt_error`)
 
 One row per failed document or entity within an attempt. Carries `document_id` or
-`entity_id`, the failure message, and `is_resolved` (flipped when a later
+`entity_id`, the failure message (capped at `MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS`),
+and `is_resolved` (flipped when a later
 successful index of the same document clears the error;
-`_resolve_indexing_document_errors` and `_resolve_indexing_entity_errors`).
+`resolve_index_attempt_errors_for_documents` and `_resolve_indexing_entity_errors`).
 
 ### `IndexAttemptStageMetric` (`onyx/db/models.py`, written via `onyx/db/index_attempt_metrics.py`)
 
@@ -155,7 +155,6 @@ not define the OpenSearch mapping those objects must match.
 | `RedisConnector(...).delete` | `redis_connector.py` | Fence + taskset for connector deletion (§4.8). |
 | `RedisConnector(...).prune` | `redis_connector_prune.py` | Fence + taskset for a pruning run (§4.8). |
 | `RedisDocprocessing(index_attempt_id, redis_client)` | `redis_docprocessing.py` | Per-attempt `pending`/`in_flight` batch counters, incremented on enqueue and consulted by the heartbeat-staleness check (§4.7); `cleanup()` on terminal status. |
-| `redis_connector.db_lock_key(search_settings_id)` | `docprocessing/tasks.py` | Cross-batch lock serializing `IndexingCoordination.update_batch_completion_and_docs` writes. The key is per `cc_pair_id` and `search_settings_id`, so it is wider than one attempt (§4.5). |
 
 ---
 
@@ -188,7 +187,7 @@ not define the OpenSearch mapping those objects must match.
    |    enricher.enrich_chunk(...)                            -- ACL, doc sets, boost, cc_pair_ids -> DocMetadataAwareIndexChunk
    |    write_chunks_to_vector_db_with_backoff(...)  x N      -- once, to the index of the attempt's SearchSettings
    |    adapter.post_index(...)                                -- chunk counts, indexed timestamps
-   |  IndexingCoordination.update_batch_completion_and_docs    -- cross-batch Redis-locked counter update
+   |  IndexingCoordination.update_batch_completion_and_docs    -- counter update under the attempt row lock
    |
    v
  check_for_indexing (next tick): monitor_indexing_attempt_progress
@@ -430,7 +429,10 @@ writes only to the index of the attempt's own `SearchSettings`: PRESENT or FUTUR
 It does not write to both generations. The port backfill (`port/tasks.py`) fills a
 FUTURE index (see [[document-index]] §4.4). The write tries the whole
 batch in one call to `DocumentIndex.index()`; on any exception it falls back to a
-per-document retry loop so one bad document doesn't fail the batch. Before writing,
+per-document retry loop so one bad document doesn't fail the batch. The exception
+is `OpenSearchIndexWriteBlockedError` (the index carries a write block): every
+document would fail the same way, so the batch fails at once with one failure per
+document and one log line. Before writing,
 `adapter.lock_context` (`document.py:prepare_to_modify_documents` ->
 `acquire_document_locks`) takes a Postgres row lock on every document in the batch,
 so no other process can concurrently modify the same document's index entry during
@@ -458,15 +460,12 @@ writer of the attempt's aggregate counters:
   Lock order: Redis creation lock, then the cc-pair row, then its attempt rows.
 - `update_batch_completion_and_docs` increments `completed_batches`,
   `total_docs_indexed`, `new_docs_indexed`, `total_chunks` under a
-  `SELECT ... FOR UPDATE` on the `IndexAttempt` row. Each `docprocessing_task` also
-  wraps this call in a **Redis lock** keyed by
-  `redis_connector.db_lock_key(search_settings_id)` (`CELERY_INDEXING_LOCK_TIMEOUT`
-  TTL), acquired with a bounded `CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300`
-  timeout rather than an unbounded wait, specifically to avoid every docprocessing
-  thread across the fleet wedging behind a lock left by a worker killed
-  mid-section. A failed acquire raises and fails the task. Celery does not
-  redeliver a failed task: the batch file stays in storage, the heartbeat check
-  fails the attempt, and the next attempt re-issues the batch.
+  `SELECT ... FOR UPDATE` on the `IndexAttempt` row. The row lock alone
+  serializes concurrent batches, and Postgres releases it when a worker dies.
+  After the update, `resolve_index_attempt_errors_for_documents` resolves the
+  batch's open document errors with one bounded `UPDATE`, outside any lock. The
+  partial index `ix_index_attempt_errors_unresolved_cc_pair_document` keeps that
+  `UPDATE` independent of the pair's error history.
 - `check_cancellation_requested` / `request_cancellation__no_commit` implement admin-triggered
   cancellation without Redis fencing: a boolean column on `IndexAttempt`, polled by
   both docfetching (`_check_connector_and_attempt_status`) and
@@ -731,7 +730,7 @@ that block, so it calls `stop_telemetry` itself first.
 | changes a Celery task signature or queue | `docfetching/tasks.py`, `docprocessing/tasks.py`, `beat_schedule.py`'s queue/priority entries, and every `app.send_task` call site that constructs the kwargs by hand (there is no shared schema enforcing the two stay in sync across a rolling deploy) |
 | changes the checkpoint format (`ConnectorCheckpoint` subclass fields) | `checkpointing_utils.py:load_checkpoint`/`get_latest_valid_checkpoint`, and every in-flight `IndexAttempt.checkpoint_pointer` written by the old format: a rolling deploy must tolerate reading both |
 | changes `IndexAttempt` states (`IndexingStatus`) | `should_reuse_checkpoint()`, `is_terminal()`, `is_successful()`, every `mark_attempt_*` function in `db/index_attempt.py`, `validate_active_indexing_attempts`, and the admin connector-status UI that renders the enum |
-| changes `IndexingCoordination` locking or the cross-batch Redis lock | every concurrent `docprocessing_task` for the same connector pair and search settings; verify the bounded-timeout behavior still fails a task cleanly rather than wedging on a fossil lock |
+| changes `IndexingCoordination` locking | every concurrent `docprocessing_task` for the same attempt; keep each counter increment under the `IndexAttempt` row lock, and keep slow work (such as error resolution) out of that transaction |
 | changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), the FUTURE-write path (`ignore_content_hash_gate=True`), and the forced path (`force_update=True`: the per-document retry and the tabular re-chunk migration) |
 | changes pruning or deletion's document-removal task | both callers (`pruning/tasks.py` and `connector_deletion/tasks.py`) share `document_by_cc_pair_cleanup_task`; a change there affects both flows even though they trigger differently |
 | changes the reindex-port re-embed logic | `port_reembed.py`'s two strategies must still match what the chunker/embedder currently produce for a fresh index, or the ported chunks will diverge from a true reindex |
@@ -815,12 +814,11 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
   with zero counts so the attempt can still reach `COMPLETED_WITH_ERRORS`. Without
   it, the same exception fails the task outright. Celery does not redeliver it;
   the batch stays in storage for the next attempt's `reissue_old_batches`.
-- **The cross-batch coordination lock has a bounded acquire on purpose.**
-  `CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300` exists because an earlier unbounded
-  `acquire()` let one killed worker's fossil lock (held for up to
-  `CELERY_INDEXING_LOCK_TIMEOUT`, several hours) wedge every docprocessing thread
-  across the entire fleet for that connector pair and search settings. A "fix" that removes the timeout
-  reintroduces that production incident.
+- **Batch completion uses no Redis lock on purpose.** A Redis lock with a
+  multi-hour TTL around the counter update outlived any holder killed mid-section
+  and stopped completions for every docprocessing thread of the pair until it
+  expired. The `IndexAttempt` row lock already serializes the increments and dies
+  with its connection. Do not add a cross-process lock around this section.
 - **The targeted-reindex fence exclusion is deliberate, not an oversight.**
   `try_create_index_attempt`'s active-attempt check explicitly filters out
   `targeted_reindex_job_id IS NOT NULL` rows, so a targeted reindex and a full

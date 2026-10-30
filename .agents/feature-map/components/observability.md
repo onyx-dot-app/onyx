@@ -26,9 +26,11 @@ including `framework/` and `processors/`), `backend/onyx/server/manage/tracing/a
 `backend/ee/onyx/background/celery/tasks/log_export/`,
 `web/src/app/admin/tracing/`, `web/src/app/admin/systeminfo/`
 
-**Read first:** `docs/METRICS.md` and `docs/AUDIT_LOGGING.md`, plus
-`deployment/fleet-telemetry.md` for fleet telemetry. They are the primary specs;
-this document maps them to code and adds verification guidance.
+**Read first:** `backend/onyx/server/metrics/README.md` (how to add a metric),
+`documentation/deployment/production/monitoring.mdx` (customer metrics
+reference), `documentation/admins/auditing/audit_logs.mdx` (audit schema and
+action taxonomy), and `deployment/fleet-telemetry.md` for fleet telemetry. This
+document maps them to code and adds verification guidance.
 
 ---
 
@@ -36,8 +38,9 @@ this document maps them to code and adds verification guidance.
 
 An operator scrapes `GET /metrics` on the API server, the MCP server, and each
 Celery worker's standalone metrics port, and wires the results into Grafana.
-No dashboard ships in-product; `docs/METRICS.md` documents every metric and
-gives PromQL starting points.
+No dashboard ships in-product. The Helm chart can deploy Grafana dashboards
+(`deployment/helm/charts/onyx/dashboards/`, `monitoring.grafana.dashboards.enabled`)
+and ServiceMonitors (`monitoring.serviceMonitors.enabled`).
 
 An admin connects Braintrust or Langfuse under **Admin > Tracing**
 (`web/src/app/admin/tracing/page.tsx`), pastes an API key, and sees every
@@ -52,8 +55,7 @@ company-wide usage broken out by user (`GET /admin/usage/export`) and by
 non-user system flows such as contextual RAG (`GET /admin/usage/system`), can
 reset a user's usage window, and can request a downloadable usage report ZIP
 (`ee/onyx/background/celery/tasks/usage_reporting/tasks.py:generate_usage_report_task`)
-containing per-user and per-system CSVs plus a PDF summary (see
-`docs/usage/usage-reports.md`).
+containing per-user and per-system CSVs plus a PDF summary (§4.9).
 
 An admin with the right permission also reviews **Query History**
 (`ee/onyx/server/query_history/api.py`) for chat-session-level audit and
@@ -61,7 +63,7 @@ exports it, downloads a **log export** bundle of raw log files for support or
 compliance (`ee/onyx/server/log_export/api.py`), and reads security-relevant
 events (login, permission changes, credential access) as JSON lines on the
 `onyx.audit` logger tree, shipped to whatever SIEM the operator points a log
-shipper at (`docs/AUDIT_LOGGING.md`).
+shipper at (`documentation/admins/auditing/audit_logs.mdx`).
 
 An admin can also register an **outbound hook**: an HTTPS endpoint Onyx calls
 synchronously at a fixed point in a pipeline (document ingestion, document
@@ -70,8 +72,9 @@ push, or query processing) and waits on for a response, configurable at
 
 By default, every installation also sends fleet telemetry to the Onyx fleet
 service. It sends approved health, version, connector, indexing, query-timing,
-license-presence, and signup-domain values. It never sends document content,
-names, credentials, or full email addresses. The operator does not need to
+license-presence, signup-domain, user-count, and answer-vote values. It never
+sends document content, names, credentials, user identities, or full email
+addresses. The operator does not need to
 configure it, and one deployment setting turns it off (see §2). Onyx continues to
 operate when the fleet service is not available.
 
@@ -127,6 +130,26 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 `ee/onyx/server/log_export/api.py`: `POST /admin/log-export`,
 `GET /admin/log-export/{export_id}`, `GET /admin/log-export/{export_id}/download`.
 
+The start fans out one collect task per worker queue, so file logs come from one
+replica per worker type, and a worker with no free thread misses the 90 s
+deadline. On Kubernetes the api_server also starts
+`ee/onyx/server/log_export/kubernetes_collection.py` in a background thread. It
+reads, through the Kubernetes API, the stdout of every pod of the Helm release
+(selected by `app.kubernetes.io/name` and `app.kubernetes.io/instance`), the
+previous container's log after a restart, a pod status summary with the last
+termination reason (for example `OOMKilled`), and the namespace events for
+those pods. The result is `piece_kubernetes_api.zip` with a `kubernetes`
+receipt. It is off by default (`LOG_EXPORT_KUBERNETES_ENABLED`).
+The Helm value `logExport.kubernetes.enabled` turns it on: the api-server then
+runs as its own service account, bound to the Role in
+`deployment/helm/charts/onyx/templates/log-export-rbac.yaml`, so no other Onyx
+pod can read pods, pod logs, or events. Without access to pods the receipt is `failed`; without access to pod logs or
+events it is `uploaded` with a partial piece. Both name the fix in the
+receipt's error, and the rest of the bundle is unchanged. The Export Logs page
+shows that error on an `uploaded` receipt too. The API cuts a log at its byte
+cap from the start of the tail window. So a capped log is read again, at most
+twice, with fewer lines, to keep the newest lines.
+
 ### Fleet telemetry
 
 | Surface | Code | Notes |
@@ -150,6 +173,9 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 | `MULTI_TENANT` | | Forces tracing config to env-only and blocks `/admin/tracing/*`. |
 | `DISABLE_TELEMETRY` | `false` | `true` stops fleet enrollment, sending, and collection (`utils/fleet_telemetry.py:start_telemetry`, the `collect-fleet-telemetry` beat entry, the Lite poller entry). Set it on every service. Prometheus metrics, tracing, and the other `monitoring` tasks do not change. |
 | `ONYX_TELEMETRY_ENDPOINT` | `https://telemetry.onyx.app` | Fleet service base URL (`utils/fleet_telemetry.py:_ENDPOINT`). For tests only. |
+| `LOG_EXPORT_KUBERNETES_ENABLED` | `true` | `false` skips the log export's Kubernetes API collection. |
+| `LOG_EXPORT_KUBERNETES_TAIL_LINES` | `100000` | Last lines read from each container log. |
+| `LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM`, `LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES` | 25 MiB, 500 MiB | Byte caps per container log and per export. |
 
 ---
 
@@ -186,8 +212,7 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
   The collector keeps its read cursor and its inventory signature in the cache
   backend (`fleet_telemetry_cursor`, `fleet_telemetry_inventory`).
 - Audit events are **not** a table. They are JSON-serialized log lines on the
-  `onyx.audit` logger tree (`utils/audit.py`); there is no `audit_event` table
-  yet (`docs/AUDIT_LOGGING.md` calls this a planned follow-up).
+  `onyx.audit` logger tree (`utils/audit.py`); there is no `audit_event` table.
 
 ---
 
@@ -212,8 +237,17 @@ inside the cluster network, not exposed externally). Generic per-task lifecycle
 metrics come from `celery_task_metrics.py:on_celery_task_prerun` /
 `on_celery_task_postrun` / `on_celery_task_retry` / `on_celery_task_revoked` /
 `on_celery_task_rejected`, wired manually into each worker's own Celery signal
-handlers; only `docfetching` and `docprocessing` currently do this
-(`docs/METRICS.md` "Current Worker Integration Status").
+handlers. Prerun creates both `onyx_celery_task_completed_total` outcomes at 0,
+so the first failure of a task is an increase that `rate()` and `increase()`
+see. `docfetching`, `docprocessing`, `heavy`, `light`, `primary`, and
+`scheduled_tasks` do this; `user_file_processing` does not start a metrics
+server. `docfetching` and `docprocessing` add per-connector labels through
+`indexing_task_metrics.py` and push connector health through
+`connector_health_metrics.py`. The `monitoring` worker registers the pull-based
+collectors in `indexing_pipeline_setup.py` (queue depth, worker heartbeats,
+Redis health). They read at scrape time through
+`indexing_pipeline.py:_CachedCollector`, which serves a cached snapshot and
+bounds each read so a slow Redis cannot hang the scrape.
 
 Request ID and endpoint context middleware (`utils/middleware.py`) use pure ASGI
 calls. They keep context through response streaming and restore it in `finally`.
@@ -229,8 +263,13 @@ it does not measure the full stream duration.
 the model for any new HTTP-scoped metric in a multi-tenant deployment: without
 a `tenant_id` label, a metric aggregates across every customer on the shared
 cluster. Connector-state metrics take a different approach for the same
-reason: `docs/METRICS.md` "Connector State Metrics" states that collection is
-skipped entirely under multi-tenant, to avoid a cross-tenant snapshot read.
+reason: `connector_state_metrics.py` skips collection entirely under
+`MULTI_TENANT`, to avoid a cross-tenant snapshot read. On a timeout or error it
+returns no connector samples (not stale ones) and sets
+`onyx_connector_state_collection_success` to 0. In this collector, connector
+display names appear only on the `onyx_connector_info` series. Other connector
+metrics also carry `connector_name` (`connector_health_metrics.py`), so a
+rename can change more than one series.
 
 ### 4.3 Tracing framework
 
@@ -253,13 +292,13 @@ directly via `add_trace_processor`, independent of Braintrust/Langfuse.
 
 A span opened with no trace in scope becomes a `NoOpSpan` and reaches no
 processor (`framework/provider.py:create_span`), so every entry point that runs
-LLM work must open a root trace first. Today those are `chat/llm_loop.py`
-(`run_llm_loop`), `deep_research/dr_loop.py`, `chat/compression.py`,
+LLM work must open a root trace first. Chat opens it in `chat/execution.py`;
+child agents and compaction inherit that trace. Other entry points include
 `server/query_and_chat/chat_backend.py` (`chat_session_naming`),
 `server/features/build/session/naming.py`, `indexing/indexing_pipeline.py`,
 `indexing/port_reembed.py`, `server/gateway/tracing.py:llm_gateway_trace`, and
 `server/features/search/api.py` (`search_api`, with an `internal_search`
-function span around `SearchTool.run` so the trace shape matches chat's). Trace
+function span around `SearchTool.search` so the trace shape matches chat's). Trace
 metadata uses `framework/create.py:ChatTraceMetadata` where a chat session
 exists and `SearchTraceMetadata` (tenant, user, persona) where none does.
 
@@ -341,8 +380,15 @@ Audit events are emitted by `utils/audit.py:emit_audit_event` (and the older
 events) as `INFO` records on the `onyx.audit.*` logger tree, with the event
 serialized to JSON in the message body so the line is byte-identical
 regardless of `LOG_FORMAT`. Field shape and the `action` taxonomy (a stable,
-append-only `<domain>.<verb>` contract) are defined in `docs/AUDIT_LOGGING.md`;
-emission is fail-safe (never raises into the caller) and deduped via Redis for
+append-only `<domain>.<verb>` contract, `utils/audit.py:AuditAction`) are
+documented for customers in `documentation/admins/auditing/audit_logs.mdx`. Each
+event goes to the child logger `onyx.audit.<ocsf_class>`, so moving an action to
+another OCSF class changes its logger name. `permission.denied`
+(`auth/scoped_permissions.py:_emit_denial`) is emitted for every refusal by a
+scoped write gate with no dedup key, so distinct look-alike attempts stay
+separate events. SCIM group writes reuse the admin actions, tagged
+`extra.source == "scim"`, and emit only on a real change.
+Emission is fail-safe (never raises into the caller) and deduped via Redis for
 high-volume classes, degrading to always-emit if Redis is unavailable. There is
 no read API in Onyx today: the documented consumption path is an external log
 shipper filtering on the `onyx.audit` logger prefix.
@@ -373,7 +419,12 @@ The EE usage-report pipeline
 (`ee/onyx/background/celery/tasks/usage_reporting/tasks.py:generate_usage_report_task`)
 runs as a Celery task and calls
 `ee/onyx/server/reporting/usage_export_generation.py:create_new_usage_report`,
-which builds the CSV+PDF ZIP described in `docs/usage/usage-reports.md`.
+which builds the ZIP (`chat_messages.csv`, `users.csv`, `usage_by_user.csv`,
+`usage_by_system.csv`, `usage_report.pdf`). The PDF review pack is built in
+pure Python with ReportLab (`usage_report_pdf.py`, base-14 fonts, no browser
+and no network) from one typed aggregate, `usage_report_data.py:UsageReportData`.
+A new output (email or Slack digest) should render that same object so the
+numbers agree. A PDF failure is logged and the ZIP ships without it.
 
 ### 4.10 Hooks
 
@@ -431,10 +482,23 @@ every five minutes.
   fails with a 4xx `OnyxError` sends no event. This includes a chat that a
   query-processing hook rejects (`QUERY_REJECTED`): the chat stream sends the
   error as a `StreamingError` packet, and `QueryObservation.error_packet` reads
-  only its code. Chat queries also report `llm_cycles`: `chat/llm_loop.py:run_llm_loop`
-  calls `Emitter.llm_step_started` before each LLM call, and `Emitter.emit` records
-  each model's count when it queues its first answer text. Deep research reports
-  the `deep_research` mode and no cycle count.
+  only its code.
+  `chat/stream_buffer.py:ChatDelivery` observes output and finishes the query
+  after server execution, including after a reader disconnects.
+  `tools/interface.py:Tool.run` records executed tool categories through
+  `utils/fleet_query_telemetry.py:CURRENT_QUERY_OBSERVATION`, copied into workers.
+  Unknown or canceled calls that never run do not count.
+  `chat/presentation.py:ResponsePresenter` counts root LLM message starts through
+  `chat/emitter.py:Emitter`. The first answer packet captures its model’s cycle count
+  before delivery. Child messages do not count. Deep research reports the
+  deep_research mode without a cycle count.
+- Answer votes: `db/feedback.py:create_chat_message_feedback` calls
+  `utils/fleet_query_telemetry.py:emit_feedback` after it stores a thumbs up or
+  down. The event carries the vote, a digest of the message id, and the channel
+  of the `MessageOrigin` the caller passes: the Slack buttons
+  (`onyxbot/slack/handlers/handle_buttons.py`) pass `SLACKBOT`, the web endpoint
+  keeps the default `WEBAPP`. Text-only feedback and follow-up requests send
+  nothing.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.
@@ -445,13 +509,14 @@ every five minutes.
 
 **Collection.** `utils/fleet_telemetry_collector.py:collect_snapshots` runs every
 five minutes for each tenant. It reads connectors, signup email domains, license
-presence, index attempts, stage summaries, and background jobs through the
+presence, the user count, index attempts, stage summaries, and background jobs through the
 statement-limited queries in `db/fleet_telemetry.py`. It reads only the rows that
 changed since its previous pass, plus work that is still running. Each read
 returns the oldest changes first. When the sender refuses a row (a full queue or
 a closed sender), the next pass resumes at that row. When a read reaches
 `ROW_LIMIT`, the next pass resumes at the time of its last row, and always moves
-forward (`_send_in_order`). The inventory (connectors, domains, license) goes out after
+forward (`_send_in_order`). The inventory (connectors, domains, license, user
+count) goes out after
 the work, when it changes and at least every six hours. Event IDs come from the
 row identity and update time, so the fleet service drops repeated events. Index attempt and job state reach the fleet only from these
 reads. The intervals are constants in `utils/fleet_telemetry.py`
@@ -503,11 +568,11 @@ waits for the database or the network.
    configuration is env-var only.
 7. **Metric label cardinality stays bounded.** Never label with a raw
    user/document ID or a free-form connector name on a per-task counter
-   (`docs/METRICS.md` "Cardinality warning"); use IDs/enums, or move the field
+   (`backend/onyx/server/metrics/README.md`); use IDs/enums, or move the field
    to a pull-based collector where cardinality is naturally bounded.
 8. **The audit `action` taxonomy is append-only.** Consumers filter on
    specific `action` strings; renaming or removing one breaks every existing
-   SIEM rule (`docs/AUDIT_LOGGING.md`).
+   SIEM rule (`documentation/admins/auditing/audit_logs.mdx`).
 9. **At most one non-deleted hook exists per `HookPoint`**, enforced by
    `db/hook.py:create_hook__no_commit` and a DB partial unique index.
 10. **A `HookFailStrategy.HARD` hook failure must abort the calling
@@ -571,12 +636,12 @@ waits for the database or the network.
 | If your change... | Also check |
 |---|---|
 | adds an LLM call site | Tag it with an `LLMFlow` (add the enum value first); verify no new `UNTAGGED_*` span appears (§8) |
-| adds a Prometheus metric | `docs/METRICS.md` reference tables; label cardinality; a `tenant_id` label if the metric is HTTP- or connector-scoped and multi-tenant applies; a unit test under `backend/tests/unit/server/metrics/` or `backend/tests/unit/onyx/server/metrics/` |
+| adds a Prometheus metric | `documentation/deployment/production/monitoring.mdx` metric families; label cardinality; a `tenant_id` label if the metric is HTTP- or connector-scoped and multi-tenant applies; a unit test under `backend/tests/unit/server/metrics/` or `backend/tests/unit/onyx/server/metrics/` |
 | changes masking (`tracing/masking.py`) | Both Braintrust and Langfuse paths; confirm the redaction still fires before `braintrust.set_masking_function` / any equivalent Langfuse hook is added |
 | changes a trace processor (`braintrust_tracing_processor.py`, `langfuse_tracing_processor.py`, or a new one) | The incognito check (`suppresses_external_traces`) must still gate it; `dynamic_processor.py`'s delegate rebuild and drain-on-retire logic |
 | adds a usage-recorded action (a new `LLMFlow`, a new system attribution) | `tracing/flows.py:SYSTEM_TEXT_GENERATION_FLOWS` if it should count as system usage; `processors/user_usage_processor.py:_system_attribution`; the usage export/report pipeline that reads `UserUsage` |
 | adds a new `HookPoint` | `hooks/registry.py:_REGISTRY` (validated at startup by `validate_registry`); a new `HookPointSpec`; the EE UI's hook-point catalogue |
-| changes the audit action taxonomy | `docs/AUDIT_LOGGING.md`; every downstream SIEM filter rule depends on the exact string |
+| changes the audit action taxonomy | `documentation/admins/auditing/audit_logs.mdx`; every downstream SIEM filter rule depends on the exact string |
 | adds a fleet telemetry field or hook | the allow-lists that `sanitize_data` uses (§5 item 12); no lock or I/O on the calling thread (§5 item 11); the fleet service's ingestion contract, which lives in a separate repository (`deployment/fleet-telemetry.md`) |
 | renames or drops a table or column that the fleet collection pass reads | the queries in `db/fleet_telemetry.py` and `backend/tests/external_dependency_unit/telemetry/test_fleet_collector.py`. A broken query fails no application path: the pass only counts the error in the heartbeat. |
 
@@ -668,7 +733,7 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `incognito=true`. Do not assume "incognito" means "invisible everywhere."
 - **Audit logging has no DB table or read API yet.** The only supported
   consumption path is an external log shipper on the `onyx.audit` logger
-  prefix (`docs/AUDIT_LOGGING.md` "Roadmap").
+  prefix.
 - **`UserUsage` and `TenantUsage` are unrelated tables that both mean
   "usage."** `UserUsage` is per-actor LLM cost/token accounting;
   `TenantUsage` is the cloud usage-limit ledger checked by

@@ -1,9 +1,9 @@
 "use client";
 
 import { JSX } from "react";
-import { Divider } from "@opal/components";
+import { Divider, Text } from "@opal/components";
 import type { IconProps } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
+import { richNodes } from "@opal/utils";
 
 export interface AdminPageTitleProps {
   icon: React.FunctionComponent<IconProps> | React.ReactNode;
@@ -27,8 +27,8 @@ export function AdminPageTitle({
           ) : (
             Icon
           )}
-          <Text headingH2 aria-label="admin-page-title">
-            {title}
+          <Text font="heading-h2" color="text-05" aria-label="admin-page-title">
+            {typeof title === "string" ? title : richNodes(title)}
           </Text>
         </div>
         {farRightElement}

@@ -19,8 +19,8 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
   error pages: `IllustrationContent`.
 - Buttons: `Button` from `@opal/components`. No raw `<button>`.
 - Inputs: Opal or refresh-components. No raw `<input>`, `<textarea>`, or `<select>`.
-- Text: `Text` from `@opal/components` with `font` and `color` props. No naked text nodes. The
-  boolean-flag API in `refresh-components/texts/Text` is deprecated.
+- Text: `Text` from `@opal/components` with `font` and `color` props. No naked text nodes. For
+  one-line text that shows a tooltip when cut, use `OverflowText`.
 - Icons: only `@opal/icons`. Never `lucide-react` or `react-icons`. If an icon is missing, import
   it from Figma with the Figma MCP tool and add it to `lib/opal/src/icons/`.
 - Hover-reveal: `Hoverable` from `@opal/core`. If you must hand-write it, add `no-hover:opacity-100`

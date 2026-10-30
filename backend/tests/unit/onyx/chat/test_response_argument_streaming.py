@@ -6,10 +6,10 @@ from unittest.mock import patch
 import pytest
 
 from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
+from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.presentation import replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.chat.response import tool_arguments_for_display
-from onyx.chat.response_models import MessageRendering, ResponseRecord
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,

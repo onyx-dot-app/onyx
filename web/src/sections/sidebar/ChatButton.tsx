@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
 import {

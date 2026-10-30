@@ -2,8 +2,7 @@
 
 Covers the cloud lockdown in ``external_apps_api`` (admins may only set
 policies on built-in apps; never create, edit credentials/config, or delete
-them). See
-``docs/craft/features/external-apps/cloud-managed-app-credentials.md``.
+them). See ``.agents/feature-map/components/craft-external-apps.md`` §4.7.
 
 Built-in apps are seeded into existing tenants by an Alembic migration rather
 than at tenant setup, so these tests seed directly via ``create_external_app``.

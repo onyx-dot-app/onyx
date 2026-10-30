@@ -1,16 +1,16 @@
 "use client";
 
-import { OverflowText } from "@opal/components";
+import { OverflowText, Text } from "@opal/components";
 import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import Text from "@/refresh-components/texts/Text";
 import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
+import { richNodes } from "@opal/utils";
 import { timeAgo } from "@opal/time";
 import { useMemo } from "react";
 import { useLocale } from "next-intl";
@@ -98,16 +98,16 @@ export default function SearchCard({
                   ).map((tag, index) => <Chip key={index}>{tag}</Chip>)}
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
-                    <Text secondaryBody text02>
-                      {timeAgo(document.updated_at, locale)}
+                    <Text font="secondary-body" color="text-02">
+                      {timeAgo(document.updated_at, locale) ?? ""}
                     </Text>
                   )}
               </Section>
 
               {/* Blurb */}
               {content && (
-                <Text secondaryBody text03 className="text-start">
-                  {content}
+                <Text font="secondary-body" color="text-03">
+                  {richNodes(content)}
                 </Text>
               )}
             </Section>

@@ -1,0 +1,72 @@
+---
+title: "Data Processing"
+description: "How sensitive data is processed"
+icon: "microchip"
+---
+
+*For a full overview of how Onyx processes data, see [Data Flows](/security/architecture/data_flows)
+and [Data Storage](/security/architecture/data_storage).*
+
+### Complete Data Isolation
+
+All data processing occurs inside your infrastructure.
+No sensitive data leaves your network except for the connections you configure.
+
+Onyx sends anonymous fleet telemetry by default. It sends health, version, connector counts, indexing counters,
+and query timings. It never sends names, URLs, email addresses, user IDs, document content, or query text.
+Set `DISABLE_TELEMETRY=true` on every Onyx service to turn it off.
+See [Configuration](/deployment/configuration/configuration).
+
+### Local Model Execution
+
+- **Data Processing**: Document parsing, chunking, and metadata extraction run on your infrastructure.
+- **Embedding Models**: The default embedding model runs locally on the Onyx model servers. You can select an API-based
+  embedding model instead. Onyx then sends document text to that provider.
+- **LLM Integration**: Bring your own LLM. Onyx sends no data to an external service unless you configure one.
+- **Reranking and Selection**: Onyx uses the LLM you configure to select the most relevant search results. No
+  separate reranking model is required.
+
+<Note>
+  Onyx Lite does not index documents and does not start the model servers.
+  See the [deployment overview](/deployment/overview).
+</Note>
+
+## Data Flow Security
+
+### Inbound Data
+
+- **Connector Data**: Document content and metadata updates pulled from the applications you connect.
+- **Model Downloads**: If you configure a non-default embedding model, Onyx downloads it over the network. It still
+  runs locally.
+- **LLM Catalog Updates**: Onyx fetches recommended model lists and model price tables from GitHub. Set
+  `ONYX_AIRGAPPED=true` to stop these fetches.
+- **User Interactions**: Chat messages and actions taken in the UI.
+- **User Uploads**: Files that users upload in chat or in Projects. Onyx processes and stores them locally.
+
+### Outbound Data
+
+- **LLM Inference**: Queries, chat history, and documents sent to the LLM you configure.
+- **Plugins and Actions**: Calls to MCP servers and OpenAPI actions that admins configure. See
+  [Plugins](/admins/plugins/overview).
+- **Web Search**: Queries sent to the search provider and page scraper you select. See
+  [Web Search](/overview/core_features/web_search).
+- **Image Generation**: Prompts sent to the image generation provider you configure.
+- **Tracing** (optional): LLM call traces sent to Braintrust or Langfuse if an admin connects one. See
+  [Tracing](/admins/advanced_configs/tracing).
+- **Hook Extensions** (optional, Enterprise): Documents or queries sent to HTTPS endpoints you register. See
+  [Hook Extensions](/admins/advanced_configs/hook_extensions).
+
+You can also configure external document processing services, embedding APIs, image captioning models,
+and contextual retrieval LLMs. These are optional. Onyx has built-in equivalents or works without them.
+
+### Craft Sandboxes
+
+Craft runs agent code in isolated sandboxes on your own Docker host or Kubernetes cluster.
+See [Craft Architecture](/security/architecture/craft).
+
+### Secrets
+
+Onyx stores connector credentials, LLM API keys, and plugin credentials in Postgres.
+The Business and Enterprise plans encrypt these secrets at rest with `ENCRYPTION_KEY_SECRET`.
+The Community edition stores them without encryption. See [Plans & Billing](/admins/billing/overview)
+and [Configuration](/deployment/configuration/configuration).

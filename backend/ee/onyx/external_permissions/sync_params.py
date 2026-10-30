@@ -42,6 +42,7 @@ from ee.onyx.external_permissions.perm_sync_types import (
     GroupSyncFuncType,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.db.enums import ConnectorCredentialPairStatus
 
 if TYPE_CHECKING:
     from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
@@ -545,6 +546,33 @@ def source_requires_external_group_sync(source: DocumentSource) -> bool:
     if source not in _SOURCE_TO_SYNC_CONFIG:
         return False
     return _SOURCE_TO_SYNC_CONFIG[source].group_sync_config is not None
+
+
+def doc_permission_sync_seconds(
+    source: DocumentSource, status: ConnectorCredentialPairStatus, indexed: bool
+) -> int | None:
+    """Seconds between a pair's doc permission syncs, before the Cloud multiplier.
+    None when its doc sync cannot run now: the source has none, the pair is not
+    active, or the source waits for the pair's first successful index."""
+    config: SyncConfig | None = _SOURCE_TO_SYNC_CONFIG.get(source)
+    doc: DocSyncConfig | None = config.doc_sync_config if config else None
+    if doc is None or status != ConnectorCredentialPairStatus.ACTIVE:
+        return None
+    if doc.initial_index_should_sync and not indexed:
+        return None
+    return doc.doc_sync_frequency
+
+
+def external_group_sync_seconds(
+    source: DocumentSource, status: ConnectorCredentialPairStatus
+) -> int | None:
+    """Seconds between a pair's group syncs. None when its group sync cannot run
+    now: the source has none, or the pair is paused, invalid, or being deleted."""
+    config: SyncConfig | None = _SOURCE_TO_SYNC_CONFIG.get(source)
+    group: GroupSyncConfig | None = config.group_sync_config if config else None
+    if group is None or not status.is_active():
+        return None
+    return group.group_sync_frequency
 
 
 def get_source_perm_sync_config(source: DocumentSource) -> SyncConfig | None:

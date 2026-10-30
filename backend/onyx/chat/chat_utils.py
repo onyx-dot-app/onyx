@@ -1,27 +1,37 @@
+"""Chat session policy and conversion of saved history into model input."""
+
 import json
 from collections.abc import Callable
+from itertools import groupby
+from typing import TypedDict
 
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
+from onyx.agents.execution_records import messages_for_model
+from onyx.agents.models import CompactionCheckpoint, messages_from_steps
 from onyx.chat.files import build_file_context
 from onyx.chat.incognito import (
     incognito_allowed_for_user,
     resolve_incognito_record_mode,
 )
 from onyx.chat.incognito_context import incognito_context_available
-from onyx.chat.models import ChatHistoryResult, ChatMessageSimple, ToolCallSimple
-from onyx.configs.constants import (
-    DEFAULT_PERSONA_ID,
-    MessageType,
+from onyx.chat.models import (
+    ChatHistoryMessage,
+    ChatHistoryResult,
+    MessageRendering,
+    PromptMetadata,
 )
+from onyx.chat.prompt_formatting import count_message_tokens, prompt_metadata
+from onyx.chat.response import restore_response_sources
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
     create_chat_session,
+    translate_db_search_doc_to_saved_search_doc,
 )
-from onyx.db.enums import (
-    IncognitoRecordMode,
-    record_mode_persists_content,
-)
-from onyx.db.models import ChatMessage, ChatSession, Persona, User
+from onyx.db.chat_response import read_response_steps
+from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
+from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -32,46 +42,45 @@ from onyx.file_store.models import (
     FileDescriptor,
     FileToolMetadata,
 )
+from onyx.llm.models import (
+    AssistantMessage,
+    Message,
+    TextContent,
+    ToolResultMessage,
+    UserMessage,
+)
+from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
-    NON_VISION_IMAGE_MARKER,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
-from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.tools.models import ToolCallKickoff
+from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
 
 
-# Used when no token_counter is available to measure the non-vision image
-# marker; intentionally generous so budgeting stays conservative.
-_NON_VISION_MARKER_TOKEN_FALLBACK = 40
-
-
-def count_message_replay_tokens(
-    msg: ChatMessageSimple,
-    *,
-    image_files_replayed_as_markers: bool = False,
-    token_counter: Callable[[str], int] | None = None,
-) -> int:
-    if not image_files_replayed_as_markers:
-        return msg.token_count
-    # Include images whose stored cost is zero, such as project images.
-    num_images: int = sum(
-        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-    )
-    if not num_images:
-        return msg.token_count
-    sample_marker: str = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-    marker_tokens: int = (
-        token_counter(sample_marker)
-        if token_counter
-        else _NON_VISION_MARKER_TOKEN_FALLBACK
-    )
-    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+def omit_prior_tool_result_content(messages: list[Message]) -> list[Message]:
+    """Keep saved tool content intact while omitting it from later chat prompts."""
+    return [
+        message.model_copy(
+            update={
+                "metadata": prompt_metadata(message).model_copy(
+                    update={
+                        "omit_tool_result_content": message.tool_name
+                        != IMAGE_GENERATION_TOOL_NAME
+                    }
+                )
+            }
+        )
+        if isinstance(message, ToolResultMessage)
+        else message
+        for message in messages
+    ]
 
 
 def create_chat_session_from_request(
@@ -160,32 +169,20 @@ def convert_chat_history_basic(
     token_counter: Callable[[str], int],
     max_individual_message_tokens: int | None = None,
     max_total_tokens: int | None = None,
-) -> list[ChatMessageSimple]:
-    """Convert ChatMessage history to ChatMessageSimple format with no tool calls or files included.
-
-    Args:
-        chat_history: List of ChatMessage objects to convert
-        token_counter: Function to count tokens in a message string
-        max_individual_message_tokens: If set, messages exceeding this number of tokens are dropped.
-            If None, no messages are dropped based on individual token count.
-        max_total_tokens: If set, maximum number of tokens allowed for the entire history.
-            If None, the history is not trimmed based on total token count.
-
-    Returns:
-        List of ChatMessageSimple objects
-    """
+) -> list[Message]:
+    """Read user and assistant text, keeping the latest messages within the token budget."""
     # Defensive: treat a non-positive total budget as "no history".
     if max_total_tokens is not None and max_total_tokens <= 0:
         return []
 
     # Convert only the core USER/ASSISTANT messages; omit files and tool calls.
-    converted: list[ChatMessageSimple] = []
+    converted: list[Message] = []
     for chat_message in chat_history:
         if chat_message.message_type not in (MessageType.USER, MessageType.ASSISTANT):
             continue
 
-        message = chat_message.message or ""
-        token_count = getattr(chat_message, "token_count", None)  # ods: ignore[getattr]
+        message = chat_message.message
+        token_count = chat_message.token_count
         if token_count is None:
             token_count = token_counter(message)
 
@@ -197,11 +194,13 @@ def convert_chat_history_basic(
             continue
 
         converted.append(
-            ChatMessageSimple(
-                message=message,
-                token_count=token_count,
-                message_type=chat_message.message_type,
-                image_files=None,
+            UserMessage(
+                content=message, metadata=PromptMetadata(token_count=token_count)
+            )
+            if chat_message.message_type == MessageType.USER
+            else AssistantMessage(
+                content=[TextContent(text=message)],
+                metadata=PromptMetadata(token_count=token_count),
             )
         )
 
@@ -209,31 +208,37 @@ def convert_chat_history_basic(
         return converted
 
     # Enforce a max total budget by keeping a contiguous suffix of the conversation.
-    trimmed_reversed: list[ChatMessageSimple] = []
+    trimmed_reversed: list[Message] = []
     total_tokens = 0
     for msg in reversed(converted):
-        if total_tokens + msg.token_count > max_total_tokens:
+        if total_tokens + count_message_tokens(msg, token_counter) > max_total_tokens:
             break
         trimmed_reversed.append(msg)
-        total_tokens += msg.token_count
+        total_tokens += count_message_tokens(msg, token_counter)
 
     return list(reversed(trimmed_reversed))
 
 
+class _ImageReplay(TypedDict):
+    file_id: str
+    revised_prompt: str
+
+
 def _build_tool_call_response_history_message(
     tool_name: str,
-    generated_images: list[dict] | None,
+    generated_images: list[dict[str, JsonValue]] | None,
     tool_call_response: str | None,
 ) -> str:
     if tool_name != IMAGE_GENERATION_TOOL_NAME:
         return TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
     if generated_images:
-        llm_image_context: list[dict[str, str]] = []
+        llm_image_context: list[_ImageReplay] = []
         for image in generated_images:
             file_id = image.get("file_id")
             revised_prompt = image.get("revised_prompt")
             if not isinstance(file_id, str):
+                logger.warning("Skipping stored generated image without a file ID")
                 continue
 
             llm_image_context.append(
@@ -254,42 +259,146 @@ def _build_tool_call_response_history_message(
     return TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
+def _legacy_tool_messages(
+    message: ChatMessage,
+    tool_names: dict[int, str],
+    token_counter: Callable[[str], int],
+) -> list[Message]:
+    """Reconstruct tool steps for responses saved without response items."""
+    messages: list[Message] = []
+    calls = sorted(
+        message.tool_calls or [], key=lambda call: (call.turn_number, call.tool_id)
+    )
+    for turn_number, turn in groupby(calls, key=lambda call: call.turn_number):
+        records = list(turn)
+        tool_calls = [
+            AgentToolCall(
+                id=call.tool_call_id,
+                name=tool_names.get(call.tool_id, "unknown"),
+                arguments=call.tool_call_arguments or {},
+            )
+            for call in records
+        ]
+        messages.append(
+            AssistantMessage(
+                id=f"chat:{message.id}:step:{turn_number}",
+                content=[TextContent(text=""), *tool_calls],
+                metadata=PromptMetadata(
+                    token_count=sum(
+                        token_counter(json.dumps(call.arguments)) for call in tool_calls
+                    )
+                ),
+            )
+        )
+        for call in records:
+            text = _build_tool_call_response_history_message(
+                tool_name=tool_names.get(call.tool_id, "unknown"),
+                generated_images=call.generated_images,
+                tool_call_response=call.tool_call_response,
+            )
+            messages.append(
+                ToolResultMessage(
+                    id=f"chat:{message.id}:step:{turn_number}:result:{call.tool_call_id}",
+                    content=text,
+                    tool_call_id=call.tool_call_id,
+                    tool_name="",
+                    metadata=PromptMetadata(token_count=token_counter(text)),
+                )
+            )
+    return messages
+
+
+def capture_chat_history(
+    messages: list[ChatMessage],
+    tool_names: dict[int, str],
+    token_counter: Callable[[str], int],
+    checkpoint: CompactionCheckpoint | None = None,
+) -> list[ChatHistoryMessage]:
+    """Copy replay data while ORM relationships are available; the caller owns the session."""
+    history: list[ChatHistoryMessage] = []
+    for message in messages:
+        response_messages: list[Message] = []
+        if message.message_type == MessageType.ASSISTANT:
+            if message.response_status is not None and record_mode_persists_content(
+                message.chat_session.incognito_record_mode
+            ):
+                response_messages = messages_for_model(
+                    messages_from_steps(read_response_steps(message)),
+                    copy_messages=False,
+                )
+                restore_response_sources(
+                    response_messages,
+                    {
+                        document.document_id: translate_db_search_doc_to_saved_search_doc(
+                            document
+                        )
+                        for document in message.search_docs
+                    },
+                    {
+                        item.id: MessageRendering.model_validate(item.rendering)
+                        for item in message.response_items
+                        if item.rendering is not None
+                    },
+                )
+                response_messages = omit_prior_tool_result_content(response_messages)
+            else:
+                response_messages = _legacy_tool_messages(
+                    message, tool_names, token_counter
+                )
+                response_messages.append(
+                    AssistantMessage(
+                        id=f"chat:{message.id}",
+                        content=[TextContent(text=message.message)],
+                        metadata=PromptMetadata(token_count=message.token_count),
+                    )
+                )
+        history.append(
+            ChatHistoryMessage(
+                id=message.id,
+                message_type=message.message_type,
+                message=message.message,
+                token_count=message.token_count,
+                files=message.files or [],
+                is_clarification=message.is_clarification,
+                response_messages=response_messages,
+            )
+        )
+    if checkpoint is not None:
+        for message in reversed(history):
+            if message.message_type == MessageType.ASSISTANT:
+                message.checkpoint = checkpoint
+                break
+    return history
+
+
 def convert_chat_history(
-    chat_history: list[ChatMessage],
+    chat_history: list[ChatHistoryMessage],
     files: list[ChatLoadedFile],
     context_image_files: list[ChatLoadedFile],
     additional_context: str | None,
     token_counter: Callable[[str], int],
-    tool_id_to_name_map: dict[int, str],
 ) -> ChatHistoryResult:
-    """Convert ChatMessage history to ChatMessageSimple format.
-
-    For user messages: includes attached files (images attached to message, text files as separate messages)
-    For assistant messages with tool calls: creates ONE ASSISTANT message with tool_calls array,
-        followed by N TOOL_CALL_RESPONSE messages (OpenAI parallel tool calling format)
-    For assistant messages without tool calls: creates a simple ASSISTANT message
-
-    Every injected text-file message is tagged with ``file_id`` and its
-    metadata is collected in ``ChatHistoryResult.all_injected_file_metadata``.
-    After context-window truncation, callers compare surviving ``file_id`` tags
-    against this map to discover "forgotten" files and provide their metadata
-    to the FileReaderTool.
-    """
-    simple_messages: list[ChatMessageSimple] = []
+    """Load canonical assistant output and attach user files to message history."""
+    messages: list[Message] = []
     all_injected_file_metadata: dict[str, FileToolMetadata] = {}
+    input_start = 0
 
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
 
     # Find the index of the last USER message
-    last_user_message_idx = None
-    for i in range(len(chat_history) - 1, -1, -1):
-        if chat_history[i].message_type == MessageType.USER:
-            last_user_message_idx = i
-            break
+    last_user_message_idx = next(
+        (
+            index
+            for index in range(len(chat_history) - 1, -1, -1)
+            if chat_history[index].message_type == MessageType.USER
+        ),
+        None,
+    )
 
     for idx, chat_message in enumerate(chat_history):
         if chat_message.message_type == MessageType.USER:
+            input_start = len(messages)
             # Process files attached to this message
             text_files: list[tuple[ChatLoadedFile, FileDescriptor]] = []
             image_files: list[ChatLoadedFile] = []
@@ -321,7 +430,8 @@ def convert_chat_history(
                     token_count=text_file.token_count,
                     content_pending=text_file.content_pending,
                 )
-                simple_messages.append(ctx.message)
+                ctx.message.id = f"chat:{chat_message.id}:file:{fd['id']}"
+                messages.append(ctx.message)
                 all_injected_file_metadata[tool_id] = ctx.tool_metadata
 
             # Sum token counts from image files (excluding project image files)
@@ -337,214 +447,49 @@ def convert_chat_history(
                     image_files.extend(context_image_files)
 
                 if additional_context:
-                    simple_messages.append(
-                        ChatMessageSimple(
-                            message=ADDITIONAL_CONTEXT_PROMPT.format(
+                    messages.append(
+                        UserMessage(
+                            id=f"chat:{chat_message.id}:context",
+                            content=ADDITIONAL_CONTEXT_PROMPT.format(
                                 additional_context=additional_context
                             ),
-                            token_count=token_counter(additional_context),
-                            message_type=MessageType.USER,
-                            image_files=None,
+                            metadata=PromptMetadata(
+                                token_count=token_counter(additional_context),
+                                image_files=None,
+                                allow_compaction_cutoff=False,
+                            ),
                         )
                     )
 
-            simple_messages.append(
-                ChatMessageSimple(
-                    message=chat_message.message,
-                    token_count=chat_message.token_count + image_token_count,
-                    message_type=MessageType.USER,
-                    image_files=image_files or None,
-                    image_token_count=image_token_count,
+            messages.append(
+                UserMessage(
+                    id=f"chat:{chat_message.id}",
+                    content=chat_message.message,
+                    metadata=PromptMetadata(
+                        token_count=chat_message.token_count + image_token_count,
+                        image_files=image_files or None,
+                        image_token_count=image_token_count,
+                    ),
                 )
             )
 
         elif chat_message.message_type == MessageType.ASSISTANT:
-            # Handle tool calls if present using OpenAI parallel tool calling format:
-            # 1. Group tool calls by turn_number
-            # 2. For each turn: ONE ASSISTANT message with tool_calls array
-            # 3. Followed by N TOOL_CALL_RESPONSE messages (one per tool call)
-            if chat_message.tool_calls:
-                # Group tool calls by turn number
-                tool_calls_by_turn: dict[int, list] = {}
-                for tool_call in chat_message.tool_calls:
-                    if tool_call.turn_number not in tool_calls_by_turn:
-                        tool_calls_by_turn[tool_call.turn_number] = []
-                    tool_calls_by_turn[tool_call.turn_number].append(tool_call)
-
-                # Sort turns and process each turn
-                for turn_number in sorted(tool_calls_by_turn.keys()):
-                    turn_tool_calls = tool_calls_by_turn[turn_number]
-                    # Sort by tool_id within the turn for consistent ordering
-                    turn_tool_calls.sort(key=lambda tc: tc.tool_id)
-
-                    # Build ToolCallSimple list for this turn
-                    tool_calls_simple: list[ToolCallSimple] = []
-                    for tool_call in turn_tool_calls:
-                        tool_name = tool_id_to_name_map.get(
-                            tool_call.tool_id, "unknown"
-                        )
-                        tool_calls_simple.append(
-                            ToolCallSimple(
-                                tool_call_id=tool_call.tool_call_id,
-                                tool_name=tool_name,
-                                tool_arguments=tool_call.tool_call_arguments or {},
-                                token_count=tool_call.tool_call_tokens,
-                            )
-                        )
-
-                    # Create ONE ASSISTANT message with all tool calls for this turn
-                    total_tool_call_tokens = sum(
-                        tc.token_count for tc in tool_calls_simple
-                    )
-                    simple_messages.append(
-                        ChatMessageSimple(
-                            message="",  # No text content when making tool calls
-                            token_count=total_tool_call_tokens,
-                            message_type=MessageType.ASSISTANT,
-                            tool_calls=tool_calls_simple,
-                            image_files=None,
-                        )
-                    )
-
-                    # Add TOOL_CALL_RESPONSE messages for each tool call in this turn
-                    for tool_call in turn_tool_calls:
-                        tool_name = tool_id_to_name_map.get(
-                            tool_call.tool_id, "unknown"
-                        )
-                        tool_response_message = (
-                            _build_tool_call_response_history_message(
-                                tool_name=tool_name,
-                                generated_images=tool_call.generated_images,
-                                tool_call_response=tool_call.tool_call_response,
-                            )
-                        )
-                        simple_messages.append(
-                            ChatMessageSimple(
-                                message=tool_response_message,
-                                token_count=token_counter(tool_response_message),
-                                message_type=MessageType.TOOL_CALL_RESPONSE,
-                                tool_call_id=tool_call.tool_call_id,
-                                image_files=None,
-                            )
-                        )
-
-            # Add the assistant message itself (the final answer)
-            simple_messages.append(
-                ChatMessageSimple(
-                    message=chat_message.message,
-                    token_count=chat_message.token_count,
-                    message_type=MessageType.ASSISTANT,
-                    image_files=None,
-                )
-            )
+            messages.extend(chat_message.response_messages)
         else:
             raise ValueError(
                 f"Invalid message type when constructing simple history: {chat_message.message_type}"
             )
 
     return ChatHistoryResult(
-        simple_messages=simple_messages,
+        messages=messages,
+        input_start=input_start,
         all_injected_file_metadata=all_injected_file_metadata,
     )
 
 
-def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
-    """Combine project and agent instructions without repeating a replacement prompt."""
-    project_instructions: str | None = (
-        chat_session.project.instructions if chat_session.project else None
-    )
-    agent_instructions: str | None = (
-        persona.system_prompt if persona.id != DEFAULT_PERSONA_ID else None
-    )
-    if persona.replace_base_system_prompt:
-        # The agent instructions already appear in the system message.
-        return project_instructions or None
-    if project_instructions and agent_instructions:
-        return (
-            f"Project instructions:\n{project_instructions}\n\n"
-            f"Agent instructions:\n{agent_instructions}\n\n"
-            "If these instructions conflict, follow the agent instructions."
-        )
-    return agent_instructions or project_instructions or None
-
-
 def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:
-    """Check if the last assistant message in chat history was a clarification question.
-
-    This is used in the deep research flow to determine whether to skip the
-    clarification step when the user has already responded to a clarification.
-
-    Args:
-        chat_history: List of ChatMessage objects in chronological order
-
-    Returns:
-        True if the last assistant message has is_clarification=True, False otherwise
-    """
+    """Return whether the last assistant response requested clarification."""
     for message in reversed(chat_history):
         if message.message_type == MessageType.ASSISTANT:
             return message.is_clarification
     return False
-
-
-def create_tool_call_failure_messages(
-    tool_calls: list[ToolCallKickoff], token_counter: Callable[[str], int]
-) -> list[ChatMessageSimple]:
-    """Create ChatMessageSimple objects for failed tool calls.
-
-    Creates messages using OpenAI parallel tool calling format:
-    1. An ASSISTANT message with tool_calls field containing all failed tool calls
-    2. A TOOL_CALL_RESPONSE failure message for each tool call
-
-    Args:
-        tool_calls: List of ToolCallKickoff objects representing the failed tool calls
-        token_counter: Function to count tokens in a message string
-
-    Returns:
-        List containing ChatMessageSimple objects: one assistant message with all tool calls
-        followed by a failure response for each tool call
-    """
-    if not tool_calls:
-        return []
-
-    # Create ToolCallSimple for each failed tool call
-    tool_calls_simple: list[ToolCallSimple] = []
-    for tool_call in tool_calls:
-        tool_call_token_count = token_counter(tool_call.to_msg_str())
-        tool_calls_simple.append(
-            ToolCallSimple(
-                tool_call_id=tool_call.tool_call_id,
-                tool_name=tool_call.tool_name,
-                tool_arguments=tool_call.tool_args,
-                token_count=tool_call_token_count,
-            )
-        )
-
-    total_token_count = sum(tc.token_count for tc in tool_calls_simple)
-
-    # Create ONE ASSISTANT message with all tool_calls (OpenAI format)
-    assistant_msg = ChatMessageSimple(
-        message="",  # No text content when making tool calls
-        token_count=total_token_count,
-        message_type=MessageType.ASSISTANT,
-        tool_calls=tool_calls_simple,
-        image_files=None,
-    )
-
-    messages: list[ChatMessageSimple] = [assistant_msg]
-
-    messages.extend(
-        create_tool_call_failure_response(tool_call.tool_call_id)
-        for tool_call in tool_calls
-    )
-
-    return messages
-
-
-def create_tool_call_failure_response(tool_call_id: str) -> ChatMessageSimple:
-    return ChatMessageSimple(
-        message=TOOL_CALL_FAILURE_PROMPT,
-        token_count=50,  # Tiny overestimate
-        message_type=MessageType.TOOL_CALL_RESPONSE,
-        tool_call_id=tool_call_id,
-        image_files=None,
-    )

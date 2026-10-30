@@ -1,6 +1,5 @@
 import csv
 import json
-import queue
 import uuid
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
@@ -9,17 +8,10 @@ import requests
 from pydantic import JsonValue, TypeAdapter
 from requests import JSONDecodeError
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.models import ToolDefinition
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    CustomToolArgs,
-    CustomToolDelta,
-    CustomToolStart,
-    Packet,
-)
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
 from onyx.server.security.store import get_security_settings
 from onyx.tools.interface import Tool
@@ -28,14 +20,12 @@ from onyx.tools.models import (
     MESSAGE_ID_PLACEHOLDER,
     USER_EMAIL_PLACEHOLDER,
     USER_ID_PLACEHOLDER,
-    DynamicSchemaInfo,
-    ToolCallException,
-    ToolResponse,
-)
-from onyx.tools.results import (
     CustomToolCallSummary,
     CustomToolErrorInfo,
     CustomToolUserFileSnapshot,
+    DynamicSchemaInfo,
+    ToolCallException,
+    ToolContext,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     REQUEST_BODY,
@@ -89,18 +79,15 @@ def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
     )
 
 
-# override_kwargs is not supported for custom tools
-class CustomTool(Tool[None]):
+class CustomTool(Tool):
     def __init__(
         self,
         id: int,
         method_spec: MethodSpec,
         base_url: str,
-        emitter: Emitter,
         custom_headers: list[HeaderItemDict] | None = None,
         user_oauth_token: str | None = None,
     ) -> None:
-        super().__init__(emitter=emitter)
 
         self._base_url = base_url
         self._method_spec = method_spec
@@ -179,58 +166,29 @@ class CustomTool(Tool[None]):
         reader = csv.DictReader(csv_file)
         return list(reader)
 
-    """Actual execution of the tool"""
-
-    def emit_start(self, placement: Placement) -> None:
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolStart(tool_name=self._name, tool_id=self._id),
-            )
-        )
-
     def _failed_response(
-        self,
-        placement: Placement,
-        status_code: int | None,
-        message: str,
-        is_unreachable: bool = False,
-    ) -> ToolResponse:
-        error_info = CustomToolErrorInfo(
-            status_code=status_code, message=message, is_unreachable=is_unreachable
-        )
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolDelta(
-                    tool_name=self._name,
-                    tool_id=self._id,
-                    response_type="text",
-                    error=error_info,
-                ),
-            )
-        )
-        return ToolResponse(
-            rich_response=CustomToolCallSummary(
+        self, status_code: int | None, message: str, is_unreachable: bool = False
+    ) -> ToolResult:
+        return ToolResult(
+            content=message,
+            is_error=True,
+            details=CustomToolCallSummary(
                 tool_name=self._name,
                 response_type="text",
                 tool_result=None,
-                error=error_info,
+                error=CustomToolErrorInfo(
+                    status_code=status_code,
+                    message=message,
+                    is_unreachable=is_unreachable,
+                ),
             ),
-            llm_facing_response=message,
         )
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        # Build path params
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         path_params = {}
         for path_param_schema in self._method_spec.get_path_param_schemas():
             param_name = path_param_schema["name"]
-            if param_name not in llm_kwargs:
+            if param_name not in invocation.arguments:
                 raise ToolCallException(
                     message=f"Missing required path parameter '{param_name}' in {self._name} tool call",
                     llm_facing_message=(
@@ -238,30 +196,17 @@ class CustomTool(Tool[None]):
                         f"Please provide it in the tool call arguments."
                     ),
                 )
-            path_params[param_name] = llm_kwargs[param_name]
+            path_params[param_name] = invocation.arguments[param_name]
 
         # Build query params
         query_params = {}
         for query_param_schema in self._method_spec.get_query_param_schemas():
-            if query_param_schema["name"] in llm_kwargs:
-                query_params[query_param_schema["name"]] = llm_kwargs[
+            if query_param_schema["name"] in invocation.arguments:
+                query_params[query_param_schema["name"]] = invocation.arguments[
                     query_param_schema["name"]
                 ]
 
-        # Emit args packet (path + query params only, no request body)
-        tool_args = {**path_params, **query_params}
-        if tool_args:
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=CustomToolArgs(
-                        tool_name=self._name,
-                        tool_args=tool_args,
-                    ),
-                )
-            )
-
-        request_body = llm_kwargs.get(REQUEST_BODY)
+        request_body = invocation.arguments.get(REQUEST_BODY)
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
 
@@ -280,7 +225,6 @@ class CustomTool(Tool[None]):
         except (SSRFException, ValueError) as e:
             logger.warning("%s request blocked: %s", self._name, e)
             return self._failed_response(
-                placement,
                 status_code=None,
                 message=(
                     f"The {self._name} tool could not run because its destination "
@@ -290,7 +234,6 @@ class CustomTool(Tool[None]):
         except requests.exceptions.Timeout:
             logger.warning("%s request timed out", self._name, exc_info=True)
             return self._failed_response(
-                placement,
                 status_code=None,
                 message=f"The {self._name} tool could not reach its server (timed out).",
                 is_unreachable=True,
@@ -298,7 +241,6 @@ class CustomTool(Tool[None]):
         except requests.exceptions.ConnectionError:
             logger.warning("%s request could not connect", self._name, exc_info=True)
             return self._failed_response(
-                placement,
                 status_code=None,
                 message=(
                     f"The {self._name} tool could not reach its server "
@@ -314,7 +256,6 @@ class CustomTool(Tool[None]):
                 response.headers.get("Location"),
             )
             return self._failed_response(
-                placement,
                 status_code=response.status_code,
                 message=(
                     f"The {self._name} tool failed because the server sent a "
@@ -340,8 +281,6 @@ class CustomTool(Tool[None]):
 
         tool_result: CustomToolUserFileSnapshot | JsonValue
         response_type: str
-        file_ids: List[str] | None = None
-        data: dict | list | str | int | float | bool | None = None
 
         if "text/csv" in content_type:
             file_ids = self._save_and_get_file_references(
@@ -361,55 +300,38 @@ class CustomTool(Tool[None]):
             try:
                 tool_result = TypeAdapter(JsonValue).validate_python(response.json())
                 response_type = "json"
-                data = tool_result
             except JSONDecodeError:
                 logger.exception(
                     "Failed to parse response as JSON for tool '%s'", self._name
                 )
                 tool_result = response.text
                 response_type = "text"
-                data = tool_result
 
         logger.info(
             "Returning tool response for %s with type %s", self._name, response_type
         )
 
-        # Emit CustomToolDelta packet
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=CustomToolDelta(
-                    tool_name=self._name,
-                    tool_id=self._id,
-                    response_type=response_type,
-                    data=data,
-                    file_ids=file_ids,
-                    error=error_info,
-                ),
-            )
-        )
-
-        llm_facing_response = (
+        content = (
             TypeAdapter(CustomToolUserFileSnapshot | JsonValue)
             .dump_json(tool_result)
             .decode()
         )
 
-        return ToolResponse(
-            rich_response=CustomToolCallSummary(
+        return ToolResult(
+            details=CustomToolCallSummary(
                 tool_name=self._name,
                 response_type=response_type,
                 tool_result=tool_result,
                 error=error_info,
             ),
-            llm_facing_response=llm_facing_response,
+            content=content,
+            is_error=not response.ok,
         )
 
 
 def build_custom_tools_from_openapi_schema_and_headers(
     tool_id: int,
     openapi_schema: dict[str, Any],
-    emitter: Emitter | None = None,
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
     user_oauth_token: str | None = None,
@@ -449,16 +371,11 @@ def build_custom_tools_from_openapi_schema_and_headers(
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
 
-    # Use a discard emitter if none provided (packets go nowhere)
-    if emitter is None:
-        emitter = Emitter(merged_queue=queue.Queue())
-
     return [
         CustomTool(
             id=tool_id,
             method_spec=method_spec,
             base_url=url,
-            emitter=emitter,
             custom_headers=custom_headers,
             user_oauth_token=user_oauth_token,
         )

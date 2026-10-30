@@ -44,7 +44,7 @@ import {
 } from "@/lib/skills/picker";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchLibraryTree } from "@/app/craft/services/apiServices";
-import type { QueuedMessage } from "@/app/app/interfaces";
+import type { QueuedMessage } from "@/app/app/types";
 
 export interface CraftInputBarHandle {
   reset: () => void;

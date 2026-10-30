@@ -380,6 +380,46 @@ Notes:
 - The EKS module can create an IRSA role plus a Kubernetes `ServiceAccount` named `onyx-s3-access` (by default in namespace `onyx`) when `s3_bucket_names` is provided. Use that service account in the Helm chart to avoid static S3 credentials.
 - If you prefer MinIO inside the cluster, leave `minio.enabled=true` (default) and skip IRSA.
 
+### Onyx Craft on EKS
+
+Terraform creates the AWS resources for Craft. Helm creates the Craft Kubernetes
+objects. With `ENABLE_CRAFT=true`, the chart creates the `onyx-sandboxes` namespace, the `sandbox`
+ServiceAccount, the sandbox RBAC, the sandbox proxy, and the sandbox NetworkPolicies.
+
+- **Sandbox nodes.** `enable_craft = true` adds a node group labeled
+  `onyx.app/workload=sandbox` and tainted `workload=sandbox:NoSchedule`, with IMDSv2
+  and hop limit 1. Sandbox pods select that label and tolerate that taint.
+  Other nodes with the same label, taint, and IMDS settings also work.
+  Do not attach the EKS primary cluster security group to these nodes. Nodes must
+  have exactly one security group tagged `kubernetes.io/cluster/<name>`.
+- **Snapshots.** The API server and Celery workers store sandbox snapshots through
+  the normal Onyx file store. Craft needs no extra bucket or IAM role. The `sandbox`
+  ServiceAccount has no IRSA annotation and does not mount a token.
+- **Sandbox proxy.** The proxy reads Postgres and Redis on each request, so it
+  needs the same endpoints and network access as the API server. With RDS IAM
+  auth, add the rendered proxy ServiceAccount name (`onyx-sandbox-proxy` for
+  release `onyx`) to `irsa_additional_service_account_names`, and annotate it
+  through `sandboxProxy.serviceAccount.annotations` with `workload_irsa_role_arn`.
+- **Push key.** Set `auth.sandboxPushSecret.enabled=true` and give it an Ed25519
+  private key. The comment above `sandboxPushSecret` in the chart's `values.yaml`
+  shows how to generate one.
+- **Manually created objects.** Helm does not install over sandbox RBAC or
+  ServiceAccounts that lack Helm ownership metadata. With no sandboxes running,
+  delete those objects, then run `helm upgrade`.
+
+Check the result:
+
+```bash
+kubectl get nodes -l onyx.app/workload=sandbox
+kubectl auth can-i create pods/exec -n onyx-sandboxes \
+  --as system:serviceaccount:onyx:<workload-service-account>
+kubectl -n onyx-sandboxes get sa sandbox -o yaml
+```
+
+To tear down a cluster, run `helm uninstall` before `terraform destroy`. If destroy
+fails with `DependencyViolation`, delete orphaned `aws-K8S-*` network interfaces
+that the VPC CNI left, then run destroy again.
+
 ## Workflow tips
 - First apply can be infra-only; once EKS is active, install the Helm chart.
 - Use Terraform workspaces to create isolated environments; the `onyx` module automatically includes the workspace in resource names.

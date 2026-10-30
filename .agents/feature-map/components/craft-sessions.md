@@ -24,10 +24,9 @@ document (see [[craft-admin]])
 `backend/onyx/server/features/build/sandbox/user_library.py`
 
 **Read first:** `.agents/feature-map/components/core-chat-loop.md` for the
-contrast (Craft is a parallel turn engine, not the chat loop), `docs/craft/
-craft-main-plan.md` for the product overview, and `docs/craft/features/
-streaming/preserve-opencode-sessions.md` for opencode history durability,
-which this document leans on heavily in §4.5 and §9.
+contrast (Craft is a parallel turn engine, not the chat loop), and
+`[[craft-sandboxes]]` for opencode history durability, which this document
+leans on heavily in §4.5 and §9.
 
 This document does **not** own: sandbox provisioning and pod lifecycle
 mechanics (`[[craft-sandboxes]]`), parsing the opencode event stream itself
@@ -318,7 +317,7 @@ itself the streaming response; Craft's send endpoint returns immediately and
 the actual work happens in a detached thread that any API replica can pick
 up (see §4.3, locking).
 
-**The turn is not a bounded cycle loop.** Chat's `llm_loop.py` runs up to
+**The turn is not a bounded cycle loop.** Chat's `backend/onyx/chat/agent.py:ChatAgent` runs up to
 `MAX_LLM_CYCLES` inference-plus-tool-call rounds itself. Craft's executor
 does not run an agentic loop at all: `drive_one_prompt`
 (`interactive_turns/executor.py:_drive_interactive_turn.drive_one_prompt`)
@@ -475,9 +474,9 @@ Readiness polling survives a successor load for the same session instance and sa
 Readiness updates preserve the newer turn and require the same session instance and sandbox.
 Cached skill notices accept server state only if no newer skill-state update or skill reload intervened.
 
-Two distinct persistence surfaces, per `docs/craft/features/streaming/
-preserve-opencode-sessions.md` and confirmed against
-`session/sandbox_lifecycle.py`:
+Two distinct persistence surfaces (`session/sandbox_lifecycle.py`). They are
+separate because opencode keeps every session of a sandbox in one data store,
+which a per-session archive cannot represent safely:
 
 - **Per-session workspace snapshots** (`outputs/`, `attachments/`): created
   by `create_session_snapshot_keep_latest`
@@ -527,6 +526,18 @@ State this precisely: `BuildMessage` history (what the user sees on reload)
 is never lost; opencode's own resumable-agent-state can be, within the
 background-sweep bound. See `[[craft-sandboxes]]` for the reaper, sweep, and
 recovery mechanics this depends on.
+
+The saved `opencode_session_id` is used optimistically:
+
+- `OpencodeServeClient.ensure_session` reuses the id on `200`. On `404` (the
+  restored history does not contain it), it creates a new opencode session,
+  and the caller saves the new id. The new session does not get the earlier
+  `BuildMessage` history. Any other lookup error fails the turn, so an
+  outage cannot silently replace the session.
+- Session delete (`SessionManager.delete_session`) tries to delete the live
+  opencode session when the sandbox is running. A failure does not block the
+  delete. It never changes the durable opencode history archive, so opencode
+  rows for deleted sessions can remain in that archive.
 
 ### 4.6 Approvals
 
@@ -651,12 +662,13 @@ files):
    `SandboxProvisionPhase.HYDRATE_MANAGED_CONTENT`) pushes both to the
    sandbox, the library to `USER_LIBRARY_MOUNT_PATH`.
 
-`docs/craft/features/user-library-sync.md` describes this same three-layer
-architecture (HTTP/DB/sandbox-sync) correctly, but names a function,
-`hydrate_user_library`, that **does not exist** in the current code (nor does
-`create_session__no_commit`, which the doc also cites); the actual call sites
-are the two above. Treat the doc's architecture as current and its specific
-function names as stale.
+Files live in the default file store (`get_default_file_store()`), not a
+Craft-specific bucket. Each push sends the full set and swaps the mount
+atomically, so an empty set clears deleted files. `build_user_library_fileset`
+strips the leading `/` from each path because the push daemon rejects
+absolute paths. `store_user_file` saves the new blob first and returns the
+old blob id. Call `cleanup_old_blobs` only after the final commit: if the
+commit fails after the delete, the row points at a deleted blob.
 
 ### 4.9 Model selection
 
@@ -873,14 +885,12 @@ env. `backend/tests/integration/common_utils/managers/build_session.py` and
 ### Local dev
 
 Craft sandboxes are real Kubernetes pods; there is no non-cluster shortcut
-for interactive session/turn work. `docs/craft/dev/local-kubernetes.md` is
-the canonical setup: a local `kind` cluster pinned to Kubernetes `>= 1.33`
-(native restartable init sidecar containers require it), `telepresence` for
-DNS/VPN into the cluster, and the vscode debugger attached to
-`api_server`/`celery`/`web`. Use `docs/craft/dev/local-compose-craft.md`
-instead only when the change is in the docker sandbox backend or
-`sandbox-proxy` specifically (`SANDBOX_BACKEND=docker`); it is slower for
-general Craft work.
+for interactive session/turn work. The canonical setup is a local `kind`
+cluster pinned to Kubernetes `>= 1.33` (native restartable init sidecar
+containers require it), with `telepresence` for DNS/VPN into the cluster (see
+`[[craft-sandboxes]]` and the `onyx-craft-dev` skill). Use the Docker backend
+(`SANDBOX_BACKEND=docker`) only when the change is in the docker sandbox
+backend or `sandbox-proxy`; it is slower for general Craft work.
 `deployment/helm/dev/k8s-up.sh` removes Kindnet's CPU limit and waits for its
 rollout on both new and existing clusters. CPU requests and memory settings stay
 unchanged. This prevents the container's CPU quota from throttling network-policy
@@ -944,20 +954,15 @@ processing and blocking sandbox egress during OpenCode startup.
   a crash between the write and the dispose; a config that looks correct on
   disk can still be running against a stale instance until the marker is
   cleared.
-- **The `/compact` slash command described in
-  `docs/craft/features/compact-command.md` is a design doc, not (yet) wired
-  up in the frontend picker or a backend `kind="compact"` turn** at the time
-  of writing; the `CompactionPacket`/`CompactionMarker` rendering path it
-  builds on **is** implemented (automatic compaction renders today), but the
-  manual trigger is not. Verify against code before citing this doc as
-  current behaviour.
-- **The subagents-view redesign in
-  `docs/craft/features/subagents/2026-05-28-subagents-view-design.md` is
-  also a plan, not current behaviour.** Today's subagent UI is the single
-  collapsible `TaskBody` card
-  (`web/src/app/craft/components/tool-cards/TaskBody.tsx`); the doc's
-  side-panel live-transcript view depends on an unshipped "universal panel"
-  refactor.
+- **There is no manual `/compact` command.** Only opencode's automatic
+  compaction shows in the transcript: `session.compacted` becomes a
+  `CompactionPacket`, and the text of the `summary: true` message is not
+  streamed (`translate_opencode_event`). A manual trigger must run as a full
+  streaming turn. A bare `POST /session/{id}/summarize` produces events that
+  no consumer reads, so nothing renders.
+- **Sub-agent activity has no stream of its own.** `SubagentView.tsx` and
+  `AgentSwitcher.tsx` render child-session events that arrive on the parent
+  turn stream; see `[[craft-streaming]]` §9.
 - **User library files are ordinary ingestion `Document` rows**, not a
   Craft-only table. A change to generic document/connector logic (deletion,
   metadata handling, permission sync) can silently affect Craft's user

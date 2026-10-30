@@ -30,10 +30,10 @@
 `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `sandbox-rbac.yaml`,
 `network-policy-sandbox-egress.yaml`, `network-policy-sandbox-push.yaml`
 
-**Read first:** `docs/craft/sandbox/image-and-spinup.md` for the image and cold-start
-story, and `docs/craft/infra/snapshot-retention.md` for the retention policy. Several
-`docs/craft/` files under this domain describe **plans, not current behaviour** (see
-§9); this document states what the code does today and flags each discrepancy.
+**Read first:** `backend/onyx/server/features/build/sandbox/README.md`
+("Sandbox Image Design Notes") for the image, tag coupling, and cold-start story.
+`deployment/helm/dev/README.md` describes the local kind workflow, and
+`backend/onyx/server/features/build/sandbox/docker/README.md` the Docker backend workflow.
 
 ---
 
@@ -76,7 +76,7 @@ visible seams:
 | `SANDBOX_BACKEND` | `kubernetes` | `kubernetes` or `docker`; picked by `factory.py:get_sandbox_manager`. There is no `local` backend. |
 | `SANDBOX_IDLE_TIMEOUT_SECONDS` | 3600 | Idle threshold the reaper (`sandbox_lifecycle.py:is_sandbox_idle`) checks. |
 | `SANDBOX_NAMESPACE` | `onyx-sandboxes` | K8s namespace sandbox pods/services live in. |
-| `SANDBOX_CONTAINER_IMAGE` | `onyxdotapp/sandbox:latest` | Overrides the chart's normal image default; see `docs/craft/infra/image-architecture.md`. |
+| `SANDBOX_CONTAINER_IMAGE` | `onyxdotapp/sandbox:latest` | Overrides the chart's normal image default, `onyxdotapp/sandbox:${global.version}`; see the sandbox `README.md`, "Image and tag coupling". |
 | `SANDBOX_SERVICE_ACCOUNT_NAME` | `sandbox` | Service account the pod runs as; must match `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`. |
 | `SANDBOX_NEXTJS_PORT_START` / `_END` | 3010 / 3100 | Per-session Next.js dev-server port range, shared by the Service, the NetworkPolicy, and the PodTemplate's container ports. |
 | `ONYX_SANDBOX_PUSH_PRIVATE_KEY` | required | Ed25519 seed signing every sidecar request (`kubernetes/sidecar_client.py:get_push_key_pair`). |
@@ -92,7 +92,12 @@ interval is `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8`
 (`CLOUD_BEAT_MULTIPLIER_DEFAULT`). Operators can change the multiplier in Redis
 (`backend/onyx/server/runtime/onyx_runtime.py:OnyxRuntime.get_beat_multiplier`). It is consumed by the
 **`sandbox` Celery queue**, currently routed to `celery-worker-heavy`
-(`docs/craft/infra/sandbox-worker-network-policy.md`).
+(`deployment/helm/charts/onyx/templates/celery-worker-heavy.yaml`). That worker only
+POSTs to the sidecar, so it needs two grants: sidecar-port-only ingress in
+`network-policy-sandbox-push.yaml`, and the restricted `auth.sandboxPushSecret`
+key to sign requests. If either is missing, no snapshots are created (a
+connect timeout on enforcing CNIs, or a `get_push_key_pair` error). Move both
+grants together if the `sandbox` queue moves to another worker.
 
 ---
 
@@ -304,11 +309,11 @@ a clear "PodTemplate/api-server version skew" error rather than a bare
 `StopIteration` if an expected container is absent.
 
 **This means changing the sandbox image, resource limits, node placement, or
-volumes is a Helm change, not a Python change.** `docs/craft/sandbox/sandbox-podtemplate.md`
-reads as a forward-looking design proposal ("Goal: move the static shape of the
-sandbox Pod into a Helm-rendered PodTemplate...") but **this has already
-shipped**: the template file and the `read_namespaced_pod_template` call both
-exist in the current tree. Treat that doc as historical rationale.
+volumes is a Helm change, not a Python change.** A `core/v1` PodTemplate is used
+because pods are created per user at runtime, so a static Helm Pod cannot work,
+and the PodTemplate is typed and validated. The per-sandbox Service stays in
+Python because Kubernetes has no Service template; the Next.js port range is
+single-sourced so the two cannot drift.
 
 The `onyx.sandboxApiUrl` Helm helper supplies the same `ONYX_SERVER_URL` to the
 API ConfigMap and sandbox PodTemplate. It defaults to the release's internal API
@@ -335,9 +340,8 @@ volumes** (`workspace` at `/workspace/sessions`, `opencode-data` at
 `/workspace/opencode-data`, and `managed` at `/workspace/managed`, read-write in
 the sidecar and read-only in the sandbox); there is no other IPC (`shareProcessNamespace:
 false`), which is exactly why the Next.js dev-server process itself must stay a
-`kubectl exec` into the main container rather than move to the sidecar
-(`docs/craft/sandbox/sandbox-exec-sidecar.md`, "Residual exec is exactly the
-Next.js dev-server lifecycle").
+`kubectl exec` into the main container rather than move to the sidecar. The dev
+server serves traffic on the main container's port, and the sidecar cannot signal it.
 
 `kubernetes/sidecar_client.py:SidecarClient` is what the api-server talks to:
 signed `GET`/`POST` over plain HTTP to
@@ -380,10 +384,8 @@ above). `list_directory` and `get_outputs_manifest` also use the sidecar.
 `upload_file`, `delete_file`, `write_sandbox_file`, `get_upload_stats`, and
 `regenerate_session_config` still use
 `k8s_stream`/`connect_get_namespaced_pod_exec` shell scripts today.
-`docs/craft/sandbox/sandbox-exec-sidecar.md` is a **plan** to move those
-remaining filesystem operations onto the sidecar too, leaving `kubectl exec`
-only for the Next.js dev-server process-control call sites. Do not assume
-that migration is complete; verify against the manager methods you're touching.
+Do not assume a filesystem operation uses the signed sidecar path; verify
+against the manager method you're touching.
 
 ### 4.4 The workspace volume
 
@@ -404,12 +406,8 @@ here survives a `terminate()` unless captured into a snapshot first (§4.5).
 `/workspace/opencode-data` in both containers, holding opencode's own SQLite
 history database (`opencode/opencode.db`). It is **not** part of a session's
 `outputs`/`attachments` tree and is captured by a **different, sandbox-wide**
-snapshot mechanism (§4.5); `docs/craft/infra/snapshot-retention.md`'s claim that
-the per-session snapshot includes `.opencode-data/` does not match the code
-(`base.py:create_snapshot` docstring and `image/sandbox_daemon/snapshot.py`'s
-own "Sandbox-global opencode history lives outside the session tree and is
-snapshotted separately" comment both say otherwise). Treat the retention doc's
-wording there as imprecise.
+snapshot mechanism (§4.5), not by the per-session snapshot
+(`base.py:create_snapshot` docstring, `image/sandbox_daemon/snapshot.py`).
 
 `managed` (`sizeLimit: 5Gi`) holds pushed skills and the user library, mounted
 read-write in the sidecar and read-only in the sandbox container; sessions
@@ -462,8 +460,7 @@ symlink into it rather than copying (`session_workspace.py`).
 skills, `AGENTS.md`, and the `user_library` symlink are excluded and regenerated
 on restore. `node_modules` and `.next` are excluded even from `outputs/`
 (`image/sandbox_daemon/snapshot.py:_SNAPSHOT_GENERATED_DIR_NAMES`), rebuilt on
-restore via `bun install` against a pre-warmed Bun cache
-(`docs/craft/sandbox/image-and-spinup.md`, "Snapshot daemon path quick reference").
+restore via `bun install` against the image's pre-warmed Bun cache.
 
 **How it's taken (Kubernetes):** the api-server POSTs to the sidecar's
 `/snapshot/create` (`SnapshotCreateRequest{session_id}`); the sidecar
@@ -600,6 +597,8 @@ Readiness watches use the remaining provisioning budget rather than the default
 short REST timeout, so slow image pulls can still finish within that budget.
 The sandbox-manager Role grants `list` for Pods, Services, and Secrets within
 the sandbox namespace. The proxy-resolution Role retains only Service `get`.
+Both bind the chart's service account and, when `logExport.kubernetes.enabled`
+gives the api-server its own account, that account too.
 
 ---
 
@@ -717,7 +716,7 @@ the sandbox namespace. The proxy-resolution Role retains only Service `get`.
 
 | If your change… | Also check |
 |---|---|
-| changes the sandbox image (`image/Dockerfile`, `initial-requirements.txt`) | the app-image/sandbox-image tag coupling (`docs/craft/infra/image-architecture.md`); the prepuller DaemonSet's pinned tag (`sandbox-image-prepuller.yaml`); `ENABLE_SKILLS` build-arg gating; re-run the spinup benchmark (`kubernetes/scripts/bench-sandbox-spinup.sh`) |
+| changes the sandbox image (`image/Dockerfile`, `initial-requirements.txt`) | the app-image/sandbox-image tag coupling (sandbox `README.md`, "Image and tag coupling"); `ENABLE_BROWSER` build-arg/runtime coupling; the prepuller DaemonSet's pinned tag (`sandbox-image-prepuller.yaml`); `ENABLE_SKILLS` build-arg gating; re-run the spinup benchmark (`kubernetes/scripts/bench-sandbox-spinup.sh`) |
 | changes the pod template (`sandbox-podtemplate.yaml`) | `_overlay_dynamic_fields`/`_require_container` (version-skew handling); the dynamic fields Python still owns; resource requests vs the CI/localdev values overlays; the Service's port range staying in sync with the template's container ports |
 | changes the snapshot format (what's included/excluded, archive layout) | `sandbox_daemon/snapshot.py`'s `_SNAPSHOT_ROOTS`/`_SNAPSHOT_GENERATED_*` sets; `restore_snapshot`'s webapp-restore path; existing snapshots in FileStore become unreadable by a format change unless restore stays backward-compatible |
 | changes the sidecar contract (`models.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
@@ -750,9 +749,9 @@ cd backend && uv run pytest tests/integration/tests/craft/k8s/test_kubernetes_sa
 cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_sandbox_network_posture_docker.py
 ```
 
-See `docs/craft/dev/local-kubernetes.md` for standing up the kind cluster these
-integration tests need, and `docs/craft/dev/local-compose-craft.md` for the
-docker-compose backend. See `backend/AGENTS.md` for authoritative env/command
+See `deployment/helm/dev/README.md` for standing up the kind cluster these
+integration tests need, and `backend/onyx/server/features/build/sandbox/docker/README.md`
+for the docker-compose backend. See `backend/AGENTS.md` for authoritative env/command
 details.
 
 **RBAC gaps only appear when exercised live.** A missing `pods:watch`
@@ -792,9 +791,7 @@ set.
 
 - **The pod spec is Helm-owned; don't add fields in Python.** Anything beyond
   the dynamic fields `_overlay_dynamic_fields` sets belongs in
-  `sandbox-podtemplate.yaml`. `docs/craft/sandbox/sandbox-podtemplate.md` reads
-  like an open plan but the migration it describes is **already done** in this
-  tree; don't redo it or "restore" the old field-by-field Python construction.
+  `sandbox-podtemplate.yaml`. Don't build pod fields field-by-field in Python.
 - **`pods:watch` is an easy-to-miss RBAC trap.** `_wait_for_pod_ready` uses
   `kubernetes.watch.Watch()` (`kubernetes_sandbox_manager.py`), which needs
   the `watch` verb on `pods` in `sandbox-rbac.yaml`. Nothing in the Python
@@ -811,17 +808,17 @@ set.
   There is no per-turn capture. An ungraceful pod death between captures loses
   whatever opencode-only history (not reflected in a session's `outputs/`)
   accumulated since the last one. See §4.5.
-- **`docs/craft/infra/snapshot-retention.md` overstates what the per-session
-  snapshot captures.** It says the snapshot includes `.opencode-data/`; the code
-  (`base.py:create_snapshot`, `sandbox_daemon/snapshot.py`) says opencode data is
-  a separate, sandbox-wide artifact captured by a different code path. Don't
-  trust that doc's exact scope claim; trust `_SNAPSHOT_ROOTS` and the manager
-  docstrings.
-- **`docs/craft/sandbox/sandbox-exec-sidecar.md` is also a plan, partially
-  done.** Snapshot/push are already on the sidecar; workspace setup/cleanup/
-  existence/listing are still `kubectl exec`. Check the manager method's actual
-  implementation, not the doc, before assuming a filesystem op goes through
-  the signed HTTP path.
+- **Opencode data is not in the per-session snapshot.** It is a separate,
+  sandbox-wide artifact. Trust `_SNAPSHOT_ROOTS` and the manager docstrings for
+  snapshot scope.
+- **Filesystem access is split between the sidecar and `kubectl exec`.**
+  Snapshot, push, directory listing, and the outputs manifest use the sidecar; workspace
+  setup/cleanup/existence/listing and file reads/writes still use `kubectl exec`.
+  Check the manager method before you assume a signed HTTP path.
+- **Agent browser state is ephemeral.** `agent-browser` keeps cookies and the
+  Chromium profile under `/home/sandbox/.agent-browser/`, outside the session
+  workspace, so logins do not survive a reap or restore. Persisting them would put
+  auth cookies into FileStore snapshots; treat that as a security decision.
 - **General internet egress from a sandbox is allowed by design; only
   connected-app traffic is policy-gated.** The iptables lockdown
   (`firewall-init.sh`) drops all outbound traffic except to the proxy, which
@@ -902,7 +899,7 @@ The local overlay selects the dev sandbox image with `IfNotPresent` for all cont
 Startup forwards `SANDBOX_IMAGE` overrides to Helm, and doctor detects template drift.
 Image refresh updates init and main containers together and does not recycle live pods.
 Cleanup previews checkout-labeled dangling images and never deletes volumes.
-See `docs/craft/dev/local-kubernetes.md` for command scope and cache retention.
+See `deployment/helm/dev/README.md` for command scope and cache retention.
 
 ### Zed local startup
 

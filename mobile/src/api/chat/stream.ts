@@ -2,7 +2,7 @@
 import { fetch as expoFetch } from "expo/fetch";
 
 import { getBaseUrl } from "@/api/config";
-import { getValidToken } from "@/api/auth/refreshState";
+import { buildHeaders } from "@/api/client";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
 import { LlmOverride } from "@/chat/models";
@@ -77,13 +77,6 @@ export function isHeartbeat(event: unknown): boolean {
   return (event as { type?: string }).type === "chat_heartbeat";
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getValidToken();
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-}
-
 async function raiseForStatus(response: ExpoResponse): Promise<never> {
   let detail = `Request failed with status ${response.status}`;
   try {
@@ -132,7 +125,7 @@ export async function* streamChatMessage(
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(`${getBaseUrl()}/chat/send-chat-message`, {
     method: "POST",
-    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    headers: await buildHeaders({ signal }, true),
     body: JSON.stringify(body),
     signal,
   });
@@ -149,7 +142,7 @@ export async function* resumeChatMessage(
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(
     `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?cursor=${cursor}`,
-    { method: "GET", headers: await authHeaders(), signal },
+    { method: "GET", headers: await buildHeaders({ signal }, false), signal },
   );
 
   if (!response.ok) await raiseForStatus(response);

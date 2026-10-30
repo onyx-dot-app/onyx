@@ -20,6 +20,12 @@ type Settings struct {
 	SearchUIEnabled                   *bool    `json:"search_ui_enabled"`
 	AutoDetectSearchFilters           *bool    `json:"auto_detect_search_filters"`
 	TemperatureOverrideEnabled        *bool    `json:"temperature_override_enabled"`
+	ReasoningOverrideEnabled          *bool    `json:"reasoning_override_enabled"`
+	HideProviderGrouping              *bool    `json:"hide_provider_grouping"`
+	DefaultLanguage                   *string  `json:"default_language"`
+	LLMGatewayEnabled                 *bool    `json:"llm_gateway_enabled"`
+	EmbeddingRateLimitRequests        *int64   `json:"embedding_rate_limit_requests"`
+	EmbeddingRateLimitPeriodSeconds   *int64   `json:"embedding_rate_limit_period_seconds"`
 	AutoScroll                        *bool    `json:"auto_scroll"`
 	QueryHistoryType                  *string  `json:"query_history_type"`
 	ImageExtractionAndAnalysisEnabled *bool    `json:"image_extraction_and_analysis_enabled"`

@@ -15,7 +15,7 @@ from litellm.exceptions import (
 )
 from pydantic import BaseModel
 
-from onyx.agents.events import AgentEndEvent, AgentEvent
+from onyx.agents.events import AgentEndEvent, AgentEvent, ToolEndEvent
 from onyx.agents.models import (
     PreparedStep,
     RunFailureKind,
@@ -25,6 +25,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.chat.errors import chat_error
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import ClassifiedLLMError, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext
@@ -36,6 +37,7 @@ from onyx.llm.models import (
     TextContent,
     TextDeltaEvent,
     ToolCall,
+    ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -108,6 +110,8 @@ def test_cancelled_callback_reserves_agent_until_it_returns(
 
 
 def test_tool_execution_survives_enrichment_failure() -> None:
+    events: list[AgentEvent] = []
+
     def enrich(_context: ToolCallContext, _result: ToolResult) -> ToolResult:
         raise ValueError("invalid enrichment")
 
@@ -126,7 +130,7 @@ def test_tool_execution_survives_enrichment_failure() -> None:
         ],
         after_tool_call=enrich,
     )
-    run = agent.start(max_steps=1)
+    run = agent.start(max_steps=1, on_event=events.append)
     with pytest.raises(RunFailed):
         run.result()
     assert run.wait_for_idle(2)
@@ -134,6 +138,52 @@ def test_tool_execution_survives_enrichment_failure() -> None:
     assert snapshot.status == "error"
     assert snapshot.messages[-1].text == "saved"
     assert next(iter(snapshot.steps[0].tools.values())).status == "complete"
+    assert snapshot.progress is not None
+    assert snapshot.progress.finalized_tool_call_ids == set()
+    completed = [event for event in events if isinstance(event, ToolEndEvent)]
+    assert len(completed) == 1
+    assert completed[0].result.content == "saved"
+
+
+def test_cancellation_during_tool_finalization_rejects_the_enriched_result() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    events: list[AgentEvent] = []
+
+    def enrich(_context: ToolCallContext, _result: ToolResult) -> ToolResult:
+        entered.set()
+        assert release.wait(5)
+        return ToolResult(content="enriched")
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="call", name="write", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="write", description="", parameters={}),
+                execute=lambda _: ToolResult(content="saved"),
+            )
+        ],
+        after_tool_call=enrich,
+    )
+    run = agent.start(max_steps=1, on_event=events.append)
+    try:
+        assert entered.wait(3)
+        run.cancel()
+    finally:
+        release.set()
+        assert run.wait_for_idle(3)
+    with pytest.raises(AgentCancelled):
+        run.result(3)
+    snapshot = run.snapshot()
+    assert snapshot.messages[-1].text == "saved"
+    assert snapshot.progress is not None
+    assert snapshot.progress.finalized_tool_call_ids == set()
+    assert not any(isinstance(event, ToolEndEvent) for event in events)
 
 
 def test_failed_handle_releases_agent_and_preserves_error_classification(
@@ -150,6 +200,8 @@ def test_failed_handle_releases_agent_and_preserves_error_classification(
             client_error_msg="Unavailable",
             error_code="provider_error",
             is_retryable=True,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            finish_reason="length",
         )
 
     agent = Agent(
@@ -163,6 +215,8 @@ def test_failed_handle_releases_agent_and_preserves_error_classification(
             run.result()
         assert raised.value.failure.llm_error is not None
         assert raised.value.failure.llm_error.is_retryable
+        assert raised.value.failure.llm_error.tool_choice == ToolChoiceOptions.REQUIRED
+        assert raised.value.failure.llm_error.finish_reason == "length"
     assert run.wait_for_idle(2)
     del agent
     time.sleep(0)
@@ -512,6 +566,53 @@ def test_observer_cannot_wait_for_its_own_run_to_become_idle() -> None:
     assert set(failures) == {"An observer cannot wait for its own run to become idle"}
 
 
+@pytest.mark.parametrize(
+    "cause,wrapper,code,retryable",
+    [
+        (
+            RateLimitError("rate limit", model="test", llm_provider="openai"),
+            LLMRateLimitError,
+            "RATE_LIMIT",
+            True,
+        ),
+        (
+            RateLimitError("insufficient_quota", model="test", llm_provider="openai"),
+            LLMRateLimitError,
+            "BUDGET_EXCEEDED",
+            False,
+        ),
+        (
+            Timeout("read timeout", model="test", llm_provider="openai"),
+            LLMTimeoutError,
+            "CONNECTION_ERROR",
+            True,
+        ),
+        (None, LLMTimeoutError, "CONNECTION_ERROR", True),
+    ],
+)
+def test_provider_failure_preserves_chat_retry_policy(
+    cause: Exception | None,
+    wrapper: type[LLMRateLimitError] | type[LLMTimeoutError],
+    code: str,
+    retryable: bool,
+) -> None:
+    def fail(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        raise wrapper("generation failed") from cause
+
+    llm = FakeModelClient(fail)
+    run = Agent(
+        llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
+    ).start(max_steps=1)
+    with pytest.raises(RunFailed) as raised:
+        run.result(2)
+    assert run.wait_for_idle(2)
+    packet = chat_error(raised.value, llm)
+    assert packet.error_code == code
+    assert packet.is_retryable is retryable
+
+
 def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
     entered, release = threading.Event(), threading.Event()
     executed: list[str] = []
@@ -558,51 +659,3 @@ def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
     assert new.result(timeout=2).output.text == "New answer"
     assert new.wait_for_idle(2)
     assert executed == []
-
-
-@pytest.mark.parametrize(
-    "cause,wrapper,code,retryable",
-    [
-        (
-            RateLimitError("rate limit", model="test", llm_provider="openai"),
-            LLMRateLimitError,
-            "RATE_LIMIT",
-            True,
-        ),
-        (
-            RateLimitError("insufficient_quota", model="test", llm_provider="openai"),
-            LLMRateLimitError,
-            "BUDGET_EXCEEDED",
-            False,
-        ),
-        (
-            Timeout("read timeout", model="test", llm_provider="openai"),
-            LLMTimeoutError,
-            "CONNECTION_ERROR",
-            True,
-        ),
-        (None, LLMTimeoutError, "CONNECTION_ERROR", True),
-    ],
-)
-def test_provider_failure_preserves_retry_classification(
-    cause: Exception | None,
-    wrapper: type[LLMRateLimitError] | type[LLMTimeoutError],
-    code: str,
-    retryable: bool,
-) -> None:
-    def fail(
-        _request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        raise wrapper("generation failed") from cause
-
-    llm = FakeModelClient(fail)
-    run = Agent(
-        llm, generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
-    ).start(max_steps=1)
-    with pytest.raises(RunFailed) as raised:
-        run.result(2)
-    assert run.wait_for_idle(2)
-    packet = raised.value.failure.llm_error
-    assert packet is not None
-    assert packet.error_code == code
-    assert packet.is_retryable is retryable

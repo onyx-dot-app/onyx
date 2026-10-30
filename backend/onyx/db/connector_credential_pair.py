@@ -802,10 +802,19 @@ def lock_connector_credential_pair_row(
     """Row-locks the pair (FOR UPDATE) and reloads it. The lock holds until the
     caller commits or rolls back.
 
-    Lock order: the Redis attempt-creation lock (when taken), then this row,
-    then the pair's index attempt rows. Attempt creation and status changes
-    that stop indexing (pause, delete) take this lock, so they run one after
-    the other."""
+    Lock order: the Redis attempt-creation lock (when taken), the pair's open
+    doc permission sync attempt (a pause takes it first), then this row, then
+    the pair's index attempt rows and its queued permission sync attempts.
+    Attempt creation and status changes that stop indexing (pause, delete)
+    take this lock, so they run one after the other. A doc permission sync
+    attempt is created under a key share lock on this row, so it waits for
+    them too. Deletion's final cleanup deletes the pair's attempt rows before
+    this row, without this lock.
+
+    Never wait under this lock for a running sync's attempt row. The sync's
+    writes hold that row while they wait for this one: a group sync write
+    through its foreign key to this row, a doc sync write through another
+    writer that needs this row."""
     return db_session.execute(
         select(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)

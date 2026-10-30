@@ -14,10 +14,10 @@ import {
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
-import { Button, Popover, SelectCard } from "@opal/components";
+import { Button, Popover, SelectCard, Text } from "@opal/components";
 import { Card, Content, ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
-import Text from "@/refresh-components/texts/Text";
+import { richNodes } from "@opal/utils";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
@@ -399,14 +399,16 @@ export default function CodeInterpreterPage() {
             </Button>
           }
         >
-          <Text as="p" text03>
-            {t.rich("disconnectModal.body.description", {
-              emphasis: (chunks) => (
-                <Text as="span" mainContentEmphasis text03>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("disconnectModal.body.description", {
+                emphasis: (chunks) => (
+                  <Text as="span" font="main-content-emphasis" color="text-03">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         </ConfirmationModalLayout>
       )}

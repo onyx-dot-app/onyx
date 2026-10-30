@@ -59,10 +59,10 @@ def test_agent_passes_operation_tag_to_model() -> None:
 
     run = Agent(
         TaggedModel(lambda *_: AssistantMessage()),
-        generation_context=GenerationContext(flow=LLMFlow.MODEL_VALIDATION),
+        generation_context=GenerationContext(flow=LLMFlow.RESEARCH_AGENT),
     ).start(max_steps=1, background=False)
     assert run.result().stop_reason == RunStatus.COMPLETE
-    assert flows == [LLMFlow.MODEL_VALIDATION]
+    assert flows == [LLMFlow.RESEARCH_AGENT]
 
 
 def tool() -> AgentTool:

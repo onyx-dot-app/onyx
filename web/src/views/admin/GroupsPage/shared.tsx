@@ -1,10 +1,13 @@
 import { useTranslations } from "next-intl";
-import type { TableColumn, TableValueColumn } from "@opal/components";
+import {
+  Text,
+  type TableColumn,
+  type TableValueColumn,
+} from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
 import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
 import type { ApiKeyDescriptor, MemberRow } from "./types";
 
@@ -77,7 +80,7 @@ function AccountTypeCell({ row }: { row: MemberRow }) {
   return (
     <div className="flex flex-row items-center gap-1">
       <Icon className="w-4 h-4 text-text-03" />
-      <Text as="span" mainUiBody text03>
+      <Text as="span" font="main-ui-body" color="text-03">
         {row.account_type
           ? (labels[row.account_type] ?? row.account_type)
           : "\u2014"}
@@ -146,7 +149,7 @@ export function makeBaseColumns(
       sortable: false,
       cell: (value) =>
         value ? (
-          <Text as="span" secondaryBody text03>
+          <Text as="span" font="secondary-body" color="text-03">
             {value}
           </Text>
         ) : null,

@@ -14,11 +14,8 @@
 `backend/onyx/background/celery/tasks/scheduled_tasks/tasks.py`,
 `backend/onyx/background/celery/configs/scheduled_tasks.py`
 
-**Read first:** `docs/craft/features/scheduled-tasks/overview.md`. It is the
-product plan and architecture diagram this document maps to code and
-verifies against. `docs/craft/features/scheduled-tasks/pre-approvals.md` is
-the design for the security-sensitive piece in §4.4. Both are implemented
-designs, not aspirational, except where noted (§9).
+**Read first:** `[[craft-sessions]]` (a run is an ordinary `BuildSession`)
+and `[[craft-external-apps]]` §5 for the policy enforcement that §4.4 relies on.
 
 ---
 
@@ -140,8 +137,7 @@ run could saturate would stall dispatch for every tenant
   dedicated column was chosen over a join-based `NOT EXISTS` against
   `scheduled_task_run` because the dispatcher writes its run row before the
   executor creates the session, and a join-based filter would briefly leak
-  the not-yet-linked session into the sidebar
-  (`docs/craft/features/scheduled-tasks/overview.md`).
+  the not-yet-linked session into the sidebar.
 - `action_approval.decided_via` (nullable: `USER`/`PRE_APPROVAL`/`SESSION_GRANT`) and
   `action_approval.gated_app_id` (nullable FK): audit fields distinguishing
   a pre-approved forward from a human click, kept separate from `decision`
@@ -337,7 +333,7 @@ settings and lock reasons for the task owner.
 | If your change... | Also check |
 |---|---|
 | changes the dispatcher's claim query or locking | concurrent-tick safety (`FOR UPDATE SKIP LOCKED`), and that `next_run_at` still advances in the same transaction |
-| changes run status transitions | the notification call sites in `executor.py`, and the run-history clickability rules in the frontend (`docs/craft/fix-live-scheduled-task-runs.md`) |
+| changes run status transitions | the notification call sites in `executor.py`, and the run-history clickability rules (`web/src/app/craft/v1/tasks/utils.ts:getNonClickableReason`) and the in-flight input lock (`isScheduledRunInFlight`) |
 | changes active task context or policy lookup | re-read §4.4 in full; this is the part of the feature where a widened match is a real security regression, not just a UX bug |
 | adds a new gated-app-request path in the egress proxy | whether all saved policies and workspace restrictions apply before forwarding |
 | changes `BuildSession.origin` handling | the sidebar filter query, and any other place that assumes `INTERACTIVE` is the only origin |
@@ -365,13 +361,18 @@ cd backend && uv run pytest tests/integration/tests/craft/test_scheduled_tasks_a
 cd web && bun run playwright scheduled-tasks
 ```
 
-`docs/craft/features/scheduled-tasks/tests.md` documents the Playwright
-spec's exact selectors (`new-task-button`, `task-status-active`,
-`data-run-status`, etc.) and states plainly what it does not cover:
-`FOR UPDATE SKIP LOCKED` concurrency, the stuck-run sweeper, the
-approval-required path, sidebar filtering, and per-user ownership
-boundaries on the HTTP API. Those rely on the manual checklist in that
-file and on code review, not automation.
+The Playwright smoke (`web/tests/e2e/scheduled-tasks/scheduled-tasks.spec.ts`)
+needs the `celery_worker_scheduled_tasks` worker; without it the run never
+reaches a terminal state and the spec times out. Its page object
+(`web/tests/e2e/pages/ScheduledTasksPage.ts`) uses test ids such as
+`new-task-button`, `save-and-run-now`, and the `data-run-status` attribute on
+run rows; rename them in lockstep with the frontend.
+`backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py`
+covers `FOR UPDATE SKIP LOCKED` dispatch and both stuck-run sweeps. To check the
+sweeper by hand, stop the worker while a run is `running`. The run is stuck after
+`SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS` (75 minutes), and the
+hourly `cleanup_stuck_scheduled_runs` sweep then marks it `failed` with
+`error_class="stuck"`, so allow up to about 2 hours 15 minutes.
 
 ### Manual reproduction
 
@@ -413,18 +414,16 @@ file and on code review, not automation.
   document independently confirms the worker exists
   (`apps/scheduled_tasks.py`) and is wired into `supervisord.conf`, the
   Helm chart, and `backend/AGENTS.md`, just not the README.
-- **`docs/craft/fix-live-scheduled-task-runs.md` addressed a real gap: a
-  running scheduled task was not viewable until it finished.** Before that
-  change, the frontend blocked opening `RUNNING` and `AWAITING_APPROVAL`
-  rows even when the backend had already linked a `session_id`. The fix
-  adds a live SSE path where the api-server attaches as another viewer of
-  the sandbox pod's own opencode `/event` stream (filtered to the run's
-  session id) rather than introducing a new transport (Redis pub/sub was
-  considered and deliberately not used, since the api-server can already
-  reach sandbox pods directly). It also changed the run-history
-  clickability rule: `RUNNING`/`FAILED`/`SUCCEEDED`/`AWAITING_APPROVAL`
-  runs are openable whenever they have a `session_id`; `QUEUED` (no
-  session yet) and `SKIPPED` (no session at all) stay non-openable.
+- **A running scheduled run is viewable live, with no extra transport.**
+  `GET /build/sessions/{id}/scheduled-run-events` (`session/api.py`) attaches
+  the api-server as one more viewer of the sandbox's opencode `/event` stream,
+  filtered to the run's session. There is no Redis pub/sub, because the
+  api-server can already reach sandbox pods. The endpoint sends keepalives
+  until the executor saves `opencode_session_id`, so a fast click on a new
+  run does not show an error. `RUNNING`, `AWAITING_APPROVAL`, `SUCCEEDED`, and
+  `FAILED` runs open when they have a `session_id`. `QUEUED` (no session yet)
+  and `SKIPPED` (no session) runs do not open
+  (`web/src/app/craft/v1/tasks/utils.ts:getNonClickableReason`).
 - **A scheduled session's chat input is not permanently locked.** Once a
   run reaches a terminal state, the user can send ordinary follow-up
   messages in that same session. Managed app requests remain blocked after the run

@@ -3,9 +3,8 @@
 import { memo } from "react";
 import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import type { ValidSources } from "@/lib/connectors/types/source";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import { SvgArrowUpRight, SvgPlusCircle } from "@opal/icons";
 
 interface KnowledgeMainContentProps {
@@ -39,7 +38,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
         alignItems="center"
         height="auto"
       >
-        <Text text03 secondaryBody>
+        <Text color="text-03" font="secondary-body">
           {t("mainContent.empty.description")}
         </Text>
         <Button
@@ -66,7 +65,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
       alignItems="center"
       height="auto"
     >
-      <Text as="p" text03 secondaryBody>
+      <Text as="p" color="text-03" font="secondary-body">
         {t("mainContent.selectedCount.label", { count: totalSelected })}
       </Text>
       <Button

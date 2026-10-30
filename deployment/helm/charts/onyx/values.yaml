@@ -5,7 +5,7 @@
 # Overlays:
 #   - values-lite.yaml: minimal deployment without vector DB, Redis, or model servers.
 #   - ../../dev/values-localdev.yaml: local Kubernetes development (source repository only).
-#     See /docs/craft/dev/local-kubernetes.md.
+#     See deployment/helm/dev/README.md.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -407,6 +407,23 @@ serviceAccount:
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
+
+logExport:
+  kubernetes:
+    # Off by default. When on, the api-server runs as its own service account
+    # (<release>-api-server) with get/list on pods, pods/log, and events in the
+    # release namespace. The admin log export then collects stdout from every
+    # Onyx pod, the logs of crashed containers, pod status, and events. The
+    # other Onyx pods keep the service account above and get no such access.
+    # When off, the export collects log files from one replica per worker type.
+    #
+    # The new service account gets serviceAccount.annotations plus the
+    # annotations below. If the api-server uses IRSA or Workload Identity, add
+    # the role annotation here when it is not in serviceAccount.annotations,
+    # and allow the new service account name in the IAM trust policy.
+    enabled: false
+    serviceAccount:
+      annotations: {}
 
 nginx:
   enabled: true
@@ -1857,6 +1874,12 @@ configMap:
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
+  # Limits for the admin log export through the Kubernetes API
+  # (logExport.kubernetes.enabled). Empty uses the defaults: last 100000 lines
+  # per container log, 25 MiB per container log, 500 MiB per export.
+  LOG_EXPORT_KUBERNETES_TAIL_LINES: ""
+  LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM: ""
+  LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty
   # (default) -> Python falls back to "info" for the api/model/etc processes;
@@ -1886,6 +1909,7 @@ configMap:
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  # The chart's service account and the api-server's (see logExport) are always bound.
   extraBoundServiceAccounts: []
   # CIDR(s) of any non-pod cluster DNS listener the sandbox must reach for firewall-init.sh's
   # proxy-FQDN getent lookup. A NodeLocal DNS cache is a hostNetwork endpoint (its listen IP is

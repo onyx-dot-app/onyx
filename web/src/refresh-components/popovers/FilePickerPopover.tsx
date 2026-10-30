@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
+  Text,
   Button,
   Dropdown,
   LineItemButton,
@@ -19,7 +20,6 @@ import { isFilePending } from "@/lib/projects/utils";
 import { Hoverable } from "@opal/core";
 import { toast } from "@opal/layouts";
 import { useProjectsContext } from "@/lib/projects/providers";
-import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import { isImageFile } from "@/lib/utils";
 import {
@@ -91,7 +91,7 @@ function FileLineItem({
               group="FileLineItem"
               variant="replace-on-hover"
               resting={
-                <Text as="p" secondaryBody text03>
+                <Text as="p" font="secondary-body" color="text-03">
                   {getFileExtension(projectFile.name)}
                 </Text>
               }

@@ -36,16 +36,14 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `backend/onyx/chat/response.py` | streaming-protocol, chat-persistence |
-| `backend/onyx/chat/response_models.py` | chat-persistence |
-| `backend/onyx/chat/files.py`, `backend/onyx/chat/prompt_formatting.py` | context-assembly |
-| `backend/onyx/chat/llm_loop.py`, `backend/onyx/chat/llm_step.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_state.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
-| `backend/onyx/chat/emitter.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
-| `backend/onyx/chat/prompt_utils.py`, `compression.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
+| `backend/onyx/chat/agent.py`, `backend/onyx/chat/execution.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/models.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
+| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
+| `backend/onyx/agents/` | agent-runtime |
+| `backend/onyx/agents/compaction.py` | agent-runtime, context-assembly |
+| `backend/onyx/context/models.py`, `backend/onyx/chat/prompt_utils.py`, `backend/onyx/chat/prompt_formatting.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |
-| `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_display.py` | chat-persistence |
-| `backend/onyx/chat/save_chat.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
+| `backend/onyx/chat/persistence.py`, `backend/onyx/chat/history_store.py`, `backend/onyx/chat/restoration.py`, `backend/onyx/chat/checkpoint.py`, `backend/onyx/chat/run_store.py`, `backend/onyx/chat/subagents.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_checkpoint.py`, `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `models.py`, `session_loading.py`, `chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
@@ -54,18 +52,18 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/tools/results.py`, `backend/onyx/tools/records.py` | tools-framework |
-| `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
+| `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
+| `backend/onyx/agents/tool_execution.py`, `backend/onyx/agents/tools.py` | agent-runtime, tools-framework |
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search, tools-framework |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/knowledge_graph/` | **incomplete feature.** The knowledge graph tool cannot run yet. See INDEX.md, Incomplete features. |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/bash/`, `python/` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `custom/` | mcp-and-custom-tools |
-| `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
+| `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
 | `backend/onyx/tools/tool_implementations/coding_agent/`, `backend/onyx/coding_agent/` | craft-sessions, tools-framework |
-| `backend/onyx/tools/fake_tools/`, `backend/onyx/deep_research/` | tools-framework |
+| `backend/onyx/deep_research/` | tools-framework |
 
 ## Backend: search and index
 
@@ -131,10 +129,11 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/configs/chat_configs.py` | chat-persistence, context-assembly, llm-providers |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
-| `backend/onyx/tracing/`, `server/manage/tracing/`, `db/tracing.py`, `server/metrics/`, `docs/METRICS.md`, `docs/AUDIT_LOGGING.md` | observability |
-| `backend/onyx/db/llm_usage.py`, `db/usage.py`, `db/user_usage.py`, `db/system_usage.py`, `server/features/usage/`, `docs/usage/` | observability |
+| `backend/onyx/tracing/`, `server/manage/tracing/`, `db/tracing.py`, `server/metrics/` | observability |
+| `backend/onyx/db/llm_usage.py`, `db/usage.py`, `db/user_usage.py`, `db/system_usage.py`, `server/features/usage/` | observability |
 | `backend/onyx/utils/fleet_telemetry.py`, `fleet_query_telemetry.py`, `fleet_telemetry_collector.py`, `fleet_telemetry_resources.py`, `telemetry.py`, `timing.py`, `backend/onyx/db/fleet_enrollment.py` | observability |
 | `backend/onyx/db/fleet_telemetry.py` | observability, indexing-pipeline |
+| `backend/ee/onyx/server/log_export/`, `backend/ee/onyx/background/celery/tasks/log_export/`, `deployment/helm/charts/onyx/templates/log-export-rbac.yaml` | observability |
 | `backend/onyx/db/token_limit.py`, `server/token_rate_limits/`, `server/usage_limits.py`, `server/tenant_usage_limits.py` | rate-and-usage-limits |
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/utils/tier.py` | billing, editions-and-gating |
 | `backend/ee/onyx/db/community_downgrade.py` | billing, access-control |
@@ -176,7 +175,6 @@ so verify the callers rather than a single component.
 | `backend/onyx/voice/`, `server/manage/voice/`, `db/voice.py` | voice |
 | `backend/onyx/image_gen/`, `server/features/image_generation/`, `server/manage/image_generation/`, `db/image_generation.py` | image-generation |
 | `backend/onyx/db/code_interpreter.py`, `server/manage/code_interpreter/` | code-execution |
-| `backend/onyx/agents/` | agent-runtime |
 | `backend/onyx/llm/`, `server/manage/llm/`, `db/llm.py` | llm-providers |
 
 ## Backend: Craft
@@ -193,7 +191,6 @@ so verify the callers rather than a single component.
 | `backend/onyx/sandbox_proxy/` | craft-external-apps |
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `backend/onyx/onyxbot/discord/` | discord-bot |
-| `docs/craft/` | the matching `craft-*` component |
 
 ## Frontend
 
@@ -253,8 +250,9 @@ so verify the callers rather than a single component.
 
 | Path | Component(s) |
 |---|---|
-| `deployment/` | the deployed component. For Craft, also `docs/craft/infra/`. |
+| `deployment/` | the deployed component. |
 | `deployment/fleet-telemetry.md` | observability |
+| `deployment/helm/charts/onyx/dashboards/` | observability |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
 | `deployment/helm/dev/` | craft-sandboxes (local Kubernetes configuration, launch, and readiness) |
 | `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |

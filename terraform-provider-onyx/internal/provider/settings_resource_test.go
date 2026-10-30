@@ -25,9 +25,14 @@ func TestAccSettingsResource(t *testing.T) {
 resource "onyx_settings" "test" {
   company_name = "tf-acc-corp"
   auto_scroll  = true
+
+  reasoning_override_enabled = false
+  hide_provider_grouping     = true
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("onyx_settings.test", "reasoning_override_enabled", "false"),
+					resource.TestCheckResourceAttr("onyx_settings.test", "hide_provider_grouping", "true"),
 					resource.TestCheckResourceAttr("onyx_settings.test", "id", "settings"),
 					resource.TestCheckResourceAttr("onyx_settings.test", "company_name", "tf-acc-corp"),
 					resource.TestCheckResourceAttr("onyx_settings.test", "auto_scroll", "true"),
@@ -72,22 +77,20 @@ func snapshotSettingsFields(t *testing.T) func() {
 	if err != nil {
 		t.Fatalf("failed to snapshot settings: %v", err)
 	}
-	companyName := before.CompanyName
-	autoScroll := before.AutoScroll
+	// PATCH merges only sent fields; a nil pointer encodes as JSON null and
+	// restores "unset".
+	restore := map[string]any{
+		"company_name":               before.CompanyName,
+		"auto_scroll":                before.AutoScroll,
+		"reasoning_override_enabled": before.ReasoningOverrideEnabled,
+	}
+	// Not nullable server-side, so restore it only when it was read.
+	if before.HideProviderGrouping != nil {
+		restore["hide_provider_grouping"] = *before.HideProviderGrouping
+	}
 
 	return func() {
-		// PATCH merges only sent fields; JSON null restores "unset".
-		var companyNameValue, autoScrollValue any
-		if companyName != nil {
-			companyNameValue = *companyName
-		}
-		if autoScroll != nil {
-			autoScrollValue = *autoScroll
-		}
-		err := c.PatchSettings(context.Background(), map[string]any{
-			"company_name": companyNameValue,
-			"auto_scroll":  autoScrollValue,
-		})
+		err := c.PatchSettings(context.Background(), restore)
 		if err != nil {
 			// A failed restore leaves the shared deployment modified.
 			t.Errorf("settings restore failed: %v", err)

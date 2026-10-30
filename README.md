@@ -42,7 +42,7 @@ Beyond search, Onyx enables LLMs with advanced features like web search, sandbox
 > curl -fsSL https://onyx.app/install_onyx.sh | bash
 > ```
 
-![Onyx chat answering a question about use cases](docs/assets/onyx-chat-use-cases.png)
+![Onyx chat answering a question about use cases](.github/assets/onyx-chat-use-cases.png)
 
 ---
 
@@ -75,7 +75,7 @@ To learn more - check out our [docs](https://docs.onyx.app/welcome?utm_source=on
 
 ## Security and Data Processing
 
-![Onyx architecture: everything runs inside your environment](docs/assets/architecture.png)
+![Onyx architecture: everything runs inside your environment](.github/assets/architecture.png)
 
 When connecting up your organization's knowledge, it's critical that this sensitive IP is not leaked to the wrong parties both external and internal.
 

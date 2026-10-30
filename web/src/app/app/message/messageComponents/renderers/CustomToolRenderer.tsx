@@ -14,7 +14,7 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
@@ -181,7 +181,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                   style={{ animationDelay: "0.2s" }}
                 ></div>
               </div>
-              <Text text03 secondaryBody>
+              <Text font="secondary-body" color="text-03">
                 {t("customTool.waitingIndicator.text")}
               </Text>
             </div>
@@ -206,7 +206,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         {/* Error display */}
         {error && (
           <div className="ps-(--timeline-common-text-padding)">
-            <Text text03 mainUiMuted>
+            <Text font="main-ui-muted" color="text-03">
               {error.message}
             </Text>
           </div>
@@ -217,7 +217,11 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
           <div className="text-sm text-text-03 flex flex-col gap-2">
             {fileIds.map((fid, idx) => (
               <div key={fid} className="flex items-center gap-2 flex-wrap">
-                <Text text03 secondaryBody className="whitespace-nowrap">
+                <Text
+                  font="secondary-body"
+                  color="text-03"
+                  wordWrap="whitespace-nowrap"
+                >
                   {t("customTool.fileItem.label", { index: idx + 1 })}
                 </Text>
                 <a

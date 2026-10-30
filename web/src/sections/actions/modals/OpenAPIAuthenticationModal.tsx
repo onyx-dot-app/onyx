@@ -11,7 +11,8 @@ import React, {
 import { useTranslations } from "next-intl";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
-import { Modal } from "@opal/components";
+import { Text, Modal } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import {
   Button,
   Divider,
@@ -22,7 +23,6 @@ import {
 import { InputSingleSelect } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { FormField } from "@/refresh-components/form/FormField";
-import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
 import {
   InputKeyValue as KeyValueInput,
@@ -433,17 +433,15 @@ export default function OpenAPIAuthenticationModal({
               alignItems="stretch"
             >
               {submissionError && (
-                <Text as="p" mainUiBody className="text-action-text-danger-05">
-                  {submissionError}
-                </Text>
+                <div className="text-action-text-danger-05">
+                  <Text as="p" font="main-ui-body" color="inherit">
+                    {submissionError}
+                  </Text>
+                </div>
               )}
               {oauthConfigError && (
-                <div className="mb-3">
-                  <Text
-                    as="p"
-                    mainUiBody
-                    className="text-action-text-danger-05"
-                  >
+                <div className="mb-3 text-action-text-danger-05">
+                  <Text as="p" font="main-ui-body" color="inherit">
                     {oauthConfigError}
                   </Text>
                 </div>
@@ -451,7 +449,7 @@ export default function OpenAPIAuthenticationModal({
 
               {shouldDisableForm ? (
                 <div className="flex min-h-[220px] items-center justify-center rounded-12 border border-border-01 bg-background-tint-00">
-                  <Text as="p" secondaryBody text03>
+                  <Text as="p" font="secondary-body" color="text-03">
                     {t("openApiAuthModal.loading.label")}
                   </Text>
                 </div>
@@ -748,28 +746,28 @@ export default function OpenAPIAuthenticationModal({
 
                       <div className="flex flex-col gap-3">
                         <div className="flex flex-col gap-2 w-full">
-                          <Text
-                            as="p"
-                            text03
-                            secondaryBody
-                            className="flex flex-wrap gap-1"
-                          >
-                            {t.rich("openApiAuthModal.redirectUri.label", {
-                              emphasis: (chunks) => (
-                                <span className="font-secondary-action">
-                                  {chunks}
-                                </span>
-                              ),
-                            })}
+                          <Text as="p" color="text-03" font="secondary-body">
+                            {richNodes(
+                              t.rich("openApiAuthModal.redirectUri.label", {
+                                emphasis: (chunks) => (
+                                  <span className="font-secondary-action">
+                                    {chunks}
+                                  </span>
+                                ),
+                              })
+                            )}
                           </Text>
                           <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
-                            <Text
-                              as="p"
-                              text04
-                              className="font-mono text-[12px] leading-[16px] truncate flex-1"
-                            >
-                              {redirectUri}
-                            </Text>
+                            <div className="flex-1 min-w-0">
+                              <Text
+                                as="p"
+                                color="text-04"
+                                font="secondary-mono"
+                                maxLines={1}
+                              >
+                                {redirectUri}
+                              </Text>
+                            </div>
                             <CopyButton
                               getCopyText={() => redirectUri}
                               tooltip={t(
@@ -786,10 +784,10 @@ export default function OpenAPIAuthenticationModal({
                   {values.authMethod === "custom-header" && (
                     <section className="flex flex-col gap-4">
                       <div className="flex flex-col gap-2">
-                        <Text as="p" mainUiAction text04>
+                        <Text as="p" font="main-ui-action" color="text-04">
                           {t("openApiAuthModal.headers.title")}
                         </Text>
-                        <Text as="p" secondaryBody text03>
+                        <Text as="p" font="secondary-body" color="text-03">
                           {t("openApiAuthModal.headers.description")}
                         </Text>
                       </div>

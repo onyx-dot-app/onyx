@@ -1,0 +1,90 @@
+---
+title: "Update Policies"
+description: "Decide which pages AI may edit, and how"
+icon: "sliders"
+---
+
+Not every page should be rewritten automatically.
+A **release runbook** you want kept current from your connected sources is very different from a **meeting record** that
+should never change after the fact.
+
+Update policies are how you draw that line. Any page — or a whole folder — carries a policy,
+edited from its **Update Policy** panel.
+
+## The switches
+
+At the top of the panel, **AI Auto-Edits** is the master switch: turn it off and no AI touches the page on its own,
+full stop. It pauses the two switches beneath it without erasing how they were set,
+so flipping it back on restores your Update/Organize choices exactly as they were.
+
+Under it sit two switches that control genuinely different things:
+
+| Switch | What it governs |
+| --- | --- |
+| **Update** | Whether ingestion may periodically scan your connected data sources and add relevant new information to this page |
+| **Organize** | Whether [Auto Organize](/agent-wiki/automate/auto_organize) may reorganize, move, or merge this page or folder |
+
+Turning **Update** off freezes the content against ingestion pushes.
+Turning **Organize** off keeps the structural cleanups away from the scope.
+A page can perfectly well have one on and the other off — an append-only log you want fed by ingestion but never merged
+into a neighbor, for instance.
+
+<Note>
+  Neither switch affects what *you* or an agent acting on your behalf can do. They gate unsolicited,
+  AI-initiated changes — a person or an agent you asked to edit the page still edits it normally.
+</Note>
+
+## Page instructions
+
+Below the switches, **Page Instructions** is free text the updater agent honors whenever it does edit:
+
+- *"Keep entries terse — one line each."*
+- *"Never touch the SLA table."*
+- *"Newest entries at the top."*
+
+This is guidance for the writer, not a filter on what may be written.
+It's the right place for house style and for the one rule about this page that an agent would otherwise get wrong.
+
+## Inheritance
+
+Policies are stored per-path, and they inherit down the tree:
+
+- A setting on a folder applies to every page beneath it.
+- A more specific page or subfolder overrides its parent.
+- Clearing a setting returns it to whatever the parent says.
+
+So the usual pattern is to set the intent once on a folder — *"nothing under `decisions/` gets reorganized"* — and
+override only the exceptions. A page with nothing set simply takes the nearest ancestor that has an opinion,
+all the way up to the wiki root.
+
+Because policies live per-path rather than in the page body, none of this guidance leaks into the content itself,
+and it survives edits by anyone.
+
+## Update health
+
+The **Update History** card at the bottom of the panel shows how often the page has been auto-edited in the last 24
+hours, measured against two limits:
+
+- **Alert.** When the page crosses this many auto-updates in 24 hours, an event lands in the activity
+  feed and the page owner is notified — advisory only, the page keeps updating.
+  The number comes from a wiki-wide default the admin sets on the [Onyx
+  Integration](/agent-wiki/admin/onyx_integration#ingest-settings) page;
+  a page owner can override it here for pages where churn is expected (or especially unwelcome).
+- **Auto-Edit Limit.** The hard cap, set by the admin for the whole wiki. A page over the cap has
+  further ingestion updates skipped until its trailing 24-hour count falls back under — a runaway page can't burn model
+  budget or bury its own history.
+
+Unlike the switches, the alert threshold is per-page only — it doesn't inherit down folders.
+
+## Setting policies from an agent
+
+Agents connected over [MCP](/agent-wiki/automate/mcp) can read and set policies with `set_update_policy`,
+so you can say "stop auto-updating this folder" in conversation rather than opening the panel. The agent acts as you,
+so it can only change policies on paths you could change yourself.
+
+## Good to know
+
+- **Moves carry the policy with them.** Renaming or moving a page keeps its policy attached, so a reorganization
+  doesn't silently re-open a page to automatic edits.
+- **Templates can carry defaults.** An admin can set a starter policy on a [template](/agent-wiki/admin/templates), so
+  pages created from it begin with the right posture instead of needing a follow-up edit.

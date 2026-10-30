@@ -174,7 +174,7 @@ dev = [
 # One-tool groups, installed with `--only-group` by the pre-commit hooks: each
 # tool comes from hash-verified uv.lock artifacts without a full project sync,
 # and each pin below is the only one in the repo.
-ods = ["onyx-devtools[audit]==0.13.14"]
+ods = ["onyx-devtools[audit]==0.13.15"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
@@ -356,6 +356,9 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # Tests use asserts, mock credentials, and lots of patterns the bandit rules
 # flag as suspicious. Disable the full S rule set in tests.
 "backend/tests/**" = ["S"]
+# Docs site tooling (documentation/scripts, documentation/audit), imported with the
+# docs. format_docs.py is one long line-by-line formatter; leave its shape alone.
+"documentation/**" = ["C901", "PERF401", "ARG001"]
 # Ops and developer scripts run by humans (kubectl exec payloads, one-off
 # data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads,
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs

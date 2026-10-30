@@ -1,7 +1,9 @@
 """Runtime ownership across hooks, observation, snapshots, and lazy resources."""
 
+import base64
 import threading
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from pydantic import BaseModel
@@ -20,12 +22,17 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.chat.models import PromptMetadata
+from onyx.chat.prompt_formatting import prepare_model_messages
+from onyx.chat.response import response_record
+from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
+    ImageContentPart,
     Message,
     SystemMessage,
     TextContent,
@@ -37,18 +44,13 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.models import CustomToolCallSummary
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
     ScriptedLLM,
     collect_generation,
 )
-
-
-class ResultDetails(BaseModel):
-    tool_name: str
-    response_type: str
-    tool_result: dict[str, int]
 
 
 class ExtraData(BaseModel):
@@ -76,6 +78,66 @@ def _model(
     )
 
 
+def test_lazy_attachments_share_resources_but_not_message_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loads = 0
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1ioAAAAASUVORK5CYII="
+    )
+
+    def load() -> bytes:
+        nonlocal loads
+        loads += 1
+        return image
+
+    attachment = ChatLoadedFile.lazy_loaded(
+        file_id="image",
+        filename="original.png",
+        file_type=ChatFileType.IMAGE,
+        content_text=None,
+        token_count=1,
+        loader=load,
+    )
+    llm = ScriptedLLM([Delta(content="image seen")])
+    monkeypatch.setattr(
+        "onyx.chat.prompt_formatting.model_supports_image_input", lambda *_: True
+    )
+    agent = Agent(
+        llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(
+            messages=[
+                UserMessage(
+                    content="describe",
+                    metadata=PromptMetadata(image_files=[attachment]),
+                )
+            ]
+        ),
+    )
+    agent.prepare_step = lambda _input: PreparedStep(
+        assemble_messages=lambda messages: prepare_model_messages(messages, llm.config)
+    )
+    copies = [agent.state, agent.state]
+    for context in copies:
+        context.model_dump_json()
+    assert loads == 0
+    metadata = copies[0].messages[0].metadata
+    assert isinstance(metadata, PromptMetadata) and metadata.image_files
+    metadata.image_files[0].filename = "changed.png"
+    assert attachment.filename == "original.png"
+    agent.start(background=False, max_steps=1).result()
+    assert loads == 1
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        contents = list(executor.map(lambda _: attachment.content, range(2)))
+    assert contents == [image, image]
+    assert loads == 1
+    assert any(
+        isinstance(part, ImageContentPart)
+        for part in llm.requests[0]["prompt"][0].content
+    )
+
+
 def test_default_model_accepts_application_metadata_without_chat_policy() -> None:
     llm = ScriptedLLM([Delta(content="done")])
     message = UserMessage(content="plain input", metadata=ExtraData())
@@ -89,6 +151,62 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
     assert output.text == "done"
     assert llm.requests[0]["prompt"][0].content == "plain input"
     assert "private metadata" not in str(llm.requests)
+
+
+@pytest.mark.parametrize("replace", [False, True])
+def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
+    requests: list[list[Message]] = []
+
+    def model(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request.messages)
+        return _model(request)
+
+    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        if replace:
+            return result.model_copy(update={"content": "accepted"})
+        result.content = "accepted"
+        return result
+
+    agent = Agent(
+        FakeModelClient(model),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            _tool(
+                lambda _: ToolResult(
+                    content="original",
+                    details=CustomToolCallSummary(
+                        tool_name="lookup", response_type="json", tool_result={"id": 1}
+                    ),
+                    metadata=ExtraData(),
+                )
+            )
+        ],
+        after_tool_call=finalize,
+    )
+    run = agent.start(max_steps=2)
+    result = run.result()
+    assert run.wait_for_idle(2)
+    snapshot = run.snapshot()
+    assert result.output.text == "accepted"
+    assert (
+        requests[1][-1].text
+        == agent.state.messages[1].text
+        == snapshot.messages[1].text
+        == "accepted"
+    )
+    record = response_record(snapshot)
+    assert "private metadata" not in record.model_dump_json()
+    saved_result = record.messages[1]
+    assert isinstance(saved_result, ToolResultMessage)
+    assert isinstance(saved_result.details, CustomToolCallSummary)
+    assert saved_result.details.tool_result == {"id": 1}
+    saved_result.details.tool_result = {"id": 2}
+    runtime_result = snapshot.messages[1]
+    assert isinstance(runtime_result, ToolResultMessage)
+    assert isinstance(runtime_result.details, CustomToolCallSummary)
+    assert runtime_result.details.tool_result == {"id": 1}
 
 
 @pytest.mark.parametrize("inherited", [False, True])
@@ -229,6 +347,50 @@ def test_completed_tools_survive_sibling_cancellation() -> None:
     assert snapshot.messages == agent.state.messages
 
 
+def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
+    tool_histories: list[list[str]] = []
+    model_histories: list[list[str]] = []
+    metadata = ExtraData(value="application phase")
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        tool_histories.append([message.text for message in invocation.messages])
+        return ToolResult(content="evidence")
+
+    tool = _tool(execute)
+
+    def prepare(_input: StepInput) -> PreparedStep:
+        return PreparedStep(
+            tools=[tool],
+            output_metadata=metadata,
+            assemble_messages=lambda _: [UserMessage(content="provider prompt")],
+        )
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        model_histories.append([message.text for message in request.messages])
+        return _model(request)
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content="original task")]),
+        tools=[tool],
+        prepare_step=prepare,
+    )
+    events: list[AgentEvent] = []
+    run = agent.start(max_steps=1, on_event=events.append)
+    result = run.result()
+    assert run.wait_for_idle(2)
+    assert model_histories == [["provider prompt"]]
+    assert tool_histories == [["original task"]]
+    assert result.output.metadata == metadata
+    assert run.snapshot().messages[0].metadata == metadata
+    assert response_record(run.snapshot()).messages[0].metadata is None
+    starts = [event for event in events if event.type == "message_start"]
+    assert len(starts) == 1 and starts[0].metadata == metadata
+
+
 def test_live_and_completed_history_match_and_are_isolated() -> None:
     step_ready = threading.Event()
     finish_step = threading.Event()
@@ -313,6 +475,29 @@ def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) ->
         assert assembled.tool_calls[0].arguments == {"filters": {"q": "assembled"}}
 
 
+def test_request_mutation_cannot_change_captured_assembly_instructions() -> None:
+    instructions = SystemMessage(content="Use sources", metadata=ExtraData())
+    history: list[Message] = [UserMessage(content="Question")]
+    prepared = PreparedStep(
+        assemble_messages=lambda messages: [instructions, *messages]
+    )
+    request = prepared.generation_request(history)
+    system = request.messages[0]
+    assert isinstance(system, SystemMessage)
+    system.content = "changed"
+    assert isinstance(system.metadata, ExtraData)
+    system.metadata.value = "changed"
+    question = request.messages[1]
+    assert isinstance(question, UserMessage)
+    question.content = "changed"
+
+    rebuilt = prepared.generation_request(history)
+    assert rebuilt.messages == [instructions, *history]
+    assert instructions.content == "Use sources"
+    assert instructions.metadata == ExtraData()
+    assert history[0].content == "Question"
+
+
 def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
     observed: list[MessageEndEvent] = []
 
@@ -339,123 +524,3 @@ def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
     assert recorded.text == result.output.text == "answer"
     assert recorded.metadata == ExtraData()
     assert recorded.id == observed[0].message_id
-
-
-@pytest.mark.parametrize("replace", [False, True])
-def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
-    requests: list[list[Message]] = []
-
-    def model(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        requests.append(request.messages)
-        return _model(request)
-
-    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
-        if replace:
-            return result.model_copy(update={"content": "accepted"})
-        result.content = "accepted"
-        return result
-
-    agent = Agent(
-        FakeModelClient(model),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[
-            _tool(
-                lambda _: ToolResult(
-                    content="original",
-                    details=ResultDetails(
-                        tool_name="lookup", response_type="json", tool_result={"id": 1}
-                    ),
-                    metadata=ExtraData(),
-                )
-            )
-        ],
-        after_tool_call=finalize,
-    )
-    run = agent.start(max_steps=2)
-    result = run.result()
-    assert run.wait_for_idle(2)
-    snapshot = run.snapshot()
-    assert result.output.text == "accepted"
-    assert (
-        requests[1][-1].text
-        == agent.state.messages[1].text
-        == snapshot.messages[1].text
-        == "accepted"
-    )
-    saved_result = run.snapshot().messages[1]
-    assert isinstance(saved_result, ToolResultMessage)
-    assert isinstance(saved_result.details, ResultDetails)
-    assert saved_result.details.tool_result == {"id": 1}
-    saved_result.details.tool_result = {"id": 2}
-    runtime_result = snapshot.messages[1]
-    assert isinstance(runtime_result, ToolResultMessage)
-    assert isinstance(runtime_result.details, ResultDetails)
-    assert runtime_result.details.tool_result == {"id": 1}
-
-
-def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
-    tool_histories: list[list[str]] = []
-    model_histories: list[list[str]] = []
-    metadata = ExtraData(value="application phase")
-
-    def execute(invocation: ToolInvocation) -> ToolResult:
-        tool_histories.append([message.text for message in invocation.messages])
-        return ToolResult(content="evidence")
-
-    tool = _tool(execute)
-
-    def prepare(_input: StepInput) -> PreparedStep:
-        return PreparedStep(
-            tools=[tool],
-            output_metadata=metadata,
-            assemble_messages=lambda _: [UserMessage(content="provider prompt")],
-        )
-
-    def generate(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        model_histories.append([message.text for message in request.messages])
-        return _model(request)
-
-    agent = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        state=AgentState(messages=[UserMessage(content="original task")]),
-        tools=[tool],
-        prepare_step=prepare,
-    )
-    events: list[AgentEvent] = []
-    run = agent.start(max_steps=1, on_event=events.append)
-    result = run.result()
-    assert run.wait_for_idle(2)
-    assert model_histories == [["provider prompt"]]
-    assert tool_histories == [["original task"]]
-    assert result.output.metadata == metadata
-    assert run.snapshot().messages[0].metadata == metadata
-    starts = [event for event in events if event.type == "message_start"]
-    assert len(starts) == 1 and starts[0].metadata == metadata
-
-
-def test_request_mutation_cannot_change_captured_assembly_instructions() -> None:
-    instructions = SystemMessage(content="Use sources", metadata=ExtraData())
-    history: list[Message] = [UserMessage(content="Question")]
-    prepared = PreparedStep(
-        assemble_messages=lambda messages: [instructions, *messages]
-    )
-    request = prepared.generation_request(history)
-    system = request.messages[0]
-    assert isinstance(system, SystemMessage)
-    system.content = "changed"
-    assert isinstance(system.metadata, ExtraData)
-    system.metadata.value = "changed"
-    question = request.messages[1]
-    assert isinstance(question, UserMessage)
-    question.content = "changed"
-
-    rebuilt = prepared.generation_request(history)
-    assert rebuilt.messages == [instructions, *history]
-    assert instructions.content == "Use sources"
-    assert instructions.metadata == ExtraData()
-    assert history[0].content == "Question"

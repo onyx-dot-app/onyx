@@ -1,11 +1,15 @@
-import type { Route } from "next";
-import type { IconProps } from "@opal/types";
-
+/**
+ * The onboarding sequence, steps 0 to n: step 0 (`PreStep`, the
+ * introduction), the numbered steps 1 to n-1, then the final step n
+ * (`PostStep`). The counter reads "Step i of n-1" on the numbered steps.
+ * Progress is i/n, so the final step is n/n.
+ */
 export enum OnboardingStep {
-  Welcome = "welcome",
+  PreStep = "pre-step",
   Name = "name",
   LlmSetup = "llm-setup",
-  Complete = "complete",
+  OptionalSetup = "optional-setup",
+  PostStep = "post-step",
 }
 
 export interface OnboardingData {
@@ -44,14 +48,6 @@ export type OnboardingAction =
   | { type: OnboardingActionType.SET_LOADING; isLoading: boolean }
   | { type: OnboardingActionType.SET_ERROR; error: string | undefined }
   | { type: OnboardingActionType.RESET };
-
-export type FinalStepItemProps = {
-  title: string;
-  description: string;
-  icon: React.FunctionComponent<IconProps>;
-  buttonText: string;
-  buttonHref: Route;
-};
 
 export type OnboardingActions = {
   nextStep: () => void;

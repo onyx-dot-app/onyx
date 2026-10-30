@@ -372,6 +372,22 @@ class AgentCoordinator:
             self.check_open()
             tracked = self._state.tracked_runs.get(run_id)
             future = tracked.completion if tracked is not None else None
+            if (
+                tracked is not None
+                and tracked.execution is None
+                and tracked.observer_stop is not None
+                and future is not None
+                and future.done()
+                and future.exception() is not None
+            ):
+                # Observation failure does not establish the child's final outcome.
+                if snapshot.status.is_terminal:
+                    future = None
+                elif self._directory is not None:
+                    tracked.completion = Future()
+                    tracked.completion.set_running_or_notify_cancel()
+                    tracked.observer_stop = None
+                    future = tracked.completion
             if future is None and not snapshot.status.is_terminal:
                 tracked = _TrackedRun()
                 self._state.tracked_runs[run_id] = tracked

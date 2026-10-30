@@ -119,6 +119,7 @@ def get_page_of_chat_sessions(
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(
             desc(ChatSession.time_created),
@@ -165,7 +166,7 @@ def fetch_chat_sessions_eagerly_by_time(
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     # Unfiltered on record mode: this backs the usage report, which carries
-    # token counts and no message content, and every mode meters usage.
+    # token counts and no message content. Child runs also meter attributed usage.
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end),
     ]
@@ -195,6 +196,7 @@ def fetch_chat_sessions_eagerly_by_time(
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(asc_time_order, message_order)
     )
