@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthContext,
-    acquire_graph_token_response,
+    acquire_token_response,
     build_graph_auth_context,
     token_info,
 )
@@ -66,7 +66,7 @@ class MicrosoftGraphGateway:
         return self._auth_context
 
     def token_response(self) -> dict[str, Any]:
-        return acquire_graph_token_response(self.auth_context, self.graph_api_host)
+        return acquire_token_response(self.auth_context, self.graph_api_host)
 
     def token_info(self) -> MicrosoftTokenInfo:
         """Signs in, and reads what the token tells about the app."""

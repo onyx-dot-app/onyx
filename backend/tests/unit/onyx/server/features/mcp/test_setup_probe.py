@@ -344,6 +344,11 @@ def test_protected_sse_message_endpoint_uses_its_oauth_challenge(
 
     monkeypatch.setattr(setup_probe, "mcp_ssrf_httpx_client_factory", factory)
     monkeypatch.setattr(oauth_discovery, "mcp_ssrf_httpx_client_factory", factory)
+    monkeypatch.setattr(
+        oauth_discovery,
+        "validated_mcp_oauth_client_metadata_url",
+        lambda: "https://onyx.example/api/mcp/oauth/client-metadata",
+    )
     result = asyncio.run(setup_probe.probe_mcp_server("https://mcp.example/sse"))
     assert result.kind == "oauth"
     assert result.transport == MCPTransport.SSE
@@ -354,6 +359,7 @@ def test_protected_sse_message_endpoint_uses_its_oauth_challenge(
         ("POST", "/messages"),
         ("GET", "/metadata"),
         ("GET", "/.well-known/oauth-authorization-server"),
+        ("GET", "/authorize"),
     ]
 
 

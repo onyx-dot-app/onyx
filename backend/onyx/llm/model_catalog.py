@@ -31,6 +31,8 @@ logger = setup_logger()
 _CATALOG_DIR = Path(__file__).parent / "price_table"
 _SUPPLEMENT_PATH = _CATALOG_DIR / "_supplement.json"
 _ENRICHMENTS_PATH = Path(__file__).parent / "model_metadata_enrichments.json"
+# Supplement fields that override an entry the upstream feed still lists.
+_SUPPLEMENT_OVERRIDE_KEYS = ("supports_decisions", "status")
 
 # Bedrock cross-region inference-profile prefixes (us., eu., global., apac.,
 # ...). Matches the sync script's alias derivation.
@@ -142,11 +144,14 @@ def _catalog() -> dict[str, dict[str, Any]]:
                 target = catalog.setdefault(provider, {"models": {}, "aliases": {}})
                 for model_id, entry in (section.get("models") or {}).items():
                     if model_id not in target["models"]:
+                        if set(entry) <= set(_SUPPLEMENT_OVERRIDE_KEYS):
+                            continue
                         target["models"][model_id] = entry
-                    elif "supports_decisions" in entry:
-                        target["models"][model_id]["supports_decisions"] = entry[
-                            "supports_decisions"
-                        ]
+                    else:
+                        existing = target["models"][model_id]
+                        for key in _SUPPLEMENT_OVERRIDE_KEYS:
+                            if key in entry:
+                                existing[key] = entry[key]
                     if provider == "bedrock":
                         for region in _BEDROCK_REGION_PREFIXES:
                             target["aliases"].setdefault(

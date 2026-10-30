@@ -48,6 +48,7 @@ import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
+import { SidebarLoader } from "@opal/loaders";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
@@ -81,10 +82,12 @@ import {
   SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
-import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import { Section } from "@/layouts/general-layouts";
+import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
@@ -114,14 +117,9 @@ function buildVisibleAgents(
   return [visibleAgents, currentAgentIsPinned];
 }
 
-const SKELETON_WIDTHS_BASE = ["w-4/5", "w-4/5", "w-3/5"];
-
-function shuffleWidths(): string[] {
-  return [...SKELETON_WIDTHS_BASE].sort(() => Math.random() - 0.5);
-}
-
 interface RecentsSectionProps {
   chatSessions: ChatSession[];
+  isLoading: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
   onLoadMore: () => void;
@@ -129,6 +127,7 @@ interface RecentsSectionProps {
 
 function RecentsSection({
   chatSessions,
+  isLoading,
   hasMore,
   isLoadingMore,
   onLoadMore,
@@ -140,9 +139,6 @@ function RecentsSection({
       type: DRAG_TYPES.RECENTS,
     },
   });
-
-  // Re-shuffle skeleton widths each time loaded session count changes
-  const skeletonWidths = useMemo(shuffleWidths, [chatSessions.length]);
 
   // Sentinel ref for IntersectionObserver-based infinite scroll
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -182,7 +178,9 @@ function RecentsSection({
       )}
     >
       <SidebarLayouts.Section title={t("appSidebar.recents.title")}>
-        {chatSessions.length === 0 ? (
+        {isLoading ? (
+          <SidebarLoader count={5} />
+        ) : chatSessions.length === 0 ? (
           <div className="px-3">
             <Text as="p" color="text-01">
               {t("appSidebar.recents.empty.text")}
@@ -197,19 +195,19 @@ function RecentsSection({
                 draggable
               />
             ))}
-            {hasMore &&
-              skeletonWidths.map((width, i) => (
-                <div
-                  key={i}
-                  ref={i === 0 ? sentinelRef : undefined}
-                  className={cn(
-                    "transition-opacity duration-300",
-                    isLoadingMore ? "opacity-100" : "opacity-40"
-                  )}
-                >
-                  <SidebarTabSkeleton textWidth={width} />
-                </div>
-              ))}
+            {hasMore && (
+              <div
+                ref={sentinelRef}
+                // Waiting to scroll into view, nothing is loading yet.
+                aria-hidden={!isLoadingMore}
+                className={cn(
+                  "transition-opacity duration-300",
+                  isLoadingMore ? "opacity-100" : "opacity-40"
+                )}
+              >
+                <SidebarLoader count={3} />
+              </div>
+            )}
           </>
         )}
       </SidebarLayouts.Section>
@@ -249,12 +247,8 @@ export default function AppSidebar() {
     isLoading: isLoadingPinnedAgents,
   } = usePinnedAgents();
 
-  // Wait for ALL dynamic data before showing any sections
-  const isLoadingDynamicContent =
-    isLoadingChatSessions ||
-    isLoadingProjects ||
-    isLoadingAgents ||
-    isLoadingPinnedAgents;
+  // Each section shows its own skeleton until its own data loads.
+  const isLoadingAgentList = isLoadingAgents || isLoadingPinnedAgents;
 
   // Still need some context for stateful operations
   const { refreshCurrentProjectDetails, currentProjectId } =
@@ -277,6 +271,10 @@ export default function AppSidebar() {
     combinedSettingsData?.onyx_craft_requires_upgrade === true;
   // Gated like a Business admin page: below that tier the tab is disabled.
   const hasCraftTier = useTierAtLeast(Tier.BUSINESS);
+  const tTasks = useTranslations("craft.tasks");
+  const unviewedTaskCount = useUnviewedScheduledTaskCount(
+    isOnyxCraftEnabled && hasCraftTier
+  );
   const plans = usePlans();
 
   // Fetch notifications for build mode intro
@@ -665,7 +663,17 @@ export default function AppSidebar() {
                     isOnyxCraftUpsell ? (
                       <PlanTag plan={Tier.BUSINESS} />
                     ) : (
-                      <BetaTag />
+                      <Section
+                        flexDirection="row"
+                        gap={1.5}
+                        width="fit"
+                        height="fit"
+                      >
+                        {unviewedTaskCount > 0 && (
+                          <UnseenMarker label={tTasks("unviewedResults")} />
+                        )}
+                        <BetaTag />
+                      </Section>
                     )
                   }
                 >
@@ -674,7 +682,6 @@ export default function AppSidebar() {
               </Disabled>
             </div>
           )}
-          {folded && moreAgentsButton}
           <SidebarTab
             icon={SvgPlug}
             href="/app/plugins"
@@ -682,70 +689,82 @@ export default function AppSidebar() {
           >
             {t("appSidebar.plugins.label")}
           </SidebarTab>
+          {/* Folded, the body's sections collapse into the header, in the
+              unfolded order: Agents, then Projects. */}
+          {folded && moreAgentsButton}
           {folded && <FoldedProjectsPopover />}
         </SidebarLayouts.Header>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">
-          {isLoadingDynamicContent ? null : (
-            <>
-              {/* Agents */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleAgentDragEnd}
-              >
-                <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
-                  <SortableContext
-                    items={visibleAgentIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {visibleAgents.map((visibleAgent) => (
-                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                    ))}
-                  </SortableContext>
-                  {moreAgentsButton}
-                </SidebarLayouts.Section>
-              </DndContext>
-
-              {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={pointerWithin}
-                modifiers={[
-                  restrictToFirstScrollableAncestor,
-                  restrictToVerticalAxis,
-                ]}
-                onDragEnd={handleChatProjectDragEnd}
-              >
-                {/* Projects */}
-                <SidebarLayouts.Section
-                  title={t("appSidebar.projects.title")}
-                  action={
-                    <OpalButton
-                      icon={SvgFolderPlus}
-                      prominence="tertiary"
-                      size="md"
-                      tooltip={t("appSidebar.newProject.tooltip")}
-                      onClick={() => createProjectModal.toggle(true)}
-                    />
-                  }
+          <>
+            {/* Agents */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleAgentDragEnd}
+            >
+              <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
+                <SortableContext
+                  items={visibleAgentIds}
+                  strategy={verticalListSortingStrategy}
                 >
-                  {projects.map((project) => (
-                    <ProjectFolderButton key={project.id} project={project} />
-                  ))}
-                  {projects.length === 0 && newProjectButton}
-                </SidebarLayouts.Section>
+                  {isLoadingAgentList ? (
+                    <SidebarLoader count={3} />
+                  ) : (
+                    visibleAgents.map((visibleAgent) => (
+                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                    ))
+                  )}
+                </SortableContext>
+                {!isLoadingAgentList && moreAgentsButton}
+              </SidebarLayouts.Section>
+            </DndContext>
 
-                {/* Recents */}
-                <RecentsSection
-                  chatSessions={chatSessions}
-                  hasMore={hasMore}
-                  isLoadingMore={isLoadingMore}
-                  onLoadMore={loadMore}
-                />
-              </DndContext>
-            </>
-          )}
+            {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={pointerWithin}
+              modifiers={[
+                restrictToFirstScrollableAncestor,
+                restrictToVerticalAxis,
+              ]}
+              onDragEnd={handleChatProjectDragEnd}
+            >
+              {/* Projects */}
+              <SidebarLayouts.Section
+                title={t("appSidebar.projects.title")}
+                action={
+                  <OpalButton
+                    icon={SvgFolderPlus}
+                    prominence="tertiary"
+                    size="md"
+                    tooltip={t("appSidebar.newProject.tooltip")}
+                    onClick={() => createProjectModal.toggle(true)}
+                  />
+                }
+              >
+                {isLoadingProjects ? (
+                  <SidebarLoader count={2} />
+                ) : (
+                  <>
+                    {projects.map((project) => (
+                      <ProjectFolderButton key={project.id} project={project} />
+                    ))}
+                    {projects.length === 0 && newProjectButton}
+                  </>
+                )}
+              </SidebarLayouts.Section>
+
+              {/* Recents */}
+              <RecentsSection
+                chatSessions={chatSessions}
+                isLoading={isLoadingChatSessions}
+                hasMore={hasMore}
+                isLoadingMore={isLoadingMore}
+                onLoadMore={loadMore}
+              />
+            </DndContext>
+          </>
         </SidebarLayouts.Body>
 
         <SidebarLayouts.Footer>

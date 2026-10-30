@@ -11,7 +11,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
 )
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp import oauth_flow, setup_oauth
+from onyx.server.features.mcp import oauth_discovery, setup_oauth
 from onyx.server.features.mcp.models import MCPSetupRequest
 from tests.unit.fakes import FakeCache
 
@@ -223,7 +223,7 @@ async def test_rejected_client_metadata_document_stores_no_attempt(
         return httpx.Response(400, request=request)
 
     monkeypatch.setattr(
-        oauth_flow,
+        oauth_discovery,
         "mcp_ssrf_httpx_client_factory",
         lambda **_kwargs: httpx.AsyncClient(transport=httpx.MockTransport(reject)),
     )

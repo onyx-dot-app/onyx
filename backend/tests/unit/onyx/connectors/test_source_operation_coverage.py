@@ -7,12 +7,23 @@ a gateway is picked up here automatically; it cannot forget to wire the test.
 """
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.azure_datalake.models import (
+    AzureDataLakePath,
+    AzureDataLakePathPage,
+    AzureRoleAssignment,
+    AzureRoleDefinition,
+    AzureStorageAccountPage,
+    AzureStorageAccountResource,
+    AzureSubscription,
+    AzureSubscriptionPage,
+)
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
@@ -336,6 +347,46 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_azure_datalake_spy(spy: MagicMock) -> None:
+    """A container holding one file, so the read check reaches the download,
+    in an account that Azure Resource Manager lists with one role assignment,
+    in a tenant with one group."""
+    spy.list_subscriptions.return_value = AzureSubscriptionPage(
+        subscriptions=[AzureSubscription(subscription_id="sub")]
+    )
+    spy.list_storage_accounts.return_value = AzureStorageAccountPage(
+        accounts=[
+            AzureStorageAccountResource(
+                id="/subscriptions/sub/resourceGroups/rg/providers/"
+                "Microsoft.Storage/storageAccounts/onyxtest",
+                name="onyxtest",
+            )
+        ]
+    )
+    spy.list_role_assignments.return_value = [
+        AzureRoleAssignment(
+            id="assignment",
+            principal_id="user",
+            principal_type="User",
+            role_definition_id="/providers/Microsoft.Authorization/roleDefinitions/r",
+        )
+    ]
+    spy.get_role_definition.return_value = AzureRoleDefinition(id="r")
+    spy.list_deny_assignments.return_value = []
+    spy.list_groups.return_value = EntraPage[EntraGroup](items=[EntraGroup(id="group")])
+    spy.list_paths_page.return_value = AzureDataLakePathPage(
+        paths=[
+            AzureDataLakePath(
+                name="docs/readme.txt",
+                is_directory=False,
+                last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                content_length=10,
+            )
+        ],
+        continuation_token=None,
+    )
+
+
 def _configure_asana_spy(spy: MagicMock) -> None:
     """One project holding one task with a comment and a creator, so the
     tasks sample reaches the comment and user reads."""
@@ -368,6 +419,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
     DocumentSource.YOUTRACK: [_configure_youtrack_spy],
+    DocumentSource.AZURE_DATALAKE: [_configure_azure_datalake_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
@@ -395,6 +447,9 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],
     # The selected-scope checks read teams and projects only when some are set.
     DocumentSource.LINEAR: [{"team_keys": ["ENG"], "projects": ["Roadmap"]}],
+    DocumentSource.AZURE_DATALAKE: [
+        {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
+    ],
 }
 
 

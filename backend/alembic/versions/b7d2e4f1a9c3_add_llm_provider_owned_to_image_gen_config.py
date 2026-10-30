@@ -4,7 +4,7 @@ Existing configs own a copy of an LLM provider. Linked configs point at a
 model on an admin-managed provider and set this to false.
 
 Revision ID: b7d2e4f1a9c3
-Revises: 3e30a81ec3bd
+Revises: a7a7e8c828c0
 Create Date: 2026-10-30 11:30:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "b7d2e4f1a9c3"
-down_revision = "3e30a81ec3bd"
+down_revision = "a7a7e8c828c0"
 branch_labels = None
 depends_on = None
 

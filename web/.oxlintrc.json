@@ -524,7 +524,6 @@
         "src/refresh-components/messages/InfoBlock.tsx",
         "src/refresh-components/popovers/FilePickerPopover.tsx",
         "src/refresh-components/skeletons/ChatSessionSkeleton.tsx",
-        "src/refresh-components/skeletons/SidebarTabSkeleton.tsx",
         "src/refresh-components/texts/ExpandableTextDisplay.tsx",
         "src/refresh-components/tiles/ButtonTile.tsx",
         "src/refresh-components/tiles/FileTile.tsx",

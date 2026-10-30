@@ -168,3 +168,37 @@ def test_is_recommended_image_model_follows_the_listing_provider() -> None:
     assert not model_catalog.is_recommended_image_model(
         gateway, "openai/gpt-image-1.5-2025-12-16"
     )
+
+
+def test_supplement_status_retires_listed_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "openai.json").write_text(
+        '{"models": {"img-a": {"mode": "image_generation"}}}'
+    )
+    supplement = tmp_path / "_supplement.json"
+    supplement.write_text('{"openai": {"models": {"img-a": {"status": "deprecated"}}}}')
+    monkeypatch.setattr(model_catalog, "_CATALOG_DIR", tmp_path)
+    monkeypatch.setattr(model_catalog, "_SUPPLEMENT_PATH", supplement)
+    model_catalog._catalog.cache_clear()
+    try:
+        entry = model_catalog._catalog()["openai"]["models"]["img-a"]
+        assert entry["status"] == "deprecated"
+        assert entry["mode"] == "image_generation"
+    finally:
+        model_catalog._catalog.cache_clear()
+
+
+def test_supplement_status_only_entry_is_not_added_as_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "openai.json").write_text('{"models": {}}')
+    supplement = tmp_path / "_supplement.json"
+    supplement.write_text('{"openai": {"models": {"img-a": {"status": "deprecated"}}}}')
+    monkeypatch.setattr(model_catalog, "_CATALOG_DIR", tmp_path)
+    monkeypatch.setattr(model_catalog, "_SUPPLEMENT_PATH", supplement)
+    model_catalog._catalog.cache_clear()
+    try:
+        assert "img-a" not in model_catalog._catalog()["openai"]["models"]
+    finally:
+        model_catalog._catalog.cache_clear()
