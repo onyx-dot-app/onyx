@@ -41,7 +41,11 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
-from onyx.connectors.jira.connector import process_jira_issue
+from onyx.connectors.jira.connector import (
+    build_jira_ticket_content,
+    jira_issue_skip_reason,
+    process_jira_issue,
+)
 from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.connectors.jira.utils import build_jira_url
 from onyx.connectors.models import (
@@ -254,6 +258,19 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
     def _list_service_desks(self) -> list[dict[str, Any]]:
         desks = list(self._paginate_desks())
+        if self.service_desk_ids is not None:
+            visible_ids = {str(desk.get("id") or "").strip() for desk in desks}
+            missing = [
+                desk_id
+                for desk_id in self.service_desk_ids
+                if desk_id not in visible_ids
+            ]
+            if missing:
+                raise ConnectorValidationError(
+                    "Jira Service Management cannot see the configured service "
+                    f"desk id(s): {', '.join(missing)}. Check the ids and the "
+                    "connector account's service desk access."
+                )
         filtered: list[dict[str, Any]] = []
         for desk in desks:
             desk_id = str(desk.get("id") or "").strip()
@@ -331,17 +348,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             return []
         if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
-        issues = self._source_operations.bulk_fetch_issues(
+        return self._source_operations.bulk_fetch_issues(
             issue_ids=issue_ids, raise_on_missing=True
         )
-        fetched_ids = {str(issue.get("id")) for issue in issues}
-        missing = [issue_id for issue_id in issue_ids if issue_id not in fetched_ids]
-        if missing:
-            raise UnexpectedValidationError(
-                f"Jira returned no ticket for {len(missing)} of {len(issue_ids)} "
-                "requested issue ids."
-            )
-        return issues
 
     def _documents(
         self,
@@ -414,9 +423,18 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         page = self._source_operations.search_issue_ids(
             jql=self._project_jql(desk_by_project), max_results=1, fast=True
         )
-        if page.issue_ids:
+        issue_ids = page.issue_ids
+        if not issue_ids:
+            # An empty scope would otherwise leave issue-fetch permission
+            # untested. Any readable ticket proves the endpoint works; it is
+            # fetched for the check only and never indexed.
+            accessible = self._source_operations.search_issue_ids(
+                jql="created >= 1970-01-01", max_results=1, fast=True
+            )
+            issue_ids = accessible.issue_ids
+        if issue_ids:
             self._source_operations.bulk_fetch_issues(
-                issue_ids=page.issue_ids, raise_on_missing=True, fast=True
+                issue_ids=issue_ids, raise_on_missing=True, fast=True
             )
 
     def retrieve_all_slim_docs(
@@ -442,6 +460,15 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                     raise UnexpectedValidationError(
                         "Jira returned a ticket without a key."
                     )
+                ticket_content = build_jira_ticket_content(
+                    issue, comment_email_blacklist=self.comment_email_blacklist
+                )
+                skip_reason = jira_issue_skip_reason(
+                    issue, ticket_content, labels_to_skip=self.labels_to_skip
+                )
+                if skip_reason is not None:
+                    logger.info("Skipping %s because %s.", issue_key, skip_reason)
+                    continue
                 batch.append(SlimDocument(id=build_jira_url(self.jira_base, issue_key)))
             if len(batch) >= self.batch_size:
                 yield batch

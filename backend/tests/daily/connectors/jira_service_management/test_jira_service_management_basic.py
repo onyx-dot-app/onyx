@@ -5,7 +5,9 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.jira_service_management import JiraServiceManagementConnector
+from onyx.connectors.jira_service_management.connector import (
+    JiraServiceManagementConnector,
+)
 from onyx.connectors.models import Document, SlimDocument
 from tests.utils.secret_names import TestSecret
 

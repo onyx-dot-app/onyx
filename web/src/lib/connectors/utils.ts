@@ -385,6 +385,19 @@ export function createConnectorValidationSchema(
       });
   }
 
+  if (connector === ValidSources.JiraServiceManagement) {
+    // An empty Project key would become "all visible desks" in the backend.
+    fieldSchemas.project_key = Yup.string()
+      .trim()
+      .when("indexing_scope", {
+        is: "project",
+        then: (schema) =>
+          schema.required(
+            messages.required?.("Project Key") ?? "Project Key is required"
+          ),
+      });
+  }
+
   if (connector === ValidSources.Confluence) {
     // An empty selection would index every space.
     fieldSchemas.space = Yup.mixed().test(

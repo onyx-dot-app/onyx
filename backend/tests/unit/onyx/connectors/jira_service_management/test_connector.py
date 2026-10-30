@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -15,7 +16,12 @@ from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    SlimDocument,
+)
 
 BASE = "https://example.atlassian.net"
 
@@ -57,6 +63,8 @@ def _issue(
     key: str,
     project_key: str = "TEST",
     summary: str = "Printer is down",
+    description: str = "The printer on floor 2 is offline.",
+    labels: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": issue_id,
@@ -65,8 +73,8 @@ def _issue(
             "summary": summary,
             "updated": "2023-01-01T12:00:00.000+0000",
             "created": "2023-01-01T12:00:00.000+0000",
-            "description": "The printer on floor 2 is offline.",
-            "labels": [],
+            "description": description,
+            "labels": labels or [],
             "reporter": {
                 "displayName": "Test Creator",
                 "emailAddress": "creator@example.com",
@@ -96,7 +104,7 @@ def _connector(
         jira_base_url=BASE, project_key="TEST", **kwargs
     )
     connector._service_desk_base_url = BASE
-    connector._session = _Session(responses or [_desk_page()])
+    connector._session = cast(Any, _Session(responses or [_desk_page()]))
     operations = MagicMock()
     operations.search_issue_ids.side_effect = list(
         search_pages or [JiraIssueIdPage(issue_ids=[], next_page_token=None)]
@@ -106,6 +114,20 @@ def _connector(
     ]
     connector._source_operations = operations
     return connector
+
+
+def _document_ids(
+    batches: Iterable[list[Document | HierarchyNode]],
+) -> list[str]:
+    return [doc.id for batch in batches for doc in batch if isinstance(doc, Document)]
+
+
+def _slim_ids(
+    batches: Iterable[list[SlimDocument | HierarchyNode]],
+) -> list[str]:
+    return [
+        doc.id for batch in batches for doc in batch if isinstance(doc, SlimDocument)
+    ]
 
 
 def _operations(connector: JiraServiceManagementConnector) -> Any:
@@ -134,6 +156,7 @@ def test_load_indexes_every_project_ticket_and_marks_source() -> None:
 
     assert len(batches) == 1
     document = batches[0][0]
+    assert isinstance(document, Document)
     assert document.source is DocumentSource.JIRA_SERVICE_MANAGEMENT
     assert document.id == f"{BASE}/browse/TEST-100"
     assert document.metadata["jsm_service_desk_id"] == "1"
@@ -154,9 +177,9 @@ def test_load_follows_the_search_cursor() -> None:
         ],
     )
 
-    documents = [doc for batch in connector.load_from_state() for doc in batch]
+    documents = _document_ids(connector.load_from_state())
 
-    assert [doc.id for doc in documents] == [
+    assert documents == [
         f"{BASE}/browse/TEST-100",
         f"{BASE}/browse/TEST-101",
     ]
@@ -189,7 +212,7 @@ def test_validation_checks_desk_jira_search_and_issue_fetch() -> None:
 def test_validation_rejects_a_configured_desk_that_is_not_visible() -> None:
     connector = _connector(service_desk_ids=["9"])
 
-    with pytest.raises(ConnectorValidationError, match="No Jira Service Management"):
+    with pytest.raises(ConnectorValidationError, match="cannot see the configured"):
         connector.validate_connector_settings()
 
 
@@ -203,7 +226,9 @@ def test_poll_uses_the_updated_window_and_the_same_project_scope() -> None:
     batches = list(connector.poll_source(1_700_000_000, 1_700_003_600))
 
     assert len(batches) == 1
-    assert batches[0][0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
+    polled = batches[0][0]
+    assert isinstance(polled, Document)
+    assert polled.source is DocumentSource.JIRA_SERVICE_MANAGEMENT
     jql = _operations(connector).search_issue_ids.call_args.kwargs["jql"]
     assert 'project in ("TEST")' in jql
     assert "updated >= 1700000000000" in jql
@@ -223,10 +248,8 @@ def test_slim_uses_the_same_scope_and_ids_as_load() -> None:
         search_pages=[JiraIssueIdPage(issue_ids=["100"], next_page_token=None)],
     )
 
-    loaded = [doc.id for batch in load_connector.load_from_state() for doc in batch]
-    slimmed = [
-        doc.id for batch in slim_connector.retrieve_all_slim_docs() for doc in batch
-    ]
+    loaded = _document_ids(load_connector.load_from_state())
+    slimmed = _slim_ids(slim_connector.retrieve_all_slim_docs())
 
     assert slimmed == loaded == [f"{BASE}/browse/TEST-100"]
     assert (
@@ -264,22 +287,68 @@ def test_runner_and_pruning_use_the_same_membership() -> None:
         issues=issues,
         search_pages=[JiraIssueIdPage(issue_ids=["100"], next_page_token=None)],
     )
-    pruned = [
-        doc.id for batch in prune_connector.retrieve_all_slim_docs() for doc in batch
-    ]
+    pruned = _slim_ids(prune_connector.retrieve_all_slim_docs())
 
     assert indexed == pruned == [f"{BASE}/browse/TEST-100"]
 
 
-def test_a_missing_bulk_issue_is_an_error() -> None:
-    connector = _connector(
+def test_slim_omits_the_tickets_that_indexing_skips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "onyx.connectors.jira.connector.JIRA_CONNECTOR_MAX_TICKET_SIZE", 50
+    )
+    issues = {
+        "100": _issue("100", "TEST-100"),
+        "101": _issue("101", "TEST-101", labels=["skip-me"]),
+        "102": _issue("102", "TEST-102", description="x" * 200),
+    }
+    load_connector = _connector(
         [_desk_page()],
-        issues={},
-        search_pages=[JiraIssueIdPage(issue_ids=["100"], next_page_token=None)],
+        issues=issues,
+        search_pages=[
+            JiraIssueIdPage(issue_ids=["100", "101", "102"], next_page_token=None)
+        ],
+        labels_to_skip=["skip-me"],
+    )
+    slim_connector = _connector(
+        [_desk_page()],
+        issues=issues,
+        search_pages=[
+            JiraIssueIdPage(issue_ids=["100", "101", "102"], next_page_token=None)
+        ],
+        labels_to_skip=["skip-me"],
     )
 
-    with pytest.raises(UnexpectedValidationError, match="no ticket for 1 of 1"):
-        list(connector.load_from_state())
+    loaded = _document_ids(load_connector.load_from_state())
+    slimmed = _slim_ids(slim_connector.retrieve_all_slim_docs())
+
+    assert loaded == slimmed == [f"{BASE}/browse/TEST-100"]
+
+
+def test_every_configured_desk_must_resolve() -> None:
+    connector = _connector([_desk_page()], service_desk_ids=["1", "9"])
+
+    with pytest.raises(ConnectorValidationError, match="9"):
+        connector.validate_connector_settings()
+
+
+def test_validation_checks_bulk_fetch_when_the_scope_is_empty() -> None:
+    connector = _connector(
+        [_desk_page()],
+        issues={"100": _issue("100", "TEST-100")},
+        search_pages=[
+            JiraIssueIdPage(issue_ids=[], next_page_token=None),
+            JiraIssueIdPage(issue_ids=["100"], next_page_token=None),
+        ],
+    )
+
+    connector.validate_connector_settings()
+
+    searches = _operations(connector).search_issue_ids.call_args_list
+    assert searches[1].kwargs["jql"] == "created >= 1970-01-01"
+    bulk = _operations(connector).bulk_fetch_issues.call_args
+    assert bulk.kwargs["issue_ids"] == ["100"]
 
 
 def test_a_repeated_search_cursor_is_an_error() -> None:
