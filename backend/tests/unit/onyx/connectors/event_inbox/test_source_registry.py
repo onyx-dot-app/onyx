@@ -12,13 +12,12 @@ from pydantic import ValidationError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox import sources as sources_module
+from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
 from onyx.connectors.event_inbox.source_registry import (
-    _SPECS,
-    WebhookRequest,
-    WebhookSourceSpec,
     get_webhook_source,
     register_webhook_source,
     registered_webhook_sources,
+    unregister_webhook_source,
     webhook_callback_url,
 )
 from onyx.connectors.event_models import EventParseResult
@@ -39,12 +38,14 @@ STUB_MODULE = "tests.unit.onyx.connectors.event_inbox.registering_source"
 
 @pytest.fixture(autouse=True)
 def clean_registry() -> Generator[None, None, None]:
-    before = dict(_SPECS)
+    before = registered_webhook_sources()
     try:
         yield
     finally:
-        _SPECS.clear()
-        _SPECS.update(before)
+        for spec in registered_webhook_sources():
+            unregister_webhook_source(spec.slug)
+        for spec in before:
+            register_webhook_source(spec)
         # A source registers as a side effect of being imported, and an
         # import happens once per process. Dropping the module lets each
         # test exercise a first load rather than a cache hit.
@@ -85,7 +86,8 @@ def test_a_source_is_registered_only_once_its_module_is_imported(
 ) -> None:
     """Both the webhook server and the drain build from this registry, and
     neither imports a source by accident."""
-    _SPECS.clear()
+    for spec in registered_webhook_sources():
+        unregister_webhook_source(spec.slug)
     monkeypatch.setattr(sources_module, "_loaded", False)
     monkeypatch.setattr(
         sources_module,
@@ -104,7 +106,8 @@ def test_a_source_is_registered_only_once_its_module_is_imported(
 def test_a_source_that_fails_to_import_does_not_stop_the_others(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _SPECS.clear()
+    for spec in registered_webhook_sources():
+        unregister_webhook_source(spec.slug)
     monkeypatch.setattr(sources_module, "_loaded", False)
     monkeypatch.setattr(
         sources_module,
@@ -162,7 +165,8 @@ def test_a_source_that_registers_then_fails_leaves_nothing_behind(
 ) -> None:
     """Logging the failure is not enough: a half-registered spec would serve
     a route for a module whose import never finished."""
-    _SPECS.clear()
+    for spec in registered_webhook_sources():
+        unregister_webhook_source(spec.slug)
     half = "tests.unit.onyx.connectors.event_inbox.half_registering_source"
     monkeypatch.setattr(sources_module, "_loaded", False)
     monkeypatch.setattr(sources_module, "EVENT_SOURCE_MODULES", (half, STUB_MODULE))
