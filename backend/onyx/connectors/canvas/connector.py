@@ -898,6 +898,8 @@ class CanvasConnector(
             if oe.status_code == _NOT_FOUND_STATUS_CODE:
                 try:
                     course_exists = self._course_exists(course_id)
+                except CanvasUnsafeUrlError:
+                    raise
                 except Exception as probe_error:
                     if isinstance(probe_error, OnyxError) and (
                         probe_error.status_code in (401, 403)

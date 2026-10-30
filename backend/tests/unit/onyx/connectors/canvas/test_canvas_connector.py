@@ -1486,6 +1486,36 @@ class TestLoadFromCheckpoint:
         ):
             _run_checkpoint(connector, cp)
 
+    def test_course_check_unsafe_url_after_404_fails_the_run(self) -> None:
+        """An off-host URL from the course check must stop the run, the same
+        as on the stage request."""
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "not found",
+                    status_code_override=404,
+                ),
+            ),
+            patch.object(
+                connector,
+                "_course_exists",
+                side_effect=CanvasUnsafeUrlError("off-host link"),
+            ),
+            pytest.raises(CanvasUnsafeUrlError),
+        ):
+            _run_checkpoint(connector, cp)
+
     def test_404_on_later_page_is_a_stage_failure(self) -> None:
         """A 404 while resuming from a pagination link is not a disabled
         tool. Record a stage failure instead of silently skipping the rest
