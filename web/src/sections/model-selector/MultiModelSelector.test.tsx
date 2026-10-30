@@ -750,6 +750,22 @@ describe("MultiModelSelector", () => {
       });
       expect(popperXY()).toEqual({ x: last.right, y: last.top - SIDE_OFFSET });
     });
+
+    test("a reopened menu drops the removed pill's place: its settings sit on +", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B", "Model C"]);
+
+      await openFromPill(user, "Model B");
+      await expectAnchoredAt("Model B");
+      await clickPillX(user, "Model B");
+      await waitFor(() => expect(popperWrapper()).toBeNull());
+
+      await openFromAdd(user);
+      await user.click(settingsButton("Model B"));
+
+      expectPane("Model B");
+      await expectAnchoredAt(ADD);
+    });
   });
 
   // -------------------------------------------------------------------------

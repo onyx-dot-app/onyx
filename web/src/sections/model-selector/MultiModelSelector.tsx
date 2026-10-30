@@ -68,7 +68,7 @@ export default function MultiModelSelector({
   // time a pill x has unmounted its target, so the row's last one is kept.
   const rowPointerDownRef = useRef<PointerEvent | null>(null);
   // A removed pill's last rect, so the closing popover does not jump during its
-  // exit animation. Keyed so it never applies to another model's pane.
+  // exit animation. Every pane change drops it, so it never outlives that close.
   const lastPillRef = useRef<{ key: string; rect: DOMRect } | null>(null);
 
   const settings = useSettings();
@@ -182,12 +182,17 @@ export default function MultiModelSelector({
     if (canAdd) onAdd(toSelectedModel(option));
   };
 
+  const showDetail = (modelKey: string | null) => {
+    lastPillRef.current = null;
+    setDetailKey(modelKey);
+  };
+
   // Every opener sets the pane key (null without a pane), so a close keeps it
   // and the anchor holds through the exit animation.
   const openPicker = (modelKey: string | null) => {
     // `pointer-events-none` only blocks the mouse; guard the keyboard path too.
     if (noModelsToSelect) return;
-    setDetailKey(modelDetail ? modelKey : null);
+    showDetail(modelDetail ? modelKey : null);
     setOpen(true);
   };
 
@@ -319,7 +324,7 @@ export default function MultiModelSelector({
           isDisabled={isDisabled}
           modelDetail={modelDetail}
           detailKey={detailKey}
-          onDetailKeyChange={setDetailKey}
+          onDetailKeyChange={showDetail}
         />
       </Popover.Content>
     </Popover>
