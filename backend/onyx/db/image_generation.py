@@ -312,3 +312,25 @@ def unlink_image_generation_model__no_commit(
     if not model_configuration.is_visible and not model_configuration.llm_model_flows:
         db_session.delete(model_configuration)
     db_session.flush()
+
+
+def is_usable_for_image_generation(llm_provider: LLMProvider) -> bool:
+    """Image generation is available to every user and agent, so only
+    unrestricted providers can back it."""
+    return llm_provider.is_public and not llm_provider.personas
+
+
+def unlink_image_generation_models_for_provider__no_commit(
+    db_session: Session,
+    llm_provider_id: int,
+) -> None:
+    configs = db_session.scalars(
+        select(ImageGenerationConfig)
+        .join(ModelConfiguration)
+        .where(
+            ModelConfiguration.llm_provider_id == llm_provider_id,
+            ImageGenerationConfig.llm_provider_owned.is_(False),
+        )
+    ).all()
+    for config in configs:
+        unlink_image_generation_model__no_commit(db_session, config)

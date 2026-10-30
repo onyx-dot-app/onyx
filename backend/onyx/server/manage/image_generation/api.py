@@ -1,3 +1,4 @@
+import hashlib
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,6 +12,7 @@ from onyx.db.image_generation import (
     delete_image_generation_config__no_commit,
     get_all_image_generation_configs,
     get_image_generation_config,
+    is_usable_for_image_generation,
     link_image_generation_model__no_commit,
     set_default_image_generation_config,
     unlink_image_generation_model__no_commit,
@@ -286,7 +288,8 @@ def create_config(
 
 def _linked_image_provider_id(llm_provider_id: int, model_name: str) -> str:
     slug = re.sub(r"[^a-z0-9._-]+", "-", model_name.lower()).strip("-")
-    return f"llm-{llm_provider_id}-{slug}"
+    digest = hashlib.sha256(model_name.encode()).hexdigest()[:8]
+    return f"llm-{llm_provider_id}-{slug}-{digest}"
 
 
 @admin_router.get("/llm-providers")
@@ -294,7 +297,7 @@ def list_llm_provider_image_models(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ImageGenerationLLMProvider]:
-    """Connected LLM providers with every model they can serve. Catalog image
+    """Connected unrestricted LLM providers with every model they can serve. Catalog image
     models are listed even when the provider's model list omits them, and are
     marked recommended."""
     connected_by_model_id = {
@@ -306,6 +309,8 @@ def list_llm_provider_image_models(
     for llm_provider in fetch_existing_llm_providers(
         db_session=db_session, flow_type_filter=[], include_model_flows=True
     ):
+        if not is_usable_for_image_generation(llm_provider):
+            continue
         catalog_models = set(iter_image_generation_models(llm_provider.provider))
         stored_by_name = {mc.name: mc for mc in llm_provider.model_configurations}
         models: list[ImageGenerationProviderModel] = []
@@ -359,11 +364,11 @@ def link_config(
             OnyxErrorCode.NOT_FOUND,
             f"LLM provider {config_link.llm_provider_id} not found",
         )
-    # Image generation is available to every user.
-    if not llm_provider.is_public:
+    if not is_usable_for_image_generation(llm_provider):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "Only public LLM providers can be used for image generation",
+            "Only public LLM providers without agent restrictions can be used "
+            "for image generation",
         )
 
     image_provider_id = _linked_image_provider_id(llm_provider.id, model_name)

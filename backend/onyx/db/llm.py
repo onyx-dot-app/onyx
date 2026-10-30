@@ -8,6 +8,9 @@ from sqlalchemy.orm.interfaces import LoaderOption
 
 from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
+from onyx.db.image_generation import (
+    unlink_image_generation_models_for_provider__no_commit,
+)
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
     DocumentSet,
@@ -784,6 +787,13 @@ def upsert_llm_provider(
         llm_provider_id=existing_llm_provider.id,
         persona_ids=llm_provider_upsert_request.personas,
     )
+    if (
+        not llm_provider_upsert_request.is_public
+        or llm_provider_upsert_request.personas
+    ):
+        unlink_image_generation_models_for_provider__no_commit(
+            db_session, existing_llm_provider.id
+        )
 
     try:
         db_session.commit()
