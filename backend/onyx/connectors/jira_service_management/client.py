@@ -79,8 +79,7 @@ class JsmClient:
                         )
                         time.sleep(retry_after)
                         continue
-                    break
-
+                    raise last_exception
                 if not response.ok:
                     raise JsmApiError(
                         f"JSM API error {response.status_code} on {endpoint}: {response.text}",

@@ -118,6 +118,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
   | ValidSources.UserFile
   | ValidSources.CraftFile // User Library - managed through dedicated UI
+  | ValidSources.JiraServiceManagement
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [
