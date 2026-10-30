@@ -46,9 +46,16 @@ Sidebar entry point. Handles three viewport sizes:
 Topbar (logo + fold button) with optional pinned content below it
 (e.g. a search input or new-session button).
 
+With `logo` and `wordmark`, the fold button is anchored to the row's end and
+moves with the column's edge as the sidebar folds, while the wordmark fades in
+place. Folded, the button takes the mark's place when the row is hovered or
+focused from the keyboard.
+
 | Prop                 | Type                                                      | Default | Description                                                                                                                     |
 | -------------------- | --------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `renderAppLogo`      | `(folded: boolean \| undefined) => IconFunctionComponent` | —       | Logo factory; receives the effective fold state (`undefined` when non-foldable) and returns a component rendered at `size={28}` |
+| `logo`               | `ReactNode`                                               | —       | The logo mark, shown in both fold states. With `wordmark`, replaces `renderAppLogo`                                             |
+| `wordmark`           | `ReactNode`                                               | —       | The name beside the mark. Fades in place on fold (`--duration-sidebar-wordmark-fade`)                                           |
 | `showLogoWhenFolded` | `boolean`                                                 | `true`  | When `false`, hides the logo and shows only the fold button when collapsed                                                      |
 | `children`           | `ReactNode`                                               | —       | Pinned content below the topbar                                                                                                 |
 

@@ -161,7 +161,18 @@ interface SidebarHeaderProps {
    * sidebar is non-foldable) and returns an `IconFunctionComponent` that is
    * rendered at `size={28}` in the topbar.
    */
-  renderAppLogo: (folded: boolean) => IconFunctionComponent;
+  renderAppLogo?: (folded: boolean) => IconFunctionComponent;
+  /**
+   * The logo mark, shown in both fold states. With `wordmark`, it replaces
+   * `renderAppLogo`.
+   */
+  logo?: React.ReactNode;
+  /**
+   * The name beside the mark. It fades in place as the sidebar folds, while
+   * the fold button, anchored to the row's end, moves with the column's edge.
+   * Folded, the fold button takes the mark's place on hover or keyboard focus.
+   */
+  wordmark?: React.ReactNode;
   /**
    * When `true` (default), the logo is shown in the folded state with a
    * hover-to-reveal fold button. When `false`, only the fold button is shown
@@ -173,6 +184,8 @@ interface SidebarHeaderProps {
 
 function SidebarHeader({
   renderAppLogo,
+  logo,
+  wordmark,
   showLogoWhenFolded = true,
   children,
 }: SidebarHeaderProps) {
@@ -193,7 +206,8 @@ function SidebarHeader({
         prominence="tertiary"
         aria-label={foldLabel}
         tooltip={foldLabel}
-        tooltipSide={folded ? "end" : "bottom"}
+        // Sidebar tooltips open toward the page, in both fold states.
+        tooltipSide="end"
         size="md"
         onClick={toggleFolded}
       />
@@ -201,7 +215,36 @@ function SidebarHeader({
     [folded, foldLabel, toggleFolded]
   );
 
-  const Logo = renderAppLogo(foldable ? folded : false);
+  if (logo !== undefined || wordmark !== undefined) {
+    return (
+      <div className="opal-sidebar-header">
+        <div className="opal-sidebar-header__topbar">
+          <div
+            className="opal-sidebar-header__brand"
+            data-foldable={foldable || undefined}
+            style={
+              {
+                "--sidebar-logo-size": `${SIDEBAR_LOGO_HEIGHT_PX}px`,
+              } as React.CSSProperties
+            }
+          >
+            <div className="opal-sidebar-header__mark">{logo}</div>
+            <div className="opal-sidebar-header__wordmark">{wordmark}</div>
+            {foldable && (
+              <div className="opal-sidebar-header__fold-button">
+                {closeButton}
+              </div>
+            )}
+          </div>
+        </div>
+        {children && (
+          <div className="opal-sidebar-header__content">{children}</div>
+        )}
+      </div>
+    );
+  }
+
+  const Logo = renderAppLogo!(foldable ? folded : false);
   const logoEl = <Logo size={SIDEBAR_LOGO_HEIGHT_PX} />;
 
   // Folded: the logo *is* the unfold control. The fold icon swaps in on hover

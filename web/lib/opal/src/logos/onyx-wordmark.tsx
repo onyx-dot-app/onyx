@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgOnyxTyped = ({ size, ...props }: IconProps) => (
+const SvgOnyxWordmark = ({ size, ...props }: IconProps) => (
   <svg
     height={size}
     viewBox="0 0 152 64"
@@ -25,4 +25,4 @@ const SvgOnyxTyped = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgOnyxTyped;
+export default SvgOnyxWordmark;

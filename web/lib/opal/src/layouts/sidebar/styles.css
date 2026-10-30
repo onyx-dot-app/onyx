@@ -100,6 +100,69 @@
   @apply flex flex-row justify-between items-start px-1 w-full;
 }
 
+/* The brand row: the mark and the wordmark in flow, and the fold button
+   anchored to the row's end. As the column narrows, the wordmark fades in
+   place (it has a fixed width, so it never reflows) and the button moves with
+   the column's edge until it sits over the mark. Folded, the button alone
+   returns when the row is hovered or focused from the keyboard. */
+.opal-sidebar-header__brand {
+  @apply relative flex flex-row items-start px-1 w-full;
+  min-height: 2.25rem;
+  /* The gap between mark and wordmark: 5/16 of the logo height (Figma). */
+  --sidebar-logo-gap: calc(var(--sidebar-logo-size) * 5 / 16);
+  gap: var(--sidebar-logo-gap);
+}
+
+.opal-sidebar-header__mark {
+  @apply flex shrink-0;
+  transition: opacity var(--duration-sidebar-fold) ease-in-out;
+}
+
+/* The faster fade has it gone before the moving button reaches it. */
+.opal-sidebar-header__wordmark {
+  @apply flex shrink-0 min-w-0;
+  /* The expanded row less its padding, the mark, the gap and the button. */
+  width: calc(
+    var(--sidebar-width-expanded) - 1.5rem - var(--sidebar-logo-size) -
+      var(--sidebar-logo-gap) - 2.25rem - var(--sidebar-logo-gap)
+  );
+  transition:
+    opacity var(--duration-sidebar-wordmark-fade) ease-in-out,
+    visibility 0s linear 0s;
+}
+
+.opal-sidebar-header__fold-button {
+  @apply absolute top-0 z-10 flex;
+  inset-inline-end: 0.25rem;
+  transition: opacity var(--duration-sidebar-fold) ease-in-out;
+}
+
+.opal-sidebar-root__inner[data-folded="true"] .opal-sidebar-header__wordmark {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-sidebar-wordmark-fade) ease-in-out,
+    visibility 0s linear var(--duration-sidebar-wordmark-fade);
+}
+
+.opal-sidebar-root__inner[data-folded="true"]
+  .opal-sidebar-header__fold-button {
+  opacity: 0;
+}
+
+/* Folded: hovering the row, or focusing it from the keyboard, shows the fold
+   button in place of the mark. */
+.opal-sidebar-root__inner[data-folded="true"]
+  .opal-sidebar-header__brand:is(:hover, :has(:focus-visible))
+  .opal-sidebar-header__fold-button {
+  opacity: 1;
+}
+.opal-sidebar-root__inner[data-folded="true"]
+  .opal-sidebar-header__brand:is(:hover, :has(:focus-visible))
+  .opal-sidebar-header__mark {
+  opacity: 0;
+}
+
 .opal-sidebar-header__content {
   @apply px-2;
 }

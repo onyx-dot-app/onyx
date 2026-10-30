@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
 import { cn } from "@opal/utils";
-import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
+import { SvgOnyxLogo, SvgOnyxLogoWordmark, SvgOnyxWordmark } from "@opal/logos";
 import { IconProps } from "@opal/types";
 import {
   DEFAULT_LOCALE,
@@ -82,7 +82,7 @@ export function FoldableLogo({
     return folded ? (
       <Logo onyxBranded size={resolvedSize} className={className} />
     ) : (
-      <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+      <SvgOnyxLogoWordmark size={resolvedSize} className={className} />
     );
   }
 
@@ -136,7 +136,56 @@ export function FoldableLogo({
   ) : folded ? (
     <Logo size={resolvedSize} className={className} />
   ) : (
-    <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+    <SvgOnyxLogoWordmark size={resolvedSize} className={className} />
+  );
+}
+
+/**
+ * The sidebar's logo mark: the workspace's custom logo, or the Onyx mark.
+ * Renders nothing when the workspace shows its name only.
+ */
+export function SidebarLogoMark({ size }: { size: number }) {
+  const { enterprise } = useSettings();
+  if (enterprise?.logo_display_style === "name_only") return null;
+  return <Logo size={size} />;
+}
+
+/**
+ * The sidebar's wordmark, beside the mark: the workspace's name with the
+ * "Powered by" line, or the Onyx wordmark when no custom name is set.
+ */
+export function SidebarWordmark({ size }: { size: number }) {
+  const t = useTranslations("common");
+  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
+  const logoDisplayStyle = enterprise?.logo_display_style;
+  const applicationName = enterprise?.application_name;
+
+  const customStyle =
+    logoDisplayStyle === "logo_only" || logoDisplayStyle === "name_only";
+  if (!customStyle && !applicationName) {
+    return <SvgOnyxWordmark size={size} />;
+  }
+
+  return (
+    /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
+    <div className="flex min-w-0 flex-1 flex-col -mt-0.5">
+      {logoDisplayStyle !== "logo_only" && (
+        <OverflowText
+          as="p"
+          textPosition="text-start"
+          font="heading-h3"
+          color="text-05"
+        >
+          {applicationName ?? ""}
+        </OverflowText>
+      )}
+      {/* Wait for settings so a hidden tagline never flashes. */}
+      {!isLoading && !hide_onyx_branding && (
+        <Text font="secondary-body" color="text-03" maxLines={1}>
+          {t("logo.poweredBy.label")}
+        </Text>
+      )}
+    </div>
   );
 }
 
