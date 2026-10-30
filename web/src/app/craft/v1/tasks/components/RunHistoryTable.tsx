@@ -29,10 +29,11 @@ import {
   listScheduledTaskRuns,
   markScheduledRunsViewed,
 } from "@/app/craft/v1/tasks/api";
-import { revalidateScheduledRunViews } from "@/app/craft/v1/tasks/hooks";
+import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { RunStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import {
   buildSessionPath,
+  RUNS_MAX_PAGE_SIZE,
   RUNS_PAGE_SIZE,
 } from "@/app/craft/v1/tasks/constants";
 import type {
@@ -148,11 +149,17 @@ function buildColumns(
       sortable: false,
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
-          <div className="flex items-center gap-2">
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            gap={2}
+            width="fit"
+            height="fit"
+          >
             {isRunUnviewed(row) && (
               <UnseenMarker label={unviewedLabel} className="shrink-0" />
             )}
-            <div className="flex flex-col gap-0.5">
+            <Section alignItems="start" gap={0.5} width="fit" height="fit">
               <Text
                 font="main-ui-body"
                 color="text-05"
@@ -163,8 +170,8 @@ function buildColumns(
               <Text font="secondary-body" color="text-03">
                 {formatRelativeShort(value)}
               </Text>
-            </div>
-          </div>
+            </Section>
+          </Section>
         </NonClickableCell>
       ),
     },
@@ -325,8 +332,18 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     if (markingViewed) return;
     setMarkingViewed(true);
     try {
-      const res = await markScheduledRunsViewed(taskId, unviewedRuns);
-      const viewed = new Map(res.items.map((run) => [run.id, run]));
+      const viewed = new Map<string, ScheduledRunSummary>();
+      // Acknowledged runs leave the unviewed filter, so each pass reads the next batch.
+      for (;;) {
+        const page = await listScheduledTaskRuns(taskId, {
+          limit: RUNS_MAX_PAGE_SIZE,
+          unviewed: true,
+        });
+        if (page.items.length === 0) break;
+        const res = await markScheduledRunsViewed(taskId, page.items);
+        for (const run of res.items) viewed.set(run.id, run);
+        if (page.items.length < RUNS_MAX_PAGE_SIZE) break;
+      }
       setOlderPages((pages) =>
         pages.map((page) => page.map((run) => viewed.get(run.id) ?? run))
       );
@@ -336,7 +353,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     } finally {
       setMarkingViewed(false);
     }
-  }, [markingViewed, taskId, unviewedRuns, t]);
+  }, [markingViewed, taskId, t]);
 
   if (isLoading && !data) {
     return (
@@ -376,7 +393,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
   return (
     <Section gap={2} alignItems="stretch">
-      <div className="flex justify-end">
+      <Section flexDirection="row" justifyContent="end" height="fit">
         <Button
           prominence="tertiary"
           size="xs"
@@ -386,7 +403,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
         >
           {t("markAllViewed.label")}
         </Button>
-      </div>
+      </Section>
       <Table
         items={allRuns}
         columns={columns}

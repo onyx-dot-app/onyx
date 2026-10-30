@@ -534,6 +534,7 @@ def list_task_runs(
     task_id: UUID,
     cursor: str | None = Query(default=None),
     limit: int = Query(default=RUNS_DEFAULT_PAGE_SIZE, ge=1, le=RUNS_MAX_PAGE_SIZE),
+    unviewed: bool = Query(default=False),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> RunListResponse:
@@ -541,7 +542,8 @@ def list_task_runs(
 
     ``cursor`` is the ``started_at`` (ISO-8601) of the last row returned by
     the previous page. ``next_cursor`` is ``None`` when the last page is
-    reached.
+    reached. ``unviewed`` keeps only runs with results the owner has not
+    opened.
 
     Raises ``OnyxError(NOT_FOUND)`` when the task is missing, soft-deleted,
     or owned by another user (ownership check happens inside the DB op).
@@ -553,6 +555,7 @@ def list_task_runs(
         user_id=user.id,
         cursor=cursor_dt,
         limit=limit,
+        unviewed_only=unviewed,
     )
     next_cursor: str | None = None
     if len(runs) == limit:

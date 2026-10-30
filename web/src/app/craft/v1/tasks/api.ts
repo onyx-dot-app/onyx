@@ -86,11 +86,12 @@ export async function runScheduledTaskNow(
 
 export async function listScheduledTaskRuns(
   taskId: string,
-  options?: { cursor?: string | null; limit?: number }
+  options?: { cursor?: string | null; limit?: number; unviewed?: boolean }
 ): Promise<ScheduledRunListResponse> {
   const params = new URLSearchParams();
   if (options?.cursor) params.set("cursor", options.cursor);
   if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.unviewed) params.set("unviewed", "true");
   const qs = params.toString();
   const url = qs
     ? `${API_BASE}/${taskId}/runs?${qs}`

@@ -87,7 +87,7 @@ import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
 import { Section } from "@/layouts/general-layouts";
-import { useUnviewedScheduledTaskCount } from "@/app/craft/v1/tasks/hooks";
+import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
@@ -674,7 +674,7 @@ export default function AppSidebar() {
                     ) : (
                       <Section
                         flexDirection="row"
-                        gap={0.375}
+                        gap={1.5}
                         width="fit"
                         height="fit"
                       >

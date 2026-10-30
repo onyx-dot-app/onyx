@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
-import { markScheduledRunsViewed } from "@/app/craft/v1/tasks/api";
+import {
+  listScheduledTaskRuns,
+  markScheduledRunsViewed,
+} from "@/app/craft/v1/tasks/api";
 import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/types";
 
 jest.mock("next/navigation", () => ({
@@ -11,7 +14,7 @@ jest.mock("@/app/craft/v1/tasks/api", () => ({
   listScheduledTaskRuns: jest.fn(),
   markScheduledRunsViewed: jest.fn(),
 }));
-jest.mock("@/app/craft/v1/tasks/hooks", () => ({
+jest.mock("@/lib/scheduledTasks/hooks", () => ({
   revalidateScheduledRunViews: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -49,10 +52,15 @@ jest.mock("swr", () => ({
 
 beforeEach(() => {
   jest.mocked(markScheduledRunsViewed).mockReset();
+  jest.mocked(listScheduledTaskRuns).mockReset();
 });
 
-it("marks only unviewed runs and sends their current revisions", async () => {
+it("marks every unviewed run of the task, not only loaded rows", async () => {
   mockRuns = [run("new", 2, 1), run("seen", 1, 1)];
+  const unloaded = run("unloaded", 1, null);
+  jest
+    .mocked(listScheduledTaskRuns)
+    .mockResolvedValue({ items: [mockRuns[0]!, unloaded], next_cursor: null });
   jest
     .mocked(markScheduledRunsViewed)
     .mockResolvedValue({ items: [run("new", 2, 2)], next_cursor: null });
@@ -64,8 +72,15 @@ it("marks only unviewed runs and sends their current revisions", async () => {
   );
 
   await waitFor(() =>
-    expect(markScheduledRunsViewed).toHaveBeenCalledWith("task", [mockRuns[0]])
+    expect(markScheduledRunsViewed).toHaveBeenCalledWith("task", [
+      mockRuns[0],
+      unloaded,
+    ])
   );
+  expect(listScheduledTaskRuns).toHaveBeenCalledWith("task", {
+    limit: 100,
+    unviewed: true,
+  });
 });
 
 it("disables mark all viewed when every run was opened", () => {

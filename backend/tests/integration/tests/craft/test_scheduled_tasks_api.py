@@ -108,8 +108,11 @@ def _list_runs(
     *,
     cursor: str | None = None,
     limit: int | None = None,
+    unviewed: bool = False,
 ) -> httpx.Response:
     params: dict[str, Any] = {}
+    if unviewed:
+        params["unviewed"] = True
     if cursor is not None:
         params["cursor"] = cursor
     if limit is not None:
@@ -434,6 +437,8 @@ def test_run_results_stay_unviewed_until_opened(
     assert runs[str(run_id)]["revision"] == 1
     assert runs[str(run_id)]["viewed_revision"] is None
     assert runs[str(skipped_id)]["revision"] == 0
+    unviewed = _list_runs(admin_user, task_id, unviewed=True).json()["items"]
+    assert [run["id"] for run in unviewed] == [str(run_id)]
 
     assert _view_run(admin_user, task_id, run_id, 2).status_code == 409
     assert _view_run(basic_user, task_id, run_id, 1).status_code == 404
@@ -442,6 +447,7 @@ def test_run_results_stay_unviewed_until_opened(
     viewed.raise_for_status()
     assert viewed.json()["viewed_revision"] == 1
     assert _unviewed_run_count(admin_user, task_id) == 0
+    assert _list_runs(admin_user, task_id, unviewed=True).json()["items"] == []
 
 
 def test_bulk_view_keeps_newer_run_results_unviewed(admin_user: DATestUser) -> None:

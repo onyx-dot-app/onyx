@@ -38,7 +38,7 @@ import {
   isScheduledRunContextInFlight,
 } from "@/app/craft/v1/tasks/utils";
 import { markScheduledRunViewed } from "@/app/craft/v1/tasks/api";
-import { revalidateScheduledRunViews } from "@/app/craft/v1/tasks/hooks";
+import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { toast } from "@opal/layouts";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {

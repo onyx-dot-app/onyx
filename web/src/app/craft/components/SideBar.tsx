@@ -7,7 +7,7 @@ import type { Route } from "next";
 import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
-import { useUnviewedScheduledTaskCount } from "@/app/craft/v1/tasks/hooks";
+import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import {
   useSession,
   useSessionHistory,

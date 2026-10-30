@@ -62,7 +62,13 @@ function buildColumns(
       weight: 25,
       sortable: false,
       cell: (value, row) => (
-        <div className="flex items-center gap-2">
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          gap={2}
+          width="fit"
+          height="fit"
+        >
           {row.unviewed_run_count > 0 && (
             <UnseenMarker label={unviewedLabel} className="shrink-0" />
           )}
@@ -73,7 +79,7 @@ function buildColumns(
           >
             {value}
           </Text>
-        </div>
+        </Section>
       ),
     },
     {

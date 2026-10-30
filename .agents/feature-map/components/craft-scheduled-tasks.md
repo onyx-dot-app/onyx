@@ -32,7 +32,7 @@ run in run history, on each task row with unviewed runs, on "Scheduled Tasks" in
 the Craft sidebar, and beside the Craft Beta tag in the main app sidebar. The
 sidebars poll `GET /build/scheduled-tasks/unviewed-count` every 30 seconds.
 Opening the run's session marks the run viewed. Opening the task page does not.
-"Mark all viewed" in run history marks the loaded runs.
+"Mark all viewed" in run history marks every unviewed run of the task.
 
 When a run fails in the executor, the user gets an INFO notification. It
 shows in the notification list, not in the banner queue. A run that the

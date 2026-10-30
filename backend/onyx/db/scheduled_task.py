@@ -422,6 +422,7 @@ def list_runs_for_task(
     user_id: UUID,
     cursor: datetime | None = None,
     limit: int = 50,
+    unviewed_only: bool = False,
 ) -> list[ScheduledTaskRun]:
     """List runs for a task, newest first, optionally paginated by ``started_at``.
 
@@ -441,6 +442,11 @@ def list_runs_for_task(
     conditions = [ScheduledTaskRun.task_id == task_id]
     if cursor is not None:
         conditions.append(ScheduledTaskRun.started_at < cursor)
+    if unviewed_only:
+        conditions.append(
+            func.coalesce(ScheduledTaskRun.viewed_revision, 0)
+            < ScheduledTaskRun.version
+        )
 
     stmt = (
         select(ScheduledTaskRun)
