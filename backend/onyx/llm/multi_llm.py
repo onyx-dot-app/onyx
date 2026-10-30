@@ -1662,6 +1662,7 @@ class LitellmLLM(LLM):
         )
         max_attempts: int = 1 + LLM_FIRST_CHUNK_MAX_RETRIES
         yielded_any: bool = False
+        finished: bool = False
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================
@@ -1762,6 +1763,7 @@ class LitellmLLM(LLM):
                         self._track_llm_cost(model_response.usage, routed_model)
 
                     yielded_any = True
+                    finished = finished or bool(model_response.choice.finish_reason)
                     yield model_response
                 logger.debug(
                     "LLM stream for %s ended after %.1fs: %d chunks, finish_reason=%s",
@@ -1773,6 +1775,16 @@ class LitellmLLM(LLM):
                 return
             except retryable_exceptions as e:
                 check_cancelled()
+                # The stream ends at end of body, after the provider's terminal
+                # event; a transport error past finish_reason loses no answer.
+                if finished:
+                    logger.warning(
+                        "Stream for model %s failed after finish_reason with %s; "
+                        "keeping the complete response, which may lack usage",
+                        self.config.model_name,
+                        type(e).__name__,
+                    )
+                    return
                 if yielded_any or attempt >= max_attempts - 1:
                     raise _as_onyx_llm_error(e)
                 logger.warning(
