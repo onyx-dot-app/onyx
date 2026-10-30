@@ -37,7 +37,7 @@ import {
   type FeatureFlags,
   type SidebarItemEntry,
 } from "@/lib/admin-sidebar-utils";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
+import { SidebarLogoMark, SidebarWordmark } from "@/lib/app/components";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 export default function AdminSidebar() {
@@ -125,7 +125,8 @@ export default function AdminSidebar() {
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        renderAppLogo={renderSidebarLogo}
+        logo={<SidebarLogoMark size={28} />}
+        wordmark={<SidebarWordmark size={28} />}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         {folded ? (

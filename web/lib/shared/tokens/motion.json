@@ -6,5 +6,9 @@
   "duration-sidebar-fold": {
     "value": "200ms",
     "type": "duration"
+  },
+  "duration-sidebar-wordmark-fade": {
+    "value": "100ms",
+    "type": "duration"
   }
 }

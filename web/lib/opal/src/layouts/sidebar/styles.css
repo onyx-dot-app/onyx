@@ -100,6 +100,92 @@
   @apply flex flex-row justify-between items-start px-1 w-full;
 }
 
+/* The brand row: the mark and the wordmark in flow, and the fold button
+   anchored to the row's end. As the column narrows, the wordmark fades in
+   place (it has a fixed width, so it never reflows) and the button moves with
+   the column's edge until it sits over the mark. Folded, the button alone
+   returns when the row is hovered or focused from the keyboard. */
+.opal-sidebar-header__brand {
+  @apply relative flex flex-row items-start px-1 w-full;
+  /* The gap between mark and wordmark: 5/16 of the logo height (Figma). */
+  --sidebar-logo-gap: calc(var(--sidebar-logo-size) * 5 / 16);
+  gap: var(--sidebar-logo-gap);
+}
+
+.opal-sidebar-header__mark {
+  @apply flex shrink-0;
+  transition: opacity var(--duration-sidebar-fold) ease-in-out;
+}
+
+/* The faster fade has it gone before the moving button reaches it. */
+.opal-sidebar-header__wordmark {
+  @apply flex shrink-0 min-w-0;
+  /* The expanded row less its padding, the mark, the gap and the button. */
+  width: calc(
+    var(--sidebar-width-expanded) - 1.5rem - var(--sidebar-logo-size) -
+      var(--sidebar-logo-gap) - 2.25rem - var(--sidebar-logo-gap)
+  );
+  transition:
+    opacity var(--duration-sidebar-wordmark-fade) ease-in-out,
+    visibility 0s linear 0s;
+}
+
+/* The button is as tall as the mark, so the row needs no room for it. */
+.opal-sidebar-header__fold-button {
+  @apply absolute top-0 z-10 flex;
+  inset-inline-end: 0.25rem;
+  transition: opacity var(--duration-sidebar-fold) ease-in-out;
+}
+
+.opal-sidebar-root__inner[data-folded="true"] .opal-sidebar-header__wordmark {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-sidebar-wordmark-fade) ease-in-out,
+    visibility 0s linear var(--duration-sidebar-wordmark-fade);
+}
+
+.opal-sidebar-root__inner[data-folded="true"]
+  .opal-sidebar-header__fold-button {
+  opacity: 0;
+}
+
+/* Folded: hovering the row, or focusing it from the keyboard, shows the fold
+   button in place of the mark. So does a row that shows no mark: the caller
+   hides the logo when folded, or the mark renders nothing (a name-only
+   brand). Without these the folded header would show nothing at all. */
+.opal-sidebar-root__inner[data-folded="true"]
+  .opal-sidebar-header__brand:is(
+    :hover,
+    :has(:focus-visible),
+    [data-logo-when-folded="false"],
+    :has(.opal-sidebar-header__mark:empty)
+  )
+  .opal-sidebar-header__fold-button {
+  opacity: 1;
+}
+.opal-sidebar-root__inner[data-folded="true"]
+  .opal-sidebar-header__brand:is(
+    :hover,
+    :has(:focus-visible),
+    [data-logo-when-folded="false"]
+  )
+  .opal-sidebar-header__mark {
+  opacity: 0;
+}
+
+/* A device without hover could never reveal the folded button, so it shows
+   the button in place of the mark at rest. */
+@media (hover: none) {
+  .opal-sidebar-root__inner[data-folded="true"]
+    .opal-sidebar-header__fold-button {
+    opacity: 1;
+  }
+  .opal-sidebar-root__inner[data-folded="true"] .opal-sidebar-header__mark {
+    opacity: 0;
+  }
+}
+
 .opal-sidebar-header__content {
   @apply px-2;
 }
@@ -179,8 +265,9 @@
   @apply pt-3 ps-2 pe-1 flex flex-row justify-between items-center;
 }
 
+/* min-w-0 lets the title shrink so its text can be cut. */
 .opal-sidebar-section__title {
-  @apply flex px-0.5 py-1.5;
+  @apply flex min-w-0 px-0.5 py-1.5;
 }
 
 .opal-sidebar-section__tag {
