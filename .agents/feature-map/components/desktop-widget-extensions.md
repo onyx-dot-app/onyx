@@ -117,10 +117,13 @@ panel picks up the new session when the user returns.
    only for a native feature the webview calls. The same holds for each app
    command in the `generate_handler!` list in
    `desktop/src-tauri/src/main.rs`: `desktop/src-tauri/build.rs` declares no
-   app manifest, so Tauri allows every registered command, and a page from
-   any server can invoke it. Popup windows (`popup-*` labels) are left out of
-   the capability, because they can host an OAuth provider or another
-   third-party site.
+   app manifest, so local pages (the bundled settings page) can call every
+   registered command, and Tauri rejects them from remote pages. Popup
+   windows (`popup-*` labels) get only `shell:default` from
+   `desktop/src-tauri/capabilities/popup.json`, because they can host an
+   OAuth provider or another third-party site. On macOS, wry 0.55 popups
+   share the opener's `WKUserContentController`, so their IPC runs with the
+   `main` grant.
 2. `os-opener-scheme-allowlist` **Only `http`, `https`, `mailto` and `tel`
    reach the OS opener.**
    `desktop/src-tauri/src/window.rs:is_externally_openable` gates popups and

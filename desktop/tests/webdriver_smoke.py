@@ -41,11 +41,9 @@ FIXTURE_HTML = b"""<!doctype html>
 <button id="same-origin-popup" onclick="
   window.sameOriginOpened = window.open(window.location.origin + '/popup', '_blank') !== null;
 ">same-origin popup</button>
-<button id="closable-popup" onclick="window.closablePopup = window.open('about:blank', '_blank');">
-closable popup</button>
 <button id="self-closing-popup" onclick="
-  const popup = window.open('about:blank', '_blank');
-  if (popup) popup.location.href = window.location.origin + '/close';
+  window.selfClosingPopup = window.open('about:blank', '_blank');
+  if (window.selfClosingPopup) window.selfClosingPopup.location.href = window.location.origin + '/close';
 ">self-closing popup</button>
 <button id="external" onclick="
   window.externalOpened = window.open('https://docs.onyx.app/smoke', '_blank') !== null;
@@ -59,11 +57,15 @@ window.addEventListener("message", (event) => window.popupMessages.push(event.da
 SELF_CLOSING_POPUP_TITLE = "Onyx smoke closing popup"
 SELF_CLOSING_POPUP_HTML = f"""<!doctype html>
 <html><head><title>{SELF_CLOSING_POPUP_TITLE}</title></head><body><script>
-setTimeout(() => window.close(), 1000);
+window.addEventListener("message", (event) => {{
+  if (event.data === "close") window.close();
+}});
 </script></body></html>
 """.encode()
 POPUP_HTML = b"""<!doctype html>
-<html><body><script>
+<html><body>
+<a id="popup-link" href="https://docs.onyx.app/popup-link" target="_blank">terms</a>
+<script>
 window.opener.postMessage("popup-ready", window.location.origin);
 </script></body></html>
 """
@@ -260,6 +262,7 @@ def main() -> int:
             )
 
         def same_origin_popup_opens_in_app() -> None:
+            driver.execute("window.popupMessages = []; return null")
             driver.click("same-origin-popup")
             assert driver.execute("return window.sameOriginOpened") is True, (
                 "window.open returned null"
@@ -269,17 +272,8 @@ def main() -> int:
                 lambda: "popup-ready" in driver.execute("return window.popupMessages"),
             )
 
-        def popup_has_no_native_access() -> None:
-            invoke = (
-                "const done = arguments[arguments.length - 1];"
-                "window.__TAURI_INTERNALS__.invoke('plugin:shell|open', "
-                "{ path: 'https://example.com/ipc-check' })"
-                ".then(() => done('allowed'), () => done('denied'));"
-            )
-            assert driver.execute_async(invoke) == "allowed", (
-                "main window lost native access"
-            )
-            driver.click("closable-popup")
+        def popup_gets_only_link_opening() -> None:
+            driver.click("same-origin-popup")
             wait_for(
                 "the popup window", lambda: len(driver.session("/window/handles")) == 2
             )
@@ -288,14 +282,28 @@ def main() -> int:
             )
             driver.session("/window", "POST", {"handle": popup})
             wait_for(
-                "the popup to report its IPC access",
-                lambda: driver.execute_async(invoke) == "denied",
+                "the popup page",
+                lambda: driver.execute("return document.readyState") == "complete",
+            )
+            result = driver.execute_async(
+                "const done = arguments[arguments.length - 1];"
+                "window.__TAURI_INTERNALS__.invoke('plugin:window|start_dragging')"
+                ".then(() => done('allowed'), (error) => done(String(error)));"
+            )
+            assert "not allowed" in result, f"popup reached window commands: {result}"
+            driver.click("popup-link")
+            wait_for(
+                "the system browser to receive the popup link",
+                lambda: opened_log.exists() and "popup-link" in opened_log.read_text(),
             )
 
         def popup_closes_itself() -> None:
             driver.click("self-closing-popup")
             wait_for(
                 "the popup window", lambda: has_native_window(SELF_CLOSING_POPUP_TITLE)
+            )
+            driver.execute(
+                "window.selfClosingPopup.postMessage('close', '*'); return null"
             )
             wait_for(
                 "the popup window to close",
@@ -344,7 +352,10 @@ def main() -> int:
             blank_popup_navigated_later,
         )
         check("same-origin popup opens in the app", same_origin_popup_opens_in_app)
-        check("popup windows get no native commands", popup_has_no_native_access)
+        check(
+            "popup links open in the browser; window commands are denied",
+            popup_gets_only_link_opening,
+        )
         check("script popup can close itself", popup_closes_itself)
         check(
             "external link opens in the system browser", external_link_opens_in_browser
