@@ -1,10 +1,9 @@
-import functools
 import re
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Generator, Iterator
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Concatenate, NoReturn, ParamSpec, TypeVar, cast
+from typing import Any, NoReturn, cast
 
 from pydantic import BaseModel, Field
 from typing_extensions import override
@@ -52,9 +51,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
-
-_P = ParamSpec("_P")
-_T = TypeVar("_T")
 
 _SLIM_DOC_SYNC_LABEL = "canvas_retrieve_all_slim_docs_perm_sync"
 _ACTIVE_ENROLLMENT_STATES = {"active", "invited"}
@@ -112,47 +108,6 @@ class CanvasStage(StrEnum):
     PAGES = "pages"
     ASSIGNMENTS = "assignments"
     ANNOUNCEMENTS = "announcements"
-
-
-def _empty_if_tool_disabled(
-    stage: CanvasStage,
-) -> Callable[
-    [Callable[Concatenate["CanvasConnector", int, _P], list[_T]]],
-    Callable[Concatenate["CanvasConnector", int, _P], list[_T]],
-]:
-    """Make a per-course listing return [] when Canvas says the tool is
-    disabled for the course.
-
-    Apply it below ``retry_builder`` so the 404 is handled before the retry
-    logic sees it. Any other error, and a 404 for a course that is gone, still
-    propagates: returning [] then would make pruning delete documents that
-    may still exist.
-    """
-
-    def decorator(
-        fn: Callable[Concatenate["CanvasConnector", int, _P], list[_T]],
-    ) -> Callable[Concatenate["CanvasConnector", int, _P], list[_T]]:
-        @functools.wraps(fn)
-        def wrapper(
-            self: "CanvasConnector", course_id: int, *args: _P.args, **kwargs: _P.kwargs
-        ) -> list[_T]:
-            try:
-                return fn(self, course_id, *args, **kwargs)
-            except OnyxError as e:
-                if e.status_code != _NOT_FOUND_STATUS_CODE or not self._course_exists(
-                    course_id
-                ):
-                    raise
-                logger.warning(
-                    "Canvas %s is disabled for course %s. Skipping stage.",
-                    stage,
-                    course_id,
-                )
-                return []
-
-        return wrapper
-
-    return decorator
 
 
 _STAGE_CONFIG: dict[CanvasStage, dict[str, Any]] = {
@@ -486,32 +441,67 @@ class CanvasConnector(
             raise
         return True
 
+    def _paginate_stage(
+        self,
+        stage: CanvasStage,
+        course_id: int,
+        endpoint: str,
+        params: dict[str, Any],
+    ) -> Iterator[list[Any]]:
+        """Paginate a per-course stage listing, yielding nothing when Canvas
+        says the tool is disabled for the course.
+
+        Only a 404 on the first page means that. A 404 on a later page, or for
+        a course that is gone, propagates: an empty or partial listing then
+        would make pruning delete documents that may still exist.
+        """
+        pages = self.canvas_client.paginate(endpoint, params=params)
+        try:
+            first_page = next(pages, None)
+        except OnyxError as e:
+            if e.status_code != _NOT_FOUND_STATUS_CODE or not self._course_exists(
+                course_id
+            ):
+                raise
+            logger.warning(
+                "Canvas %s is disabled for course %s. Skipping stage.",
+                stage,
+                course_id,
+            )
+            return
+        if first_page is None:
+            return
+        yield first_page
+        yield from pages
+
     @retry_builder(tries=3, delay=1, backoff=2)
-    @_empty_if_tool_disabled(CanvasStage.PAGES)
     def _list_pages(self, course_id: int) -> list[CanvasPage]:
         """Fetch all pages for a given course."""
         logger.debug("Fetching pages for course %s", course_id)
 
         pages: list[CanvasPage] = []
         config = _STAGE_CONFIG[CanvasStage.PAGES]
-        for page in self.canvas_client.paginate(
+        for page in self._paginate_stage(
+            CanvasStage.PAGES,
+            course_id,
             config["endpoint"].format(course_id=course_id),
-            params=_format_stage_params(config["params"], course_id),
+            _format_stage_params(config["params"], course_id),
         ):
             pages.extend(CanvasPage.from_api(p, course_id=course_id) for p in page)
         return pages
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    @_empty_if_tool_disabled(CanvasStage.ASSIGNMENTS)
     def _list_assignments(self, course_id: int) -> list[CanvasAssignment]:
         """Fetch all assignments for a given course."""
         logger.debug("Fetching assignments for course %s", course_id)
 
         assignments: list[CanvasAssignment] = []
         config = _STAGE_CONFIG[CanvasStage.ASSIGNMENTS]
-        for page in self.canvas_client.paginate(
+        for page in self._paginate_stage(
+            CanvasStage.ASSIGNMENTS,
+            course_id,
             config["endpoint"].format(course_id=course_id),
-            params=_format_stage_params(config["params"], course_id),
+            _format_stage_params(config["params"], course_id),
         ):
             assignments.extend(
                 CanvasAssignment.from_api(a, course_id=course_id) for a in page
@@ -519,7 +509,6 @@ class CanvasConnector(
         return assignments
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    @_empty_if_tool_disabled(CanvasStage.ANNOUNCEMENTS)
     def _list_announcements(
         self,
         course_id: int,
@@ -536,9 +525,11 @@ class CanvasConnector(
         params["end_date"] = _unix_to_canvas_time(
             end if end is not None else time.time()
         )
-        for page in self.canvas_client.paginate(
+        for page in self._paginate_stage(
+            CanvasStage.ANNOUNCEMENTS,
+            course_id,
             config["endpoint"].format(course_id=course_id),
-            params=params,
+            params,
         ):
             announcements.extend(
                 CanvasAnnouncement.from_api(a, course_id=course_id) for a in page
@@ -901,14 +892,21 @@ class CanvasConnector(
             if oe.status_code in (401, 403):
                 _handle_canvas_api_error(oe)  # NoReturn — always raises
 
-            if oe.status_code == _NOT_FOUND_STATUS_CODE and self._course_exists(
-                course_id
+            course_gone = (
+                oe.status_code == _NOT_FOUND_STATUS_CODE
+                and not self._course_exists(course_id)
+            )
+            if (
+                oe.status_code == _NOT_FOUND_STATUS_CODE
+                and not course_gone
+                and new_checkpoint.next_url is None
             ):
-                # The course exists, so the tool is disabled for it. The
-                # other stages are unaffected, so skip only this one and
-                # record no failure: counting it as one trips the failure
-                # threshold and aborts the run for accounts where the tool
-                # is disabled in several courses.
+                # A 404 on the first page of a course that exists means the
+                # tool is disabled for it. The other stages are unaffected,
+                # so skip only this one and record no failure: counting it as
+                # one trips the failure threshold and aborts the run for
+                # accounts where the tool is disabled in several courses. A
+                # 404 on a later page is a stage failure.
                 logger.warning(
                     "Canvas %s is disabled for course %s (HTTP 404: %s). Skipping stage.",
                     stage,
@@ -916,7 +914,7 @@ class CanvasConnector(
                     oe,
                 )
                 new_checkpoint.advance_stage()
-            elif oe.status_code == _NOT_FOUND_STATUS_CODE:
+            elif course_gone:
                 # The course itself is gone. Its other stages would hit the
                 # same 404, so skip the whole course.
                 logger.warning(

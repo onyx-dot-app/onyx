@@ -1408,6 +1408,41 @@ class TestLoadFromCheckpoint:
         assert new_cp.next_url is None
         assert new_cp.has_more is True
 
+    def test_404_on_later_page_is_a_stage_failure(self) -> None:
+        """A 404 while resuming from a pagination link is not a disabled
+        tool. Record a stage failure instead of silently skipping the rest
+        of the stage."""
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+            next_url=f"{FAKE_BASE_URL}/api/v1/courses/1/pages?page=2",
+        )
+
+        with (
+            patch.object(
+                connector,
+                "_fetch_stage_page",
+                side_effect=OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "not found",
+                    status_code_override=404,
+                ),
+            ),
+            patch.object(connector, "_course_exists", return_value=True),
+        ):
+            items, new_cp = _run_checkpoint(connector, cp)
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+        assert items[0].failed_entity is not None
+        assert items[0].failed_entity.entity_id == "canvas-pages-1"
+        assert new_cp.current_course_index == 0
+        assert new_cp.stage == CanvasStage.ASSIGNMENTS
+        assert new_cp.next_url is None
+
     def test_disabled_tool_404_on_last_stage_advances_to_next_course(self) -> None:
         connector = _build_connector()
         cp = CanvasConnectorCheckpoint(
@@ -2023,6 +2058,38 @@ class TestRetrieveAllSlimDocsPermSync:
         connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
 
         with pytest.raises(OnyxError):
+            list(connector.retrieve_all_slim_docs_perm_sync())
+
+    @patch("tenacity.nap.time.sleep")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_404_on_later_page_still_fails_sync(
+        self, mock_requests: MagicMock, _mock_sleep: MagicMock
+    ) -> None:
+        """Only a 404 on the first page means the tool is disabled. A 404 on
+        a later page must fail the sync, not drop the pages already read."""
+        dispatcher = _make_url_dispatcher(courses=[_mock_course()])
+        second_page_url = f"{FAKE_BASE_URL}/api/v1/courses/1/pages?page=2"
+
+        def _respond(url: str, **kwargs: Any) -> MagicMock:
+            if url == second_page_url:
+                return _mock_response(404, {"errors": [{"message": "not found"}]})
+            if url.endswith("/pages"):
+                return _mock_response(
+                    json_data=[_mock_page(10, "Page", "2025-06-01T12:00:00Z")],
+                    link_header=f'<{second_page_url}>; rel="next"',
+                )
+            return dispatcher(url, **kwargs)
+
+        mock_requests.get.side_effect = _respond
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with (
+            patch.object(
+                connector, "_get_item_permissions", return_value=ExternalAccess.empty()
+            ),
+            pytest.raises(OnyxError),
+        ):
             list(connector.retrieve_all_slim_docs_perm_sync())
 
     @pytest.mark.parametrize("status_code", [401, 403, 500])
