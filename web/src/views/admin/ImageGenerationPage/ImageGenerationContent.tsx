@@ -42,14 +42,14 @@ import {
   toast,
 } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
-import { SvgEmpty } from "@opal/illustrations";
+import { SvgDisconnected, SvgEmpty } from "@opal/illustrations";
 import {
   SvgArrowExchange,
   SvgSettings,
   SvgSlash,
   SvgUnplug,
 } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
 import { getModelIcon } from "@/lib/languageModels/utils";
@@ -70,8 +70,8 @@ function linkedModelTitle(model: ImageGenerationProviderModel): string {
 
 interface ConnectedModelCardProps {
   icon: IconFunctionComponent;
-  title: string;
-  description: string;
+  title: string | RichStr;
+  description: string | RichStr;
   ariaLabel: string;
   isDefault: boolean;
   disconnectModalOpen: boolean;
@@ -90,6 +90,7 @@ function ConnectedModelCard({
   onEdit,
 }: ConnectedModelCardProps) {
   const t = useTranslations("admin.imageGeneration");
+  const ariaTitle = typeof title === "string" ? title : title.raw;
   return (
     <Hoverable.Root
       group="ConnectedImageModelCard"
@@ -124,7 +125,9 @@ function ConnectedModelCard({
                 <Button
                   icon={SvgUnplug}
                   prominence="tertiary"
-                  aria-label={t("disconnectButton.ariaLabel", { title })}
+                  aria-label={t("disconnectButton.ariaLabel", {
+                    title: ariaTitle,
+                  })}
                   onClick={onDisconnect}
                 />
               </Hoverable.Item>
@@ -132,7 +135,7 @@ function ConnectedModelCard({
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
-                  aria-label={t("editButton.ariaLabel", { title })}
+                  aria-label={t("editButton.ariaLabel", { title: ariaTitle })}
                   onClick={onEdit}
                 />
               )}
@@ -146,8 +149,8 @@ function ConnectedModelCard({
 
 interface AvailableModelCardProps {
   icon: IconFunctionComponent;
-  title: string;
-  description: string;
+  title: string | RichStr;
+  description: string | RichStr;
   ariaLabel: string;
   disabled: boolean;
   onConnect: () => void;
@@ -423,7 +426,12 @@ export default function ImageGenerationContent() {
   }, [disconnectProvider]);
 
   if (configError) {
-    return <MessageCard variant="error" title={t("loadError.message")} />;
+    return (
+      <IllustrationContent
+        illustration={SvgDisconnected}
+        title={t("loadError.message")}
+      />
+    );
   }
 
   if (configsLoading || llmProvidersLoading) {
