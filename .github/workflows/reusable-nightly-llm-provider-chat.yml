@@ -38,6 +38,11 @@ on:
         required: false
         default: ""
         type: string
+      google_models:
+        description: "Comma-separated models for google"
+        required: false
+        default: ""
+        type: string
       azure_api_base:
         description: "API base for azure provider"
         required: false
@@ -197,6 +202,14 @@ jobs:
             api_version: ""
             deployment_name: ""
             required: false
+          - provider: google
+            models: ${{ inputs.google_models }}
+            api_key_env: GEMINI_API_KEY
+            custom_config_env: ""
+            api_base: ""
+            api_version: ""
+            deployment_name: ""
+            required: false
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -233,6 +246,7 @@ jobs:
             AZURE_API_KEY, test/azure-api-key
             OLLAMA_API_KEY, test/ollama-api-key
             OPENROUTER_API_KEY, test/openrouter-api-key
+            GEMINI_API_KEY, test/gemini-api-key
             ONYX_DEV_LICENSE, test/onyx-dev-license
 
       - name: Run nightly provider chat test
