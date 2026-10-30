@@ -144,8 +144,17 @@ injects the pair and attempt ids because neither is stored config. One
 consequence: the probes dispatch on the connector class
 (`ee/onyx/connectors/perm_sync_valid.py:_VALIDATOR_BY_CONNECTOR_CLASS`), so an
 event pair runs neither the source's `validate_perm_sync` nor its
-`validate_connector_settings`. Both pass silently rather than failing. Single
-tenant only; the webhook server refuses to start under `MULTI_TENANT`.
+`validate_connector_settings`. Both pass silently rather than failing.
+
+A spec gets one `POST /webhook/<slug>` on the webhook server
+(`onyx/webhook_server/routes.py`), built at startup. The route exists whether
+or not the source is set up; what opens it is an active `EVENT` pair, because
+without one there is no ACL to attribute a document to
+([[#handshake-after-verification]] governs the order within it). A source's
+parser, verifier and responder are each contained: the first two answer 400
+and the verifier 401, because a 5xx makes a provider retry a body that will
+never parse. Single tenant only; the webhook server refuses to start under
+`MULTI_TENANT`.
 
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
@@ -261,6 +270,15 @@ downloaded file with
     goes through `web/src/lib/connectors/utils.ts:withoutFormOnlyFields`. A new
     call site that skips it fails validation, because typed configs use
     `extra="forbid"`.
+13. `handshake-after-verification` **A webhook handshake responder runs only
+    after the signature verifies.** A responder answers a provider's
+    endpoint-validation challenge with the shared secret applied to
+    caller-chosen input, so running it on an unverified request is a signing
+    oracle: ask for the secret over the exact message the verifier checks,
+    then replay the answer as a signature. `WebhookSourceSpec` offers no way
+    to reverse the order, and `onyx/webhook_server/routes.py` calls the
+    responder after `spec.verifier`. A provider that signs challenges
+    differently needs its own challenge verifier, not an earlier responder.
 
 ---
 
