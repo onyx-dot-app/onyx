@@ -23,7 +23,7 @@ div.opal-sidebar-tab      <- folded styling hook (see styles.css)
 
 ## Folded state
 
-A tab inside a sidebar needs no `folded` prop. `SidebarRoot` publishes its fold state as `data-folded` on `.opal-sidebar-root__inner`, and `styles.css` hides the label and `rightChildren` from there. Folding a sidebar therefore re-renders no tabs, and the label fades with the 200ms column width transition.
+A tab inside a sidebar needs no `folded` prop. `SidebarRoot` publishes its fold state as `data-folded` on `.opal-sidebar-root__inner`, and `styles.css` hides the label and `rightChildren` from there. Folding a sidebar therefore re-renders no tabs, and the label fades with the column width transition. Both take the shared `--duration-sidebar-fold` token.
 
 The label stays in the DOM while folded. It is hidden with `visibility: hidden`, which keeps it out of the accessibility tree and out of the tab order, so a screen reader never announces it.
 

@@ -1,0 +1,10 @@
+{
+  "duration-interactive": {
+    "value": "150ms",
+    "type": "duration"
+  },
+  "duration-sidebar-fold": {
+    "value": "200ms",
+    "type": "duration"
+  }
+}
