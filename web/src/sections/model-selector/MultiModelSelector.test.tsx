@@ -168,25 +168,58 @@ function renderPicker(names: string[], callbacks?: Callbacks) {
 // Layout and popper position
 // ---------------------------------------------------------------------------
 
-// Row at x 600-900, y 700-740; every control inside it (+, pills) measures
-// at the row's right end but 8 px short of it, so an anchor on a control
-// is told apart from an anchor on the row. Detached nodes measure 0x0.
-const ROW_RECT = new DOMRect(600, 700, 300, 40);
-const CONTROL_RECT = new DOMRect(860, 704, 32, 32);
+const ROW = "row";
+const ADD = "add";
+const ADD_LABEL = "multiModel.addModelButton.label";
 /** Opal Popover.Content's default sideOffset. */
 const SIDE_OFFSET = 4;
-/** The 0x0 floating pane in jsdom sits with its right edge on the anchor's right and its bottom SIDE_OFFSET above its top. */
-const ROW_ANCHORED = { x: ROW_RECT.right, y: ROW_RECT.top - SIDE_OFFSET };
+
+// Every element the popover can measure has its own rect, so a position names
+// its anchor. Keys are ROW, ADD or a pill's display name.
+function defaultRects(): Map<string, DOMRect> {
+  return new Map([
+    [ROW, new DOMRect(300, 700, 600, 40)],
+    [ADD, new DOMRect(320, 704, 32, 32)],
+    ["Model A", new DOMRect(800, 704, 90, 32)],
+    ["Model B", new DOMRect(700, 704, 90, 32)],
+    ["Model C", new DOMRect(600, 704, 90, 32)],
+    ["Model D", new DOMRect(500, 704, 90, 32)],
+    ["Model E", new DOMRect(400, 704, 90, 32)],
+    ["Model F", new DOMRect(360, 704, 30, 32)],
+  ]);
+}
+let mockRects: Map<string, DOMRect> = defaultRects();
+
+function rectKey(element: Element): string | null {
+  if (element.getAttribute("data-testid") === "model-selector") return ROW;
+  if (
+    element.tagName !== "BUTTON" ||
+    !element.closest('[data-testid="model-selector"]')
+  )
+    return null;
+  if (element.getAttribute("aria-label") === ADD_LABEL) return ADD;
+  return element.textContent;
+}
+
+function rectOf(key: string): DOMRect {
+  const rect = mockRects.get(key);
+  if (!rect) throw new Error(`no rect for ${key}`);
+  return rect;
+}
+
+/** Moves an element, as a layout shift would; autoUpdate sees it on the next resize. */
+function setRect(key: string, rect: DOMRect) {
+  mockRects.set(key, rect);
+}
 
 function mockLayout() {
+  mockRects = defaultRects();
   jest
     .spyOn(Element.prototype, "getBoundingClientRect")
     .mockImplementation(function (this: Element) {
       if (!this.isConnected) return new DOMRect(0, 0, 0, 0);
-      if (this.getAttribute("data-testid") === "model-selector")
-        return ROW_RECT;
-      if (this.closest('[data-testid="model-selector"]')) return CONTROL_RECT;
-      return new DOMRect(0, 0, 0, 0);
+      const key = rectKey(this);
+      return (key && mockRects.get(key)) || new DOMRect(0, 0, 0, 0);
     });
   // jsdom reports a 0x0 viewport, which would clamp every position.
   Object.defineProperty(document.documentElement, "clientWidth", {
@@ -218,10 +251,20 @@ function popperXY(): { x: number; y: number } | null {
   return match ? { x: Number(match[1]), y: Number(match[2]) } : null;
 }
 
-/** autoUpdate re-measures on window resize; the setup ResizeObserver is a no-op. */
-async function expectAnchoredToRow() {
+/**
+ * The 0x0 jsdom pane sits with its right edge on the anchor's right and its
+ * bottom SIDE_OFFSET above the anchor's top. autoUpdate re-measures on window
+ * resize; the setup ResizeObserver and IntersectionObserver are no-ops.
+ */
+async function expectAnchoredAt(key: string) {
+  const rect = rectOf(key);
   fireEvent(window, new Event("resize"));
-  await waitFor(() => expect(popperXY()).toEqual(ROW_ANCHORED));
+  await waitFor(() =>
+    expect(popperXY()).toEqual({
+      x: rect.right,
+      y: rect.top - SIDE_OFFSET,
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -233,9 +276,7 @@ function selectorRow(): HTMLElement {
 }
 
 function addButton(): HTMLElement | null {
-  return within(selectorRow()).queryByRole("button", {
-    name: "multiModel.addModelButton.label",
-  });
+  return within(selectorRow()).queryByRole("button", { name: ADD_LABEL });
 }
 
 function pill(displayName: string): HTMLElement {
@@ -364,39 +405,112 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("anchoring", () => {
-    test("AC-1: keeps the pane at the row's right edge and height through a row add, a row remove and a pill x", async () => {
+    test("D-16: the list sits on + and follows it through row adds and removes, and on the row while + is hidden", async () => {
       const user = setupUser();
       renderPicker(["Model A"]);
 
       await openFromAdd(user);
-      await expectAnchoredToRow();
+      expectList();
+      await expectAnchoredAt(ADD);
 
       await user.click(row("Model B"));
       expect(pillNames()).toEqual(["Model B", "Model A"]);
-      await expectAnchoredToRow();
+      setRect(ADD, new DOMRect(220, 704, 32, 32));
+      await expectAnchoredAt(ADD);
 
       await user.click(row("Model B"));
       expect(pillNames()).toEqual(["Model A"]);
-      await expectAnchoredToRow();
+      setRect(ADD, new DOMRect(320, 704, 32, 32));
+      await expectAnchoredAt(ADD);
 
       await user.click(row("Model B"));
       await user.click(row("Model C"));
       expect(pillNames()).toEqual(["Model C", "Model B", "Model A"]);
-      await expectAnchoredToRow();
+      expect(addButton()).toBeNull();
+      await expectAnchoredAt(ROW);
 
       await clickPillX(user, "Model C");
       expect(pillNames()).toEqual(["Model B", "Model A"]);
-      await expectAnchoredToRow();
+      expectList();
+      await expectAnchoredAt(ADD);
     });
 
-    test("AC-2: opens the list from + anchored to the row, not the + button", async () => {
+    test("D-16: a pill opens its pane on that pill, and the pane follows the pill when it moves", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B"]);
+
+      await user.click(pill("Model B"));
+      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      expectPane("Model B");
+      await expectAnchoredAt("Model B");
+
+      setRect("Model B", new DOMRect(760, 704, 90, 32));
+      await expectAnchoredAt("Model B");
+
+      await user.click(pill("Model A"));
+      expectPane("Model A");
+      await expectAnchoredAt("Model A");
+    });
+
+    test("D-16: settings on a selected row moves the menu to that pill, back returns it to +", async () => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
       await openFromAdd(user);
+      await expectAnchoredAt(ADD);
 
+      await user.click(settingsButton("Model B"));
+      expectPane("Model B");
+      await expectAnchoredAt("Model B");
+
+      await clickBack(user);
       expectList();
-      await expectAnchoredToRow();
+      await expectAnchoredAt(ADD);
+    });
+
+    test("D-16: the pane of an unselected model sits on +", async () => {
+      const user = setupUser();
+      renderPicker(["Model A"]);
+
+      await openFromAdd(user);
+      await user.click(settingsButton("Model C"));
+      expectPane("Model C");
+      await expectAnchoredAt(ADD);
+    });
+
+    // At max the unselected rows, settings included, are disabled, so the flag
+    // is the reachable way to hide + with an unselected pane available.
+    test("D-16: with multi-model off the list and an unselected model's pane sit on the row", async () => {
+      mockSettings = { ...DEFAULT_SETTINGS, multi_model_chat_enabled: false };
+      const user = setupUser();
+      renderPicker(["Model A"]);
+
+      await user.click(pill("Model A"));
+      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      expectPane("Model A");
+      await expectAnchoredAt("Model A");
+
+      await clickBack(user);
+      expectList();
+      await expectAnchoredAt(ROW);
+
+      await user.click(settingsButton("Model C"));
+      expectPane("Model C");
+      await expectAnchoredAt(ROW);
+    });
+
+    test("D-16: a pill keeps its node from one model to two and back", async () => {
+      const user = setupUser();
+      renderPicker(["Model A"]);
+      const pillA = pill("Model A");
+
+      await openFromAdd(user);
+      await user.click(row("Model B"));
+      expect(pill("Model A")).toBe(pillA);
+
+      await user.click(row("Model B"));
+      expect(pillNames()).toEqual(["Model A"]);
+      expect(pill("Model A")).toBe(pillA);
     });
   });
 
@@ -541,7 +655,7 @@ describe("MultiModelSelector", () => {
       expect(pillX(pill("Model B"))).toBeNull();
       expect(addButton()).not.toBeNull();
       expect(popperWrapper()).not.toBeNull();
-      await expectAnchoredToRow();
+      await expectAnchoredAt(ADD);
     });
   });
 
@@ -584,13 +698,17 @@ describe("MultiModelSelector", () => {
         expect(callbacks.onRemove).toHaveBeenCalledWith(removedIndex);
         expect(pillNames()).not.toContain(remove);
         expect(popperWrapper()).toBe(wrapper);
-        if (view === "list") expectList();
-        else expectPane("Model A");
-        await expectAnchoredToRow();
+        if (view === "list") {
+          expectList();
+          await expectAnchoredAt(ADD);
+        } else {
+          expectPane("Model A");
+          await expectAnchoredAt("Model A");
+        }
       }
     );
 
-    test("AC-9: removing the pane's own model keeps the pane, back shows the list with it unselected and enabled", async () => {
+    test("D-16: x on the pane's own model removes it and closes the menu", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B", "Model C"], callbacks);
@@ -603,12 +721,7 @@ describe("MultiModelSelector", () => {
 
       expect(callbacks.onRemove).toHaveBeenCalledWith(1);
       expect(pillNames()).toEqual(["Model A", "Model C"]);
-      expectPane("Model B");
-
-      await clickBack(user);
-      expectList();
-      expectRowSelected("Model B", false);
-      expect(rowFieldset("Model B")).not.toBeDisabled();
+      await waitFor(() => expect(popperWrapper()).toBeNull());
     });
   });
 
