@@ -4,10 +4,11 @@ Drives the real desktop binary through tauri-driver (WebKitWebDriver on
 Linux) against a local fixture server. Each check is a browser behaviour the
 web app relies on and that the shell must provide: script popups with a
 working `window.opener`, external links in the system browser, JavaScript
-dialogs, and downloads.
+dialogs, downloads, and OAuth callbacks that return through onyx:// links.
 
 Usage: python3 desktop/tests/webdriver_smoke.py <path-to-onyx-binary>
-Requires `tauri-driver` and `WebKitWebDriver` on PATH and a display.
+Requires `tauri-driver` and `WebKitWebDriver` on PATH, a display, and a D-Bus
+session bus (single-instance forwards onyx:// links over it).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -54,6 +56,10 @@ window.addEventListener("message", (event) => window.popupMessages.push(event.da
 </script>
 </body></html>
 """
+CALLBACK_HTML = b"""<!doctype html>
+<html><head><title>Onyx smoke callback</title></head><body>callback</body></html>
+"""
+REQUESTED_PATHS: list[str] = []
 SELF_CLOSING_POPUP_TITLE = "Onyx smoke closing popup"
 SELF_CLOSING_POPUP_HTML = f"""<!doctype html>
 <html><head><title>{SELF_CLOSING_POPUP_TITLE}</title></head><body><script>
@@ -87,10 +93,13 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         self._respond(include_body=True)
 
     def _respond(self, include_body: bool) -> None:
+        REQUESTED_PATHS.append(self.path)
         headers: dict[str, str] = {"Content-Type": "text/html"}
         body = FIXTURE_HTML
         if self.path.startswith("/popup"):
             body = POPUP_HTML
+        elif self.path.startswith("/mcp/oauth/callback"):
+            body = CALLBACK_HTML
         elif self.path.startswith("/close"):
             body = SELF_CLOSING_POPUP_HTML
         elif self.path.startswith("/download"):
@@ -351,6 +360,50 @@ def main() -> int:
                 ),
             )
 
+        def open_deep_link(path: str) -> None:
+            link = "onyx://oauth-callback?" + urllib.parse.urlencode({"path": path})
+            # A second launch forwards its arguments to the running app and exits.
+            subprocess.run(
+                [str(binary), link],
+                env=env,
+                timeout=30,
+                check=False,
+                stdout=sys.stderr,
+                stderr=sys.stderr,
+            )
+
+        def desktop_bridge_is_exposed() -> None:
+            assert (
+                driver.execute(
+                    "return window.__ONYX_DESKTOP__ && window.__ONYX_DESKTOP__.oauthInBrowser"
+                )
+                is True
+            ), "window.__ONYX_DESKTOP__.oauthInBrowser is not set"
+
+        # WebDriver does not see windows the shell builds itself, so these
+        # checks watch the fixture server for the callback request instead.
+        def deep_link_loads_callback() -> None:
+            open_deep_link("/mcp/oauth/callback?code=c1&state=s1.desktop")
+            wait_for(
+                "the callback to load on the configured server",
+                lambda: "/mcp/oauth/callback?code=c1&state=s1" in REQUESTED_PATHS,
+            )
+
+        def rejected_deep_links_open_nothing() -> None:
+            for path in [
+                "//evil.example/mcp/oauth/callback?code=c&state=s.desktop",
+                "/app?state=s.desktop",
+                "/mcp/oauth/callback?code=c&state=plain",
+            ]:
+                open_deep_link(path)
+            time.sleep(3)
+            loaded = [
+                path
+                for path in REQUESTED_PATHS
+                if path.startswith(("/app", "/mcp/oauth/callback?code=c&"))
+            ]
+            assert not loaded, f"a rejected onyx:// link loaded {loaded}"
+
         check(
             "blank popup navigated later keeps window.opener",
             blank_popup_navigated_later,
@@ -366,6 +419,12 @@ def main() -> int:
         )
         check("confirm() shows a dialog and returns the choice", javascript_dialogs)
         check("download saves to the Downloads folder", download_saves_file)
+        check("pages see the desktop OAuth bridge", desktop_bridge_is_exposed)
+        check(
+            "onyx:// callback link opens the callback in the app",
+            deep_link_loads_callback,
+        )
+        check("rejected onyx:// links open nothing", rejected_deep_links_open_nothing)
     finally:
         if driver.session_id:
             try:

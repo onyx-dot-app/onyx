@@ -39,6 +39,12 @@ struct Cli {
     /// Enable verbose logging, auto-open `DevTools`, and capture webview console output
     #[arg(long)]
     debug: bool,
+
+    // Linux and Windows launch the app with the onyx:// link as an argument;
+    // the deep-link plugin reads it from argv.
+    #[arg(hide = true)]
+    #[allow(dead_code)]
+    links: Vec<String>,
 }
 
 #[derive(Deserialize)]
