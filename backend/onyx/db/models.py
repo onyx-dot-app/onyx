@@ -6048,6 +6048,11 @@ class UserFile(Base):
         nullable=False,
         default=UserFileStatus.PROCESSING,
     )
+    # Pickups by the processing task. Counted before the slow work, so a
+    # worker the kernel kills mid-file still spent one.
+    processing_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     # Privacy is decided when the file is uploaded, from the toggle state, so
     # an attachment made before the session exists is already private.
     incognito: Mapped[bool] = mapped_column(

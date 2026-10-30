@@ -71,6 +71,7 @@ POST /user/projects/file/upload             server/features/projects/api.py:uplo
       UserFile rows                         PROCESSING or SKIPPED, project link
     enqueue PROCESS_SINGLE_USER_FILE        or BackgroundTasks when DISABLE_VECTOR_DB
 process_user_file_impl                      user_file_processing/tasks.py
+  consume_user_file_processing_attempt      db/user_file.py; FAILED past USER_FILE_PROCESSING_MAX_ATTEMPTS pickups
   _load_user_file_documents                 LocalFileConnector; document id = str(UserFile.id)
   incognito or DISABLE_VECTOR_DB -> _process_user_file_without_vector_db (plaintext, no chunks)
   else -> _process_user_file_with_indexing  run_indexing_pipeline + UserFileIndexingAdapter
