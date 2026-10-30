@@ -652,13 +652,16 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       // incognito stay. An incognito chat cannot be rebuilt from the server,
       // so this tab holds its only copy; a session whose incognito state is
       // not known yet (a send can run before its load sets the flag) counts as
-      // incognito. A session still fetching can go: its fetch no longer owns
-      // the session and discards the result.
+      // incognito, unless it holds no messages: a chat left before it loaded
+      // is an empty placeholder with nothing to lose. A session still
+      // fetching can go: its fetch no longer owns the session and discards
+      // the result.
       const isEvictable = (sessionId: string, session: ChatSessionData) =>
         sessionId !== state.currentSessionId &&
         session.chatState === "input" &&
         session.queuedMessages.length === 0 &&
-        session.incognito === false;
+        (session.incognito === false ||
+          (session.incognito === undefined && session.messageTree.size === 0));
 
       const evictable = Array.from(state.sessions.entries())
         .filter(([sessionId, session]) => isEvictable(sessionId, session))
