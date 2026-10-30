@@ -23,8 +23,8 @@ from onyx.connectors.models import (
 )
 from onyx.db.connector_event_inbox import (
     claim_events,
-    mark_events_completed,
     mark_events_failed,
+    settle_events_from_finished_attempts,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.utils.logger import setup_logger
@@ -99,10 +99,10 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             )
 
         drained = checkpoint.drained
-        indexed_ids: list[int] = []
         failed: list[tuple[int, str]] = []
 
         with get_session_with_current_tenant() as db_session:
+            settle_events_from_finished_attempts(db_session, self._cc_pair_id)
             events = claim_events(
                 db_session,
                 cc_pair_id=self._cc_pair_id,
@@ -140,18 +140,14 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
                     )
                     continue
 
-                # A handler returns None for an event with nothing to index,
-                # such as a delete. The row still settles: it was handled.
+                # None means nothing to index, such as a delete.
                 if document is not None:
                     yield document
-                indexed_ids.append(event.id)
 
-            # Settling here, rather than when the attempt finishes, is safe
-            # because a checkpoint is saved once its batch reaches the file
-            # store, and a resumed attempt reissues stored batches.
-            mark_events_completed(db_session, indexed_ids)
-            # Without this a rejected row stays IN_PROGRESS forever: it is
-            # claimed, so no later attempt picks it up.
+            # Rejected rows settle now: there is no document to store, so
+            # nothing later can change the outcome. The indexed ones stay
+            # claimed until this attempt's own outcome is known, because the
+            # runner has not stored their documents yet.
             mark_events_failed(db_session, failed)
             db_session.commit()
 
