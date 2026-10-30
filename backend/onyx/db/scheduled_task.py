@@ -372,7 +372,10 @@ def mark_run_status(
     leave it NULL.
     """
     run = db_session.execute(
-        select(ScheduledTaskRun).where(ScheduledTaskRun.id == run_id)
+        select(ScheduledTaskRun)
+        .where(ScheduledTaskRun.id == run_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if run is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")

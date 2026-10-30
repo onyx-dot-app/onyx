@@ -270,6 +270,15 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     }
   );
 
+  const { data: unviewedProbe } = useSWR<ScheduledRunListResponse>(
+    `${SWR_KEYS.scheduledTaskRuns(taskId)}?limit=1&unviewed=true`,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: RUN_HISTORY_REFRESH_INTERVAL_MS,
+    }
+  );
+
   useEffect(() => {
     setOlderPages([]);
     setOlderNextCursor(null);
@@ -326,13 +335,15 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     return runs;
   }, [data?.items, olderPages]);
 
-  const unviewedRuns = allRuns.filter(isRunUnviewed);
+  const hasUnviewedRuns =
+    allRuns.some(isRunUnviewed) ||
+    (unviewedProbe?.items.some(isRunUnviewed) ?? false);
 
   const markAllViewed = useCallback(async () => {
     if (markingViewed) return;
     setMarkingViewed(true);
+    const viewed = new Map<string, ScheduledRunSummary>();
     try {
-      const viewed = new Map<string, ScheduledRunSummary>();
       // Acknowledged runs leave the unviewed filter, so each pass reads the next batch.
       for (;;) {
         const page = await listScheduledTaskRuns(taskId, {
@@ -344,13 +355,15 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
         for (const run of res.items) viewed.set(run.id, run);
         if (page.items.length < RUNS_MAX_PAGE_SIZE) break;
       }
-      setOlderPages((pages) =>
-        pages.map((page) => page.map((run) => viewed.get(run.id) ?? run))
-      );
-      await revalidateScheduledRunViews(taskId);
     } catch {
       toast.error(t("markAllViewed.error"));
     } finally {
+      if (viewed.size > 0) {
+        setOlderPages((pages) =>
+          pages.map((page) => page.map((run) => viewed.get(run.id) ?? run))
+        );
+        await revalidateScheduledRunViews(taskId).catch(() => undefined);
+      }
       setMarkingViewed(false);
     }
   }, [markingViewed, taskId, t]);
@@ -397,7 +410,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
         <Button
           prominence="tertiary"
           size="xs"
-          disabled={markingViewed || unviewedRuns.length === 0}
+          disabled={markingViewed || !hasUnviewedRuns}
           aria-busy={markingViewed}
           onClick={() => void markAllViewed()}
         >

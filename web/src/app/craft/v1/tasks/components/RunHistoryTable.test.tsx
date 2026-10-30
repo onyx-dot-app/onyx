@@ -39,11 +39,15 @@ function run(
 }
 
 let mockRuns: ScheduledRunSummary[] = [];
+let mockUnviewedRuns: ScheduledRunSummary[] = [];
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
   __esModule: true,
-  default: () => ({
-    data: { items: mockRuns, next_cursor: null },
+  default: (key: string) => ({
+    data: {
+      items: key.includes("unviewed=true") ? mockUnviewedRuns : mockRuns,
+      next_cursor: null,
+    },
     error: undefined,
     isLoading: false,
     mutate: jest.fn(),
@@ -53,6 +57,7 @@ jest.mock("swr", () => ({
 beforeEach(() => {
   jest.mocked(markScheduledRunsViewed).mockReset();
   jest.mocked(listScheduledTaskRuns).mockReset();
+  mockUnviewedRuns = [];
 });
 
 it("marks every unviewed run of the task, not only loaded rows", async () => {
@@ -93,4 +98,12 @@ it("disables mark all viewed when every run was opened", () => {
   expect(
     screen.getByRole("button", { name: "Mark all viewed" })
   ).toBeDisabled();
+});
+
+it("enables mark all viewed when only an unloaded run is unviewed", () => {
+  mockRuns = [run("seen", 1, 1)];
+  mockUnviewedRuns = [run("older", 1, null)];
+  render(<RunHistoryTable taskId="task" />);
+
+  expect(screen.getByRole("button", { name: "Mark all viewed" })).toBeEnabled();
 });
