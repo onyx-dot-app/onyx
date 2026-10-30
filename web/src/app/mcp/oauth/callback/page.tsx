@@ -14,7 +14,7 @@ import {
 } from "@opal/illustrations";
 import type { IconFunctionComponent } from "@opal/types";
 import { completeMCPUserOAuth } from "@/lib/mcp/svc";
-import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
 import { reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 

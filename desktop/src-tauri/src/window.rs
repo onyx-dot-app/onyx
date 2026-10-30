@@ -361,7 +361,7 @@ fn build_popup_window(
 
 /// wry destroys the webview on `window.close()` but leaves its GTK window open.
 #[cfg(target_os = "linux")]
-fn close_window_with_webview(window: &WebviewWindow) {
+pub fn close_window_with_webview(window: &WebviewWindow) {
     use gtk::prelude::WidgetExt;
 
     let handle = window.clone();

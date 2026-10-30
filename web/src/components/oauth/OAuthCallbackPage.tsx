@@ -2,7 +2,7 @@
 
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
 import { reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";

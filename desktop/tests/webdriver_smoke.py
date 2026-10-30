@@ -360,8 +360,10 @@ def main() -> int:
                 ),
             )
 
-        def open_deep_link(path: str) -> None:
-            link = "onyx://oauth-callback?" + urllib.parse.urlencode({"path": path})
+        def open_deep_link(path: str, origin: str = fixture_url) -> None:
+            link = "onyx://oauth-callback?" + urllib.parse.urlencode(
+                {"origin": origin, "path": path}
+            )
             # A second launch forwards its arguments to the running app and exits.
             subprocess.run(
                 [str(binary), link],
@@ -396,6 +398,10 @@ def main() -> int:
                 "/mcp/oauth/callback?code=c&state=plain",
             ]:
                 open_deep_link(path)
+            open_deep_link(
+                "/mcp/oauth/callback?code=c&state=other.desktop",
+                origin="https://other.example.com",
+            )
             time.sleep(3)
             loaded = [
                 path

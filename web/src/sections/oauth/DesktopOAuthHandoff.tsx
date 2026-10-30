@@ -4,7 +4,7 @@ import { type ComponentType, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, Section } from "@opal/layouts";
 import { SvgConnected } from "@opal/illustrations";
 import {
   desktopOAuthReturnUrl,
@@ -23,7 +23,7 @@ export function DesktopOAuthHandoff() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <Section justifyContent="center" padding={4} className="min-h-screen">
       <div className="w-full max-w-md">
         <Card
           padding={6}
@@ -31,7 +31,7 @@ export function DesktopOAuthHandoff() {
           color="background-tint-00"
           border="solid"
         >
-          <div className="flex flex-col items-stretch gap-4">
+          <Section alignItems="stretch" gap={4} padding={0} height="auto">
             <IllustrationContent
               illustration={SvgConnected}
               title={t("title")}
@@ -44,10 +44,10 @@ export function DesktopOAuthHandoff() {
             >
               {t("button")}
             </Button>
-          </div>
+          </Section>
         </Card>
       </div>
-    </div>
+    </Section>
   );
 }
 

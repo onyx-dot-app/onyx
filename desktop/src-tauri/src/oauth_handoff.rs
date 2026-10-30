@@ -50,9 +50,16 @@ pub fn callback_url(server: &Url, deep_link: &Url) -> Option<Url> {
     if deep_link.scheme() != SCHEME || deep_link.host_str() != Some(HOST) {
         return None;
     }
-    let path = deep_link
-        .query_pairs()
-        .find_map(|(key, value)| (key == "path").then(|| value.into_owned()))?;
+    let param = |name: &str| {
+        deep_link
+            .query_pairs()
+            .find_map(|(key, value)| (key == name).then(|| value.into_owned()))
+    };
+    // The code and state belong to the server that started the attempt.
+    if param("origin")? != server.origin().ascii_serialization() {
+        return None;
+    }
+    let path = param("path")?;
     if !path.starts_with('/') || path.starts_with("//") || path.contains('\\') {
         return None;
     }
@@ -92,6 +99,8 @@ fn open_callback_window(app: &AppHandle, url: Url) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     crate::macos_webview::install_ui_delegate_extensions(&window);
+    #[cfg(target_os = "linux")]
+    crate::window::close_window_with_webview(&window);
     window.set_focus().map_err(|e| e.to_string())
 }
 
@@ -159,10 +168,16 @@ mod tests {
         Url::parse("https://onyx.example.com").unwrap()
     }
 
-    fn link(path: &str) -> Url {
+    fn link_from(origin: &str, path: &str) -> Url {
         let mut url = Url::parse("onyx://oauth-callback").unwrap();
-        url.query_pairs_mut().append_pair("path", path);
+        url.query_pairs_mut()
+            .append_pair("origin", origin)
+            .append_pair("path", path);
         url
+    }
+
+    fn link(path: &str) -> Url {
+        link_from("https://onyx.example.com", path)
     }
 
     #[test]
@@ -191,7 +206,14 @@ mod tests {
     #[test]
     fn keeps_the_server_path_prefix_origin() {
         let server = Url::parse("http://127.0.0.1:3000").unwrap();
-        let url = callback_url(&server, &link("/mcp/oauth/callback?state=s.desktop")).unwrap();
+        let url = callback_url(
+            &server,
+            &link_from(
+                "http://127.0.0.1:3000",
+                "/mcp/oauth/callback?state=s.desktop",
+            ),
+        )
+        .unwrap();
         assert_eq!(url.origin(), server.origin());
     }
 
@@ -211,6 +233,16 @@ mod tests {
         ] {
             assert!(callback_url(&server(), &link(path)).is_none(), "{path}");
         }
+        let other_server = link_from(
+            "https://other.example.com",
+            "/mcp/oauth/callback?state=s.desktop",
+        );
+        assert!(callback_url(&server(), &other_server).is_none());
+        let mut no_origin = Url::parse("onyx://oauth-callback").unwrap();
+        no_origin
+            .query_pairs_mut()
+            .append_pair("path", "/mcp/oauth/callback?state=s.desktop");
+        assert!(callback_url(&server(), &no_origin).is_none());
         let wrong_host = Url::parse("onyx://other?path=%2Fmcp%2Foauth%2Fcallback").unwrap();
         assert!(callback_url(&server(), &wrong_host).is_none());
         let wrong_scheme =

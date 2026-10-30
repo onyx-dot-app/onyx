@@ -71,6 +71,7 @@ export function stripDesktopOAuthState(state: string): string {
 /** The URL that hands a browser-side callback back to the desktop app. */
 export function desktopOAuthReturnUrl(callback: URL): string {
   const query = new URLSearchParams({
+    origin: callback.origin,
     path: callback.pathname + callback.search,
   });
   return `${DESKTOP_OAUTH_RETURN_URL}?${query.toString()}`;
