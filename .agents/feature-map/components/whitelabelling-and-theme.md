@@ -87,6 +87,13 @@ on `ee_features_enabled`. There is no CE copy of the page.
 static connector and service icons. It does not render the uploaded logo.
 `web/src/lib/app/components.tsx:Logo` renders it as a plain `<img>`.
 
+The app sidebar's header splits the branding in two, so the name can fade on
+fold while the mark stays. `web/src/lib/app/components.tsx:SidebarLogoMark` is
+the custom logo or the stock mark, and nothing for `name_only`.
+`web/src/lib/app/components.tsx:SidebarWordmark` is the name with the "Powered
+by" line, or the stock wordmark when no name is set. `FoldableLogo` still
+renders the combined logo for the admin and Craft sidebars.
+
 ---
 
 ## Contracts and traps

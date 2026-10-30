@@ -4,6 +4,7 @@ import { InputSingleSelect, OverflowText, Text } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
+import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { SvgOnyxLogo, SvgOnyxLogoWordmark, SvgOnyxWordmark } from "@opal/logos";
 import { IconProps } from "@opal/types";
@@ -168,7 +169,14 @@ export function SidebarWordmark({ size }: { size: number }) {
 
   return (
     /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
-    <div className="flex min-w-0 flex-1 flex-col -mt-0.5">
+    <Section
+      flexDirection="column"
+      alignItems="start"
+      justifyContent="start"
+      gap={0}
+      height="fit"
+      className="min-w-0 flex-1 -mt-0.5"
+    >
       {logoDisplayStyle !== "logo_only" && (
         <OverflowText
           as="p"
@@ -185,7 +193,7 @@ export function SidebarWordmark({ size }: { size: number }) {
           {t("logo.poweredBy.label")}
         </Text>
       )}
-    </div>
+    </Section>
   );
 }
 

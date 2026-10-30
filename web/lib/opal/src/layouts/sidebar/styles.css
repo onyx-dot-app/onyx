@@ -151,16 +151,39 @@
 }
 
 /* Folded: hovering the row, or focusing it from the keyboard, shows the fold
-   button in place of the mark. */
+   button in place of the mark. So does a row that shows no mark: the caller
+   hides the logo when folded, or the mark renders nothing (a name-only
+   brand). Without these the folded header would show nothing at all. */
 .opal-sidebar-root__inner[data-folded="true"]
-  .opal-sidebar-header__brand:is(:hover, :has(:focus-visible))
+  .opal-sidebar-header__brand:is(
+    :hover,
+    :has(:focus-visible),
+    [data-logo-when-folded="false"],
+    :has(.opal-sidebar-header__mark:empty)
+  )
   .opal-sidebar-header__fold-button {
   opacity: 1;
 }
 .opal-sidebar-root__inner[data-folded="true"]
-  .opal-sidebar-header__brand:is(:hover, :has(:focus-visible))
+  .opal-sidebar-header__brand:is(
+    :hover,
+    :has(:focus-visible),
+    [data-logo-when-folded="false"]
+  )
   .opal-sidebar-header__mark {
   opacity: 0;
+}
+
+/* A device without hover could never reveal the folded button, so it shows
+   the button in place of the mark at rest. */
+@media (hover: none) {
+  .opal-sidebar-root__inner[data-folded="true"]
+    .opal-sidebar-header__fold-button {
+    opacity: 1;
+  }
+  .opal-sidebar-root__inner[data-folded="true"] .opal-sidebar-header__mark {
+    opacity: 0;
+  }
 }
 
 .opal-sidebar-header__content {

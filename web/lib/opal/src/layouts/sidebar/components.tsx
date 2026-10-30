@@ -155,24 +155,31 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 // Header — topbar (logo + fold button) with optional pinned content below
 // ---------------------------------------------------------------------------
 
-interface SidebarHeaderProps {
-  /**
-   * Logo factory. Receives the effective fold state (`undefined` when the
-   * sidebar is non-foldable) and returns an `IconFunctionComponent` that is
-   * rendered at `size={28}` in the topbar.
-   */
-  renderAppLogo?: (folded: boolean) => IconFunctionComponent;
-  /**
-   * The logo mark, shown in both fold states. With `wordmark`, it replaces
-   * `renderAppLogo`.
-   */
-  logo?: React.ReactNode;
-  /**
-   * The name beside the mark. It fades in place as the sidebar folds, while
-   * the fold button, anchored to the row's end, moves with the column's edge.
-   * Folded, the fold button takes the mark's place on hover or keyboard focus.
-   */
-  wordmark?: React.ReactNode;
+/** The header's branding: a logo factory, or a mark and a wordmark. */
+type SidebarHeaderBrandingProps =
+  | {
+      /**
+       * Logo factory. Receives the effective fold state and returns an
+       * `IconFunctionComponent` that is rendered at `size={28}` in the topbar.
+       */
+      renderAppLogo: (folded: boolean) => IconFunctionComponent;
+      logo?: never;
+      wordmark?: never;
+    }
+  | {
+      renderAppLogo?: never;
+      /** The logo mark, shown in both fold states. */
+      logo: React.ReactNode;
+      /**
+       * The name beside the mark. It fades in place as the sidebar folds,
+       * while the fold button, anchored to the row's end, moves with the
+       * column's edge. Folded, the fold button takes the mark's place on
+       * hover, keyboard focus, or a device without hover.
+       */
+      wordmark: React.ReactNode;
+    };
+
+type SidebarHeaderProps = SidebarHeaderBrandingProps & {
   /**
    * When `true` (default), the logo is shown in the folded state with a
    * hover-to-reveal fold button. When `false`, only the fold button is shown
@@ -180,15 +187,10 @@ interface SidebarHeaderProps {
    */
   showLogoWhenFolded?: boolean;
   children?: React.ReactNode;
-}
+};
 
-function SidebarHeader({
-  renderAppLogo,
-  logo,
-  wordmark,
-  showLogoWhenFolded = true,
-  children,
-}: SidebarHeaderProps) {
+function SidebarHeader(props: SidebarHeaderProps) {
+  const { showLogoWhenFolded = true, children } = props;
   const foldable = useContext(SidebarFoldableContext);
   const { folded, setFolded } = useSidebarState();
   const strings = useOpalStrings();
@@ -215,21 +217,25 @@ function SidebarHeader({
     [folded, foldLabel, toggleFolded]
   );
 
-  if (logo !== undefined || wordmark !== undefined) {
+  if (props.renderAppLogo === undefined) {
     return (
       <div className="opal-sidebar-header">
         <div className="opal-sidebar-header__topbar">
           <div
             className="opal-sidebar-header__brand"
             data-foldable={foldable || undefined}
+            // Folded without the logo, the fold button stays shown.
+            data-logo-when-folded={showLogoWhenFolded}
             style={
               {
                 "--sidebar-logo-size": `${SIDEBAR_LOGO_HEIGHT_PX}px`,
               } as React.CSSProperties
             }
           >
-            <div className="opal-sidebar-header__mark">{logo}</div>
-            <div className="opal-sidebar-header__wordmark">{wordmark}</div>
+            <div className="opal-sidebar-header__mark">{props.logo}</div>
+            <div className="opal-sidebar-header__wordmark">
+              {props.wordmark}
+            </div>
             {foldable && (
               <div className="opal-sidebar-header__fold-button">
                 {closeButton}
@@ -244,7 +250,7 @@ function SidebarHeader({
     );
   }
 
-  const Logo = renderAppLogo!(foldable ? folded : false);
+  const Logo = props.renderAppLogo(foldable ? folded : false);
   const logoEl = <Logo size={SIDEBAR_LOGO_HEIGHT_PX} />;
 
   // Folded: the logo *is* the unfold control. The fold icon swaps in on hover
