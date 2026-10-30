@@ -90,6 +90,7 @@ from onyx.llm.well_known_providers.constants import (
     AWS_ROLE_NAME_KWARG,
     AWS_ROLE_NAME_KWARG_ENV_VAR_FORMAT,
     INWORLD_AUTO_ROUTER_MODEL,
+    INWORLD_DEFAULT_API_BASE,
     INWORLD_MODELS_PATH,
     LM_STUDIO_API_KEY_CONFIG_KEY,
     VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
@@ -2702,7 +2703,8 @@ def _get_openai_compatible_models_response(
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
+        # Some gateways, Inworld among them, reject a bad key with 403.
+        if e.response.status_code in (401, 403):
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
                 f"Authentication failed: invalid or missing API key for {source_name}.",
@@ -3015,7 +3017,8 @@ def _inworld_model_to_response(model: dict) -> InworldFinalModelResponse | None:
     None when it is not a chat model."""
     provider = model.get("provider")
     model_name = model.get("model")
-    if not provider or not model_name:
+    # The catalog omits false booleans, so an unsupported model has no flag.
+    if not provider or not model_name or not model.get("isSupported"):
         return None
 
     spec = model.get("spec") or {}
@@ -3030,12 +3033,20 @@ def _inworld_model_to_response(model: dict) -> InworldFinalModelResponse | None:
         return None
 
     display_name = model_name.removeprefix("models/")
-    capabilities = spec.get("capabilities") or {}
-    reasoning_capability = capabilities.get("reasoningCapability") or {}
-    supports_reasoning = bool(reasoning_capability.get("supported")) or (
-        model_is_reasoning_model(model_id, LlmProviderNames.INWORLD)
-        or is_reasoning_model(model_id, display_name)
-    )
+    capabilities = spec.get("capabilities")
+    if isinstance(capabilities, dict):
+        # The catalog omits false flags, so a missing reasoningCapability
+        # means no reasoning. Name heuristics would mark models like
+        # `xai/grok-4.20-non-reasoning` as reasoning.
+        reasoning_capability = capabilities.get("reasoningCapability") or {}
+        supports_reasoning = bool(reasoning_capability.get("supported"))
+    else:
+        capabilities = {}
+        # No capability data from the source; fall back to the LiteLLM
+        # cost map, then the substring heuristic
+        supports_reasoning = model_is_reasoning_model(
+            model_id, LlmProviderNames.INWORLD
+        ) or is_reasoning_model(model_id, display_name)
     supports_image_input = bool(capabilities.get("vision")) or (
         "image" in (spec.get("inputModalities") or [])
     )
@@ -3062,7 +3073,7 @@ def get_inworld_available_models(
     )
 
     response_json = _get_inworld_models_response(
-        api_base=request.api_base, api_key=api_key
+        api_base=request.api_base or INWORLD_DEFAULT_API_BASE, api_key=api_key
     )
 
     models = response_json.get("models", [])

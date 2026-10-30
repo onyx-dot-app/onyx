@@ -985,7 +985,7 @@ class VercelAIGatewayFinalModelResponse(BaseModel):
 
 # Inworld Router dynamic models fetch
 class InworldModelsRequest(BaseModel):
-    api_base: str
+    api_base: str | None = None
     api_key: str | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None

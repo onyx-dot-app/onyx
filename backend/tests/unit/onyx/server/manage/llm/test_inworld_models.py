@@ -8,10 +8,12 @@ from that catalog to Onyx model configs.
 from typing import Any, cast
 from unittest.mock import patch
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.api import (
     _get_inworld_models_response,
@@ -145,6 +147,7 @@ def test_vision_from_input_modalities_alone() -> None:
                 {
                     "model": "gemini-3-flash",
                     "provider": "google",
+                    "isSupported": True,
                     "spec": {
                         "inputModalities": ["text", "image"],
                         "outputModalities": ["text"],
@@ -160,6 +163,79 @@ def test_reasoning_from_reasoning_capability() -> None:
     by_name = _fetch()
     assert by_name["openai/gpt-5.4"].supports_reasoning is True
     assert by_name["inworld/models/inworld-llm-small"].supports_reasoning is False
+
+
+def test_catalog_capabilities_override_reasoning_name_heuristics() -> None:
+    by_name = _fetch(
+        {
+            "models": [
+                {
+                    # The catalog omits reasoningCapability for non-reasoning
+                    # models; the name alone would read as a reasoning model.
+                    "model": "grok-4.20-non-reasoning",
+                    "provider": "xai",
+                    "isSupported": True,
+                    "spec": {
+                        "outputModalities": ["text"],
+                        "capabilities": {"functionCalling": True},
+                    },
+                },
+                {
+                    # Without capability data, fall back to name heuristics.
+                    "model": "o3",
+                    "provider": "openai",
+                    "isSupported": True,
+                    "spec": {"outputModalities": ["text"]},
+                },
+            ]
+        }
+    )
+    assert by_name["xai/grok-4.20-non-reasoning"].supports_reasoning is False
+    assert by_name["openai/o3"].supports_reasoning is True
+
+
+def test_unsupported_models_are_dropped() -> None:
+    chat_spec = {"outputModalities": ["text"]}
+    by_name = _fetch(
+        {
+            "models": [
+                {
+                    "model": "gpt-5-mini",
+                    "provider": "openai",
+                    "isSupported": True,
+                    "spec": chat_spec,
+                },
+                {
+                    "model": "gpt-4o",
+                    "provider": "openai",
+                    "isSupported": False,
+                    "spec": chat_spec,
+                },
+                # The catalog omits false booleans.
+                {"model": "gpt-4.1", "provider": "openai", "spec": chat_spec},
+            ]
+        }
+    )
+    assert "openai/gpt-5-mini" in by_name
+    assert "openai/gpt-4o" not in by_name
+    assert "openai/gpt-4.1" not in by_name
+
+
+def test_missing_api_base_reads_the_public_catalog() -> None:
+    with (
+        patch("onyx.server.manage.llm.api._resolve_api_key", return_value="k"),
+        patch(
+            "onyx.server.manage.llm.api._get_inworld_models_response",
+            return_value=_SAMPLE,
+        ) as get_models,
+    ):
+        get_inworld_available_models(
+            request=InworldModelsRequest(api_key="k"),
+            _=cast(User, None),
+            db_session=cast(Session, None),
+        )
+
+    assert get_models.call_args.kwargs["api_base"] == "https://api.inworld.ai/v1"
 
 
 def test_display_name_drops_inworld_models_prefix() -> None:
@@ -238,6 +314,19 @@ def test_models_request_uses_basic_auth() -> None:
     assert mock_get.call_args.args[0] == "https://api.inworld.ai/llm/v1alpha/models"
     headers = mock_get.call_args.kwargs["headers"]
     assert headers["Authorization"] == "Basic aW53b3JsZA=="
+
+
+def test_rejected_key_reports_authentication_failure() -> None:
+    """Inworld answers an invalid key with 403, not 401."""
+    request = httpx.Request("GET", "https://api.inworld.ai/llm/v1alpha/models")
+    with patch(
+        "onyx.server.manage.llm.api.httpx.get",
+        return_value=httpx.Response(403, request=request),
+    ):
+        with pytest.raises(OnyxError, match="Authentication failed") as exc_info:
+            _get_inworld_models_response("https://api.inworld.ai/v1", "bad-key")
+
+    assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
 
 
 def test_models_request_without_key_sends_no_authorization() -> None:

@@ -28,6 +28,7 @@ VERCEL_AI_GATEWAY_PROVIDER_NAME = "vercel_ai_gateway"
 VERCEL_AI_GATEWAY_DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1"
 
 INWORLD_PROVIDER_NAME = "inworld"
+INWORLD_DEFAULT_API_BASE = "https://api.inworld.ai/v1"
 # Model catalog path on the API host; `/v1/models` is not routed publicly.
 INWORLD_MODELS_PATH = "/llm/v1alpha/models"
 # Inworld's own model selection; `models`/`sort` in the request narrow it.

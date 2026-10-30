@@ -1,5 +1,9 @@
 _BASIC_PREFIX = "basic "
 
+# The OpenAI SDK builds a Bearer header from its api_key, which the router reads
+# as a JWT. It gets this placeholder, so the key travels only as Basic.
+INWORLD_SDK_API_KEY_PLACEHOLDER = "inworld-basic-auth"
+
 
 def inworld_authorization(api_key: str) -> str:
     """Authorization header value for an Inworld API key.

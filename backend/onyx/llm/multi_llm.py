@@ -106,8 +106,14 @@ from onyx.llm.models import (
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.llm.well_known_providers.inworld import inworld_authorization
+from onyx.llm.well_known_providers.constants import (
+    INWORLD_DEFAULT_API_BASE,
+    VERTEX_LOCATION_KWARG,
+)
+from onyx.llm.well_known_providers.inworld import (
+    INWORLD_SDK_API_KEY_PLACEHOLDER,
+    inworld_authorization,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -741,6 +747,11 @@ class LitellmLLM(LLM):
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
+        # Without a base, LiteLLM's OpenAI client sends the Inworld key to
+        # api.openai.com.
+        if model_provider == LlmProviderNames.INWORLD and not self._api_base:
+            self._api_base = INWORLD_DEFAULT_API_BASE
+
         if self._api_surface in OPENAI_COMPATIBLE_SURFACES:
             self._custom_llm_provider = "openai"
             # LiteLLM's OpenAI client requires an api_key to be set.
@@ -758,10 +769,11 @@ class LitellmLLM(LLM):
             if self._api_base is not None:
                 self._api_base = self._api_base.rstrip("/")
 
-        # Replaces the OpenAI SDK's Bearer header, which Inworld reads as a JWT.
         if model_provider == LlmProviderNames.INWORLD and self._api_key:
+            model_kwargs["api_key"] = INWORLD_SDK_API_KEY_PLACEHOLDER
+            headers = model_kwargs.get("extra_headers")
             model_kwargs["extra_headers"] = {
-                **(model_kwargs.get("extra_headers") or {}),
+                **(headers if isinstance(headers, dict) else {}),
                 "Authorization": inworld_authorization(self._api_key),
             }
 
@@ -802,7 +814,14 @@ class LitellmLLM(LLM):
         if not self._is_router or not response_model:
             return None
         model: str = response_model
-        for prefix in (self._model_provider, self._custom_llm_provider):
+        # Inworld IDs are already provider/model; stripping the "openai"
+        # routing prefix would turn openai/gpt-5-mini into gpt-5-mini.
+        prefixes = (
+            ()
+            if self._model_provider == LlmProviderNames.INWORLD
+            else (self._model_provider, self._custom_llm_provider)
+        )
+        for prefix in prefixes:
             if (
                 prefix
                 and model.startswith(f"{prefix}/")
@@ -962,6 +981,10 @@ class LitellmLLM(LLM):
         if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
             # Drives LiteLLM's completions -> responses bridge.
             model = f"responses/{model_bare}"
+        elif self._model_provider == LlmProviderNames.INWORLD:
+            # LiteLLM removes one OpenAI routing prefix. Preserve Inworld's
+            # full provider/model id, including its own openai/ namespace.
+            model = f"openai/{model_bare}"
         elif self._api_surface is not None:
             model = model_bare
         else:
