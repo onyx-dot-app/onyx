@@ -13,6 +13,7 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 #[cfg(target_os = "macos")]
 const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
+const DESKTOP_BRIDGE_SCRIPT: &str = "window.__ONYX_DESKTOP__ = Object.assign(window.__ONYX_DESKTOP__ || {}, { oauthInBrowser: true });";
 
 /// The window a shortcut or menu action should apply to: whichever one is
 /// focused (the app can have several windows). Focus-query failures are
@@ -316,7 +317,7 @@ fn handle_new_window(
 }
 
 const POPUP_DEFAULT_SIZE: (f64, f64) = (650.0, 760.0);
-const POPUP_LABEL_PREFIX: &str = "popup-";
+pub const POPUP_LABEL_PREFIX: &str = "popup-";
 
 pub fn is_popup_window(webview: &Webview) -> bool {
     webview.label().starts_with(POPUP_LABEL_PREFIX)
@@ -382,6 +383,9 @@ fn with_shared_webview_handlers(
     builder: WebviewWindowBuilder<'_, Wry, AppHandle>,
 ) -> WebviewWindowBuilder<'_, Wry, AppHandle> {
     builder
+        // Lets the web app hand OAuth to the system browser; the callback
+        // returns through an onyx:// link (see `oauth_handoff`).
+        .initialization_script(DESKTOP_BRIDGE_SCRIPT)
         // Tauri's own drag-and-drop handler swallows file drops, so the web
         // app's upload drop zones never receive them.
         .disable_drag_drop_handler()
