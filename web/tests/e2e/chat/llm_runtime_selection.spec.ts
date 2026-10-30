@@ -404,21 +404,17 @@ test.describe("LLM Runtime Selection", () => {
       });
     });
 
-    await new ChatPage(page).goto();
+    const chatPage = new ChatPage(page);
+    await chatPage.goto();
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
-    const dialog = page.locator('[role="dialog"]');
-    await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
+    await chatPage.openModelList(sharedModelName);
 
-    const sharedModelOptions = dialog.locator("[data-interactive-state]");
-    await expect(sharedModelOptions).toHaveCount(2);
+    await expect(chatPage.modelOptions).toHaveCount(2);
     // Two results with the same model name under different providers.
     // Groups are sorted alphabetically, so OpenAI (index 1) comes after Anthropic (index 0).
-    const openAiModelOption = sharedModelOptions.nth(1);
+    const openAiModelOption = chatPage.modelOptions.nth(1);
     await expect(openAiModelOption).toBeVisible();
-    await openAiModelOption.click();
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+    await chatPage.chooseModelOption(openAiModelOption);
 
     await sendMessage(page, "Collision payload check one.");
     await expect.poll(() => capturedPayloads.length).toBe(1);
@@ -428,33 +424,18 @@ test.describe("LLM Runtime Selection", () => {
     await startNewChat(page);
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
-    const secondDialog = page.locator('[role="dialog"]');
-    await secondDialog
-      .getByPlaceholder("Search models...")
-      .fill(sharedModelName);
+    await chatPage.openModelList(sharedModelName);
 
-    const secondSharedModelOptions = secondDialog.locator(
-      "[data-interactive-state]"
-    );
-    await expect(secondSharedModelOptions).toHaveCount(2);
+    await expect(chatPage.modelOptions).toHaveCount(2);
     // Anthropic is index 0 (alphabetically first).
-    const anthropicModelOption = secondSharedModelOptions.nth(0);
+    const anthropicModelOption = chatPage.modelOptions.nth(0);
     await expect(anthropicModelOption).toBeVisible();
-    await anthropicModelOption.click();
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+    await chatPage.chooseModelOption(anthropicModelOption);
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
-    const verifyDialog = page.locator('[role="dialog"]');
+    await chatPage.openModelList();
     // Verify the Anthropic option (index 0) is selected.
-    const selectedOption = verifyDialog.locator(
-      '[data-interactive-state="selected"]'
-    );
-    await expect(selectedOption).toHaveCount(1);
-    await page.keyboard.press("Escape");
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+    await expect(chatPage.selectedModelOptions).toHaveCount(1);
+    await chatPage.closeModelPicker();
 
     await sendMessage(page, "Collision payload check two.");
     await expect.poll(() => capturedPayloads.length).toBe(2);
@@ -509,19 +490,12 @@ test.describe("LLM Runtime Selection", () => {
     providersToCleanup.push(restrictedProviderId);
 
     await loginWithCleanCookies(page, testInfo.workerIndex);
-    await new ChatPage(page).goto();
+    const chatPage = new ChatPage(page);
+    await chatPage.goto();
 
-    await page.getByTestId("model-selector").locator("button").last().click();
-    await page.waitForSelector('[role="dialog"]', { state: "visible" });
+    const dialog = await chatPage.openModelList(restrictedModelName);
 
-    const dialog = page.locator('[role="dialog"]');
-    await dialog.getByPlaceholder("Search models...").fill(restrictedModelName);
-
-    const restrictedModelOption = dialog
-      .locator("[data-interactive-state]")
-      .filter({ hasText: restrictedModelName });
-
-    await expect(restrictedModelOption).toHaveCount(0);
+    await expect(chatPage.modelOption(restrictedModelName)).toHaveCount(0);
     await expect(dialog.getByText("No models found")).toBeVisible();
   });
 });
