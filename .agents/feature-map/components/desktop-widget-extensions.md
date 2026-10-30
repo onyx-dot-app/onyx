@@ -142,9 +142,17 @@ panel picks up the new session when the user returns.
 4. `desktop-popup-routing` **Script popups stay in the app; plain links go to
    the browser.** `desktop/src-tauri/src/window.rs:classify_new_window` opens
    `about:blank`, same-origin pages and popups with size features in an app
-   window that keeps the session cookies and `window.opener`. OAuth flows
-   depend on this: they open `about:blank` inside the click, then navigate it
-   and wait for a `postMessage`. Other `http(s)` popups go to the browser.
+   window that keeps the session cookies and `window.opener`. Other `http(s)`
+   popups go to the browser. OAuth flows that use
+   `web/src/lib/oauth/launch.ts:launchOAuth` do not use a popup in the app.
+   They open the provider in the system browser with a `.desktop` state
+   suffix. The browser-side callback page opens
+   `onyx://oauth-callback?path=...&origin=...`, and
+   `desktop/src-tauri/src/oauth_handoff.rs` loads that callback in an app
+   window on the configured server only. It accepts only allowlisted callback
+   paths. The callback then reports completion through `BroadcastChannel`.
+   Older OAuth flows still open `about:blank` inside the click, navigate it,
+   and wait for a `postMessage`.
    `desktop/tests/webdriver_smoke.py` drives the real binary through these
    rules, `confirm()` and downloads. Add a check there when the web app starts
    to depend on a new browser behaviour.
