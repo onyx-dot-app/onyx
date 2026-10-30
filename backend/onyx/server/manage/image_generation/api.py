@@ -37,9 +37,8 @@ from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_catalog import (
-    find_model_entry,
+    is_recommended_image_model,
     iter_image_generation_models,
-    resolve_model_mode,
 )
 from onyx.llm.utils import collect_credential_values
 from onyx.server.manage.image_generation.models import (
@@ -325,7 +324,6 @@ def list_llm_provider_image_models(
     ):
         if not is_usable_for_image_generation(llm_provider):
             continue
-        recommended_models = set(iter_image_generation_models(llm_provider.provider))
         catalog_models = set(
             iter_image_generation_models(llm_provider.provider, recommended_only=False)
         )
@@ -341,12 +339,8 @@ def list_llm_provider_image_models(
                         if stored
                         else None
                     ),
-                    is_recommended=(
-                        name in recommended_models
-                        or (
-                            find_model_entry(llm_provider.provider, name) is None
-                            and resolve_model_mode(name) == "image_generation"
-                        )
+                    is_recommended=is_recommended_image_model(
+                        llm_provider.provider, name
                     ),
                     image_provider_id=(
                         connected_by_model_id.get(stored.id) if stored else None

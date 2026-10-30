@@ -303,6 +303,25 @@ def iter_image_generation_models(
     )
 
 
+def is_recommended_image_model(provider: str, model_name: str) -> bool:
+    """Whether a stored image model belongs in the recommended view. A name
+    that another provider's catalog lists (e.g. a proxy that serves
+    ``gpt-image-2``) follows that provider's recommendation. Unknown names
+    fall back to the name-based mode."""
+    if model_name in iter_image_generation_models(provider):
+        return True
+    if _vendored_model_entry(provider, model_name) is not None:
+        return False
+    listed_elsewhere = False
+    for other in _catalog():
+        if _vendored_model_entry(other, model_name) is None:
+            continue
+        if model_name in iter_image_generation_models(other):
+            return True
+        listed_elsewhere = True
+    return not listed_elsewhere and resolve_model_mode(model_name) == "image_generation"
+
+
 def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     """A model's vendored catalog entry for the provider (direct or alias)."""
     section = _catalog().get(provider)

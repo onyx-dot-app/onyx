@@ -152,3 +152,15 @@ def test_image_generation_models_skip_pruned_and_dated_snapshots() -> None:
     assert "dall-e-3" not in models
     assert "gpt-image-1.5-2025-12-16" not in models
     assert all("/" not in model for model in models)
+
+
+def test_is_recommended_image_model_follows_the_listing_provider() -> None:
+    gateway = "custom_image_gateway"
+    assert model_catalog.is_recommended_image_model(gateway, "gpt-image-1.5")
+    assert not model_catalog.is_recommended_image_model(gateway, "dall-e-3")
+    assert not model_catalog.is_recommended_image_model(
+        gateway, "gpt-image-1.5-2025-12-16"
+    )
+    assert not model_catalog.is_recommended_image_model(
+        LlmProviderNames.OPENAI, "dall-e-3"
+    )
