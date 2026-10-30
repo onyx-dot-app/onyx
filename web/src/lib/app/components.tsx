@@ -75,7 +75,7 @@ export function FoldableLogo({
 }: FoldableLogoProps) {
   const t = useTranslations("common");
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
+  const { enterprise, logoUrl, hide_onyx_branding, isLoading } = useSettings();
   const logoDisplayStyle = enterprise?.logo_display_style;
   const applicationName = enterprise?.application_name;
 
@@ -121,50 +121,51 @@ export function FoldableLogo({
     );
   };
 
-  // Handle "logo_only" display style
-  if (logoDisplayStyle === "logo_only") {
-    return renderNameAndPoweredBy({ includeLogo: true, includeName: false });
+  // No custom name: the custom logo alone, or the Onyx logo and wordmark.
+  if (!applicationName) {
+    return logoUrl || folded ? (
+      <Logo size={resolvedSize} className={className} />
+    ) : (
+      <SvgOnyxLogoWordmark size={resolvedSize} className={className} />
+    );
   }
 
-  // Handle "name_only" display style
-  if (logoDisplayStyle === "name_only") {
-    return renderNameAndPoweredBy({ includeLogo: false, includeName: true });
-  }
-
-  // Handle "logo_and_name" or default behavior
-  return applicationName ? (
-    renderNameAndPoweredBy({ includeLogo: true, includeName: true })
-  ) : folded ? (
-    <Logo size={resolvedSize} className={className} />
-  ) : (
-    <SvgOnyxLogoWordmark size={resolvedSize} className={className} />
-  );
+  // A custom name, with the custom logo or the Onyx mark. The display style
+  // can leave out either one.
+  return renderNameAndPoweredBy({
+    includeLogo: logoDisplayStyle !== "name_only",
+    includeName: logoDisplayStyle !== "logo_only",
+  });
 }
 
 /**
  * The sidebar's logo mark: the workspace's custom logo, or the Onyx mark.
- * Renders nothing when the workspace shows its name only.
+ * Renders nothing when a workspace with a custom name shows the name only.
  */
 export function SidebarLogoMark({ size }: { size: number }) {
   const { enterprise } = useSettings();
-  if (enterprise?.logo_display_style === "name_only") return null;
+  if (
+    enterprise?.application_name &&
+    enterprise.logo_display_style === "name_only"
+  ) {
+    return null;
+  }
   return <Logo size={size} />;
 }
 
 /**
- * The sidebar's wordmark, beside the mark: the workspace's name with the
- * "Powered by" line, or the Onyx wordmark when no custom name is set.
+ * The sidebar's wordmark, beside the mark. With a custom name: the name and,
+ * unless Onyx branding is hidden, the "Powered by" line. Without one: the Onyx
+ * wordmark, or nothing when a custom logo stands alone.
  */
 export function SidebarWordmark({ size }: { size: number }) {
   const t = useTranslations("common");
-  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
+  const { enterprise, logoUrl, hide_onyx_branding, isLoading } = useSettings();
   const logoDisplayStyle = enterprise?.logo_display_style;
   const applicationName = enterprise?.application_name;
 
-  const customStyle =
-    logoDisplayStyle === "logo_only" || logoDisplayStyle === "name_only";
-  if (!customStyle && !applicationName) {
-    return <SvgOnyxWordmark size={size} />;
+  if (!applicationName) {
+    return logoUrl ? null : <SvgOnyxWordmark size={size} />;
   }
 
   return (
@@ -184,7 +185,7 @@ export function SidebarWordmark({ size }: { size: number }) {
           font="heading-h3"
           color="text-05"
         >
-          {applicationName ?? ""}
+          {applicationName}
         </OverflowText>
       )}
       {/* Wait for settings so a hidden tagline never flashes. */}
