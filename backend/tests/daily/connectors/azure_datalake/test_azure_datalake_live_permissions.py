@@ -4,12 +4,8 @@ permission checks. Read only.
 
 The fixture's root ACL is `user::rwx,group::---,other::--x`. The test user
 owns every path and holds Storage Blob Data Owner; the RBAC Readers group
-(Subash) holds Storage Blob Data Reader on the container. The table of the
-plan lists what each folder and file ACL grants.
+(Subash) holds Storage Blob Data Reader on the container.
 """
-
-from collections.abc import Generator
-from typing import Any
 
 import pytest
 
@@ -35,10 +31,6 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import SlimDocument
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation,
-    global_version,
-)
 from tests.utils.secret_names import TestSecret
 
 pytestmark = [
@@ -58,7 +50,7 @@ ID_PREFIX = f"azure_datalake:{ACCOUNT}:{CONTAINER}"
 RBAC_READERS_GROUP = "d7a184e4-fca0-4d84-97f3-d5b7c718ad6d"
 ACL_GROUP_A = "d9d93eee-bfce-46e9-aae1-00623a99b697"
 ACL_GROUP_B = "c016e6b3-be0a-4f39-b886-345524716e6f"
-TEST_USER = normalize_email("test@danswerai.onmicrosoft.com").lower()
+TEST_USER = normalize_email("test@danswerai.onmicrosoft.com")
 RAUNAK = "raunak@onyx.app"
 SUBASH = "subash@onyx.app"
 
@@ -78,7 +70,7 @@ OTHER_READABLE = "50-other/other-readable.txt"
 OTHER_MINUS_GROUP_A = "60-other-minus-group/other-minus-group-a.txt"
 
 
-def _certificate_credentials(test_secrets: dict[TestSecret, str]) -> dict[str, Any]:
+def _certificate_credentials(test_secrets: dict[TestSecret, str]) -> dict[str, str]:
     return {
         "authentication_method": "certificate",
         "adls_client_id": test_secrets[TestSecret.PERM_SYNC_SHAREPOINT_CLIENT_ID],
@@ -90,7 +82,7 @@ def _certificate_credentials(test_secrets: dict[TestSecret, str]) -> dict[str, A
     }
 
 
-def _provider(credentials: dict[str, Any]) -> OnyxStaticCredentialsProvider:
+def _provider(credentials: dict[str, str]) -> OnyxStaticCredentialsProvider:
     return OnyxStaticCredentialsProvider(
         None, DocumentSource.AZURE_DATALAKE, credentials
     )
@@ -111,32 +103,25 @@ def _everyone_group(test_secrets: dict[TestSecret, str]) -> str:
     return f"entra_tenant_everyone:{tenant}"
 
 
+# TODO(evan-onyx): add a live test that changes the fixture: the poll window,
+# the prune of a deleted file, and a permission re-sync after an ACL, role or
+# group change. It needs write access on onyxadlstest for the CI app.
 @pytest.fixture(scope="module")
 def synced(
+    enable_ee_module: None,  # noqa: ARG001
     test_secrets: dict[TestSecret, str],
-) -> Generator[dict[str, ExternalAccess], None, None]:
-    # A module fixture runs before the function-scoped `enable_ee`.
-    was_ee = global_version.is_ee_version()
-    global_version.set_ee()
-    fetch_versioned_implementation.cache_clear()
-    try:
-        connector = AzureDataLakeConnector(
-            account_name=ACCOUNT, container_name=CONTAINER
-        )
-        connector.set_credentials_provider(
-            _provider(_certificate_credentials(test_secrets))
-        )
-        access: dict[str, ExternalAccess] = {}
-        for batch in connector.retrieve_all_slim_docs_perm_sync():
-            for item in batch:
-                if isinstance(item, SlimDocument):
-                    assert item.external_access is not None
-                    access[item.id.removeprefix(f"{ID_PREFIX}:")] = item.external_access
-        yield access
-    finally:
-        if not was_ee:
-            global_version.unset_ee()
-        fetch_versioned_implementation.cache_clear()
+) -> dict[str, ExternalAccess]:
+    connector = AzureDataLakeConnector(account_name=ACCOUNT, container_name=CONTAINER)
+    connector.set_credentials_provider(
+        _provider(_certificate_credentials(test_secrets))
+    )
+    access: dict[str, ExternalAccess] = {}
+    for batch in connector.retrieve_all_slim_docs_perm_sync():
+        for item in batch:
+            if isinstance(item, SlimDocument):
+                assert item.external_access is not None
+                access[item.id.removeprefix(f"{ID_PREFIX}:")] = item.external_access
+    return access
 
 
 @pytest.mark.parametrize("path", sorted(EXTRA_READERS))
@@ -190,8 +175,8 @@ def test_the_group_sync_reads_the_fixture_groups(
     assert {TEST_USER, RAUNAK, SUBASH} <= groups[_everyone_group(test_secrets)]
 
 
-def _run_checks(credentials: dict[str, Any]) -> list[CapabilityCheckResult]:
-    config: dict[str, Any] = {"account_name": ACCOUNT, "container_name": CONTAINER}
+def _run_checks(credentials: dict[str, str]) -> list[CapabilityCheckResult]:
+    config: dict[str, str] = {"account_name": ACCOUNT, "container_name": CONTAINER}
     context = CapabilityCheckContext(
         source=DocumentSource.AZURE_DATALAKE,
         credential_json=credentials,
@@ -201,6 +186,7 @@ def _run_checks(credentials: dict[str, Any]) -> list[CapabilityCheckResult]:
             connector_specific_config=config,
         ),
     )
+    # Both builders hold the shared app registration and Graph checks.
     checks: dict[str, CapabilityCheck] = {
         check.check_id: check
         for check in build_azure_datalake_doc_permission_sync_checks()
