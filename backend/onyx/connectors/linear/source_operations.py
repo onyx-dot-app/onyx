@@ -8,6 +8,7 @@ to api.linear.app.
 """
 
 import json
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import ExitStack
@@ -320,7 +321,14 @@ def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str,
     body: dict[str, Any] = response.json()
     errors: list[dict[str, Any]] | None = body.get("errors")
     if errors:
-        if _RATE_LIMITED_CODE in _error_codes(errors):
+        codes: set[str] = _error_codes(errors)
+        if _AUTHENTICATION_ERROR_CODE in codes:
+            raise LinearAuthError(
+                f"Linear refused the credential: {errors}",
+                status_code=response.status_code,
+                body=json.dumps({"errors": errors}),
+            )
+        if _RATE_LIMITED_CODE in codes:
             raise LinearRateLimitError(
                 f"Linear rate limited the request: {errors}",
                 status_code=response.status_code,
@@ -453,7 +461,8 @@ class LinearSourceOperations(SourceOperations):
             return self._authorization_cache
         credentials: dict[str, Any] = self.credentials_provider.get_credentials()
         if is_expiring(credentials):
-            with self._refresh_lock():
+            # The thread lock covers providers whose rotation lock is a no-op.
+            with self._thread_refresh_lock(), self._refresh_lock():
                 credentials = self.credentials_provider.get_credentials()
                 if is_expiring(credentials):
                     credentials = refresh_oauth_token(credentials)
@@ -461,6 +470,12 @@ class LinearSourceOperations(SourceOperations):
         self._authorization_cache = _authorization(credentials)
         self._authorization_expires_at = credentials.get(EXPIRE_AT)
         return self._authorization_cache
+
+    def _thread_refresh_lock(self) -> threading.Lock:
+        """Lets one of this gateway's threads redeem the refresh token.
+        ``dict.setdefault`` is atomic under the GIL, so no guard lock is
+        needed."""
+        return vars(self).setdefault("_refresh_thread_lock", threading.Lock())
 
     def _refresh_lock(self) -> ExitStack:
         """The provider's rotation lock, held by the returned stack. Only

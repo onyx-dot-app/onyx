@@ -5,6 +5,7 @@ tested nothing says."""
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 
 from onyx.configs.constants import DocumentSource
@@ -115,18 +116,34 @@ def test_a_missing_token_says_so() -> None:
     assert result.summary == "No token saved in the account"
 
 
-def test_an_unreachable_server_fails_only_a_form_run() -> None:
+@pytest.mark.parametrize(
+    "error,summary,kind",
+    [
+        (
+            requests.ConnectionError("refused"),
+            "Cannot reach GitHub",
+            CheckErrorKind.UNREACHABLE,
+        ),
+        (requests.ReadTimeout("slow"), "Sign-in timed out", CheckErrorKind.TIMEOUT),
+    ],
+    ids=["unreachable", "timeout"],
+)
+def test_an_unreachable_server_fails_only_a_form_run(
+    error: Exception, summary: str, kind: CheckErrorKind
+) -> None:
     gateway = healthy_gateway()
-    gateway.get_token_info.side_effect = requests.ConnectionError("refused")
+    gateway.get_token_info.side_effect = error
 
     form = _run("github_auth", gateway, form_run=True)
     stored = _run("github_auth", gateway)
 
     assert form.status == CapabilityCheckStatus.FAILED
     assert stored.status == CapabilityCheckStatus.INCOMPLETE
-    assert form.summary == stored.summary == "Cannot reach GitHub"
+    assert form.summary == stored.summary == summary
+    assert form.error_kind == stored.error_kind == kind
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
     gateway = healthy_gateway()
     gateway.get_token_info.side_effect = GitHubRateLimitError(
@@ -261,6 +278,39 @@ def test_no_selected_repository_found_fails() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.summary == "No selected repo found"
+
+
+def test_all_repositories_failing_for_different_reasons_names_each() -> None:
+    gateway = healthy_gateway()
+    gateway.get_repository.side_effect = [
+        api_error(404, "Not Found"),
+        api_error(403, "Forbidden"),
+    ]
+
+    result = _run(
+        "github_configured_repositories", gateway, form_config(repositories="a, b")
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == "Cannot read 2 of 2 repositories"
+    assert "Not found: a." in (result.description or "")
+    assert "Denied: b." in (result.description or "")
+
+
+def test_denied_and_unreadable_repositories_are_not_all_denied() -> None:
+    gateway = healthy_gateway()
+    gateway.get_repository.side_effect = [make_repo("a"), api_error(403, "Forbidden")]
+    gateway.list_root_contents.side_effect = api_error(403, "Resource not accessible")
+
+    result = _run(
+        "github_configured_repositories", gateway, form_config(repositories="a, b")
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "InsufficientPermissionsError"
+    assert result.summary == "Cannot read 2 of 2 repositories"
+    assert "Denied: b." in (result.description or "")
+    assert "Unreadable files: acme/a." in (result.description or "")
 
 
 def test_checks_after_a_partial_find_run_on_the_found_repositories() -> None:

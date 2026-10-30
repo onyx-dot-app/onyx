@@ -1,11 +1,10 @@
 import { useLocale, useTranslations } from "next-intl";
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
-import { Button, Card } from "@opal/components";
+import { Button, Card, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -30,10 +29,10 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 
   const cellBody = (
     <>
-      <Text as="span" mainUiAction text04>
+      <Text as="span" font="main-ui-action" color="text-04">
         {display}
       </Text>
-      <Text as="span" secondaryBody text03>
+      <Text as="span" font="secondary-body" color="text-03">
         {label}
       </Text>
       {onFilter && (

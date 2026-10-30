@@ -4,16 +4,18 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import requests
 
+from onyx.agents.tools import ToolInvocation
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolResult
 from onyx.server.features.tool.api import _validate_tool_definition
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.security.models import SSRFProtectionLevel
-from onyx.tools.models import DynamicSchemaInfo, ToolCallException, ToolResponse
+from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo, ToolContext
 from onyx.tools.tool_implementations.custom import custom_tool
 from onyx.tools.tool_implementations.custom.custom_tool import (
     CUSTOM_TOOL_REQUEST_TIMEOUT,
-    CustomToolCallSummary,
     build_custom_tools_from_openapi_schema_and_headers,
     validate_custom_tool_url,
 )
@@ -132,10 +134,15 @@ class TestCustomTool(unittest.TestCase):
         )
 
         result = tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
+        assert isinstance(result, ToolResult)
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with(
             expected_url, method="GET", json=None, headers={}, **_REQUEST_KWARGS
@@ -143,12 +150,12 @@ class TestCustomTool(unittest.TestCase):
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
         self.assertIsNotNone(
-            result.rich_response,
-            "Expected rich_response to be set",
+            result.details,
+            "Expected details to be set",
         )
-        assert isinstance(result.rich_response, CustomToolCallSummary)
+        assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
-            result.rich_response.tool_name,
+            result.details.tool_name,
             "getAssistant",
             "Tool name in response does not match expected value",
         )
@@ -173,10 +180,15 @@ class TestCustomTool(unittest.TestCase):
         )
 
         result = tools[1].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="456",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "456"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
+        assert isinstance(result, ToolResult)
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/456"
         mock_request.assert_called_once_with(
             expected_url, method="POST", json=None, headers={}, **_REQUEST_KWARGS
@@ -184,12 +196,12 @@ class TestCustomTool(unittest.TestCase):
 
         self.assertIsNotNone(result, "Expected a result from the tool run")
         self.assertIsNotNone(
-            result.rich_response,
-            "Expected rich_response to be set",
+            result.details,
+            "Expected details to be set",
         )
-        assert isinstance(result.rich_response, CustomToolCallSummary)
+        assert isinstance(result.details, CustomToolCallSummary)
         self.assertEqual(
-            result.rich_response.tool_name,
+            result.details.tool_name,
             "createAssistant",
             "Tool name in response does not match expected value",
         )
@@ -221,9 +233,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         expected_headers = {
@@ -262,9 +278,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            assistant_id="123",
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"assistant_id": "123"},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with(
@@ -351,9 +371,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
-            email=user_email,
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={"email": user_email},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
 
         expected_url = (
@@ -417,8 +441,13 @@ class TestCustomTool(unittest.TestCase):
         )
 
         tools[0].run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=None,
+            invocation=ToolInvocation(
+                call_id="test",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            context=ToolContext(),
         )
 
         mock_request.assert_called_once_with(
@@ -432,20 +461,20 @@ class TestCustomTool(unittest.TestCase):
     def test_custom_tool_final_result(self) -> None:
         """
         Test extracting the final result from a custom tool response.
-        Verifies that the tool result can be correctly extracted from the ToolResponse.
+        Verifies that the tool result can be correctly extracted from the ToolResult.
         """
-        mock_response = ToolResponse(
-            rich_response=CustomToolCallSummary(
+        mock_response = ToolResult(
+            details=CustomToolCallSummary(
                 response_type="json",
                 tool_name="getAssistant",
                 tool_result={"id": "789", "name": "Final Assistant"},
             ),
-            llm_facing_response='{"id": "789", "name": "Final Assistant"}',
+            content='{"id": "789", "name": "Final Assistant"}',
         )
 
-        # Extract the final result from the rich_response
-        assert isinstance(mock_response.rich_response, CustomToolCallSummary)
-        final_result = mock_response.rich_response.tool_result
+        # Extract the final result from the details
+        assert isinstance(mock_response.details, CustomToolCallSummary)
+        final_result = mock_response.details.tool_result
         self.assertEqual(
             final_result,
             {"id": "789", "name": "Final Assistant"},
@@ -538,6 +567,53 @@ class TestSanitizeToolName(unittest.TestCase):
             openapi_to_method_specs(schema)
 
 
+if __name__ == "__main__":
+    pytest.main([__file__])
+
+
+@pytest.mark.parametrize("status_code", [200, 401, 403, 500])
+def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> None:
+    tools = build_custom_tools_from_openapi_schema_and_headers(
+        tool_id=1,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Status", "version": "1.0.0"},
+            "servers": [{"url": "https://example.com"}],
+            "paths": {
+                "/status": {
+                    "get": {
+                        "operationId": "status",
+                        "summary": "Get status",
+                        "responses": {},
+                    }
+                }
+            },
+        },
+    )
+    response = requests.Response()
+    response.status_code = status_code
+    response.headers["Content-Type"] = "application/json"
+    with (
+        patch(
+            "onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request",
+            return_value=response,
+        ),
+        patch.object(response, "json", return_value={"message": "upstream response"}),
+    ):
+        result = tools[0].run(
+            ToolInvocation(
+                call_id="status",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+        assert isinstance(result, ToolResult)
+    assert result.is_error is (status_code >= 400)
+    assert "upstream response" in result.text
+
+
 @pytest.mark.parametrize(
     ("content_type", "response_type"),
     [("text/csv", "csv"), ("image/png", "image")],
@@ -578,11 +654,20 @@ def test_custom_tool_file_response_is_serialized_for_llm(
             return_value=["file-1"],
         ),
     ):
-        result = tools[0].run(placement=Placement(turn_index=0, tab_index=0))
+        result = tools[0].run(
+            ToolInvocation(
+                call_id="file",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+        assert isinstance(result, ToolResult)
 
-    assert isinstance(result.rich_response, CustomToolCallSummary)
-    assert result.rich_response.response_type == response_type
-    assert result.llm_facing_response == '{"file_ids":["file-1"]}'
+    assert isinstance(result.details, CustomToolCallSummary)
+    assert result.details.response_type == response_type
+    assert result.text == '{"file_ids":["file-1"]}'
 
 
 def _schema(server_url: str) -> dict[str, Any]:
@@ -684,8 +769,7 @@ def test_link_local_blocked_at_every_level(
     with pytest.raises(SSRFException):
         validate_custom_tool_url(url, resolve_dns=False)
     with patch("onyx.utils.url._pinned_request") as pinned:
-        with pytest.raises(ToolCallException):
-            _run_ping(url)
+        _assert_failed(_run_ping(url), status_code=None)
         pinned.assert_not_called()
 
 
@@ -720,14 +804,54 @@ def test_save_rejects_invalid_server_url(servers: list[dict[str, Any]] | None) -
     assert exc_info.value.status_code == 400
 
 
-def _run_ping(server_url: str) -> ToolResponse:
+def _run_ping(server_url: str) -> ToolResult:
     tool = build_custom_tools_from_openapi_schema_and_headers(
         tool_id=1, openapi_schema=_schema(server_url)
     )[0]
-    return tool.run(
-        placement=Placement(turn_index=0, tab_index=0),
-        requestBody={"q": 1},
+    response = tool.run(
+        ToolInvocation(
+            call_id="ping",
+            arguments={"requestBody": {"q": 1}},
+            cancellation=CancellationSignal(),
+            update=lambda _: None,
+        ),
+        ToolContext(),
     )
+    assert isinstance(response, ToolResult)
+    from onyx.chat.renderer import ToolRenderer
+    from onyx.llm.models import ToolCall
+    from onyx.server.query_and_chat.placement import Placement
+    from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+
+    packets = ToolRenderer(
+        ToolCall(id="ping", name=tool.name, arguments={}),
+        Placement(turn_index=0),
+        tool_id=1,
+    ).complete(response)
+    deltas = [
+        packet.obj for packet in packets if isinstance(packet.obj, CustomToolDelta)
+    ]
+    assert len(deltas) == 1
+    assert isinstance(response.details, CustomToolCallSummary)
+    error = deltas[0].error
+    expected = response.details.error
+    assert (error.model_dump() if error else None) == (
+        expected.model_dump() if expected else None
+    )
+    return response
+
+
+def _assert_failed(
+    response: ToolResult, status_code: int | None, is_unreachable: bool = False
+) -> None:
+    assert isinstance(response.details, CustomToolCallSummary)
+    assert response.is_error
+    error = response.details.error
+    assert error is not None
+    assert not error.is_auth_error
+    assert error.status_code == status_code
+    assert error.is_unreachable == is_unreachable
+    assert response.text == error.message
 
 
 @pytest.mark.parametrize(
@@ -751,8 +875,7 @@ def test_call_blocks_host_resolving_to_blocked_ip(
         ),
         patch("onyx.utils.url._pinned_request") as pinned,
     ):
-        with pytest.raises(ToolCallException):
-            _run_ping("https://api.example.com")
+        _assert_failed(_run_ping("https://api.example.com"), status_code=None)
         pinned.assert_not_called()
 
 
@@ -793,10 +916,56 @@ def test_call_refuses_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
         patch("onyx.utils.url.socket.getaddrinfo", return_value=_addr_info("8.8.8.8")),
         patch("onyx.utils.url._pinned_request", return_value=redirect) as pinned,
     ):
-        with pytest.raises(ToolCallException):
-            _run_ping("https://api.example.com")
+        _assert_failed(_run_ping("https://api.example.com"), status_code=302)
     pinned.assert_called_once()
 
 
-if __name__ == "__main__":
-    pytest.main([__file__])
+def test_validate_all_allows_private_network_on_self_hosted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accepted risk (ENG-4421): self-hosted custom tools reach RFC1918 hosts
+    even at VALIDATE_ALL. Change this test only with a deliberate policy change."""
+    _set_ssrf_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
+    _validate_tool_definition(_schema("http://10.0.0.1"))
+    response = unittest.mock.MagicMock()
+    response.is_redirect = False
+    response.status_code = 200
+    response.headers = {"Content-Type": "application/json"}
+    response.json.return_value = {"ok": True}
+    with patch("onyx.utils.url._pinned_request", return_value=response) as pinned:
+        result = _run_ping("http://10.0.0.1")
+    pinned.assert_called_once()
+    assert isinstance(result.details, CustomToolCallSummary)
+    assert result.details.error is None
+
+
+_RAW_URLLIB3_MESSAGE = (
+    "HTTPConnectionPool(host='10.255.255.1', port=80): Max retries exceeded "
+    "with url: /ping (Caused by ConnectTimeoutError("
+    "<urllib3.connection.HTTPConnection object at 0x1>, "
+    "'Connection to 10.255.255.1 timed out. (connect timeout=10)'))"
+)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_reason"),
+    [
+        (requests.exceptions.ConnectTimeout(_RAW_URLLIB3_MESSAGE), "(timed out)"),
+        (requests.exceptions.ReadTimeout(_RAW_URLLIB3_MESSAGE), "(timed out)"),
+        (
+            requests.exceptions.ConnectionError(_RAW_URLLIB3_MESSAGE),
+            "(connection failed)",
+        ),
+    ],
+)
+def test_call_network_error_returns_clean_message(
+    error: requests.exceptions.RequestException, expected_reason: str
+) -> None:
+    with patch("onyx.utils.url._pinned_request", side_effect=error):
+        response = _run_ping("http://10.255.255.1")
+    _assert_failed(response, status_code=None, is_unreachable=True)
+    assert response.text == (
+        f"The ping tool could not reach its server {expected_reason}."
+    )
+    for internal_detail in ("urllib3", "HTTPConnectionPool", "Max retries", "10.255"):
+        assert internal_detail not in response.text

@@ -11,7 +11,7 @@ from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 
 def default_llm_config(
     provider: str = "openai",
-    model_name: str = "gpt-5-mini",
+    model_name: str = "gpt-6-luna",
     api_key: str = "test-key",
 ) -> CraftLLMProviderConfig:
     """Standard ``CraftLLMProviderConfig`` for tests that don't care about specifics."""

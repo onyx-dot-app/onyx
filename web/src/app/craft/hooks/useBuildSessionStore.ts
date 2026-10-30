@@ -41,7 +41,7 @@ import {
   type SubagentTurn,
 } from "@/app/craft/types/displayTypes";
 
-import { MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
+import { MAX_QUEUED_MESSAGES } from "@/app/app/types";
 
 import {
   createSession as apiCreateSession,
@@ -2188,29 +2188,21 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const canApplySkillsStale: () => boolean = () =>
       get().sessions.get(sessionId)?.skillsStaleRevision ===
       skillsStaleRevision;
+    let loadPhase: "history" | "runtime" = "history";
 
     try {
       // Capture runtime failures while history loads independently.
       const runtimeRequest: Promise<
         [PromiseSettledResult<Awaited<ReturnType<typeof fetchSession>>>]
       > = Promise.allSettled([fetchSession(sessionId)]);
-      let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
-      try {
-        activeTurn = await fetchActiveTurn(sessionId);
-      } catch (err) {
-        console.warn("Failed to fetch active turn:", err);
-      }
+      let activeTurn = await fetchActiveTurn(sessionId);
       if (!isCurrentRuntimeLoad()) return;
       // Server completion follows the final transcript commit. Observe it before reading messages.
       let messages: BuildMessage[] = await fetchMessages(sessionId);
       if (!isCurrentRuntimeLoad()) return;
       const historyTurnId = activeTurn?.turn_id;
-      try {
-        // A second tab can start while history loads. Keep the first owner if it completed during the read.
-        activeTurn = (await fetchActiveTurn(sessionId)) ?? activeTurn;
-      } catch (err) {
-        console.warn("Failed to recheck active turn:", err);
-      }
+      // A second tab can start while history loads. Keep the first owner if it completed during the read.
+      activeTurn = (await fetchActiveTurn(sessionId)) ?? activeTurn;
       if (!isCurrentRuntimeLoad()) return;
       if (activeTurn && activeTurn.turn_id !== historyTurnId) {
         // The new turn may have committed its prompt after our history read.
@@ -2284,6 +2276,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             : currentSession!.contextUsage,
         });
 
+      loadPhase = "runtime";
       const [runtimeResult] = await runtimeRequest;
       if (!isCurrentRuntimeLoad()) return;
       if (runtimeResult.status === "rejected") throw runtimeResult.reason;
@@ -2410,7 +2403,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         }
       }
     } catch (err) {
-      if (!isCurrentRuntimeLoad()) return;
+      // History errors belong to the captured turn; runtime errors belong to the session.
+      const ownsFailure =
+        loadPhase === "history" ? isCurrentLoad() : isCurrentRuntimeLoad();
+      if (!ownsFailure) return;
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {
         loadError: err instanceof Error ? err.message : String(err),

@@ -15,7 +15,7 @@ import { toast } from "@opal/layouts";
 import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
-import type { ChatSession } from "@/app/app/interfaces";
+import type { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -260,7 +260,7 @@ export function usePinChatAgent() {
  *    A user who has unpinned everything has nothing here and falls to step 4.
  * 4. anything eligible
  *
- * "Disable Default Chat" (`disable_default_assistant`) is a constraint,
+ * "Always Start with an Agent" (`disable_default_assistant`) is a constraint,
  * not a preference: with it on the Assistant is never a valid answer, so it
  * leaves the candidate set up front rather than being skipped at step 2. That
  * is what stops a stale `?agentId=0`, or a session created before the setting
@@ -389,6 +389,8 @@ export function useAgentLabels() {
   };
 }
 
+const DEFAULT_ASSISTANT_TOOLS_URL = "/api/admin/default-assistant/tools";
+
 type DefaultAssistantCache = ReturnType<typeof useSWRConfig>["cache"];
 
 const defaultAssistantSaveTails = new WeakMap<
@@ -447,11 +449,12 @@ export function useDefaultAssistantConfiguration() {
       await result.mutate(
         async (current) => {
           if (!current) return current;
-          const next = applySelection(current);
-          const response = await fetch("/api/admin/default-assistant", {
+          // Send only the change: a full list from this cache would overwrite
+          // concurrent edits to the shared default assistant.
+          const response = await fetch(DEFAULT_ASSISTANT_TOOLS_URL, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tool_ids: next.tool_ids }),
+            body: JSON.stringify({ tool_ids: toolIds, enabled }),
           });
           if (!response.ok)
             throw new Error(

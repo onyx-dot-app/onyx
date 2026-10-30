@@ -294,11 +294,10 @@ class GitHubSourceOperations(SourceOperations):
     # The gateway reads only the credential.
     config_keys = frozenset()
 
-    _cached_client: Github | None = None
-
-    def _client_build_lock(self) -> threading.Lock:
-        """Guards the first client build, which validates the base URL."""
-        return vars(self).setdefault("_build_lock", threading.Lock())
+    def _thread_clients(self) -> threading.local:
+        """This gateway's clients, one per thread. ``dict.setdefault`` is
+        atomic under the GIL, so no guard lock is needed."""
+        return vars(self).setdefault("_clients", threading.local())
 
     def _token(self) -> str:
         token: Any = self.credentials_provider.get_credentials().get(
@@ -309,22 +308,24 @@ class GitHubSourceOperations(SourceOperations):
         return token
 
     def _client(self) -> Github:
-        if self._cached_client is not None:
-            return self._cached_client
-        with self._client_build_lock():
-            if self._cached_client is None:
-                credentials: dict[str, Any] = (
-                    self.credentials_provider.get_credentials()
-                )
-                base_url: str | None = resolve_github_base_url(credentials)
-                kwargs: dict[str, Any] = {"base_url": base_url} if base_url else {}
-                self._cached_client = Github(
-                    auth=Auth.Token(self._token()),
-                    per_page=_PER_PAGE,
-                    retry=BoundedGithubRetry(),
-                    **kwargs,
-                )
-        return self._cached_client
+        """This thread's client. Threads must not share one: PyGithub keeps
+        each request's URL and headers on one connection object between
+        sending the request and reading the response."""
+        clients: threading.local = self._thread_clients()
+        cached: Github | None = vars(clients).get("client")
+        if cached is not None:
+            return cached
+        credentials: dict[str, Any] = self.credentials_provider.get_credentials()
+        base_url: str | None = resolve_github_base_url(credentials)
+        kwargs: dict[str, Any] = {"base_url": base_url} if base_url else {}
+        client = Github(
+            auth=Auth.Token(self._token()),
+            per_page=_PER_PAGE,
+            retry=BoundedGithubRetry(),
+            **kwargs,
+        )
+        clients.client = client
+        return client
 
     def _get(
         self, url: str, params: dict[str, Any] | None = None
@@ -664,6 +665,8 @@ class GitHubSourceOperations(SourceOperations):
             raise ValueError(f"Expected a file at {path}, got a directory")
         encoding: Any = data.get("encoding")
         content: Any = data.get("content")
+        response_path: Any = data.get("path")
+        html_url: Any = data.get("html_url")
         return GitHubFileContent(
             content=(
                 base64.b64decode(bytearray(content, "utf-8"))
@@ -671,6 +674,8 @@ class GitHubSourceOperations(SourceOperations):
                 else None
             ),
             encoding=encoding if isinstance(encoding, str) else None,
+            path=response_path if isinstance(response_path, str) else None,
+            html_url=html_url if isinstance(html_url, str) else None,
         )
 
     @source_operation(

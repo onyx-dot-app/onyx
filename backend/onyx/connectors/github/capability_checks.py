@@ -27,8 +27,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -38,6 +38,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -60,16 +61,28 @@ from onyx.connectors.github.source_operations import (
     GitHubSourceOperations,
 )
 from onyx.connectors.github.utils import parse_repository_names
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    CheckRowText,
+    ConnectorMissingCredentialError,
+    counted,
+)
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check ran past its time limit.\nRe-run the checks later.",
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("GitHub")
 _SSO_GUIDE_LINK = (
     "https://docs.github.com/en/enterprise-cloud@latest/authentication/"
     "authenticating-with-saml-single-sign-on/"
     "authorizing-a-personal-access-token-for-use-with-saml-single-sign-on"
 )
 _OWNER_FIELDS = frozenset({"repo_owner"})
+# The config fields each check's result reads, see ``config_fields``.
+_REPOSITORY_FIELDS = _OWNER_FIELDS | {"repositories"}
+_DOCUMENT_TYPE_FIELDS = frozenset({"include_prs", "include_issues", "include_files"})
 _ERROR_DETAIL_CHARS = 300
 # GitHub's text when a SAML organization has not authorized the token.
 _SAML_TEXT = "saml enforcement"
@@ -270,8 +283,11 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
         required: bool = True,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = _OWNER_FIELDS,
+        config_fields: frozenset[str] | None = None,
         requires_connector_config: bool = False,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -282,9 +298,12 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
             requires_connector_instance=False,
             requires_connector_config=requires_connector_config,
             requires_fields=requires_fields,
+            config_fields=config_fields,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -303,13 +322,16 @@ class _AuthCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id=_AUTH_CHECK_ID,
+            config_fields=frozenset(),
             display_name="Sign in to GitHub",
             remediation=(
                 "Create a new personal access token (classic or fine-grained) and "
                 "check the Enterprise Server URL, if one is set."
             ),
             requires_fields=frozenset(),
+            validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -324,7 +346,13 @@ class _AuthCheck(_GitHubCheck):
                     "token in API Token."
                 ),
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"GitHub did not answer the sign-in in time: {e}",
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 "Onyx cannot connect to GitHub. Check the Enterprise Server URL, "
                 "if one is set.",
@@ -370,6 +398,7 @@ class _TokenScopesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_token_scopes",
+            config_fields=frozenset(),
             display_name="Read token scopes",
             required=False,
             remediation=(
@@ -416,6 +445,7 @@ class _DocumentTypesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_document_types",
+            config_fields=_DOCUMENT_TYPE_FIELDS,
             display_name="Check selected content",
             remediation="Select pull requests, issues or files.",
             requires_fields=frozenset(),
@@ -474,6 +504,7 @@ class _OwnerCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id=_OWNER_CHECK_ID,
+            config_fields=_OWNER_FIELDS,
             display_name="Find repository owner",
             remediation=(
                 "Enter the organization or user name from the repository URL "
@@ -534,6 +565,7 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_repositories_visible",
+            config_fields=_OWNER_FIELDS,
             display_name="List repositories",
             remediation=(
                 f"{_TOKEN_ACCESS_HINT} A user owner lists only public repositories; "
@@ -566,7 +598,7 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
                 else str(len(repositories))
             )
             return CheckOutput(
-                summary=f"{_counted(count, 'repository', 'repositories')} visible"
+                summary=f"{counted(count, 'repository', 'repositories')} visible"
             )
         if is_organization:
             raise InsufficientPermissionsError(
@@ -609,11 +641,6 @@ def _repository_problem(
             f"`{full_name}`: access denied (HTTP 403: {_detail(error)})."
             f"{_accepted_access(error)}"
         )
-    if "/" in name:
-        return (
-            f"`{full_name}`: not found. Enter the repository name without the "
-            "owner (e.g. `onyx`, not `onyx-dot-app/onyx`)"
-        )
     cause: str = (
         "the classic token has no `repo` scope, which private repositories need"
         if _lacks_private_scope(token)
@@ -634,12 +661,6 @@ def _raise_unless_denied(error: GitHubApiError, *, denied: str) -> None:
         _raise_for_api_error(error, denied=denied)
 
 
-def _counted(count: int | str, noun: str, plural: str) -> str:
-    """``count`` with its noun: "1 repository", "3 repositories", "100+
-    repositories"."""
-    return f"{count} {noun if str(count) == '1' else plural}"
-
-
 def _names(names: list[str]) -> str:
     return ", ".join(names)
 
@@ -647,11 +668,6 @@ def _names(names: list[str]) -> str:
 def _not_found_line(names: list[str], token: GitHubTokenInfo | None) -> str:
     """The line after a not-found description: the names, and the likely
     cause."""
-    if any("/" in name for name in names):
-        return (
-            f"Not found: {_names(names)}. Enter each name without the owner "
-            "(onyx, not onyx-dot-app/onyx)."
-        )
     if _lacks_private_scope(token):
         return f"Not found: {_names(names)}. Select the repo scope."
     return f"Not found: {_names(names)}. Check each name and the token's access."
@@ -666,6 +682,7 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_configured_repositories",
+            config_fields=_REPOSITORY_FIELDS,
             display_name="Find selected repos",
             remediation=(
                 "Check each repository name (without the owner) and the owner. "
@@ -737,7 +754,39 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
             if denied
             else ""
         )
+        failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
+        # One line for each kind of failure, so the row names every repository.
+        mixed_row: CheckRowText | None = (
+            CheckRowText(
+                summary=f"Cannot read {len(messages)} of {len(names)} repositories",
+                description="\n".join(
+                    line
+                    for line in (
+                        _not_found_line(missing, token) if missing else "",
+                        denied_line,
+                        f"Unreadable files: {_names(unreadable)}. Index attempts "
+                        "reject these."
+                        if unreadable
+                        else "",
+                    )
+                    if line
+                ),
+            )
+            if failure_kinds > 1
+            else None
+        )
         if len(problems) + len(content_problems) == len(names):
+            if mixed_row is not None:
+                error_class: type[ConnectorValidationError] = (
+                    ConnectorValidationError
+                    if missing
+                    else InsufficientPermissionsError
+                )
+                raise error_class(
+                    message,
+                    summary=mixed_row.summary,
+                    description=mixed_row.description,
+                )
             if not missing:
                 raise InsufficientPermissionsError(
                     message,
@@ -763,24 +812,8 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                     f"{_not_found_line(missing, token)}"
                 ),
             )
-        failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
-        if failure_kinds > 1:
-            # One line for each kind of failure, so the row names every repository.
-            row: CheckRowText = CheckRowText(
-                summary=f"Cannot read {len(messages)} of {len(names)} repositories",
-                description="\n".join(
-                    line
-                    for line in (
-                        _not_found_line(missing, token) if missing else "",
-                        denied_line,
-                        f"Unreadable files: {_names(unreadable)}. Index attempts "
-                        "reject these."
-                        if unreadable
-                        else "",
-                    )
-                    if line
-                ),
-            )
+        if mixed_row is not None:
+            row: CheckRowText = mixed_row
         elif missing:
             row = CheckRowText(
                 summary=f"{len(missing)} of {len(names)} repositories not found",
@@ -888,6 +921,7 @@ class _BranchCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_branch",
+            config_fields=_REPOSITORY_FIELDS | {"branch"},
             display_name="Find selected branch",
             remediation=(
                 "Check the branch name, or leave it blank to index each "
@@ -947,7 +981,7 @@ class _BranchCheck(_GitHubCheck):
                 "index each repository's default branch.",
                 summary=(
                     "Branch not found in "
-                    f"{_counted(len(missing), 'repository', 'repositories')}"
+                    f"{counted(len(missing), 'repository', 'repositories')}"
                 ),
                 description=(
                     "Indexing would stop at the first repository without this "
@@ -958,7 +992,7 @@ class _BranchCheck(_GitHubCheck):
         return CheckOutput(
             summary=(
                 f"Found {branch} in "
-                f"{_counted(len(repositories), 'repository', 'repositories')}"
+                f"{counted(len(repositories), 'repository', 'repositories')}"
             )
         )
 
@@ -976,6 +1010,7 @@ class _PullRequestsCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_pull_requests",
+            config_fields=_REPOSITORY_FIELDS | {"state_filter"},
             display_name="Sample pull requests",
             remediation=(
                 "Fine-grained token: give it read access to Pull requests. Classic "
@@ -1053,6 +1088,7 @@ class _IssuesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_issues",
+            config_fields=_REPOSITORY_FIELDS | {"state_filter"},
             display_name="Sample issues",
             remediation=(
                 "Fine-grained token: give it read access to Issues. Classic token: "
@@ -1129,6 +1165,7 @@ class _FilesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_files",
+            config_fields=_REPOSITORY_FIELDS | {"branch"},
             display_name="Sample files",
             remediation=(
                 "Fine-grained token: give it read access to Contents. Classic "
@@ -1197,7 +1234,7 @@ class _FilesCheck(_GitHubCheck):
             _raise_for_api_error(e, denied=denied, denied_row=denied_row)
         return CheckOutput(
             summary=(
-                f"{_counted(len(paths), 'document', 'documents')} found in "
+                f"{counted(len(paths), 'document', 'documents')} found in "
                 f"{repository.full_name}"
             )
         )
@@ -1290,6 +1327,7 @@ class _RepositoryVisibilityCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="github_repository_visibility",
+            config_fields=_REPOSITORY_FIELDS,
             display_name="Read repo visibility",
             remediation=(
                 "Give the token read access to the repositories (see the indexing "
@@ -1419,6 +1457,7 @@ class _CollaboratorsCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id=_COLLABORATORS_CHECK_ID,
+            config_fields=_REPOSITORY_FIELDS,
             display_name="List collaborators",
             remediation=(
                 "Use a token of an account with write access to the private "
@@ -1460,7 +1499,7 @@ class _CollaboratorsCheck(_GitHubCheck):
         logins: list[str] = _read_collaborators(context, repository, _COUNT_LIMIT)
         return CheckOutput(
             summary=(
-                f"{_counted(_count(logins, _COUNT_LIMIT), 'collaborator', 'collaborators')} "
+                f"{counted(_count(logins, _COUNT_LIMIT), 'collaborator', 'collaborators')} "
                 f"in {repository.full_name}"
             )
         )
@@ -1504,6 +1543,7 @@ class _OrganizationMembersCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id=_MEMBERS_CHECK_ID,
+            config_fields=_REPOSITORY_FIELDS,
             display_name="List org members",
             remediation=_MEMBERS_HINT,
         )
@@ -1556,7 +1596,7 @@ class _OrganizationMembersCheck(_GitHubCheck):
         logins: list[str] = _read_members(context, org_login, _COUNT_LIMIT)
         return CheckOutput(
             summary=(
-                f"{_counted(_count(logins, _COUNT_LIMIT), 'member', 'members')} in "
+                f"{counted(_count(logins, _COUNT_LIMIT), 'member', 'members')} in "
                 f"{org_login}"
             )
         )
@@ -1572,6 +1612,7 @@ class _UserEmailsCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="github_user_emails",
+            config_fields=_REPOSITORY_FIELDS,
             display_name="Read public emails",
             required=False,
             remediation=(

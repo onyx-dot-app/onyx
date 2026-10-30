@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "Adicionar ação OpenAPI"
+        "title": "Adicionar plugin OpenAPI"
       },
       "cancelButton": {
         "label": "Cancelar"
@@ -188,14 +188,14 @@
         "invalidJson": "Formato JSON inválido",
         "placeholder": "Insira seu esquema OpenAPI aqui",
         "required": "A definição do esquema OpenAPI é obrigatória",
-        "subDescription": "Especifique um esquema OpenAPI que defina as APIs que você quer disponibilizar como parte desta ação. Você pode usar os espaços reservados `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` e `USER_EMAIL` em qualquer lugar do esquema (por exemplo, URL do servidor, caminhos, valores padrão de parâmetros). Eles serão substituídos pelos valores da solicitação atual no momento da chamada. Saiba mais sobre [ações OpenAPI]({docsUrl}).",
+        "subDescription": "Especifique um esquema OpenAPI que defina as APIs que você quer disponibilizar como parte deste plugin. Você pode usar os espaços reservados `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` e `USER_EMAIL` em qualquer lugar do esquema (por exemplo, URL do servidor, caminhos, valores padrão de parâmetros). Eles serão substituídos pelos valores da solicitação atual no momento da chamada. Saiba mais sobre [plugins OpenAPI]({docsUrl}).",
         "title": "Definição do esquema OpenAPI"
       },
       "editConfigsButton": {
-        "disabledTooltip": "Somente o criador da ação ou um administrador pode gerenciar a autenticação"
+        "disabledTooltip": "Somente o criador do plugin ou um administrador pode gerenciar a autenticação"
       },
       "editHeader": {
-        "title": "Editar ação OpenAPI"
+        "title": "Editar plugin OpenAPI"
       },
       "empty": {
         "description": "Forneça um esquema OpenAPI para pré-visualizar as ações aqui.",
@@ -208,17 +208,17 @@
         "noSummary": "Nenhum resumo fornecido"
       },
       "submitButton": {
-        "addLabel": "Adicionar ação",
+        "addLabel": "Adicionar plugin",
         "addingLabel": "Adicionando...",
         "saveLabel": "Salvar alterações",
         "savingLabel": "Salvando..."
       },
       "toasts": {
-        "actionCreated": "Ação OpenAPI criada com sucesso",
-        "actionUpdated": "Ação OpenAPI atualizada com sucesso",
-        "createFailed": "Falha ao criar a ação OpenAPI",
+        "actionCreated": "Plugin OpenAPI criado com sucesso",
+        "actionUpdated": "Plugin OpenAPI atualizado com sucesso",
+        "createFailed": "Falha ao criar o plugin OpenAPI",
         "invalidJson": "Formato JSON inválido na definição do esquema OpenAPI",
-        "updateFailed": "Falha ao atualizar a ação OpenAPI"
+        "updateFailed": "Falha ao atualizar o plugin OpenAPI"
       },
       "humanDescription": {
         "title": "Descrição para pessoas",
@@ -327,12 +327,11 @@
         "saveAuthFailed": "Falha ao salvar a configuração de autenticação",
         "saveConfigFailed": "Falha ao salvar a configuração do servidor",
         "saveStage": "Não foi possível salvar as configurações da conexão",
-        "oauthStage": "Não foi possível iniciar o login",
-        "discoveryStage": "Não foi possível carregar as ferramentas do servidor",
         "loadStage": "Não foi possível carregar as configurações da conexão",
         "clientRegistrationFailed": "O registro automático do cliente falhou. Use seu próprio cliente OAuth ou verifique os requisitos de configuração do provedor.",
+        "clientMetadataRejected": "O provedor não conseguiu usar o documento de metadados do cliente. Se esta instância não estiver acessível pela internet pública, desative “Usar documento de metadados do cliente” e conecte novamente.",
         "discoveryFailed": "Não foi possível encontrar as configurações de login OAuth. Verifique a URL do servidor ou insira os endpoints do seu provedor.",
-        "connectionFailed": "Não foi possível acessar o servidor OAuth. Verifique a URL do servidor e tente novamente.",
+        "connectionFailed": "Não foi possível acessar o servidor. Verifique a URL do servidor e tente novamente.",
         "oauthFailed": "Não foi possível iniciar o login OAuth. Verifique as configurações do cliente e tente novamente.",
         "oauthInitFailed": "Falha ao iniciar o OAuth: {detail}"
       },
@@ -413,7 +412,8 @@
       },
       "cimd": {
         "label": "Usar documento de metadados do cliente",
-        "description": "Quando ativado, o provedor busca o documento de metadados do cliente do {appName} pela Internet pública. Desative isto se esta instância do {appName} for privada. O {appName} então usa o registro automático de cliente."
+        "description": "Quando ativado, o provedor busca o documento de metadados do cliente do {appName} pela Internet pública. Desative isto se esta instância do {appName} for privada. O {appName} então usa o registro automático de cliente.",
+        "turnOff": "Desativar documento de metadados do cliente"
       },
       "discovery": {
         "checking": "Verificando a configuração automática…",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "Falha ao carregar a configuração OAuth existente. Informe os detalhes novamente para atualizá-la."
       },
       "header": {
-        "description": "Autentique sua conexão para começar a usar as ações OpenAPI."
+        "description": "Autentique sua conexão para começar a usar este plugin OpenAPI."
       },
       "headers": {
         "addButton": {
           "label": "Adicionar cabeçalho"
         },
-        "description": "Especifique cabeçalhos personalizados para todas as solicitações enviadas ao endpoint de API desta ação.",
+        "description": "Especifique cabeçalhos personalizados para todas as solicitações enviadas ao endpoint de API deste plugin.",
         "keyRequired": "A chave do cabeçalho é obrigatória",
         "keyTitle": "Cabeçalho",
         "minRequired": "Adicione pelo menos um cabeçalho de autenticação",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "Excluir"
         },
-        "title": "Excluir ação OpenAPI"
+        "title": "Excluir plugin OpenAPI"
       },
       "method": {
         "noSummary": "Nenhum resumo fornecido"
@@ -764,7 +764,7 @@
           "tooltip": "Configurar geração de imagens"
         },
         "openapi": {
-          "tooltip": "Gerenciar ações OpenAPI"
+          "tooltip": "Gerenciar plugins OpenAPI"
         },
         "webSearch": {
           "tooltip": "Configurar pesquisa na web"
@@ -923,7 +923,7 @@
       "status": {
         "connected": "Conectado",
         "workspace": "Conexão do espaço de trabalho",
-        "session": "Usa seu login",
+        "session": "Usa sua conta conectada",
         "none": "Pronto para usar",
         "oauth": "Conecte sua conta",
         "credentials": "Adicione suas credenciais",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "Problemas",
-        "readyDescription": "Você já pode começar a usar este plugin.",
+        "noAuthentication": "Não é necessária autenticação",
         "connection": "Conexão",
         "tools": "Ferramentas",
         "toolCount": "{count, plural, one {# ferramenta} other {# ferramentas}}",
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "Adicionar",
         "mcp": "Adicionar servidor MCP personalizado",
-        "openapi": "Adicionar ação OpenAPI"
+        "openapi": "Adicionar plugin OpenAPI"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "Não foi possível carregar os servidores MCP.",
         "listErrorDescription": "Não foi possível carregar esta lista de plugins. Tente novamente em instantes.",
-        "openapiError": "Não foi possível carregar as ações OpenAPI.",
+        "openapiError": "Não foi possível carregar os plugins OpenAPI.",
         "retry": {
           "label": "Tentar novamente"
         },
@@ -1249,6 +1249,36 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "Gerenciar configurações de chat em Modelos de linguagem",
+      "decisionModel": {
+        "title": "Modelo de decisão",
+        "openAiDecisionsModelName": "Decisões da OpenAI (GPT-6 Luna)",
+        "description": "A pesquisa interna usa este modelo para classificar os resultados e decidir quanto contexto adicionar. Você também pode defini-lo em Preferências de chat.",
+        "clear": "Limpar",
+        "notConfigured": "Não configurado",
+        "saveFailed": "Não foi possível atualizar o modelo de decisão"
+      },
+      "header": {
+        "title": "Modelos de decisão",
+        "description": "Gerencie os provedores e escolha um modelo de decisão opcional."
+      },
+      "providers": {
+        "title": "Provedores",
+        "description": "Conecte um provedor ou gerencie seus modelos de decisão.",
+        "clearBeforeRemoval": "Limpe o modelo de decisão selecionado antes de remover este provedor.",
+        "connect": "Conectar"
+      },
+      "loadFailed": "Não foi possível carregar os modelos de decisão.",
+      "retry": "Tentar novamente",
+      "zoom": {
+        "title": "Conectar Zoom AI Services",
+        "description": "Use uma conexão para Zoom Scribe e Zoom AI Decisions. As alterações se aplicam a ambos.",
+        "connection": "Conexão do Zoom",
+        "selectConnection": "Selecionar uma conexão do Zoom",
+        "removeDescription": "Isso remove a conexão compartilhada do Zoom de Voz e Modelos de decisão."
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2189,43 +2219,30 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "Modelo usado para nomear sessões de chat. Por padrão, usa o modelo de cada sessão.",
-        "resetButton": {
-          "label": "Redefinir"
-        },
-        "sessionModel": {
-          "label": "Usar modelo padrão"
-        },
-        "title": "Modelo para nomear chats"
+        "description": "Gera os títulos das sessões. Um modelo rápido e de baixo custo funciona bem.",
+        "title": "Modelo de nomeação de chats"
       },
-      "searchSelectionModel": {
-        "description": "Seleciona e verifica os documentos recuperados. Um modelo mais barato pode reduzir os custos de busca, mas pode afetar a qualidade das respostas.",
-        "resetButton": {
-          "label": "Redefinir"
-        },
-        "sessionModel": {
-          "label": "Usar modelo padrão"
-        },
-        "title": "Modelo de seleção da busca"
+      "searchDecisionModel": {
+        "description": "Seleciona os documentos recuperados e decide quanto contexto adicionar. Um modelo de decisão os classifica em uma única chamada. Um modelo de linguagem os seleciona como antes.",
+        "title": "Modelo de decisão de pesquisa"
       },
       "taskModels": {
-        "title": "Seleção de modelos",
         "loadFailed": "Não foi possível carregar os modelos de tarefas",
         "retry": {
           "label": "Tentar novamente"
         },
-        "noProviders": {
-          "title": "Conecte um provedor de modelos de linguagem"
-        },
         "addProvider": {
           "label": "Adicionar provedor"
+        },
+        "chatDefault": {
+          "label": "Padrão do chat"
         }
       },
       "advanced": {
         "title": "Opções avançadas"
       },
       "anonymousUsers": {
-        "description": "Permita que qualquer pessoa inicie chats sem fazer login. Essas pessoas não veem outros chats e não podem criar agentes nem atualizar configurações.",
+        "description": "Permite que qualquer pessoa inicie chats **sem fazer login**. Ela não vê outros chats e não pode criar agentes nem alterar configurações.",
         "title": "Permitir usuários anônimos"
       },
       "autoDetectFilters": {
@@ -2236,15 +2253,13 @@
         "description": "Rola automaticamente para o novo conteúdo enquanto o chat gera a resposta. Os usuários podem substituir isso nas configurações pessoais.",
         "title": "Rolagem automática do chat"
       },
-      "betaTag": {
-        "label": "beta"
-      },
       "connectors": {
+        "description": "Fontes que a pesquisa interna usa no chat. Adicione ou altere-as na página de status de indexação.",
         "empty": {
           "title": "Nenhum conector configurado"
         },
         "manageAllButton": {
-          "label": "Gerenciar tudo"
+          "label": "Gerenciar conectores"
         },
         "title": "Conectores"
       },
@@ -2253,12 +2268,12 @@
         "title": "Pesquisa profunda"
       },
       "defaultLanguage": {
-        "description": "O idioma da interface para usuários que não escolheram um nas próprias configurações.",
+        "description": "Idioma da interface para usuários que não definiram um nas próprias configurações.",
         "title": "Idioma padrão"
       },
       "disableDefaultChat": {
-        "description": "Isso obriga os usuários a sempre começar em um agente. Os novos chats serão criados no primeiro agente fixado. Defina agentes em destaque para ajudar os novos usuários a começar.",
-        "title": "Desativar o chat padrão"
+        "description": "Isso remove o chat padrão. Os usuários sempre começarão em um agente, e novos chats serão criados no último agente ativo. Defina [agentes em destaque](/admin/agents) para ajudar novos usuários a começar.",
+        "title": "Sempre começar com um agente"
       },
       "fileLimits": {
         "default": {
@@ -2316,10 +2331,6 @@
           "label": "Mostrar com dados do usuário"
         },
         "title": "Visibilidade do histórico de consultas"
-      },
-      "reasoning": {
-        "description": "Permita que os usuários ajustem quanto raciocínio o modelo faz antes de responder, no seletor de modelos do chat.",
-        "title": "Controle de raciocínio"
       },
       "retention": {
         "custom": {
@@ -2391,26 +2402,13 @@
         "placeholder": "Insira o nome da equipe",
         "title": "Nome da equipe"
       },
-      "temperature": {
-        "description": "Permita que os usuários ajustem a temperatura (criatividade) das respostas do modelo no seletor de modelos do chat.",
-        "title": "Controle de temperatura"
-      },
       "toasts": {
-        "chatNamingUpdated": "Modelo para nomear chats atualizado",
-        "chatNamingReset": "Modelo para nomear chats redefinido para o modelo padrão",
         "chatNamingUpdateFailed": "Falha ao atualizar o modelo para nomear chats",
-        "chatNamingResetFailed": "Falha ao redefinir o modelo para nomear chats",
         "providerResolveFailed": "Não foi possível resolver o provedor",
-        "searchSelectionReset": "Modelo de seleção da busca redefinido para o modelo padrão",
-        "searchSelectionResetFailed": "Falha ao redefinir o modelo de seleção da busca",
-        "searchSelectionUpdateFailed": "Falha ao atualizar o modelo de seleção da busca",
-        "searchSelectionUpdated": "Modelo de seleção da busca atualizado",
+        "searchDecisionUpdateFailed": "Falha ao atualizar o modelo de decisão de pesquisa",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
-        "settingsUpdated": "Configurações atualizadas",
         "systemPromptUpdateFailed": "Falha ao atualizar o prompt de sistema",
-        "systemPromptUpdated": "Prompt de sistema atualizado",
         "toolsUpdateFailed": "Falha ao atualizar as ferramentas",
-        "toolsUpdated": "Ferramentas atualizadas",
         "unknownError": "Ocorreu um erro desconhecido"
       },
       "tools": {
@@ -2423,7 +2421,7 @@
           "title": "Agente de código"
         },
         "description": "Ferramentas e recursos disponíveis para o chat usar. Isso não se aplica aos agentes.",
-        "pluginsNote": "Configure servidores MCP e ações OpenAPI para o chat padrão em [Plugins]({url}).",
+        "pluginsNote": "Configure servidores MCP e plugins OpenAPI para o chat padrão em [Plugins]({url}).",
         "imageGeneration": {
           "description": "Gera e manipula imagens com ferramentas de IA.",
           "disabledTooltip": "A geração de imagens requer um modelo configurado. Configure um em Configuração > Geração de imagens ou peça a um administrador.",
@@ -2637,10 +2635,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Excluir",
-          "tooltip": {
-            "active": "Pause o conector antes de excluir"
-          }
+          "label": "Excluir"
         },
         "reIndex": {
           "tooltip": {
@@ -2676,6 +2671,13 @@
         "startIndexing": {
           "label": "Iniciar indexação",
           "description": "Ignorar as verificações do conector e indexar agora."
+        },
+        "syncPermissions": {
+          "label": "Sincronizar permissões",
+          "description": "Buscar agora na fonte quem pode ler cada documento.",
+          "tooltip": {
+            "syncing": "Uma sincronização de permissões já está na fila ou em andamento"
+          }
         }
       },
       "reEnableModal": {
@@ -2799,19 +2801,16 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Documentos no índice"
-        },
         "indexingSpeed": "{speed} documentos/min",
         "indexingSpeedTooltip": "Documentos indexados por minuto desde a criação do conector",
         "lastIndexed": {
           "value": "Última indexação {when}"
         },
-        "statusLine": "Status da indexação - {detail}",
         "documents": {
-          "label": "Recentes / Total",
-          "total": "/ {total}",
-          "totalLabel": "Total"
+          "totalLabel": "Total de documentos no índice",
+          "recentLabel": "Documentos processados recentemente",
+          "syncedPermissionsLabel": "Permissões sincronizadas",
+          "syncedMembershipsLabel": "Associações a grupos sincronizadas"
         },
         "throughput": {
           "ariaLabel": "Documentos indexados ao longo do tempo",
@@ -2828,7 +2827,16 @@
           "releaseFailed": "Não foi possível iniciar a indexação",
           "viewChecks": "Ver verificações do conector"
         },
-        "title": "Status da indexação"
+        "title": "Status da indexação",
+        "sync": {
+          "permissionsTitle": "Status da sincronização de permissões",
+          "groupsTitle": "Status da sincronização de associações a grupos",
+          "last": "Última sincronização {when}",
+          "never": "Ainda não sincronizado",
+          "neverTooltip": "Os documentos indexados podem não ser pesquisáveis até que suas permissões sejam sincronizadas.",
+          "waitingForFirstIndex": "Aguardando a primeira indexação"
+        },
+        "accessTitle": "Acesso aos documentos do conector"
       },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",
@@ -2837,19 +2845,20 @@
         "indexingStartUnexpectedError": "Ocorreu um erro inesperado ao tentar iniciar a indexação",
         "indexingUpdateStarted": "Atualização da indexação iniciada com sucesso",
         "nameUpdateFailed": "Falha ao atualizar o nome do conector",
-        "nameUpdated": "Nome do conector atualizado com sucesso",
         "noUnresolvedErrors": "Nenhum erro não resolvido para tentar novamente.",
         "pruningFrequencyUpdateFailed": "Falha ao atualizar a frequência de limpeza do conector",
-        "pruningFrequencyUpdated": "Frequência de limpeza do conector atualizada com sucesso",
         "refreshFrequencyUpdateFailed": "Falha ao atualizar a frequência de atualização do conector",
-        "refreshFrequencyUpdated": "Frequência de atualização do conector atualizada com sucesso",
         "targetedReindexFailed": "Falha na reindexação direcionada: {message}",
-        "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados.",
-        "checkFrequencyUpdated": "Frequência de verificação do conector atualizada com sucesso",
+        "targetedReindexRunning": "Repetindo {count, plural, one {# erro} other {# erros}}…",
+        "targetedReindexDone": "Repetição concluída. {resolved, plural, one {# erro resolvido} other {# erros resolvidos}}.",
+        "targetedReindexPartial": "Repetição concluída. {resolved, plural, one {# erro resolvido} other {# erros resolvidos}}, {failing, plural, one {# documento ainda falha} other {# documentos ainda falham}}.",
+        "targetedReindexIncomplete": "A repetição não terminou. Os erros não resolvidos continuam na lista.",
         "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector",
         "runResolved": "Marcado como resolvido.",
         "runResolveFailed": "Não foi possível resolver: {message}",
-        "runsResolved": "{count, plural, one {# execução marcada como resolvida} other {# execuções marcadas como resolvidas}}."
+        "runsResolved": "{count, plural, one {# execução marcada como resolvida} other {# execuções marcadas como resolvidas}}.",
+        "permissionSyncStarted": "Sincronização de permissões iniciada",
+        "permissionSyncFailed": "Não foi possível iniciar a sincronização de permissões"
       },
       "backButton": {
         "label": "Todos os conectores"
@@ -2956,6 +2965,7 @@
           "label": "Tipo de execução",
           "all": "Todos os tipos",
           "indexing": "Índice de documentos",
+          "backfill": "Preenchimento de documentos",
           "doc_permission_sync": "Sincronização de permissões",
           "group_sync": "Sincronização de membros de grupos",
           "pruning": "Limpeza de documentos",
@@ -2965,9 +2975,10 @@
           "queued": "Na fila",
           "running": "Em execução",
           "rate": "{rate} documentos/min",
-          "finished": "{time} ({minutes, number} min)",
-          "rateFinished": "{rate} documentos/min ({minutes, number} min)",
-          "membershipRate": "{rate} associações/min"
+          "finished": "{time} ({duration})",
+          "rateFinished": "{rate} documentos/min ({duration})",
+          "membershipRate": "{rate} associações/min",
+          "membershipRateFinished": "{rate} associações/min ({duration})"
         },
         "actions": {
           "stages": "Ver métricas por etapa",
@@ -2976,7 +2987,7 @@
           "checks": "Ver resultados das verificações"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "tooltip": "{count, plural, one {# item falhou} other {# itens falharam}}",
           "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
         },
         "newModel": {
@@ -2992,8 +3003,8 @@
           "checks": "verificações executadas"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# documento novo} other {# documentos novos}}",
-          "updatedDocs": "Documentos atualizados",
+          "newDocs": "{count, plural, one {# documento novo no índice nesta execução} other {# documentos novos no índice nesta execução}}",
+          "updatedDocs": "{count, plural, one {# documento que já estava no índice, processado nesta execução, alterado ou não} other {# documentos que já estavam no índice, processados nesta execução, alterados ou não}}",
           "removedDocs": "{count, plural, one {# documento removido} other {# documentos removidos}}",
           "users": "{count, plural, one {# usuário} other {# usuários}}",
           "groups": "{count, plural, one {# grupo} other {# grupos}}",
@@ -3003,17 +3014,17 @@
           "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
           "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
           "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "incompleteChecks": "{count, plural, one {# verificação incompleta} other {# verificações incompletas}}",
           "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}",
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
         "search": {
-          "placeholder": "Pesquisar execuções de indexação…"
+          "placeholder": "Pesquisar erros de execuções…"
         },
         "window": {
           "label": "Período",
           "all": "Todo o período",
           "h1": "Última hora",
-          "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
           "d7": "Últimos 7 dias",
           "d30": "Últimos 30 dias"
@@ -3070,7 +3081,8 @@
           "failures": "Falhas",
           "errors": "Erros",
           "other": "Outros",
-          "resolved": "Resolvido"
+          "resolved": "Resolvido",
+          "toggle": "Filtros"
         },
         "groups": {
           "failures": "{count, plural, =0 {Falhas} one {# falha} other {# falhas}}",
@@ -3087,6 +3099,7 @@
             "errors": "Indexação concluída com erros.",
             "resolved": "Erros de indexação resolvidos.",
             "succeeded": "Indexação concluída com sucesso.",
+            "queued": "Indexação na fila.",
             "inProgress": "Indexação em andamento.",
             "canceled": "Indexação interrompida."
           },
@@ -3098,6 +3111,7 @@
             "errors": "Permissões sincronizadas com erros.",
             "resolved": "Erros de sincronização de permissões resolvidos.",
             "succeeded": "Permissões sincronizadas com sucesso.",
+            "queued": "Sincronização de permissões na fila.",
             "inProgress": "Sincronizando permissões.",
             "canceled": "Sincronização de permissões interrompida."
           },
@@ -3109,6 +3123,7 @@
             "errors": "Membros de grupos sincronizados com erros.",
             "resolved": "Erros de sincronização de membros de grupos resolvidos.",
             "succeeded": "Associações de grupo sincronizadas com sucesso.",
+            "queued": "Sincronização de associações de grupo na fila.",
             "inProgress": "Sincronizando associações de grupo.",
             "canceled": "Sincronização de grupos interrompida."
           },
@@ -3120,6 +3135,7 @@
             "errors": "Limpeza concluída com erros.",
             "resolved": "Erros de limpeza resolvidos.",
             "succeeded": "Limpeza concluída com sucesso.",
+            "queued": "Limpeza na fila.",
             "inProgress": "Limpeza em andamento.",
             "canceled": "Limpeza interrompida."
           },
@@ -3131,6 +3147,7 @@
             "errors": "Verificações do conector concluídas com erros.",
             "resolved": "Erros das verificações do conector resolvidos.",
             "succeeded": "Verificações do conector aprovadas.",
+            "queued": "Verificações do conector na fila.",
             "inProgress": "Verificações do conector em andamento.",
             "canceled": "Verificações do conector interrompidas."
           }
@@ -3146,12 +3163,14 @@
         "tags": {
           "stackTrace": "Rastreamento de pilha",
           "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "indexingItems": "{count, plural, one {# item falhou} other {# itens falharam}}",
           "doc_permission_sync": "{count, plural, one {Permissões de # documento não sincronizadas} other {Permissões de # documentos não sincronizadas}}",
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
           "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
           "resolved": "Resolvido",
-          "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}"
+          "resolvedDocs": "{count, plural, one {# item resolvido} other {# itens resolvidos}}",
+          "superseded": "Substituído"
         },
         "more": "Mostrar mais",
         "empty": {
@@ -3166,9 +3185,9 @@
           "title": "Não foi possível carregar a atividade."
         },
         "docs": {
-          "title": "Documentos com falha",
+          "title": "Itens com falha",
           "search": {
-            "placeholder": "Pesquisar documentos…"
+            "placeholder": "Pesquisar itens…"
           },
           "resolveAll": "Repetir todos",
           "resolveAllTooltip": "Reindexar todos os documentos com falha desta execução",
@@ -3178,8 +3197,8 @@
           "more": "Mais",
           "less": "Menos",
           "unknownDocument": "Documento desconhecido",
-          "empty": "Sem erros de documentos em aberto",
-          "loadError": "Não foi possível carregar os documentos com falha.",
+          "empty": "Sem erros em aberto",
+          "loadError": "Não foi possível carregar os itens com falha.",
           "open": "Abrir o documento"
         },
         "trace": {
@@ -3380,11 +3399,13 @@
           },
           "deleteButton": {
             "label": "Excluir conta",
-            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
+            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a.",
+            "notOwnerTooltip": "Somente o proprietário pode excluir esta credencial"
           },
           "updateButton": {
             "label": "Atualizar credenciais",
-            "tooltip": "Altera os valores salvos para cada conector que usa esta conta."
+            "tooltip": "Altera os valores salvos para cada conector que usa esta conta.",
+            "notOwnerTooltip": "Somente o proprietário pode atualizar esta credencial"
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
@@ -3404,20 +3425,17 @@
           "rerunButton": {
             "label": "Executar verificações novamente"
           },
+          "renameButton": {
+            "tooltip": "Renomear conta"
+          },
           "authenticationType": {
             "label": "Tipo de autenticação"
           },
           "rerunFailed": {
             "toast": "Não foi possível iniciar as verificações. Tente novamente."
           },
-          "shareSaved": {
-            "toast": "Compartilhamento atualizado."
-          },
           "shareFailed": {
             "toast": "Não foi possível alterar quem pode usar esta conta. Tente novamente."
-          },
-          "renameSaved": {
-            "toast": "Conta renomeada."
           },
           "renameFailed": {
             "toast": "Não foi possível renomear esta conta. Tente novamente."
@@ -3426,10 +3444,16 @@
             "tooltip": "Somente quem adicionou esta conta pode torná-la privada."
           },
           "shareLocked": {
-            "tooltip": "Somente quem adicionou esta conta, ou um administrador com quem ela foi compartilhada, pode alterar quem pode usá-la."
+            "tooltip": "Somente o proprietário pode compartilhar esta credencial"
           },
           "viewDetails": {
             "tooltip": "Ver detalhes"
+          },
+          "failedToRun": {
+            "title": "Falha ao executar as verificações"
+          },
+          "unavailable": {
+            "label": "Indisponível"
           }
         },
         "accountUnavailable": {
@@ -3451,6 +3475,9 @@
       "field": {
         "optionalSuffix": {
           "label": "opcional"
+        },
+        "availableRefresh": {
+          "tooltip": "Atualizar a lista"
         }
       },
       "gdrive": {
@@ -3596,7 +3623,7 @@
         }
       },
       "content": {
-        "title": "Conteúdo do conector",
+        "title": "Configurações de indexação",
         "description": "Selecione o conteúdo a ser indexado para este conector."
       },
       "selectInput": {
@@ -3644,13 +3671,16 @@
         },
         "checkFrequency": {
           "title": "Executar verificações a cada",
-          "description": "Verifica a conexão, seus recursos e sua integridade."
-        }
+          "description": "Verifica a conexão, seus recursos e sua integridade.",
+          "placeholder": "Nunca"
+        },
+        "rangeRequired": "Insira um valor no intervalo {min, number} - {max, number}."
       },
       "settings": {
         "description": "Informações e acesso do conector.",
         "displayName": {
-          "title": "Nome de exibição do conector"
+          "title": "Nome de exibição",
+          "placeholder": "Adicione um nome de exibição"
         },
         "documentAccess": {
           "description": "Controle quem pode acessar os documentos indexados por este conector.",
@@ -3709,7 +3739,7 @@
               "label": "Incluir anexos"
             },
             "scoped_token": {
-              "label": "Este é um token de API com escopos",
+              "label": "Token de API com escopos",
               "description": "Tokens com escopos exigem roteamento pelo gateway de API da Atlassian. Deixe desativado para tokens clássicos."
             }
           }
@@ -3836,13 +3866,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Proprietário do repositório"
+              "label": "Proprietário do repositório",
+              "placeholder": "Especifique um proprietário do repositório"
             },
             "github_mode": {
-              "label": "Conteúdo do GitHub a indexar",
               "tabs": {
                 "repo": {
-                  "label": "Repositório específico"
+                  "label": "Repositórios específicos"
                 },
                 "everything": {
                   "label": "Tudo"
@@ -3850,12 +3880,12 @@
               }
             },
             "repositories": {
-              "label": "Nome(s) do repositório",
-              "description": "Para vários repositórios, informe os nomes separados por vírgula (por exemplo, repo1,repo2,repo3)"
+              "label": "Nomes dos repositórios",
+              "placeholder": "Adicione um nome de repositório"
             },
             "everything": {
-              "label": "Tudo",
-              "description": "Este conector indexará todos os repositórios aos quais as credenciais fornecidas têm acesso!"
+              "label": "Indexar tudo",
+              "description": "O Onyx indexará todos os repositórios encontrados para o proprietário {owner}."
             },
             "include_prs": {
               "label": "Incluir pull requests",
@@ -3871,7 +3901,8 @@
             },
             "branch": {
               "label": "Branch",
-              "description": "Branch de onde indexar os documentos (por exemplo, gh-pages). Deixe em branco para usar a branch padrão de cada repositório. Só se aplica quando \"Incluir documentos\" está ativado. Depois de alterar isso em um conector existente, acione uma reindexação para aplicar a nova branch imediatamente."
+              "description": "Branch de onde indexar os documentos (por exemplo, gh-pages). Deixe em branco para usar a branch padrão de cada repositório. Só se aplica quando \"Incluir documentos\" está ativado. Depois de alterar isso em um conector existente, acione uma reindexação para aplicar a nova branch imediatamente.",
+              "placeholder": "Adicione um nome de branch"
             }
           }
         },
@@ -3954,8 +3985,8 @@
               "description": "Uma ou mais chaves de projeto do Bitbucket (separadas por vírgula) para indexar todos os repositórios desses projetos (por exemplo, PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "Workspace",
-              "description": "Este conector indexará todos os repositórios do workspace."
+              "label": "Indexa todos os repositórios do workspace",
+              "description": "O Onyx indexa todos os repositórios do workspace que a conta selecionada pode ler. Para indexar menos, escolha outra aba."
             }
           }
         },
@@ -4060,18 +4091,16 @@
             },
             "wiki_base": {
               "label": "URL do site",
-              "placeholder": "https://seu-dominio.atlassian.net/wiki"
+              "placeholder": "https://seu-dominio.atlassian.net/wiki",
+              "placeholderDataCenter": "https://seu-dominio.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "Tudo"
+                  "label": "Indexar tudo"
                 },
-                "space": {
-                  "label": "Space"
-                },
-                "page": {
-                  "label": "Página"
+                "select": {
+                  "label": "Selecionar espaços/páginas"
                 },
                 "cql": {
                   "label": "Consulta CQL"
@@ -4079,24 +4108,36 @@
               }
             },
             "everything": {
-              "label": "Tudo",
-              "description": "Este conector indexará todas as páginas às quais as credenciais fornecidas têm acesso!"
+              "label": "Indexar tudo",
+              "description": "O Onyx indexará todos os espaços e páginas aos quais a conta selecionada tem acesso."
             },
             "space": {
-              "label": "Chave do space",
-              "description": "A chave do space do Confluence a indexar (por exemplo, `KB`)."
+              "label": "Espaços",
+              "description": "Chaves de espaço que este conector indexa (por exemplo, ENG).",
+              "placeholder": "Adicione uma chave de espaço ou URL",
+              "required": "Adicione pelo menos um espaço ou uma página.",
+              "available": "{more, select, true {{count, number}+ espaços disponíveis} other {{count, plural, one {# espaço disponível} other {# espaços disponíveis}}}}"
             },
             "page_id": {
-              "label": "ID da página",
-              "description": "ID de uma página específica a indexar (por exemplo, `131368`)"
+              "label": "Páginas",
+              "description": "IDs de página que este conector indexa (por exemplo, 123456).",
+              "placeholder": "Adicione um ID de página ou URL",
+              "available": "{more, select, true {{count, number}+ páginas disponíveis} other {{count, plural, one {# página disponível} other {# páginas disponíveis}}}}"
             },
             "index_recursively": {
-              "label": "Indexar recursivamente",
-              "description": "Se ativado, indexaremos a página indicada pelo ID da página, bem como todas as suas páginas filhas."
+              "label": "Incluir páginas filhas",
+              "description": "Também indexa todas as páginas aninhadas nas páginas indicadas acima, em qualquer profundidade."
             },
             "cql_query": {
               "label": "Consulta CQL",
-              "description": "IMPORTANTE: No momento, só oferecemos suporte a consultas CQL que retornam objetos do tipo 'page'. Isso significa que toda consulta CQL deve conter 'type=page' como único filtro de tipo. Também é importante não usar filtros de 'lastModified', pois eles causam problemas na lógica de sondagem do conector. Não use ORDER BY, porque o conector define sua própria ordenação. Ainda assim, obteremos todos os anexos e comentários das páginas retornadas pela consulta CQL. Qualquer filtro de 'lastmodified' será sobrescrito. Consulte a [documentação de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) da Atlassian para mais detalhes."
+              "description": "Retorne apenas páginas. Mantenha `type=page` como o único filtro de tipo.\nEvite ordenação e filtros de data. `order by` ou `lastModified` quebrarão a consulta do próprio Onyx. [Referência de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "Testar consulta"
+              },
+              "required": "Adicione uma consulta CQL."
+            },
+            "include_attachments": {
+              "description": "Indexa arquivos e imagens anexados às páginas. Veja [Configurações de indexação/processamento de imagens]({indexSettingsPath})."
             }
           }
         },
@@ -4122,8 +4163,8 @@
               }
             },
             "everything": {
-              "label": "Tudo",
-              "description": "Este conector indexará todas as issues às quais as credenciais fornecidas têm acesso!"
+              "label": "Indexa todas as issues que a conta pode ler",
+              "description": "O Onyx indexa todas as issues de cada projeto que a conta selecionada pode ler. Para indexar menos, escolha outra aba."
             },
             "project_key": {
               "label": "Chave do projeto",
@@ -4310,8 +4351,8 @@
               }
             },
             "everything_description": {
-              "label": "Tudo",
-              "description": "Este conector indexará todos os spaces aos quais as credenciais fornecidas têm acesso!"
+              "label": "Indexa todos os espaços que a conta pode ler",
+              "description": "O Onyx indexa todas as páginas de cada espaço que a conta selecionada pode ler. Para indexar menos, escolha outra aba."
             },
             "spaces": {
               "label": "IDs de spaces",
@@ -4751,8 +4792,8 @@
               }
             },
             "everything_description": {
-              "label": "Tudo",
-              "description": "Este conector descobrirá e indexará automaticamente todas as bases e tabelas acessíveis pelo seu token de API."
+              "label": "Indexa todas as bases que o token pode ler",
+              "description": "O Onyx encontra e indexa todas as bases e tabelas que o token de API pode ler. Para indexar menos, escolha outra aba."
             },
             "airtable_url": {
               "label": "URL do Airtable",
@@ -4791,8 +4832,8 @@
               "description": "Para vários spots, informe os spots um por um."
             },
             "everything": {
-              "label": "Tudo",
-              "description": "Este conector indexará todos os spots aos quais as credenciais fornecidas têm acesso!"
+              "label": "Indexa todos os spots que a conta pode ler",
+              "description": "O Onyx indexa todos os spots que a conta selecionada pode ler. Para indexar menos, escolha outra aba."
             }
           }
         },
@@ -4816,8 +4857,12 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "Todos os provedores"
+      "deleteModal": {
+        "description": "O uso de **{model}** ({provider}) voltará a ser cobrado pelo preço integrado.",
+        "submit": {
+          "label": "Excluir"
+        },
+        "title": "Excluir substituição de *{model}*"
       },
       "empty": {
         "description": "Adicione uma para aplicar uma taxa negociada (USD por 1M de tokens) a um modelo.",
@@ -4825,27 +4870,34 @@
       },
       "form": {
         "addButton": {
-          "label": "Adicionar substituição"
+          "label": "Adicionar"
         },
+        "description": "Defina uma taxa negociada para um modelo. Ela substitui o preço integrado nos cálculos de custo de uso.",
+        "editTitle": "Editar substituição de custo",
+        "newTitle": "Nova substituição de custo",
         "cacheRate": {
-          "label": "Taxa de leitura de cache (USD por 1M de tokens, opcional)",
-          "placeholder": "usa a taxa de entrada por padrão"
+          "description": "Unidades em USD por 1M de tokens. Usa a taxa de entrada por padrão.",
+          "label": "Taxa de leitura de cache"
         },
         "cancelButton": {
           "label": "Cancelar"
         },
         "inputRate": {
-          "label": "Taxa de entrada (USD por 1M de tokens)"
+          "label": "Taxa de entrada"
         },
         "model": {
+          "description": "Aplique uma substituição de custo a este modelo escolhido.",
           "label": "Modelo",
           "placeholder": "Selecione um modelo"
         },
         "outputRate": {
-          "label": "Taxa de saída (USD por 1M de tokens)"
+          "label": "Taxa de saída"
         },
         "saveButton": {
           "label": "Salvar"
+        },
+        "units": {
+          "description": "Unidades em USD por 1M de tokens."
         }
       },
       "panel": {
@@ -4859,36 +4911,25 @@
         "title": "Substituições de custo"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "Excluir a substituição de {provider} para {model}"
         },
+        "description": "{provider} · Atualizado {time}",
         "editButton": {
           "ariaLabel": "Editar a substituição de {provider} para {model}"
         },
-        "rates": "{provider} · Entrada {input} · Saída {output} · USD por 1M de tokens",
-        "ratesWithCache": "{provider} · Entrada {input} · Saída {output} · Cache {cache} · USD por 1M de tokens",
-        "updated": "Atualizado {time}"
+        "input": "Entrada {value}",
+        "output": "Saída {value}"
       },
       "toasts": {
         "removeFailed": "Falha ao remover a substituição: {message}",
-        "removed": "Substituição removida para {model}.",
         "saveFailed": "Falha ao salvar a substituição: {message}",
-        "saved": "Taxa salva para {model}.",
         "unknownError": "Erro desconhecido"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "Craft desativado para o usuário"
-        },
-        "enabledSuccess": {
-          "message": "Craft ativado para o usuário"
-        },
         "error": {
           "message": "Falha ao atualizar o acesso ao Craft"
         }
@@ -4923,9 +4964,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "O Craft está desativado para todos. Alterne usuários individuais abaixo."
         },
@@ -5006,14 +5044,8 @@
         "resetError": {
           "message": "Falha ao limpar o modelo padrão"
         },
-        "resetSuccess": {
-          "message": "Modelo padrão do Craft limpo"
-        },
         "saveError": {
           "message": "Falha ao salvar o modelo padrão"
-        },
-        "saveSuccess": {
-          "message": "Modelo padrão do Craft salvo"
         }
       },
       "header": {
@@ -5113,6 +5145,9 @@
         },
         "submitError": {
           "toast": "Erro ao enviar a credencial"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "Adicione seu token de acesso pessoal"
         }
       },
       "delete": {
@@ -5123,9 +5158,9 @@
           "message": "Tem certeza de que deseja excluir esta credencial? Não é possível excluir credenciais vinculadas a conectores ativos."
         },
         "confirmButton": {
-          "label": "Confirmar"
+          "label": "Excluir"
         },
-        "confirmTitle": "Confirmar exclusão"
+        "confirmTitle": "Excluir *{name}*"
       },
       "displayNames": {
         "accessKeyId": "ID da chave de acesso de {source}",
@@ -5171,7 +5206,8 @@
         "zuliprcContent": "Conteúdo do Zuliprc",
         "authenticationMethod": "Método de autenticação",
         "primaryAdminEmail": "E-mail do administrador principal",
-        "serviceAccountKey": "Chave da conta de serviço"
+        "serviceAccountKey": "Chave da conta de serviço",
+        "personalAccessToken": "Token de acesso pessoal"
       },
       "hints": {
         "boxUserEmail": "Opcional. O usuário do Box a ser representado.",
@@ -5183,7 +5219,8 @@
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio."
+        "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio.",
+        "confluencePersonalAccessToken": "Cole o [token de acesso pessoal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) da sua conta de administrador do Confluence."
       },
       "methods": {
         "labels": {
@@ -5387,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "Agente padrão removido"
-        },
         "section": {
           "description": "O agente usado pelo bot em todos os canais, a menos que seja substituído.",
           "title": "Agente padrão"
@@ -5402,9 +5436,6 @@
         },
         "updateError": {
           "toast": "Falha ao atualizar o agente"
-        },
-        "updated": {
-          "toast": "Agente padrão atualizado"
         }
       },
       "error": {
@@ -5457,15 +5488,9 @@
         "deleted": {
           "toast": "Configuração do servidor excluída"
         },
-        "disabled": {
-          "toast": "Servidor desativado"
-        },
         "empty": {
           "description": "Crie uma configuração de servidor para começar.",
           "title": "Nenhum servidor do Discord configurado ainda"
-        },
-        "enabled": {
-          "toast": "Servidor ativado"
         },
         "fallbackName": "Servidor #{id}",
         "notRegistered": {
@@ -5589,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "A pontuação precisa ser um número"
-        },
-        "updated": {
-          "toast": "Pontuação atualizada!"
         }
       },
       "sets": {
@@ -5688,9 +5710,16 @@
         "newButton": {
           "label": "Novo conjunto de documentos"
         },
+        "noResults": {
+          "description": "Nenhum conjunto de documentos corresponde a \"{query}\"",
+          "title": "Nenhum conjunto de documentos encontrado"
+        },
         "notFound": {
           "message": "Conjunto de documentos com id {id} não encontrado",
           "title": "Conjunto de documentos não encontrado"
+        },
+        "search": {
+          "placeholder": "Pesquisar conjuntos de documentos..."
         },
         "status": {
           "deleting": {
@@ -5779,6 +5808,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {enviou # arquivo} other {enviou # arquivos}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {enviou # arquivo} other {enviou # arquivos}}, incompleto: {error}"
         }
       },
       "sensitiveWarning": {
@@ -6005,12 +6037,11 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "Padrão"
+        "defaultSuffix": {
+          "label": "(Padrão)"
         },
         "toasts": {
-          "renameFailed": "Falha ao renomear o grupo",
-          "renamed": "Grupo renomeado para \"{name}\""
+          "renameFailed": "Falha ao renomear o grupo"
         },
         "viewGroup": {
           "label": "Ver grupo"
@@ -6089,8 +6120,6 @@
         "toasts": {
           "deleteFailed": "Falha ao excluir o grupo",
           "deleted": "Grupo \"{name}\" excluído",
-          "managerAssigned": "Gerente atribuído",
-          "managerRevoked": "Gerente revogado",
           "managerUpdateFailed": "Falha ao atualizar o gerente",
           "membersStranded": "Alguns desses membros ficariam sem grupo. Adicione-os a outro grupo primeiro.",
           "syncing": "Este grupo está sincronizando no momento. Aguarde um momento e tente novamente.",
@@ -6112,8 +6141,7 @@
           "text": "Crie grupos para organizar usuários e gerenciar o acesso."
         },
         "loadError": {
-          "description": "Verifique o console para mais detalhes.",
-          "title": "Falha ao carregar os grupos."
+          "description": "Verifique o console para mais detalhes."
         },
         "newGroup": {
           "label": "Novo grupo"
@@ -6123,7 +6151,7 @@
           "title": "Nenhum grupo encontrado"
         },
         "search": {
-          "placeholder": "Pesquisar grupos..."
+          "placeholder": "Pesquise grupos ou pressione \"/\" para focar..."
         }
       },
       "members": {
@@ -6197,7 +6225,7 @@
         "learnMore": {
           "label": "Saiba mais"
         },
-        "title": "As permissões mudaram"
+        "title": "As permissões mudaram."
       },
       "sharedResources": {
         "agent": {
@@ -6568,9 +6596,6 @@
       "deselectError": {
         "message": "Falha ao desmarcar"
       },
-      "deselectSuccess": {
-        "message": "{title} desmarcado"
-      },
       "disconnectError": {
         "message": "Falha ao desconectar"
       },
@@ -6735,14 +6760,19 @@
           "description": "O modelo premium de geração de imagens da OpenAI, para as edições mais precisas."
         }
       },
+      "retiredModelWarning": {
+        "description": "Conecte outro modelo, defina-o como padrão e depois desconecte {title}.",
+        "title": "{title} não está mais disponível"
+      },
       "setDefaultError": {
         "message": "Falha ao definir o padrão"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} definido como padrão"
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "Opções avançadas",
+        "description": "Estas configurações alteram a eficiência com que o {appName} aplica as permissões de documentos na pesquisa. Elas não alteram quais documentos cada usuário pode ver. Não as altere sem orientação explícita da equipe Onyx."
+      },
       "actions": {
         "applyForward": {
           "label": "Aplicar a documentos novos e atualizados"
@@ -6806,6 +6836,10 @@
           "description": "Pare agora de gerar contexto para documentos novos e atualizados ou reconstrua todos os documentos para remover também o contexto já gerado.",
           "title": "Escolha como desativar a recuperação contextual"
         },
+        "contextualEnableOnly": {
+          "description": "Gere contexto para documentos novos e atualizados a partir de agora ou reconstrua todos os documentos para que cada documento receba contexto.",
+          "title": "Escolha como ativar a recuperação contextual"
+        },
         "contextualModelMissing": {
           "description": "A recuperação contextual está ativada, mas nenhum modelo foi selecionado. Escolha um LLM de recuperação contextual abaixo antes de reindexar — sem ele, a reindexação não pode ser executada.",
           "title": "Selecione um LLM de recuperação contextual"
@@ -6832,6 +6866,9 @@
         "reindex": {
           "description": "A reindexação pode levar *horas ou dias* dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Uma reindexação completa será executada."
+        },
+        "reindexModel": {
+          "title": "Mudando para {provider} / {model}. Uma reindexação completa será executada."
         }
       },
       "cloudDisabled": {
@@ -6846,6 +6883,9 @@
         "description": "Adicione contexto no nível do documento a cada chunk indexado para melhorar a relevância da pesquisa híbrida. Isso pode aumentar bastante o custo de embedding.",
         "noModelsTooltip": "A recuperação contextual está desativada porque você não tem modelos configurados. Configure primeiro um [modelo de linguagem]({link}).",
         "title": "Recuperação contextual"
+      },
+      "currentModel": {
+        "legacyHint": "Este é um modelo legado. Ele continua funcionando, mas você não pode selecioná-lo de novo para um novo índice. Para atualizar, clique em “Ver todos os modelos” e selecione um modelo mais recente."
       },
       "embeddingModel": {
         "cloudManaged": {
@@ -6931,6 +6971,10 @@
         "description": "A recuperação contextual é interrompida para documentos adicionados ou atualizados a partir de agora. Os documentos existentes mantêm o contexto já gerado até serem atualizados ou até que você reindexe.",
         "title": "Desativar a recuperação contextual daqui em diante"
       },
+      "enableForwardModal": {
+        "description": "A recuperação contextual começa para documentos adicionados ou atualizados a partir de agora. Os documentos existentes permanecem como estão até serem atualizados ou até que você reindexe, portanto o enriquecimento contextual pode variar entre documentos.",
+        "title": "Ativar a recuperação contextual daqui em diante"
+      },
       "header": {
         "description": "Configure como os documentos são indexados, transformados em embeddings e preparados para pesquisa e recuperação."
       },
@@ -6953,11 +6997,6 @@
         "modelName": {
           "description": "O {appName} vai se conectar a este modelo no seu proxy {provider}."
         }
-      },
-      "maxImageSize": {
-        "description": "Imagens acima deste tamanho serão ignoradas para limitar o uso de recursos.",
-        "suffix": "(MB)",
-        "title": "Tamanho máximo de imagem para análise"
       },
       "modal": {
         "cancelButton": {
@@ -6985,9 +7024,12 @@
         "currentButton": {
           "label": "Modelo atual"
         },
-        "deprecated": {
-          "connectTooltip": "Este modelo de embedding está descontinuado e não é possível se conectar a ele.",
-          "selectTooltip": "Este modelo de embedding está descontinuado e não pode ser selecionado."
+        "gpuRecommended": {
+          "tag": "GPU recomendada"
+        },
+        "legacy": {
+          "tag": "Legado",
+          "tooltip": "Você não pode selecionar este modelo para um novo índice. Ele continua funcionando até você trocar de modelo."
         },
         "selectButton": {
           "label": "Selecionar modelo"
@@ -6997,6 +7039,7 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "As velocidades de CPU são estimativas e variam conforme o hardware e o tamanho dos documentos. A RAM recomendada cobre um modelo carregado, não toda a infraestrutura do Onyx. Reserve mais memória durante a reindexação.",
         "addCustomModel": {
           "label": "Adicionar modelo personalizado"
         },
@@ -7007,6 +7050,7 @@
           "title": "Configure um modelo de embedding personalizado."
         },
         "customModels": {
+          "hint": "Use um modelo compatível com [SentenceTransformers](https://www.sbert.net/) disponível no [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). O {appName} vai baixar o modelo para configurá-lo em auto-hospedagem. A compatibilidade não é garantida.",
           "title": "Modelos personalizados"
         },
         "foldModels": {
@@ -7041,6 +7085,20 @@
           "label": "temporariamente indisponível"
         },
         "title": "Indexação multipass"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "A URL base do seu endpoint compatível com OpenAI, por exemplo http://localhost:8000/v1. O {appName} adiciona o caminho /embeddings.",
+          "title": "URL base da API"
+        },
+        "modelName": {
+          "description": "O {appName} se conectará a este modelo no seu endpoint compatível com OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Solicite vetores mais curtos. Apenas modelos treinados com Matryoshka Representation Learning oferecem suporte a isso. Vetores mais curtos usam menos armazenamento e buscam mais rápido. Deixe vazio para usar o tamanho completo do modelo.",
+          "placeholder": "ex.: 1024",
+          "title": "Dimensões do embedding"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7150,6 +7208,8 @@
         "contextualModelUpdated": "LLM de recuperação contextual atualizado",
         "contextualRetrievalDisableFailed": "Falha ao desativar a recuperação contextual",
         "contextualRetrievalDisabled": "Recuperação contextual desativada",
+        "contextualRetrievalEnableFailed": "Falha ao ativar a recuperação contextual",
+        "contextualRetrievalEnabled": "Recuperação contextual ativada",
         "modelNotFound": "Não foi possível encontrar o modelo selecionado",
         "providerResolveFailed": "Não foi possível resolver o provedor",
         "reindexCanceled": "Reindexação cancelada",
@@ -7166,6 +7226,7 @@
         "modelDimPositive": "Deve ser um número inteiro positivo",
         "modelDimRequired": "A dimensão do modelo é obrigatória",
         "modelNameRequired": "O nome do modelo é obrigatório",
+        "reducedDimensionTooLarge": "Deve ser menor que a dimensão do modelo",
         "serviceAccountJsonInvalid": "Deve ser um arquivo JSON de conta de serviço do Google válido",
         "serviceAccountJsonRequired": "O JSON da conta de serviço é obrigatório",
         "targetUrlRequired": "A URL de destino é obrigatória",
@@ -7198,22 +7259,27 @@
         "restoreHint": "Para manter um conector, cancele aqui, retome-o ou corrija-o e reindexe novamente — assim ele será levado adiante. Caso contrário, adicione-o de volta quando a reindexação terminar."
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "O principal modelo de embeddings da Cohere. O melhor equilíbrio entre qualidade e custo. Saída de 2048 dimensões.",
+        "cohereEmbedV5Fast": "Versão de menor custo do Embed 5 da Cohere. Ainda assim, uma excelente opção. Saída de 2048 dimensões.",
         "cohereEmbedEnglishV3": "Modelo de embeddings em inglês da Cohere. Bom desempenho em tarefas em inglês.",
         "cohereEmbedEnglishLightV3": "Modelo leve de embeddings em inglês da Cohere. Mais rápido e eficiente para tarefas simples.",
-        "cohereEmbedV4": "O modelo de embeddings multilíngue mais recente da Cohere, com saída padrão de 1536 dimensões para melhor qualidade de recuperação.",
-        "openaiTextEmbedding3Large": "Modelo de embeddings grande da OpenAI. Melhor desempenho, porém mais caro.",
-        "openaiTextEmbedding3Small": "Modelo de embeddings mais novo e eficiente da OpenAI. Bom equilíbrio entre desempenho e custo.",
+        "cohereEmbedV4": "O modelo de embeddings multilíngue da Cohere, com saída de 1536 dimensões.",
+        "openaiTextEmbedding3Large": "Modelo de embeddings grande da OpenAI. Uma boa escolha se você já usa a OpenAI. Saída de 3072 dimensões.",
+        "openaiTextEmbedding3Small": "Modelo de embeddings pequeno da OpenAI. De longe a opção na nuvem mais econômica. Saída de 1536 dimensões.",
         "googleGeminiEmbedding001": "Modelo de embeddings Gemini do Google. Poderoso e eficiente.",
         "googleTextEmbedding005": "Modelo de embeddings menor e mais leve do Google.",
-        "googleGeminiEmbedding2": "O modelo de embeddings multimodal mais recente do Google (GA). Recuperação da mais alta qualidade com saída de 3072 dimensões.",
+        "googleGeminiEmbedding2": "O principal modelo de embeddings do Google. Muito poderoso, mas caro e mais lento. Sua saída de 3072 dimensões gera um índice grande. Uma escolha sólida para equipes que já usam o Google.",
         "googleGeminiEmbedding2Preview": "Versão prévia do Gemini Embedding 2. Substituída pelo gemini-embedding-2 em novas configurações.",
         "voyageLarge2Instruct": "Modelo de embeddings grande da Voyage. Alto desempenho com ajuste fino por instruções.",
         "voyage4Large": "O maior modelo de embeddings da série 4 da Voyage. A melhor qualidade de recuperação da Voyage, multilíngue.",
         "voyage4": "Modelo de embeddings de uso geral da série 4 da Voyage. Alta qualidade de recuperação a um custo moderado.",
         "voyage4Lite": "Modelo leve de embeddings da série 4 da Voyage. Menor custo e maiores limites de taxa.",
         "voyageLight2Instruct": "Modelo leve de embeddings da Voyage. Bom equilíbrio entre desempenho e eficiência.",
+        "graniteEmbedding97mMultilingualR2": "O pequeno modelo multilíngue da IBM. Incluído no {appName}. 97 milhões de parâmetros, saída de 384 dimensões. Até 200 documentos / min / núcleo de CPU. RAM recomendada para CPU: 4 GB por servidor de modelos.",
+        "voyage4Nano": "O modelo de pesos abertos da Voyage AI. 346 milhões de parâmetros, saída de 2048 dimensões. Até 50 documentos / min / núcleo de CPU. RAM recomendada para CPU: 4 GB por servidor de modelos.",
+        "nemotron3Embed1b": "O modelo multilíngue da NVIDIA. 1,1 bilhão de parâmetros, saída de 2048 dimensões. Até 5 documentos / min / núcleo de CPU. RAM recomendada para CPU: 8 GB por servidor de modelos. GPU recomendada.",
         "nomicEmbedTextV1": "Modelo de embeddings da Nomic especializado em recuperação, similaridade, agrupamento e classificação.",
-        "e5BaseV2": "Um modelo menor e mais rápido que o padrão. É cerca de 2x mais rápido que o modelo padrão, com menor qualidade de busca.",
+        "e5BaseV2": "Modelo de embeddings em inglês da família E5 da Microsoft. Equilibra velocidade e qualidade de busca.",
         "e5SmallV2": "A versão menor e mais rápida da linha de modelos E5. Se você executa o {appName} em um sistema com recursos limitados, pode ser uma boa escolha.",
         "multilingualE5Base": "Para corpora em outros idiomas além do inglês, esta é a escolha certa.",
         "multilingualE5Small": "Para corpora em outros idiomas além do inglês em um sistema com recursos limitados, esta é a escolha certa."
@@ -7225,11 +7291,11 @@
             "off": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos. O acesso por conector está desativado.",
             "shadow": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos e as compara com o acesso por conector."
           },
-          "title": "Atualização do acesso por conector concluída"
+          "title": "Atualização do acesso por conector concluída."
         },
         "notStarted": {
           "description": "Um trabalho em segundo plano adicionará os IDs de conector aos fragmentos existentes do índice de pesquisa. Ele começa em alguns minutos.",
-          "title": "A atualização do acesso por conector ainda não começou"
+          "title": "A atualização do acesso por conector ainda não começou."
         },
         "progress": {
           "ariaLabel": "Progresso da atualização do acesso por conector"
@@ -7265,13 +7331,12 @@
           },
           "placeholder": "Selecione um modo",
           "toasts": {
-            "error": "Não foi possível atualizar o modo de acesso à pesquisa.",
-            "success": "Modo de acesso à pesquisa definido como {mode}."
+            "error": "Não foi possível atualizar o modo de acesso à pesquisa."
           }
         },
         "loadError": {
           "description": "Recarregue a página para tentar novamente.",
-          "title": "Não foi possível carregar a atualização do acesso por conector"
+          "title": "Não foi possível carregar a atualização do acesso por conector."
         }
       },
       "embeddingRateLimit": {
@@ -7279,21 +7344,16 @@
         "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente em vez de falhar, então os workers pegam menos trabalho novo. Um lote só falha se esperar demais. Consultas de pesquisa não têm limite.",
         "requests": {
           "title": "Requisições por janela",
-          "description": "Deixe vazio para não ter limite.",
-          "placeholder": "Sem limite"
+          "description": "O máximo de requisições de embedding que a indexação pode enviar em uma janela. Deixe vazio para não ter limite.",
+          "placeholder": "Sem limite",
+          "suffix": "requisições"
         },
         "period": {
           "title": "Duração da janela",
-          "description": "Por exemplo, 60 para um limite por minuto.",
-          "suffix": "(segundos)"
-        },
-        "restoreDefault": "Restaurar padrão",
-        "validation": {
-          "requests": "Insira um número inteiro de 1 a {max, number}, ou deixe o campo vazio para não ter limite.",
-          "period": "Insira um número inteiro de segundos de 1 a {max, number}."
+          "description": "Quanto tempo dura uma janela. Use 60 para um limite por minuto.",
+          "suffix": "segundos"
         },
         "toasts": {
-          "saved": "Limite salvo.",
           "failed": "Não foi possível salvar o limite."
         }
       },
@@ -7311,13 +7371,19 @@
           "label": "Conectores"
         },
         "documents": {
-          "caption": "Indexados recentemente / total",
-          "label": "Documentos"
+          "caption": "No índice",
+          "label": "Documentos",
+          "tooltip": "Soma os documentos de cada conector, então um documento que dois conectores têm conta duas vezes."
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "Não foi possível carregar a visão geral."
+        "loadError": "Não foi possível carregar a visão geral.",
+        "processed": {
+          "caption": "Processados no período",
+          "label": "Documentos",
+          "tooltip": "Uma estimativa, pois a contagem de cada execução é distribuída igualmente pelo tempo em que ela rodou. Um documento conta cada vez que uma execução o processa, incluindo os que falharam, então o número pode passar dos documentos no índice."
+        }
       },
       "activities": {
         "title": "Atividades",
@@ -7341,7 +7407,9 @@
           "indexed": "{count, plural, one {# conector indexado} other {# conectores indexados}}",
           "indexing": "{count, plural, one {# conector indexando} other {# conectores indexando}}",
           "failed": "{count, plural, one {# conector com falha} other {# conectores com falha}}",
-          "paused": "{count, plural, one {# conector pausado} other {# conectores pausados}}"
+          "paused": "{count, plural, one {# conector pausado} other {# conectores pausados}}",
+          "scheduled": "{count, plural, one {# conector agendado} other {# conectores agendados}}",
+          "deleting": "{count, plural, one {# conector sendo excluído} other {# conectores sendo excluídos}}"
         },
         "access": {
           "public": "Público",
@@ -7356,7 +7424,11 @@
         },
         "docs": {
           "label": "docs",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} processados",
+          "processedTooltip": {
+            "running": "Documentos que a execução atual processou até agora, incluindo os que falharam. Um documento que a execução processa duas vezes conta duas vezes, então o número pode passar dos documentos do conector.",
+            "finished": "Documentos que a última execução processou, incluindo os que falharam. Um documento que a execução processou duas vezes conta duas vezes, e documentos removidos desde então não contam mais para o conector, então o número pode passar dos documentos do conector."
+          }
         },
         "actions": {
           "manage": "Gerenciar",
@@ -7388,7 +7460,7 @@
         "title": "Nova configuração de LLM temporariamente indisponível."
       },
       "defaultModel": {
-        "description": "Este modelo será usado pelo {appName} por padrão nos seus chats.",
+        "description": "Usado por padrão em novas sessões.",
         "title": "Modelo padrão"
       },
       "deleteModal": {
@@ -7475,6 +7547,10 @@
           "accessKeyIdField": {
             "title": "ID da chave de acesso da AWS"
           },
+          "assumeRoleField": {
+            "description": "Use uma função do Bedrock em outra conta da AWS. O {appName} assume essa função com as credenciais acima.",
+            "title": "ARN da função a assumir"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "Para ambientes fora da AWS",
@@ -7490,6 +7566,10 @@
               "label": "Chave de API de longo prazo"
             },
             "title": "Método de autenticação"
+          },
+          "externalIdField": {
+            "description": "Somente se a política de confiança da função exigir um.",
+            "title": "ID externo"
           },
           "iamNotice": {
             "title": "O {appName} vai usar a função IAM associada ao ambiente em que está sendo executado para se autenticar."
@@ -7667,10 +7747,16 @@
             "label": "Mais modelos"
           },
           "refetch": {
+            "label": "Atualizar modelos",
             "errorToast": "Falha ao buscar os modelos"
           },
           "row": {
             "defaultLabel": "Modelo padrão",
+            "decisionTag": {
+              "label": "Decisão",
+              "decisionOnly": "Modelo de decisão. Não está disponível no seletor de modelos de chat.",
+              "chatAndDecision": "Suporta tarefas de chat e de decisão."
+            },
             "renameButton": {
               "tooltip": "Renomear"
             },
@@ -7886,24 +7972,24 @@
       },
       "toasts": {
         "providerDeleteFailed": "Falha ao excluir o provedor: {message}",
-        "providerDeleted": "Provedor excluído com sucesso!",
         "providerLoadFailed": "Não foi possível carregar o provedor: {message}",
         "providerResolveFailed": "Não foi possível resolver o provedor",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
-        "settingsUpdated": "Configurações atualizadas",
         "unknownError": "Erro desconhecido"
       },
       "modelRouting": {
         "autoMode": {
           "title": "Modo automático",
-          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem."
+          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem.",
+          "noRoutersTooltip": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
+          "noRoutersError": "Nenhum modelo roteador encontrado, então os usuários não podem selecionar Auto. Ative um modelo roteador em um provedor de gateway."
         },
         "target": {
           "title": "Modelo de roteamento",
           "description": "Gerencia o roteamento de modelos para o modo Auto.",
-          "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
           "error": "Falha ao carregar os modelos de roteamento.",
-          "retry": "Tentar novamente"
+          "retry": "Tentar novamente",
+          "missing": "Escolha um modelo roteador para que os usuários possam usar o modo de roteamento automático."
         }
       },
       "providers": {
@@ -7915,6 +8001,14 @@
           "productName": "Modelos personalizados",
           "companyName": "Endpoints compatíveis com OpenAI"
         }
+      },
+      "reasoning": {
+        "description": "Permitir que os usuários substituam o nível de raciocínio padrão do modelo em cada sessão.",
+        "title": "Controle de raciocínio"
+      },
+      "temperature": {
+        "description": "Permitir que os usuários substituam a temperatura padrão do modelo em cada sessão.",
+        "title": "Controle de temperatura"
       }
     },
     "mcpActions": {
@@ -8313,9 +8407,6 @@
         "error": "Falha ao carregar o status do token SCIM."
       },
       "modal": {
-        "copied": {
-          "message": "Token copiado para a área de transferência"
-        },
         "copyFailed": {
           "error": "Falha ao copiar o token"
         },
@@ -8477,6 +8568,10 @@
           "description": "Todos entram e se cadastram somente por SSO. Requer pelo menos um provedor de SSO ativado.",
           "title": "Desativar login e cadastro por senha"
         },
+        "renamedClaim": {
+          "description": "Permite que usuários cujo e-mail foi renomeado entrem por outro provedor na conta que tem seu e-mail atual, quando essa conta não tem mais vínculo com um provedor. Ative apenas enquanto migra usuários de um provedor SSO excluído.",
+          "title": "Reivindicar contas renomeadas após excluir um provedor"
+        },
         "section": {
           "title": "Autenticação"
         },
@@ -8527,7 +8622,7 @@
           },
           "title": "Proteção contra SSRF",
           "validateAll": {
-            "description": "Mais restritivo. Todas as solicitações de saída se recusam a alcançar IPs privados ou internos, incluindo os conectores da web.",
+            "description": "Mais restritivo. As solicitações de saída, incluindo os conectores da web, não podem alcançar IPs privados ou internos. Exceção: as ferramentas personalizadas ainda podem alcançar endereços da rede privada. Loopback, link-local e metadados da nuvem continuam bloqueados.",
             "label": "Validar todas as solicitações"
           },
           "validateLlm": {
@@ -8572,9 +8667,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "Falha ao atualizar as configurações de segurança",
-        "securitySettingsUpdated": "Configurações de segurança atualizadas",
-        "settingsUpdateFailed": "Falha ao atualizar as configurações",
-        "settingsUpdated": "Configurações atualizadas"
+        "settingsUpdateFailed": "Falha ao atualizar as configurações"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8696,8 +8789,7 @@
       "page": {
         "description": "Use contas de serviço para acessar a API do {appName} de forma programática.",
         "error": {
-          "description": "Verifique o console para mais detalhes.",
-          "title": "Falha ao carregar as contas de serviço."
+          "description": "Verifique o console para mais detalhes."
         }
       },
       "regenerateModal": {
@@ -8748,7 +8840,6 @@
       "toasts": {
         "deleteFailed": "Falha ao excluir a chave de API.",
         "deleteFailedWithDetail": "Falha ao excluir a chave de API: {detail}",
-        "keyCopied": "Chave de API copiada para a área de transferência.",
         "regenerateFailed": "Falha ao regenerar a chave de API.",
         "regenerateFailedWithDetail": "Falha ao regenerar a chave de API: {detail}"
       },
@@ -9155,9 +9246,6 @@
         "fieldUpdateFailed": {
           "toast": "Falha ao atualizar {field} do conector"
         },
-        "fieldUpdated": {
-          "toast": "{field} do conector atualizado com sucesso"
-        },
         "updateTokensButton": {
           "label": "Atualizar tokens"
         }
@@ -9182,9 +9270,10 @@
         "gatedTooltip": "Vários provedores de SSO ativados estão disponíveis nos planos Business ou Enterprise."
       },
       "copyRedirectUri": {
-        "tooltip": "Copiar URI de redirecionamento",
-        "successToast": "URI de redirecionamento copiada",
-        "errorToast": "Não foi possível copiar"
+        "tooltip": "Copiar URI de redirecionamento"
+      },
+      "deleteProvider": {
+        "tooltip": "Excluir"
       },
       "editProvider": {
         "tooltip": "Editar"
@@ -9198,6 +9287,17 @@
         "title": "Falha ao carregar os provedores de SSO"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "Excluir {name}",
+          "description": "Os usuários que entraram com {name} mantêm suas contas. O próximo login por outro provedor com o mesmo e-mail abre a mesma conta. Adicione o provedor substituto antes de excluir este.",
+          "countsError": "Não foi possível carregar quem entrou com este provedor. Feche e tente novamente.",
+          "countsLoading": "Carregando quem entrou com este provedor…",
+          "linkedUsers": "{count, plural, =0 {Nenhum usuário entrou com {name}.} one {# usuário entrou com {name}.} other {# usuários entraram com {name}.}}",
+          "renamedUsers": "{count, plural, one {# deles foi renomeado e precisa da janela de reivindicação de contas renomeadas em Reforço de segurança para entrar por outro provedor.} other {# deles foram renomeados e precisam da janela de reivindicação de contas renomeadas em Reforço de segurança para entrar por outro provedor.}}",
+          "submit": {
+            "label": "Excluir"
+          }
+        },
         "domainVerification": {
           "description": "Um domínio autentica os usuários do seu workspace automaticamente somente depois que você comprova que é o dono dele. Adicione o registro DNS abaixo e depois verifique.",
           "loadError": {
@@ -9296,6 +9396,7 @@
         "description": "Permita que os usuários entrem pelo seu provedor de identidade."
       },
       "toasts": {
+        "providerDeleted": "{name} excluído",
         "unexpectedError": "Ocorreu um erro inesperado."
       },
       "providerTypes": {
@@ -9541,6 +9642,8 @@
         "deleting": "Excluindo",
         "failed": "Falhou",
         "indexed": "Indexado",
+        "backfilling": "Preenchendo",
+        "backfilled": "Preenchido",
         "indexing": "Indexando",
         "initialIndexing": "Indexação inicial",
         "interrupted": "Interrompido",
@@ -9886,8 +9989,7 @@
         }
       },
       "loadError": {
-        "description": "Não foi possível carregar a configuração de rastreamento.",
-        "title": "Falha ao carregar as configurações de rastreamento"
+        "description": "Não foi possível carregar a configuração de rastreamento."
       },
       "page": {
         "description": "Conecte plataformas de observabilidade para monitorar e avaliar as chamadas de LLM."
@@ -10235,7 +10337,7 @@
         "copyButton": {
           "label": "Copiar senha"
         },
-        "description": "Isto vai gerar uma nova senha aleatória para <strong>{email}</strong>. A senha atual vai parar de funcionar imediatamente.",
+        "description": "Isto vai gerar uma nova senha aleatória para <strong>{email}</strong>. A senha atual vai parar de funcionar imediatamente. A pessoa será desconectada de todas as sessões e os tokens de acesso pessoal dela serão revogados.",
         "doneButton": {
           "label": "Concluído"
         },
@@ -10430,7 +10532,7 @@
           "required": "A chave de API é obrigatória"
         },
         "apiSecret": {
-          "description": "Cole seu [segredo de API]({url}) do {provider} para acessar o Scribe.",
+          "description": "Cole seu [segredo de API]({url}) de {provider} para acessar o Zoom AI Services.",
           "label": "Segredo de API",
           "placeholder": "Segredo de API",
           "required": "O segredo de API é obrigatório"
@@ -10655,7 +10757,6 @@
         "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → LLM Gateway."
       },
       "toasts": {
-        "settingsUpdated": "Configurações atualizadas",
         "settingsUpdateFailed": "Falha ao atualizar as configurações"
       }
     },
@@ -10665,26 +10766,28 @@
         "title": "Testar conexão",
         "description": "{appName} executará verificações para validar os escopos necessários antes de continuar.",
         "startButton": {
-          "label": "Iniciar verificações"
+          "label": "Iniciar verificações",
+          "disabledTooltip": "Escolha uma conta ou preencha uma nova acima para iniciar as verificações"
         }
       },
       "title": "Verificações do conector",
       "groups": {
         "failed": "{count} com falha",
-        "indeterminate": "{count} não verificadas",
+        "indeterminate": "{count} incompletas",
         "passed": "{count} bem-sucedidas",
         "skipped": "{count} ignoradas",
-        "running": "{count} em execução",
+        "running": "{count} em andamento",
         "expected": "{count} esperadas"
       },
       "status": {
-        "passed": "Aprovada",
+        "passed": "Bem-sucedida",
         "failed": "Com falha",
-        "indeterminate": "Não foi possível verificar",
+        "indeterminate": "Incompleta",
         "skipped": "Ignorada",
-        "running": "Testando…",
+        "running": "Em execução…",
         "pending": "Na fila",
-        "waiting": "Aguardando configurações"
+        "waiting": "Aguardando configurações",
+        "stopped": "Interrompida por você"
       },
       "required": {
         "label": "Obrigatória"
@@ -10692,17 +10795,15 @@
       "empty": {
         "label": "Nenhuma verificação foi executada ainda."
       },
-      "docsLink": {
-        "label": "Documentação"
-      },
       "foldButton": {
         "fold": "Recolher",
         "expand": "Ver tudo"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} com falha",
-        "unverified": "{count} não verificadas",
+        "unverified": "{count} incompletas",
         "inProgress": "{count} em andamento",
         "expected": "{count} a mais previstas",
         "skipped": "{count} ignoradas",
@@ -10725,6 +10826,31 @@
         "proceedButton": {
           "label": "Criar conector mesmo assim"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "Executar verificação"
+        },
+        "skip": {
+          "label": "Ignorar verificação"
+        },
+        "rerun": {
+          "label": "Executar verificação novamente"
+        }
+      },
+      "details": {
+        "expand": "Mostrar detalhes",
+        "collapse": "Ocultar detalhes"
+      },
+      "docsButton": {
+        "label": "Docs"
+      },
+      "runLost": "As verificações pararam de responder. Tente novamente.",
+      "cancelButton": {
+        "label": "Cancelar"
+      },
+      "cancelFailed": {
+        "toast": "Não foi possível cancelar as verificações. Tente novamente."
       }
     },
     "connectorEdit": {
@@ -11313,14 +11439,18 @@
         },
         "toasts": {
           "accessRemoved": "Acesso removido.",
-          "copyLinkFailed": "Falha ao copiar o link.",
-          "linkCopied": "Link copiado.",
           "ownershipTransferred": "Propriedade transferida.",
           "sharingUpdated": "Compartilhamento atualizado."
         },
         "transfer": {
           "label": "Transferir",
           "title": "Transferir *{name}*"
+        },
+        "people": {
+          "label": "Pessoas com acesso"
+        },
+        "ownerOption": {
+          "disabledTooltip": "Não é possível remover o compartilhamento do proprietário."
         }
       },
       "viewer": {
@@ -11896,6 +12026,9 @@
         "personal": {
           "label": "Pessoal"
         },
+        "required": {
+          "tooltip": "O administrador da sua organização exige que você tenha esta habilidade."
+        },
         "unavailable": {
           "label": "Indisponível - clique para saber mais"
         }
@@ -11958,8 +12091,14 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "Não foi possível iniciar um novo chat. Tente novamente."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {Um arquivo falhou e foi removido: {names}} other {Alguns arquivos falharam e foram removidos: {names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "Carregando o chat"
       },
       "newChatButton": {
         "label": "Iniciar um novo chat"
@@ -12195,7 +12334,9 @@
           "speakingPlaceholder": "O {appName} está falando..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Aguardando o processamento dos arquivos anexados"
+          "processingFilesTooltip": "Aguardando o processamento dos arquivos anexados",
+          "stoppingLabel": "Parando…",
+          "reloadLabel": "Verificar novamente"
         },
         "tabReadingButton": {
           "readLabel": "Ler esta aba",
@@ -12424,6 +12565,9 @@
         "authFailedStatus": {
           "text": "Falha na autenticação de {toolName} (HTTP {statusCode})"
         },
+        "blockedStatus": {
+          "text": "{toolName} foi bloqueado"
+        },
         "completedStatus": {
           "text": "{toolName} concluído"
         },
@@ -12456,6 +12600,9 @@
         },
         "runningStatus": {
           "text": "{toolName} em execução..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} não conseguiu alcançar o servidor"
         },
         "waitingIndicator": {
           "text": "Aguardando resposta..."
@@ -13494,13 +13641,14 @@
       "incognito": {
         "title": "Você está no modo anônimo"
       }
+    },
+    "readiness": {
+      "stopFailed": "Não foi possível parar a resposta. Tente novamente.",
+      "checkFailed": "Não foi possível confirmar o fim da resposta. Verifique novamente antes de enviar outra mensagem."
     }
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "Adicionar novo"
-      },
       "removeButton": {
         "tooltip": "Remover"
       }
@@ -14017,21 +14165,23 @@
     },
     "plans": {
       "free": {
-        "title": "Plano gratuito",
-        "tooltip": "Disponível em todos os planos."
+        "title": "Plano gratuito"
       },
       "business": {
         "title": "Plano Business",
-        "tooltip": "Requer o [plano Business ou Enterprise](/admin/billing)."
+        "tooltip": "Este recurso está disponível apenas na [versão Business ou Enterprise do Onyx](/admin/billing)."
       },
       "enterprise": {
         "title": "Plano Enterprise",
-        "tooltip": "Requer o [plano Enterprise](/admin/billing)."
+        "tooltip": "Este recurso está disponível apenas na [versão Enterprise do Onyx](/admin/billing)."
       },
       "upgrade": {
         "label": "Fazer upgrade do plano"
       },
-      "availableFor": "Disponível no {plan}"
+      "availableFor": "Disponível no {plan}",
+      "beta": {
+        "title": "beta"
+      }
     },
     "placeholders": {
       "email": "email@suaempresa.com",
@@ -14057,6 +14207,14 @@
         "projectId": "meu-projeto-vertex",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "Padrão global"
+      }
+    },
+    "appFooter": {
+      "slogan": "Plataforma de IA de código aberto"
     }
   },
   "craft": {
@@ -14173,7 +14331,7 @@
         "title": "Habilidades associadas",
         "unavailable": {
           "duplicateName": "Uma habilidade chamada “{name}” já está associada.",
-          "invalid": "Habilidade inválida: corrija-a antes de associar.",
+          "invalid": "Habilidade inválida. Corrija-a antes de associar.",
           "otherApp": "Já associada ao app “{name}”."
         },
         "unlink": {
@@ -14476,11 +14634,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "Não é possível visualizar o arquivo"
+        "title": "A prévia deste tipo de arquivo não é compatível no momento"
       },
       "error": {
         "inline": "Erro: {message}",
-        "title": "Erro ao carregar o arquivo"
+        "title": "Não foi possível carregar a prévia",
+        "description": "Não foi possível carregar a prévia. Tente novamente ou baixe o arquivo para abri-lo."
       },
       "loading": {
         "label": "Carregando arquivo..."
@@ -14493,10 +14652,25 @@
         "malformed": "Este CSV contém um campo entre aspas inválido. Baixe o original para verificá-lo."
       },
       "imageTooLarge": {
-        "description": "Esta imagem é muito grande para a prévia. Baixe o original para abri-la."
+        "description": "Imagens de até 10 MB podem ser visualizadas. Baixe o arquivo para abri-lo.",
+        "title": "Imagem muito grande para prévia"
       },
       "unsupported": {
-        "description": "Não é possível visualizar este arquivo. Baixe o original para abri-lo."
+        "description": "Baixe o arquivo para visualizar seu conteúdo."
+      },
+      "retry": {
+        "label": "Tentar novamente"
+      },
+      "download": {
+        "label": "Baixar arquivo"
+      },
+      "tooLarge": {
+        "title": "Arquivo muito grande para prévia",
+        "description": "Arquivos de até {size, number} MB podem ser visualizados aqui. Baixe o arquivo para abri-lo."
+      },
+      "playback": {
+        "title": "Reprodução não suportada",
+        "description": "Seu navegador não pode reproduzir este arquivo. Baixe o arquivo para abri-lo."
       }
     },
     "filesTab": {
@@ -14895,7 +15069,7 @@
         "title": "Excluir \"{title}\"?"
       },
       "newSession": {
-        "label": "Começar a criar"
+        "label": "Nova sessão"
       },
       "options": {
         "label": "Opções da sessão"
@@ -14959,7 +15133,8 @@
         "missingTaskId": "Faltando o id da tarefa.",
         "pauseButton": "Pausar",
         "resumeButton": "Retomar",
-        "runNowButton": "Executar agora",
+        "runHistoryTab": "Histórico de execuções",
+        "runNowButton": "Executar uma vez",
         "toasts": {
           "deleteFailed": "Falha ao excluir a tarefa",
           "deleted": "\"{name}\" excluída.",
@@ -15054,7 +15229,7 @@
           "trigger": "Gatilho"
         },
         "empty": {
-          "label": "Nenhuma execução ainda. A tarefa criará uma cada vez que disparar, ou use Executar agora acima."
+          "label": "Nenhuma execução ainda. A tarefa criará uma cada vez que disparar, ou use Executar uma vez acima."
         },
         "errors": {
           "loadFailed": "Falha ao carregar o histórico de execuções.",
@@ -15073,19 +15248,20 @@
           "notOpenableAriaLabel": "Não pode ser aberto"
         },
         "trigger": {
-          "runNow": "Executar agora",
+          "runNow": "Executar uma vez",
           "schedule": "Agendamento"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "Os horários usam seu fuso horário local.",
         "dailyWeekly": {
-          "atLabel": "Às",
-          "daysLabel": "Nestes dias",
+          "atLabel": "Horário",
+          "daysLabel": "Dias",
           "runsEveryDay": "Executa todos os dias",
           "runsOn": "Executa em {days}"
         },
         "interval": {
-          "everyLabel": "A cada"
+          "everyLabel": "Repetir a cada"
         },
         "intervalUnits": {
           "days": "dias",
@@ -15424,8 +15600,8 @@
       "appTitle": "Configurações de aprovação de {name}",
       "title": "Configurações de aprovação",
       "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft e nas novas tarefas; as tarefas existentes mantêm suas próprias configurações.",
-      "taskDescription": "Somente aplicativos ativados estão disponíveis para esta tarefa. As alterações se aplicam apenas a esta tarefa.",
-      "newTaskDescription": "Ative os aplicativos que esta tarefa pode usar. Cada aplicativo começa com suas configurações de ações atuais.",
+      "taskDescription": "Escolha os plugins que esta tarefa pode usar e quais ações serão executadas automaticamente. As alterações valem apenas para esta tarefa.",
+      "newTaskDescription": "Ative um plugin para começar com suas configurações atuais de ações.",
       "workspace_disabled": "Desativada para o espaço de trabalho",
       "workspace_managed": "Gerenciado pelo espaço de trabalho",
       "userManagement": "Permitir que usuários gerenciem configurações de aprovação",
@@ -15449,11 +15625,12 @@
       "disabledForTask": "Desativado para esta tarefa",
       "externalApp": "Aplicativo",
       "mcpServer": "Servidor MCP",
-      "taskAppsTitle": "Aplicativos e servidores MCP",
+      "taskAppsTitle": "Plugins",
+      "taskAccessTitle": "Acesso a plugins",
+      "noEnabledApps": "Nenhum plugin ativado para esta tarefa.",
       "actionPolicies": "Configurações de aprovação",
       "policyCounts": "{auto} automáticas · {ask} perguntar · {disabled} desativadas",
       "manageActions": "Gerenciar ações",
-      "viewActions": "Ver ações",
       "taskModalDescription": "As alterações se aplicam ao salvar a tarefa. As restrições do espaço de trabalho sempre se aplicam.",
       "searchActions": "Buscar ações",
       "setPermissions": "Definir permissões",
@@ -15664,6 +15841,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Concluir configuração"
+      },
+      "nextButton": {
+        "label": "Próxima"
+      },
       "progress": {
         "label": "Etapa {current} de {total}"
       }
@@ -15675,13 +15858,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# modelo conectado} other {# modelos conectados}}"
       },
-      "customProvider": {
-        "subtitle": "APIs compatíveis com LiteLLM",
-        "title": "Provedor de LLM personalizado"
-      },
       "description": "O {appName} é compatível com modelos auto-hospedados e com provedores populares.",
       "edit": {
         "ariaLabel": "Editar provedores de LLM"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "Ver"
+        },
+        "description": "Configurar no painel de administração",
+        "title": "Mais provedores"
       },
       "providerCard": {
         "connect": {
@@ -15689,7 +15875,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Configurações do provedor"
-        }
+        },
+        "settingsLoadError": "Não foi possível carregar as configurações deste provedor. Tente novamente."
       },
       "title": "Conecte seus modelos de LLM"
     },
@@ -15716,28 +15903,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "Concluir configuração"
-        },
-        "title": "Tudo pronto: revise as configurações opcionais ou clique em Concluir configuração"
-      },
       "llmSetup": {
-        "button": {
-          "label": "Próxima"
-        },
-        "title": "Quase lá! Conecte seus modelos para começar a conversar."
+        "title": "Conecte um modelo para começar a conversar."
       },
       "name": {
-        "button": {
-          "label": "Próxima"
-        },
-        "title": "Vamos dedicar um momento para configurar tudo."
+        "title": "Diga como devemos chamar você."
       },
-      "welcome": {
-        "button": {
-          "label": "Vamos lá"
-        },
+      "optionalSetup": {
+        "title": "Configure alguns extras opcionais."
+      },
+      "postStep": {
+        "title": "Tudo pronto."
+      },
+      "preStep": {
         "title": "Vamos dedicar um momento para configurar tudo."
       }
     }
@@ -15793,6 +15971,11 @@
     },
     "iconTooltip": {
       "label": "Mais informações"
+    },
+    "inputCurrency": {
+      "amount": "Valor",
+      "fraction": "Parte decimal do valor",
+      "whole": "Parte inteira do valor"
     },
     "input": {
       "day": "Dia",
@@ -15857,6 +16040,12 @@
     "settingsHeader": {
       "cancel": "Cancelar"
     },
+    "settingsBody": {
+      "error": {
+        "title": "Não foi possível carregar {page}",
+        "description": "Algo deu errado. Tente novamente em instantes."
+      }
+    },
     "table": {
       "alwaysShown": "Sempre exibida",
       "ascending": "Crescente",
@@ -15879,6 +16068,18 @@
     "tabs": {
       "scrollLeft": "Rolar abas para a esquerda",
       "scrollRight": "Rolar abas para a direita"
+    },
+    "toast": {
+      "moreCount": "+{count} mais"
+    },
+    "sidebar": {
+      "open": "Abrir barra lateral",
+      "close": "Fechar a barra lateral"
+    },
+    "inputNumber": {
+      "outOfRange": "Insira um número de {min, number} a {max, number}",
+      "belowMin": "Insira um número de pelo menos {min, number}",
+      "aboveMax": "Insira um número de no máximo {max, number}"
     }
   },
   "settings": {
@@ -15900,6 +16101,7 @@
         "currentPassword": {
           "title": "Senha atual"
         },
+        "description": "Suas outras sessões serão encerradas e seus tokens de acesso pessoal serão revogados.",
         "newPassword": {
           "title": "Nova senha"
         },
@@ -15910,8 +16112,7 @@
         "title": "Alterar senha",
         "toasts": {
           "networkError": "Ocorreu um erro ao alterar a senha",
-          "updateFailed": "Falha ao alterar a senha",
-          "updated": "Senha atualizada com sucesso"
+          "updateFailed": "Falha ao alterar a senha"
         },
         "validation": {
           "confirmRequired": "Confirme sua nova senha",
@@ -15983,10 +16184,8 @@
       "toasts": {
         "createFailed": "Falha ao criar token",
         "createNetworkError": "Erro de rede ao criar token",
-        "created": "Token criado com sucesso",
         "deleteFailed": "Falha ao excluir token",
         "deleteNetworkError": "Erro de rede ao excluir token",
-        "deleted": "Token excluído com sucesso",
         "loadFailed": "Falha ao carregar tokens",
         "loadPermissionsFailed": "Falha ao carregar opções de permissão",
         "nameRequired": "O nome do token é obrigatório"
@@ -16050,8 +16249,7 @@
       },
       "title": "Chats",
       "toasts": {
-        "saveFailed": "Falha ao salvar preferências",
-        "saved": "Preferências salvas"
+        "saveFailed": "Falha ao salvar preferências"
       }
     },
     "connectors": {
@@ -16071,8 +16269,7 @@
       },
       "title": "Conectores",
       "toasts": {
-        "disconnectFailed": "Falha ao desconectar",
-        "disconnected": "Desconectado com sucesso"
+        "disconnectFailed": "Falha ao desconectar"
       }
     },
     "dangerZone": {
@@ -16088,8 +16285,7 @@
         "description": "Exclua permanentemente todas as suas sessões de chat.",
         "title": "Excluir todos os chats",
         "toasts": {
-          "deleteFailed": "Falha ao excluir todas as sessões de chat",
-          "deleted": "Todas as suas sessões de chat foram excluídas."
+          "deleteFailed": "Falha ao excluir todas as sessões de chat"
         }
       },
       "title": "Zona de perigo"
@@ -16136,8 +16332,7 @@
       "title": "Idioma",
       "toasts": {
         "updateFailed": "Não foi possível atualizar a preferência de idioma"
-      },
-      "workspaceDefault": "Padrão ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16224,8 +16419,7 @@
       },
       "title": "Perfil",
       "toasts": {
-        "updateFailed": "Falha ao atualizar a personalização",
-        "updated": "Personalização atualizada com sucesso"
+        "updateFailed": "Falha ao atualizar a personalização"
       },
       "workRole": {
         "description": "Compartilhe seu cargo para personalizar melhor as respostas.",
@@ -16243,12 +16437,9 @@
       "title": "Atalhos de prompt",
       "toasts": {
         "bothRequired": "O atalho e a expansão são obrigatórios",
-        "created": "Atalho criado",
         "deleteFailed": "Falha ao excluir atalho",
-        "deleted": "Atalho excluído",
         "loadFailed": "Falha ao carregar atalhos",
-        "saveFailed": "Falha ao salvar atalho",
-        "updated": "Atalho atualizado"
+        "saveFailed": "Falha ao salvar atalho"
       },
       "toggle": {
         "description": "Ative os atalhos para inserir rapidamente prompts comuns.",
@@ -16411,6 +16602,9 @@
         "languageModels": {
           "label": "Modelos de linguagem"
         },
+        "decisionModels": {
+          "label": "Modelos de decisão"
+        },
         "llmGateway": {
           "label": "LLM Gateway"
         },
@@ -16488,12 +16682,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "Este recurso está disponível apenas na [versão Business ou Enterprise do Onyx](/admin/billing)."
-      },
-      "enterpriseOnly": {
-        "tooltip": "Este recurso está disponível apenas na [versão Enterprise do Onyx](/admin/billing)."
-      },
       "exitAdminPanel": {
         "label": "Sair do painel de administração"
       },
@@ -16512,8 +16700,7 @@
         "title": "Agentes"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "Explorar agentes"
@@ -16754,21 +16941,11 @@
         "title": "Habilidade indisponível"
       },
       "management": {
-        "description": "Controle quem pode usar esta habilidade.",
-        "externalApp": {
-          "manage": {
-            "label": "Gerenciar nas configurações do aplicativo"
-          },
-          "readyDescription": "Esta habilidade usa o aplicativo “{appName}”.",
-          "title": "Aplicativo externo"
-        },
         "sharing": {
           "edit": {
             "label": "Editar compartilhamento"
-          },
-          "title": "Compartilhamento"
-        },
-        "title": "Gerenciamento"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "Adicione uma descrição antes de salvar.",
@@ -16778,21 +16955,6 @@
         "noPermission": "Você não tem permissão para editar os detalhes desta habilidade.",
         "savingChanges": "Salvando as alterações...",
         "savingSkill": "Salvando a habilidade..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "Todos na sua organização podem usar e editar esta habilidade.",
-          "title": "Organização",
-          "viewerDescription": "Todos na sua organização podem usar esta habilidade."
-        },
-        "personal": {
-          "description": "Apenas você pode usar esta habilidade.",
-          "title": "Pessoal"
-        },
-        "shares": {
-          "description": "Apenas usuários e grupos selecionados podem usar esta habilidade.",
-          "title": "{count, plural, one {# compartilhamento} other {# compartilhamentos}}"
-        }
       },
       "toasts": {
         "created": "\"{name}\" criada",
@@ -16973,7 +17135,6 @@
         },
         "externalAppNotice": "É necessário acesso de visualização para toda a organização enquanto esta habilidade estiver associada ao aplicativo “{appName}”.",
         "header": {
-          "title": "Compartilhar *{name}*",
           "transferTitle": "Transferir *{name}*"
         },
         "loading": {
@@ -16985,7 +17146,9 @@
         },
         "ownerLabel": "Proprietário",
         "permissionMenu": {
-          "ariaLabel": "Atualizar o acesso de {name}"
+          "ariaLabel": "Atualizar o acesso de {name}",
+          "canUse": "Pode usar",
+          "canEdit": "Pode editar"
         },
         "saveButton": {
           "label": "Salvar"
@@ -17007,7 +17170,23 @@
         },
         "transferredToast": {
           "message": "Propriedade transferida."
-        }
+        },
+        "installation": {
+          "title": "Instalação",
+          "available": "Disponível para instalar",
+          "default": "Instalado por padrão",
+          "required": "Obrigatório",
+          "availableDescription": "Os usuários podem instalar ou desinstalar a qualquer momento.",
+          "defaultDescription": "Instalado automaticamente. Os usuários podem desativar ou desinstalar a qualquer momento.",
+          "requiredDescription": "Instalado automaticamente. Os usuários não podem desativar nem desinstalar.",
+          "description": "Escolha como esta habilidade é instalada para quem tem acesso."
+        },
+        "description": "Escolha quem pode usar esta habilidade e como ela é instalada.",
+        "accessTitle": "Quem pode acessar",
+        "peopleTitle": "Pessoas com acesso",
+        "manageIndividualAccess": "Gerenciar acesso individual",
+        "individualAccessTitle": "Acesso individual",
+        "ownershipTitle": "Propriedade"
       },
       "placeholders": {
         "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"

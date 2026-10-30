@@ -1,6 +1,7 @@
 """The HubSpot gateway turns SDK and REST answers into plain models, builds the
 requests HubSpot expects, and reports refusals as HubSpotApiError."""
 
+import threading
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -9,9 +10,15 @@ import pytest
 import requests
 import urllib3
 from hubspot.crm.associations.v4.models import (
-    CollectionResponseMultiAssociatedObjectWithLabelForwardPaging,
+    BatchResponsePublicAssociationMultiWithLabel,
+    BatchResponsePublicAssociationMultiWithLabelWithErrors,
     MultiAssociatedObjectWithLabel,
+    PublicAssociationMultiWithLabel,
+    PublicObjectId,
+    StandardError,
 )
+from hubspot.crm.associations.v4.models import NextPage as AssociationsNextPage
+from hubspot.crm.associations.v4.models import Paging as AssociationsPaging
 from hubspot.crm.deals.exceptions import ApiException as DealsApiException
 from hubspot.crm.tickets.models import (
     AssociatedId,
@@ -29,6 +36,7 @@ from onyx.connectors.hubspot.models import (
     HubSpotPage,
 )
 from onyx.connectors.hubspot.source_operations import (
+    ASSOCIATIONS_BATCH_SIZE,
     HUBSPOT_PAGE_SIZE,
     PERMITTED_USERS_BATCH_SIZE,
     PERMITTED_USERS_PATH,
@@ -44,6 +52,14 @@ DEAL_HCRN = f"hcrn:{PORTAL}:crm-object:0-3"
 START = datetime(2024, 1, 1, tzinfo=timezone.utc)
 END = datetime(2024, 2, 1, tzinfo=timezone.utc)
 CREATED = datetime(2024, 6, 6, 19, 17, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _no_resend_wait() -> Any:
+    with patch(
+        "onyx.connectors.hubspot.source_operations._CONNECTION_RETRY_DELAY_SECONDS", 0
+    ):
+        yield
 
 
 def _gateway() -> tuple[HubSpotSourceOperations, MagicMock]:
@@ -137,19 +153,34 @@ def test_real_sdk_objects_parse_the_same_way() -> None:
             paging=ForwardPaging(next=NextPage(after="c2")),
         )
     )
-    client.crm.associations.v4.basic_api.get_page.return_value = (
-        CollectionResponseMultiAssociatedObjectWithLabelForwardPaging(
+    client.crm.associations.v4.batch_api.get_page.return_value = (
+        BatchResponsePublicAssociationMultiWithLabel(
+            status="COMPLETE",
+            started_at=CREATED,
+            completed_at=CREATED,
             results=[
-                MultiAssociatedObjectWithLabel(to_object_id=5, association_types=[])
-            ]
+                PublicAssociationMultiWithLabel(
+                    _from=PublicObjectId(id="1"),
+                    to=[
+                        MultiAssociatedObjectWithLabel(
+                            to_object_id=5, association_types=[]
+                        )
+                    ],
+                    paging=AssociationsPaging(
+                        next=AssociationsNextPage(after="links2")
+                    ),
+                )
+            ],
         )
     )
 
     page = gateway.list_records(
         variant=HubSpotObjectType.TICKETS, properties=["subject"]
     )
-    associations = gateway.list_associations(
-        object_type=HubSpotObjectType.TICKETS, object_id="1", to_object_type="contacts"
+    associations = gateway.read_associations(
+        object_type=HubSpotObjectType.TICKETS,
+        to_object_type="contacts",
+        cursors={"1": None, "2": None},
     )
 
     [record] = page.items
@@ -158,7 +189,100 @@ def test_real_sdk_objects_parse_the_same_way() -> None:
         "contacts": HubSpotAssociationIds(ids=["9"], has_more=True)
     }
     assert page.next_after == "c2"
-    assert associations == HubSpotPage(items=["5"], next_after=None)
+    # Record 2 has no links, so HubSpot leaves it out.
+    assert associations == {"1": HubSpotPage(items=["5"], next_after="links2")}
+
+
+def test_a_link_read_sends_one_input_per_record_with_its_cursor() -> None:
+    gateway, client = _gateway()
+    client.crm.associations.v4.batch_api.get_page.return_value.to_dict.return_value = {
+        "results": []
+    }
+
+    gateway.read_associations(
+        object_type=HubSpotObjectType.DEALS,
+        to_object_type="notes",
+        cursors={"1": None, "2": "c2"},
+    )
+
+    kwargs = client.crm.associations.v4.batch_api.get_page.call_args.kwargs
+    assert kwargs["from_object_type"] == "deals"
+    assert kwargs["to_object_type"] == "notes"
+    request = kwargs["batch_input_public_fetch_associations_batch_request"]
+    assert [(i.id, i.after) for i in request.inputs] == [("1", None), ("2", "c2")]
+
+
+def _partial_link_answer(*errors: StandardError) -> Any:
+    return BatchResponsePublicAssociationMultiWithLabelWithErrors(
+        status="COMPLETE",
+        started_at=CREATED,
+        completed_at=CREATED,
+        results=[
+            PublicAssociationMultiWithLabel(
+                _from=PublicObjectId(id="1"),
+                to=[
+                    MultiAssociatedObjectWithLabel(to_object_id=5, association_types=[])
+                ],
+            )
+        ],
+        errors=list(errors),
+        num_errors=len(errors),
+    )
+
+
+def _batch_error(category: str, sub_category: str | None = None) -> StandardError:
+    return StandardError(
+        category=category,
+        sub_category=sub_category,
+        message=f"{category} message",
+        context={"fromObjectId": ["2"]},
+        links={},
+        errors=[],
+        status="error",
+    )
+
+
+def test_a_record_without_links_is_left_out_of_a_partial_answer() -> None:
+    gateway, client = _gateway()
+    client.crm.associations.v4.batch_api.get_page.return_value = _partial_link_answer(
+        _batch_error("OBJECT_NOT_FOUND", "crm.associations.NO_ASSOCIATIONS_FOUND")
+    )
+
+    links = gateway.read_associations(
+        object_type=HubSpotObjectType.DEALS,
+        to_object_type="contacts",
+        cursors={"1": None, "2": None},
+    )
+
+    assert links == {"1": HubSpotPage(items=["5"])}
+
+
+def test_any_other_error_in_a_partial_answer_fails_the_read() -> None:
+    """A record whose links HubSpot could not read must not read as unlinked."""
+    gateway, client = _gateway()
+    client.crm.associations.v4.batch_api.get_page.return_value = _partial_link_answer(
+        _batch_error("INTERNAL_ERROR")
+    )
+
+    with pytest.raises(HubSpotApiError, match="INTERNAL_ERROR message"):
+        gateway.read_associations(
+            object_type=HubSpotObjectType.DEALS,
+            to_object_type="contacts",
+            cursors={"1": None, "2": None},
+        )
+
+
+def test_a_link_read_of_too_many_records_is_refused_before_the_call() -> None:
+    gateway, client = _gateway()
+
+    with pytest.raises(ValueError):
+        gateway.read_associations(
+            object_type=HubSpotObjectType.DEALS,
+            to_object_type="contacts",
+            cursors=dict.fromkeys(str(i) for i in range(ASSOCIATIONS_BATCH_SIZE + 1)),
+        )
+
+    client.crm.associations.v4.batch_api.get_page.assert_not_called()
 
 
 def test_a_listing_passes_the_cursor_and_associations_through() -> None:
@@ -326,6 +450,59 @@ def test_an_sdk_call_that_times_out_says_so() -> None:
     assert error.value.timed_out
 
 
+def _read_timeout() -> urllib3.exceptions.ReadTimeoutError:
+    return urllib3.exceptions.ReadTimeoutError(
+        MagicMock(), "/crm/v3/objects/deals/search", "read timed out"
+    )
+
+
+def test_a_call_hubspot_did_not_answer_is_sent_again() -> None:
+    """A dropped idle connection gets no answer. The resend opens a new one."""
+    gateway, client = _gateway()
+    search = client.crm.deals.search_api.do_search
+    answer = MagicMock()
+    answer.to_dict.return_value = {"results": []}
+    search.side_effect = [_read_timeout(), answer]
+
+    page = gateway.search_records(
+        variant=HubSpotObjectType.DEALS,
+        properties=["p"],
+        modified_after=START,
+        modified_before=END,
+    )
+
+    assert page.items == []
+    assert search.call_count == 2
+
+
+def test_a_call_that_never_gets_an_answer_fails_after_three_tries() -> None:
+    gateway, client = _gateway()
+    search = client.crm.deals.search_api.do_search
+    search.side_effect = _read_timeout()
+
+    with pytest.raises(HubSpotConnectionError) as error:
+        gateway.search_records(
+            variant=HubSpotObjectType.DEALS,
+            properties=["p"],
+            modified_after=START,
+            modified_before=END,
+        )
+
+    assert error.value.timed_out
+    assert search.call_count == 3
+
+
+def test_a_refusal_is_not_sent_again() -> None:
+    gateway, client = _gateway()
+    listing = client.crm.deals.basic_api.get_page
+    listing.side_effect = DealsApiException(status=403, reason="Forbidden")
+
+    with pytest.raises(HubSpotApiError):
+        gateway.list_records(variant=HubSpotObjectType.DEALS, properties=["p"])
+
+    assert listing.call_count == 1
+
+
 def test_a_search_keeps_the_match_count() -> None:
     gateway, client = _gateway()
     client.crm.tickets.search_api.do_search.return_value = _sdk_page(
@@ -425,3 +602,40 @@ def test_a_cursor_walk_stops_at_the_end_and_refuses_to_spin() -> None:
                 max_pages=3,
             )
         )
+
+
+def test_threads_share_one_rate_limiter() -> None:
+    """Parallel first calls build one limiter, so it counts every thread's
+    calls. A second build would meet the first at the barrier."""
+    gateway = HubSpotSourceOperations(credentials_provider=MagicMock())
+    builds_meet = threading.Barrier(2, timeout=0.5)
+    builds: list[MagicMock] = []
+
+    def build_limiter() -> MagicMock:
+        limiter = MagicMock()
+        builds.append(limiter)
+        try:
+            builds_meet.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return limiter
+
+    both_started = threading.Barrier(2, timeout=10)
+    limiters: list[Any] = []
+
+    def first_call() -> None:
+        both_started.wait()
+        limiters.append(gateway._limiter())
+
+    with patch(
+        "onyx.connectors.hubspot.source_operations.HubSpotRateLimiter",
+        side_effect=build_limiter,
+    ):
+        threads = [threading.Thread(target=first_call) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    assert len(builds) == 1
+    assert limiters == [builds[0], builds[0]]

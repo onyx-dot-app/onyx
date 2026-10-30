@@ -1,12 +1,13 @@
 """Unit tests for search utility functions."""
 
 from typing import NamedTuple
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk, InferenceSection
+from onyx.tools.tool_implementations.search import search_utils
 from onyx.tools.tool_implementations.search.search_tool import deduplicate_queries
 from onyx.tools.tool_implementations.search.search_utils import (
     _retrieve_adjacent_chunks,
@@ -694,3 +695,27 @@ class TestRetrieveAdjacentChunks:
 
         assert [chunk.chunk_id for chunk in above] == [1, 2]
         assert below == []
+
+
+def test_expansion_without_llm_fallback_raises_when_the_decision_call_fails() -> None:
+    chunk = MagicMock(semantic_identifier="Doc", content="text")
+    section = MagicMock(center_chunk=chunk, combined_content="text", chunks=[chunk])
+    with (
+        patch.object(search_utils, "_retrieve_adjacent_chunks", return_value=([], [])),
+        patch.object(
+            search_utils,
+            "decide_context_expansion",
+            side_effect=RuntimeError("decision model down"),
+        ),
+        patch.object(search_utils, "classify_section_relevance") as classify,
+        pytest.raises(RuntimeError),
+    ):
+        search_utils.expand_section_with_context(
+            section=section,
+            user_query="query",
+            llm=MagicMock(),
+            document_index=MagicMock(),
+            decision_client=MagicMock(),
+            llm_fallback=False,
+        )
+    classify.assert_not_called()

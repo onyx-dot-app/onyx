@@ -3,12 +3,12 @@
 page_title: "onyx_llm_provider_default Resource - terraform-provider-onyx"
 subcategory: ""
 description: |-
-  The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus optional vision and chat auto-naming defaults). Managing it as its own resource lets depends_on ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset API for the text and vision defaults, so destroying this resource leaves them in place; the chat-naming default is cleared when managed.
+  The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus optional vision, chat auto-naming, Craft and search selection defaults). Managing it as its own resource lets depends_on ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset API for the text and vision defaults, so destroying this resource leaves them in place. Destroy clears the chat-naming, Craft and search selection defaults that the resource manages.
 ---
 
 # onyx_llm_provider_default (Resource)
 
-The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus optional vision and chat auto-naming defaults). Managing it as its own resource lets `depends_on` ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset API for the text and vision defaults, so destroying this resource leaves them in place; the chat-naming default is cleared when managed.
+The deployment-wide default LLM model — a singleton pointer at one provider + model pair (plus optional vision, chat auto-naming, Craft and search selection defaults). Managing it as its own resource lets `depends_on` ordering repoint the default before the provider holding it is deleted or shrunk. Onyx has no unset API for the text and vision defaults, so destroying this resource leaves them in place. Destroy clears the chat-naming, Craft and search selection defaults that the resource manages.
 
 ## Example Usage
 
@@ -18,10 +18,10 @@ The deployment-wide default LLM model — a singleton pointer at one provider + 
 # provider holding it is deleted.
 resource "onyx_llm_provider_default" "this" {
   provider_id = onyx_llm_provider.openai.id
-  model_name  = "gpt-5"
+  model_name  = "gpt-6-sol"
 
   vision_provider_id = onyx_llm_provider.openai.id
-  vision_model_name  = "gpt-5"
+  vision_model_name  = "gpt-6-sol"
 }
 ```
 
@@ -30,13 +30,17 @@ resource "onyx_llm_provider_default" "this" {
 
 ### Required
 
-- `model_name` (String) Model name within that provider, e.g. `gpt-5-mini`. Must be one of its visible `model_configurations`.
+- `model_name` (String) Model name within that provider, e.g. `gpt-6-luna`. Must be one of its visible `model_configurations`.
 - `provider_id` (String) Id of the `onyx_llm_provider` holding the default model.
 
 ### Optional
 
 - `chat_naming_model_name` (String) Dedicated chat auto-naming model name.
 - `chat_naming_provider_id` (String) Provider id for the dedicated chat auto-naming model. Unset, auto-naming uses the session's model. Removing the pair clears the server value.
+- `craft_model_name` (String) Default Onyx Craft model name.
+- `craft_provider_id` (String) Provider id for the default Onyx Craft model. Unset, Craft uses the default text model. Removing the pair clears the server value.
+- `search_selection_model_name` (String) Name of the model that selects search results. Needs Onyx v5.0.0 or later.
+- `search_selection_provider_id` (String) Provider id for the model that selects search results. Unset, the session's model selects them. Removing the pair clears the server value. Needs Onyx v5.0.0 or later.
 - `vision_model_name` (String) Default vision model name.
 - `vision_provider_id` (String) Provider id for the default vision model.
 

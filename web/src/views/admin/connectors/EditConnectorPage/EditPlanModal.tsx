@@ -27,6 +27,7 @@ import {
   type EditPlanChoices,
 } from "@/lib/connectors/edit/choices";
 import type { ApplyEditOutcome } from "@/lib/connectors/edit/svc";
+import { applicableResults } from "@/lib/connectors/checks/results";
 import type {
   ConnectorEditApplyRequest,
   ConnectorEditPlanResponse,
@@ -222,7 +223,7 @@ function ValidationSection({
   const t = useTranslations("admin.connectorEdit.plan.validation");
   const outcome = validationOutcome(validation, blocksApply);
   const lines: CheckLine[] = [
-    ...validation.check_results.map((result) => ({
+    ...applicableResults(validation.check_results).map((result) => ({
       ...result,
       state: result.status,
     })),
@@ -230,6 +231,8 @@ function ValidationSection({
       (check): CheckLine => ({
         ...check,
         message: "",
+        summary: null,
+        description: null,
         remediation: null,
         docs_link: null,
         state: "pending",

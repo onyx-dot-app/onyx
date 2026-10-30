@@ -53,8 +53,10 @@ test.each([
         writes.push({ path, body: JSON.parse(String(init.body)) });
       if (path === "/api/admin/default-assistant/configuration")
         return new Response(JSON.stringify({ tool_ids: [99] }));
-      if (path === "/api/admin/default-assistant")
-        return new Response(JSON.stringify({ tool_ids: [99, 42] }));
+      if (path === "/api/admin/default-assistant/tools")
+        return new Response(
+          JSON.stringify({ tool_ids: enabled ? [99, 42] : [99] })
+        );
       if (path === "/api/tool/openapi")
         return new Response(
           JSON.stringify(
@@ -100,20 +102,22 @@ test.each([
     expect(
       screen.queryByRole("switch", { name: "Enable in default Chat" })
     ).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Add Action" }));
+    await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
     expect(writes).toContainEqual({
       path: "/api/admin/tool/custom",
       body: expect.objectContaining({ enabled: true }),
     });
     expect(writes).toContainEqual({
-      path: "/api/admin/default-assistant",
-      body: { tool_ids: enabled ? [99, 42] : [99] },
+      path: "/api/admin/default-assistant/tools",
+      body: { tool_ids: [42], enabled },
     });
     expect(
       writes.findIndex((write) => write.path === "/api/admin/tool/custom")
     ).toBeLessThan(
-      writes.findIndex((write) => write.path === "/api/admin/default-assistant")
+      writes.findIndex(
+        (write) => write.path === "/api/admin/default-assistant/tools"
+      )
     );
   }
 );
@@ -180,7 +184,7 @@ test.each(["mounted", "disposed"])(
       screen.getByRole("dialog", { name: "Connect to Release API" })
     ).toBeVisible();
     expect(createBody).toBeUndefined();
-    await user.click(await screen.findByRole("button", { name: "Add Action" }));
+    await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
     await waitFor(() =>
       expect(createBody).toEqual({
         description: "Release dashboard",
@@ -246,9 +250,9 @@ test("shows creation failures without completing or closing the form", async () 
     }
   );
   await user.click(screen.getByRole("button", { name: "Continue" }));
-  await user.click(await screen.findByRole("button", { name: "Add Action" }));
+  await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Add Action" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Add Plugin" })).toBeEnabled()
   );
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   expect(onCreated).not.toHaveBeenCalled();
@@ -326,7 +330,7 @@ test("keeps OAuth settings through Back and saves them only on final creation", 
     await screen.findByRole("textbox", { name: "OAuth Client ID" })
   ).toHaveValue("release-client");
   expect(writes).toEqual([]);
-  const submit = screen.getByRole("button", { name: "Add Action" });
+  const submit = screen.getByRole("button", { name: "Add Plugin" });
   await waitFor(() => expect(submit).toBeEnabled());
   await user.click(submit);
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
@@ -460,9 +464,9 @@ describe("authentication save retries", () => {
         target: { value: "release-secret" },
       });
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Add Action" })).toBeEnabled()
+        expect(screen.getByRole("button", { name: "Add Plugin" })).toBeEnabled()
       );
-      await user.click(screen.getByRole("button", { name: "Add Action" }));
+      await user.click(screen.getByRole("button", { name: "Add Plugin" }));
       await waitFor(() => expect(failRefresh).toBe(false));
       expect(onCreated).not.toHaveBeenCalled();
       expect(
@@ -472,7 +476,7 @@ describe("authentication save retries", () => {
       if (retry === "failed refresh") {
         failRefresh = true;
         const updateCount = updates.length;
-        await user.click(screen.getByRole("button", { name: "Add Action" }));
+        await user.click(screen.getByRole("button", { name: "Add Plugin" }));
         await waitFor(() => expect(failRefresh).toBe(false));
         expect(updates).toHaveLength(updateCount);
         expect(onCreated).not.toHaveBeenCalled();
@@ -500,7 +504,7 @@ describe("authentication save retries", () => {
         );
         await user.click(screen.getByRole("button", { name: "Continue" }));
       }
-      await user.click(screen.getByRole("button", { name: "Add Action" }));
+      await user.click(screen.getByRole("button", { name: "Add Plugin" }));
       await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
       expect(toolCreates).toBe(1);
       expect(configCreates).toBe(1);
@@ -524,4 +528,38 @@ describe("authentication save retries", () => {
         );
     }
   );
+});
+
+test("shows a schema validation error once before and after blur", async () => {
+  const error = "Server URL is not allowed.";
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    if (String(input) === "/api/admin/tool/custom/validate")
+      return new Response(JSON.stringify({ detail: error }), { status: 400 });
+    return new Response(JSON.stringify([]));
+  });
+  render(
+    <OpenAPIPluginCreateModal open onClose={jest.fn()} onCreated={jest.fn()} />
+  );
+  const schema = await screen.findByRole("textbox", {
+    name: /OpenAPI Schema Definition/,
+  });
+  fireEvent.change(schema, { target: { value: JSON.stringify(definition) } });
+  expect(await screen.findByText(error)).toBeInTheDocument();
+  expect(screen.getAllByText(error)).toHaveLength(1);
+  fireEvent.blur(schema);
+  fireEvent.change(
+    screen.getByRole("textbox", { name: /Description for Humans/ }),
+    { target: { value: "Release notes" } }
+  );
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(screen.getAllByText(error)).toHaveLength(1);
+
+  fireEvent.change(schema, { target: { value: "" } });
+  fireEvent.blur(schema);
+  expect(
+    await screen.findAllByText("OpenAPI schema definition is required")
+  ).toHaveLength(1);
+  expect(screen.queryByText(error)).not.toBeInTheDocument();
 });

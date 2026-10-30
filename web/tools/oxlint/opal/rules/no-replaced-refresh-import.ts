@@ -3,14 +3,6 @@ import { defineRule } from "@oxlint/plugins";
 // refresh-components module -> its Opal replacement. Add a row when Opal ships a
 // replacement, and delete the row when the refresh module is deleted.
 const OPAL_REPLACEMENTS = new Map<string, string>([
-  [
-    "@/refresh-components/texts/Text",
-    "`Text` from `@opal/components` (string-enum `font` and `color` props)",
-  ],
-  [
-    "@/refresh-components/texts/Truncated",
-    "`OverflowText` from `@opal/components`",
-  ],
   ["@/refresh-components/cards/Card", "`Card` from `@opal/components`"],
   ["@/refresh-components/Divider", "`Divider` from `@opal/components`"],
   [

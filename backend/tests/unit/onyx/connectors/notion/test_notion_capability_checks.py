@@ -9,11 +9,13 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
     CheckNotRunReason,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.notion.capability_checks import build_notion_indexing_checks
+from onyx.connectors.notion.config import ROOT_PAGE_ID_FORMAT_ERROR
 from onyx.connectors.notion.connector import NotionConnector
 from onyx.connectors.notion.source_operations import NotionApiError
 from tests.unit.onyx.connectors.notion.notion_check_helpers import (
@@ -21,6 +23,7 @@ from tests.unit.onyx.connectors.notion.notion_check_helpers import (
     workspace_gateway,
 )
 
+_ROOT_PAGE_ID = "17ab3186873d418fb899c3f6a43f68de"
 _CREDENTIAL = {"notion_integration_token": "secret"}
 
 
@@ -53,7 +56,7 @@ def test_every_check_probes_without_waiting_on_rate_limits() -> None:
     gateway: MagicMock = workspace_gateway()
 
     for check in build_notion_indexing_checks():
-        _run(check.check_id, gateway, {"root_page_id": "root"})
+        _run(check.check_id, gateway, {"root_page_id": _ROOT_PAGE_ID})
 
     calls = [call for call in gateway.mock_calls if call[0]]
     assert calls
@@ -136,7 +139,7 @@ def test_shared_content_fails_without_the_read_content_capability() -> None:
 
 def test_shared_content_does_not_apply_with_a_root_page() -> None:
     result: CapabilityCheckResult = _run(
-        "notion_shared_content", workspace_gateway(), {"root_page_id": "root"}
+        "notion_shared_content", workspace_gateway(), {"root_page_id": _ROOT_PAGE_ID}
     )
 
     assert not result.applicable
@@ -149,27 +152,25 @@ def test_root_page_applies_only_with_a_root_page() -> None:
     assert not _run("notion_root_page", workspace_gateway()).applicable
 
 
-def test_root_page_does_not_apply_to_a_run_without_config() -> None:
-    """A credential-time run has no config, so no root page: the check does
-    not apply and calls nothing."""
-    gateway: MagicMock = workspace_gateway()
-    (check,) = [
-        check
-        for check in build_notion_indexing_checks()
-        if check.check_id == "notion_root_page"
-    ]
+def test_page_content_stops_when_shared_content_fails_without_config() -> None:
+    """On a run without a config the root page waits for settings, so the
+    shared-content check alone decides page content."""
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.NOTION,
         credential_json=_CREDENTIAL,
         connector_specific_config=None,
-        source_operations=gateway,
+        source_operations=workspace_gateway(pages=[], data_sources=[]),
     )
 
-    (result,) = run_capability_checks([check], context)
+    results = {
+        result.check_id: result
+        for result in run_capability_checks(build_notion_indexing_checks(), context)
+    }
 
-    assert result.status == CapabilityCheckStatus.SKIPPED
-    assert not result.applicable
-    gateway.get_page.assert_not_called()
+    content = results["notion_page_content"]
+    assert content.status == CapabilityCheckStatus.SKIPPED
+    assert content.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert content.blocked_by == "notion_shared_content"
 
 
 def test_connector_reads_a_blank_root_page_id_as_unset() -> None:
@@ -182,11 +183,11 @@ def test_root_page_passes() -> None:
     gateway: MagicMock = workspace_gateway()
 
     result: CapabilityCheckResult = _run(
-        "notion_root_page", gateway, {"root_page_id": " root "}
+        "notion_root_page", gateway, {"root_page_id": f" {_ROOT_PAGE_ID} "}
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_page.assert_called_once_with(page_id="root", fast=True)
+    gateway.get_page.assert_called_once_with(page_id=_ROOT_PAGE_ID, fast=True)
     gateway.get_database.assert_not_called()
 
 
@@ -196,11 +197,11 @@ def test_root_page_passes_for_a_wiki() -> None:
     gateway.get_page.side_effect = api_error(404, "object_not_found")
 
     result: CapabilityCheckResult = _run(
-        "notion_root_page", gateway, {"root_page_id": "root"}
+        "notion_root_page", gateway, {"root_page_id": _ROOT_PAGE_ID}
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_database.assert_called_once_with(database_id="root", fast=True)
+    gateway.get_database.assert_called_once_with(database_id=_ROOT_PAGE_ID, fast=True)
 
 
 def test_root_page_fails_when_not_shared() -> None:
@@ -209,7 +210,7 @@ def test_root_page_fails_when_not_shared() -> None:
     gateway.get_database.side_effect = api_error(404, "object_not_found")
 
     result: CapabilityCheckResult = _run(
-        "notion_root_page", gateway, {"root_page_id": "root"}
+        "notion_root_page", gateway, {"root_page_id": _ROOT_PAGE_ID}
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
@@ -217,17 +218,45 @@ def test_root_page_fails_when_not_shared() -> None:
     assert "shared with the integration" in result.message
 
 
-def test_root_page_fails_for_an_invalid_id() -> None:
+def test_root_page_fails_when_notion_rejects_the_id() -> None:
     gateway: MagicMock = workspace_gateway()
     gateway.get_page.side_effect = api_error(400, "validation_error")
+
+    result: CapabilityCheckResult = _run(
+        "notion_root_page", gateway, {"root_page_id": _ROOT_PAGE_ID}
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "not a valid Notion page ID" in result.message
+    gateway.get_database.assert_not_called()
+
+
+def test_root_page_that_is_not_an_id_or_url_fails_as_a_setting() -> None:
+    gateway: MagicMock = workspace_gateway()
 
     result: CapabilityCheckResult = _run(
         "notion_root_page", gateway, {"root_page_id": "My Page"}
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "not a valid Notion page ID" in result.message
-    gateway.get_database.assert_not_called()
+    assert result.error_kind == CheckErrorKind.INVALID
+    assert f"root_page_id: {ROOT_PAGE_ID_FORMAT_ERROR}" in result.message
+    gateway.get_page.assert_not_called()
+
+
+def test_root_page_reads_the_id_in_a_page_url() -> None:
+    gateway: MagicMock = workspace_gateway()
+
+    result: CapabilityCheckResult = _run(
+        "notion_root_page",
+        gateway,
+        {"root_page_id": f"https://www.notion.so/acme/Handbook-{_ROOT_PAGE_ID}"},
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    gateway.get_page.assert_called_once_with(
+        page_id="17ab3186-873d-418f-b899-c3f6a43f68de", fast=True
+    )
 
 
 # --- notion_page_content ---
@@ -248,12 +277,12 @@ def test_page_content_reads_the_root_page_when_search_is_empty() -> None:
     gateway: MagicMock = workspace_gateway(pages=[])
 
     result: CapabilityCheckResult = _run(
-        "notion_page_content", gateway, {"root_page_id": "root"}
+        "notion_page_content", gateway, {"root_page_id": _ROOT_PAGE_ID}
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
     gateway.get_block_children.assert_called_once_with(
-        block_id="root", page_size=1, fast=True
+        block_id=_ROOT_PAGE_ID, page_size=1, fast=True
     )
 
 
@@ -294,7 +323,7 @@ def test_page_content_leaves_an_unreadable_root_page_to_its_check() -> None:
     gateway.get_block_children.side_effect = api_error(404, "object_not_found")
 
     result: CapabilityCheckResult = _run(
-        "notion_page_content", gateway, {"root_page_id": "root"}
+        "notion_page_content", gateway, {"root_page_id": _ROOT_PAGE_ID}
     )
 
     assert result.status == CapabilityCheckStatus.INCOMPLETE

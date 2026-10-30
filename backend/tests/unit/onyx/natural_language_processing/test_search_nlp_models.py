@@ -1,9 +1,13 @@
+import json
 from collections.abc import AsyncGenerator, Iterator
 from threading import Lock
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
+import openai
 import pytest
+import requests
 from google.auth.credentials import Credentials
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
@@ -17,11 +21,12 @@ from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingModel,
     EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
-    clean_model_name,
+    cohere_rerank_aws,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
+from shared_configs.utils import clean_model_name
 
 
 @pytest.fixture
@@ -83,6 +88,40 @@ async def test_openai_embedding(
 
         assert result == sample_embeddings
         mock_client.embeddings.create.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reduced_dimension", "expected_dimensions"),
+    [(1024, 1024), (None, openai.omit)],
+)
+async def test_openai_compatible_embedding_sends_base_url_and_dimensions(
+    reduced_dimension: int | None, expected_dimensions: object
+) -> None:
+    created = MagicMock()
+    created.data = [MagicMock(embedding=[0.1, 0.2])]
+    client = MagicMock()
+    client.embeddings.create = AsyncMock(return_value=created)
+
+    with patch.object(openai, "AsyncOpenAI", return_value=client) as make_client:
+        async with CloudEmbedding(
+            "fake-key",
+            EmbeddingProvider.OPENAI_COMPATIBLE,
+            api_url="https://embed.example.com/v1",
+        ) as embedding:
+            result = await embedding.embed(
+                texts=["a"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="qwen3-embedding-8b",
+                reduced_dimension=reduced_dimension,
+            )
+
+    assert result == [[0.1, 0.2]]
+    assert make_client.call_args.kwargs["base_url"] == "https://embed.example.com/v1"
+    assert client.embeddings.create.call_args.kwargs["model"] == "qwen3-embedding-8b"
+    assert (
+        client.embeddings.create.call_args.kwargs["dimensions"] is expected_dimensions
+    )
 
 
 def _build_google_embed_response(
@@ -824,6 +863,19 @@ def test_query_embeddings_never_wait_for_the_rate_limit() -> None:
     load_limiter.assert_not_called()
 
 
+def test_model_server_error_detail_reaches_the_caller() -> None:
+    model = _make_local_embedding_model()
+    failed = MagicMock(status_code=500)
+    failed.raise_for_status.side_effect = requests.HTTPError("500", response=failed)
+    failed.json.return_value = {"detail": "model is not in the cache"}
+
+    with (
+        patch(f"{_SEARCH_NLP_MODULE}.requests.post", return_value=failed),
+        pytest.raises(httpx.HTTPError, match="model is not in the cache"),
+    ):
+        model.encode(texts=["text_0"], text_type=EmbedTextType.QUERY)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("block_on_provider_rate_limit", "expected_retries"),
@@ -833,8 +885,6 @@ async def test_openai_sdk_retries_are_off_when_the_policy_counts_requests(
     block_on_provider_rate_limit: bool, expected_retries: int
 ) -> None:
     """SDK retries would send requests that take no rate limit slot."""
-    import openai
-
     policy = EmbeddingRequestPolicy(
         retry_backoff=EmbeddingRetryBackoff(scale_seconds=0, max_seconds=0),
         retry_tries=1,
@@ -852,3 +902,54 @@ async def test_openai_sdk_retries_are_off_when_the_policy_counts_requests(
             await embedding._embed_openai(["a"], "text-embedding-3-small", None)
 
     assert make_client.call_args.kwargs["max_retries"] == expected_retries
+
+
+@pytest.mark.asyncio
+async def test_cohere_rerank_aws_scores_follow_document_order() -> None:
+    body = MagicMock()
+    body.read = AsyncMock(
+        return_value=json.dumps(
+            {
+                "results": [
+                    {"index": 1, "relevance_score": 0.2},
+                    {"index": 0, "relevance_score": 0.9},
+                ]
+            }
+        ).encode()
+    )
+    bedrock_client = MagicMock()
+    bedrock_client.invoke_model = AsyncMock(return_value={"body": body})
+    client_context = MagicMock()
+    client_context.__aenter__ = AsyncMock(return_value=bedrock_client)
+    client_context.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    session.create_client.return_value = client_context
+
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.get_session",
+        return_value=session,
+    ):
+        scores = await cohere_rerank_aws(
+            query="q",
+            docs=["first", "second"],
+            model_name="cohere.rerank-v3-5:0",
+            region_name="us-east-1",
+            aws_access_key_id="key-id",
+            aws_secret_access_key="secret",
+        )
+
+    assert scores == [0.9, 0.2]
+    session.create_client.assert_called_once_with(
+        "bedrock-runtime",
+        region_name="us-east-1",
+        aws_access_key_id="key-id",
+        aws_secret_access_key="secret",
+    )
+    request = bedrock_client.invoke_model.call_args.kwargs
+    assert request["modelId"] == "cohere.rerank-v3-5:0"
+    assert json.loads(request["body"]) == {
+        "query": "q",
+        "documents": ["first", "second"],
+        "api_version": 2,
+    }
+    client_context.__aexit__.assert_awaited_once()

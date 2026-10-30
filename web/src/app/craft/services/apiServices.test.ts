@@ -186,7 +186,7 @@ const selection = {
   providerId: 13,
   providerName: "OpenAI Compatible Test",
   provider: "openai_compatible",
-  modelName: "gpt-5-mini",
+  modelName: "gpt-6-luna",
 };
 
 describe("Craft LLM selection payloads", () => {
@@ -202,7 +202,7 @@ describe("Craft LLM selection payloads", () => {
     expect(JSON.parse(String(request!.body))).toMatchObject({
       provider: "onyx",
       provider_id: 13,
-      model: "gpt-5-mini",
+      model: "gpt-6-luna",
     });
   });
 

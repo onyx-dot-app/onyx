@@ -6,7 +6,7 @@
 # image and bootstraps .vscode/.env.k8s from the tracked template. Safe to
 # re-run on a partially-set-up machine.
 #
-# See docs/craft/dev/local-kubernetes.md for the full workflow.
+# See deployment/helm/dev/README.md for the full workflow.
 #
 # Usage:
 #   deployment/helm/dev/craft-up.sh
@@ -19,6 +19,7 @@
 #   --skip-sandbox-image           skip the sandbox image build, but still run
 #                                  `kind load` so a previously-built image gets
 #                                  picked up by a fresh cluster
+#   --rebuild-sandbox-image        force a rebuild instead of reusing the image
 #   -h | --help                    show this help
 #
 # Any unrecognised flag is passed through to k8s-up.sh.
@@ -28,12 +29,12 @@ set -euo pipefail
 CLUSTER_NAME="onyx-dev"
 SKIP_HELM=0
 SKIP_SANDBOX_IMAGE=0
+REBUILD_SANDBOX_IMAGE=0
 PASSTHROUGH=()
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-SANDBOX_IMAGE="onyxdotapp/sandbox:dev"
-SANDBOX_IMAGE_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/image"
+SANDBOX_IMAGE="${SANDBOX_IMAGE:-onyxdotapp/sandbox:dev}"
 ENV_K8S="$REPO_ROOT/.vscode/.env.k8s"
 ENV_K8S_TEMPLATE="$REPO_ROOT/.vscode/.env.k8s.template"
 ENV_WEB="$REPO_ROOT/.vscode/.env.web"
@@ -43,7 +44,7 @@ require() {
   local bin="$1"
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo "error: '$bin' is required but not on PATH" >&2
-    echo "see docs/craft/dev/local-kubernetes.md for installation" >&2
+    echo "see deployment/helm/dev/README.md for installation" >&2
     exit 1
   fi
 }
@@ -72,6 +73,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_SANDBOX_IMAGE=1
       shift
       ;;
+    --rebuild-sandbox-image)
+      REBUILD_SANDBOX_IMAGE=1
+      shift
+      ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -86,10 +91,16 @@ done
 require docker
 require kind
 require kubectl
+require python3
 # helm is only invoked by k8s-up.sh when it actually installs the chart;
 # with --skip-helm the cluster-only workflow shouldn't demand helm on PATH.
 if [[ "$SKIP_HELM" -eq 0 ]]; then
   require helm
+fi
+
+if [[ "$REBUILD_SANDBOX_IMAGE" -eq 1 && "$SKIP_SANDBOX_IMAGE" -eq 1 ]]; then
+  echo "error: --skip-sandbox-image and --rebuild-sandbox-image conflict" >&2
+  exit 2
 fi
 
 # ---- 1. cluster bring-up (delegates) ----
@@ -117,39 +128,46 @@ bootstrap_env_file() {
 }
 
 bootstrap_env_file "$ENV_K8S" "$ENV_K8S_TEMPLATE" \
-  "edit <REPLACE THIS> values (at minimum GEN_AI_API_KEY)"
+  "add personal overrides or model credentials as needed"
 
 bootstrap_env_file "$ENV_WEB" "$ENV_WEB_TEMPLATE"
 
 # ---- 3. sandbox image build + load ----
 
-if [[ "$SKIP_SANDBOX_IMAGE" -eq 1 ]]; then
+IMAGE_ARGS=(--reuse)
+if [[ "$REBUILD_SANDBOX_IMAGE" -eq 1 ]]; then
+  IMAGE_ARGS=(--force)
+elif [[ "$SKIP_SANDBOX_IMAGE" -eq 1 ]]; then
   echo "==> skipping sandbox image build (--skip-sandbox-image)"
-else
-  echo "==> building $SANDBOX_IMAGE ..."
-  docker build -t "$SANDBOX_IMAGE" "$SANDBOX_IMAGE_DIR"
+elif ! docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then
+  IMAGE_ARGS=()
 fi
 
-echo "==> loading $SANDBOX_IMAGE into kind node ($CLUSTER_NAME) ..."
-kind load docker-image "$SANDBOX_IMAGE" --name "$CLUSTER_NAME"
+python3 "$SCRIPT_DIR/dev.py" --cluster-name "$CLUSTER_NAME" images \
+  --only sandbox --load-only ${IMAGE_ARGS[@]+"${IMAGE_ARGS[@]}"}
 
 # ---- 4. next steps ----
 
 cat <<EOF
 
-craft-up complete.
+Craft infrastructure ready. The local API and frontend are not started by this command.
 
 next steps:
   1. open vscode and run the "Run All Onyx Services (k8s)" launch profile.
      (api + web + every celery worker + beat, intercepting api_server via
      telepresence.)
 
-  2. visit http://localhost:3000 once services are up.
+  2. verify the local API through the frontend:
+       make craft-ready
+     Then visit http://localhost:3000.
 
   3. rebuild loop for the sandbox image:
        make craft-sandbox-image
 
-teardown:
+end of day (preserves data; stop the local launch compound first):
+  make craft-pause
+
+full teardown (deletes cluster data):
   make craft-down
 
 EOF

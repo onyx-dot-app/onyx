@@ -52,8 +52,8 @@ Requires Postgres/Redis up. `EVAL_LLM_PROVIDER` is the provider's *configured
 name* in Onyx (e.g. `"DevEnvPresetOpenAI"`), not the slug `"openai"`; when the
 env vars are unset the tenant default provider is used. In CI (fresh database,
 no provider configured) the conftest auto-provisions an OpenAI provider from
-`OPENAI_API_KEY` using `gpt-5-mini`. Use the cheap tiers for real calls: OpenAI
-`gpt-5-mini` or Anthropic `claude-haiku-4-5`.
+`OPENAI_API_KEY` using `gpt-6-luna`. Use the cheap tiers for real calls: OpenAI
+`gpt-6-luna` or Anthropic `claude-haiku-4-5`.
 
 The test prints a per-case report (expected vs got, per-category breakdown) —
 run with `-s` to see it on success too.

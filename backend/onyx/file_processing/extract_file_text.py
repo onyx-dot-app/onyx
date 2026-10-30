@@ -340,13 +340,19 @@ def read_pdf_file(
             )
 
         if extract_images:
-            images = iter_pdf_extracted_images(pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE)
-            if image_callback is None:
-                extracted_images.extend(images)
-            else:
-                # Stream each image out immediately
-                for img_bytes, image_name in images:
-                    image_callback(img_bytes, image_name)
+            # Images are best-effort: a failure here must not discard the text.
+            try:
+                images = iter_pdf_extracted_images(
+                    pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE
+                )
+                if image_callback is None:
+                    extracted_images.extend(images)
+                else:
+                    # Stream each image out immediately
+                    for img_bytes, image_name in images:
+                        image_callback(img_bytes, image_name)
+            except Exception:
+                logger.exception("Failed to extract pdf images")
 
         return text, metadata, extracted_images
 

@@ -5,6 +5,7 @@ import threading
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -130,6 +131,7 @@ def _validate(
         connector_specific_config=_PROPOSED_CONFIG,
         credential=cc_pair.credential,
         access_type=AccessType.PUBLIC,
+        user_id=uuid4(),
     )
 
 

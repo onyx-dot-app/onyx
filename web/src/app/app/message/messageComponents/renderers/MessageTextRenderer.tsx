@@ -10,7 +10,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 import { useTypewriter } from "@/hooks/useTypewriter";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   ChatPacket,
   PacketType,
@@ -101,15 +101,13 @@ export const MessageTextRenderer: MessageRenderer<
   onComplete,
   renderType,
   animate,
+  restoredTextLength = 0,
   stopPacketSeen,
   stopReason,
   children,
 }) => {
   const t = useTranslations("chat.messages");
   const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
-  );
   const setIsStreamDraining = useChatSessionStore(
     (state) => state.setIsStreamDraining
   );
@@ -273,7 +271,8 @@ export const MessageTextRenderer: MessageRenderer<
   const { displayed: displayedContent, isDraining } = useTypewriter(
     content,
     isStreamingAnimationEnabled,
-    isStreamFinished
+    isStreamFinished,
+    restoredTextLength
   );
 
   // One-way signal: stream done AND typewriter caught up. Do NOT derive
@@ -301,34 +300,16 @@ export const MessageTextRenderer: MessageRenderer<
   // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
   // ever goes true→false during a renderer's lifetime, so its mount-time
   // value distinguishes "actively-streaming renderer" (animate=true) from
-  // "historical mount" (animate=false). Used to gate the queue-release
-  // write below.
+  // "historical mount" (animate=false) for scroll draining below.
   const wasEverAnimatingRef = useRef(animate);
 
-  // Bind sessionId at mount so a navigation while the typewriter is still
-  // draining doesn't write the completion flag to the newly-active session.
+  // Keep scroll-draining updates on the session that mounted this renderer.
   const sessionIdAtMountRef = useRef(
     useChatSessionStore.getState().currentSessionId
   );
-
-  // Fire onComplete exactly once per mount. `onComplete` is an inline
-  // arrow in AgentMessage so its identity changes on every parent render;
-  // without this guard, each new identity would re-fire the effect once
-  // `streamFullyDisplayed` is true.
-  const onCompleteFiredRef = useRef(false);
   useEffect(() => {
-    if (streamFullyDisplayed && !onCompleteFiredRef.current) {
-      onCompleteFiredRef.current = true;
-      onComplete();
-      // Only the renderer that was actively streaming (mounted with
-      // animate=true) flips the chat-session gate back to "rendered".
-      // Historical mounts leave the flag alone so they don't release the
-      // queue while a newer stream is still in flight.
-      if (wasEverAnimatingRef.current && sessionIdAtMountRef.current) {
-        setLatestMessageRenderComplete(sessionIdAtMountRef.current, true);
-      }
-    }
-  }, [streamFullyDisplayed, onComplete, setLatestMessageRenderComplete]);
+    if (streamFullyDisplayed) onComplete();
+  }, [streamFullyDisplayed, onComplete]);
 
   // Mirror the typewriter's drain state into the chat-session store so
   // ChatScrollContainer can pause auto-scroll while the drain runs. Only
@@ -384,9 +365,7 @@ export const MessageTextRenderer: MessageRenderer<
         );
       },
       p: ({ children, dir }) => (
-        <MemoizedParagraph dir={dir} className="font-main-content-body">
-          {children}
-        </MemoizedParagraph>
+        <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
       ),
       pre: ({ children }) => <>{children}</>,
       b: ({ className, children }) => (
@@ -460,9 +439,11 @@ export const MessageTextRenderer: MessageRenderer<
       status: null,
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
-          <Text as="span" secondaryBody text04 className="italic">
-            {t("text.thinkingPlaceholder.text")}
-          </Text>
+          <span className="italic">
+            <Text font="secondary-body" color="text-04">
+              {t("text.thinkingPlaceholder.text")}
+            </Text>
+          </span>
         ) : displayedContent.length > 0 ? (
           <div
             dir="auto"

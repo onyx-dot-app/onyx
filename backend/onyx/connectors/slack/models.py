@@ -3,7 +3,7 @@ from typing import NotRequired
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from onyx.connectors.capability_checks.models import CheckRowText
+from onyx.connectors.models import CheckRowText
 
 
 class ChannelTopicPurposeType(TypedDict):

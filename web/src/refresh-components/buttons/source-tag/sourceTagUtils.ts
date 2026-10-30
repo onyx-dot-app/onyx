@@ -1,6 +1,6 @@
 import { OnyxDocument } from "@/lib/search/types";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
-import { SubQuestionDetail } from "@/app/app/interfaces";
+import { SubQuestionDetail } from "@/app/app/types";
 import { StreamingCitation } from "@/app/app/services/streamingModels";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceInfo } from "./SourceTagDetailsCard";

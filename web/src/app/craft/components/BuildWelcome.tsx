@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { motion, useReducedMotion } from "motion/react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
-import Text from "@/refresh-components/texts/Text";
 import { FoldableLogo } from "@/lib/app/components";
 import CraftInputBar, {
   CraftInputBarHandle,
@@ -23,7 +22,7 @@ interface BuildWelcomeProps {
     message: string,
     files: BuildFile[],
     model?: BuildLlmSelection | null
-  ) => void;
+  ) => boolean | void | Promise<boolean | void>;
   isRunning: boolean;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
@@ -80,8 +79,8 @@ export default function BuildWelcome({
                 size={28}
                 className="translate-y-[6px]"
               />
-              <Text
-                text05
+              <span
+                className="font-main-ui-body text-text-05"
                 style={{
                   fontFamily: "var(--font-kh-teka)",
                   fontWeight: 400,
@@ -93,7 +92,7 @@ export default function BuildWelcome({
                 }}
               >
                 craft
-              </Text>
+              </span>
             </button>
             <ModelPickerButton
               selection={selectedModel}

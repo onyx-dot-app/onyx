@@ -16,18 +16,23 @@ import (
 )
 
 const (
-	defaultSkillSource = ".claude/skills/onyx-infra"
-	// Checkout location used before the skills moved into onyx-infra, still
-	// honored when it is the only checkout on disk.
+	defaultSkillSource = ".claude/skills/agent-context"
+	// Parent of the default checkout. A checkout of the internal infra repo
+	// under another name here (an older default) is still found.
+	skillSourceParent = ".claude/skills"
+	// Checkout location used before the skills moved into the internal infra
+	// repo, still honored when it is the only checkout on disk.
 	legacySkillSource = ".claude/skills/onyx-llm-context"
 	claudeMDFile      = ".claude/CLAUDE.md"
 	// Repo-relative home of on-demand skills. Claude, Codex and Cursor read
 	// it through the .claude/skills, .codex/skills and .cursor/skills symlinks.
 	projectSkillsDir = ".agents/skills"
-	// The skills live in the agent-context/ subdirectory of onyx-infra, a
-	// private repo that is large, so --clone fetches only that subdirectory.
-	agentContextCloneURL = "https://github.com/onyx-dot-app/onyx-infra.git"
-	agentContextDir      = "agent-context"
+	// The skills live in the agent-context/ subdirectory of the internal infra
+	// repo, a private repo that is large, so --clone fetches only that
+	// subdirectory. This env var overrides the repo (owner/name); see
+	// resolveInternalRepo.
+	agentContextRepoEnv = "ODS_AGENT_CONTEXT_REPO"
+	agentContextDir     = "agent-context"
 
 	agentClaudeCode = "claude-code"
 	agentCursor     = "cursor"
@@ -60,8 +65,8 @@ func NewInstallSkillCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install-skill",
 		Short: "Install Onyx agent-context skills for your coding agent",
-		Long: `Install skills from agent-context/ in onyx-infra (private) for one or more
-coding agents.
+		Long: `Install skills from agent-context/ in the internal infra repo (private) for
+one or more coding agents.
 
 claude-code (default):
   Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md
@@ -84,13 +89,17 @@ codex:
 The checkout is fast-forwarded before installing, so a plain rerun picks up
 new skills; --no-pull installs from the checkout as it is.
 
-By default, looks for an onyx-infra checkout at ~/.claude/skills/onyx-infra.
---clone fetches only its agent-context/ directory (shallow, sparse). Checkouts
-of the old onyx-llm-context repo still work.`,
+By default, looks for a checkout of the internal infra repo at
+~/.claude/skills/agent-context, or for any other checkout under
+~/.claude/skills that holds agent-context/. --clone fetches only its
+agent-context/ directory (shallow, sparse). It reads the repo from the
+CLOUD_DEPLOYMENT_REPO variable of onyx-dot-app/onyx, or from
+ODS_AGENT_CONTEXT_REPO (owner/name) when set. Checkouts of the old
+onyx-llm-context repo still work.`,
 		Example: `  ods install-skill --clone
   ods install-skill --agent cursor
   ods install-skill --agent claude-code --agent cursor --agent codex
-  ods install-skill --source /path/to/onyx-infra
+  ods install-skill --source /path/to/checkout
   ods install-skill --copy`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			installers, err := resolveAgents(agents)
@@ -105,12 +114,14 @@ of the old onyx-llm-context repo still work.`,
 				}
 				source = filepath.Join(home, defaultSkillSource)
 				legacy := filepath.Join(home, legacySkillSource)
-				if _, err := os.Stat(source); os.IsNotExist(err) && !cloneRepo {
-					if _, err := os.Stat(legacy); err == nil {
+				if _, err := os.Stat(source); os.IsNotExist(err) {
+					if found := findAgentContextCheckout(filepath.Join(home, skillSourceParent)); found != "" {
+						source = found
+					} else if _, err := os.Stat(legacy); err == nil && !cloneRepo {
 						_, _ = fmt.Fprintf(
 							cmd.ErrOrStderr(),
 							"Warning: using the old checkout at %s, which is no longer updated.\n"+
-								"  Re-run with --clone to switch to onyx-infra.\n",
+								"  Re-run with --clone to switch to the internal infra repo.\n",
 							legacy,
 						)
 						source = legacy
@@ -120,9 +131,13 @@ of the old onyx-llm-context repo still work.`,
 
 			if _, err := os.Stat(source); os.IsNotExist(err) {
 				if !cloneRepo {
-					return fmt.Errorf("onyx-infra checkout not found at %s\n  Re-run with --clone to fetch it automatically", source)
+					return fmt.Errorf("agent-context checkout not found at %s\n  Re-run with --clone to fetch it automatically", source)
 				}
-				if err := cloneAgentContext(cmd, agentContextCloneURL, source); err != nil {
+				repo, err := resolveInternalRepo(agentContextRepoEnv)
+				if err != nil {
+					return err
+				}
+				if err := cloneAgentContext(cmd, "https://github.com/"+repo+".git", source); err != nil {
 					return err
 				}
 			} else if !noPull {
@@ -147,17 +162,35 @@ of the old onyx-llm-context repo still work.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&source, "source", "", "Path to an onyx-infra checkout (default: ~/.claude/skills/onyx-infra)")
+	cmd.Flags().StringVar(&source, "source", "", "Path to a checkout of the internal infra repo (default: ~/.claude/skills/agent-context)")
 	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code and codex manual skills)")
-	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone the agent-context/ directory of %s if not already present", agentContextCloneURL))
+	cmd.Flags().BoolVar(&cloneRepo, "clone", false, "Clone the agent-context/ directory of the internal infra repo if not already present")
 	cmd.Flags().BoolVar(&noPull, "no-pull", false, "Install from the checkout as it is, without updating it first")
 	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor, codex")
 
 	return cmd
 }
 
+// findAgentContextCheckout returns the first directory under parent that holds
+// agent-context/, or "" when there is none. It finds checkouts made at an
+// older default location.
+func findAgentContextCheckout(parent string) string {
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		candidate := filepath.Join(parent, entry.Name())
+		if info, err := os.Stat(filepath.Join(candidate, agentContextDir)); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
 // cloneAgentContext makes a shallow, sparse checkout of url at dest holding
-// only agent-context/, since onyx-infra is large and the rest is not needed.
+// only agent-context/, since the internal infra repo is large and the rest is
+// not needed.
 func cloneAgentContext(cmd *cobra.Command, url, dest string) error {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cloning %s (%s/ only) → %s\n", url, agentContextDir, dest)
 	steps := [][]string{
@@ -175,7 +208,7 @@ func cloneAgentContext(cmd *cobra.Command, url, dest string) error {
 			}
 			if i == 0 {
 				return fmt.Errorf(
-					"git clone failed: %w\n  onyx-infra is a private repo; make sure you have access to it "+
+					"git clone failed: %w\n  the internal infra repo is a private repo; make sure you have access to it "+
 						"and that git can authenticate to GitHub (for example with `gh auth login`)",
 					err,
 				)

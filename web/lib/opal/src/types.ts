@@ -69,6 +69,25 @@ export type ContainerSizeVariants = Exclude<SizeVariants, "full" | "xl">;
 export type Rounding = 0.5 | 1 | 2 | 3 | 4 | 5 | "full";
 
 /**
+ * A line height on the {@link Spacing} scale, one of the `--height-line-*`
+ * tokens in size.json: `N` is `N / 4` rem.
+ *
+ * | Step | px | Token                     |
+ * |------|----|---------------------------|
+ * | `3`  | 12 | `height-line-small`       |
+ * | `4`  | 16 | `height-line-secondary`   |
+ * | `5`  | 20 | `height-line-main`        |
+ * | `6`  | 24 | `height-line-label`       |
+ * | `7`  | 28 | `height-line-h3-section`  |
+ * | `8`  | 32 | `height-line-h2-sub-headline` |
+ * | `9`  | 36 | `height-line-h1-headline` |
+ * | `12` | 48 | `height-line-h1-hero`     |
+ *
+ * Closed, like {@link Rounding}: only the app's line heights are valid.
+ */
+export type LineHeight = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12;
+
+/**
  * Extreme size variants ("fit" and "full" only).
  *
  * Used for width and height properties that only support extremal values.
@@ -113,12 +132,10 @@ export type ContextualMenuWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90 | 120 | 160;
 export type ShadowVariants = "none" | Extract<SizeVariants, "sm" | "md" | "lg">;
 
 /**
- * Size variants with numeric overrides.
- *
- * Allows size specification as a named preset or a custom numeric value.
- * Used in components that need programmatic sizing flexibility.
+ * `"fit"`, `"full"`, or a fixed length as a {@link Spacing} step (`N / 4` rem,
+ * converted with `spacingToRem`), e.g. `46` is `11.5rem`.
  */
-export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
+export type OverridableExtremaSizeVariants = ExtremaSizeVariants | Spacing;
 
 // ---------------------------------------------------------------------------
 // Orientation Variants
@@ -290,6 +307,204 @@ export type InputVariants =
   | "error"
   | "disabled"
   | "readOnly";
+
+// ---------------------------------------------------------------------------
+// Currency
+// ---------------------------------------------------------------------------
+
+/**
+ * An active ISO 4217 currency code, for `InputCurrency`'s `currency` prop.
+ * Withdrawn codes (DEM, HRK, ZWL) are left out; `Intl.supportedValuesOf`
+ * still lists them.
+ */
+export type CurrencyCode =
+  | "AED"
+  | "AFN"
+  | "ALL"
+  | "AMD"
+  | "AOA"
+  | "ARS"
+  | "AUD"
+  | "AWG"
+  | "AZN"
+  | "BAM"
+  | "BBD"
+  | "BDT"
+  | "BHD"
+  | "BIF"
+  | "BMD"
+  | "BND"
+  | "BOB"
+  | "BOV"
+  | "BRL"
+  | "BSD"
+  | "BTN"
+  | "BWP"
+  | "BYN"
+  | "BZD"
+  | "CAD"
+  | "CDF"
+  | "CHE"
+  | "CHF"
+  | "CHW"
+  | "CLF"
+  | "CLP"
+  | "CNY"
+  | "COP"
+  | "COU"
+  | "CRC"
+  | "CUP"
+  | "CVE"
+  | "CZK"
+  | "DJF"
+  | "DKK"
+  | "DOP"
+  | "DZD"
+  | "EGP"
+  | "ERN"
+  | "ETB"
+  | "EUR"
+  | "FJD"
+  | "FKP"
+  | "GBP"
+  | "GEL"
+  | "GHS"
+  | "GIP"
+  | "GMD"
+  | "GNF"
+  | "GTQ"
+  | "GYD"
+  | "HKD"
+  | "HNL"
+  | "HTG"
+  | "HUF"
+  | "IDR"
+  | "ILS"
+  | "INR"
+  | "IQD"
+  | "IRR"
+  | "ISK"
+  | "JMD"
+  | "JOD"
+  | "JPY"
+  | "KES"
+  | "KGS"
+  | "KHR"
+  | "KMF"
+  | "KPW"
+  | "KRW"
+  | "KWD"
+  | "KYD"
+  | "KZT"
+  | "LAK"
+  | "LBP"
+  | "LKR"
+  | "LRD"
+  | "LSL"
+  | "LYD"
+  | "MAD"
+  | "MDL"
+  | "MGA"
+  | "MKD"
+  | "MMK"
+  | "MNT"
+  | "MOP"
+  | "MRU"
+  | "MUR"
+  | "MVR"
+  | "MWK"
+  | "MXN"
+  | "MXV"
+  | "MYR"
+  | "MZN"
+  | "NAD"
+  | "NGN"
+  | "NIO"
+  | "NOK"
+  | "NPR"
+  | "NZD"
+  | "OMR"
+  | "PAB"
+  | "PEN"
+  | "PGK"
+  | "PHP"
+  | "PKR"
+  | "PLN"
+  | "PYG"
+  | "QAR"
+  | "RON"
+  | "RSD"
+  | "RUB"
+  | "RWF"
+  | "SAR"
+  | "SBD"
+  | "SCR"
+  | "SDG"
+  | "SEK"
+  | "SGD"
+  | "SHP"
+  | "SLE"
+  | "SOS"
+  | "SRD"
+  | "SSP"
+  | "STN"
+  | "SVC"
+  | "SYP"
+  | "SZL"
+  | "THB"
+  | "TJS"
+  | "TMT"
+  | "TND"
+  | "TOP"
+  | "TRY"
+  | "TTD"
+  | "TWD"
+  | "TZS"
+  | "UAH"
+  | "UGX"
+  | "USD"
+  | "USN"
+  | "UYI"
+  | "UYU"
+  | "UYW"
+  | "UZS"
+  | "VED"
+  | "VES"
+  | "VND"
+  | "VUV"
+  | "WST"
+  | "XAF"
+  | "XAG"
+  | "XAU"
+  | "XBA"
+  | "XBB"
+  | "XBC"
+  | "XBD"
+  | "XCD"
+  | "XCG"
+  | "XDR"
+  | "XOF"
+  | "XPD"
+  | "XPF"
+  | "XPT"
+  | "XSU"
+  | "XTS"
+  | "XUA"
+  | "XXX"
+  | "YER"
+  | "ZAR"
+  | "ZMW"
+  | "ZWG";
+
+/**
+ * Fraction digits an amount field accepts. A number is clamped to an integer
+ * in [0, 15]: amounts are JS numbers, which hold up to 15 significant digits
+ * exactly. `"unlimited"` is 15, spelled out for callers with no business
+ * limit. Like
+ * {@link Rounding}'s `"full"`, it is a string because a literal `Infinity`
+ * would widen the union back to `number`.
+ */
+export type CurrencyPrecision = number | "unlimited";
 
 /**
  * HTML button `type` attribute values.

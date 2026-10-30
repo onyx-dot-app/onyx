@@ -20,6 +20,7 @@ from ee.onyx.db.external_perm import (
     upsert_external_groups,
 )
 from ee.onyx.external_permissions.sync_params import (
+    external_group_sync_seconds,
     get_all_cc_pair_agnostic_group_sync_sources,
     get_source_perm_sync_config,
 )
@@ -122,7 +123,8 @@ def fail_lost_queued_external_group_sync_attempts(app: Celery) -> None:
     lost task (e.g. a Redis restart without persistence) does not hold the
     pair's lock until the task would have expired. A task that a worker has
     already taken also looks lost here; its claim then fails and the beat
-    dispatches the pair again, so the check errs only toward a redispatch."""
+    dispatches the pair again once the retry backoff for that failure ends,
+    so the check errs only toward a later redispatch."""
     with get_session_with_current_tenant() as db_session:
         candidates = get_not_started_external_group_sync_attempts_older_than(
             db_session, timedelta(seconds=PERMISSION_SYNC_LOST_TASK_GRACE)
@@ -164,25 +166,14 @@ def is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
         )
         return False
 
-    # A paused, invalid or deleting pair does not sync until it is active again.
-    if not cc_pair.status.is_active():
+    # None while a paused, invalid or deleting pair waits to be active again, and
+    # for a source without groups. Fleet telemetry reports the same period.
+    source_sync_period = external_group_sync_seconds(
+        cc_pair.connector.source, cc_pair.status
+    )
+    if source_sync_period is None:
         task_logger.debug(
-            f"Skipping group sync for CC Pair {cc_pair.id} - status is {cc_pair.status}"
-        )
-        return False
-
-    sync_config = get_source_perm_sync_config(cc_pair.connector.source)
-    if sync_config is None:
-        task_logger.debug(
-            f"Skipping group sync for CC Pair {cc_pair.id} - no sync config found for {cc_pair.connector.source}"
-        )
-        return False
-
-    # If there is not group sync function for the connector, we don't run the sync
-    # This is fine because all sources dont necessarily have a concept of groups
-    if sync_config.group_sync_config is None:
-        task_logger.debug(
-            f"Skipping group sync for CC Pair {cc_pair.id} - no group sync config found for {cc_pair.connector.source}"
+            f"Skipping group sync for CC Pair {cc_pair.id} - status is {cc_pair.status}, source is {cc_pair.connector.source}"
         )
         return False
 
@@ -198,8 +189,6 @@ def is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     pending_since = cc_pair.perm_sync_pending_since
     if pending_since is not None and last_ext_group_sync < pending_since:
         return True
-
-    source_sync_period = sync_config.group_sync_config.group_sync_frequency
 
     # If the last sync is greater than the full fetch period, we run the sync
     next_sync = last_ext_group_sync + timedelta(seconds=source_sync_period)

@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ensureHrefProtocol } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Dropdown, OpenButton } from "@opal/components";
+import { Button, Dropdown, SelectButton, Text } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
@@ -23,9 +22,11 @@ const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 secondaryAction className="my-0! text-center">
-      {children}
-    </Text>
+    <p className="my-0! text-center">
+      <Text font="secondary-action" color="text-03">
+        {richNodes(children)}
+      </Text>
+    </p>
   ),
   a: ({
     href,
@@ -42,8 +43,8 @@ const footerMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text text03 secondaryAction>
-          {children}
+        <Text font="secondary-action" color="text-03">
+          {richNodes(children)}
         </Text>
       </a>
     );
@@ -122,7 +123,8 @@ export default function NRFChrome() {
           {showModeToggle && (
             <Dropdown open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
               <Dropdown.Trigger asChild>
-                <OpenButton
+                <SelectButton
+                  chevron
                   aria-label={t("appChrome.modeButton.ariaLabel")}
                   icon={
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
@@ -132,7 +134,7 @@ export default function NRFChrome() {
                   {effectiveMode === "search"
                     ? t("appChrome.mode.search.label")
                     : t("appChrome.mode.chat.label")}
-                </OpenButton>
+                </SelectButton>
               </Dropdown.Trigger>
               <Dropdown.Data
                 label={t("appChrome.modeButton.ariaLabel")}

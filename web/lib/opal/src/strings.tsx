@@ -1,6 +1,10 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
+import {
+  getCurrencyParts,
+  type CurrencyParts,
+} from "@opal/components/inputs/numbers/input-currency/currency";
 
 /**
  * Labels Opal renders itself. Hosts translate them via `OpalStringsProvider`.
@@ -11,6 +15,9 @@ export type OpalStrings = {
   loadingPage: string;
   /** The Cancel action `SettingsLayouts.Header` renders when `cancel` is set. */
   settingsHeaderCancel: string;
+  /** `SettingsLayouts.Body`'s error state: a title from the page name, and the description used when the page gives none. */
+  settingsBodyErrorTitle: (page: string) => string;
+  settingsBodyErrorDescription: string;
   copy: string;
   copied: string;
   copyCode: string;
@@ -49,6 +56,8 @@ export type OpalStrings = {
   remove: string;
   removeItem: (title: string) => string;
   showFullMessage: string;
+  /** The collapsed toast pile's label, e.g. "+2 more". */
+  toastMoreCount: (count: number) => string;
   selectAnOption: string;
   openCalendar: string;
   month: string;
@@ -66,6 +75,8 @@ export type OpalStrings = {
   collapsibleExpand: string;
   collapsibleFoldSection: (title: string) => string;
   collapsibleExpandSection: (title: string) => string;
+  sidebarOpen: string;
+  sidebarClose: string;
   dividerViewAll: string;
   contentOptional: string;
   previousPage: string;
@@ -116,12 +127,25 @@ export type OpalStrings = {
   keyValueGroup: (keyTitle: string, valueTitle: string) => string;
   keyValueInput: (label: string, index: number) => string;
   keyValuePairFallback: string;
+  /** A number field's value outside its range. Either bound may be absent. */
+  inputNumberOutOfRange: (
+    min: number | undefined,
+    max: number | undefined
+  ) => string;
   keyValueRemovePair: (label: string, index: number) => string;
 
   /** Locale digits, no grouping, for the counts Opal renders itself (footer range, page numbers). */
   formatNumber: (value: number) => string;
   /** Inverse of formatNumber for typed input: a whole number in the locale digits (ASCII always accepted), else null. */
   parseNumber: (text: string) => number | null;
+  /** InputCurrency: label of the whole field. */
+  inputCurrencyAmount: string;
+  /** InputCurrency: label of the whole-number segment. */
+  inputCurrencyWhole: string;
+  /** InputCurrency: label of the fraction segment. */
+  inputCurrencyFraction: string;
+  /** InputCurrency: how the locale writes amounts in `currency` (an ISO 4217 code). */
+  inputCurrencyParts: (currency: string) => CurrencyParts;
   /** Table footer summary, e.g. "Showing 1~10 of 22", as text chunks around the two styled nodes. */
   showing: (range: ReactNode, total: ReactNode) => ReactNode;
   /** Pagination count summary, e.g. "1~10 of 22", same chunk shape as `showing`. */
@@ -133,6 +157,8 @@ export const defaultOpalStrings: OpalStrings = {
   loading: "Loading",
   loadingPage: "Loading …",
   settingsHeaderCancel: "Cancel",
+  settingsBodyErrorTitle: (page: string) => `${page} failed to load`,
+  settingsBodyErrorDescription: "Something went wrong. Try again in a moment.",
   copy: "Copy",
   copied: "Copied!",
   copyCode: "Copy code",
@@ -163,6 +189,7 @@ export const defaultOpalStrings: OpalStrings = {
   remove: "Remove",
   removeItem: (title) => `Remove ${title}`,
   showFullMessage: "Show the full message",
+  toastMoreCount: (count) => `+${count} more`,
   selectAnOption: "Select an option",
   openCalendar: "Open calendar",
   month: "Month",
@@ -180,6 +207,8 @@ export const defaultOpalStrings: OpalStrings = {
   collapsibleExpand: "Expand",
   collapsibleFoldSection: (title) => `Fold ${title}`,
   collapsibleExpandSection: (title) => `Expand ${title}`,
+  sidebarOpen: "Open Sidebar",
+  sidebarClose: "Close Sidebar",
   dividerViewAll: "View All",
   contentOptional: "(Optional)",
   previousPage: "Previous page",
@@ -235,11 +264,21 @@ export const defaultOpalStrings: OpalStrings = {
       : `${count} validation errors found`,
   keyValueGroup: (keyTitle, valueTitle) =>
     `${keyTitle} and ${valueTitle} pairs`,
+  inputNumberOutOfRange: (min, max) =>
+    min !== undefined && max !== undefined
+      ? `Enter a number from ${min} to ${max}`
+      : min !== undefined
+        ? `Enter a number of at least ${min}`
+        : `Enter a number of at most ${max}`,
   keyValueInput: (label, index) => `${label} ${index}`,
   keyValuePairFallback: "key-value",
   keyValueRemovePair: (label, index) => `Remove ${label} pair ${index}`,
   formatNumber: (value) => String(value),
   parseNumber: (text) => (/^\d+$/.test(text) ? Number(text) : null),
+  inputCurrencyAmount: "Amount",
+  inputCurrencyWhole: "Whole amount",
+  inputCurrencyFraction: "Fractional amount",
+  inputCurrencyParts: (currency) => getCurrencyParts("en-US", currency),
   showing: (range, total) => ["Showing ", range, " of ", total],
   rangeOfTotal: (range, total) => [range, " of ", total],
 };

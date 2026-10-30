@@ -27,3 +27,15 @@ class JiraGroupMemberSample(BaseModel):
     complete: bool
     # The groups whose first page was read.
     groups_read: int
+
+
+class JiraProjectSample(BaseModel):
+    """The projects a permission check reads, in probe order. ``total`` is the
+    number of projects in scope, or None when the probe could not count them."""
+
+    project_keys: list[str]
+    total: int | None
+
+    @property
+    def covers_scope(self) -> bool:
+        return self.total is not None and len(self.project_keys) >= self.total

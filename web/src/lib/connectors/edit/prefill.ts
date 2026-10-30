@@ -12,6 +12,7 @@ import type {
 } from "@/lib/connectors/types/source";
 import {
   connectorConfigFromForm,
+  findConfigField,
   connectorFormControlFieldNames,
   createConnectorInitialValues,
   formOnlyFieldNames,
@@ -45,7 +46,14 @@ function tabFor(
   config: Record<string, unknown>
 ): string | null {
   const stored = config[field.name];
-  if (typeof stored === "string") return stored;
+  // A stored tab that no longer exists (a renamed tab) falls through to the
+  // tab whose fields hold values.
+  if (
+    typeof stored === "string" &&
+    field.tabs.some((tab) => tab.value === stored)
+  ) {
+    return stored;
+  }
   // Only a field that selects a scope picks the tab: a supporting checkbox
   // (e.g. Confluence's index_recursively) is stored under any scope.
   const withValues = field.tabs.find((option) =>
@@ -128,6 +136,26 @@ function accessValues(
  * over the form defaults, the pair's name, schedule and access, and the tab
  * that holds the stored values.
  */
+/** The stored config as form values: a list field stored as one
+ * comma-joined string (see its `transform`) edits as its entries. */
+function listValues(
+  configuration: ConnectionConfiguration,
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(config).map(([name, value]) => [
+      name,
+      typeof value === "string" &&
+      findConfigField(configuration, name)?.type === "list"
+        ? value
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry !== "")
+        : value,
+    ])
+  );
+}
+
 export function editInitialValues(
   source: ConfigurableSources,
   configuration: ConnectionConfiguration,
@@ -136,19 +164,21 @@ export function editInitialValues(
 ): ConnectorFormValues {
   const config: Record<string, unknown> =
     ccPair.connector.connector_specific_config ?? {};
-  const { refresh_freq, prune_freq, indexing_start } = ccPair.connector;
+  const { refresh_freq, prune_freq, check_freq, indexing_start } =
+    ccPair.connector;
   return {
     ...createConnectorInitialValues(source),
     ...tabValues(
       [...configuration.values, ...configuration.advanced_values],
       config
     ),
-    ...config,
+    ...listValues(configuration, config),
     ...credentialRealmValues(source, ccPair),
     ...accessValues(ccPair.access_type, dataAccessGroupIds),
     name: ccPair.name,
     refreshFreq: refresh_freq === null ? undefined : refresh_freq / 60,
     pruneFreq: prune_freq === null ? undefined : prune_freq / 3600,
+    checkFreq: check_freq === null ? undefined : check_freq / 3600,
     // The date picker holds "YYYY-MM-DD".
     indexingStart: indexing_start === null ? "" : indexing_start.slice(0, 10),
   };
@@ -204,6 +234,7 @@ const NON_CONFIG_FORM_KEYS: ReadonlySet<string> = new Set([
   "pruneFreq",
   "indexingStart",
   "refreshFreq",
+  "checkFreq",
   "auto_sync_options",
 ]);
 
@@ -310,6 +341,13 @@ export function buildEditProposal(
       values.pruneFreq,
       initialValues.pruneFreq,
       ccPair.connector.prune_freq,
+      3600
+    ),
+    // Cleared, null: the checks run only on request.
+    check_freq: proposedSeconds(
+      values.checkFreq,
+      initialValues.checkFreq,
+      ccPair.connector.check_freq,
       3600
     ),
   };

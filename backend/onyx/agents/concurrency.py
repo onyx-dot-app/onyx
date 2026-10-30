@@ -1,0 +1,357 @@
+"""Thread ownership and event delivery for an execution tree."""
+
+import threading
+import time
+from collections import Counter, deque
+from collections.abc import Callable
+from concurrent.futures import Future
+from contextvars import copy_context
+
+from onyx.agents.events import (
+    AgentEvent,
+    is_shareable_delta,
+)
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import (
+    start_thread_future,
+    start_thread_with_context,
+)
+
+logger = setup_logger()
+OPERATION_TIMEOUT_SECONDS = 1800.0
+EVENT_FLUSH_INTERVAL_SECONDS = 0.05
+
+
+class WorkTracker:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._count = 0
+        self._listeners: set[Callable[[], None]] = set()
+
+    def started(self) -> None:
+        with self._lock:
+            self._count += 1
+
+    def finished(self, count: int = 1) -> None:
+        with self._lock:
+            self._count -= count
+            listeners = tuple(self._listeners) if self._count == 0 else ()
+            if listeners:
+                self._listeners.clear()
+        for listener in listeners:
+            try:
+                listener()
+            except Exception:
+                logger.exception("Agent idle callback failed")
+
+    def on_idle(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Notify once when current work drains; callers must stop admitting new work."""
+        with self._lock:
+            idle = self._count == 0
+            if not idle:
+                self._listeners.add(listener)
+        if idle:
+            listener()
+
+        def unsubscribe() -> None:
+            with self._lock:
+                self._listeners.discard(listener)
+
+        return unsubscribe
+
+    def follow(self, other: "WorkTracker") -> None:
+        """Include existing work after its owner stops admitting new operations."""
+        self.started()
+        other.on_idle(self.finished)
+
+    def wait_idle(self, timeout: float) -> bool:
+        finished = threading.Event()
+        unsubscribe = self.on_idle(finished.set)
+        try:
+            return finished.wait(timeout)
+        finally:
+            unsubscribe()
+
+
+def wait_operation[T](
+    future: Future[T],
+    signal: CancellationSignal,
+    timeout: float = OPERATION_TIMEOUT_SECONDS,
+) -> T:
+    finished = threading.Event()
+    future.add_done_callback(lambda _future: finished.set())
+    with signal.on_cancel(finished.set):
+        signal.check()
+        if not finished.wait(timeout):
+            raise TimeoutError("Agent operation exceeded its bound")
+        signal.check()
+        return future.result()
+
+
+class ExecutionWork:
+    """Track a run's jobs independently of its terminal result."""
+
+    def __init__(self) -> None:
+        self.tracker = WorkTracker()
+
+    def start[T](self, operation: Callable[[], T]) -> Future[T]:
+        self.tracker.started()
+        try:
+            future = start_thread_future(operation, name="agent-operation")
+        except BaseException:
+            self.tracker.finished()
+            raise
+        future.add_done_callback(lambda _future: self.tracker.finished())
+        return future
+
+    def track_operation(self, future: Future[None]) -> None:
+        self.tracker.started()
+
+        def finished(_future: Future[None]) -> None:
+            self.tracker.finished()
+
+        future.add_done_callback(finished)
+
+
+class EventDispatcher:
+    """Deliver queued agent events to listeners on one shared worker.
+
+    The optional flush callback batches listener output on that same worker. It
+    receives True after close drains all accepted events, for final output cleanup.
+    Events remain pending until their listener output has been flushed.
+    """
+
+    def __init__(
+        self,
+        *,
+        flush: Callable[[bool], None] | None = None,
+    ) -> None:
+        self._flush = flush
+        self._context = copy_context()
+        self._condition = threading.Condition()
+        self._queue: deque[tuple[tuple[EventDelivery, ...], AgentEvent]] = deque()
+        self._pending_event_count = 0
+        self._closed = False
+        self._release_when_idle = False
+        self._worker: threading.Thread | None = None
+
+    def publish(self, delivery: "EventDelivery", event: AgentEvent) -> None:
+        channels: list[EventDelivery] = []
+        try:
+            with self._condition:
+                has_listeners = False
+                current: EventDelivery | None = delivery
+                while current is not None:
+                    with current._lock:
+                        if current is delivery and current._closing:
+                            return
+                        if not current._closing and not current.failed.is_set():
+                            current.tracker.started()
+                            channels.append(current)
+                            has_listeners |= bool(current._listeners)
+                        current = current._parent
+                if not has_listeners:
+                    return
+                if self._closed:
+                    raise RuntimeError("Agent event dispatcher is closed")
+                owned_event = (
+                    event if is_shareable_delta(event) else event.model_copy(deep=True)
+                )
+                self.start()
+                self._pending_event_count += 1
+                self._queue.append((tuple(channels), owned_event))
+                self._condition.notify()
+                channels = []
+        except Exception:
+            for channel in channels:
+                channel.failed.set()
+            logger.exception("Agent event delivery could not queue an event")
+        finally:
+            for channel in channels:
+                channel.tracker.finished()
+
+    def start(self) -> None:
+        with self._condition:
+            if self._worker is None and not self._closed:
+                self._worker = start_thread_with_context(
+                    self._deliver, name="agent-events", daemon=True
+                )
+
+    def _deliver(self) -> None:
+        last_flush = time.monotonic()
+        delivered_event_count = 0
+        channel_event_counts: Counter[EventDelivery] = Counter()
+        while True:
+            with self._condition:
+                self._condition.wait_for(
+                    lambda: self._closed or self._release_when_idle or self._queue,
+                    EVENT_FLUSH_INTERVAL_SECONDS
+                    if self._flush is not None
+                    else OPERATION_TIMEOUT_SECONDS,
+                )
+                item = self._queue.popleft() if self._queue else None
+                exiting = item is None and (
+                    self._closed or self._release_when_idle or self._flush is None
+                )
+                final_flush = exiting and self._closed
+            if item is not None:
+                channels, event = item
+                try:
+                    for index, channel in enumerate(channels):
+                        channel._context.run(
+                            channel._send,
+                            event,
+                            owns_event=index == len(channels) - 1,
+                        )
+                finally:
+                    delivered_event_count += 1
+                    channel_event_counts.update(channels)
+            flush_due = self._flush is not None and (
+                exiting or time.monotonic() - last_flush >= EVENT_FLUSH_INTERVAL_SECONDS
+            )
+            if flush_due and self._flush is not None:
+                try:
+                    self._context.run(self._flush, final_flush)
+                except (AgentCancelled, Exception) as error:
+                    for channel in channel_event_counts:
+                        channel.failed.set()
+                    if isinstance(error, AgentCancelled):
+                        logger.debug("Agent event sink flush cancelled")
+                    else:
+                        logger.exception("Agent event sink flush failed")
+                last_flush = time.monotonic()
+            if self._flush is None or flush_due:
+                with self._condition:
+                    self._pending_event_count -= delivered_event_count
+                delivered_event_count = 0
+                for channel, count in channel_event_counts.items():
+                    channel._context.run(channel.tracker.finished, count)
+                channel_event_counts.clear()
+            if exiting:
+                with self._condition:
+                    if self._queue or (
+                        self._flush is not None and self._closed and not final_flush
+                    ):
+                        continue
+                    self._worker = None
+                    return
+
+    @property
+    def has_pending_events(self) -> bool:
+        """Whether accepted events await delivery or a buffered-output flush."""
+        with self._condition:
+            return self._pending_event_count > 0
+
+    @property
+    def is_dispatch_thread(self) -> bool:
+        with self._condition:
+            return (
+                self._worker is not None and self._worker.ident == threading.get_ident()
+            )
+
+    def pause(self) -> None:
+        """Release the worker when accepted events drain."""
+        with self._condition:
+            self._release_when_idle = True
+            self._condition.notify_all()
+
+    def resume(self) -> None:
+        with self._condition:
+            self._release_when_idle = False
+
+    def close(self) -> None:
+        """Reject new events and let the worker exit after accepted work drains."""
+        with self._condition:
+            try:
+                if self._flush is not None:
+                    self.start()
+            finally:
+                self._closed = True
+                self._condition.notify_all()
+
+
+class EventDelivery:
+    """Deliver run events and route foreground child events to ancestor listeners."""
+
+    def __init__(
+        self,
+        dispatcher: EventDispatcher | None = None,
+        *,
+        parent: "EventDelivery | None" = None,
+    ) -> None:
+        if parent is not None:
+            if dispatcher is not None and dispatcher is not parent.dispatcher:
+                raise ValueError("Related event deliveries must share a dispatcher")
+            dispatcher = parent.dispatcher
+        self._parent = parent
+        self._lock = threading.Lock()
+        self._listeners: list[Callable[[AgentEvent], None]] = []
+        self._closing = False
+        self.failed = threading.Event()
+        self.tracker = WorkTracker()
+        self._context = copy_context()
+        self._owns_dispatcher = dispatcher is None
+        self.dispatcher = dispatcher if dispatcher is not None else EventDispatcher()
+
+    def subscribe(self, listener: Callable[[AgentEvent], None]) -> Callable[[], None]:
+        with self._lock:
+            if not self._closing:
+                self._listeners.append(listener)
+
+        def unsubscribe() -> None:
+            with self._lock:
+                if listener in self._listeners:
+                    self._listeners.remove(listener)
+
+        return unsubscribe
+
+    def publish(self, event: AgentEvent) -> None:
+        self.dispatcher.publish(self, event)
+
+    @property
+    def is_dispatch_thread(self) -> bool:
+        return self.dispatcher.is_dispatch_thread
+
+    def _send(self, event: AgentEvent, *, owns_event: bool) -> None:
+        shareable = is_shareable_delta(event)
+        with self._lock:
+            listeners = tuple(self._listeners)
+        for index, listener in enumerate(listeners):
+            with self._lock:
+                if listener not in self._listeners:
+                    continue
+            try:
+                # Mutable snapshots belong exclusively to the final listener.
+                listener(
+                    event
+                    if shareable or owns_event and index == len(listeners) - 1
+                    else event.model_copy(deep=True)
+                )
+            except AgentCancelled:
+                self.failed.set()
+                logger.debug("Agent observer cancelled")
+            except Exception:
+                self.failed.set()
+                logger.exception("Agent observer failed")
+
+    def resume(self) -> None:
+        if self._owns_dispatcher:
+            self.dispatcher.resume()
+
+    def pause(self) -> None:
+        """Drain accepted events while retaining subscriptions for resumed execution."""
+        if self._owns_dispatcher:
+            self.dispatcher.pause()
+
+    def close(self) -> None:
+        """Stop accepting events and release listeners after accepted work drains."""
+        with self._lock:
+            self._closing = True
+        self.tracker.on_idle(self._clear_listeners)
+        if self._owns_dispatcher:
+            self.dispatcher.close()
+
+    def _clear_listeners(self) -> None:
+        with self._lock:
+            self._listeners.clear()

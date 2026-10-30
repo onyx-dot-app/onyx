@@ -16,7 +16,7 @@ import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { RATE_LIMITED_ERROR_CODE } from "@/app/app/interfaces";
+import { RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
@@ -77,8 +77,7 @@ interface BuildMessageListProps {
  * Per-turn structure after filtering:
  *   [Working block | single tool card], [last thinking?], [final text]
  * The in-progress turn additionally pins the latest TodoListCard to the top
- * (sticky) and surfaces a "working on…" pill at the bottom while a tool is
- * mid-stream.
+ * (sticky) and keeps a flashing cursor visible until the turn settles.
  */
 export default function BuildMessageList({
   sessionId,
@@ -136,10 +135,12 @@ export default function BuildMessageList({
 
   const hasStreamItems = streamItems.length > 0;
   const lastMessage = messages[messages.length - 1];
-  const lastMessageIsUser = lastMessage?.type === "user";
   const showStreamingArea =
     hasStreamItems ||
-    (isStreaming && (lastMessageIsUser || messages.length === 0));
+    (isStreaming && (!isFinalizing || lastMessage?.type !== "assistant"));
+  const showStreamCursor =
+    isStreaming &&
+    !streamItems.some((item) => item.type === "text" && item.isStreaming);
 
   const renderStreamItems = (
     rawItems: StreamItem[],
@@ -455,6 +456,7 @@ export default function BuildMessageList({
                       sessionId={sessionId}
                       attachments={message.attachments}
                       refreshKey={attachmentRefreshKey}
+                      onFileOpen={onFileOpen}
                     />
                   )}
                   <HumanMessage content={message.content} nodeId={idx} />
@@ -511,14 +513,15 @@ export default function BuildMessageList({
                   />
                 </div>
               )}
-              {!hasStreamItems ? (
-                <div className="h-9 flex items-center">
-                  <BlinkingBar />
-                </div>
-              ) : (
+              {hasStreamItems && (
                 <AnimatePresence initial={false}>
                   {streamRender?.nodes}
                 </AnimatePresence>
+              )}
+              {showStreamCursor && (
+                <div className="h-9 flex items-center">
+                  <BlinkingBar />
+                </div>
               )}
               {trailingAssistantSlot}
             </div>

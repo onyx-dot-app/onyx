@@ -22,10 +22,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckAdvisory,
-    CheckNotApplicableError,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -35,10 +34,11 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
 from onyx.connectors.notion.config import NotionConnectorConfig
 from onyx.connectors.notion.models import NotionSearchObjectType, NotionSearchResponse
 from onyx.connectors.notion.source_operations import (
@@ -48,6 +48,14 @@ from onyx.connectors.notion.source_operations import (
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/notion"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit} without an answer from Notion.\n"
+        "Re-run the checks."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Notion")
 _ERROR_DETAIL_CHARS = 300
 # Keeps a row's line short when it names a page or database.
 _TITLE_CHARS = 24
@@ -68,14 +76,18 @@ _READ_USERS = "Read user information"
 _AUTH_CHECK_ID = "notion_auth"
 _SHARED_CONTENT_CHECK_ID = "notion_shared_content"
 _ROOT_PAGE_CHECK_ID = "notion_root_page"
-# check_id to the checks it runs after. The shared-content and root-page
-# checks are alternatives: only one applies to a config.
+_PAGE_CONTENT_CHECK_ID = "notion_page_content"
+# check_id to the checks it runs after.
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _SHARED_CONTENT_CHECK_ID: (_AUTH_CHECK_ID,),
     _ROOT_PAGE_CHECK_ID: (_AUTH_CHECK_ID,),
-    "notion_page_content": (_SHARED_CONTENT_CHECK_ID, _ROOT_PAGE_CHECK_ID),
     "notion_database_rows": (_AUTH_CHECK_ID,),
     "notion_user_info": (_AUTH_CHECK_ID,),
+}
+# The shared-content and root-page checks are alternatives: a config applies
+# only one, and a run without a config waits for the root page.
+_DEPENDS_ON_ANY: dict[str, tuple[str, ...]] = {
+    _PAGE_CONTENT_CHECK_ID: (_SHARED_CONTENT_CHECK_ID, _ROOT_PAGE_CHECK_ID),
 }
 
 
@@ -154,7 +166,7 @@ def _raise_for_api_error(
             ),
         ) from error
     if status is None and error.timed_out:
-        raise UnreachableValidationError(
+        raise TimedOutValidationError(
             f"Notion did not answer in time: {detail}",
             summary="Timed out",
             description="Notion did not answer the request in time.\nRe-run the checks.",
@@ -251,18 +263,25 @@ class _NotionCheck(CapabilityCheck[NotionConnectorConfig]):
         display_name: str,
         remediation: str,
         required: bool = True,
+        validates_binding: bool = False,
+        requires_connector_config: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
             check_id=check_id,
             display_name=display_name,
             depends_on=_DEPENDS_ON.get(check_id, ()),
+            depends_on_any=_DEPENDS_ON_ANY.get(check_id, ()),
             required=required,
             requires_connector_instance=False,
+            requires_connector_config=requires_connector_config,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -287,7 +306,9 @@ class _AuthCheck(_NotionCheck):
                 "settings in Notion (Integrations > the integration > "
                 "Configuration) and update the credential."
             ),
+            validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -305,13 +326,10 @@ class _AuthCheck(_NotionCheck):
             ) from e
         except NotionApiError as e:
             if e.status_code is None and e.timed_out:
-                raise UnreachableValidationError(
+                raise TimedOutValidationError(
                     f"Notion did not answer the sign-in in time: {e}",
-                    summary="Sign-in timed out",
-                    description=(
-                        "Notion did not answer the sign-in in time.\nRe-run, or "
-                        "check that Notion is reachable from Onyx."
-                    ),
+                    summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                    description=_SIGN_IN_TIMEOUT_TEXT.description,
                 ) from e
             _raise_for_api_error(
                 e,
@@ -376,9 +394,8 @@ class _SharedContentCheck(_NotionCheck):
 
 class _RootPageCheck(_NotionCheck):
     """Reads the root page as indexing does: a page, else a database (a page
-    that became a wiki is a database). A run without a config has no root
-    page: indexing then reads every shared page, which the shared-content
-    check tests."""
+    that became a wiki is a database). A run without a config waits for the
+    settings."""
 
     config_class = NotionConnectorConfig
 
@@ -386,6 +403,7 @@ class _RootPageCheck(_NotionCheck):
         super().__init__(
             check_id=_ROOT_PAGE_CHECK_ID,
             display_name="Find root page",
+            requires_connector_config=True,
             remediation=(
                 "Use the 32-character ID at the end of the page URL. Then share the "
                 "page with the integration: open the page, select the ••• menu > "
@@ -399,8 +417,6 @@ class _RootPageCheck(_NotionCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         root_page_id: str = _root_page_id(self.config(context))
-        if not root_page_id:
-            raise CheckNotApplicableError("No root page is set.")
         gateway: NotionSourceOperations = _gateway(context)
         try:
             page: dict[str, Any] = gateway.get_page(page_id=root_page_id, fast=True)
@@ -455,7 +471,7 @@ class _PageContentCheck(_NotionCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="notion_page_content",
+            check_id=_PAGE_CONTENT_CHECK_ID,
             display_name="Sample page content",
             remediation=(
                 f"{_CAPABILITIES_HINT} and select 'Read content'. Then share the "

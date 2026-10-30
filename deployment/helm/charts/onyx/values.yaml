@@ -5,7 +5,7 @@
 # Overlays:
 #   - values-lite.yaml: minimal deployment without vector DB, Redis, or model servers.
 #   - ../../dev/values-localdev.yaml: local Kubernetes development (source repository only).
-#     See /docs/craft/dev/local-kubernetes.md.
+#     See deployment/helm/dev/README.md.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -201,6 +201,19 @@ autoscaling:
 
 inferenceCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume. Without one, a model that the image
+  # does not bundle (only the default model is bundled; nomic is not) downloads
+  # again on every pod start. At startup, the model server copies the bundled
+  # model into the volume. The chart does not create the claim. With a
+  # ReadWriteOnce claim, keep replicaCount at 1 and set strategy.type: Recreate.
+  # Give indexCapability its own claim.
+  # volumes:
+  #   - name: hf-cache
+  #     persistentVolumeClaim:
+  #       claimName: onyx-inference-model-hf-cache
+  # volumeMounts:
+  #   - name: hf-cache
+  #     mountPath: /app/.cache/huggingface
   volumes: []
   volumeMounts: []
   service:
@@ -278,6 +291,7 @@ inferenceCapability:
 
 indexCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume: see inferenceCapability.volumes.
   volumes: []
   volumeMounts: []
   service:
@@ -394,6 +408,23 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+logExport:
+  kubernetes:
+    # Off by default. When on, the api-server runs as its own service account
+    # (<release>-api-server) with get/list on pods, pods/log, and events in the
+    # release namespace. The admin log export then collects stdout from every
+    # Onyx pod, the logs of crashed containers, pod status, and events. The
+    # other Onyx pods keep the service account above and get no such access.
+    # When off, the export collects log files from one replica per worker type.
+    #
+    # The new service account gets serviceAccount.annotations plus the
+    # annotations below. If the api-server uses IRSA or Workload Identity, add
+    # the role annotation here when it is not in serviceAccount.annotations,
+    # and allow the new service account name in the IAM trust policy.
+    enabled: false
+    serviceAccount:
+      annotations: {}
+
 nginx:
   enabled: true
   # Nginx proxy timeout settings (in seconds)
@@ -412,7 +443,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "10"
+      onyx.app/nginx-config-version: "11"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -624,10 +655,21 @@ api:
   # every replica at once, and a lone not-ready pod leaves the Service empty.
   # Do NOT put /health/ready on the liveness probe.
   #
-  # Liveness and startup probes stay opt-in. Size a startupProbe for the longest
-  # migration you expect, or it kills the pod mid-migration.
+  # Liveness and startup probes stay opt-in. /health answers only after startup:
+  # the migrations, then the wait for the model server to load a self-hosted
+  # embedding model, with a download if it is not cached (up to
+  # LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT, 1800 s by default). A livenessProbe
+  # with no startupProbe therefore restarts the pod during a download. Size the
+  # startupProbe (periodSeconds x failureThreshold) for the longest migration
+  # you expect plus that timeout.
   #
   # Example:
+  # startupProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: api-server-port
+  #   periodSeconds: 10
+  #   failureThreshold: 200  # 2000 s
   # readinessProbe:
   #   httpGet:
   #     path: /health/ready
@@ -1205,6 +1247,59 @@ mcpServer:
   tolerations: []
   affinity: {}
 
+webhookServer:
+  extraEnv: []
+  # Runs the webhook server. It serves health and metrics only; the route that
+  # receives connector events comes later. Creates the deployment; the service
+  # always exists so nginx can name it. The ingress and servicemonitor also
+  # need `ingress.enabled` and `monitoring.serviceMonitors.enabled`. With
+  # ingress.enabled=false the bundled nginx routes /webhook instead.
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  # Prefix the ingress routes here, stripped before the app sees it.
+  ingressPath: /webhook
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+  deploymentLabels:
+    app: webhook-server
+  service:
+    type: ClusterIP
+    servicePort: 8091
+    targetPort: webhook-port
+    portName: webhook-port
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
@@ -1755,6 +1850,10 @@ configMap:
   ASYM_PASSAGE_PREFIX: ""
   DISABLE_RERANK_FOR_STREAMING: ""
   MODEL_SERVER_PORT: ""
+  # Seconds the API server waits on startup for the model server to load a
+  # self-hosted embedding model, including a download if it is not cached;
+  # "" = 1800. Startup fails when the wait runs out. "0" disables the wait.
+  LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT: ""
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""
@@ -1812,8 +1911,9 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
-  # Time limit in seconds for one doc permission sync or group sync (default:
-  # JOB_TIMEOUT_SECONDS, 6h); raise it for a source whose full sync takes longer.
+  # Time limit in seconds for one group sync (default: JOB_TIMEOUT_SECONDS, 6h);
+  # raise it for a source whose group sync takes longer. A doc permission sync
+  # has no time limit. It stops after an hour without progress.
   PERMISSION_SYNC_TIMEOUT_SECONDS: ""
   # Document-index sync beat lock TTL in seconds (default 120); raise it if the
   # sync pass aborts with "no longer owned" or "Lock not owned on completion".
@@ -1827,6 +1927,12 @@ configMap:
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
+  # Limits for the admin log export through the Kubernetes API
+  # (logExport.kubernetes.enabled). Empty uses the defaults: last 100000 lines
+  # per container log, 25 MiB per container log, 500 MiB per export.
+  LOG_EXPORT_KUBERNETES_TAIL_LINES: ""
+  LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM: ""
+  LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty
   # (default) -> Python falls back to "info" for the api/model/etc processes;
@@ -1848,15 +1954,15 @@ configMap:
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
-  # ONYX_SERVER_URL must be the full API base URL, path prefix included — e.g.
-  # "https://onyx.example/api" through the public proxy, or
-  # "http://<release>-api-service.<ns>.svc.cluster.local:8080" directly at the
-  # API service (no prefix). It is required when ENABLE_CRAFT=true.
+  # ONYX_SERVER_URL defaults to the chart's internal API Service when Craft is enabled.
+  # Set an explicit full API base URL, including any path prefix, to override it:
+  # ONYX_SERVER_URL: "https://onyx.example/api"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  # The chart's service account and the api-server's (see logExport) are always bound.
   extraBoundServiceAccounts: []
   # CIDR(s) of any non-pod cluster DNS listener the sandbox must reach for firewall-init.sh's
   # proxy-FQDN getent lookup. A NodeLocal DNS cache is a hostNetwork endpoint (its listen IP is

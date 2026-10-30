@@ -19,8 +19,8 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
   error pages: `IllustrationContent`.
 - Buttons: `Button` from `@opal/components`. No raw `<button>`.
 - Inputs: Opal or refresh-components. No raw `<input>`, `<textarea>`, or `<select>`.
-- Text: `Text` from `@opal/components` with `font` and `color` props. No naked text nodes. The
-  boolean-flag API in `refresh-components/texts/Text` is deprecated.
+- Text: `Text` from `@opal/components` with `font` and `color` props. No naked text nodes. For
+  one-line text that shows a tooltip when cut, use `OverflowText`.
 - Icons: only `@opal/icons`. Never `lucide-react` or `react-icons`. If an icon is missing, import
   it from Figma with the Figma MCP tool and add it to `lib/opal/src/icons/`.
 - Hover-reveal: `Hoverable` from `@opal/core`. If you must hand-write it, add `no-hover:opacity-100`
@@ -55,6 +55,14 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
   subset of it.
 - **Padding over margin.** Use a component's `padding` prop before wrapping it in a `<div>`. If a
   library component has no such prop, add one to the component instead of adding a wrapper.
+- **Inputs sit 1rem from their container's edge.** Build the 1rem from two 0.5rem steps, not from
+  absolute positioning:
+  - Give the container 0.5rem, for example `Modal.Body padding={2}`.
+  - A naked input (no card around it): wrap it in `InputPadder`, which adds the other 0.5rem. Put
+    `InputDivider` between naked groups.
+  - A covered input: to group inputs visually, put them in a white, borderless `<Card padding={2}>`.
+    The card adds 0.5rem, and the input's own 0.5rem internal padding adds the rest. Do not wrap
+    inputs inside the card in `InputPadder`.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 
@@ -83,6 +91,13 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 - Keys are stable identifiers: `<namespace>.<section>.<element>.<role>` in camelCase, for example
   `settings.appearance.colorMode.title`. Rewording the English never changes the key.
 - Use ICU for arguments and plurals. Never concatenate translated fragments.
+- Use title case for English setting titles: field labels and the titles of settings sections and
+  cards (`Include Pull Requests`, `Categories to Index`). Keep articles, short conjunctions and
+  prepositions in lowercase, except as the first or last word. Do not change brand or acronym casing
+  (`GitHub`, `API`). Use sentence case for placeholders, descriptions, messages and errors. A
+  placeholder prompts the action and does not repeat the field's title (`Add a display name`, not
+  `Display name`). A change in letter case only needs no new translation; the `i18n-copy-changes`
+  hook ignores it.
 - Dates and numbers: `useFormatter` and `useLocale`, not hard-coded `"en-US"`.
 - New styles use logical properties (`ms-`, `pe-`, `start-`) instead of `ml-`, `pr-`, `left-`.
 

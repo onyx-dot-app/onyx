@@ -73,7 +73,6 @@ function VertexAIModalInternals({
     } else if (authMethod === AUTH_METHOD_SERVICE_ACCOUNT) {
       formikProps.setFieldValue(FIELD_VERTEX_PROJECT, "");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMethod]);
 
   const showAuthMethodSelector = !isMultiTenant;

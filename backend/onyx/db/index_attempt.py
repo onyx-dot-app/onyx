@@ -1,6 +1,6 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import TypeVarTuple
+from typing import NamedTuple, TypeVarTuple
 
 from sqlalchemy import (
     ColumnElement,
@@ -19,8 +19,10 @@ from sqlalchemy.orm import Session, joinedload
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.backfill_models import BackfillSpec
+from onyx.db.cc_pair_run_resolution import run_is_resolved
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -39,6 +41,9 @@ from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Bounds stored failure text; a raw upstream error body can run to megabytes.
+MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS = 10_000
 
 
 def get_last_attempt_for_cc_pair(
@@ -503,13 +508,20 @@ def mark_attempt_canceled(
     index_attempt_id: int,
     db_session: Session,
     reason: str = "Unknown",
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
@@ -538,13 +550,20 @@ def mark_attempt_failed(
     db_session: Session,
     failure_reason: str = "Unknown",
     full_exception_trace: str | None = None,
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
@@ -943,25 +962,42 @@ def get_error_counts_for_index_attempts(
     return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
-def get_open_doc_error_counts_for_index_attempts(
+class OpenErrorCounts(NamedTuple):
+    # Whole entities (a drive, a channel) included.
+    total: int = 0
+    # Only these can be re-fetched by a targeted reindex.
+    docs: int = 0
+
+
+def get_open_error_counts_for_index_attempts(
     db_session: Session,
     index_attempt_ids: list[int],
-) -> dict[int, int]:
-    """Per-attempt counts of unresolved document-level errors, the ones a
-    targeted reindex can retry. Attempt ids with none are absent."""
+) -> dict[int, OpenErrorCounts]:
+    """Per-attempt counts of open errors. An error is open while unresolved on
+    an attempt no admin resolved. The run resolution leaves ``is_resolved``
+    alone for the poll cursor and Retry. Attempt ids with none are absent."""
     if not index_attempt_ids:
         return {}
 
     stmt = (
-        select(IndexAttemptError.index_attempt_id, func.count())
+        select(
+            IndexAttemptError.index_attempt_id,
+            func.count(),
+            func.count().filter(IndexAttemptError.document_id.isnot(None)),
+        )
         .where(
             IndexAttemptError.index_attempt_id.in_(index_attempt_ids),
             IndexAttemptError.is_resolved.is_(False),
-            IndexAttemptError.document_id.isnot(None),
+            ~run_is_resolved(
+                CCPairRunKind.INDEXING, IndexAttemptError.index_attempt_id
+            ),
         )
         .group_by(IndexAttemptError.index_attempt_id)
     )
-    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
+    return {
+        attempt_id: OpenErrorCounts(total=total, docs=docs)
+        for attempt_id, total, docs in db_session.execute(stmt).all()
+    }
 
 
 def get_paginated_index_attempts_for_cc_pair_id(
@@ -1199,6 +1235,16 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
     return query.distinct().count()
 
 
+def _cap_failure_message(message: str) -> str:
+    if len(message) <= MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS:
+        return message
+    # Sized for the largest possible count, so the result never exceeds the cap.
+    keep = MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS - len(
+        f"... [{len(message)} chars truncated]"
+    )
+    return f"{message[:keep]}... [{len(message) - keep} chars truncated]"
+
+
 def create_index_attempt_error(
     index_attempt_id: int | None,
     connector_credential_pair_id: int,
@@ -1226,7 +1272,7 @@ def create_index_attempt_error(
             if failure.failed_entity and failure.failed_entity.missed_time_range
             else None
         ),
-        failure_message=failure.failure_message,
+        failure_message=_cap_failure_message(failure.failure_message),
         is_resolved=False,
         error_type=type(exc).__name__ if exc else None,
     )
@@ -1234,6 +1280,32 @@ def create_index_attempt_error(
     db_session.commit()
 
     return new_error.id
+
+
+def resolve_index_attempt_errors_for_documents(
+    db_session: Session,
+    cc_pair_id: int,
+    document_ids: Collection[str],
+) -> None:
+    """Mark the pair's open errors for ``document_ids`` resolved in one UPDATE,
+    so the cost scales with the batch, not the pair's open-error backlog.
+    Commits."""
+    if not document_ids:
+        return
+
+    db_session.execute(
+        update(IndexAttemptError)
+        .where(
+            IndexAttemptError.connector_credential_pair_id == cc_pair_id,
+            IndexAttemptError.document_id.in_(document_ids),
+            # Must render as NOT is_resolved to match the partial index;
+            # Postgres does not match `IS false` to it.
+            ~IndexAttemptError.is_resolved,
+        )
+        .values(is_resolved=True)
+        .execution_options(synchronize_session=False)
+    )
+    db_session.commit()
 
 
 def get_index_attempt_errors(
@@ -1260,7 +1332,7 @@ def _cc_pair_errors(
     containing ``query``."""
     stmt = stmt.where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
     if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
+        stmt = stmt.where(~IndexAttemptError.is_resolved)
     if index_attempt_id is not None:
         stmt = stmt.where(IndexAttemptError.index_attempt_id == index_attempt_id)
     if query:
@@ -1370,8 +1442,8 @@ def get_index_attempt_errors_across_connectors(
         count_stmt = count_stmt.where(IndexAttemptError.error_type == error_type)
 
     if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
-        count_stmt = count_stmt.where(IndexAttemptError.is_resolved.is_(False))
+        stmt = stmt.where(~IndexAttemptError.is_resolved)
+        count_stmt = count_stmt.where(~IndexAttemptError.is_resolved)
 
     if start_time is not None:
         stmt = stmt.where(IndexAttemptError.time_created >= start_time)

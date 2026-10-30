@@ -8,7 +8,7 @@
         "input": 0.23,
         "output": 0.96
       },
-      "family": "minimax-m3",
+      "family": "minimax",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -25,7 +25,7 @@
       "name": "MiniMax M3",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-06-12",
+      "release_date": "2026-06-01",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -37,7 +37,7 @@
         "input": 0.25,
         "output": 1.25
       },
-      "family": "qwen3.6",
+      "family": "qwen",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -54,7 +54,7 @@
       "name": "Qwen3.6 35B A3B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-15",
+      "release_date": "2026-04-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -123,7 +123,7 @@
         "input": 0.13,
         "output": 0.28
       },
-      "family": "deepseek",
+      "family": "deepseek-flash",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -151,7 +151,7 @@
         "input": 1.31,
         "output": 3.96
       },
-      "family": "deepseek",
+      "family": "deepseek-thinking",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -179,7 +179,7 @@
         "input": 0.15,
         "output": 0.65
       },
-      "family": "deepseek",
+      "family": "deepseek-flash",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -282,7 +282,7 @@
       "name": "Granite 4.2 8B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-24",
+      "release_date": "2026-08-25",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -338,7 +338,7 @@
       "name": "Llama 3.3 70B",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2024-12-01",
+      "release_date": "2024-12-06",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -545,9 +545,9 @@
     "reflection/Beam-1.0-501B-A23B": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.1,
-        "input": 1,
-        "output": 3
+        "cache_read": 0.04,
+        "input": 0.3,
+        "output": 1
       },
       "family": "beam",
       "limit": {
@@ -562,10 +562,10 @@
           "text"
         ]
       },
-      "name": "Beam 1.0",
+      "name": "Beam 1.0 501B A23B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-10-16",
+      "release_date": "2026-10-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -593,7 +593,7 @@
       "name": "GLM 5.2",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-06-16",
+      "release_date": "2026-06-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -633,7 +633,7 @@
         "input": 0.15,
         "output": 0.5
       },
-      "family": "glm",
+      "family": "glm-flash",
       "limit": {
         "context": 1048576,
         "output": 1048576

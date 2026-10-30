@@ -4,7 +4,6 @@ set -euo pipefail
 
 ONYX_ZED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ONYX_ZED_ROOT
-readonly ONYX_ZED_ENV_FILE="${ONYX_ZED_ROOT}/.vscode/.env.k8s"
 readonly ONYX_ZED_WEB_ENV_FILE="${ONYX_ZED_ROOT}/.vscode/.env.web"
 readonly ONYX_ZED_COMPOSE_FILE="${ONYX_ZED_ROOT}/.zed/process-compose.k8s.yaml"
 readonly ONYX_ZED_CONTROL_PORT=18080
@@ -12,7 +11,7 @@ readonly ONYX_ZED_API_PORT=8080
 readonly ONYX_ZED_WEB_PORT=3000
 
 ONYX_ZED_STACK_STARTED=false
-ONYX_ZED_INTERCEPT_CREATED=false
+ONYX_ZED_INTERCEPT_FILE=""
 ONYX_ZED_CLEANING_UP=false
 ONYX_ZED_PROCESS_TREE_PIDS=()
 
@@ -173,30 +172,6 @@ stop_managed_stack() {
   assert_port_available "$ONYX_ZED_API_PORT" "Onyx API"
 }
 
-update_env_value() {
-  local key="$1"
-  local value="$2"
-  local temporary_file
-
-  # Single quotes preserve backslashes and dollar signs in Process Compose env files.
-  case "$value" in
-    *"'"*|*$'\n'*|*$'\r'*)
-      echo "error: $key contains a quote or newline that cannot be stored safely" >&2
-      return 1
-      ;;
-  esac
-
-  temporary_file="$(mktemp "${ONYX_ZED_ENV_FILE}.tmp.XXXXXX")"
-  ONYX_ZED_ENV_VALUE="'$value'" awk -v key="$key" '
-    BEGIN { found = 0; value = ENVIRON["ONYX_ZED_ENV_VALUE"] }
-    index($0, key "=") == 1 { print key "=" value; found = 1; next }
-    { print }
-    END { if (!found) print key "=" value }
-  ' "$ONYX_ZED_ENV_FILE" >"$temporary_file"
-  chmod 600 "$temporary_file"
-  mv "$temporary_file" "$ONYX_ZED_ENV_FILE"
-}
-
 cleanup() {
   if [[ "$ONYX_ZED_CLEANING_UP" == true ]]; then
     return
@@ -207,8 +182,11 @@ cleanup() {
   if [[ "$ONYX_ZED_STACK_STARTED" == true ]]; then
     stop_managed_stack || true
   fi
-  if [[ "$ONYX_ZED_INTERCEPT_CREATED" == true ]]; then
-    run_bounded 10 telepresence leave onyx-api-server || true
+  if [[ -n "$ONYX_ZED_INTERCEPT_FILE" ]]; then
+    if [[ -s "$ONYX_ZED_INTERCEPT_FILE" ]]; then
+      run_bounded 10 telepresence leave "$(cat "$ONYX_ZED_INTERCEPT_FILE")" || true
+    fi
+    rm -f "$ONYX_ZED_INTERCEPT_FILE"
   fi
 }
 
@@ -233,8 +211,8 @@ if [[ "$#" -gt 0 ]]; then
 fi
 
 require_command bun "install Bun before starting the web server"
+require_command make "install Make before starting local services"
 require_command kubectl "install kubectl before using the local kind cluster"
-require_file "$ONYX_ZED_ENV_FILE" "copy .vscode/.env.k8s.template and fill in its required values"
 require_file "$ONYX_ZED_WEB_ENV_FILE" "run make craft-up to create the web environment file"
 require_file "${ONYX_ZED_ROOT}/.venv/bin/python" "run 'uv sync --frozen' from the repository root"
 
@@ -243,53 +221,19 @@ if ! kubectl config get-contexts kind-onyx-dev -o name >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> reading cluster secrets into .vscode/.env.k8s"
-readonly ONYX_ZED_KUBECTL=(kubectl --context kind-onyx-dev --namespace onyx)
-opensearch_password="$(
-  "${ONYX_ZED_KUBECTL[@]}" get secret onyx-opensearch \
-    -o jsonpath='{.data.opensearch_admin_password}' 2>/dev/null | base64 -d || true
-)"
-if [[ -z "$opensearch_password" ]]; then
-  echo "error: could not read the onyx-opensearch admin password; is the cluster running?" >&2
-  exit 1
-fi
-
-encryption_key="$(
-  "${ONYX_ZED_KUBECTL[@]}" get secret onyx-encryption-key \
-    -o jsonpath='{.data.encryption_key_secret}' 2>/dev/null | base64 -d || true
-)"
-if [[ -z "$encryption_key" ]]; then
-  echo "error: could not read the onyx-encryption-key value; is the cluster running?" >&2
-  exit 1
-fi
-
-update_env_value OPENSEARCH_ADMIN_PASSWORD "$opensearch_password"
-update_env_value ENCRYPTION_KEY_SECRET "$encryption_key"
-unset opensearch_password encryption_key
-
 mkdir -p "${ONYX_ZED_ROOT}/.zed/logs"
 
 stop_managed_stack
 assert_port_available "$ONYX_ZED_WEB_PORT" "Onyx web server"
 
-echo "==> connecting Telepresence to kind-onyx-dev"
-# Clear any previous context; bound the call because Telepresence can hang.
-if ! run_bounded 15 telepresence quit; then
-  echo "    'telepresence quit' did not exit in 15s; killed it and continuing"
-fi
-telepresence connect --context kind-onyx-dev --namespace onyx
-
-echo "==> intercepting onyx-api-server on port ${ONYX_ZED_API_PORT}"
-run_bounded 10 telepresence leave onyx-api-server || true
-telepresence intercept onyx-api-server \
-  --namespace onyx \
-  --port 8080:8080 \
-  --mount=false
-ONYX_ZED_INTERCEPT_CREATED=true
-
+ONYX_ZED_INTERCEPT_FILE="$(mktemp)"
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+echo "==> preparing the API intercept (with stale-agent recovery)"
+make -C "$ONYX_ZED_ROOT" craft-intercept CLUSTER_NAME=onyx-dev NAMESPACE=onyx \
+  INTERCEPT_ARGS="--ownership-file '$ONYX_ZED_INTERCEPT_FILE'"
 
 process_compose_args=(
   --port "$ONYX_ZED_CONTROL_PORT"

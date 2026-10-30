@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useAppPosition } from "@/lib/position/hooks";
@@ -9,11 +8,10 @@ import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
 import { useProjects } from "@/lib/projects/hooks";
-import { useCreateModal } from "@opal/components";
+import { Text, useCreateModal } from "@opal/components";
 import { CreateProjectModal } from "@/lib/projects/components";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import Text from "@/refresh-components/texts/Text";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
   SvgEditBig,
@@ -79,7 +77,6 @@ export default function ChatSearchCommandMenu({
     string | undefined
   >();
   const appPosition = useAppPosition();
-  const router = useRouter();
 
   // Data hooks
   const { projects } = useProjects();
@@ -158,9 +155,9 @@ export default function ChatSearchCommandMenu({
 
   // Navigation handlers
   const handleNewSession = useCallback(() => {
-    router.push("/app");
+    appPosition.openNewSession();
     setOpen(false);
-  }, [router]);
+  }, [appPosition]);
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
@@ -269,16 +266,16 @@ export default function ChatSearchCommandMenu({
                       icon={SvgBubbleText}
                       rightContent={({ isHighlighted }) =>
                         isHighlighted ? (
-                          <Text figureKeystroke text02>
+                          <Text font="figure-keystroke" color="text-02">
                             ↵
                           </Text>
                         ) : (
                           <Text
-                            secondaryBody
-                            text03
+                            font="secondary-body"
+                            color="text-03"
                             data-testid="command-menu-timestamp"
                           >
-                            {timeAgo(chat.time, locale)}
+                            {timeAgo(chat.time, locale) ?? ""}
                           </Text>
                         )
                       }
@@ -330,16 +327,16 @@ export default function ChatSearchCommandMenu({
                     icon={SvgFolder}
                     rightContent={({ isHighlighted }) =>
                       isHighlighted ? (
-                        <Text figureKeystroke text02>
+                        <Text font="figure-keystroke" color="text-02">
                           ↵
                         </Text>
                       ) : (
                         <Text
-                          secondaryBody
-                          text03
+                          font="secondary-body"
+                          color="text-03"
                           data-testid="command-menu-timestamp"
                         >
-                          {timeAgo(project.time, locale)}
+                          {timeAgo(project.time, locale) ?? ""}
                         </Text>
                       )
                     }

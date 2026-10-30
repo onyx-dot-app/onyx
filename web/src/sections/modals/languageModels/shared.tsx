@@ -23,11 +23,8 @@ import { InputSingleComboBox } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputSwitch } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-// The file's unqualified `Text` is the legacy component, kept for its
-// existing call sites.
-import { Text as OpalText } from "@opal/components";
+import { Text } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -62,7 +59,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard } from "@opal/components";
+import { Card, EmptyMessageCard, Tag, Tooltip } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
 import { SvgEdit } from "@opal/icons";
@@ -342,7 +339,7 @@ export function ModelAccessField() {
                 sizePreset="main-ui"
                 variant="section"
                 rightChildren={
-                  <Text secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     {t("access.admin.sharedNote")}
                   </Text>
                 }
@@ -453,7 +450,7 @@ export function ModelAccessField() {
 interface RefetchButtonProps {
   onRefetch: (signal: AbortSignal) => Promise<void> | void;
 }
-function RefetchButton({ onRefetch }: RefetchButtonProps) {
+export function RefetchButton({ onRefetch }: RefetchButtonProps) {
   const t = useTranslations("admin.languageModels.modals");
   const abortRef = useRef<AbortController | null>(null);
   const [isFetching, setIsFetching] = useState(false);
@@ -466,6 +463,8 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
     <Button
       prominence="tertiary"
       icon={isFetching ? IconLoader : SvgRefreshCw}
+      aria-label={t("models.refetch.label")}
+      tooltip={t("models.refetch.label")}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -555,7 +554,7 @@ function modelRightChildren(
 ): React.ReactNode {
   if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
   return (
-    <Text secondaryBody text03 title={visionTitle}>
+    <Text font="secondary-body" color="text-03" title={visionTitle}>
       👁
     </Text>
   );
@@ -671,6 +670,21 @@ function ModelRow({
                   height="auto"
                   gap={1}
                 >
+                  {model.supports_decisions && (
+                    <Tooltip
+                      tooltip={t(
+                        model.supports_chat === false
+                          ? "models.row.decisionTag.decisionOnly"
+                          : "models.row.decisionTag.chatAndDecision"
+                      )}
+                      side="top"
+                    >
+                      <Tag
+                        color="gray"
+                        title={t("models.row.decisionTag.label")}
+                      />
+                    </Tooltip>
+                  )}
                   {modelRightChildren(
                     model,
                     t("models.row.visionMarker.title")
@@ -692,11 +706,13 @@ function ModelRow({
                           editHandle.current?.startEditing();
                         }}
                       />
-                      <ModelSettingsPopover
-                        model={model}
-                        onChange={onSettingsChange}
-                        onOpenChange={setSettingsOpen}
-                      />
+                      {model.supports_chat !== false && (
+                        <ModelSettingsPopover
+                          model={model}
+                          onChange={onSettingsChange}
+                          onOpenChange={setSettingsOpen}
+                        />
+                      )}
                       {!isDefaultModel && onSetDefaultModel && (
                         <Button
                           prominence="internal"
@@ -712,13 +728,15 @@ function ModelRow({
                     </OpalSection>
                   </Hoverable.Item>
                   {isDefaultModel && (
-                    <Text
-                      secondaryAction
-                      nowrap
-                      className="px-1.5 py-1 text-action-selection-05"
-                    >
-                      {t("models.row.defaultLabel")}
-                    </Text>
+                    <span className="px-1.5 py-1 text-action-selection-05">
+                      <Text
+                        font="secondary-action"
+                        wordWrap="whitespace-nowrap"
+                        color="inherit"
+                      >
+                        {t("models.row.defaultLabel")}
+                      </Text>
+                    </span>
                   )}
                 </OpalSection>
               }
@@ -770,14 +788,12 @@ export function ModelSelectionField({
     }
   }, [models]);
 
-  // Automatically derive test_model_name from model_configurations.
-  // Any change to visibility or the model list syncs this automatically.
   useEffect(() => {
-    const firstVisible = models.find((m) => m.is_visible)?.name;
-    if (firstVisible !== formikProps.values.test_model_name) {
-      formikProps.setFieldValue("test_model_name", firstVisible);
+    const testModel = models.find((model) => model.is_visible)?.name;
+    if (testModel !== formikProps.values.test_model_name) {
+      formikProps.setFieldValue("test_model_name", testModel);
     }
-  }, [models]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [models, formikProps.setFieldValue, formikProps.values.test_model_name]);
 
   function setVisibility(modelName: string, visible: boolean) {
     const updated = models.map((m) =>
@@ -906,7 +922,9 @@ export function ModelSelectionField({
                       }
                       isDefaultModel={model.name === defaultModelName}
                       onSetDefaultModel={
-                        providerId != null && model.is_visible
+                        providerId != null &&
+                        model.is_visible &&
+                        model.supports_chat !== false
                           ? () => void setDefaultModel(model.name)
                           : undefined
                       }
@@ -1079,7 +1097,7 @@ function ModalWrapperInner({
     ) {
       setFieldValue("model_configurations", modelConfigurations);
     }
-  }, [modelConfigurations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [modelConfigurations, setFieldValue, values.model_configurations]);
 
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
@@ -1140,9 +1158,9 @@ function ModalWrapperInner({
           </Modal.Body>
           <Modal.Footer>
             {saveIsSlow && (
-              <OpalText font="secondary-body" color="text-03">
+              <Text font="secondary-body" color="text-03">
                 {t("setup.slowSave.text")}
-              </OpalText>
+              </Text>
             )}
             <Button prominence="secondary" onClick={onClose} type="button">
               {t("setup.cancelButton.label")}

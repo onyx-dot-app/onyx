@@ -598,7 +598,7 @@ export default function HooksPage() {
         />
       )}
 
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
@@ -606,9 +606,7 @@ export default function HooksPage() {
           divider
         />
         <SettingsLayouts.Body>
-          {isLoading ? (
-            <IconLoader />
-          ) : specsError || hooksError ? (
+          {specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError
                 ? t("page.loadSpecsFailed.message")

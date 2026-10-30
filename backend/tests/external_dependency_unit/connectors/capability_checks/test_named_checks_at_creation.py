@@ -24,7 +24,6 @@ from onyx.connectors import factory
 from onyx.connectors.capability_checks import creation, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckStateKind,
     StoredDraftRun,
     load_draft_run,
     read_draft_run_for_user,
@@ -42,6 +41,7 @@ from onyx.connectors.capability_checks.models import (
     CountFinding,
     CredentialCapability,
     CredentialCapabilityReport,
+    DraftCheckStateKind,
     FindingOption,
     OptionsFinding,
 )
@@ -579,6 +579,7 @@ def test_validation_replaces_a_run_in_flight(
         connector_id=slack_pair.connector_id,
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()

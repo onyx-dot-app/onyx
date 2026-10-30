@@ -46,9 +46,10 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckNotApplicableError,
     CheckOutput,
-    CheckRowText,
+    CheckStep,
     CredentialCapability,
     OptionsFinding,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -61,6 +62,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     UnreachableValidationError,
 )
+from onyx.connectors.models import CheckRowText, counted
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.slack.connector import (
     channel_keys,
@@ -88,6 +90,13 @@ from onyx.connectors.source_operations import SourceOperations
 
 _SLACK_DOCS_LINK = (
     "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed"
+)
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit}.\nRe-run the checks when no Slack "
+        "indexing job is running."
+    ),
 )
 
 _ADD_SCOPE_REMEDIATION = (
@@ -133,7 +142,7 @@ _PERM_SYNC_PRIVATE_LISTING_CHECK_ID = "slack_perm_sync_private_channel_listing"
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _GRID_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
     _PUBLIC_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
-    "slack_readable_channel_listing": (_AUTH_CHECK_ID,),
+    "slack_readable_channel_listing": (_PUBLIC_LISTING_CHECK_ID,),
     "slack_perm_sync_channel_listing": (_AUTH_CHECK_ID,),
     "slack_message_history_read": (_PUBLIC_LISTING_CHECK_ID,),
     "slack_channel_join_scope": (_AUTH_CHECK_ID,),
@@ -158,11 +167,6 @@ _ROW_IDS: dict[str, str] = {
 def _need(scope: str) -> str:
     """The line that says what the bot token needs."""
     return f"Add the `{scope}` bot scope, then reinstall the app."
-
-
-def _counted(count: int | str, noun: str, plural: str) -> str:
-    """``count`` with its noun: "1 channel", "3 channels", "1000+ channels"."""
-    return f"{count} {noun if str(count) == '1' else plural}"
 
 
 def _channel_name(channel: dict[str, Any]) -> str:
@@ -469,6 +473,8 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
         validates_binding: bool = False,
         discovery: bool = False,
         fails_when_unreachable: bool = False,
+        step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -485,6 +491,8 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
             validates_binding=validates_binding,
             discovery=discovery,
             fails_when_unreachable=fails_when_unreachable,
+            step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -501,6 +509,7 @@ class _TokenAuthCheck(_SlackCheck):
             ),
             validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=sign_in_timeout_text("Slack"),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -643,7 +652,7 @@ class _GridWorkspaceListingCheck(_SlackCheck):
             raise _no_grid_workspaces_error()
         shown = f"{count}+" if more else count
         return CheckOutput(
-            summary=f"{_counted(shown, 'workspace', 'workspaces')} in the org"
+            summary=f"{counted(shown, 'workspace', 'workspaces')} in the org"
         )
 
 
@@ -1073,7 +1082,7 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
         missing = [entry for entry in configured if entry not in visible_channels]
         if not missing:
             return CheckOutput(
-                summary=f"All {_counted(len(configured), 'selected channel', 'selected channels')} found"
+                summary=f"All {counted(len(configured), 'selected channel', 'selected channels')} found"
             )
         message = (
             f"Configured channels are not visible to the bot: {missing}. Each may "
@@ -1093,7 +1102,7 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
             )
         return CheckOutput(
             summary=(
-                f"{_counted(len(missing), 'selected channel', 'selected channels')} "
+                f"{counted(len(missing), 'selected channel', 'selected channels')} "
                 "not visible"
             ),
             description=(
@@ -1158,6 +1167,11 @@ class _ReadableChannelListingCheck(_SlackCheck):
             display_name="List public channels",
             remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:read"),
             discovery=True,
+            step=CheckStep(
+                step_of=_PUBLIC_LISTING_CHECK_ID,
+                running_summary="Channels visible, counting…",
+                unfinished_caveat="Could not count every channel.",
+            ),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -1193,7 +1207,7 @@ class _ReadableChannelListingCheck(_SlackCheck):
             )
         return CheckOutput(
             summary=(
-                f"{_counted(len(finding.options), 'public channel', 'public channels')} "
+                f"{counted(len(finding.options), 'public channel', 'public channels')} "
                 "found"
             ),
             findings=[finding],
@@ -1454,7 +1468,7 @@ class _PrivateChannelMemberListingCheck(_SlackCheck):
             else len(members)
         )
         return CheckOutput(
-            summary=f"Listed {_counted(count, 'member', 'members')} of #{name}"
+            summary=f"Listed {counted(count, 'member', 'members')} of #{name}"
         )
 
 

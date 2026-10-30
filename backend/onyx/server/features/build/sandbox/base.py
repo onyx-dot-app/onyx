@@ -17,7 +17,7 @@ Architecture Note (User-Shared Sandbox Model):
 import json
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from pathlib import PurePosixPath
@@ -48,6 +48,7 @@ from onyx.server.features.build.sandbox.models import (
     PushResult,
     RetriableWriteError,
     SandboxInfo,
+    SandboxResource,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
@@ -193,6 +194,50 @@ class SandboxManager(_ServeMixin, ABC):
 
     supports_opencode_history_persistence: bool = False
 
+    def iter_resources(
+        self, tenant_id: str, deadline: float, sandbox_id: UUID | None = None
+    ) -> Iterator[SandboxResource]:
+        """Inventory only this deployment's resources, including partial provisions."""
+        raise NotImplementedError
+
+    def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
+        """Delete the observed instance after ownership checks. Raise on incomplete deletion."""
+        raise NotImplementedError
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        """Return False only after confirming that workspace storage is absent."""
+        raise NotImplementedError
+
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        """Confirm runtime presence independently of surviving workspace storage."""
+        raise NotImplementedError
+
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        """Identify the owned workspace instance, or confirm its absence."""
+        raise NotImplementedError
+
+    def terminate_observed_resources(
+        self,
+        sandbox_id: UUID,
+        resources: list[SandboxResource],
+        deadline: float,
+    ) -> None:
+        self._close_all_sandbox_buses(sandbox_id)
+        errors: list[Exception] = []
+        for resource in resources:
+            try:
+                if resource.sandbox_id != sandbox_id:
+                    raise ValueError("Cleanup resource belongs to another sandbox")
+                self.delete_resource(resource, deadline)
+            except Exception as e:
+                errors.append(e)
+        if errors:
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} cleanup incomplete: {errors}"
+            ) from errors[0]
+
     def _ensure_document_preview_bundle(
         self, sandbox_id: UUID, run_command: Callable[[list[str]], str]
     ) -> None:
@@ -246,10 +291,8 @@ class SandboxManager(_ServeMixin, ABC):
             tenant_id: Tenant identifier for multi-tenant isolation
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
             provisioning_attempt_number: This attempt's number; stamped onto
-                backend resources at creation so operators can attribute
-                orphans (never read programmatically — the attempt-number
-                condition on DB status writes is what blocks stale
-                attempts).
+                backend resources for cleanup ownership checks. Database writes
+                also require the same current attempt number.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -463,9 +506,11 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: The sandbox ID
 
         Returns:
-            List of session UUIDs found under sessions/. Returns an empty list
-            if the sandbox is not running, has no sessions, or the backend does
-            not support cleanup (e.g. local).
+            List of session UUIDs found under sessions/. An empty list means
+            discovery completed and found no session workspaces.
+
+        Raises:
+            RuntimeError: The runtime is missing or workspace discovery failed.
         """
         ...
 

@@ -28,16 +28,15 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from onyx.chat.save_chat import save_chat_turn
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_session,
     create_new_chat_message,
     get_or_create_root_message,
-    reserve_message_id,
+    reserve_chat_response_ids,
 )
+from onyx.db.chat_response import save_chat_turn
 from onyx.db.models import ChatMessage, ChatSession, ToolCall
-from onyx.db.tools import create_tool_call_no_commit
 
 
 def test_execution_metadata_upgrade_retry_downgrade_upgrade(
@@ -479,7 +478,11 @@ def test_current_chat_writers_accept_execution_metadata_schema(
             message_type=MessageType.USER,
             db_session=db_session,
         )
-        answer = reserve_message_id(db_session, session_id, question.id)
+        answer_id = reserve_chat_response_ids(
+            db_session, session_id, question.id, ["test-model"]
+        )[0]
+        answer = db_session.get(ChatMessage, answer_id)
+        assert answer is not None
         save_chat_turn(
             message_text="Answer",
             reasoning_tokens="Reasoning",
@@ -489,7 +492,7 @@ def test_current_chat_writers_accept_execution_metadata_schema(
             db_session=db_session,
             assistant_message=answer,
         )
-        call = create_tool_call_no_commit(
+        call = ToolCall(
             chat_session_id=session_id,
             parent_chat_message_id=answer.id,
             turn_number=0,
@@ -498,8 +501,8 @@ def test_current_chat_writers_accept_execution_metadata_schema(
             tool_call_arguments={"query": "Question"},
             tool_call_response="Existing result",
             tool_call_tokens=1,
-            db_session=db_session,
         )
+        db_session.add(call)
         db_session.commit()
         answer_id, call_id = answer.id, call.id
         db_session.expire_all()

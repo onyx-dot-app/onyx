@@ -19,11 +19,11 @@ def test_context_limit_normalization(streaming: bool, after_chunk: bool) -> None
     client = LitellmLLM(
         api_key=None,
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         max_input_tokens=1000,
     )
     failure = ContextWindowExceededError(
-        message="provider context overflow", model="gpt-5-mini", llm_provider="openai"
+        message="provider context overflow", model="gpt-6-luna", llm_provider="openai"
     )
 
     def chunks() -> Iterator[ModelResponseStream]:

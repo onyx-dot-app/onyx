@@ -21,9 +21,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
     form_config,
+    sign_in_timeout_text,
 )
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     RateLimitTriedTooManyTimesError,
@@ -35,6 +35,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -52,13 +53,25 @@ from onyx.connectors.hubspot.source_operations import (
     HubSpotConnectionError,
     HubSpotSourceOperations,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    CheckRowText,
+    ConnectorMissingCredentialError,
+    counted,
+)
 from onyx.connectors.source_operations import SourceOperations
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/hubspot"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit} without an answer from HubSpot.\n"
+        "Re-run the checks."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("HubSpot")
 _PROBE_LIMIT = 1
 _NOTE_BODY_PROPERTY = "hs_note_body"
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
@@ -68,6 +81,8 @@ _INDEXED_TYPES_REMEDIATION = (
 )
 _TOKEN_CHECK_ID = "hubspot_token"
 _USERS_CHECK_ID = "hubspot_users"
+_ASSOCIATIONS_CHECK_ID = "hubspot_associations"
+_NOTES_CHECK_ID = "hubspot_notes"
 # What the gateway raises for a call HubSpot refused or never answered.
 _GATEWAY_ERRORS = (
     HubSpotApiError,
@@ -80,19 +95,22 @@ def _read_check_id(object_type: HubSpotObjectType) -> str:
     return f"hubspot_{object_type.value}_readable"
 
 
-# check_id to the checks it runs after. The linked-record and notes checks run
-# after the sign-in only: they sample any readable type, so an empty or denied
-# type does not stop them.
+_READ_CHECK_IDS: tuple[str, ...] = tuple(
+    _read_check_id(object_type) for object_type in HubSpotObjectType
+)
+_SAMPLE_CHECK_IDS: tuple[str, ...] = (_ASSOCIATIONS_CHECK_ID, _NOTES_CHECK_ID)
+# check_id to the checks it runs after.
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    **{
-        _read_check_id(object_type): (_TOKEN_CHECK_ID,)
-        for object_type in HubSpotObjectType
-    },
-    "hubspot_associations": (_TOKEN_CHECK_ID,),
-    "hubspot_notes": (_TOKEN_CHECK_ID,),
+    **dict.fromkeys(_READ_CHECK_IDS, (_TOKEN_CHECK_ID,)),
+    **dict.fromkeys(_SAMPLE_CHECK_IDS, (_TOKEN_CHECK_ID,)),
     _USERS_CHECK_ID: (_TOKEN_CHECK_ID,),
     "hubspot_record_viewers": (_USERS_CHECK_ID,),
 }
+# The linked-record and notes checks sample any readable type, so one selected
+# type that reads is enough for them to run.
+_DEPENDS_ON_ANY: dict[str, tuple[str, ...]] = dict.fromkeys(
+    _SAMPLE_CHECK_IDS, _READ_CHECK_IDS
+)
 
 
 def _gateway(context: CapabilityCheckContext) -> HubSpotSourceOperations:
@@ -122,11 +140,6 @@ def _noun(object_type: HubSpotObjectType) -> str:
     return HUBSPOT_OBJECT_SPECS[object_type].document_noun
 
 
-def _counted(count: int | str, noun: str, plural: str) -> str:
-    """``count`` with its noun: "1 ticket", "3 tickets", "100+ users"."""
-    return f"{count} {noun if str(count) == '1' else plural}"
-
-
 def _need(scope: str) -> str:
     """The line that says what the private app needs."""
     return f"In HubSpot, add `{scope}` to the private app's scopes."
@@ -145,6 +158,10 @@ _UNREACHABLE_ROW = CheckRowText(
         "The request to HubSpot failed.\nCheck that the server can reach "
         "api.hubapi.com."
     ),
+)
+_REQUEST_TIMEOUT_ROW = CheckRowText(
+    summary="Timed out",
+    description="HubSpot did not answer the request in time.\nRe-run the checks.",
 )
 _UNEXPECTED_ROW = CheckRowText(
     summary="Unexpected response from HubSpot",
@@ -172,6 +189,12 @@ def _raise_for_error(
                 "HubSpot kept refusing requests after 5 retries. (HTTP 429)\nWait "
                 "a minute, then re-run."
             ),
+        ) from error
+    if isinstance(error, HubSpotConnectionError) and error.timed_out:
+        raise TimedOutValidationError(
+            f"HubSpot did not answer in time: {error}",
+            summary=_REQUEST_TIMEOUT_ROW.summary,
+            description=_REQUEST_TIMEOUT_ROW.description,
         ) from error
     if isinstance(error, HubSpotConnectionError):
         raise UnreachableValidationError(
@@ -278,18 +301,23 @@ class _HubSpotCheck(CapabilityCheck[HubSpotConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         required: bool = True,
         remediation: str | None = None,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
             check_id=check_id,
             display_name=display_name,
             depends_on=_DEPENDS_ON.get(check_id, ()),
+            depends_on_any=_DEPENDS_ON_ANY.get(check_id, ()),
             required=required,
             requires_connector_instance=False,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -299,7 +327,9 @@ class _TokenCheck(_HubSpotCheck):
             check_id=_TOKEN_CHECK_ID,
             display_name="Sign in to HubSpot",
             remediation="Create a private app in HubSpot and paste its access token.",
+            validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -317,13 +347,10 @@ class _TokenCheck(_HubSpotCheck):
         except HubSpotConnectionError as error:
             if not error.timed_out:
                 _raise_for_error(error, denied="read the portal")
-            raise UnreachableValidationError(
+            raise TimedOutValidationError(
                 f"HubSpot did not answer the sign-in in time: {error}",
-                summary="Sign-in timed out",
-                description=(
-                    "HubSpot did not answer the sign-in in time.\nRe-run, or check "
-                    "that HubSpot is reachable from Onyx."
-                ),
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
             ) from error
         except ValueError as error:
             # A body that is not HubSpot's portal info, e.g. a proxy page.
@@ -423,7 +450,7 @@ class _RecordsReadableCheck(_HubSpotCheck):
             return CheckOutput(summary=f"Read {object_type.value}")
         return CheckOutput(
             summary=(
-                f"Found {_counted(search.total, _noun(object_type), object_type.value)}"
+                f"Found {counted(search.total, _noun(object_type), object_type.value)}"
             )
         )
 
@@ -463,7 +490,7 @@ class _AssociationsCheck(_HubSpotCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="hubspot_associations",
+            check_id=_ASSOCIATIONS_CHECK_ID,
             display_name="List linked records",
             required=False,
             remediation=_INDEXED_TYPES_REMEDIATION,
@@ -474,11 +501,10 @@ class _AssociationsCheck(_HubSpotCheck):
         to_object_type: HubSpotObjectType = ASSOCIATED_TYPES[object_type][0]
         to_scope: str = _read_scope(to_object_type)
         try:
-            _gateway(context).list_associations(
+            _gateway(context).read_associations(
                 object_type=object_type,
-                object_id=record.id,
                 to_object_type=to_object_type.value,
-                limit=_PROBE_LIMIT,
+                cursors={record.id: None},
             )
         except _GATEWAY_ERRORS as error:
             _raise_for_error(
@@ -505,7 +531,7 @@ class _NotesCheck(_HubSpotCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="hubspot_notes",
+            check_id=_NOTES_CHECK_ID,
             display_name="Sample notes",
             required=False,
             remediation=_INDEXED_TYPES_REMEDIATION,
@@ -515,16 +541,16 @@ class _NotesCheck(_HubSpotCheck):
         object_type, record = _first_readable_record(context)
         gateway: HubSpotSourceOperations = _gateway(context)
         try:
-            notes: HubSpotPage[str] = gateway.list_associations(
+            notes: HubSpotPage[str] | None = gateway.read_associations(
                 object_type=object_type,
-                object_id=record.id,
                 to_object_type=NOTES_OBJECT_TYPE,
-                limit=_PROBE_LIMIT,
-            )
-            if notes.items:
+                cursors={record.id: None},
+            ).get(record.id)
+            note_ids: list[str] = notes.items[:_PROBE_LIMIT] if notes else []
+            if note_ids:
                 gateway.read_records(
                     variant=NOTES_OBJECT_TYPE,
-                    ids=notes.items,
+                    ids=note_ids,
                     properties=[_NOTE_BODY_PROPERTY],
                 )
         except _GATEWAY_ERRORS as error:
@@ -540,7 +566,7 @@ class _NotesCheck(_HubSpotCheck):
                     ),
                 ),
             )
-        if not notes.items:
+        if not note_ids:
             raise InconclusiveValidationError(
                 f"The sample HubSpot {_noun(object_type)} has no notes, so Onyx "
                 "could not read one.",
@@ -590,7 +616,7 @@ class _UsersCheck(_HubSpotCheck):
         count: int | str = (
             f"{len(page.items)}+" if page.next_after is not None else len(page.items)
         )
-        return CheckOutput(summary=f"{_counted(count, 'user', 'users')} found")
+        return CheckOutput(summary=f"{counted(count, 'user', 'users')} found")
 
 
 class _RecordViewersCheck(_HubSpotCheck):
@@ -626,7 +652,7 @@ class _RecordViewersCheck(_HubSpotCheck):
         count: int = len(viewers.get(record.id, set()))
         return CheckOutput(
             summary=(
-                f"{_counted(count, 'user', 'users')} can view a sample "
+                f"{counted(count, 'user', 'users')} can view a sample "
                 f"{_noun(object_type)}"
             )
         )

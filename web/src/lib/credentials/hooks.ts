@@ -9,13 +9,10 @@ import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import {
-  adminDeleteCredential,
   deleteCredential,
   startCredentialCheckRun,
   updateCredentialSharing,
 } from "@/lib/credentials/svc";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
 import {
   getCredentialCreationMethods,
   getCredentialSpec,
@@ -36,6 +33,7 @@ import type {
   AnyCredential,
   CredentialCheckReport,
   CredentialSharing,
+  CredentialSpecField,
   SimilarCredential,
   CredentialSetup,
   OAuthDetails,
@@ -53,17 +51,18 @@ export interface CredentialFieldCopy {
 }
 
 /**
- * Looks up a credential field's title and hint from the source's spec. A key
- * the spec does not list (a stored key of an older credential) falls back to
- * a title read from the key itself, so no field renders blank.
+ * Looks up a credential field's title and hint from the source's spec, or
+ * from `field` when given (a form variant's field). A key the spec does not
+ * list (a stored key of an older credential) falls back to a title read from
+ * the key itself, so no field renders blank.
  */
 export function useCredentialFieldCopy(
   source: ValidSources
-): (key: string) => CredentialFieldCopy {
+): (key: string, field?: CredentialSpecField) => CredentialFieldCopy {
   const t = useTranslations("admin.credentials");
   const spec = getCredentialSpec(source);
-  return (key) => {
-    const field = spec?.fields[key];
+  return (key, fieldOverride) => {
+    const field = fieldOverride ?? spec?.fields[key];
     if (!spec || !field) {
       return {
         title:
@@ -172,9 +171,6 @@ export function useCredentialLoad(
 export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   const { credentials, oauthDetails, isLoading, error } =
     useCredentialLoad(sourceType);
-  const { isGlobalHolder } = usePermissionAuthority(
-    Permission.MANAGE_CONNECTORS
-  );
   const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
     null
   );
@@ -237,12 +233,8 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   ): Promise<string | null> {
     let response: Response;
     try {
-      // A global connector manager sees every credential and deletes any of
-      // them through the admin route. A scoped manager may not use that
-      // route; they delete through the owner route, which covers their own.
-      response = isGlobalHolder
-        ? await adminDeleteCredential(credential.id)
-        : await deleteCredential(credential.id);
+      // Only the owner may delete a credential.
+      response = await deleteCredential(credential.id);
     } catch (error) {
       // The request never landed, so nothing changed and nothing refreshes.
       return errorMessage(error) || failureMessage;

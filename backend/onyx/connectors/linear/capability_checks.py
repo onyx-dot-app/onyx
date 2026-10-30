@@ -16,10 +16,11 @@ from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckNotApplicableError,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
     form_config,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -27,6 +28,7 @@ from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InconclusiveValidationError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -54,7 +56,11 @@ from onyx.connectors.linear.source_operations import (
     LinearTokenRefreshError,
     LinearUnreachableError,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    MAX_ROW_SUMMARY_LENGTH,
+    CheckRowText,
+    ConnectorMissingCredentialError,
+)
 
 T = TypeVar("T")
 
@@ -71,7 +77,6 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _PROJECTS_CHECK_ID: (SIGN_IN_CHECK_ID,),
     ISSUES_CHECK_ID: (SIGN_IN_CHECK_ID, _TEAMS_CHECK_ID, _PROJECTS_CHECK_ID),
 }
-_MAX_SUMMARY_CHARS: int = 40
 # A refused renewal: the refresh token is spent, revoked or expired.
 _REFRESH_REFUSED_STATUSES: frozenset[int] = frozenset({400, 401})
 
@@ -118,19 +123,11 @@ def config_from_context(context: CapabilityCheckContext) -> LinearConnectorConfi
     return form_config(context, LinearConnectorConfig)
 
 
-def _timeout_row(sign_in: bool) -> CheckRowText:
-    if sign_in:
-        return CheckRowText(
-            summary="Sign-in timed out",
-            description=(
-                "Linear did not answer the sign-in in time.\nRe-run, or check "
-                "that Linear is reachable from Onyx."
-            ),
-        )
-    return CheckRowText(
-        summary="Timed out",
-        description="The check ran past its time limit.\nRe-run the checks later.",
-    )
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check ran past its time limit.\nRe-run the checks later.",
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Linear")
 
 
 def _raise_for_linear_error(
@@ -187,8 +184,8 @@ def _raise_for_linear_error(
             ),
         ) from error
     if isinstance(error, LinearUnreachableError) and error.timed_out:
-        row: CheckRowText = _timeout_row(sign_in)
-        raise UnreachableValidationError(
+        row: CheckRowText = _SIGN_IN_TIMEOUT_TEXT if sign_in else _TIMEOUT_TEXT
+        raise TimedOutValidationError(
             f"Linear did not answer in time: {error}",
             summary=row.summary,
             description=row.description,
@@ -250,7 +247,7 @@ def probe(
 
 
 def _fit(line: str, fallback: str) -> str:
-    return line if len(line) <= _MAX_SUMMARY_CHARS else fallback
+    return line if len(line) <= MAX_ROW_SUMMARY_LENGTH else fallback
 
 
 def _find_result(
@@ -297,8 +294,9 @@ class _LinearCheck(CapabilityCheck[LinearConnectorConfig]):
         check_id: str,
         display_name: str,
         remediation: str,
-        requires_connector_config: bool = False,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -306,10 +304,11 @@ class _LinearCheck(CapabilityCheck[LinearConnectorConfig]):
             display_name=display_name,
             depends_on=_DEPENDS_ON.get(check_id, ()),
             requires_connector_instance=False,
-            requires_connector_config=requires_connector_config,
             remediation=remediation,
             docs_link=DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -319,7 +318,9 @@ class _TokenCheck(_LinearCheck):
             check_id=SIGN_IN_CHECK_ID,
             display_name="Sign in to Linear",
             remediation="Check the API key, or reconnect through OAuth.",
+            validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -331,17 +332,21 @@ class _TokenCheck(_LinearCheck):
         )
         if viewer.email is None:
             return CheckOutput(summary="Signed in to Linear")
-        return CheckOutput(summary=f"Signed in as {viewer.email}")
+        return CheckOutput(
+            summary=_fit(f"Signed in as {viewer.email}", "Signed in to Linear")
+        )
 
 
 class _TeamsCheck(_LinearCheck):
+    """With no team selected, also on a config-less run, it does not apply, so
+    it does not stop the issues sample."""
+
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
             check_id=_TEAMS_CHECK_ID,
             display_name="Find selected teams",
-            requires_connector_config=True,
             remediation=(
                 "Check each team key, or connect as a member of the team if it is private."
             ),
@@ -352,6 +357,8 @@ class _TeamsCheck(_LinearCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         keys: list[str] = normalize_team_keys(config_from_context(context).team_keys)
+        if not keys:
+            raise CheckNotApplicableError("No teams are selected.")
         missing: list[str] = probe(
             lambda: missing_team_keys(gateway_from_context(context), keys),
             "The configured teams could not be checked.",
@@ -368,13 +375,15 @@ class _TeamsCheck(_LinearCheck):
 
 
 class _ProjectsCheck(_LinearCheck):
+    """With no project selected, also on a config-less run, it does not apply,
+    so it does not stop the issues sample."""
+
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
             check_id=_PROJECTS_CHECK_ID,
             display_name="Find selected projects",
-            requires_connector_config=True,
             remediation=(
                 "Check each project name or URL, or connect as a member of the "
                 "project's team if it is private."
@@ -386,6 +395,8 @@ class _ProjectsCheck(_LinearCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         names, slug_ids = project_scope(config_from_context(context).projects)
+        if not names and not slug_ids:
+            raise CheckNotApplicableError("No projects are selected.")
         missing: list[str] = probe(
             lambda: missing_projects(gateway_from_context(context), names, slug_ids),
             "The configured projects could not be checked.",

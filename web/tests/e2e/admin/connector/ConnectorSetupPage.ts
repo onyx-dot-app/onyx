@@ -113,6 +113,11 @@ export class ConnectorSetupPage {
       .evaluate((el) => el.scrollTo(0, el.scrollHeight));
   }
 
+  /** Open a tab of a tab field (e.g. an indexing scope), by its label. */
+  async selectTab(label: string): Promise<void> {
+    await this.page.getByRole("tab", { name: label, exact: true }).click();
+  }
+
   /** A single-line text field from the connector config, by its config name. */
   textField(fieldName: string): Locator {
     return this.page.getByTestId(fieldName);
@@ -169,13 +174,13 @@ export class ConnectorSetupPage {
   }
 
   /**
-   * Submit the form and wait for the post-creation redirect to the connector
-   * status page. Creation validates the config server-side (up to ~10s in the
-   * UI), so allow a generous timeout.
+   * Submit the form and wait for the post-creation redirect to the new
+   * connector's page. Creation validates the config server-side (up to ~10s
+   * in the UI), so allow a generous timeout.
    */
   async submitAndWaitForCreation() {
     await this.createConnectorButton.click();
-    await this.page.waitForURL("**/admin/indexing-status**", {
+    await this.page.waitForURL(/\/admin\/connector\/\d+/, {
       timeout: 30_000,
     });
   }

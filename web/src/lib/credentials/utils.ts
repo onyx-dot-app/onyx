@@ -86,6 +86,22 @@ export function isOwnSetupMethod(
   );
 }
 
+/**
+ * `spec` as the add-connector page shows it for these connector form values:
+ * the first form variant they match replaces its fields.
+ */
+export function specForConnectorValues(
+  spec: CredentialSpec,
+  values: Readonly<Record<string, unknown>>
+): CredentialSpec {
+  const variant = spec.formVariants?.find((candidate) =>
+    Object.entries(candidate.when).every(
+      ([key, value]) => values[key] === value
+    )
+  );
+  return variant ? { ...spec, fields: variant.fields } : spec;
+}
+
 /** The value a form starts a field at. */
 export function initialFieldValue(
   field: CredentialSpecField

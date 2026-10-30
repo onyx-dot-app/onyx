@@ -363,7 +363,7 @@ func TestBackupPathSkipsDanglingSymlinksAndEventuallyGivesUp(t *testing.T) {
 
 func TestInstallSkill_unknownAgentFails(t *testing.T) {
 	skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 
 	_, err := skillRun(t, "--source", source, "--agent", "emacs")
@@ -376,7 +376,7 @@ func TestInstallSkill_unknownAgentFails(t *testing.T) {
 
 func TestInstallSkill_agentCursorInstallsRulesEndToEnd(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source, "--agent", "claude-code", "--agent", "cursor", "--agent", "cursor")

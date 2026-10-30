@@ -1,26 +1,28 @@
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, wait
 from datetime import datetime, timedelta, timezone
-from enum import Enum
+from functools import partial
 from typing import Any
-
-from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings_setting import check_findings_enabled
 from onyx.connectors.capability_checks.models import (
     INCOMPLETE_STATUSES,
+    TIME_LIMIT_PLACEHOLDER,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
-    CheckAdvisory,
     CheckErrorDetail,
     CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
     CheckNotRunReason,
+    CheckOutcome,
     CheckOutput,
+    CheckReadiness,
+    CheckReadinessKind,
     CredentialCapability,
     CredentialCapabilityReport,
     check_error_detail,
@@ -41,7 +43,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.models import InputType
+from onyx.connectors.models import CheckRowText, InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import (
     SourceOperations,
@@ -53,7 +55,7 @@ from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_with_timeout
+from onyx.utils.threadpool_concurrency import run_with_timeout, start_thread_future
 
 logger = setup_logger()
 
@@ -63,6 +65,12 @@ logger = setup_logger()
 # forever. Known-slow probes override it via
 # ``CapabilityCheck.timeout_seconds``.
 CAPABILITY_CHECK_TIMEOUT_SECONDS = 600
+# Checks of one run that execute at once. Small: the checks share one
+# credential, and source APIs rate limit.
+MAX_PARALLEL_CHECKS = 4
+# How long past its hang guard a check's worker thread may take to return
+# before the runner treats it as a bug.
+_THREAD_RETURN_SLACK_SECONDS = 60
 
 _SKIP_NEEDS_INSTANCE_MESSAGE = (
     "Requires a connector instance -- will re-run automatically when the "
@@ -73,7 +81,6 @@ _SKIP_NEEDS_CONFIG_MESSAGE = (
     "connector is configured."
 )
 _SKIP_FINDINGS_OFF_MESSAGE = "Findings are turned off for this workspace."
-_SKIP_VALIDATION_FAILED_MESSAGE = "Skipped: a required check failed."
 _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
@@ -100,53 +107,14 @@ _DEFAULT_ROW_TEXT_BY_KIND: dict[CheckErrorKind, tuple[str, str]] = {
     ),
 }
 
-# Receives the results recorded so far, after each result row is appended. The
-# runner calls it on its own thread, never on an abandoned probe thread.
+# Receives the results recorded so far, newest last, after each result row is
+# appended. The runner calls it on the calling thread, one call at a time,
+# never on a worker or an abandoned probe thread.
 CapabilityCheckProgressCallback = Callable[[Sequence[CapabilityCheckResult]], None]
 
 
-class CheckReadinessKind(str, Enum):
-    NOT_APPLICABLE = "not_applicable"
-    MISSING_FIELDS = "missing_fields"
-    INVALID_FIELDS = "invalid_fields"
-    NEEDS_CONFIG = "needs_config"
-    NEEDS_INSTANCE = "needs_instance"
-    RUNNABLE = "runnable"
-
-
-class CheckReadiness(BaseModel):
-    """Whether a check can run in a context, and why not."""
-
-    kind: CheckReadinessKind
-    # The missing or invalid field names, for those kinds.
-    fields: frozenset[str] = frozenset()
-    message: str = ""
-
-
-class _CheckOutcome(BaseModel):
-    """
-    Outcome of one check execution, before it is joined with the check's
-    metadata into a result row. Shared across checks with one check_id.
-    """
-
-    status: CapabilityCheckStatus
-    message: str = ""
-    error_type: str | None = None
-    error_kind: CheckErrorKind | None = None
-    error_detail: CheckErrorDetail | None = None
-    not_run_reason: CheckNotRunReason | None = None
-    blocked_by: str | None = None
-    partial: bool = False
-    summary: str | None = None
-    description: str | None = None
-    duration_ms: int | None = None
-    applicable: bool = True
-    findings: list[CheckFinding] = []
-    advisories: list[CheckAdvisory] = []
-
-
 def _build_result(
-    check: CapabilityCheck, outcome: _CheckOutcome
+    check: CapabilityCheck, outcome: CheckOutcome
 ) -> CapabilityCheckResult:
     return CapabilityCheckResult(
         capability=check.capability,
@@ -155,6 +123,7 @@ def _build_result(
         required=check.required,
         status=outcome.status,
         row_id=check.row_id,
+        step=check.step,
         message=outcome.message,
         error_type=outcome.error_type,
         error_kind=outcome.error_kind,
@@ -185,8 +154,13 @@ def _safe_error_detail(
     """The error's detail, or None when building it fails: a detail is for
     support, and must never fail the run."""
     try:
+        # A fallback check's row text is inferred from an untyped legacy
+        # error, so its stack trace stays available whatever the kind.
         return check_error_detail(
-            error, error_kind, credential_strings(context.credential_json)
+            error,
+            error_kind,
+            credential_strings(context.credential_json),
+            keep_trace=check.is_fallback,
         )
     except Exception:
         logger.exception(
@@ -202,16 +176,21 @@ def _error_outcome(
     form_run: bool,
     message: str | None = None,
     duration_ms: int | None = None,
-) -> _CheckOutcome:
+    default_row: CheckRowText | None = None,
+) -> CheckOutcome:
     """Maps a check's exception to an outcome, per the check exception
     contract and the check's ``outcome_status``. The row text is the
-    error's own, else the default of its kind."""
+    error's own, else ``default_row``, else the default of its kind."""
     error_kind = check_error_kind(error)
-    summary, description = _DEFAULT_ROW_TEXT_BY_KIND.get(error_kind, (None, None))
+    summary, description = (
+        (default_row.summary, default_row.description)
+        if default_row is not None
+        else _DEFAULT_ROW_TEXT_BY_KIND.get(error_kind, (None, None))
+    )
     if isinstance(error, ValidationError):
         summary = error.summary or summary
         description = error.description or description
-    return _CheckOutcome(
+    return CheckOutcome(
         status=check.outcome_status(error_kind, form_run),
         message=str(error) if message is None else message,
         summary=summary,
@@ -225,7 +204,7 @@ def _error_outcome(
 
 def _missing_instance_outcome(
     check: CapabilityCheck, context: CapabilityCheckContext, form_run: bool
-) -> _CheckOutcome:
+) -> CheckOutcome:
     """
     Maps a missing connector instance to an outcome for an instance-requiring
     check.
@@ -236,7 +215,7 @@ def _missing_instance_outcome(
     contract.
     """
     if context.instantiation_error is None:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_NEEDS_INSTANCE_MESSAGE,
         )
@@ -248,6 +227,28 @@ def effective_check_timeout_seconds(check: CapabilityCheck[Any]) -> float:
     return check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
 
 
+def _time_limit_words(timeout_seconds: float) -> str:
+    seconds = round(timeout_seconds)
+    if seconds >= 60 and seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"{minutes} minute{'' if minutes == 1 else 's'}"
+    return f"{seconds} second{'' if seconds == 1 else 's'}"
+
+
+def _hang_guard_row(
+    check: CapabilityCheck, timeout_seconds: float
+) -> CheckRowText | None:
+    """The check's own text for its hang guard, with the guard's time limit."""
+    if check.timeout_text is None:
+        return None
+    return CheckRowText(
+        summary=check.timeout_text.summary,
+        description=check.timeout_text.description.replace(
+            TIME_LIMIT_PLACEHOLDER, _time_limit_words(timeout_seconds)
+        ),
+    )
+
+
 def _capped(timeout_seconds: float, cap_seconds: float | None) -> float:
     return timeout_seconds if cap_seconds is None else min(timeout_seconds, cap_seconds)
 
@@ -257,7 +258,7 @@ def _execute_check(
     context: CapabilityCheckContext,
     timeout_cap_seconds: float | None,
     form_run: bool,
-) -> _CheckOutcome:
+) -> CheckOutcome:
     """
     Executes one check under its hang guard and maps the outcome to a status.
 
@@ -277,7 +278,7 @@ def _execute_check(
             timeout_seconds, check.run, context
         )
     except CheckNotApplicableError as e:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=str(e),
             error_type=type(e).__name__,
@@ -287,7 +288,7 @@ def _execute_check(
     except NothingToCheckError as e:
         # Unlike a check that does not apply, it keeps its row: the scope is
         # what the admin should know about.
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=str(e),
             summary=e.summary,
@@ -314,6 +315,7 @@ def _execute_check(
             form_run,
             message=_TIMEOUT_MESSAGE,
             duration_ms=elapsed_ms(),
+            default_row=_hang_guard_row(check, timeout_seconds),
         )
     except Exception as e:
         if check_error_kind(e) == CheckErrorKind.UNEXPECTED:
@@ -324,7 +326,7 @@ def _execute_check(
             )
         return _error_outcome(check, context, e, form_run, duration_ms=elapsed_ms())
     output = output or CheckOutput()
-    return _CheckOutcome(
+    return CheckOutcome(
         status=(
             CapabilityCheckStatus.INCOMPLETE
             if output.partial
@@ -364,33 +366,50 @@ def _findings_for_source(
 
 
 def _discovery_skip_outcome(
-    validation_results: Iterable[CapabilityCheckResult], keep_findings: bool
-) -> _CheckOutcome | None:
-    """Why a discovery check does not run, or None when it runs."""
+    check: CapabilityCheck,
+    validation_results: Iterable[CapabilityCheckResult],
+    results_by_check_id: Mapping[str, CapabilityCheckResult],
+    keep_findings: bool,
+) -> CheckOutcome | None:
+    """Why a discovery check does not run, or None when it runs. A failed
+    required check stops it; its own dependency names the cause when one
+    stopped it, else the first failed required check does."""
     if not keep_findings:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_FINDINGS_OFF_MESSAGE,
             applicable=False,
         )
-    if any(
-        result.required and result.status == CapabilityCheckStatus.FAILED
-        for result in validation_results
-    ):
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.SKIPPED,
-            message=_SKIP_VALIDATION_FAILED_MESSAGE,
-            applicable=False,
-        )
-    return None
+    failed = next(
+        (
+            result
+            for result in validation_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ),
+        None,
+    )
+    if failed is None:
+        return None
+    if dependency_outcome := _dependency_not_run_outcome(check, results_by_check_id):
+        return dependency_outcome
+    line = _NOT_RUN_LINE_BY_REASON[CheckNotRunReason.DEPENDENCY_FAILED].format(
+        name=failed.display_name
+    )
+    return CheckOutcome(
+        status=CapabilityCheckStatus.SKIPPED,
+        message=line,
+        summary=line,
+        not_run_reason=CheckNotRunReason.DEPENDENCY_FAILED,
+        blocked_by=failed.check_id,
+    )
 
 
 def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     """Upper bound on one run's legitimate execution time, in seconds.
 
-    Checks run sequentially and mirrored checks (one check surfaced under
-    several capabilities) execute once, so the bound sums the distinct per-check
-    hang guards, plus the default guard connector instantiation runs under (it
+    Mirrored checks (one check surfaced under several capabilities) execute
+    once, so the bound sums the distinct per-check hang guards, as if every
+    check ran alone, plus the default guard connector instantiation runs under (it
     can itself probe the source; ``generate_capability_report`` enforces that
     guard).
     """
@@ -401,28 +420,70 @@ def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     return int(CAPABILITY_CHECK_TIMEOUT_SECONDS + sum(timeout_by_check_id.values()))
 
 
-def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
-    """Age past which a RUNNING mark is a dead run, not a slow one.
+def capability_check_run_lease(source: DocumentSource) -> timedelta:
+    """How long a stored run's RUNNING mark lives without the worker renewing
+    it; past that, the run is dead and reads FAILED_TO_RUN.
 
-    The mark is set at trigger time, so a legitimate run's wall clock is queue
-    wait plus execution; the task expiry bounds the wait at one execution
-    ceiling, leaving two ceilings in total. Both the re-trigger guard and the
-    stale-run sweep use this cutoff.
+    The worker renews the mark as it starts the checks and after every result,
+    so the longest wait between renewals is the connector instantiation's guard
+    plus the slowest single check's guard, never the whole run. Bounding by
+    the slowest check rather than the sum keeps an orphaned run (a worker
+    restart) from spinning for hours.
     """
-    return timedelta(seconds=2 * capability_check_run_ceiling_seconds(source))
+    slowest_check_seconds = max(
+        (
+            effective_check_timeout_seconds(check)
+            for check in get_capability_checks(source)
+        ),
+        default=0,
+    )
+    return timedelta(
+        seconds=CAPABILITY_CHECK_TIMEOUT_SECONDS
+        + slowest_check_seconds
+        + _THREAD_RETURN_SLACK_SECONDS
+    )
 
 
-def run_order(checks: Sequence[CapabilityCheck]) -> list[CapabilityCheck]:
+def _with_dependencies(checks: Sequence[CapabilityCheck], check_id: str) -> set[str]:
+    """``check_id`` and every check of ``checks`` it depends on, directly or
+    through other checks."""
+    depends_on_by_id: dict[str, tuple[str, ...]] = {
+        check.check_id: check.dependency_ids for check in checks
+    }
+    found: set[str] = set()
+    stack: list[str] = [check_id]
+    while stack:
+        current = stack.pop()
+        if current in found or current not in depends_on_by_id:
+            continue
+        found.add(current)
+        stack.extend(depends_on_by_id[current])
+    return found
+
+
+def run_order(
+    checks: Sequence[CapabilityCheck], first_check_id: str | None = None
+) -> list[CapabilityCheck]:
     """The order the runner executes ``checks``: validation checks before
     discovery checks, and every check after the checks of ``checks`` it
     depends on; otherwise their given order.
 
+    ``first_check_id`` (Start Now) moves that check, and the checks it needs,
+    ahead of every other check: the admin asked for it, so a discovery check
+    started now does not wait for the validation checks.
+
     Raises:
         ValueError: The dependencies among ``checks`` form a cycle.
     """
-    remaining: list[CapabilityCheck] = [
-        check for check in checks if not check.discovery
-    ] + [check for check in checks if check.discovery]
+    first_ids: set[str] = (
+        _with_dependencies(checks, first_check_id)
+        if first_check_id is not None
+        else set()
+    )
+    # A stable sort, so the given order holds within each group.
+    remaining: list[CapabilityCheck] = sorted(
+        checks, key=lambda check: (check.check_id not in first_ids, check.discovery)
+    )
     present_ids: set[str] = {check.check_id for check in checks}
     ordered: list[CapabilityCheck] = []
     ordered_ids: set[str] = set()
@@ -432,7 +493,7 @@ def run_order(checks: Sequence[CapabilityCheck]) -> list[CapabilityCheck]:
             for check in remaining
             if all(
                 dependency in ordered_ids or dependency not in present_ids
-                for dependency in check.depends_on
+                for dependency in check.dependency_ids
             )
         ]
         if not ready:
@@ -458,52 +519,96 @@ _NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
     CheckNotRunReason.DEPENDENCY_INCOMPLETE: "Not run: {name} incomplete",
     CheckNotRunReason.DEPENDENCY_SKIPPED: "Not run: {name} did not run",
 }
-_NOTHING_IN_SCOPE_LINE = "Not run: {name} found nothing to test"
+# The line of a check whose dependency did not run for a reason of its own
+# (not a gate of the run). The reason stays the dependency's.
+_DEPENDENCY_NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
+    CheckNotRunReason.NOTHING_IN_SCOPE: "Not run: {name} found nothing to test",
+    CheckNotRunReason.SKIPPED_BY_USER: "Not run: {name} skipped",
+    CheckNotRunReason.STOPPED_BY_USER: "Not run: {name} stopped",
+}
+
+
+def _stop_outcome(dependency: CapabilityCheckResult) -> CheckOutcome | None:
+    """The outcome of a check that ``dependency`` stops, or None when it lets
+    the check run. A dependency that a gate stopped passes its cause on, so a
+    whole chain names the check that failed."""
+    if (dependency_reason := dependency.not_run_reason) is not None:
+        own_line = _DEPENDENCY_NOT_RUN_LINE_BY_REASON.get(dependency_reason)
+        if own_line is not None:
+            line = own_line.format(name=dependency.display_name)
+            return CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message=line,
+                summary=line,
+                not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
+                blocked_by=dependency.check_id,
+            )
+        return CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=dependency.message,
+            summary=dependency.summary,
+            not_run_reason=dependency.not_run_reason,
+            blocked_by=dependency.blocked_by,
+        )
+    reason = _NOT_RUN_REASON_BY_DEPENDENCY_STATUS.get(dependency.status)
+    # A partial result lets its dependents run on what it found.
+    if reason is None or dependency.partial:
+        return None
+    line = _NOT_RUN_LINE_BY_REASON[reason].format(name=dependency.display_name)
+    return CheckOutcome(
+        status=CapabilityCheckStatus.SKIPPED,
+        message=line,
+        summary=line,
+        not_run_reason=reason,
+        blocked_by=dependency.check_id,
+    )
+
+
+def _lacks_own_inputs(result: CapabilityCheckResult) -> bool:
+    """True for a check SKIPPED because its own config or instance is
+    missing, not because of a gate of the run."""
+    return (
+        result.status == CapabilityCheckStatus.SKIPPED and result.not_run_reason is None
+    )
+
+
+def _any_of_not_run_outcome(
+    check: CapabilityCheck,
+    results_by_check_id: Mapping[str, CapabilityCheckResult],
+) -> CheckOutcome | None:
+    """The outcome of a check that its ``depends_on_any`` group stops: no
+    member passed and at least one stopped it. The first such member, in the
+    order the check lists them, names the cause. A member without a result is
+    left out, as in ``depends_on``: creation runs each check alone, and
+    ``stop_blocked_results`` applies the rule once every result is in."""
+    first_stop: CheckOutcome | None = None
+    for member_id in check.depends_on_any:
+        member = results_by_check_id.get(member_id)
+        if member is None or not member.applicable or _lacks_own_inputs(member):
+            continue
+        stop = _stop_outcome(member)
+        if stop is None:
+            return None
+        first_stop = first_stop or stop
+    return first_stop
 
 
 def _dependency_not_run_outcome(
     check: CapabilityCheck,
     results_by_check_id: Mapping[str, CapabilityCheckResult],
-) -> _CheckOutcome | None:
+) -> CheckOutcome | None:
     """The outcome of a check that a dependency stops, or None when its
     dependencies let it run. A dependency without a result, or one that does
     not apply, does not stop it. The first stopping dependency, in the order
-    the check lists them, names the cause. A dependency that a gate stopped
-    passes its cause on, so a whole chain names the check that failed."""
+    the check lists them, names the cause; ``depends_on`` before the any-of
+    group."""
     for dependency_id in check.depends_on:
         dependency = results_by_check_id.get(dependency_id)
         if dependency is None or not dependency.applicable:
             continue
-        if dependency.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE:
-            line = _NOTHING_IN_SCOPE_LINE.format(name=dependency.display_name)
-            return _CheckOutcome(
-                status=CapabilityCheckStatus.SKIPPED,
-                message=line,
-                summary=line,
-                not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
-                blocked_by=dependency_id,
-            )
-        if dependency.not_run_reason is not None:
-            return _CheckOutcome(
-                status=CapabilityCheckStatus.SKIPPED,
-                message=dependency.message,
-                summary=dependency.summary,
-                not_run_reason=dependency.not_run_reason,
-                blocked_by=dependency.blocked_by,
-            )
-        reason = _NOT_RUN_REASON_BY_DEPENDENCY_STATUS.get(dependency.status)
-        # A partial result lets its dependents run on what it found.
-        if reason is None or dependency.partial:
-            continue
-        line = _NOT_RUN_LINE_BY_REASON[reason].format(name=dependency.display_name)
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.SKIPPED,
-            message=line,
-            summary=line,
-            not_run_reason=reason,
-            blocked_by=dependency_id,
-        )
-    return None
+        if (stop := _stop_outcome(dependency)) is not None:
+            return stop
+    return _any_of_not_run_outcome(check, results_by_check_id)
 
 
 def dependency_not_run_result(
@@ -520,7 +625,7 @@ def stop_blocked_results(
     checks: Sequence[CapabilityCheck], results: Sequence[CapabilityCheckResult]
 ) -> list[CapabilityCheckResult]:
     """``results`` of checks that ran side by side, with each check that a
-    dependency stops replaced by the result the sequential runner records for
+    dependency stops replaced by the result ``run_capability_checks`` records for
     it. A check SKIPPED for its own reason keeps its result."""
     result_by_key: dict[tuple[str, CredentialCapability], CapabilityCheckResult] = {
         (result.check_id, result.capability): result for result in results
@@ -548,21 +653,23 @@ def run_capability_checks(
     prior_results: Sequence[CapabilityCheckResult] = (),
     form_run: bool = False,
 ) -> list[CapabilityCheckResult]:
-    """Runs checks sequentially, in ``run_order``, and maps their outcomes to
-    statuses.
+    """Runs checks in dependency waves and maps their outcomes to statuses.
 
-    Sequential on purpose: source APIs can rate limit aggressively, so
-    concurrent probes against the same credential are counterproductive. Check
-    failures become result rows; this function never raises for them.
+    A check starts once every check it depends on has a result, at most
+    ``MAX_PARALLEL_CHECKS`` at a time: source APIs rate limit, so the cap stays
+    small. Check failures become result rows; this function never raises for
+    them. The returned rows are in ``run_order``.
 
     Checks sharing one check_id (the perm-sync fallback registered under both
     sync capabilities) are one check surfaced per capability: they execute once
     and the outcome mirrors onto each result. Distinct check_ids always execute
     independently, even when they share an implementation.
 
-    ``on_result`` is called after every result row, skips included, with the
-    rows recorded so far in run order. It is how a caller publishes per-check
-    progress before the run completes; an exception from it propagates.
+    ``on_result`` is called on the calling thread after every result row, skips
+    included, with the rows recorded so far in the order they finished; the
+    newest row is last. It is how a caller publishes per-check progress before
+    the run completes; an exception from it propagates, and checks still
+    running are abandoned.
 
     ``timeout_cap_seconds`` caps each check's hang guard.
 
@@ -571,10 +678,12 @@ def run_capability_checks(
 
     A check whose dependency FAILED, is INCOMPLETE or did not run does not
     run: it is SKIPPED with the reason (``dependency_not_run_result``). Once
-    the source rate limits a check, the checks after it do not run either.
-    ``prior_results`` are results of checks outside this run, such as a draft
-    run's cached results: they count as dependencies, and a required failure
-    among them skips the discovery checks.
+    the source rate limits a check, no other check starts; checks already
+    running finish. ``prior_results`` are results of checks outside this run,
+    such as a draft run's cached results: they count as dependencies, and a
+    required failure among them skips the discovery checks. Discovery checks
+    start after every required validation check has a result: only a required
+    failure skips them, so an optional check does not hold them back.
     """
     # A check_id may repeat only as one check mirrored across capabilities;
     # anything else is a registration bug, caught before it silently collapses
@@ -593,80 +702,232 @@ def run_capability_checks(
             f"check_id {check.check_id!r} is shared by {check_class.__name__} "
             f"and {type(check).__name__}; mirrored checks must be one class."
         )
+    return _CheckRun(
+        checks,
+        context,
+        on_result=on_result,
+        timeout_cap_seconds=timeout_cap_seconds,
+        prior_results=prior_results,
+        form_run=form_run,
+    ).run()
 
-    results: list[CapabilityCheckResult] = []
-    outcome_by_check_id: dict[str, _CheckOutcome] = {}
-    result_by_check_id: dict[str, CapabilityCheckResult] = {
-        result.check_id: result for result in prior_results
-    }
-    rate_limited = False
 
-    def record(check: CapabilityCheck, outcome: _CheckOutcome) -> None:
+class _CheckRun:
+    """The state of one ``run_capability_checks`` call. Worker threads only
+    execute checks; the calling thread starts them, records every result and
+    calls ``on_result``, so results need no lock."""
+
+    def __init__(
+        self,
+        checks: Sequence[CapabilityCheck],
+        context: CapabilityCheckContext,
+        *,
+        on_result: CapabilityCheckProgressCallback | None,
+        timeout_cap_seconds: float | None,
+        prior_results: Sequence[CapabilityCheckResult],
+        form_run: bool,
+    ) -> None:
+        self._ordered: list[CapabilityCheck] = run_order(checks)
+        self._context = context
+        self._on_result = on_result
+        self._timeout_cap_seconds = timeout_cap_seconds
+        self._prior_results = prior_results
+        self._form_run = form_run
+        # The checks surfaced under each check_id, in run order.
+        self._checks_by_id: dict[str, list[CapabilityCheck]] = {}
+        for check in self._ordered:
+            self._checks_by_id.setdefault(check.check_id, []).append(check)
+        # The checks whose failure skips the discovery checks.
+        self._required_validation_ids: set[str] = {
+            check.check_id
+            for check in self._ordered
+            if not check.discovery and check.required
+        }
+        self._pending_ids: list[str] = list(self._checks_by_id)
+        self._running: dict[Future[CheckOutcome], list[CapabilityCheck]] = {}
+        self._settled_ids: set[str] = set()
+        self._results: list[CapabilityCheckResult] = []
+        self._result_by_check_id: dict[str, CapabilityCheckResult] = {
+            result.check_id: result for result in prior_results
+        }
+        self._rate_limited = False
+
+    def run(self) -> list[CapabilityCheckResult]:
+        while self._pending_ids or self._running:
+            self._start_ready_checks()
+            if not self._running and self._pending_ids:
+                raise RuntimeError(
+                    "No capability check can start: " + ", ".join(self._pending_ids)
+                )
+            if self._running:
+                self._record_finished_checks()
+        result_by_key = {
+            (result.check_id, result.capability): result for result in self._results
+        }
+        return [
+            result_by_key[(check.check_id, check.capability)] for check in self._ordered
+        ]
+
+    def _start_ready_checks(self) -> None:
+        """Starts the pending checks that can start, in run order. A check
+        that does not execute gets its result at once, which can make a later
+        check ready, so the scan repeats until nothing starts."""
+        started = True
+        while started:
+            started = False
+            for check_id in list(self._pending_ids):
+                if self._is_ready(check_id) and self._start(check_id):
+                    self._pending_ids.remove(check_id)
+                    started = True
+
+    def _is_ready(self, check_id: str) -> bool:
+        check = self._checks_by_id[check_id][0]
+        if check.discovery and not self._required_validation_ids <= self._settled_ids:
+            return False
+        return all(
+            dependency in self._settled_ids or dependency not in self._checks_by_id
+            for dependency in check.dependency_ids
+        )
+
+    def _start(self, check_id: str) -> bool:
+        """Records the checks of ``check_id`` that do not execute and starts
+        the rest on a worker thread. False, with nothing recorded, when they
+        must execute and every slot is taken."""
+        recorded: list[tuple[CapabilityCheck, CheckOutcome]] = []
+        to_execute: list[CapabilityCheck] = []
+        for check in self._checks_by_id[check_id]:
+            outcome = self._own_skip_outcome(check)
+            if outcome is None:
+                to_execute.append(check)
+            else:
+                recorded.append((check, outcome))
+        if to_execute:
+            self._read_finished_rate_limits()
+        if to_execute and (
+            run_outcome := _run_gate_outcome(
+                to_execute[0], self._result_by_check_id, self._rate_limited
+            )
+        ):
+            recorded.extend((check, run_outcome) for check in to_execute)
+            to_execute = []
+        if to_execute and len(self._running) >= MAX_PARALLEL_CHECKS:
+            return False
+        # Connectors are not thread safe, unlike gateways: checks that call the
+        # connector instance run one at a time.
+        if (
+            to_execute
+            and to_execute[0].requires_connector_instance
+            and self._connector_check_running()
+        ):
+            return False
+        for check, outcome in recorded:
+            self._record(check, outcome)
+        if not to_execute:
+            self._settled_ids.add(check_id)
+            return True
+        future = start_thread_future(
+            partial(
+                _execute_check,
+                to_execute[0],
+                self._context,
+                self._timeout_cap_seconds,
+                self._form_run,
+            ),
+            name=f"capability-check-{check_id}",
+        )
+        self._running[future] = to_execute
+        return True
+
+    def _read_finished_rate_limits(self) -> None:
+        """Reads a rate limit from checks that finished but are not recorded
+        yet: a check can finish while ``on_result`` runs for another one."""
+        self._rate_limited = self._rate_limited or any(
+            future.done()
+            and future.exception() is None
+            and future.result().error_kind == CheckErrorKind.RATE_LIMITED
+            for future in self._running
+        )
+
+    def _connector_check_running(self) -> bool:
+        return any(
+            checks[0].requires_connector_instance for checks in self._running.values()
+        )
+
+    def _own_skip_outcome(self, check: CapabilityCheck) -> CheckOutcome | None:
+        """The outcome of a check that must not run for a reason of its own, or
+        None. Discovery checks run only when validation found the credential
+        usable: they exist to show what a working credential reaches. A check
+        that does not apply drops out before a failed check can stop it."""
+        unrunnable = _unrunnable_outcome(check, self._context, self._form_run)
+        if unrunnable is not None and not unrunnable.applicable:
+            return unrunnable
+        if check.discovery and (
+            discovery_outcome := _discovery_skip_outcome(
+                check,
+                [*self._prior_results, *self._results],
+                self._result_by_check_id,
+                check_findings_enabled(),
+            )
+        ):
+            return discovery_outcome
+        return unrunnable
+
+    def _record_finished_checks(self) -> None:
+        # Each worker returns within its check's hang guard; the wait's
+        # timeout only catches a worker that never returns.
+        wait_seconds = _THREAD_RETURN_SLACK_SECONDS + max(
+            _capped(
+                effective_check_timeout_seconds(checks[0]), self._timeout_cap_seconds
+            )
+            for checks in self._running.values()
+        )
+        done, _ = wait(self._running, timeout=wait_seconds, return_when=FIRST_COMPLETED)
+        if not done:
+            raise RuntimeError(
+                "Capability check threads did not return within their hang guards."
+            )
+        # In start order, so checks that finish together record in a fixed order.
+        for future in [future for future in self._running if future in done]:
+            checks = self._running.pop(future)
+            outcome = future.result()
+            self._rate_limited = self._rate_limited or (
+                outcome.error_kind == CheckErrorKind.RATE_LIMITED
+            )
+            for check in checks:
+                self._record(check, outcome)
+            self._settled_ids.add(checks[0].check_id)
+
+    def _record(self, check: CapabilityCheck, outcome: CheckOutcome) -> None:
         # Read per result: a run can take minutes, and the setting can be
         # turned off meanwhile.
         if outcome.findings and not check_findings_enabled():
             outcome = outcome.model_copy(update={"findings": []})
         result = _build_result(check, outcome)
-        results.append(result)
-        result_by_check_id[check.check_id] = result
-        if on_result is not None:
+        self._results.append(result)
+        self._result_by_check_id[check.check_id] = result
+        if self._on_result is not None:
             # A snapshot: the callback must not observe later appends.
-            on_result(tuple(results))
-
-    # Discovery checks run after validation, and only when it found the
-    # credential usable: they exist to show what a working credential reaches.
-    for check in run_order(checks):
-        if check.discovery:
-            discovery_outcome: _CheckOutcome | None = _discovery_skip_outcome(
-                [*prior_results, *results], check_findings_enabled()
-            )
-            if discovery_outcome is not None:
-                record(check, discovery_outcome)
-                continue
-        unrunnable_outcome = _unrunnable_outcome(check, context, form_run)
-        if unrunnable_outcome is not None:
-            record(check, unrunnable_outcome)
-            continue
-
-        if check.check_id not in outcome_by_check_id:
-            outcome_by_check_id[check.check_id] = _next_outcome(
-                check,
-                context,
-                result_by_check_id,
-                rate_limited=rate_limited,
-                timeout_cap_seconds=timeout_cap_seconds,
-                form_run=form_run,
-            )
-            rate_limited = rate_limited or (
-                outcome_by_check_id[check.check_id].error_kind
-                == CheckErrorKind.RATE_LIMITED
-            )
-        record(check, outcome_by_check_id[check.check_id])
-    return results
+            self._on_result(tuple(self._results))
 
 
-def _next_outcome(
+def _run_gate_outcome(
     check: CapabilityCheck,
-    context: CapabilityCheckContext,
     result_by_check_id: Mapping[str, CapabilityCheckResult],
-    *,
     rate_limited: bool,
-    timeout_cap_seconds: float | None,
-    form_run: bool,
-) -> _CheckOutcome:
-    """The outcome of a runnable check: not run when a dependency stops it or
-    the run is rate limited, else what executing it gives."""
+) -> CheckOutcome | None:
+    """The outcome of a runnable check that does not run: a dependency stops
+    it, or the run is rate limited. None when it executes."""
     dependency_outcome = _dependency_not_run_outcome(check, result_by_check_id)
     if dependency_outcome is not None:
         return dependency_outcome
     if rate_limited:
-        return _CheckOutcome(
+        return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_RATE_LIMITED_NOT_RUN_MESSAGE,
             summary=_RATE_LIMITED_NOT_RUN_MESSAGE,
             not_run_reason=CheckNotRunReason.RATE_LIMITED,
         )
-    return _execute_check(check, context, timeout_cap_seconds, form_run)
+    return None
 
 
 def decide_check_readiness(
@@ -725,7 +986,7 @@ def decide_check_readiness(
 
 def _unrunnable_outcome(
     check: CapabilityCheck[Any], context: CapabilityCheckContext, form_run: bool
-) -> _CheckOutcome | None:
+) -> CheckOutcome | None:
     """The outcome of a check that must not run in this context, or None when
     it can run."""
     readiness = decide_check_readiness(check, context)
@@ -735,20 +996,20 @@ def _unrunnable_outcome(
         case CheckReadinessKind.NEEDS_INSTANCE:
             return _missing_instance_outcome(check, context, form_run)
         case CheckReadinessKind.INVALID_FIELDS:
-            return _CheckOutcome(
+            return CheckOutcome(
                 status=CapabilityCheckStatus.FAILED,
                 message=readiness.message,
                 error_type=ConnectorValidationError.__name__,
                 error_kind=CheckErrorKind.INVALID,
             )
         case CheckReadinessKind.NOT_APPLICABLE:
-            return _CheckOutcome(
+            return CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED,
                 message=readiness.message,
                 applicable=False,
             )
         case CheckReadinessKind.NEEDS_CONFIG | CheckReadinessKind.MISSING_FIELDS:
-            return _CheckOutcome(
+            return CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED, message=readiness.message
             )
 
@@ -808,6 +1069,7 @@ def generate_capability_report(
     timeout_cap_seconds: float | None = None,
     prior_results: Sequence[CapabilityCheckResult] = (),
     form_run: bool = False,
+    first_check_id: str | None = None,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -831,9 +1093,13 @@ def generate_capability_report(
     ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
     the connector instantiation's. ``prior_results`` and ``form_run`` are
     forwarded to ``run_capability_checks``.
+
+    ``first_check_id`` (Start Now) orders the source's checks before
+    ``check_ids`` limits them, as a draft run's progress does
+    (``pending_in_run_order``).
     """
     source = source or credential.source
-    checks = get_capability_checks(source)
+    checks = run_order(get_capability_checks(source), first_check_id)
     if check_ids is not None:
         checks = [check for check in checks if check.check_id in check_ids]
     # Fail loudly for programmer errors (a source with no connector class)
@@ -855,9 +1121,9 @@ def generate_capability_report(
     )
     if should_instantiate:
         try:
-            # Under the guard the run ceiling budgets for it: construction and
+            # Under the guard the run lease budgets for it: construction and
             # ``load_credentials`` can probe the source with no timeout of their
-            # own, and the stale-run sweep trusts the ceiling.
+            # own, and the stale-run sweep trusts the lease.
             connector, fresh_credential_json = run_with_timeout(
                 _capped(CAPABILITY_CHECK_TIMEOUT_SECONDS, timeout_cap_seconds),
                 _instantiate_connector_isolated,

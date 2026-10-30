@@ -13,6 +13,7 @@ import type {
   OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
+  LineHeight,
   Rounding,
   Spacing,
   ContextualMenuWidth,
@@ -163,6 +164,7 @@ function roundingToRem(rounding: Rounding): string {
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
+  type LineHeight,
   type OverridableExtremaSizeVariants,
   type Rounding,
   type SizeVariants,

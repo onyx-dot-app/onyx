@@ -4,11 +4,9 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  merge_group:
   pull_request:
     paths:
       - "backend/**"
-      - ".agents/hooks/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
@@ -77,7 +75,7 @@ jobs:
         run: |
           # Find all subdirectories in backend/tests/external_dependency_unit
           dirs=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
-          echo "test-dirs=$dirs" >> $GITHUB_OUTPUT
+          echo "test-dirs=$dirs" >> "$GITHUB_OUTPUT"
 
   external-dependency-unit-tests:
     needs: discover-test-dirs

@@ -13,14 +13,21 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 
 from onyx.chat import process_message
-from onyx.chat.models import AnswerStream, ChatFullResponse, StreamingError
+from onyx.chat.models import (
+    AnswerStream,
+    ChatFullResponse,
+    ChatResponseOutcome,
+    ChatResponseSnapshot,
+    PersistenceStatus,
+)
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.utils import fleet_query_telemetry
 
 _USER_ID = "3f1c9a7e-0f38-4c3d-9a55-2d9e8a1b4c6d"
@@ -40,8 +47,10 @@ def _mock_user() -> Mock:
 def _request() -> Request:
     # A bare request with no Authorization header, so the endpoint treats the
     # caller as a web UI user rather than an API key or PAT client.
+    app = FastAPI()
     return Request(
         scope={
+            "app": app,
             "type": "http",
             "method": "POST",
             "path": "/chat/send-message",
@@ -68,6 +77,24 @@ def _install_turn(monkeypatch: pytest.MonkeyPatch, turn: Any) -> None:
 def _two_packet_turn(**_: Any) -> AnswerStream:
     yield _packet()
     yield _packet()
+    if response_future := _.get("response_future"):
+        response_future.set_result(
+            ChatResponseOutcome(
+                response=ChatResponseSnapshot(
+                    answer="answer",
+                    reasoning=None,
+                    request_params=None,
+                    citation_to_doc={},
+                    tool_calls=[],
+                    is_clarification=False,
+                    all_search_docs={},
+                    pre_answer_processing_time=None,
+                    response=None,
+                    cancelled=False,
+                ),
+                persistence_status=PersistenceStatus.SAVED,
+            )
+        )
 
 
 def _call_endpoint(
@@ -165,7 +192,7 @@ def test_stream_failure_still_emits_query_record(
         yield StreamingError(
             error="llm exploded",
             error_code="RATE_LIMIT",
-            details={"model": "gpt-4o", "provider": "openai"},
+            details={"model": "gpt-6-sol", "provider": "openai"},
         )
 
     _install_turn(monkeypatch, failing_turn)

@@ -271,7 +271,8 @@ class IndexReclaimStatus(str, PyEnum):
     SOAKING: the old index stopped being read; waiting out the retention window.
     DELETING: deleting the old index's data (loops until count-verified empty).
     RECLAIMED: terminal success — the old index's data is gone; the PAST row is kept
-        (not deleted) as the durable record that this index was reclaimed.
+        (not deleted) as the durable record that this index was reclaimed. Some rows
+        hold a shorter value for it; see IndexReclaimStatusType.
     BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
     """
 
@@ -685,6 +686,7 @@ class LLMModelFlowType(str, PyEnum):
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
     SEARCH_SELECTION = "search_selection"
+    DECISION = "decision"
     CRAFT = "craft"
 
 
@@ -956,3 +958,9 @@ class CapabilityReportRunStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED_TO_RUN = "failed_to_run"
+
+
+class SkillInstallationPolicy(str, PyEnum):
+    AVAILABLE = "AVAILABLE"
+    DEFAULT = "DEFAULT"
+    REQUIRED = "REQUIRED"

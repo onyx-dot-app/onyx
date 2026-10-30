@@ -4,10 +4,7 @@ import pytest
 from sqlalchemy import Boolean, Column, Integer, MetaData, Table, create_engine
 from sqlalchemy.orm import Session
 
-from onyx.db import persona as persona_db
 from onyx.db.models import MCPServer, Persona, Tool, User
-from onyx.server.features.default_assistant import api as default_api
-from onyx.server.features.default_assistant.models import DefaultAssistantUpdateRequest
 from onyx.server.features.mcp.models import MCPConnectionStatus
 
 
@@ -177,42 +174,6 @@ def tool(tool_id: int, server_id: int | None, name: str) -> Tool:
     return Tool(id=tool_id, name=name, mcp_server_id=server_id, enabled=True)
 
 
-def test_default_chat_views_share_existing_tool_attachments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    selected = tool(1, 42, "selected")
-    other_mcp = tool(2, 43, "other_server")
-    built_in = tool(3, None, "search")
-    unselected = tool(4, 42, "unselected")
-    default = Persona(id=0, tools=[selected, other_mcp, built_in])
-    custom = Persona(id=5, tools=[selected, unselected])
-    db = MagicMock(spec=Session)
-    user = User()
-    monkeypatch.setattr(persona_db, "get_default_assistant", lambda _: default)
-    monkeypatch.setattr(default_api, "get_default_assistant", lambda _: default)
-    monkeypatch.setattr(persona_db, "should_expose_tool_to_fe", lambda _: True)
-
-    def save_selection(tools: list[Tool]) -> None:
-        db.query.return_value.filter.return_value.one_or_none.side_effect = tools
-        response = default_api.update_default_assistant(
-            DefaultAssistantUpdateRequest(tool_ids=[item.id for item in tools]),
-            user,
-            db,
-        )
-        assert response.tool_ids == [item.id for item in tools]
-        assert (
-            default_api.get_default_assistant_configuration(user, db).tool_ids
-            == response.tool_ids
-        )
-        assert custom.tools == [selected, unselected]
-
-    save_selection([other_mcp, built_in])
-    save_selection([selected, other_mcp, built_in])
-    save_selection([selected, unselected, other_mcp, built_in])
-    assert default.system_prompt is None
-    assert db.commit.call_count == 3
-
-
 def test_default_chat_availability_has_no_separate_server_field() -> None:
     from onyx.server.features.mcp.models import MCPServer as MCPServerResponse
 
@@ -264,7 +225,6 @@ def test_default_chat_checks_access_before_resolving_credentials(
     accessible: bool,
     expected_resolution: bool,
 ) -> None:
-    from onyx.chat.emitter import Emitter
     from onyx.db.models import User
     from onyx.llm.interfaces import LLM
     from onyx.server.features.mcp.credentials import MCPCredentialsError
@@ -311,7 +271,6 @@ def test_default_chat_checks_access_before_resolving_credentials(
     result = tool_constructor._construct_tools_impl(
         configuration=configuration,
         db_session=MagicMock(spec=Session),
-        emitter=MagicMock(spec=Emitter),
         user=User(enable_memory_tool=False),
         llm=MagicMock(spec=LLM),
     )

@@ -1,10 +1,16 @@
+import builtins
 import math
+from collections.abc import Collection
+from itertools import batched, islice
 
 from redis.exceptions import LockNotOwnedError
 from redis.lock import Lock as RedisLock
 
 from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
 from onyx.redis.tenant_redis_client import TenantRedisClient
+
+_SCAN_BATCH_SIZE = 100
+_EXISTS_BATCH_SIZE = 1000
 
 
 class RedisCacheLock(CacheLock):
@@ -26,7 +32,10 @@ class RedisCacheLock(CacheLock):
         )
 
     def release(self) -> None:
-        self._lock.release()
+        try:
+            self._lock.release()
+        except LockNotOwnedError as error:
+            raise CacheLockLostError(str(error)) from error
 
     def extend(self, ttl_seconds: float) -> None:
         try:
@@ -42,9 +51,7 @@ class RedisCacheLock(CacheLock):
 class RedisCacheBackend(CacheBackend):
     """``CacheBackend`` implementation that delegates to a tenant Redis client.
 
-    This is a thin pass-through — every method maps 1-to-1 to the underlying
-    Redis command. Key-prefixing is handled by the ``TenantRedisClient``
-    itself (provided by ``get_redis_client``).
+    ``TenantRedisClient`` applies the tenant prefix to every command and pipeline.
     """
 
     def __init__(self, redis_client: TenantRedisClient) -> None:
@@ -77,8 +84,46 @@ class RedisCacheBackend(CacheBackend):
     def delete(self, key: str) -> None:
         self._r.delete(key)
 
+    def delete_prefix(self, prefix: str) -> None:
+        if not prefix:
+            raise ValueError("Cache deletion requires a nonempty prefix")
+        pattern = (
+            "".join("\\" + char if char in "\\*?[]" else char for char in prefix) + "*"
+        )
+        batch: list[bytes] = []
+        for key in self._r.scan_iter(match=pattern, count=_SCAN_BATCH_SIZE):
+            batch.append(key)
+            if len(batch) == _SCAN_BATCH_SIZE:
+                self._r.delete(*batch)
+                batch.clear()
+        if batch:
+            self._r.delete(*batch)
+
     def exists(self, key: str) -> bool:
         return bool(self._r.exists(key))
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        existing: set[str] = set()
+        for names in batched(keys, _EXISTS_BATCH_SIZE, strict=False):
+            with self._r.pipeline(transaction=False) as pipeline:
+                for name in names:
+                    pipeline.exists(name)
+                results = pipeline.execute()
+            existing.update(
+                name for name, exists in zip(names, results, strict=True) if exists
+            )
+        return existing
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        self._r.sadd(key, member)
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        self._r.srem(key, member)
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        return list(islice(self._r.sscan_iter(key, count=_SCAN_BATCH_SIZE), limit))
 
     # -- TTL ---------------------------------------------------------------
 

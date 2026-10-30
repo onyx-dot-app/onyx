@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
@@ -7,7 +8,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.connectors.factory import parse_credential_binding, validate_ccpair_for_user
+from onyx.connectors.factory import (
+    credential_use_refusal,
+    parse_credential_binding,
+    validate_ccpair_for_user,
+)
 from onyx.db.connector_credential_pair import (
     get_manageable_cc_pairs_for_credentials,
     verify_user_can_edit_connector,
@@ -17,7 +22,6 @@ from onyx.db.credentials import (
     CredentialAccessLevel,
     alter_credential,
     create_credential,
-    delete_credential,
     delete_credential_for_user,
     fetch_credential_by_id_for_user,
     fetch_credential_group_ids,
@@ -63,6 +67,7 @@ from onyx.utils.audit import (
     actor_from_user,
     emit_audit_event,
 )
+from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -70,6 +75,15 @@ logger = setup_logger()
 
 
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
+
+
+def _reject_masked_values(credential_json: dict[str, Any]) -> None:
+    """Refuses values that are a masked credential sent back, so a form that
+    shows masked values can never save them as the credential."""
+    try:
+        reject_masked_credentials(credential_json)
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
 
 def _credential_snapshot(
@@ -139,7 +153,8 @@ def get_cc_source_full_info(
 ) -> list[SimilarCredentialSnapshot]:
     """The credentials a ``source_type`` connector can use, shown in that
     source's keys. Each lists the connectors using it that the user can manage,
-    with their credential-bound config values, to help pick one."""
+    with their credential-bound config values, and says whether the user may
+    use it, to help pick one."""
     credentials = fetch_credentials_usable_by_source_for_user(
         db_session=db_session,
         user=user,
@@ -168,21 +183,32 @@ def get_cc_source_full_info(
         db_session, [credential.id for credential in credentials]
     )
     masked_ids = credential_ids_to_mask(credentials, user, db_session)
-    return [
-        SimilarCredentialSnapshot(
-            **dict(
-                CredentialSnapshot.from_credential_db_model(
-                    credential,
-                    mask_credential_prefix=credential.id in masked_ids,
-                    view_source=source_type,
-                    viewer_id=user.id,
-                    group_ids=group_ids.get(credential.id),
-                )
-            ),
-            usages=usages[credential.id],
+    snapshots: list[SimilarCredentialSnapshot] = []
+    for credential in credentials:
+        refusal = credential_use_refusal(
+            db_session,
+            user=user,
+            credential=credential,
+            source=source_type,
+            connector_specific_config=None,
         )
-        for credential in credentials
-    ]
+        snapshots.append(
+            SimilarCredentialSnapshot(
+                **dict(
+                    CredentialSnapshot.from_credential_db_model(
+                        credential,
+                        mask_credential_prefix=credential.id in masked_ids,
+                        view_source=source_type,
+                        viewer_id=user.id,
+                        group_ids=group_ids.get(credential.id),
+                    )
+                ),
+                usages=usages[credential.id],
+                usable=refusal is None,
+                refusal_reason=refusal.detail if refusal else None,
+            )
+        )
+    return snapshots
 
 
 @router.delete("/admin/credential/{credential_id}")
@@ -191,8 +217,8 @@ def delete_credential_by_id_admin(
     user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
-    """Same as the user endpoint, but can delete any credential (not just the user's own)"""
-    delete_credential(db_session=db_session, credential_id=credential_id)
+    """Same as the user endpoint: only the owner may delete a credential."""
+    delete_credential_for_user(credential_id, user, db_session)
     emit_audit_event(
         AuditAction.CREDENTIAL_DELETE,
         AuditOutcome.SUCCESS,
@@ -314,6 +340,7 @@ def create_credential_from_model(
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     assert_credential_share_within_scope(credential_info, user, db_session)
+    _reject_masked_values(credential_info.credential_json)
     # A typed Google account can come here (the account dialog) as well as
     # through a draft, so its key is checked the same way.
     try:
@@ -373,6 +400,7 @@ def create_credential_with_private_key(
     private_key_content: str = private_key_processor(uploaded_file)
 
     credential_data[field_key] = private_key_content
+    _reject_masked_values(credential_data)
 
     credential_info = CredentialBase(
         credential_json=credential_data,
@@ -439,6 +467,7 @@ def update_credential_data(
     user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialBase:
+    _reject_masked_values(credential_update.credential_json)
     credential = alter_credential(
         credential_id,
         credential_update.name,
@@ -484,6 +513,7 @@ def update_credential_private_key(
         )
     private_key_content: str = private_key_processor(uploaded_file)
     credential_data[field_key] = private_key_content
+    _reject_masked_values(credential_data)
 
     credential = alter_credential(
         credential_id,
@@ -511,8 +541,9 @@ def update_credential_sharing_endpoint(
     ),
     db_session: Session = Depends(get_session),
 ) -> CredentialSnapshot:
-    """Changes who may reuse a saved credential. The owner, or an admin who can
-    edit it, may do this. ``name`` changes the name when set."""
+    """Changes who may reuse a saved credential. Only its owner may do this, so
+    a credential with no owner keeps its sharing. ``name`` changes the name
+    when set."""
     # Held until update_credential_sharing commits: the current groups read
     # below must still be the groups the write replaces.
     lock_credential__no_commit(db_session, credential_id)
@@ -565,6 +596,7 @@ def update_credential_from_model(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CredentialSnapshot | StatusResponse[int]:
+    _reject_masked_values(credential_data.credential_json)
     updated_credential = update_credential(
         credential_id, credential_data, user, db_session
     )

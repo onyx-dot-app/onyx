@@ -10,13 +10,6 @@ export function pluginDetailHref(reference: PluginReference): PluginDetailPath {
   return `${ADMIN_ROUTES.PLUGINS.path}/${reference.kind}/${reference.id}`;
 }
 
-export function mcpOAuthReturnHref(
-  serverId: number,
-  enableChat = false
-): PluginHref {
-  return `${pluginDetailHref({ kind: "mcp", id: serverId })}?trigger_fetch=true${enableChat ? "&enable_chat=true" : ""}`;
-}
-
 export function parsePluginId(value: string | undefined): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
   const id = Number(value);

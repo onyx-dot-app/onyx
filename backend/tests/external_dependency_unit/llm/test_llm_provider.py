@@ -22,7 +22,7 @@ from onyx.db.llm import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.manage.llm.api import (
     test_default_provider as run_test_default_provider,
 )
@@ -56,7 +56,7 @@ def _create_test_provider(
             api_key=api_key,
             api_key_changed=True,
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
+                ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=True)
             ],
         ),
         db_session=db_session,
@@ -85,14 +85,14 @@ class TestLLMConfigurationEndpoint:
         provider_name: str,  # noqa: ARG002
     ) -> None:
         """
-        Test that a successful LLM test returns normally (no exception).
+        Test that a successful model probe returns normally (no exception).
 
         When test_llm returns None (success), the endpoint should complete
         without raising an exception.
         """
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmLLM] = []
 
-        def mock_test_llm_success(llm: LLM) -> str | None:
+        def mock_test_llm_success(llm: LitellmLLM) -> str | None:
             """Mock test_llm that always succeeds."""
             captured_llms.append(llm)
             return None  # Success
@@ -108,9 +108,9 @@ class TestLLMConfigurationEndpoint:
                         api_key="sk-new-test-key-0000000000000000000000000000",
                         api_key_changed=True,
                         custom_config_changed=False,
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -118,7 +118,7 @@ class TestLLMConfigurationEndpoint:
             assert len(captured_llms) == 1, "test_llm should have been called once"
 
             # Verify the LLM was configured with the correct model
-            assert captured_llms[0].config.model_name == "gpt-4o-mini"
+            assert captured_llms[0].config.model_name == "gpt-6-luna"
             assert captured_llms[0].config.model_provider == LlmProviderNames.OPENAI
 
         finally:
@@ -130,14 +130,14 @@ class TestLLMConfigurationEndpoint:
         provider_name: str,  # noqa: ARG002
     ) -> None:
         """
-        Test that a failed LLM test raises an OnyxError with VALIDATION_ERROR.
+        Test that a failed model probe raises an OnyxError with VALIDATION_ERROR.
 
         When test_llm returns an error message, the endpoint should raise
         an OnyxError with the error details.
         """
         error_message = "Invalid API key: Authentication failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
+        def mock_test_llm_failure(llm: LitellmLLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 
@@ -152,9 +152,9 @@ class TestLLMConfigurationEndpoint:
                             api_key="sk-invalid-key-00000000000000000000000000",
                             api_key_changed=True,
                             custom_config_changed=False,
-                            model="gpt-4o-mini",
+                            model="gpt-6-luna",
                         ),
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -174,9 +174,9 @@ class TestLLMConfigurationEndpoint:
         the stored API key from the database is used.
         """
         original_api_key = "sk-original-stored-key-00000000000000000000"
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmLLM] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmLLM) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -198,9 +198,9 @@ class TestLLMConfigurationEndpoint:
                         api_key=None,  # Not providing a new key
                         api_key_changed=False,  # Using existing key
                         custom_config_changed=False,
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -223,9 +223,9 @@ class TestLLMConfigurationEndpoint:
         """
         original_api_key = "sk-original-stored-key-00000000000000000000"
         new_api_key = "sk-new-updated-key-000000000000000000000000"
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmLLM] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmLLM) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -247,9 +247,9 @@ class TestLLMConfigurationEndpoint:
                         api_key=new_api_key,  # Providing a new key
                         api_key_changed=True,  # Key is being changed
                         custom_config_changed=False,
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -271,9 +271,9 @@ class TestLLMConfigurationEndpoint:
         the stored custom_config from the database is used.
         """
         original_custom_config = {"custom_key": "original_value"}
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmLLM] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmLLM) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -290,7 +290,7 @@ class TestLLMConfigurationEndpoint:
                     custom_config_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name="gpt-6-luna", is_visible=True
                         )
                     ],
                 ),
@@ -309,9 +309,9 @@ class TestLLMConfigurationEndpoint:
                         api_key_changed=False,
                         custom_config=None,  # Not providing new config
                         custom_config_changed=False,  # Using existing config
-                        model="gpt-4o-mini",
+                        model="gpt-6-luna",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -330,13 +330,13 @@ class TestLLMConfigurationEndpoint:
         """
         Test that the endpoint correctly passes different model names to the LLM.
         """
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmLLM] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmLLM) -> str | None:
             captured_llms.append(llm)
             return None
 
-        test_models = ["gpt-4", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
+        test_models = ["gpt-4", "gpt-6-sol", "gpt-6-luna", "gpt-3.5-turbo"]
 
         try:
             with patch(
@@ -351,7 +351,7 @@ class TestLLMConfigurationEndpoint:
                             custom_config_changed=False,
                             model=model_name,
                         ),
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -395,12 +395,12 @@ class TestDefaultProviderEndpoint:
         provider_2_api_key = "sk-provider2-key-000000000000000000000000000"
 
         provider_1_initial_model = "gpt-4"
-        provider_1_updated_model = "gpt-4o"
-        provider_2_default_model = "gpt-4o-mini"
+        provider_1_updated_model = "gpt-6-sol"
+        provider_2_default_model = "gpt-6-luna"
 
-        captured_llms: list[LLM] = []
+        captured_llms: list[LitellmLLM] = []
 
-        def mock_test_llm_capture(llm: LLM) -> str | None:
+        def mock_test_llm_capture(llm: LitellmLLM) -> str | None:
             """Mock test_llm that captures the LLM for inspection."""
             captured_llms.append(llm)
             return None
@@ -415,7 +415,9 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-6-sol", is_visible=True
+                        ),
                     ],
                 ),
                 db_session=db_session,
@@ -449,7 +451,7 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name="gpt-6-luna", is_visible=True
                         ),
                         ModelConfigurationUpsertRequest(
                             name="gpt-3.5-turbo", is_visible=True
@@ -480,7 +482,9 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-6-sol", is_visible=True
+                        ),
                     ],
                 ),
                 db_session=db_session,
@@ -563,12 +567,12 @@ class TestDefaultProviderEndpoint:
         db_session: Session,
     ) -> None:
         """
-        Test that when the default provider's LLM test fails, an exception is raised.
+        Test that when the default provider's model probe fails, an exception is raised.
         """
         provider_name = f"test-provider-{uuid4().hex[:8]}"
-        error_message = "Connection to LLM provider failed"
+        error_message = "Connection to model provider failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
+        def mock_test_llm_failure(llm: LitellmLLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 
@@ -582,7 +586,7 @@ class TestDefaultProviderEndpoint:
                     api_key_changed=True,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name="gpt-6-luna", is_visible=True
                         ),
                     ],
                 ),
@@ -590,7 +594,7 @@ class TestDefaultProviderEndpoint:
             )
             update_default_model(
                 provider_id=provider.id,
-                model="gpt-4o-mini",
+                model="gpt-6-luna",
                 db_session=db_session,
                 flow_type=LLMModelFlowType.CHAT,
             )

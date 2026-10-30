@@ -2,8 +2,7 @@ import type { useTranslations } from "next-intl";
 import { SvgGlobe, SvgUserKey } from "@opal/icons";
 import { SvgGoogle } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
-import { toast } from "@opal/layouts";
-import { SSOProviderType } from "@/lib/sso/interfaces";
+import { SSOProviderType } from "@/lib/sso/types";
 
 export type SSOTranslate = ReturnType<
   typeof useTranslations<"admin.ssoProviders">
@@ -172,15 +171,3 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
       },
     ],
   };
-
-export async function copyRedirectUri(
-  redirectUri: string,
-  t: SSOTranslate
-): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(redirectUri);
-    toast.success(t("copyRedirectUri.successToast"));
-  } catch {
-    toast.error(t("copyRedirectUri.errorToast"));
-  }
-}

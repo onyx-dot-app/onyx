@@ -1,7 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
+import { FilePreviewLoading } from "@/app/craft/components/output-panel/FilePreviewLoading";
 import { SWRConfig } from "swr";
 import { useUser } from "@/providers/UserProvider";
 import { useFilePreview } from "@/lib/build/hooks";
@@ -10,12 +11,16 @@ import {
   downloadArtifactFile,
   fetchFileContent,
 } from "@/app/craft/services/apiServices";
-import { Button, Text } from "@opal/components";
-import { SvgDownloadCloud } from "@opal/icons";
+import { Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { PreviewUnavailable } from "@/app/craft/components/output-panel/PreviewUnavailable";
+import { binaryPreviewKind } from "@/app/craft/services/filePreview";
+import BinaryFilePreview from "@/app/craft/components/output-panel/BinaryFilePreview";
 import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
 import MarkdownFilePreview from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
+import HtmlFilePreview from "@/app/craft/components/output-panel/HtmlFilePreview";
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 
 import {
@@ -25,7 +30,7 @@ import {
 
 import { CsvPreview } from "@/app/craft/components/output-panel/CsvPreview";
 
-interface FilePreviewContentProps extends FilePreviewScrollPosition {
+export interface FilePreviewContentProps extends FilePreviewScrollPosition {
   onRefreshingChange?: (isRefreshing: boolean) => void;
   initialSlide?: number;
   onSlideChange?: (slide: number) => void;
@@ -56,6 +61,7 @@ export function FilePreviewContent({
     (page: number) => onSlideChange?.(page - 1),
     [onSlideChange]
   );
+  const binaryKind = binaryPreviewKind(filePath);
   if (!user) return null;
   // The retained viewer owns its bytes. Eviction or an identity change releases its cache.
   return (
@@ -63,7 +69,16 @@ export function FilePreviewContent({
       key={`${user.id}:${sessionId}:${filePath}`}
       value={{ provider: () => new Map() }}
     >
-      {/\.pptx?$/i.test(filePath) ? (
+      {filePath.startsWith("outputs/") && /\.html?$/i.test(filePath) ? (
+        <HtmlFilePreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          isActive={isActive}
+          onRefreshingChange={onRefreshingChange}
+        />
+      ) : /\.pptx?$/i.test(filePath) ? (
         <PptxPreview
           sessionId={sessionId}
           filePath={filePath}
@@ -84,6 +99,18 @@ export function FilePreviewContent({
           onPageChange={onPdfPageChange}
           isActive={isActive}
           onRefreshingChange={onRefreshingChange}
+        />
+      ) : binaryKind ? (
+        <BinaryFilePreview
+          kind={binaryKind}
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          isActive={isActive}
+          onRefreshingChange={onRefreshingChange}
+          initialScrollTop={initialScrollTop}
+          onScrollTopChange={onScrollTopChange}
         />
       ) : (
         <FetchedFilePreview
@@ -113,56 +140,60 @@ function FetchedFilePreview({
   onScrollTopChange,
 }: FilePreviewContentProps) {
   const t = useTranslations("craft.filePreview");
-  const downloadTranslations = useTranslations("craft.filesTab");
+  const [retry, setRetry] = useState(0);
   const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
-    { revision, refreshKey, isActive, onRefreshingChange }
+    {
+      revision,
+      refreshKey: (refreshKey ?? 0) + retry,
+      isActive,
+      onRefreshingChange,
+    }
   );
 
   if (!data || data.error) {
-    let title: string | undefined;
-    let description = t("noContent.label");
-    if (isLoading) {
-      description = t("loading.label");
-    } else if (error) {
-      title = t("error.title");
-      description = error.message;
-    } else if (data?.error) {
-      title = t("cannotPreview.title");
-      description =
-        data.error === "unsupported_binary"
-          ? t("unsupported.description")
-          : t("imageTooLarge.description");
+    if (isLoading && !error) return <FilePreviewLoading />;
+    if (error || data?.error) {
+      const reason = error
+        ? "error"
+        : data?.error === "image_too_large"
+          ? "imageTooLarge"
+          : "unsupported";
+      return (
+        <PreviewUnavailable
+          fileName={filePath}
+          title={t(
+            reason === "unsupported"
+              ? "cannotPreview.title"
+              : reason === "imageTooLarge"
+                ? "imageTooLarge.title"
+                : "error.title"
+          )}
+          description={t(`${reason}.description`)}
+          onDownload={() => downloadArtifactFile(sessionId, filePath)}
+          onRetry={error ? () => setRetry((value) => value + 1) : undefined}
+        />
+      );
     }
-    const message = (
-      <div className="flex flex-col items-center gap-3 text-center">
-        <Text font="secondary-body" color="text-03">
-          {description}
-        </Text>
-        {data?.error && !isLoading && !error && (
-          <Button
-            icon={SvgDownloadCloud}
-            prominence="secondary"
-            size="sm"
-            onClick={() => downloadArtifactFile(sessionId, filePath)}
-          >
-            {downloadTranslations("download.label")}
-          </Button>
-        )}
-      </div>
-    );
-    return (
-      <WorkspaceHome title={title ?? description}>
-        {title && message}
-      </WorkspaceHome>
-    );
+    return <WorkspaceHome title={t("noContent.label")}>{null}</WorkspaceHome>;
   }
 
   const fileName = filePath.split("/").pop() || filePath;
   let viewer: ReactNode;
   if (data.isImage) {
     viewer = <ImagePreview src={data.content} fileName={fileName} />;
+  } else if (/\.html?$/i.test(filePath)) {
+    viewer = (
+      <iframe
+        key={refreshKey}
+        title={fileName}
+        srcDoc={data.content}
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        className="h-full w-full border-0 bg-background-neutral-01"
+      />
+    );
   } else if (/\.csv$/i.test(filePath)) {
     viewer = (
       <CsvPreview
@@ -195,7 +226,7 @@ function FetchedFilePreview({
     );
   }
   return (
-    <div className="flex h-full flex-col">
+    <Section gap={0} alignItems="stretch" justifyContent="start">
       {error && (
         <div
           role="alert"
@@ -207,6 +238,6 @@ function FetchedFilePreview({
         </div>
       )}
       <div className="min-h-0 flex-1">{viewer}</div>
-    </div>
+    </Section>
   );
 }

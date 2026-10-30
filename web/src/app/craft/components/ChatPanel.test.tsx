@@ -147,9 +147,18 @@ jest.mock("@/app/craft/components/BuildMessageList", () => ({
   __esModule: true,
   default: () => <div>Saved history</div>,
 }));
+const mockSubmitResult = jest.fn();
 jest.mock("@/app/craft/components/BuildWelcome", () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ onSubmit }: Pick<CraftInputBarProps, "onSubmit">) => (
+    <button
+      onClick={async () =>
+        mockSubmitResult(await onSubmit("welcome prompt", []))
+      }
+    >
+      Send welcome
+    </button>
+  ),
 }));
 jest.mock("@/app/craft/components/AgentSwitcher", () => ({
   __esModule: true,
@@ -245,7 +254,7 @@ it.each([
   ).toHaveLength(1);
 });
 
-it("shows a failed metadata load and retries the session explicitly", async () => {
+it("blocks submission after a failed session load and offers an explicit retry", async () => {
   const original = useBuildSessionStore.getState().loadSession;
   const loadSession = jest.fn().mockResolvedValue(undefined);
   useBuildSessionStore.setState({ loadSession });
@@ -255,6 +264,8 @@ it("shows a failed metadata load and retries the session explicitly", async () =
   try {
     render(<BuildChatPanel existingSessionId={SESSION_ID} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Runtime unavailable");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Queue" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(loadSession).toHaveBeenCalledWith(SESSION_ID, { force: true });
   } finally {
@@ -622,6 +633,40 @@ it.each(["active", "failed"] as const)(
       expect(streamMessage).toHaveBeenCalledTimes(1);
     } finally {
       useBuildSessionStore.setState({ loadSession: original });
+    }
+  }
+);
+
+it.each([true, false])(
+  "reports welcome handoff acceptance with sandbox ready: %s",
+  async (ready) => {
+    const pendingStream = deferred<void>();
+    streamMessage.mockReturnValueOnce(pendingStream.promise);
+    useBuildSessionStore.setState({
+      currentSessionId: null,
+      preProvisioning: ready
+        ? { status: "ready", sessionId: "welcome" }
+        : { status: "idle" },
+    });
+    const error = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<BuildChatPanel />);
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "Send welcome" }))
+      );
+      expect(mockSubmitResult).toHaveBeenCalledWith(ready);
+      if (ready)
+        expect(streamMessage).toHaveBeenCalledWith(
+          "welcome",
+          "welcome prompt",
+          expect.anything(),
+          []
+        );
+      else expect(streamMessage).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      await act(async () => pendingStream.resolve());
+      streamMessage.mockReset().mockResolvedValue(undefined);
     }
   }
 );

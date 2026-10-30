@@ -10,19 +10,20 @@ import React, {
 } from "react";
 import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
-import { InputPrompt } from "@/app/app/interfaces";
+import { InputPrompt } from "@/app/app/types";
 import { LlmManager } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/types";
-import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
+import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { effectiveChatForcedToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/position/hooks";
+import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
@@ -53,6 +54,7 @@ import {
   SvgSearch,
   SvgStop,
   SvgX,
+  SvgRefreshCw,
 } from "@opal/icons";
 import {
   Button,
@@ -79,6 +81,8 @@ import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
+  /** Puts back a message and files that failed to send, unless a newer draft exists. */
+  restore: (message: string, files: ProjectFile[]) => void;
   focus: () => void;
 }
 
@@ -143,6 +147,22 @@ const AppInputBar = React.memo(
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const queuedMessages = useCurrentQueuedMessages();
+    const currentSessionId = useChatSessionStore(
+      (state) => state.currentSessionId
+    );
+    const [checkingSessions, setCheckingSessions] = useState<Set<string>>(
+      () => new Set()
+    );
+    const isCheckingCompletion =
+      currentSessionId !== null && checkingSessions.has(currentSessionId);
+    const canStopGeneration =
+      chatState === "loading" || chatState === "streaming";
+    const tReadiness = useTranslations("chat.readiness");
+    const queuedMessagesPaused = useChatSessionStore(
+      (state) =>
+        state.sessions.get(state.currentSessionId ?? "")
+          ?.queuedMessagesPaused ?? false
+    );
     const latestMessageRenderComplete = useCurrentLatestMessageRenderComplete();
     const enqueueCurrentMessage = useChatSessionStore(
       (state) => state.enqueueCurrentMessage
@@ -302,14 +322,17 @@ const AppInputBar = React.memo(
     );
     const submitMessage = useCallback(
       (text: string) => {
-        if (!text.trim()) {
+        if (chatState !== "input" || !text.trim()) {
           return;
         }
         handleSubmit(text);
         clearChatDraft();
       },
-      [handleSubmit, clearChatDraft]
+      [chatState, handleSubmit, clearChatDraft]
     );
+
+    const { currentMessageFiles, setCurrentMessageFiles } =
+      useProjectsContext();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -318,6 +341,13 @@ const AppInputBar = React.memo(
           clearMessage();
           clearChatDraft();
         }
+      },
+      restore: (text: string, files: ProjectFile[]) => {
+        // Keep a draft the user started while the failed send was pending.
+        if (message.trim() || currentMessageFiles.length > 0) return;
+        setMessage(text);
+        setCurrentMessageFiles(files);
+        setCursorToEnd();
       },
       focus: () => {
         inputRef.current?.focus();
@@ -332,7 +362,7 @@ const AppInputBar = React.memo(
       if (initialMessage) {
         setMessage(initialMessage);
       }
-    }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [initialMessage]);
     const shouldShowRecordingWaveformBelow =
       isRecording &&
       !isVoicePlaybackActive &&
@@ -342,7 +372,7 @@ const AppInputBar = React.memo(
       if (isNewSession && !initialMessage) {
         clearMessage();
       }
-    }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isNewSession, initialMessage]);
 
     const { clearForcedTool } = toolConfiguration;
     const forcedToolId = effectiveChatForcedToolId({
@@ -350,8 +380,6 @@ const AppInputBar = React.memo(
       agent: activeAgent,
       plugins: memberPlugins ?? [],
     });
-    const { currentMessageFiles, setCurrentMessageFiles } =
-      useProjectsContext();
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
@@ -396,7 +424,10 @@ const AppInputBar = React.memo(
       // typewriter is still flushing the prior answer.
       const wasReady =
         prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
-      const isReady = chatState === "input" && latestMessageRenderComplete;
+      const isReady =
+        chatState === "input" &&
+        latestMessageRenderComplete &&
+        !queuedMessagesPaused;
 
       prevChatStateRef.current = chatState;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
@@ -413,6 +444,7 @@ const AppInputBar = React.memo(
       chatState,
       latestMessageRenderComplete,
       queuedMessages,
+      queuedMessagesPaused,
       removeCurrentQueuedMessage,
       stopTTS,
       onSubmit,
@@ -750,6 +782,8 @@ const AppInputBar = React.memo(
 
           <Button
             disabled={
+              chatState === "cancelling" ||
+              (isCheckingCompletion && chatState === "unconfirmed") ||
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
                 !message) ||
@@ -757,21 +791,51 @@ const AppInputBar = React.memo(
               isClassifying
             }
             tooltip={
-              hasPendingFiles
-                ? t("appInputBar.sendButton.processingFilesTooltip")
-                : undefined
+              chatState === "cancelling"
+                ? t("appInputBar.sendButton.stoppingLabel")
+                : hasPendingFiles
+                  ? t("appInputBar.sendButton.processingFilesTooltip")
+                  : undefined
             }
             id="onyx-chat-input-send-button"
             icon={
-              isClassifying
+              isCheckingCompletion && chatState === "unconfirmed"
                 ? IconLoader
-                : chatState !== "input" && message.trim()
-                  ? SvgArrowUp
-                  : chatState === "streaming" || isVoicePlaybackControllable
-                    ? SvgStop
-                    : SvgArrowUp
+                : chatState === "unconfirmed"
+                  ? SvgRefreshCw
+                  : isClassifying || chatState === "cancelling"
+                    ? IconLoader
+                    : chatState !== "input" && message.trim()
+                      ? SvgArrowUp
+                      : canStopGeneration || isVoicePlaybackControllable
+                        ? SvgStop
+                        : SvgArrowUp
             }
             onClick={() => {
+              if (chatState === "unconfirmed") {
+                const store = useChatSessionStore.getState();
+                const sessionId = store.currentSessionId;
+                const session = sessionId
+                  ? store.sessions.get(sessionId)
+                  : undefined;
+                if (!sessionId || !session || isCheckingCompletion) return;
+                setCheckingSessions((pending) =>
+                  new Set(pending).add(sessionId)
+                );
+                void settleChatSession({
+                  sessionId,
+                  controller: session.abortController,
+                  errorMessage: tReadiness("checkFailed"),
+                  mode: "recovery",
+                }).finally(() =>
+                  setCheckingSessions((pending) => {
+                    const remaining = new Set(pending);
+                    remaining.delete(sessionId);
+                    return remaining;
+                  })
+                );
+                return;
+              }
               const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
@@ -781,7 +845,7 @@ const AppInputBar = React.memo(
                   // empty-save.
                   clearChatDraft();
                 }
-              } else if (chatState == "streaming") {
+              } else if (canStopGeneration) {
                 stopTTS({ manual: true });
                 stopGenerating();
               } else if (isVoicePlaybackControllable) {
@@ -790,7 +854,13 @@ const AppInputBar = React.memo(
                 submitMessage(message);
               }
             }}
-          />
+          >
+            {chatState === "cancelling"
+              ? t("appInputBar.sendButton.stoppingLabel")
+              : chatState === "unconfirmed"
+                ? t("appInputBar.sendButton.reloadLabel")
+                : undefined}
+          </Button>
         </div>
       </div>
     );
@@ -943,6 +1013,8 @@ const AppInputBar = React.memo(
                               submitMessage(message);
                             }
                           } else if (
+                            chatState !== "cancelling" &&
+                            chatState !== "unconfirmed" &&
                             message.trim() &&
                             !disabled &&
                             !isClassifying &&
@@ -1020,7 +1092,13 @@ const AppInputBar = React.memo(
                     prominence="tertiary"
                   />
                   <Button
-                    disabled={!message || isClassifying || hasPendingFiles}
+                    disabled={
+                      !message ||
+                      isClassifying ||
+                      hasPendingFiles ||
+                      chatState === "cancelling" ||
+                      chatState === "unconfirmed"
+                    }
                     id="onyx-chat-input-send-button"
                     icon={isClassifying ? IconLoader : SvgSearch}
                     onClick={() => {

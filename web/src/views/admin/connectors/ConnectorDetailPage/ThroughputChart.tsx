@@ -14,9 +14,8 @@ import {
 import {
   Card,
   Dropdown,
-  FilterButton,
+  SelectButton,
   MessageCard,
-  OpenButton,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -38,14 +37,15 @@ const DAY_MINUTES = 1440;
 const HOUR_MINUTES = 60;
 
 // Labels sit on local times divisible by this. At a day they fall on midnight and show the date.
+// All time has no fixed length, so it takes a zoomed span's spacing.
 const TICK_MINUTES = {
   "1h": 10,
-  "12h": 2 * HOUR_MINUTES,
   "24h": 4 * HOUR_MINUTES,
   "7d": DAY_MINUTES,
-} satisfies Record<CCPairThroughputWindow, number>;
+  all: null,
+} satisfies Record<CCPairThroughputWindow, number | null>;
 
-// A zoomed span labels the coarsest of these that still fits this many labels.
+// A zoomed span or all time labels the coarsest of these that still fits this many labels.
 const SPAN_TICK_MINUTES = [
   1,
   5,
@@ -55,10 +55,14 @@ const SPAN_TICK_MINUTES = [
   2 * HOUR_MINUTES,
   4 * HOUR_MINUTES,
   DAY_MINUTES,
+  2 * DAY_MINUTES,
+  7 * DAY_MINUTES,
+  14 * DAY_MINUTES,
+  30 * DAY_MINUTES,
 ];
 const SPAN_TICKS_WANTED = 3;
 
-/** Tick spacing for a zoomed span, so a span of any length keeps a few labels. */
+/** Tick spacing for a span of any length, zoomed or all time, so it keeps a few labels. */
 function spanTickMinutes(spanMs: number): number {
   const spanMinutes = spanMs / 60_000;
   const fitting = SPAN_TICK_MINUTES.filter(
@@ -71,14 +75,14 @@ function spanTickMinutes(spanMs: number): number {
 export type PickerWindow = CCPairThroughputWindow;
 
 // The pair chart has no 1h window: one hour of a pair is too few runs to read.
-export const PAIR_WINDOWS: readonly PickerWindow[] = ["12h", "24h", "7d"];
+export const PAIR_WINDOWS: readonly PickerWindow[] = ["24h", "7d", "all"];
 
 /** Each window's label under `admin.connector.runs.window`. */
 export const WINDOW_LABEL_KEYS = {
   "1h": "h1",
-  "12h": "h12",
   "24h": "h24",
   "7d": "d7",
+  all: "all",
 } as const satisfies Record<PickerWindow, string>;
 
 function windowLabelKey(window: PickerWindow) {
@@ -87,10 +91,10 @@ function windowLabelKey(window: PickerWindow) {
 
 const WINDOW_HOURS = {
   "1h": 1,
-  "12h": 12,
   "24h": 24,
   "7d": 24 * 7,
-} satisfies Record<PickerWindow, number>;
+  all: null,
+} satisfies Record<PickerWindow, number | null>;
 
 export interface PickedWindow {
   window: PickerWindow;
@@ -110,8 +114,10 @@ export function windowStart(hours: number): string {
   return new Date(minute - hours * 3_600_000).toISOString();
 }
 
-export function pickedWindowStart({ window }: PickedWindow): string {
-  return windowStart(WINDOW_HOURS[window]);
+/** The window's start, or `null` for all time. */
+export function pickedWindowStart({ window }: PickedWindow): string | null {
+  const hours = WINDOW_HOURS[window];
+  return hours === null ? null : windowStart(hours);
 }
 
 /** A chart slice or dragged span, as ISO times, that zooms the chart and narrows its run lists. `until` is exclusive. */
@@ -135,13 +141,47 @@ export function rangeWithin(
   };
 }
 
-const SLICE_TIME_FORMAT = {
-  month: "short",
-  day: "numeric",
+const DAY_LABEL_FORMAT = { month: "short", day: "numeric" } as const;
+const TIME_LABEL_FORMAT = {
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
 } as const;
+const SLICE_TIME_FORMAT = {
+  ...DAY_LABEL_FORMAT,
+  ...TIME_LABEL_FORMAT,
+} as const;
+
+type Formatter = ReturnType<typeof useFormatter>;
+
+/** The browser's time zone. The ticks fall on its local times, while next-intl formats in the server's zone. */
+function localTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/** A slice or picked span in local time, such as "Oct 21, 09:00 – 09:20". */
+export function formatSliceRange(
+  format: Formatter,
+  from: Date,
+  to: Date
+): string {
+  return format.dateTimeRange(from, to, {
+    ...SLICE_TIME_FORMAT,
+    timeZone: localTimeZone(),
+  });
+}
+
+/** An axis label in local time: the date for day spacing, else the time. */
+export function formatTickLabel(
+  format: Formatter,
+  value: number,
+  tickMinutes: number
+): string {
+  return format.dateTime(new Date(value), {
+    ...(tickMinutes >= DAY_MINUTES ? DAY_LABEL_FORMAT : TIME_LABEL_FORMAT),
+    timeZone: localTimeZone(),
+  });
+}
 
 // The status strip draws this many hairline ticks under each bar, so a run reads as
 // thin ticks with gaps between them rather than a solid block.
@@ -165,19 +205,39 @@ interface Slice {
   docs: number;
 }
 
-/** The local times inside the window that are a whole multiple of `minutes` past local midnight. */
+/** The slices that overlap `start` to `end`, plus one on each side, which the axis clips. Recharts sizes bars by the gap between points, so a lone slice draws no bar. */
+export function chartSlices(
+  docsIndexed: number[],
+  dataStart: number,
+  sliceMs: number,
+  start: number,
+  end: number
+): Slice[] {
+  return docsIndexed
+    .map((docs, index) => ({ at: dataStart + sliceMs * (index + 0.5), docs }))
+    .filter(
+      (slice) =>
+        slice.at + sliceMs * 1.5 > start && slice.at - sliceMs * 1.5 < end
+    );
+}
+
+/** The local times inside the window that are a whole multiple of `minutes` past local midnight, or every `minutes / DAY_MINUTES`th local midnight. */
 function axisTicks(start: number, end: number, minutes: number): number[] {
   // Ticks within an hour step by their own spacing, longer ones hour by hour so a day's ticks still land on midnight across a clock change.
   const step = Math.min(minutes, HOUR_MINUTES);
+  const everyDays = Math.max(1, minutes / DAY_MINUTES);
   const tick = new Date(start);
   tick.setSeconds(0, 0);
   tick.setMinutes(tick.getMinutes() - (tick.getMinutes() % step));
   const ticks: number[] = [];
   for (; tick.getTime() <= end; tick.setMinutes(tick.getMinutes() + step)) {
     const sinceMidnight = tick.getHours() * HOUR_MINUTES + tick.getMinutes();
-    if (tick.getTime() >= start && sinceMidnight % minutes === 0) {
-      ticks.push(tick.getTime());
-    }
+    if (tick.getTime() < start || sinceMidnight % minutes !== 0) continue;
+    // Days since the epoch by local date, so multi-day labels hold their dates as the window moves and across a clock change.
+    const day =
+      Date.UTC(tick.getFullYear(), tick.getMonth(), tick.getDate()) /
+      (DAY_MINUTES * 60_000);
+    if (day % everyDays === 0) ticks.push(tick.getTime());
   }
   return ticks;
 }
@@ -270,23 +330,26 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
     <Dropdown>
       <Dropdown.Trigger asChild>
         {selection === null || onClearSelection === undefined ? (
-          <OpenButton icon={SvgClock} state="empty">
+          <SelectButton chevron icon={SvgClock} state="empty">
             {label ?? tWindow(windowLabelKey(value))}
-          </OpenButton>
+          </SelectButton>
         ) : (
           // The span takes the picker's place, so the row keeps its shape. Its X returns to the window.
-          <FilterButton
+          <SelectButton
+            variant="select-filter"
+            chevron
+            labelFont="main-ui-action"
             icon={SvgClock}
-            active
+            state="selected"
             tooltip={t("rangeFilter")}
             onClear={onClearSelection}
           >
-            {format.dateTimeRange(
+            {formatSliceRange(
+              format,
               new Date(selection.since),
-              new Date(selection.until),
-              SLICE_TIME_FORMAT
+              new Date(selection.until)
             )}
-          </FilterButton>
+          </SelectButton>
         )}
       </Dropdown.Trigger>
       <Dropdown.Data
@@ -324,7 +387,7 @@ function SliceTooltip({ active, payload, sliceMs }: SliceTooltipProps) {
         {t("tooltip", { count: slice.docs })}
       </Text>
       <Text font="secondary-body" color="text-03">
-        {format.dateTimeRange(from, to, SLICE_TIME_FORMAT)}
+        {formatSliceRange(format, from, to)}
       </Text>
     </Card>
   );
@@ -362,20 +425,13 @@ export function ThroughputBars({
   const dataEnd = Date.parse(data.window_end);
   const sliceMs = (dataEnd - dataStart) / data.docs_indexed.length;
   const tickMs = sliceMs / STRIP_TICKS_PER_SLICE;
-  // A selection shows only the slices that overlap it, so the bars widen to fill the span and a
-  // slice that drifts half out as the window rolls keeps its bar, clipped at the axis, until it leaves.
+  // A selection shows only the slices near it, so the bars widen to fill the span.
   const start = selection === null ? dataStart : Date.parse(selection.since);
   const end = selection === null ? dataEnd : Date.parse(selection.until);
-  const slices: Slice[] = data.docs_indexed
-    .map((docs, index) => ({
-      at: dataStart + sliceMs * (index + 0.5),
-      docs,
-    }))
-    .filter(
-      (slice) => slice.at + sliceMs / 2 > start && slice.at - sliceMs / 2 < end
-    );
+  const slices = chartSlices(data.docs_indexed, dataStart, sliceMs, start, end);
   const tickMinutes =
-    selection === null ? TICK_MINUTES[range] : spanTickMinutes(end - start);
+    (selection === null ? TICK_MINUTES[range] : null) ??
+    spanTickMinutes(end - start);
   const labelTicks = axisTicks(start, end, tickMinutes);
   const labelSet = new Set(labelTicks);
   const ticks = [
@@ -458,18 +514,9 @@ export function ThroughputBars({
               allowDataOverflow
               ticks={ticks}
               tickFormatter={(value: number) =>
-                !labelSet.has(value)
-                  ? ""
-                  : tickMinutes >= DAY_MINUTES
-                    ? format.dateTime(new Date(value), {
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : format.dateTime(new Date(value), {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hourCycle: "h23",
-                      })
+                labelSet.has(value)
+                  ? formatTickLabel(format, value, tickMinutes)
+                  : ""
               }
               tick={{
                 fontSize: 10,

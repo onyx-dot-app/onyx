@@ -8,10 +8,11 @@ from urllib.parse import urlparse
 
 from box_sdk_gen import BoxCCGAuth, BoxClient, CCGConfig
 from box_sdk_gen.box.errors import BoxAPIError
+from box_sdk_gen.schemas.file import FileItemStatusField
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
 from box_sdk_gen.schemas.user_full import UserFull
-from box_sdk_gen.schemas.web_link import WebLink
+from box_sdk_gen.schemas.web_link import WebLink, WebLinkItemStatusField
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import BOX_CONNECTOR_SIZE_THRESHOLD, INDEX_BATCH_SIZE
@@ -36,6 +37,7 @@ from onyx.connectors.interfaces import (
     CheckpointOutput,
     GenerateSlimDocumentOutput,
     NormalizationResult,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -89,6 +91,7 @@ _ITEM_FIELDS = [
     "url",
     "description",
 ]
+_REINDEX_FILE_FIELDS = [*_ITEM_FIELDS, "path_collection", "item_status"]
 
 BOX_GROUP_ID_PREFIX = "box-group"
 BOX_ALL_ENTERPRISE_USERS_GROUP_PREFIX = "box-enterprise-all-users"
@@ -115,6 +118,16 @@ def box_file_document_id(file_id: str) -> str:
 
 def box_web_link_document_id(web_link_id: str) -> str:
     return f"{_WEB_LINK_DOCUMENT_ID_PREFIX}-{web_link_id}"
+
+
+def parse_box_document_id(document_id: str) -> tuple[str, str] | None:
+    """Split a Box document id into ``(prefix, item_id)``. Returns None when
+    the id is not a file or web link id the crawl produces."""
+    for prefix in (_FILE_DOCUMENT_ID_PREFIX, _WEB_LINK_DOCUMENT_ID_PREFIX):
+        item_id = document_id.removeprefix(f"{prefix}-")
+        if item_id != document_id and item_id.isdigit():
+            return prefix, item_id
+    return None
 
 
 def box_file_image_id(file_id: str, image_index: int) -> str:
@@ -217,6 +230,44 @@ def iter_box_enterprise_users(
     raise RuntimeError("Box enterprise-user pagination did not terminate")
 
 
+def _is_box_credential_error(error: BoxAPIError) -> bool:
+    if box_api_status_code(error) == 401:
+        return True
+    code, _ = box_oauth_error(error)
+    return code in _BOX_CREDENTIAL_OAUTH_ERRORS
+
+
+def _folder_hierarchy_node(entry: BoxFolderFrontierEntry) -> HierarchyNode:
+    return HierarchyNode(
+        raw_node_id=entry.folder_id,
+        raw_parent_id=entry.parent_folder_id,
+        display_name=entry.display_name,
+        link=f"{BOX_APP_BASE_URL}/folder/{entry.folder_id}",
+        node_type=HierarchyNodeType.FOLDER,
+        external_access=entry.access,
+    )
+
+
+def _reindex_failure(
+    document_id: str,
+    message: str,
+    exception: Exception | None = None,
+) -> ConnectorFailure:
+    parsed = parse_box_document_id(document_id)
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=document_id,
+            document_link=(
+                box_file_link(parsed[1])
+                if parsed is not None and parsed[0] == _FILE_DOCUMENT_ID_PREFIX
+                else None
+            ),
+        ),
+        failure_message=message,
+        exception=exception,
+    )
+
+
 def _required_string_credential(credentials: dict[str, Any], key: str) -> str:
     value = credentials.get(key)
     if not isinstance(value, str) or not value:
@@ -228,6 +279,7 @@ class BoxConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[BoxConnectorCheckpoint],
+    Resolver,
 ):
     slim_listing_honors_indexing_start = True
 
@@ -614,14 +666,7 @@ class BoxConnector(
                 checkpoint.has_more = bool(checkpoint.todo)
                 return checkpoint
 
-        yield HierarchyNode(
-            raw_node_id=entry.folder_id,
-            raw_parent_id=entry.parent_folder_id,
-            display_name=entry.display_name,
-            link=f"{BOX_APP_BASE_URL}/folder/{entry.folder_id}",
-            node_type=HierarchyNodeType.FOLDER,
-            external_access=entry.access,
-        )
+        yield _folder_hierarchy_node(entry)
         checkpoint.current = entry
         checkpoint.current_marker = None
         checkpoint.has_more = True
@@ -820,6 +865,173 @@ class BoxConnector(
         return self._retrieve_all_slim_docs(
             start, end, callback, include_permissions=True
         )
+
+    def _reindex_folder_chain(
+        self,
+        path_entries: list[FolderMini],
+        include_permissions: bool,
+        folder_cache: dict[str, BoxFolderFrontierEntry],
+    ) -> list[BoxFolderFrontierEntry] | None:
+        """Rebuild the crawl's frontier entries from the innermost configured
+        entry folder down to the item's parent. The crawl seeds every configured
+        folder as a root before it visits any subfolder, so a nested configured
+        folder is always a root. Returns None when no configured entry folder
+        is an ancestor of the item."""
+        entry_index = next(
+            (
+                index
+                for index in reversed(range(len(path_entries)))
+                if path_entries[index].id in self.entry_folder_ids
+            ),
+            None,
+        )
+        if entry_index is None:
+            return None
+
+        chain: list[BoxFolderFrontierEntry] = []
+        parent: BoxFolderFrontierEntry | None = None
+        for folder in path_entries[entry_index:]:
+            entry = folder_cache.get(folder.id)
+            if entry is None:
+                name = folder.name or folder.id
+                access: ExternalAccess | None = None
+                if include_permissions:
+                    # Same order as the crawl: access of the folders above the
+                    # entry folder, then each folder's own grants on the way down.
+                    inherited = (
+                        parent.access
+                        if parent is not None
+                        else resolve_box_ancestor_access(
+                            self.content_client,
+                            path_entries[:entry_index],
+                            self.enterprise_id,
+                        )
+                    )
+                    access = resolve_box_folder_access(
+                        self.content_client, folder.id, inherited, self.enterprise_id
+                    )
+                entry = BoxFolderFrontierEntry(
+                    folder_id=folder.id,
+                    display_name=name,
+                    parent_folder_id=parent.folder_id if parent is not None else None,
+                    path=f"{parent.path}/{name}" if parent is not None else name,
+                    access=access,
+                )
+                folder_cache[folder.id] = entry
+            chain.append(entry)
+            parent = entry
+        return chain
+
+    def _reindex_document(
+        self,
+        document_id: str,
+        include_permissions: bool,
+        folder_cache: dict[str, BoxFolderFrontierEntry],
+        yielded_folder_ids: set[str],
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        parsed = parse_box_document_id(document_id)
+        if parsed is None:
+            yield _reindex_failure(
+                document_id,
+                f"Cannot parse Box document id '{document_id}'; expected "
+                f"'{_FILE_DOCUMENT_ID_PREFIX}-<id>' or "
+                f"'{_WEB_LINK_DOCUMENT_ID_PREFIX}-<id>'.",
+            )
+            return
+        prefix, item_id = parsed
+
+        item: FileFull | WebLink
+        if prefix == _FILE_DOCUMENT_ID_PREFIX:
+            item = self.content_client.files.get_file_by_id(
+                item_id, fields=_REINDEX_FILE_FIELDS
+            )
+            is_active = item.item_status in (None, FileItemStatusField.ACTIVE)
+        else:
+            if not self.include_web_links:
+                yield _reindex_failure(
+                    document_id,
+                    f"Box web link {item_id} is out of scope: this connector "
+                    "does not index web links.",
+                )
+                return
+            item = self.content_client.web_links.get_web_link_by_id(item_id)
+            is_active = item.item_status in (None, WebLinkItemStatusField.ACTIVE)
+        if not is_active:
+            yield _reindex_failure(
+                document_id, f"Box item {item_id} is trashed or deleted."
+            )
+            return
+
+        chain = self._reindex_folder_chain(
+            item.path_collection.entries if item.path_collection else [],
+            include_permissions,
+            folder_cache,
+        )
+        if not chain:
+            yield _reindex_failure(
+                document_id,
+                f"Box item {item_id} is not inside a folder this connector indexes.",
+            )
+            return
+
+        for entry in chain:
+            if entry.folder_id not in yielded_folder_ids:
+                yielded_folder_ids.add(entry.folder_id)
+                yield _folder_hierarchy_node(entry)
+
+        if isinstance(item, FileFull):
+            converted = self._convert_file(item, chain[-1], include_permissions)
+            if converted is None:
+                yield _reindex_failure(
+                    document_id,
+                    f"Box file {item_id} is not indexable (unsupported type, "
+                    "over the size threshold, or empty).",
+                )
+            elif isinstance(converted, ConnectorFailure):
+                if isinstance(
+                    converted.exception, BoxAPIError
+                ) and _is_box_credential_error(converted.exception):
+                    raise converted.exception
+                # Rekey on the input id so the caller can match it.
+                yield _reindex_failure(
+                    document_id, converted.failure_message, converted.exception
+                )
+            else:
+                yield converted
+            return
+
+        web_link_doc = self._convert_web_link(item, chain[-1], include_permissions)
+        if web_link_doc is None:
+            yield _reindex_failure(document_id, f"Box web link {item_id} has no URL.")
+        else:
+            yield web_link_doc
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        # Folder access and hierarchy nodes are shared by many targets.
+        folder_cache: dict[str, BoxFolderFrontierEntry] = {}
+        yielded_folder_ids: set[str] = set()
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            document_id = failure.failed_document.document_id
+            try:
+                yield from self._reindex_document(
+                    document_id, include_permissions, folder_cache, yielded_folder_ids
+                )
+            except BoxAPIError as error:
+                if _is_box_credential_error(error):
+                    raise
+                status = box_api_status_code(error)
+                yield _reindex_failure(
+                    document_id,
+                    f"Failed to fetch Box item for '{document_id}' "
+                    f"(status={status}): {error.message}",
+                    error,
+                )
 
     def build_dummy_checkpoint(self) -> BoxConnectorCheckpoint:
         return BoxConnectorCheckpoint(has_more=True)

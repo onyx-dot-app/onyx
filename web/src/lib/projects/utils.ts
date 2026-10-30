@@ -1,4 +1,4 @@
-import type { FileDescriptor } from "@/app/app/interfaces";
+import type { FileDescriptor } from "@/app/app/types";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
 
 export function projectsFileToFileDescriptor(

@@ -6,8 +6,8 @@ no hold applies. The hold reads the pair's connector-scoped report (credential
 + connector):
 
 - A run in flight holds.
-- A dead run holds: FAILED_TO_RUN, or a RUNNING mark past the stale cutoff
-  (the sweep retires it to FAILED_TO_RUN). The admin re-runs the checks. A
+- A dead run holds: FAILED_TO_RUN, or a RUNNING mark past its deadline (the
+  sweep retires it to FAILED_TO_RUN). The admin re-runs the checks. A
   stored report that cannot be read holds the same way.
 - A required, applicable check that FAILED holds. INCOMPLETE (or the legacy
   INDETERMINATE) and SKIPPED do not.
@@ -20,7 +20,7 @@ release outranks any run started before it, and a later run holds again.
 Nothing is held while CONNECTOR_CHECKS_ENABLED is off.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -36,9 +36,11 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapabilityReport,
 )
 from onyx.connectors.capability_checks.registry import has_named_capability_checks
-from onyx.connectors.capability_checks.runner import capability_check_run_stale_after
 from onyx.connectors.config_hash import compute_connector_config_hash
-from onyx.db.credential_capability import get_capability_report_row
+from onyx.db.credential_capability import (
+    effective_run_status,
+    get_capability_report_row,
+)
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import CapabilityReportRunStatus
 from onyx.db.index_attempt import cc_pair_has_dispatched_index_attempts
@@ -53,15 +55,13 @@ def decide_indexing_hold(
     *,
     live_config_hash: str | None,
     now: datetime,
-    stale_after: timedelta,
 ) -> IndexingHold | None:
     """The hold that the report row puts on a pair's first index attempt.
     ``live_config_hash`` is the hash of the pair's saved config."""
-    if row.run_status == CapabilityReportRunStatus.RUNNING:
-        if row.run_started_at is not None and row.run_started_at >= now - stale_after:
-            return IndexingHold(reason=IndexingHoldReason.CHECKS_RUNNING)
-        return IndexingHold(reason=IndexingHoldReason.CHECKS_FAILED_TO_RUN)
-    if row.run_status == CapabilityReportRunStatus.FAILED_TO_RUN:
+    run_status = effective_run_status(row, now)
+    if run_status == CapabilityReportRunStatus.RUNNING:
+        return IndexingHold(reason=IndexingHoldReason.CHECKS_RUNNING)
+    if run_status == CapabilityReportRunStatus.FAILED_TO_RUN:
         return IndexingHold(reason=IndexingHoldReason.CHECKS_FAILED_TO_RUN)
     if row.report is None or row.connector_config_hash != live_config_hash:
         return None
@@ -123,5 +123,4 @@ def get_first_indexing_hold(
             cc_pair.connector.connector_specific_config
         ),
         now=get_db_current_time(db_session),
-        stale_after=capability_check_run_stale_after(source),
     )

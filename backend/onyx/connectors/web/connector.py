@@ -18,7 +18,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
-    InsufficientPermissionsError,
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
@@ -36,7 +35,7 @@ from onyx.connectors.web.config import (
 )
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.server.security.models import SSRFProtectionLevel, web_connector_ssrf_enforced
+from onyx.server.security.models import SSRFProtectionLevel, connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.os_reaper import reap_zombie_children
@@ -161,7 +160,7 @@ def protected_url_check(url: str) -> None:
     """
     # The web connector is only guarded at the most restrictive SSRF level; at
     # VALIDATE_LLM / DISABLED admin-configured connectors may reach private IPs.
-    if not web_connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
+    if not connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
         return
 
     parse = urlparse(url)
@@ -185,6 +184,14 @@ def protected_url_check(url: str) -> None:
                 f"Non-global IP address detected: {ip}, skipping page {url}. "
                 f"The Web Connector is not allowed to read loopback, link-local, or private ranges"
             )
+
+
+class WebPageHTTPError(Exception):
+    """An HTTP error status from the connectivity probe."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def check_internet_connection(url: str) -> None:
@@ -223,7 +230,9 @@ def check_internet_connection(url: str) -> None:
             503: "Service Unavailable",
             504: "Gateway Timeout",
         }.get(status_code, "HTTP Error")
-        raise Exception(f"{error_msg} ({status_code}) for {url} - {e}")
+        raise WebPageHTTPError(
+            f"{error_msg} ({status_code}) for {url} - {e}", status_code
+        ) from e
     except requests.exceptions.SSLError as e:
         cause = (
             e.args[0].reason
@@ -293,7 +302,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     # rather than a wrapped sitemap-parse failure.
     protected_url_check(sitemap_url)
     level = get_security_settings().ssrf_protection_level
-    allow_private_network = not web_connector_ssrf_enforced(level)
+    allow_private_network = not connector_ssrf_enforced(level)
     allow_loopback = level == SSRFProtectionLevel.DISABLED
 
     # Note: brotli compression is handled automatically by the requests library
@@ -473,7 +482,7 @@ class WebConnector(LoadConnector, SlimConnector):
             initial_url,
             headers=DEFAULT_HEADERS,
             timeout=REQUEST_TIMEOUT_SECONDS,
-            allow_private_network=not web_connector_ssrf_enforced(level),
+            allow_private_network=not connector_ssrf_enforced(level),
             block_loopback_and_link_local=level != SSRFProtectionLevel.DISABLED,
             block_link_local_only=True,
             stream=True,
@@ -504,7 +513,7 @@ class WebConnector(LoadConnector, SlimConnector):
         page = session_ctx.playwright_context.new_page()
         install_ssrf_guard(
             page,
-            allow_private_network=not web_connector_ssrf_enforced(level),
+            allow_private_network=not connector_ssrf_enforced(level),
             allow_loopback=level == SSRFProtectionLevel.DISABLED,
             authorization_header=session_ctx.authorization_header,
             authorization_url=self.authorization_url,
@@ -828,30 +837,33 @@ class WebConnector(LoadConnector, SlimConnector):
             return None
 
         # Make a quick request to see if we get a valid response. This re-runs the
-        # SSRF check internally (intentional, cheap defense-in-depth).
+        # SSRF check internally (intentional, cheap defense-in-depth). Classify by
+        # status code, not message text: the message holds the URL, whose digits
+        # can look like a status code (e.g. port 33403).
         try:
             check_internet_connection(test_url)
-        except Exception as e:
-            err_str = str(e)
-            if "401" in err_str:
+        except WebPageHTTPError as e:
+            if e.status_code == 401:
                 raise CredentialExpiredError(
                     f"Unauthorized access to '{test_url}': {e}"
-                )
-            elif "403" in err_str:
-                raise InsufficientPermissionsError(
-                    f"Forbidden access to '{test_url}': {e}"
-                )
-            elif "404" in err_str:
-                raise ConnectorValidationError(f"Page not found for '{test_url}': {e}")
-            elif "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
+                ) from e
+            if e.status_code == 404:
+                raise ConnectorValidationError(
+                    f"Page not found for '{test_url}': {e}"
+                ) from e
+            # Could be a 5xx or another error, treat as unexpected
+            raise UnexpectedValidationError(
+                f"Unexpected error validating '{test_url}': {e}"
+            ) from e
+        except Exception as e:
+            err_str = str(e)
+            if "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
                 raise ConnectorValidationError(
                     f"Unable to resolve hostname for '{test_url}'. Please check the URL and your internet connection."
-                )
-            else:
-                # Could be a 5xx or another error, treat as unexpected
-                raise UnexpectedValidationError(
-                    f"Unexpected error validating '{test_url}': {e}"
-                )
+                ) from e
+            raise UnexpectedValidationError(
+                f"Unexpected error validating '{test_url}': {e}"
+            ) from e
 
 
 if __name__ == "__main__":

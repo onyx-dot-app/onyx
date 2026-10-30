@@ -7,6 +7,7 @@ import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
 import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { AdminLanguageModelsPage } from "@tests/e2e/pages/AdminLanguageModelsPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -18,7 +19,7 @@ async function cleanup(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-test.describe("Permission gating — ADD_AGENTS", () => {
+test.describe("Permission gating: ADD_AGENTS", () => {
   test("New Agent button is disabled without ADD_AGENTS and enabled after granting it", async ({
     page,
     adminClient,
@@ -89,7 +90,7 @@ test.describe("Permission gating — ADD_AGENTS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_AGENTS", () => {
+test.describe("Permission gating: MANAGE_AGENTS", () => {
   test("Admin panel and /admin/agents are gated behind MANAGE_AGENTS", async ({
     page,
     adminClient,
@@ -166,7 +167,7 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_LLMS", () => {
+test.describe("Permission gating: MANAGE_LLMS", () => {
   test("Admin panel and /admin/language-models are gated behind MANAGE_LLMS", async ({
     page,
     adminClient,
@@ -186,9 +187,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
     const providerId = await adminClient.createProvider(providerName);
     // The Cost Overrides panel sits on this page but reads its own endpoint, so
     // seed a row the holder must be able to see.
-    const overrideModel = await adminClient.upsertCostOverride(
-      `e2e-manage-llm-${Date.now()}`
-    );
+    const override = await adminClient.createCostOverride(providerId);
 
     try {
       // Phase 1: Without MANAGE_LLMS — the page should redirect to /app
@@ -216,16 +215,15 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
       ).toBeVisible({
         timeout: 10000,
       });
-      await expect(page.getByText(providerName)).toBeVisible();
+      const languageModelsPage = new AdminLanguageModelsPage(page);
+      await expect(languageModelsPage.providerCard(providerName)).toBeVisible();
 
       // Cost overrides are gated separately from the page, so reaching the page
       // is not evidence the panel loaded — assert the row, not just the heading.
-      await expect(page.getByText(overrideModel)).toBeVisible({
-        timeout: 10000,
-      });
       await expect(
-        page.getByText("Failed to load cost overrides.")
-      ).toBeHidden();
+        languageModelsPage.costOverrideCard(override.modelDisplayName)
+      ).toBeVisible({ timeout: 10000 });
+      await expect(languageModelsPage.costOverridesLoadError).toBeHidden();
 
       // Phase 3: Revoke MANAGE_LLMS — should redirect again
       await page.context().clearCookies();
@@ -243,13 +241,13 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
         await loginAs(page, "admin");
         const cleanupClient = new OnyxApiClient(page.request);
         await cleanupClient.deleteProvider(providerId);
-        await cleanupClient.deleteCostOverride(overrideModel);
+        await cleanupClient.deleteCostOverride(override.modelConfigurationId);
       });
     }
   });
 });
 
-test.describe("Permission gating — MANAGE_CONNECTORS", () => {
+test.describe("Permission gating: MANAGE_CONNECTORS", () => {
   test("Admin panel and /admin/indexing-status are gated behind MANAGE_CONNECTORS", async ({
     page,
     adminClient,
@@ -368,7 +366,7 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
+test.describe("Permission gating: MANAGE_DOCUMENT_SETS", () => {
   test("Admin panel and /admin/documents/sets are gated behind MANAGE_DOCUMENT_SETS, with implied READ_CONNECTORS", async ({
     page,
     adminClient,
@@ -519,7 +517,7 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_ACTIONS", () => {
+test.describe("Permission gating: MANAGE_ACTIONS", () => {
   test("Admin panel /admin/plugins is gated behind MANAGE_ACTIONS", async ({
     page,
     adminClient,
@@ -587,7 +585,7 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
+test.describe("Permission gating: MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
   test("Admin panel /admin/service-accounts is gated behind MANAGE_SERVICE_ACCOUNT_API_KEYS, with implied READ_USER_GROUPS", async ({
     page,
     adminClient,
@@ -688,7 +686,7 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_BOTS", () => {
+test.describe("Permission gating: MANAGE_BOTS", () => {
   test("Admin panel /admin/bots and /admin/discord-bot are gated behind MANAGE_BOTS", async ({
     page,
     adminClient,
@@ -775,7 +773,7 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
   });
 });
 
-test.describe("Permission gating — READ_QUERY_HISTORY", () => {
+test.describe("Permission gating: READ_QUERY_HISTORY", () => {
   test("Admin panel /admin/performance/query-history is gated behind READ_QUERY_HISTORY", async ({
     page,
     adminClient,
@@ -845,7 +843,7 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
   });
 });
 
-test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
+test.describe("Permission gating: CREATE_USER_API_KEYS", () => {
   test("The Basic group grants Access Tokens by default and an admin can switch it off", async ({
     page,
     browser,
@@ -957,7 +955,7 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
+test.describe("Permission gating: MANAGE_USER_GROUPS", () => {
   test("Admin panel /admin/groups and /admin/groups/create are gated behind MANAGE_USER_GROUPS, with implied READ_CONNECTORS, READ_DOCUMENT_SETS, and READ_AGENTS", async ({
     page,
     adminClient,

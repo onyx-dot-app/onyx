@@ -115,10 +115,12 @@ function ChatPanelContent({
     (card: OutputCard) => {
       if (!outputSessionId || card.deleted) return;
       const store = useBuildSessionStore.getState();
-      if (card.kind === "app")
+      if (card.kind === "app") {
         store.openBrowserTab(outputSessionId, outputSessionId);
-      else store.openFilePreview(outputSessionId, card.path, card.name);
-      void markViewed(card);
+        void markViewed(card);
+      } else {
+        store.openFilePreview(outputSessionId, card.path, card.name);
+      }
     },
     [outputSessionId, markViewed]
   );
@@ -128,12 +130,8 @@ function ChatPanelContent({
       useBuildSessionStore
         .getState()
         .openFilePreview(outputSessionId, path, name);
-      const card = outputCards.find(
-        (output) => output.kind === "file" && output.path === path
-      );
-      if (card) void markViewed(card);
     },
-    [outputSessionId, outputCards, markViewed]
+    [outputSessionId]
   );
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
   // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
@@ -416,11 +414,11 @@ function ChatPanelContent({
       message: string,
       attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
-    ) => {
-      if (submissionBlocked) return;
+    ): Promise<boolean> => {
+      if (submissionBlocked) return false;
       if (scheduledRunInFlight) {
         toast.error(t("toast.scheduledRunWait"));
-        return;
+        return false;
       }
 
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
@@ -432,7 +430,7 @@ function ChatPanelContent({
         // Check if response is still streaming - show toast like main chat does
         if (isRunning) {
           toast.error(t("toast.operationWait"));
-          return;
+          return false;
         }
 
         // Add user message to state
@@ -444,7 +442,7 @@ function ChatPanelContent({
           attachments,
         });
         // Stream the response
-        await streamMessage(
+        void streamMessage(
           sessionId,
           message,
           modelOverride ?? modelBySession[sessionId] ?? null,
@@ -458,7 +456,7 @@ function ChatPanelContent({
           // This should not happen if UI properly disables input until ready
           console.error("[ChatPanel] No pre-provisioned session available");
           toast.error(t("toast.sandboxWait"));
-          return;
+          return false;
         }
 
         // Pre-provisioned session flow:
@@ -517,8 +515,10 @@ function ChatPanelContent({
         );
 
         // Stream the response (uses session ID directly, not currentSessionId)
-        await streamMessage(newSessionId, message, chosen, attachments);
+        void streamMessage(newSessionId, message, chosen, attachments);
       }
+      // Acceptance ends at prompt handoff; streaming keeps its own lifecycle.
+      return true;
     },
     [
       hasSession,
@@ -788,6 +788,8 @@ function ChatPanelContent({
                       }}
                     >
                       <CraftInputBar
+                        key={existingSessionId ?? "new"}
+                        sessionId={existingSessionId}
                         ref={inputBarRef}
                         onSubmit={handleSubmit}
                         isRunning={displayIsRunning}

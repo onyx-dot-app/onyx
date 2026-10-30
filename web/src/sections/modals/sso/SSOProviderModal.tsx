@@ -20,7 +20,7 @@ import type {
   SSOProviderResponse,
   SSOProviderType,
   SSOProviderUpdateRequest,
-} from "@/lib/sso/interfaces";
+} from "@/lib/sso/types";
 import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";

@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FileDescriptor } from "@/app/app/interfaces";
+import { FileDescriptor } from "@/app/app/types";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
-import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
-import { CopyButton } from "@opal/components";
+import { CopyButton, Text } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
@@ -246,15 +245,16 @@ const HumanMessage = React.memo(function HumanMessage({
                   }
                 }}
               >
-                <Text
-                  as="p"
-                  dir="auto"
-                  className="inline-block align-middle"
-                  mainContentBody
-                  text04
-                >
-                  {content}
-                </Text>
+                <div className="inline-block align-middle">
+                  <Text
+                    as="p"
+                    dir="auto"
+                    font="main-content-body"
+                    color="text-04"
+                  >
+                    {content}
+                  </Text>
+                </div>
               </div>
             </div>
           </div>

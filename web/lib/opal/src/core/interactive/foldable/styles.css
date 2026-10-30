@@ -21,7 +21,8 @@
 }
 
 .interactive:hover:not([data-disabled]) .interactive-foldable-host,
-.interactive:focus-within:not([data-disabled]) .interactive-foldable-host,
+.interactive:is(:focus-visible, :has(:focus-visible)):not([data-disabled])
+  .interactive-foldable-host,
 .interactive[data-interaction="hover"]:not([data-disabled])
   .interactive-foldable-host,
 .interactive[data-interaction="active"]:not([data-disabled])
@@ -46,9 +47,12 @@
   min-width: 0;
 }
 
-/* Expanded: hovered, focused within, or interaction override */
+/* Expanded: hovered, keyboard-focused (a mouse click leaves focus behind, so
+   plain focus would hold it open after the pointer leaves), or interaction
+   override */
 .interactive:hover:not([data-disabled]) .interactive-foldable,
-.interactive:focus-within:not([data-disabled]) .interactive-foldable,
+.interactive:is(:focus-visible, :has(:focus-visible)):not([data-disabled])
+  .interactive-foldable,
 .interactive[data-interaction="hover"]:not([data-disabled])
   .interactive-foldable,
 .interactive[data-interaction="active"]:not([data-disabled])

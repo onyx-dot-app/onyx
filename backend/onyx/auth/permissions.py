@@ -125,7 +125,7 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.MANAGE_AGENTS,
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
-        Permission.MANAGE_ACTIONS,  # scoped via its agents at GATE 2
+        Permission.MANAGE_ACTIONS,  # scoped to actions the manager owns (can_manage_tool)
         Permission.MANAGE_SKILLS,  # scoped via Skill__UserGroup at GATE 2
     }
 )
@@ -177,13 +177,17 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         group=0,
     ),
     PermissionRegistryEntry(
-        id="manage_connectors_and_document_sets",
-        display_name="Manage Connectors & Document Sets",
-        description="Add and update connectors and document sets.",
-        permissions=[
-            Permission.MANAGE_CONNECTORS,
-            Permission.MANAGE_DOCUMENT_SETS,
-        ],
+        id="manage_connectors",
+        display_name="Manage Connectors",
+        description="Add and update connectors and their credentials, and run indexing.",
+        permissions=[Permission.MANAGE_CONNECTORS],
+        group=0,
+    ),
+    PermissionRegistryEntry(
+        id="manage_document_sets",
+        display_name="Manage Document Sets",
+        description="Add and update document sets from existing connectors.",
+        permissions=[Permission.MANAGE_DOCUMENT_SETS],
         group=0,
     ),
     PermissionRegistryEntry(

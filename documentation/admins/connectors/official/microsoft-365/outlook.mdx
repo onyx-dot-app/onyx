@@ -1,0 +1,168 @@
+---
+title: "Outlook"
+description: "Index mail, attachments and calendar events from Exchange Online mailboxes"
+---
+
+The Outlook connector indexes mailboxes in your Microsoft 365 tenant through Microsoft Graph. It reads mail threads,
+the text of file attachments, and calendar events, and it can mirror who may read each item with **Sync with Outlook**.
+
+The connector signs in as an app registration set up in [Microsoft 365
+Setup](/admins/connectors/official/microsoft-365/setup). It reaches Exchange Online only.
+On-premises Exchange Server is not supported.
+
+## How it works
+
+| Content       | Behavior                                                                                                                                                                                                                                                             |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Threads       | One document per mail thread across the indexed mailboxes, built from the mailbox that holds the thread's newest message and the most messages. Each message contributes its sender, recipients, date and text body, oldest first. Drafts are skipped. Long threads keep their newest 100 indexable messages, found among the newest 500. A mailbox that holds only part of a thread, such as one that never received a private reply, gets a document of its own copy. |
+| Folders       | Every indexed folder becomes part of the mailbox's hierarchy. Junk Email, Deleted Items, Drafts and Outbox are always skipped, as are hidden folders and search folders. You can skip more folders by name, and the subfolders of a skipped folder are skipped with it. |
+| Attachments   | Optional. The text of file attachments is added to the message it came with. Inline attachments (usually signature images), attached mail items and cloud links are skipped, as are files over 20 MB and file types Onyx cannot parse.                                                              |
+| Calendar      | Optional. One document per event with its time, location, organizer, attendees and description. A recurring series is indexed once from its master plus any modified occurrence. Cancelled events and events marked private or confidential are skipped.            |
+| Permissions   | Optional, on paid plans. A thread is visible to the owners of the mailboxes that hold every message in its document, and a partial copy to its owner. Folders are visible to the mailbox owner. An event is also visible to its organizer and attendees. |
+
+Each refresh reads the messages each folder received since the last run and rebuilds every thread that gained one.
+A thread that only lost a message keeps its old text until it gains a message or the connector is re-indexed.
+Pruning removes threads that no longer exist and calendar events that have left the calendar window.
+
+After an upgrade that brings thread documents, every existing Outlook connector is re-indexed once,
+and its per-mailbox documents are removed at the next prune.
+
+## Before you begin
+
+You need a Microsoft 365 tenant with Exchange Online mailboxes and the roles listed in [Microsoft 365
+Setup](/admins/connectors/official/microsoft-365/setup#before-you-begin).
+
+<Note>
+  The app registration can open every mailbox in the tenant by default. To limit it to specific mailboxes,
+  either restrict the Graph grants with an [application access
+  policy](https://learn.microsoft.com/en-us/graph/auth-limit-mailbox-access),
+  or replace the mail and calendar grants with scoped roles through [Exchange RBAC for
+  Applications](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac).
+  Keep **User.Read.All** either way. Exchange takes 30 minutes to two hours to apply such a change.
+</Note>
+
+## Configure Microsoft Entra
+
+Follow [Microsoft 365 Setup](/admins/connectors/official/microsoft-365/setup)
+with the Outlook rows of its [permission table](/admins/connectors/official/microsoft-365/setup#permissions).
+What each grant is for:
+
+- **Mail.Read**: read mail and attachments in every mailbox the app may open
+- **User.Read.All**: list the tenant's users, resolve mailbox addresses and build permission lists
+- **GroupMember.Read.All**: list the members of the groups in **Mailbox Groups**, only when that setting is used
+- **Calendars.Read**: read calendars, only needed when you turn on **Include Calendar**
+
+A client secret or a certificate both work. Outlook reads no SharePoint API, so nothing here needs a certificate.
+
+## Configure Onyx
+
+<Steps>
+  <Step title="Create a credential">
+    In Onyx, go to **Admin Panel → Connectors** and select **Outlook**.
+    Select an existing Outlook credential or create one as described in [Microsoft 365
+    Setup](/admins/connectors/official/microsoft-365/setup#enter-the-credential-in-onyx).
+
+    Onyx validates the connector when you save it: the app can sign in, each listed mailbox is reachable,
+    each group in **Mailbox Groups** can be found and its members listed, or the tenant's users can be listed.
+    During indexing,
+    a mailbox or calendar the app may not open is recorded as an error naming the missing permission when you listed the
+    mailbox, and skipped with a log line for a mailbox found through a group or every-mailbox mode.
+  </Step>
+
+  <Step title="Choose the mailboxes">
+    In **Mailboxes**, list the user principal names or primary email addresses to index. In **Mailbox Groups**,
+    list Microsoft Entra groups by display name or object ID to index the mailbox of every member,
+    members of nested groups included. This is the way to limit a large tenant to the people who use Onyx.
+    It needs the **GroupMember.Read.All** application permission.
+    Leave both lists empty to index the mailbox of every enabled user who has a mail address.
+
+    Shared mailboxes are normally sign-in disabled, so automatic discovery does not pick them up. List them explicitly.
+  </Step>
+
+  <Step title="Set an indexing start date">
+    Under **Schedule**, set **Index Documents After** unless you need every message ever received. Without one,
+    the first indexing attempt reads each mailbox from its first message,
+    and a tenant with years of mail in many mailboxes takes days to become searchable. With a start date,
+    Onyx indexes the threads that received a message on or after it and skips the rest. The calendar has its own window,
+    set by **Calendar Past Days** and **Calendar Future Days** below.
+    See [Advanced Configuration](/admins/connectors/overview#advanced-configuration).
+  </Step>
+
+  <Step title="Choose what to index">
+    Turn on **Include Attachments** to index the text of file attachments and **Include Calendar** to index each
+    mailbox's calendar as well as its mail. Both are off by default.
+  </Step>
+
+  <Step title="Choose the access type">
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with Outlook**.
+    **Sync with Outlook** mirrors mailbox ownership and meeting attendance and is the default where available.
+
+    **Specific Groups** and **Sync with Outlook** need the Business or Enterprise tier on Onyx Cloud,
+    or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Connect and verify">
+    Select **Create Connector**. Then open **Admin Panel → Indexing Status**, select the connector,
+    and confirm its initial indexing attempt completes.
+  </Step>
+</Steps>
+
+### Advanced settings
+
+| Setting                | Default                              | Purpose                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Excluded Folders       | empty                                | Whole folder names to skip in every mailbox, in addition to the folders that are always skipped. Names are matched without regard to case, and a skipped folder's subfolders are skipped with it.  |
+| Calendar Past Days     | 365                                  | How far back the calendar window reaches. Events older than this leave the index at the next prune. Widening it later needs a re-index, since unchanged events do not re-enter on their own.   |
+| Calendar Future Days   | 180                                  | How far ahead the calendar window reaches. Widening it later also needs a re-index.                                                                                                             |
+| Authority Host         | `https://login.microsoftonline.com`  | The Microsoft identity endpoint. See [National clouds](/admins/connectors/official/microsoft-365/setup#national-clouds). |
+| Graph API Host         | `https://graph.microsoft.com`        | The Microsoft Graph endpoint. See [National clouds](/admins/connectors/official/microsoft-365/setup#national-clouds).    |
+
+## Attachments
+
+With **Include Attachments** on, Onyx downloads each file attachment and appends its text to the message it came with.
+Onyx parses these types: `.csv`, `.docx`, `.eml`, `.epub`, `.html`, `.json`, `.md`, `.mdx`, `.pdf`, `.pptx`, `.tsv`,
+`.txt`, `.xlsx`, `.xlsm`, `.xml`, `.yaml`, `.yml`, `.conf`, `.log` and `.sql`.
+
+A message contributes at most 20 attachments, and a thread stops downloading after 25 download attempts,
+failed ones included, or one million characters of attachment text.
+Set `OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD` (bytes) to change the 20 MB (20 × 1024 × 1024 bytes) size limit.
+
+## Sync with Outlook
+
+With **Sync with Outlook**, Onyx grants access by email address.
+A mailbox's address must match the user's email in Onyx.
+
+| Outlook item                    | Who can see it in Onyx                                          |
+| ------------------------------- | --------------------------------------------------------------- |
+| Folders                         | The owner of the mailbox                                        |
+| Threads                         | The owners of the mailboxes that hold every message in the thread's document. A partial copy is visible to its owner only. |
+| Calendar events                 | The owner of the mailbox, the organizer and every attendee      |
+
+Permissions are attached during indexing,
+so a new connector is searchable by the right people from its first indexing attempt.
+Who can read a thread follows who holds the mail, which every refresh keeps current.
+A permission sync runs once a day by default to catch deletions and updates the access lists of existing documents.
+Set `OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY` (seconds) to change the interval.
+
+<Warning>
+  A shared mailbox has no owner who signs in to Onyx,
+  so its threads stay hidden under **Sync with Outlook** unless an Onyx account carries the mailbox's own address.
+  Delegate access to a shared mailbox is not synchronized. To make a shared mailbox searchable,
+  index it with a separate connector set to **Specific Groups** and assign the user groups who should see it.
+</Warning>
+
+Permission sync uses the same **Mail.Read** and **Calendars.Read** grants as indexing and needs no further Graph
+permission. **User.Read.All** supplies the owner addresses. Both authentication methods support it.
+
+## Troubleshooting
+
+See [Microsoft 365 Setup](/admins/connectors/official/microsoft-365/setup#troubleshooting)
+for the messages every Microsoft 365 connector can show.
+
+| Message or symptom                                 | Cause and fix                                                                                                                                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The app cannot look up the tenant's users          | Grant **User.Read.All** as an application permission and admin-consent it.                                                                                                                                    |
+| Graph reported `ErrorAccessDenied`                 | Either **Mail.Read** (or **Calendars.Read**) is missing, or the mailbox sits outside the app's Exchange scope. Grant the permission or add the mailbox to the scope, then wait up to two hours.              |
+| These mailboxes cannot be indexed                  | An address in **Mailboxes** matches no user, or Graph found no mailbox behind it or refused it because it sits outside the app's Exchange scope. Use the user principal name or primary SMTP address, and add scoped mailboxes to the app's scope. Shared mailboxes usually need no license, only an explicit entry. |
+| A group in Mailbox Groups cannot be found          | The display name matches no Entra group, or **GroupMember.Read.All** is missing. Use the group's object ID, and grant and admin-consent the permission. |
+| Calendar events are missing                        | Turn on **Include Calendar** and grant **Calendars.Read**. Events outside the past and future day windows are not indexed, and widening a window needs a re-index.                                            |

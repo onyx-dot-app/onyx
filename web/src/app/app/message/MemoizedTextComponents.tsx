@@ -3,11 +3,12 @@ import type { ExtraProps } from "react-markdown";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
-import { SubQuestionDetail, CitationMap } from "../interfaces";
+import { SubQuestionDetail, CitationMap } from "@/app/app/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { ProjectFile } from "@/lib/projects/types";
 import { BlinkingBar } from "./BlinkingBar";
-import Text from "@/refresh-components/texts/Text";
+import { Text, type TextColor, type TextFont } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import {
   documentToSourceInfo,
@@ -251,7 +252,8 @@ export const MemoizedLink = memo(
 );
 
 interface MemoizedParagraphProps {
-  className?: string;
+  font?: TextFont;
+  color?: TextColor;
   // Stamped per-paragraph by the rehypeDirection plugin so RTL and LTR
   // paragraphs align independently. Unstamped paragraphs inherit their
   // container's direction.
@@ -260,13 +262,14 @@ interface MemoizedParagraphProps {
 }
 
 export const MemoizedParagraph = memo(function MemoizedParagraph({
-  className,
+  font = "main-content-body",
+  color = "text-04",
   dir,
   children,
 }: MemoizedParagraphProps) {
   return (
-    <Text as="p" dir={dir} mainContentBody text04 className={className}>
-      {children}
+    <Text as="p" dir={dir} font={font} color={color}>
+      {richNodes(children)}
     </Text>
   );
 });

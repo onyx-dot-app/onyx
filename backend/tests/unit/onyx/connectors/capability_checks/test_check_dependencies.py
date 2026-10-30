@@ -1,5 +1,6 @@
-"""Check dependencies: run order, the checks a dependency stops, the stop
-after a rate limit, and the same rule for checks that ran side by side."""
+"""Check dependencies: run order, the checks a dependency stops, any-of
+groups, the stop after a rate limit, and the same rule for checks that ran
+side by side."""
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
@@ -13,8 +14,6 @@ from onyx.connectors.capability_checks.creation import (
     _unfinished_results,
 )
 from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckState,
-    DraftCheckStateKind,
     cache_draft_result,
     wait_for_dependencies,
 )
@@ -28,6 +27,8 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
+    DraftCheckState,
+    DraftCheckStateKind,
 )
 from onyx.connectors.capability_checks.runner import (
     merge_capability_results,
@@ -49,16 +50,20 @@ class _Check(CapabilityCheck):
         check_id: str,
         *,
         depends_on: tuple[str, ...] = (),
+        depends_on_any: tuple[str, ...] = (),
         error: Exception | None = None,
         discovery: bool = False,
+        requires_connector_config: bool = False,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
             check_id=check_id,
             display_name=f"Run {check_id}",
             requires_connector_instance=False,
+            requires_connector_config=requires_connector_config,
             discovery=discovery,
             depends_on=depends_on,
+            depends_on_any=depends_on_any,
         )
         self._error = error
         self.calls = 0
@@ -170,6 +175,7 @@ def test_a_prior_failure_stops_a_dependent() -> None:
     assert results["list"].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_stops_the_rest_of_the_run() -> None:
     later = _Check("later")
     results = _run(
@@ -386,3 +392,147 @@ def test_a_partial_find_is_incomplete_and_its_dependents_run() -> None:
     assert results["find"].summary == "1 of 2 drives not found"
     assert sample.calls == 1
     assert results["sample"].status == CapabilityCheckStatus.PASSED
+
+
+_DENIED = CredentialExpiredError("Rejected.")
+
+
+def _any_of_content() -> _Check:
+    return _Check("content", depends_on_any=("shared", "root"))
+
+
+def test_an_any_of_check_runs_after_every_member() -> None:
+    order = run_order(
+        [
+            _Check("content", depends_on_any=("shared", "root")),
+            _Check("shared"),
+            _Check("root"),
+        ]
+    )
+
+    assert [check.check_id for check in order] == ["shared", "root", "content"]
+
+
+def test_an_any_of_check_runs_when_one_member_passes() -> None:
+    content = _any_of_content()
+    results = _run([_Check("shared", error=_DENIED), _Check("root"), content])
+
+    assert content.calls == 1
+    assert results["content"].status == CapabilityCheckStatus.PASSED
+
+
+def test_an_any_of_check_runs_after_a_partial_member() -> None:
+    content = _any_of_content()
+    _run([_Check("shared", error=_DENIED), _PartialCheck("root"), content])
+
+    assert content.calls == 1
+
+
+def test_an_any_of_check_stops_when_every_member_fails() -> None:
+    """The first member, in the order the check lists them, names the cause."""
+    content = _any_of_content()
+    results = _run(
+        [
+            _Check("root", error=UnexpectedValidationError("Unknown.")),
+            _Check("shared", error=_DENIED),
+            content,
+        ]
+    )
+
+    assert content.calls == 0
+    assert results["content"].status == CapabilityCheckStatus.SKIPPED
+    assert results["content"].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results["content"].blocked_by == "shared"
+    assert results["content"].summary == "Not run: Run shared failed"
+
+
+@pytest.mark.parametrize(
+    "left_out",
+    [
+        _Check("root", error=CheckNotApplicableError("No root page.")),
+        _Check("root", requires_connector_config=True),
+    ],
+    ids=["does_not_apply", "needs_config"],
+)
+def test_an_any_of_member_without_a_verdict_is_left_out(left_out: _Check) -> None:
+    """A member that does not apply or lacks its own config neither lets the
+    check run nor stops it: the other members decide."""
+    passed = _run([left_out, _Check("shared"), _any_of_content()])
+    assert passed["content"].status == CapabilityCheckStatus.PASSED
+
+    stopped = _run([left_out, _Check("shared", error=_DENIED), _any_of_content()])
+    assert stopped["content"].status == CapabilityCheckStatus.SKIPPED
+    assert stopped["content"].blocked_by == "shared"
+
+
+def test_an_any_of_check_run_alone_is_stopped_once_its_members_fail() -> None:
+    """Creation runs each check alone, so the any-of check runs without its
+    members; the rule applies when their results arrive."""
+    content = _any_of_content()
+    alone = _run([content])["content"]
+    assert content.calls == 1
+
+    results = stop_blocked_results(
+        [_Check("shared"), _Check("root"), content],
+        [
+            _result("shared", CapabilityCheckStatus.FAILED),
+            _result("root", CapabilityCheckStatus.FAILED),
+            alone,
+        ],
+    )
+
+    assert results[2].status == CapabilityCheckStatus.SKIPPED
+    assert results[2].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results[2].blocked_by == "shared"
+
+
+def test_an_any_of_member_stopped_by_its_dependency_passes_the_cause_on() -> None:
+    results = _run(
+        [
+            _Check("sign_in", error=_DENIED),
+            _Check("shared", depends_on=("sign_in",)),
+            _Check("root", depends_on=("sign_in",)),
+            _any_of_content(),
+        ]
+    )
+
+    assert results["content"].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results["content"].blocked_by == "sign_in"
+
+
+def test_an_all_of_dependency_stops_before_the_any_of_group() -> None:
+    results = _run(
+        [
+            _Check("sign_in", error=_DENIED),
+            _Check("shared"),
+            _Check("content", depends_on=("sign_in",), depends_on_any=("shared",)),
+        ]
+    )
+
+    assert results["content"].blocked_by == "sign_in"
+
+
+def test_an_any_of_check_waits_only_while_every_member_waits() -> None:
+    def state(check_id: str, kind: DraftCheckStateKind) -> DraftCheckState:
+        return DraftCheckState(
+            check_id=check_id,
+            display_name=check_id,
+            capability=CredentialCapability.INDEXING,
+            required=True,
+            state=kind,
+            missing_fields=["root"] if kind == DraftCheckStateKind.WAITING else [],
+        )
+
+    def content_state(shared: DraftCheckStateKind) -> DraftCheckStateKind:
+        planned: list[tuple[CapabilityCheck, DraftCheckState]] = [
+            (_Check("shared"), state("shared", shared)),
+            (_Check("root"), state("root", DraftCheckStateKind.WAITING)),
+            (_any_of_content(), state("content", DraftCheckStateKind.PENDING)),
+        ]
+        wait_for_dependencies(planned)
+        return planned[2][1].state
+
+    assert content_state(DraftCheckStateKind.PENDING) == DraftCheckStateKind.PENDING
+    assert (
+        content_state(DraftCheckStateKind.NOT_APPLICABLE) == DraftCheckStateKind.WAITING
+    )

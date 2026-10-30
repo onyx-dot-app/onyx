@@ -36,7 +36,7 @@ jobs:
           filters: |
             python:
               - 'backend/**'
-              - '.agents/hooks/**'
+              - 'web/src/lib/searchSettings/constants.ts'
               - 'pyproject.toml'
               - '.github/workflows/pr-python-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'

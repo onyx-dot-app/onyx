@@ -48,7 +48,6 @@ export interface Settings {
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
-  image_analysis_max_size_mb?: number | null;
 
   // Global limit on indexing embedding requests; null means no limit
   embedding_rate_limit_requests?: number | null;
@@ -124,6 +123,8 @@ export interface Settings {
 
   // Factory defaults for the restore button.
   default_pruning_freq?: number;
+  // A new connector's schedule as the create form fills it in, in seconds.
+  default_refresh_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
 

@@ -2,11 +2,13 @@
 
 import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
+import { fetchErrorDetail } from "@/lib/fetcher";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { useCredentialCheckReports } from "@/lib/credentials/hooks";
 import type { CredentialCheckRunStatus } from "@/lib/credentials/types";
 import type { ConnectorChecksStatus } from "@/lib/connectors/checks/types";
 import { NO_CHECKS } from "@/lib/connectors/checks/hooks";
+import { applicableResults } from "@/lib/connectors/checks/results";
 import { CheckCardView } from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 
 // The card reads only whether a run is going or broke. A stored report is
@@ -46,7 +48,9 @@ export default function PairChecksCard({
   if (report === null || (!held && !running)) return null;
 
   const progress = running ? report.progress : null;
-  const results = progress?.check_results ?? report.report?.check_results ?? [];
+  const results = applicableResults(
+    progress?.check_results ?? report.report?.check_results ?? []
+  );
   const openChecks = progress?.open_checks ?? [];
   const stateCounts = { ...NO_CHECKS };
   for (const result of results) stateCounts[result.status] += 1;
@@ -64,8 +68,8 @@ export default function PairChecksCard({
       stateCounts={stateCounts}
       defaultCollapsed={!running}
       onRerun={() => {
-        rerun(credentialId, connectorId).catch(() =>
-          toast.error(tAccount("rerunFailed.toast"))
+        rerun(credentialId, connectorId).catch((error: unknown) =>
+          toast.error(fetchErrorDetail(error) ?? tAccount("rerunFailed.toast"))
         );
       }}
       expandRequest={expandRequest}

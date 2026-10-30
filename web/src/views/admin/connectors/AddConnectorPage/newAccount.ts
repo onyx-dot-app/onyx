@@ -11,6 +11,7 @@ import {
   initialCredentialValues,
   isOwnSetupMethod,
   realmFields,
+  specForConnectorValues,
 } from "@/lib/credentials/utils";
 import {
   DEFAULT_SHARE_AUDIENCE,
@@ -38,9 +39,15 @@ export type NewAccountSchema = ReturnType<typeof createValidationSchema>;
  * The source's credential spec when a new account is typed into the form;
  * `null` for a source with no credential. A file field is typed in too: a
  * .pfx certificate as the file's base64 text, a Google key as its JSON text.
+ * The connector form's values pick a form variant, e.g. Confluence Data
+ * Center's token-only account.
  */
-export function typedAccountSpec(source: ValidSources): CredentialSpec | null {
-  return getCredentialSpec(source) ?? null;
+export function typedAccountSpec(
+  source: ValidSources,
+  connectorValues: Readonly<Record<string, unknown>> = {}
+): CredentialSpec | null {
+  const spec = getCredentialSpec(source);
+  return spec ? specForConnectorValues(spec, connectorValues) : null;
 }
 
 /**
@@ -92,7 +99,7 @@ export function typedDraft(
     formValues,
     NEW_ACCOUNT_FIELD
   );
-  const spec = typedAccountSpec(source);
+  const spec = typedAccountSpec(source, formValues);
   if (
     spec === null ||
     schema === null ||
@@ -120,10 +127,21 @@ export function typedDraft(
   return {
     source,
     credential_json: {
+      // Only the shown fields: a field another variant asked for stays out.
+      // Text is trimmed: a pasted token often carries a trailing space or
+      // newline, which the schema's trim only ignores while validating.
       ...Object.fromEntries(
-        Object.entries(fields).filter(
-          ([, value]) => value !== null && value !== ""
-        )
+        Object.entries(fields)
+          .map(([key, value]): [string, unknown] => [
+            key,
+            typeof value === "string" ? value.trim() : value,
+          ])
+          .filter(
+            ([key, value]) =>
+              (key in spec.fields || key === "authentication_method") &&
+              value !== null &&
+              value !== ""
+          )
       ),
       ...realm,
     },

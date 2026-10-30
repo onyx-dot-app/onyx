@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "OpenAPI アクションを追加"
+        "title": "OpenAPI プラグインを追加"
       },
       "cancelButton": {
         "label": "キャンセル"
@@ -188,14 +188,14 @@
         "invalidJson": "JSON の形式が無効です",
         "placeholder": "ここに OpenAPI スキーマを入力してください",
         "required": "OpenAPI スキーマ定義は必須です",
-        "subDescription": "このアクションで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI アクション]({docsUrl}) を参照してください。",
+        "subDescription": "このプラグインで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI プラグイン]({docsUrl}) を参照してください。",
         "title": "OpenAPI スキーマ定義"
       },
       "editConfigsButton": {
-        "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです"
+        "disabledTooltip": "認証を管理できるのは、プラグインの作成者または管理者のみです"
       },
       "editHeader": {
-        "title": "OpenAPI アクションを編集"
+        "title": "OpenAPI プラグインを編集"
       },
       "empty": {
         "description": "OpenAPI スキーマを入力すると、ここにアクションのプレビューが表示されます。",
@@ -208,17 +208,17 @@
         "noSummary": "概要はありません"
       },
       "submitButton": {
-        "addLabel": "アクションを追加",
+        "addLabel": "プラグインを追加",
         "addingLabel": "追加中...",
         "saveLabel": "変更を保存",
         "savingLabel": "保存中..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI アクションを作成しました",
-        "actionUpdated": "OpenAPI アクションを更新しました",
-        "createFailed": "OpenAPI アクションの作成に失敗しました",
+        "actionCreated": "OpenAPI プラグインを作成しました",
+        "actionUpdated": "OpenAPI プラグインを更新しました",
+        "createFailed": "OpenAPI プラグインの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
-        "updateFailed": "OpenAPI アクションの更新に失敗しました"
+        "updateFailed": "OpenAPI プラグインの更新に失敗しました"
       },
       "humanDescription": {
         "title": "ユーザー向けの説明",
@@ -327,12 +327,11 @@
         "saveAuthFailed": "認証設定の保存に失敗しました",
         "saveConfigFailed": "サーバー設定の保存に失敗しました",
         "saveStage": "接続設定を保存できませんでした",
-        "oauthStage": "サインインを開始できませんでした",
-        "discoveryStage": "サーバーのツールを読み込めませんでした",
         "loadStage": "接続設定を読み込めませんでした",
         "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
+        "clientMetadataRejected": "プロバイダーがクライアントメタデータドキュメントを使用できませんでした。このインスタンスがインターネットからアクセスできない場合は、「クライアントメタデータドキュメントを使用」をオフにして、もう一度接続してください。",
         "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
-        "connectionFailed": "OAuthサーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
+        "connectionFailed": "サーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
         "oauthFailed": "OAuthサインインを開始できませんでした。クライアント設定を確認して再試行してください。",
         "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
       },
@@ -413,7 +412,8 @@
       },
       "cimd": {
         "label": "クライアントメタデータドキュメントを使用",
-        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。"
+        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。",
+        "turnOff": "クライアントメタデータドキュメントをオフにする"
       },
       "discovery": {
         "checking": "自動設定を確認しています…",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "既存の OAuth 設定の読み込みに失敗しました。更新するには、内容を再入力してください。"
       },
       "header": {
-        "description": "接続を認証すると、OpenAPI アクションを使用できます。"
+        "description": "接続を認証すると、OpenAPI プラグインを使用できます。"
       },
       "headers": {
         "addButton": {
           "label": "ヘッダーを追加"
         },
-        "description": "このアクションの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
+        "description": "このプラグインの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
         "keyRequired": "ヘッダーのキーは必須です",
         "keyTitle": "ヘッダー",
         "minRequired": "認証ヘッダーを 1 つ以上追加してください",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "削除"
         },
-        "title": "OpenAPI アクションを削除"
+        "title": "OpenAPI プラグインを削除"
       },
       "method": {
         "noSummary": "概要はありません"
@@ -764,7 +764,7 @@
           "tooltip": "画像生成を設定"
         },
         "openapi": {
-          "tooltip": "OpenAPIアクションを管理"
+          "tooltip": "OpenAPIプラグインを管理"
         },
         "webSearch": {
           "tooltip": "ウェブ検索を設定"
@@ -923,7 +923,7 @@
       "status": {
         "connected": "接続済み",
         "workspace": "ワークスペースの接続",
-        "session": "ログイン情報を使用",
+        "session": "接続済みのアカウントを使用",
         "none": "使用可能",
         "oauth": "アカウントを接続",
         "credentials": "認証情報を追加",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "問題",
-        "readyDescription": "このプラグインを使い始めることができます。",
+        "noAuthentication": "認証は不要です",
         "connection": "接続",
         "tools": "ツール",
         "toolCount": "{count, plural, other {#個のツール}}",
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "追加",
         "mcp": "カスタム MCP サーバーを追加",
-        "openapi": "OpenAPI アクションを追加"
+        "openapi": "OpenAPI プラグインを追加"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "MCP サーバーを読み込めませんでした。",
         "listErrorDescription": "このプラグイン一覧を読み込めませんでした。しばらくしてから再試行してください。",
-        "openapiError": "OpenAPI アクションを読み込めませんでした。",
+        "openapiError": "OpenAPI プラグインを読み込めませんでした。",
         "retry": {
           "label": "再試行"
         },
@@ -1249,6 +1249,36 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "言語モデルでチャット設定を管理",
+      "decisionModel": {
+        "title": "判断モデル",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "社内検索はこのモデルを使って結果を順位付けし、追加するコンテキストの量を決めます。チャット設定でも設定できます。",
+        "clear": "解除",
+        "notConfigured": "未設定",
+        "saveFailed": "判断モデルを更新できませんでした"
+      },
+      "header": {
+        "title": "判断モデル",
+        "description": "判断モデルのプロバイダーを管理し、必要に応じてモデルを選択します。"
+      },
+      "providers": {
+        "title": "プロバイダー",
+        "description": "プロバイダーを接続するか、判断モデルを管理します。",
+        "clearBeforeRemoval": "このプロバイダーを削除する前に、選択した判断モデルを解除してください。",
+        "connect": "接続"
+      },
+      "loadFailed": "判断モデルを読み込めませんでした。",
+      "retry": "再試行",
+      "zoom": {
+        "title": "Zoom AI Services に接続",
+        "description": "Zoom Scribe と Zoom AI Decisions に同じ接続を使用します。変更は両方に適用されます。",
+        "connection": "Zoom 接続",
+        "selectConnection": "Zoom 接続を選択",
+        "removeDescription": "音声と決定モデルから共有 Zoom 接続を削除します。"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2189,43 +2219,30 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "チャットセッションの名前を付けるモデルです。既定では各セッションのモデルを使用します。",
-        "resetButton": {
-          "label": "リセット"
-        },
-        "sessionModel": {
-          "label": "デフォルトモデルを使用"
-        },
-        "title": "チャット名の生成モデル"
+        "description": "セッションのタイトルを生成します。高速で低コストのモデルが適しています。",
+        "title": "チャット命名モデル"
       },
-      "searchSelectionModel": {
-        "description": "取得したドキュメントを選択して確認します。低コストのモデルは検索コストを削減できますが、回答の品質に影響する可能性があります。",
-        "resetButton": {
-          "label": "リセット"
-        },
-        "sessionModel": {
-          "label": "デフォルトモデルを使用"
-        },
-        "title": "検索選択モデル"
+      "searchDecisionModel": {
+        "description": "取得したドキュメントを選び、追加するコンテキストの量を決めます。判定モデルは1回の呼び出しで順位付けします。言語モデルは従来どおり選択します。",
+        "title": "検索判定モデル"
       },
       "taskModels": {
-        "title": "モデルの選択",
         "loadFailed": "タスクモデルを読み込めませんでした",
         "retry": {
           "label": "再試行"
         },
-        "noProviders": {
-          "title": "言語モデルのプロバイダーを接続"
-        },
         "addProvider": {
           "label": "プロバイダーを追加"
+        },
+        "chatDefault": {
+          "label": "チャットのデフォルト"
         }
       },
       "advanced": {
         "title": "詳細オプション"
       },
       "anonymousUsers": {
-        "description": "ログインなしで誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
+        "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
         "title": "匿名ユーザーを許可"
       },
       "autoDetectFilters": {
@@ -2236,15 +2253,13 @@
         "description": "チャットが応答を生成するときに、新しい内容へ自動的にスクロールします。ユーザーは個人設定でこれを変更できます。",
         "title": "チャットの自動スクロール"
       },
-      "betaTag": {
-        "label": "ベータ"
-      },
       "connectors": {
+        "description": "チャットの内部検索で使用されるソースです。追加や変更はインデックス作成ステータスのページで行います。",
         "empty": {
           "title": "コネクターが設定されていません"
         },
         "manageAllButton": {
-          "label": "すべて管理"
+          "label": "コネクタを管理"
         },
         "title": "コネクター"
       },
@@ -2253,12 +2268,12 @@
         "title": "ディープリサーチ"
       },
       "defaultLanguage": {
-        "description": "自分の設定で言語を選択していないユーザーに適用される UI の言語です。",
+        "description": "個人設定で言語を設定していないユーザー向けの UI 言語。",
         "title": "既定の言語"
       },
       "disableDefaultChat": {
-        "description": "ユーザーは必ずエージェントからチャットを開始します。新しいチャットは、最初にピン留めされたエージェントで作成されます。新しいユーザーを支援するため、注目のエージェントを設定してください。",
-        "title": "既定のチャットを無効化"
+        "description": "既定のチャットを削除します。ユーザーは常にエージェントで開始し、新しいチャットは最後に使用したエージェントで作成されます。新しいユーザーが始めやすいように[おすすめのエージェント](/admin/agents)を設定してください。",
+        "title": "常にエージェントから開始"
       },
       "fileLimits": {
         "default": {
@@ -2316,10 +2331,6 @@
           "label": "ユーザー情報付きで表示"
         },
         "title": "クエリ履歴の表示設定"
-      },
-      "reasoning": {
-        "description": "チャットのモデル選択メニューから、回答前にモデルが行う推論の量をユーザーが調整できるようにします。",
-        "title": "推論の制御"
       },
       "retention": {
         "custom": {
@@ -2391,26 +2402,13 @@
         "placeholder": "チーム名を入力",
         "title": "チーム名"
       },
-      "temperature": {
-        "description": "チャットのモデル選択メニューから、モデル応答の Temperature（創造性）をユーザーが調整できるようにします。",
-        "title": "Temperature の制御"
-      },
       "toasts": {
-        "chatNamingUpdated": "チャット名の生成モデルを更新しました",
-        "chatNamingReset": "チャット名の生成モデルをデフォルトモデルにリセットしました",
         "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
-        "chatNamingResetFailed": "チャット名の生成モデルのリセットに失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
-        "searchSelectionReset": "検索選択モデルをデフォルトモデルにリセットしました",
-        "searchSelectionResetFailed": "検索選択モデルのリセットに失敗しました",
-        "searchSelectionUpdateFailed": "検索選択モデルの更新に失敗しました",
-        "searchSelectionUpdated": "検索選択モデルを更新しました",
+        "searchDecisionUpdateFailed": "検索判定モデルを更新できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
-        "settingsUpdated": "設定を更新しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
-        "systemPromptUpdated": "システムプロンプトを更新しました",
         "toolsUpdateFailed": "ツールの更新に失敗しました",
-        "toolsUpdated": "ツールを更新しました",
         "unknownError": "不明なエラーが発生しました"
       },
       "tools": {
@@ -2423,7 +2421,7 @@
           "title": "コーディングエージェント"
         },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
-        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI アクションは、[プラグイン]({url})で設定できます。",
+        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI プラグインは、[プラグイン]({url})で設定できます。",
         "imageGeneration": {
           "description": "AI ツールを使用して画像を生成・加工します。",
           "disabledTooltip": "画像生成にはモデルの設定が必要です。「構成 > 画像生成」で設定するか、管理者に依頼してください。",
@@ -2637,10 +2635,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "削除",
-          "tooltip": {
-            "active": "削除する前にコネクターを一時停止してください"
-          }
+          "label": "削除"
         },
         "reIndex": {
           "tooltip": {
@@ -2676,6 +2671,13 @@
         "startIndexing": {
           "label": "インデックス作成を開始",
           "description": "コネクターのチェックをスキップして、今すぐインデックスを作成します。"
+        },
+        "syncPermissions": {
+          "label": "権限を同期",
+          "description": "各ドキュメントを閲覧できるユーザーを今すぐソースから取得します。",
+          "tooltip": {
+            "syncing": "権限の同期はすでに待機中または実行中です"
+          }
         }
       },
       "reEnableModal": {
@@ -2799,19 +2801,16 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "インデックス済みドキュメント"
-        },
         "indexingSpeed": "{speed} 件/分",
         "indexingSpeedTooltip": "コネクター作成以降の1分あたりのインデックス済みドキュメント数",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
-        "statusLine": "インデックス状況 - {detail}",
         "documents": {
-          "label": "直近 / 合計",
-          "total": "/ {total}",
-          "totalLabel": "合計"
+          "totalLabel": "インデックス済みドキュメント合計",
+          "recentLabel": "最近処理されたドキュメント",
+          "syncedPermissionsLabel": "同期済みの権限",
+          "syncedMembershipsLabel": "同期済みのグループメンバーシップ"
         },
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
@@ -2828,7 +2827,16 @@
           "releaseFailed": "インデックス作成を開始できませんでした",
           "viewChecks": "コネクタのチェックを表示"
         },
-        "title": "インデックス状況"
+        "title": "インデックス状況",
+        "sync": {
+          "permissionsTitle": "権限同期の状況",
+          "groupsTitle": "グループメンバーシップ同期の状況",
+          "last": "最終同期 {when}",
+          "never": "まだ同期されていません",
+          "neverTooltip": "インデックス済みのドキュメントは、権限が同期されるまで検索できない場合があります。",
+          "waitingForFirstIndex": "初回インデックス待ち"
+        },
+        "accessTitle": "コネクターのドキュメントアクセス"
       },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",
@@ -2837,19 +2845,20 @@
         "indexingStartUnexpectedError": "インデックス作成の開始中に予期しないエラーが発生しました",
         "indexingUpdateStarted": "インデックスの更新を開始しました",
         "nameUpdateFailed": "コネクター名を更新できませんでした",
-        "nameUpdated": "コネクター名を更新しました",
         "noUnresolvedErrors": "再試行する未解決のエラーはありません。",
         "pruningFrequencyUpdateFailed": "コネクターのプルーニング頻度を更新できませんでした",
-        "pruningFrequencyUpdated": "コネクターのプルーニング頻度を更新しました",
         "refreshFrequencyUpdateFailed": "コネクターの更新頻度を変更できませんでした",
-        "refreshFrequencyUpdated": "コネクターの更新頻度を変更しました",
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
-        "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。",
-        "checkFrequencyUpdated": "コネクタのチェック頻度を更新しました",
+        "targetedReindexRunning": "{count, plural, one {# 件のエラー} other {# 件のエラー}}を再試行しています…",
+        "targetedReindexDone": "再試行が完了しました。{resolved, plural, one {# 件のエラー} other {# 件のエラー}}が解決しました。",
+        "targetedReindexPartial": "再試行が完了しました。{resolved, plural, one {# 件のエラー} other {# 件のエラー}}が解決し、{failing, plural, one {# 件のドキュメント} other {# 件のドキュメント}}は引き続き失敗しています。",
+        "targetedReindexIncomplete": "再試行は完了しませんでした。未解決のエラーは一覧に残ります。",
         "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした",
         "runResolved": "解決済みにしました。",
         "runResolveFailed": "解決できませんでした: {message}",
-        "runsResolved": "{count, plural, other {# 件の実行}}を解決済みにしました。"
+        "runsResolved": "{count, plural, other {# 件の実行}}を解決済みにしました。",
+        "permissionSyncStarted": "権限の同期を開始しました",
+        "permissionSyncFailed": "権限の同期を開始できませんでした"
       },
       "backButton": {
         "label": "すべてのコネクタ"
@@ -2956,6 +2965,7 @@
           "label": "実行の種類",
           "all": "すべての種類",
           "indexing": "ドキュメントインデックス",
+          "backfill": "ドキュメントのバックフィル",
           "doc_permission_sync": "権限の同期",
           "group_sync": "グループメンバーシップの同期",
           "pruning": "ドキュメントのプルーニング",
@@ -2965,9 +2975,10 @@
           "queued": "待機中",
           "running": "実行中",
           "rate": "{rate} 件/分",
-          "finished": "{time}（{minutes, number} 分）",
-          "rateFinished": "{rate} 件/分（{minutes, number} 分）",
-          "membershipRate": "{rate} メンバーシップ/分"
+          "finished": "{time}（{duration}）",
+          "rateFinished": "{rate} 件/分（{duration}）",
+          "membershipRate": "{rate} メンバーシップ/分",
+          "membershipRateFinished": "{rate} メンバーシップ/分（{duration}）"
         },
         "actions": {
           "stages": "ステージの指標を表示",
@@ -2976,7 +2987,7 @@
           "checks": "チェック結果を表示"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "tooltip": "{count, plural, other {# 件の項目が失敗}}",
           "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
         },
         "newModel": {
@@ -2992,8 +3003,8 @@
           "checks": "件のチェックを実行"
         },
         "counts": {
-          "newDocs": "{count, plural, other {# 件の新しいドキュメント}}",
-          "updatedDocs": "更新されたドキュメント",
+          "newDocs": "{count, plural, other {この実行でインデックスに新しく追加されたドキュメント # 件}}",
+          "updatedDocs": "{count, plural, other {すでにインデックスにあり、変更の有無にかかわらずこの実行で処理されたドキュメント # 件}}",
           "removedDocs": "{count, plural, other {# 件のドキュメントを削除}}",
           "users": "{count, plural, other {# 人のユーザー}}",
           "groups": "{count, plural, other {# 件のグループ}}",
@@ -3003,17 +3014,17 @@
           "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "incompleteChecks": "{count, plural, one {# 件のチェックが未完了} other {# 件のチェックが未完了}}",
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
         "search": {
-          "placeholder": "インデックス実行を検索…"
+          "placeholder": "実行エラーを検索…"
         },
         "window": {
           "label": "期間",
           "all": "全期間",
           "h1": "過去 1 時間",
-          "h12": "過去 12 時間",
           "h24": "過去 24 時間",
           "d7": "過去 7 日間",
           "d30": "過去 30 日間"
@@ -3070,7 +3081,8 @@
           "failures": "失敗",
           "errors": "エラー",
           "other": "その他",
-          "resolved": "解決済み"
+          "resolved": "解決済み",
+          "toggle": "フィルター"
         },
         "groups": {
           "failures": "{count, plural, =0 {失敗} other {失敗 # 件}}",
@@ -3087,6 +3099,7 @@
             "errors": "エラーを伴いインデックス作成が完了しました。",
             "resolved": "インデックス作成のエラーが解決されました。",
             "succeeded": "インデックスが正常に完了しました。",
+            "queued": "インデックスは待機中です。",
             "inProgress": "インデックス実行中。",
             "canceled": "インデックスが停止しました。"
           },
@@ -3098,6 +3111,7 @@
             "errors": "エラーを伴い権限が同期されました。",
             "resolved": "権限同期のエラーが解決されました。",
             "succeeded": "権限の同期が正常に完了しました。",
+            "queued": "権限の同期は待機中です。",
             "inProgress": "権限を同期中。",
             "canceled": "権限の同期が停止しました。"
           },
@@ -3109,6 +3123,7 @@
             "errors": "エラーを伴いグループメンバーシップが同期されました。",
             "resolved": "グループメンバーシップ同期のエラーが解決されました。",
             "succeeded": "グループメンバーシップの同期が正常に完了しました。",
+            "queued": "グループメンバーシップの同期は待機中です。",
             "inProgress": "グループメンバーシップを同期中。",
             "canceled": "グループ同期が停止しました。"
           },
@@ -3120,6 +3135,7 @@
             "errors": "プルーニングがエラーを伴って完了しました。",
             "resolved": "プルーニングのエラーが解決されました。",
             "succeeded": "プルーニングが正常に完了しました。",
+            "queued": "プルーニングは待機中です。",
             "inProgress": "プルーニングを実行中。",
             "canceled": "プルーニングが停止しました。"
           },
@@ -3131,6 +3147,7 @@
             "errors": "コネクタチェックがエラーを伴って完了しました。",
             "resolved": "コネクタチェックのエラーが解決されました。",
             "succeeded": "コネクタチェックに合格しました。",
+            "queued": "コネクタチェックは待機中です。",
             "inProgress": "コネクタチェックを実行中。",
             "canceled": "コネクタチェックが停止しました。"
           }
@@ -3146,12 +3163,14 @@
         "tags": {
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "indexingItems": "{count, plural, other {# 件の項目が失敗}}",
           "doc_permission_sync": "{count, plural, other {# 件のドキュメントの権限の同期に失敗}}",
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
           "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
           "resolved": "解決済み",
-          "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}"
+          "resolvedDocs": "{count, plural, other {# 件の項目を解決}}",
+          "superseded": "置き換え済み"
         },
         "more": "さらに表示",
         "empty": {
@@ -3166,9 +3185,9 @@
           "title": "アクティビティを読み込めませんでした。"
         },
         "docs": {
-          "title": "失敗したドキュメント",
+          "title": "失敗した項目",
           "search": {
-            "placeholder": "ドキュメントを検索…"
+            "placeholder": "項目を検索…"
           },
           "resolveAll": "すべて再試行",
           "resolveAllTooltip": "この実行で失敗したすべてのドキュメントを再インデックス",
@@ -3178,8 +3197,8 @@
           "more": "さらに表示",
           "less": "折りたたむ",
           "unknownDocument": "不明なドキュメント",
-          "empty": "未解決のドキュメントエラーはありません",
-          "loadError": "失敗したドキュメントを読み込めませんでした。",
+          "empty": "未解決のエラーはありません",
+          "loadError": "失敗した項目を読み込めませんでした。",
           "open": "ドキュメントを開く"
         },
         "trace": {
@@ -3380,11 +3399,13 @@
           },
           "deleteButton": {
             "label": "アカウントを削除",
-            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。"
+            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。",
+            "notOwnerTooltip": "この認証情報を削除できるのは所有者のみです"
           },
           "updateButton": {
             "label": "認証情報を更新",
-            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。"
+            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。",
+            "notOwnerTooltip": "この認証情報を更新できるのは所有者のみです"
           },
           "usedBy": {
             "label": "{count, plural, other {# 個のコネクタ}}で使用中"
@@ -3404,20 +3425,17 @@
           "rerunButton": {
             "label": "チェックを再実行"
           },
+          "renameButton": {
+            "tooltip": "アカウント名を変更"
+          },
           "authenticationType": {
             "label": "認証タイプ"
           },
           "rerunFailed": {
             "toast": "チェックを開始できませんでした。もう一度お試しください。"
           },
-          "shareSaved": {
-            "toast": "共有を更新しました。"
-          },
           "shareFailed": {
             "toast": "このアカウントを使用できるユーザーを変更できませんでした。もう一度お試しください。"
-          },
-          "renameSaved": {
-            "toast": "アカウント名を変更しました。"
           },
           "renameFailed": {
             "toast": "このアカウントの名前を変更できませんでした。もう一度お試しください。"
@@ -3426,10 +3444,16 @@
             "tooltip": "このアカウントを追加したユーザーのみが非公開にできます。"
           },
           "shareLocked": {
-            "tooltip": "このアカウントを追加したユーザー、または共有されている管理者のみが、使用できるユーザーを変更できます。"
+            "tooltip": "この認証情報を共有できるのは所有者のみです"
           },
           "viewDetails": {
             "tooltip": "詳細を表示"
+          },
+          "failedToRun": {
+            "title": "チェックを実行できませんでした"
+          },
+          "unavailable": {
+            "label": "利用不可"
           }
         },
         "accountUnavailable": {
@@ -3451,6 +3475,9 @@
       "field": {
         "optionalSuffix": {
           "label": "任意"
+        },
+        "availableRefresh": {
+          "tooltip": "リストを更新"
         }
       },
       "gdrive": {
@@ -3596,7 +3623,7 @@
         }
       },
       "content": {
-        "title": "コネクタのコンテンツ",
+        "title": "インデックス設定",
         "description": "このコネクタでインデックスするコンテンツを選択してください。"
       },
       "selectInput": {
@@ -3644,13 +3671,16 @@
         },
         "checkFrequency": {
           "title": "チェックの実行間隔",
-          "description": "接続の機能と状態を確認します。"
-        }
+          "description": "接続の機能と状態を確認します。",
+          "placeholder": "なし"
+        },
+        "rangeRequired": "{min, number} - {max, number} の範囲で値を入力してください。"
       },
       "settings": {
         "description": "コネクタの情報とアクセス。",
         "displayName": {
-          "title": "コネクタの表示名"
+          "title": "表示名",
+          "placeholder": "表示名を入力"
         },
         "documentAccess": {
           "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",
@@ -3709,7 +3739,7 @@
               "label": "添付ファイルを含める"
             },
             "scoped_token": {
-              "label": "スコープ付き API トークンを使用する",
+              "label": "スコープ付き API トークン",
               "description": "スコープ付きトークンは、Atlassian の API ゲートウェイ経由のルーティングが必要です。従来型トークンの場合はオフのままにしてください。"
             }
           }
@@ -3836,13 +3866,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "リポジトリのオーナー"
+              "label": "リポジトリのオーナー",
+              "placeholder": "リポジトリのオーナーを指定"
             },
             "github_mode": {
-              "label": "インデックスする GitHub コンテンツ",
               "tabs": {
                 "repo": {
-                  "label": "特定のリポジトリ"
+                  "label": "指定したリポジトリ"
                 },
                 "everything": {
                   "label": "すべて"
@@ -3850,12 +3880,12 @@
               }
             },
             "repositories": {
-              "label": "リポジトリ名",
-              "description": "複数のリポジトリを指定する場合は、名前をカンマ区切りで入力してください(例: repo1,repo2,repo3)"
+              "label": "リポジトリ名の一覧",
+              "placeholder": "リポジトリ名を入力"
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのリポジトリをインデックスします。"
+              "label": "すべてをインデックス",
+              "description": "Onyx は、オーナー {owner} について見つかったすべてのリポジトリをインデックスします。"
             },
             "include_prs": {
               "label": "プルリクエストを含める",
@@ -3871,7 +3901,8 @@
             },
             "branch": {
               "label": "ブランチ",
-              "description": "ドキュメントをインデックスするブランチ(例: gh-pages)。空欄の場合は、各リポジトリのデフォルトブランチを使用します。「ドキュメントを含める」が有効な場合のみ適用されます。既存のコネクターでこの設定を変更した後は、再インデックスを実行すると新しいブランチがすぐに反映されます。"
+              "description": "ドキュメントをインデックスするブランチ(例: gh-pages)。空欄の場合は、各リポジトリのデフォルトブランチを使用します。「ドキュメントを含める」が有効な場合のみ適用されます。既存のコネクターでこの設定を変更した後は、再インデックスを実行すると新しいブランチがすぐに反映されます。",
+              "placeholder": "ブランチ名を入力"
             }
           }
         },
@@ -3954,8 +3985,8 @@
               "description": "1 つ以上の Bitbucket プロジェクトキー(カンマ区切り)。それらのプロジェクト内のすべてのリポジトリをインデックスします(例: PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "ワークスペース",
-              "description": "このコネクターは、ワークスペース内のすべてのリポジトリをインデックスします。"
+              "label": "ワークスペース内のすべてのリポジトリをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるワークスペース内のすべてのリポジトリをインデックスします。対象を絞るには、別のタブを選択してください。"
             }
           }
         },
@@ -4060,18 +4091,16 @@
             },
             "wiki_base": {
               "label": "サイト URL",
-              "placeholder": "https://domein-mei.atlassian.net/wiki"
+              "placeholder": "https://domein-mei.atlassian.net/wiki",
+              "placeholderDataCenter": "https://domein-mei.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "すべて"
+                  "label": "すべてをインデックス"
                 },
-                "space": {
-                  "label": "スペース"
-                },
-                "page": {
-                  "label": "ページ"
+                "select": {
+                  "label": "スペース/ページを選択"
                 },
                 "cql": {
                   "label": "CQL クエリ"
@@ -4079,24 +4108,36 @@
               }
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのページをインデックスします。"
+              "label": "すべてをインデックス",
+              "description": "Onyx は、選択したアカウントがアクセスできるすべてのスペースとページをインデックスします。"
             },
             "space": {
-              "label": "スペースキー",
-              "description": "インデックスする Confluence のスペースキー(例: `KB`)。"
+              "label": "スペース",
+              "description": "このコネクタでインデックスするスペースキー（例: ENG）。",
+              "placeholder": "スペースキーまたは URL を入力",
+              "required": "スペースまたはページを 1 つ以上追加してください。",
+              "available": "{more, select, true {利用可能なスペース: {count, number}+} other {{count, plural, one {利用可能なスペース: #} other {利用可能なスペース: #}}}}"
             },
             "page_id": {
-              "label": "ページ ID",
-              "description": "インデックスする特定のページ ID(例: `131368`)"
+              "label": "ページ",
+              "description": "このコネクタでインデックスするページ ID（例: 123456）。",
+              "placeholder": "ページ ID または URL を入力",
+              "available": "{more, select, true {利用可能なページ: {count, number}+} other {{count, plural, one {利用可能なページ: #} other {利用可能なページ: #}}}}"
             },
             "index_recursively": {
-              "label": "再帰的にインデックス",
-              "description": "オンにすると、ページ ID で指定したページと、そのすべての子ページをインデックスします。"
+              "label": "子ページを含める",
+              "description": "上で指定したページの下にネストされたすべてのページも、階層の深さを問わずインデックスします。"
             },
             "cql_query": {
               "label": "CQL クエリ",
-              "description": "重要: 現在、'page' タイプのオブジェクトを返す CQL クエリのみがサポートされています。つまり、すべての CQL クエリで、唯一のタイプフィルターとして 'type=page' を含める必要があります。また、コネクターのポーリングロジックに問題が生じるため、'lastModified' のフィルターは使用しないでください。コネクターが独自の並び順を設定するため、ORDER BY も使用しないでください。CQL クエリが返すページの添付ファイルとコメントは、すべて取得されます。'lastmodified' フィルターは上書きされます。詳細は、Atlassian の [CQL ドキュメント](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)を参照してください。"
+              "description": "ページのみを返します。タイプフィルターは `type=page` のみにしてください。\n並べ替えと日付フィルターは避けてください。`order by` や `lastModified` は Onyx 独自のクエリを壊します。 [CQL リファレンス](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "クエリをテスト"
+              },
+              "required": "CQL クエリを追加してください。"
+            },
+            "include_attachments": {
+              "description": "ページに添付されたファイルと画像をインデックスします。[画像のインデックス/処理設定]({indexSettingsPath})を参照してください。"
             }
           }
         },
@@ -4122,8 +4163,8 @@
               }
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべての Issue をインデックスします。"
+              "label": "アカウントが読み取れるすべての課題をインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべてのプロジェクトのすべての課題をインデックスします。対象を絞るには、別のタブを選択してください。"
             },
             "project_key": {
               "label": "プロジェクトキー",
@@ -4310,8 +4351,8 @@
               }
             },
             "everything_description": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスペースをインデックスします。"
+              "label": "アカウントが読み取れるすべてのスペースをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべてのスペースのすべてのページをインデックスします。対象を絞るには、別のタブを選択してください。"
             },
             "spaces": {
               "label": "スペース ID",
@@ -4751,8 +4792,8 @@
               }
             },
             "everything_description": {
-              "label": "すべて",
-              "description": "このコネクターは、API トークンでアクセスできるすべてのベースとテーブルを自動的に検出してインデックスします。"
+              "label": "トークンが読み取れるすべてのベースをインデックスします",
+              "description": "Onyx は、API トークンが読み取れるすべてのベースとテーブルを検出してインデックスします。対象を絞るには、別のタブを選択してください。"
             },
             "airtable_url": {
               "label": "Airtable の URL",
@@ -4791,8 +4832,8 @@
               "description": "複数のスポットを指定する場合は、スポット名を 1 つずつ入力してください。"
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスポットをインデックスします。"
+              "label": "アカウントが読み取れるすべてのスポットをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべてのスポットをインデックスします。対象を絞るには、別のタブを選択してください。"
             }
           }
         },
@@ -4816,8 +4857,12 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "すべてのプロバイダー"
+      "deleteModal": {
+        "description": "**{model}**（{provider}）の利用は再び組み込み価格で計算されます。",
+        "submit": {
+          "label": "削除"
+        },
+        "title": "*{model}* の上書きを削除"
       },
       "empty": {
         "description": "モデルに交渉済みの単価（100 万 tokens あたりの USD）を適用するには、追加してください。",
@@ -4825,27 +4870,34 @@
       },
       "form": {
         "addButton": {
-          "label": "オーバーライドを追加"
+          "label": "追加"
         },
+        "description": "モデルの交渉済み単価を設定します。利用コストの計算で組み込み価格の代わりに使われます。",
+        "editTitle": "コストの上書きを編集",
+        "newTitle": "新しいコストの上書き",
         "cacheRate": {
-          "label": "キャッシュ読み取り単価（100 万 tokens あたりの USD、任意）",
-          "placeholder": "既定では入力単価を使用"
+          "description": "単位は 100 万 tokens あたりの USD です。既定では入力単価を使用します。",
+          "label": "キャッシュ読み取り単価"
         },
         "cancelButton": {
           "label": "キャンセル"
         },
         "inputRate": {
-          "label": "入力単価（100 万 tokens あたりの USD）"
+          "label": "入力単価"
         },
         "model": {
+          "description": "選択したこのモデルにコストの上書きを適用します。",
           "label": "モデル",
           "placeholder": "モデルを選択"
         },
         "outputRate": {
-          "label": "出力単価（100 万 tokens あたりの USD）"
+          "label": "出力単価"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "単位は 100 万 tokens あたりの USD です。"
         }
       },
       "panel": {
@@ -4859,36 +4911,25 @@
         "title": "コストオーバーライド"
       },
       "row": {
+        "cache": "キャッシュ {value}",
         "deleteButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを削除"
         },
+        "description": "{provider} · 更新 {time}",
         "editButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを編集"
         },
-        "rates": "{provider} · 入力 {input} · 出力 {output} · 100 万 tokens あたりの USD",
-        "ratesWithCache": "{provider} · 入力 {input} · 出力 {output} · キャッシュ {cache} · 100 万 tokens あたりの USD",
-        "updated": "更新 {time}"
+        "input": "入力 {value}",
+        "output": "出力 {value}"
       },
       "toasts": {
         "removeFailed": "オーバーライドを削除できませんでした: {message}",
-        "removed": "{model} のオーバーライドを削除しました。",
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
-        "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
       "accessCell": {
-        "disabledSuccess": {
-          "message": "このユーザーの Craft を無効にしました"
-        },
-        "enabledSuccess": {
-          "message": "このユーザーの Craft を有効にしました"
-        },
         "error": {
           "message": "Craft のアクセス権を更新できませんでした"
         }
@@ -4923,9 +4964,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "ベータ"
-        },
         "disabled": {
           "description": "Craft は全員に対してオフです。下で個別のユーザーを切り替えられます。"
         },
@@ -5006,14 +5044,8 @@
         "resetError": {
           "message": "既定のモデルをクリアできませんでした"
         },
-        "resetSuccess": {
-          "message": "Craft の既定のモデルをクリアしました"
-        },
         "saveError": {
           "message": "既定のモデルを保存できませんでした"
-        },
-        "saveSuccess": {
-          "message": "Craft の既定のモデルを保存しました"
         }
       },
       "header": {
@@ -5113,6 +5145,9 @@
         },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "個人用アクセストークンを追加"
         }
       },
       "delete": {
@@ -5123,9 +5158,9 @@
           "message": "この認証情報を削除してもよろしいですか?稼働中のコネクタに関連付けられた認証情報は削除できません。"
         },
         "confirmButton": {
-          "label": "確認"
+          "label": "削除"
         },
-        "confirmTitle": "削除の確認"
+        "confirmTitle": "*{name}* を削除"
       },
       "displayNames": {
         "accessKeyId": "{source} アクセスキー ID",
@@ -5171,7 +5206,8 @@
         "zuliprcContent": "Zuliprc の内容",
         "authenticationMethod": "認証方法",
         "primaryAdminEmail": "プライマリ管理者のメールアドレス",
-        "serviceAccountKey": "サービスアカウントキー"
+        "serviceAccountKey": "サービスアカウントキー",
+        "personalAccessToken": "個人用アクセストークン"
       },
       "hints": {
         "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
@@ -5183,7 +5219,8 @@
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
-        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。"
+        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。",
+        "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。"
       },
       "methods": {
         "labels": {
@@ -5387,9 +5424,6 @@
         }
       },
       "defaultAgent": {
-        "cleared": {
-          "toast": "既定のエージェントを解除しました"
-        },
         "section": {
           "description": "オーバーライドがない限り、ボットがすべてのチャンネルで使用するエージェントです。",
           "title": "既定のエージェント"
@@ -5402,9 +5436,6 @@
         },
         "updateError": {
           "toast": "エージェントを更新できませんでした"
-        },
-        "updated": {
-          "toast": "既定のエージェントを更新しました"
         }
       },
       "error": {
@@ -5457,15 +5488,9 @@
         "deleted": {
           "toast": "サーバー設定を削除しました"
         },
-        "disabled": {
-          "toast": "サーバーを無効にしました"
-        },
         "empty": {
           "description": "まずはサーバー設定を作成してください。",
           "title": "設定済みの Discord サーバーはまだありません"
-        },
-        "enabled": {
-          "toast": "サーバーを有効にしました"
         },
         "fallbackName": "サーバー #{id}",
         "notRegistered": {
@@ -5589,9 +5614,6 @@
       "score": {
         "notANumber": {
           "toast": "スコアは数値で入力してください"
-        },
-        "updated": {
-          "toast": "スコアを更新しました！"
         }
       },
       "sets": {
@@ -5688,9 +5710,16 @@
         "newButton": {
           "label": "新しいドキュメントセット"
         },
+        "noResults": {
+          "description": "「{query}」に一致するドキュメントセットはありません",
+          "title": "ドキュメントセットが見つかりません"
+        },
         "notFound": {
           "message": "id が {id} のドキュメントセットは見つかりません",
           "title": "ドキュメントセットが見つかりません"
+        },
+        "search": {
+          "placeholder": "ドキュメントセットを検索..."
         },
         "status": {
           "deleting": {
@@ -5779,6 +5808,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {#件のファイルをアップロードしました} other {#件のファイルをアップロードしました}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {#件のファイルをアップロードしました} other {#件のファイルをアップロードしました}}、不完全: {error}"
         }
       },
       "sensitiveWarning": {
@@ -6005,12 +6037,11 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "デフォルト"
+        "defaultSuffix": {
+          "label": "（デフォルト）"
         },
         "toasts": {
-          "renameFailed": "グループの名前を変更できませんでした",
-          "renamed": "グループ名を「{name}」に変更しました"
+          "renameFailed": "グループの名前を変更できませんでした"
         },
         "viewGroup": {
           "label": "グループを表示"
@@ -6089,8 +6120,6 @@
         "toasts": {
           "deleteFailed": "グループを削除できませんでした",
           "deleted": "グループ「{name}」を削除しました",
-          "managerAssigned": "マネージャーを割り当てました",
-          "managerRevoked": "マネージャー権限を取り消しました",
           "managerUpdateFailed": "マネージャーを更新できませんでした",
           "membersStranded": "一部のメンバーがどのグループにも所属しなくなります。先に別のグループへ追加してください。",
           "syncing": "このグループは現在同期中です。しばらく待ってからもう一度お試しください。",
@@ -6112,8 +6141,7 @@
           "text": "グループを作成して、ユーザーを整理しアクセス権を管理しましょう。"
         },
         "loadError": {
-          "description": "詳細はコンソールを確認してください。",
-          "title": "グループを読み込めませんでした。"
+          "description": "詳細はコンソールを確認してください。"
         },
         "newGroup": {
           "label": "新しいグループ"
@@ -6123,7 +6151,7 @@
           "title": "グループが見つかりません"
         },
         "search": {
-          "placeholder": "グループを検索..."
+          "placeholder": "グループを検索、または \"/\" を押してフォーカス..."
         }
       },
       "members": {
@@ -6197,7 +6225,7 @@
         "learnMore": {
           "label": "詳細を見る"
         },
-        "title": "権限の仕組みが変わりました"
+        "title": "権限の仕組みが変わりました。"
       },
       "sharedResources": {
         "agent": {
@@ -6568,9 +6596,6 @@
       "deselectError": {
         "message": "選択を解除できませんでした"
       },
-      "deselectSuccess": {
-        "message": "{title} の選択を解除しました"
-      },
       "disconnectError": {
         "message": "接続を解除できませんでした"
       },
@@ -6735,14 +6760,19 @@
           "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
       },
+      "retiredModelWarning": {
+        "description": "別のモデルを接続してデフォルトに設定してから、{title} の接続を解除してください。",
+        "title": "{title} は利用できなくなりました"
+      },
       "setDefaultError": {
         "message": "デフォルトに設定できませんでした"
-      },
-      "setDefaultSuccess": {
-        "message": "{title} をデフォルトに設定しました"
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "詳細オプション",
+        "description": "これらの設定は、{appName} が検索でドキュメントの権限を適用する効率を変更します。各ユーザーが閲覧できるドキュメントは変わりません。Onyx チームからの明示的な指示がない限り、変更しないでください。"
+      },
       "actions": {
         "applyForward": {
           "label": "新規および更新されたドキュメントに適用"
@@ -6806,6 +6836,10 @@
           "description": "新規および更新されたドキュメントのコンテキスト生成を今すぐ停止するか、すべてのドキュメントを再構築して生成済みのコンテキストも削除します。",
           "title": "コンテキスト検索をオフにする方法を選択してください"
         },
+        "contextualEnableOnly": {
+          "description": "今後の新規および更新されたドキュメントにコンテキストを生成するか、すべてのドキュメントを再構築してすべてのドキュメントにコンテキストを付与します。",
+          "title": "コンテキスト検索をオンにする方法を選択してください"
+        },
         "contextualModelMissing": {
           "description": "コンテキスト検索は有効ですが、モデルが選択されていません。再インデックスの前に、下でコンテキスト検索 LLM を選択してください。選択しないと再インデックスは実行できません。",
           "title": "コンテキスト検索 LLM を選択してください"
@@ -6832,6 +6866,9 @@
         "reindex": {
           "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "完全な再インデックスが実行されます。"
+        },
+        "reindexModel": {
+          "title": "{provider} / {model} に切り替えます。完全な再インデックスが実行されます。"
         }
       },
       "cloudDisabled": {
@@ -6846,6 +6883,9 @@
         "description": "インデックスする各チャンクにドキュメント全体のコンテキストを追加し、ハイブリッド検索の関連性を高めます。embedding のコストが大幅に増える場合があります。",
         "noModelsTooltip": "モデルが設定されていないため、コンテキスト検索は無効です。先に [言語モデル]({link}) を設定してください。",
         "title": "コンテキスト検索"
+      },
+      "currentModel": {
+        "legacyHint": "これはレガシーモデルです。引き続き動作しますが、新しいインデックスに再度選択することはできません。アップグレードするには、「すべてのモデルを表示」をクリックして新しいモデルを選択してください。"
       },
       "embeddingModel": {
         "cloudManaged": {
@@ -6931,6 +6971,10 @@
         "description": "今後追加または更新されるドキュメントではコンテキスト検索が停止します。既存のドキュメントは、更新されるか再インデックスするまで生成済みのコンテキストを保持します。",
         "title": "コンテキスト検索を以降のドキュメントでオフにする"
       },
+      "enableForwardModal": {
+        "description": "今後追加または更新されるドキュメントからコンテキスト検索が始まります。既存のドキュメントは、更新されるか再インデックスするまでそのままなので、コンテキストの付与状況はドキュメントごとに異なる場合があります。",
+        "title": "コンテキスト検索を以降のドキュメントでオンにする"
+      },
       "header": {
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
       },
@@ -6953,11 +6997,6 @@
         "modelName": {
           "description": "{appName} は {provider} プロキシ上にあるこのモデルに接続します。"
         }
-      },
-      "maxImageSize": {
-        "description": "このサイズを超える画像はリソース使用を抑えるためスキップされます。",
-        "suffix": "(MB)",
-        "title": "解析する画像の最大サイズ"
       },
       "modal": {
         "cancelButton": {
@@ -6985,9 +7024,12 @@
         "currentButton": {
           "label": "現在のモデル"
         },
-        "deprecated": {
-          "connectTooltip": "この embedding モデルは非推奨のため接続できません。",
-          "selectTooltip": "この embedding モデルは非推奨のため選択できません。"
+        "gpuRecommended": {
+          "tag": "GPU推奨"
+        },
+        "legacy": {
+          "tag": "レガシー",
+          "tooltip": "このモデルは新しいインデックスには選択できません。モデルを変更するまでは引き続き動作します。"
         },
         "selectButton": {
           "label": "モデルを選択"
@@ -6997,6 +7039,7 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPUの速度は目安で、ハードウェアと文書サイズによって異なります。推奨RAMは読み込んだモデル1つ分であり、Onyx全体の必要量ではありません。再インデックス時は追加のメモリを確保してください。",
         "addCustomModel": {
           "label": "カスタムモデルを追加"
         },
@@ -7007,6 +7050,7 @@
           "title": "カスタム embedding モデルを設定します。"
         },
         "customModels": {
+          "hint": "[Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) で公開されている [SentenceTransformers](https://www.sbert.net/) 互換のモデルを使用してください。{appName} はセルフホスティング用にモデルをダウンロードします。互換性は保証されません。",
           "title": "カスタムモデル"
         },
         "foldModels": {
@@ -7041,6 +7085,20 @@
           "label": "一時的に利用不可"
         },
         "title": "マルチパスインデックス"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 互換エンドポイントのベース URL(例: http://localhost:8000/v1)。{appName} が /embeddings パスを追加します。",
+          "title": "API ベース URL"
+        },
+        "modelName": {
+          "description": "{appName} は OpenAI 互換エンドポイント上のこのモデルに接続します。"
+        },
+        "reducedDimension": {
+          "description": "より短いベクトルをリクエストします。Matryoshka Representation Learning で学習したモデルのみが対応しています。短いベクトルはストレージが少なく、検索も高速です。モデルの最大サイズを使う場合は空欄のままにしてください。",
+          "placeholder": "例: 1024",
+          "title": "埋め込み次元数"
+        }
       },
       "progressBanner": {
         "attentionButton": {
@@ -7150,6 +7208,8 @@
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",
         "contextualRetrievalDisableFailed": "コンテキスト検索をオフにできませんでした",
         "contextualRetrievalDisabled": "コンテキスト検索をオフにしました",
+        "contextualRetrievalEnableFailed": "コンテキスト検索をオンにできませんでした",
+        "contextualRetrievalEnabled": "コンテキスト検索をオンにしました",
         "modelNotFound": "選択したモデルが見つかりませんでした",
         "providerResolveFailed": "プロバイダーを特定できませんでした",
         "reindexCanceled": "再インデックスをキャンセルしました",
@@ -7166,6 +7226,7 @@
         "modelDimPositive": "正の整数を入力してください",
         "modelDimRequired": "モデルの次元数は必須です",
         "modelNameRequired": "モデル名は必須です",
+        "reducedDimensionTooLarge": "モデルの次元数より小さくする必要があります",
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
@@ -7198,22 +7259,27 @@
         "restoreHint": "コネクタを残したい場合は、ここでキャンセルし、再開または修正してから再インデックスを実行してください。そうすれば新しいインデックスに引き継がれます。そうしない場合は、再インデックスの完了後に追加し直してください。"
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere の主力埋め込みモデル。品質とコストのバランスが最も優れています。2048 次元出力。",
+        "cohereEmbedV5Fast": "Cohere の Embed 5 の低コスト版。それでも非常に優れた選択肢です。2048 次元出力。",
         "cohereEmbedEnglishV3": "Cohere の英語向け埋め込みモデル。英語タスクで良好な性能。",
         "cohereEmbedEnglishLightV3": "Cohere の軽量な英語向け埋め込みモデル。単純なタスクではより高速で効率的。",
-        "cohereEmbedV4": "Cohere の最新の多言語埋め込みモデル。デフォルトの 1536 次元出力で検索品質を向上。",
-        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。最高の性能だが高コスト。",
-        "openaiTextEmbedding3Small": "OpenAI の新しく効率的な埋め込みモデル。性能とコストのバランスが良い。",
+        "cohereEmbedV4": "Cohere の多言語埋め込みモデル。1536 次元出力。",
+        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。すでに OpenAI を利用している場合に適しています。3072 次元出力。",
+        "openaiTextEmbedding3Small": "OpenAI の小型埋め込みモデル。クラウド型の選択肢の中で群を抜いて経済的です。1536 次元出力。",
         "googleGeminiEmbedding001": "Google の Gemini 埋め込みモデル。強力で効率的。",
         "googleTextEmbedding005": "Google のより小型で軽量な埋め込みモデル。",
-        "googleGeminiEmbedding2": "Google の最新のマルチモーダル埋め込みモデル（GA）。3072 次元出力で最高品質の検索。",
+        "googleGeminiEmbedding2": "Google の主力埋め込みモデル。非常に高性能ですが、コストが高く低速です。3072 次元出力のためインデックスが大きくなります。すでに Google を利用しているチームには堅実な選択肢です。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 のプレビュー版。新規セットアップでは gemini-embedding-2 に置き換えられました。",
         "voyageLarge2Instruct": "Voyage の大規模埋め込みモデル。指示によるファインチューニングで高性能。",
         "voyage4Large": "Voyage 4 シリーズ最大の埋め込みモデル。Voyage で最高の検索品質、多言語対応。",
         "voyage4": "Voyage 4 シリーズの汎用埋め込みモデル。手頃なコストで高い検索品質。",
         "voyage4Lite": "Voyage 4 シリーズの軽量埋め込みモデル。最も低コストで、レート制限が最も高い。",
         "voyageLight2Instruct": "Voyage の軽量な埋め込みモデル。性能と効率のバランスが良い。",
+        "graniteEmbedding97mMultilingualR2": "IBMの小型多言語モデル。{appName}に同梱。9700万パラメータ、384次元出力。CPUコアあたり最大200文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "voyage4Nano": "Voyage AIのオープンウェイトモデル。3億4600万パラメータ、2048次元出力。CPUコアあたり最大50文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "nemotron3Embed1b": "NVIDIAの多言語モデル。11億パラメータ、2048次元出力。CPUコアあたり最大5文書/分。CPU実行時の推奨RAM：モデルサーバーあたり8 GB。GPU推奨。",
         "nomicEmbedTextV1": "検索、類似度、クラスタリング、分類に特化した Nomic の埋め込みモデル。",
-        "e5BaseV2": "デフォルトより小型で高速なモデル。検索品質は下がるが、デフォルトモデルの約 2 倍高速。",
+        "e5BaseV2": "Microsoft の E5 ファミリーの英語埋め込みモデル。速度と検索品質のバランスが取れています。",
         "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で {appName} を実行している場合に適しています。",
         "multilingualE5Base": "英語以外の言語のコーパスには、これを選択してください。",
         "multilingualE5Small": "英語以外の言語のコーパスで、かつリソースが限られた環境の場合は、これを選択してください。"
@@ -7225,11 +7291,11 @@
             "off": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用します。コネクタ単位のアクセスはオフです。",
             "shadow": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用し、コネクタ単位のアクセスと比較します。"
           },
-          "title": "コネクタアクセスの更新が完了しました"
+          "title": "コネクタアクセスの更新が完了しました。"
         },
         "notStarted": {
           "description": "バックグラウンドジョブが検索インデックス内の既存チャンクにコネクタIDを追加します。数分以内に開始されます。",
-          "title": "コネクタアクセスの更新はまだ開始されていません"
+          "title": "コネクタアクセスの更新はまだ開始されていません。"
         },
         "progress": {
           "ariaLabel": "コネクタアクセス更新の進行状況"
@@ -7265,13 +7331,12 @@
           },
           "placeholder": "モードを選択",
           "toasts": {
-            "error": "検索アクセスモードを更新できませんでした。",
-            "success": "検索アクセスモードを{mode}に設定しました。"
+            "error": "検索アクセスモードを更新できませんでした。"
           }
         },
         "loadError": {
           "description": "ページを再読み込みして、もう一度お試しください。",
-          "title": "コネクタアクセスの更新を読み込めませんでした"
+          "title": "コネクタアクセスの更新を読み込めませんでした。"
         }
       },
       "embeddingRateLimit": {
@@ -7279,21 +7344,16 @@
         "description": "インデックス作成が一定時間内に送信する埋め込みリクエストの数を、すべてのインデックス作成ワーカーを通して制限します。上限に達すると、インデックス作成は失敗せずに待機してから再試行するため、ワーカーは新しい作業を取りにくくなります。バッチが失敗するのは、待機が長すぎる場合だけです。検索クエリは制限されません。",
         "requests": {
           "title": "時間枠あたりのリクエスト数",
-          "description": "空欄にすると制限なしになります。",
-          "placeholder": "制限なし"
+          "description": "インデックス作成が 1 つの時間枠で送信できる埋め込みリクエストの最大数です。空欄にすると制限なしになります。",
+          "placeholder": "制限なし",
+          "suffix": "リクエスト"
         },
         "period": {
           "title": "時間枠の長さ",
-          "description": "例: 1 分あたりの制限なら 60。",
-          "suffix": "（秒）"
-        },
-        "restoreDefault": "デフォルトに戻す",
-        "validation": {
-          "requests": "1 から {max, number} までの整数を入力するか、制限なしにする場合は空欄にしてください。",
-          "period": "1 から {max, number} までの整数の秒数を入力してください。"
+          "description": "1 つの時間枠の長さです。1 分あたりの制限にするには 60 を指定します。",
+          "suffix": "秒"
         },
         "toasts": {
-          "saved": "レート制限を保存しました。",
           "failed": "レート制限を保存できませんでした。"
         }
       },
@@ -7311,13 +7371,19 @@
           "label": "コネクタ"
         },
         "documents": {
-          "caption": "最近インデックス済み / 合計",
-          "label": "ドキュメント"
+          "caption": "インデックス内",
+          "label": "ドキュメント",
+          "tooltip": "各コネクタのドキュメント数を合計するため、2 つのコネクタが持つドキュメントは 2 回数えられます。"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "概要を読み込めませんでした。"
+        "loadError": "概要を読み込めませんでした。",
+        "processed": {
+          "caption": "期間内に処理",
+          "label": "ドキュメント",
+          "tooltip": "推定値です。各実行の件数は実行時間全体に均等に配分されます。ドキュメントは実行が処理するたびに数えられ、失敗したものも含まれるため、インデックス内のドキュメント数を超えることがあります。"
+        }
       },
       "activities": {
         "title": "アクティビティ",
@@ -7341,7 +7407,9 @@
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
           "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
-          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}"
+          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
+          "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",
+          "deleting": "{count, plural, other {# 件のコネクタを削除中}}"
         },
         "access": {
           "public": "公開",
@@ -7356,7 +7424,11 @@
         },
         "docs": {
           "label": "ドキュメント",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} 件処理済み",
+          "processedTooltip": {
+            "running": "現在の実行がこれまでに処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられるため、コネクタのドキュメント数を超えることがあります。",
+            "finished": "前回の実行が処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられ、その後に削除されたドキュメントはコネクタの件数から外れるため、コネクタのドキュメント数を超えることがあります。"
+          }
         },
         "actions": {
           "manage": "管理",
@@ -7388,7 +7460,7 @@
         "title": "新しい LLM の設定は一時的に利用できません。"
       },
       "defaultModel": {
-        "description": "このモデルは {appName} のチャットでデフォルトとして使用されます。",
+        "description": "新しいセッションで既定で使用されます。",
         "title": "デフォルトモデル"
       },
       "deleteModal": {
@@ -7475,6 +7547,10 @@
           "accessKeyIdField": {
             "title": "AWS アクセスキー ID"
           },
+          "assumeRoleField": {
+            "description": "別の AWS アカウントの Bedrock ロールを使用します。{appName} は上記の認証情報でこのロールを引き受けます。",
+            "title": "引き受けるロールの ARN"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "AWS 以外の環境向け",
@@ -7490,6 +7566,10 @@
               "label": "長期 API キー"
             },
             "title": "認証方法"
+          },
+          "externalIdField": {
+            "description": "ロールの信頼ポリシーで必要な場合のみ。",
+            "title": "外部 ID"
           },
           "iamNotice": {
             "title": "{appName} は実行環境に割り当てられた IAM ロールを使用して認証します。"
@@ -7667,10 +7747,16 @@
             "label": "モデルをもっと見る"
           },
           "refetch": {
+            "label": "モデルを更新",
             "errorToast": "モデルを取得できませんでした"
           },
           "row": {
             "defaultLabel": "デフォルトモデル",
+            "decisionTag": {
+              "label": "判断",
+              "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",
+              "chatAndDecision": "チャットと判断の両方のタスクに対応しています。"
+            },
             "renameButton": {
               "tooltip": "名前を変更"
             },
@@ -7886,24 +7972,24 @@
       },
       "toasts": {
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
-        "providerDeleted": "プロバイダーを削除しました。",
         "providerLoadFailed": "プロバイダーを読み込めませんでした: {message}",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
-        "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
       },
       "modelRouting": {
         "autoMode": {
           "title": "オートモード",
-          "description": "各メッセージに最適なモデルを選ぶ Auto 項目をモデルピッカーに追加します。"
+          "description": "各メッセージに最適なモデルを選ぶ Auto 項目をモデルピッカーに追加します。",
+          "noRoutersTooltip": "ルーターモデルが見つかりません。先にゲートウェイプロバイダーでルーターモデルを有効にしてください。",
+          "noRoutersError": "ルーターモデルが見つからないため、ユーザーは Auto を選べません。ゲートウェイプロバイダーでルーターモデルを有効にしてください。"
         },
         "target": {
           "title": "ルーターモデル",
           "description": "Auto モードのモデルルーティングを担当します。",
-          "empty": "ルーターモデルが見つかりません。先にゲートウェイプロバイダーでルーターモデルを有効にしてください。",
           "error": "ルーターモデルを読み込めませんでした。",
-          "retry": "再試行"
+          "retry": "再試行",
+          "missing": "ユーザーが自動ルーティングモードを使えるように、ルーターモデルを選択してください。"
         }
       },
       "providers": {
@@ -7915,6 +8001,14 @@
           "productName": "カスタムモデル",
           "companyName": "OpenAI 互換エンドポイント"
         }
+      },
+      "reasoning": {
+        "description": "ユーザーがセッションごとにモデルの既定の推論レベルを上書きできるようにします。",
+        "title": "推論の制御"
+      },
+      "temperature": {
+        "description": "ユーザーがセッションごとにモデルの既定の温度を上書きできるようにします。",
+        "title": "Temperature の制御"
       }
     },
     "mcpActions": {
@@ -8313,9 +8407,6 @@
         "error": "SCIM token のステータスを読み込めませんでした。"
       },
       "modal": {
-        "copied": {
-          "message": "token をクリップボードにコピーしました"
-        },
         "copyFailed": {
           "error": "token をコピーできませんでした"
         },
@@ -8477,6 +8568,10 @@
           "description": "全員が SSO のみでサインインおよび登録します。有効な SSO プロバイダーが 1 つ以上必要です。",
           "title": "パスワードでのログインと登録を無効化"
         },
+        "renamedClaim": {
+          "description": "メールアドレスが変更されたユーザーが、プロバイダーとの関連付けが残っていない現在のメールアドレスのアカウントに、別のプロバイダーからサインインできるようにします。削除した SSO プロバイダーからユーザーを移行する間だけ有効にしてください。",
+          "title": "プロバイダー削除後に名前変更されたアカウントを引き継ぐ"
+        },
         "section": {
           "title": "認証"
         },
@@ -8527,7 +8622,7 @@
           },
           "title": "SSRF 保護",
           "validateAll": {
-            "description": "最も厳しい設定です。Web コネクターを含め、すべての外向きリクエストがプライベート IP や内部 IP に接続できません。",
+            "description": "最も厳しい設定です。Web コネクターを含め、外向きリクエストはプライベート IP や内部 IP に接続できません。例外として、カスタムツールは引き続きプライベートネットワークのアドレスに接続できます。ループバック、リンクローカル、クラウドメタデータは引き続きブロックされます。",
             "label": "すべてのリクエストを検証"
           },
           "validateLlm": {
@@ -8572,9 +8667,7 @@
       },
       "toasts": {
         "securitySettingsUpdateFailed": "セキュリティ設定を更新できませんでした",
-        "securitySettingsUpdated": "セキュリティ設定を更新しました",
-        "settingsUpdateFailed": "設定を更新できませんでした",
-        "settingsUpdated": "設定を更新しました"
+        "settingsUpdateFailed": "設定を更新できませんでした"
       },
       "placeholders": {
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
@@ -8696,8 +8789,7 @@
       "page": {
         "description": "サービスアカウントを使用して、{appName} API にプログラムからアクセスします。",
         "error": {
-          "description": "詳細はコンソールを確認してください。",
-          "title": "サービスアカウントの読み込みに失敗しました。"
+          "description": "詳細はコンソールを確認してください。"
         }
       },
       "regenerateModal": {
@@ -8748,7 +8840,6 @@
       "toasts": {
         "deleteFailed": "API キーの削除に失敗しました。",
         "deleteFailedWithDetail": "API キーの削除に失敗しました: {detail}",
-        "keyCopied": "API キーをクリップボードにコピーしました。",
         "regenerateFailed": "API キーの再生成に失敗しました。",
         "regenerateFailedWithDetail": "API キーの再生成に失敗しました: {detail}"
       },
@@ -9155,9 +9246,6 @@
         "fieldUpdateFailed": {
           "toast": "コネクターの {field} の更新に失敗しました"
         },
-        "fieldUpdated": {
-          "toast": "コネクターの {field} を更新しました"
-        },
         "updateTokensButton": {
           "label": "Token を更新"
         }
@@ -9182,9 +9270,10 @@
         "gatedTooltip": "複数の SSO プロバイダーを有効にできるのは、Business プランまたは Enterprise プランです。"
       },
       "copyRedirectUri": {
-        "tooltip": "リダイレクト URI をコピー",
-        "successToast": "リダイレクト URI をコピーしました",
-        "errorToast": "コピーできませんでした"
+        "tooltip": "リダイレクト URI をコピー"
+      },
+      "deleteProvider": {
+        "tooltip": "削除"
       },
       "editProvider": {
         "tooltip": "編集"
@@ -9198,6 +9287,17 @@
         "title": "SSO プロバイダーの読み込みに失敗しました"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "{name} を削除",
+          "description": "{name} でサインインしたユーザーのアカウントはそのまま残ります。同じメールアドレスで別のプロバイダーからサインインすると、同じアカウントが開きます。このプロバイダーを削除する前に、代わりのプロバイダーを追加してください。",
+          "countsError": "このプロバイダーでサインインしたユーザーを読み込めませんでした。閉じてからもう一度お試しください。",
+          "countsLoading": "このプロバイダーでサインインしたユーザーを読み込んでいます…",
+          "linkedUsers": "{count, plural, =0 {{name} でサインインしたユーザーはいません。} other {# 人のユーザーが {name} でサインインしました。}}",
+          "renamedUsers": "{count, plural, other {そのうち # 人は名前変更されており、別のプロバイダーからサインインするにはセキュリティ強化の「名前変更されたアカウントの引き継ぎ」を有効にする必要があります。}}",
+          "submit": {
+            "label": "削除"
+          }
+        },
         "domainVerification": {
           "description": "ドメインの所有権を確認すると、そのドメインのユーザーはワークスペースに自動でサインインできます。下の DNS レコードを追加してから確認してください。",
           "loadError": {
@@ -9296,6 +9396,7 @@
         "description": "ユーザーが自社の ID プロバイダー経由でサインインできるようにします。"
       },
       "toasts": {
+        "providerDeleted": "{name} を削除しました",
         "unexpectedError": "予期しないエラーが発生しました。"
       },
       "providerTypes": {
@@ -9541,6 +9642,8 @@
         "deleting": "削除中",
         "failed": "失敗",
         "indexed": "インデックス済み",
+        "backfilling": "バックフィル中",
+        "backfilled": "バックフィル済み",
         "indexing": "インデックス作成中",
         "initialIndexing": "初回インデックス作成",
         "interrupted": "中断",
@@ -9886,8 +9989,7 @@
         }
       },
       "loadError": {
-        "description": "トレース設定を読み込めません。",
-        "title": "トレース設定の読み込みに失敗しました"
+        "description": "トレース設定を読み込めません。"
       },
       "page": {
         "description": "オブザーバビリティプラットフォームを接続して、LLM 呼び出しを監視・評価します。"
@@ -10235,7 +10337,7 @@
         "copyButton": {
           "label": "パスワードをコピー"
         },
-        "description": "<strong>{email}</strong> の新しいランダムなパスワードを生成します。現在のパスワードは直ちに使用できなくなります。",
+        "description": "<strong>{email}</strong> の新しいランダムなパスワードを生成します。現在のパスワードは直ちに使用できなくなります。すべてのセッションからサインアウトされ、個人用アクセストークンは無効化されます。",
         "doneButton": {
           "label": "完了"
         },
@@ -10430,7 +10532,7 @@
           "required": "API キーは必須です"
         },
         "apiSecret": {
-          "description": "Scribe にアクセスするには、{provider} の [API シークレット]({url}) を貼り付けてください。",
+          "description": "{provider} の [API シークレット]({url}) を貼り付けて Zoom AI Services にアクセスします。",
           "label": "API シークレット",
           "placeholder": "API シークレット",
           "required": "API シークレットは必須です"
@@ -10655,7 +10757,6 @@
         "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
       },
       "toasts": {
-        "settingsUpdated": "設定を更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました"
       }
     },
@@ -10665,26 +10766,28 @@
         "title": "接続をテスト",
         "description": "{appName} は続行する前に、必要なスコープを確認するチェックを実行します。",
         "startButton": {
-          "label": "チェックを開始"
+          "label": "チェックを開始",
+          "disabledTooltip": "チェックを開始するには、上でアカウントを選択するか、新しいアカウントを入力してください"
         }
       },
       "title": "コネクターチェック",
       "groups": {
         "failed": "失敗 {count} 件",
-        "indeterminate": "未検証 {count} 件",
+        "indeterminate": "未完了 {count} 件",
         "passed": "成功 {count} 件",
         "skipped": "スキップ {count} 件",
-        "running": "実行中 {count} 件",
+        "running": "進行中 {count} 件",
         "expected": "予定 {count} 件"
       },
       "status": {
-        "passed": "合格",
+        "passed": "成功",
         "failed": "失敗",
-        "indeterminate": "検証できませんでした",
+        "indeterminate": "未完了",
         "skipped": "スキップ",
-        "running": "テスト中…",
+        "running": "実行中…",
         "pending": "待機中",
-        "waiting": "設定を待っています"
+        "waiting": "設定を待っています",
+        "stopped": "ユーザーが停止"
       },
       "required": {
         "label": "必須"
@@ -10692,17 +10795,15 @@
       "empty": {
         "label": "まだチェックは実行されていません。"
       },
-      "docsLink": {
-        "label": "ドキュメント"
-      },
       "foldButton": {
         "fold": "折りたたむ",
         "expand": "すべて表示"
       },
       "titleCount": "（{complete}/{total}）",
+      "titleTotal": "（{total}）",
       "summary": {
         "failed": "失敗 {count} 件",
-        "unverified": "未検証 {count} 件",
+        "unverified": "未完了 {count} 件",
         "inProgress": "実行中 {count} 件",
         "expected": "予定 {count} 件",
         "skipped": "スキップ {count} 件",
@@ -10725,6 +10826,31 @@
         "proceedButton": {
           "label": "それでもコネクタを作成"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "チェックを実行"
+        },
+        "skip": {
+          "label": "チェックをスキップ"
+        },
+        "rerun": {
+          "label": "チェックを再実行"
+        }
+      },
+      "details": {
+        "expand": "詳細を表示",
+        "collapse": "詳細を非表示"
+      },
+      "docsButton": {
+        "label": "ドキュメント"
+      },
+      "runLost": "チェックが応答しなくなりました。もう一度お試しください。",
+      "cancelButton": {
+        "label": "キャンセル"
+      },
+      "cancelFailed": {
+        "toast": "チェックをキャンセルできませんでした。もう一度お試しください。"
       }
     },
     "connectorEdit": {
@@ -11313,14 +11439,18 @@
         },
         "toasts": {
           "accessRemoved": "アクセス権を削除しました。",
-          "copyLinkFailed": "リンクのコピーに失敗しました。",
-          "linkCopied": "リンクをコピーしました。",
           "ownershipTransferred": "オーナー権限を譲渡しました。",
           "sharingUpdated": "共有設定を更新しました。"
         },
         "transfer": {
           "label": "譲渡",
           "title": "*{name}* を譲渡"
+        },
+        "people": {
+          "label": "アクセスできるユーザー"
+        },
+        "ownerOption": {
+          "disabledTooltip": "オーナーの共有は解除できません。"
         }
       },
       "viewer": {
@@ -11896,6 +12026,9 @@
         "personal": {
           "label": "個人用"
         },
+        "required": {
+          "tooltip": "組織の管理者により、このスキルの利用が必須になっています。"
+        },
         "unavailable": {
           "label": "利用できません - クリックして詳細を表示"
         }
@@ -11958,8 +12091,14 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "新しいチャットを開始できませんでした。もう一度お試しください。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {ファイルの処理に失敗したため削除しました：{names}} other {ファイルの処理に失敗したため削除しました：{names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "チャットを読み込んでいます"
       },
       "newChatButton": {
         "label": "新しいチャットを開始"
@@ -12195,7 +12334,9 @@
           "speakingPlaceholder": "{appName} が話しています..."
         },
         "sendButton": {
-          "processingFilesTooltip": "添付ファイルの処理が完了するのを待っています"
+          "processingFilesTooltip": "添付ファイルの処理が完了するのを待っています",
+          "stoppingLabel": "停止中…",
+          "reloadLabel": "もう一度確認"
         },
         "tabReadingButton": {
           "readLabel": "このタブを読み取る",
@@ -12424,6 +12565,9 @@
         "authFailedStatus": {
           "text": "{toolName} の認証に失敗しました (HTTP {statusCode})"
         },
+        "blockedStatus": {
+          "text": "{toolName} はブロックされました"
+        },
         "completedStatus": {
           "text": "{toolName} が完了しました"
         },
@@ -12456,6 +12600,9 @@
         },
         "runningStatus": {
           "text": "{toolName} を実行中..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} はサーバーに接続できませんでした"
         },
         "waitingIndicator": {
           "text": "レスポンスを待っています..."
@@ -13494,13 +13641,14 @@
       "incognito": {
         "title": "シークレットモードです"
       }
+    },
+    "readiness": {
+      "stopFailed": "応答を停止できませんでした。もう一度お試しください。",
+      "checkFailed": "応答の完了を確認できませんでした。次のメッセージを送信する前に、もう一度確認してください。"
     }
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "新規追加"
-      },
       "removeButton": {
         "tooltip": "削除"
       }
@@ -14017,21 +14165,23 @@
     },
     "plans": {
       "free": {
-        "title": "無料プラン",
-        "tooltip": "すべてのプランで利用できます。"
+        "title": "無料プラン"
       },
       "business": {
         "title": "ビジネスプラン",
-        "tooltip": "[ビジネスプランまたはエンタープライズプラン](/admin/billing)が必要です。"
+        "tooltip": "この機能は [Onyx の Business 版または Enterprise 版](/admin/billing) でのみ利用できます。"
       },
       "enterprise": {
         "title": "エンタープライズプラン",
-        "tooltip": "[エンタープライズプラン](/admin/billing)が必要です。"
+        "tooltip": "この機能は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。"
       },
       "upgrade": {
         "label": "プランをアップグレード"
       },
-      "availableFor": "{plan}で利用可能"
+      "availableFor": "{plan}で利用可能",
+      "beta": {
+        "title": "ベータ"
+      }
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -14057,6 +14207,14 @@
         "projectId": "vertex-purojekuto",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "グローバルデフォルト"
+      }
+    },
+    "appFooter": {
+      "slogan": "オープンソース AI プラットフォーム"
     }
   },
   "craft": {
@@ -14173,7 +14331,7 @@
         "title": "関連付けられたスキル",
         "unavailable": {
           "duplicateName": "「{name}」という名前のスキルはすでに関連付けられています。",
-          "invalid": "無効なスキルです。関連付ける前に修正してください。",
+          "invalid": "無効なスキル。関連付ける前に修正してください。",
           "otherApp": "すでにアプリ「{name}」に関連付けられています。"
         },
         "unlink": {
@@ -14476,11 +14634,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "ファイルをプレビューできません"
+        "title": "このファイル形式のプレビューは現在サポートされていません"
       },
       "error": {
         "inline": "エラー: {message}",
-        "title": "ファイルの読み込みエラー"
+        "title": "プレビューを読み込めませんでした",
+        "description": "もう一度お試しいただくか、ファイルをダウンロードして開いてください。"
       },
       "loading": {
         "label": "ファイルを読み込んでいます..."
@@ -14493,10 +14652,25 @@
         "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。"
       },
       "imageTooLarge": {
-        "description": "この画像は大きすぎるためプレビューできません。元のファイルをダウンロードして開いてください。"
+        "description": "10 MBまでの画像をプレビューできます。ファイルをダウンロードして開いてください。",
+        "title": "画像が大きすぎるためプレビューできません"
       },
       "unsupported": {
-        "description": "このファイルはプレビューできません。元のファイルをダウンロードして開いてください。"
+        "description": "ファイルをダウンロードして内容を確認してください。"
+      },
+      "retry": {
+        "label": "再試行"
+      },
+      "download": {
+        "label": "ファイルをダウンロード"
+      },
+      "tooLarge": {
+        "title": "ファイルが大きすぎるためプレビューできません",
+        "description": "ここでは{size, number} MBまでのファイルをプレビューできます。ファイルをダウンロードして開いてください。"
+      },
+      "playback": {
+        "title": "再生は未対応です",
+        "description": "お使いのブラウザーではこのファイルを再生できません。ダウンロードして開いてください。"
       }
     },
     "filesTab": {
@@ -14895,7 +15069,7 @@
         "title": "「{title}」を削除しますか？"
       },
       "newSession": {
-        "label": "クラフトを始める"
+        "label": "新しいセッション"
       },
       "options": {
         "label": "セッションのオプション"
@@ -14959,7 +15133,8 @@
         "missingTaskId": "タスク ID がありません。",
         "pauseButton": "一時停止",
         "resumeButton": "再開",
-        "runNowButton": "今すぐ実行",
+        "runHistoryTab": "実行履歴",
+        "runNowButton": "1回実行",
         "toasts": {
           "deleteFailed": "タスクを削除できませんでした",
           "deleted": "「{name}」を削除しました。",
@@ -15054,7 +15229,7 @@
           "trigger": "トリガー"
         },
         "empty": {
-          "label": "まだ実行はありません。タスクは発火のたびに実行を作成します。上の「今すぐ実行」も使えます。"
+          "label": "まだ実行はありません。タスクは発火のたびに実行を作成します。上の「1回実行」も使えます。"
         },
         "errors": {
           "loadFailed": "実行履歴を読み込めませんでした。",
@@ -15073,19 +15248,20 @@
           "notOpenableAriaLabel": "開けません"
         },
         "trigger": {
-          "runNow": "今すぐ実行",
+          "runNow": "1回実行",
           "schedule": "スケジュール"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "時刻にはローカルのタイムゾーンを使用します。",
         "dailyWeekly": {
-          "atLabel": "時刻:",
-          "daysLabel": "実行する曜日",
+          "atLabel": "時刻",
+          "daysLabel": "曜日",
           "runsEveryDay": "毎日実行されます",
           "runsOn": "{days} に実行されます"
         },
         "interval": {
-          "everyLabel": "実行間隔:"
+          "everyLabel": "繰り返し間隔"
         },
         "intervalUnits": {
           "days": "日",
@@ -15424,8 +15600,8 @@
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
       "personalDescription": "これらの設定は、Craftの会話と新しいタスクでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
-      "taskDescription": "このタスクでは有効なアプリのみ使用できます。変更はこのタスクのみに適用されます。",
-      "newTaskDescription": "このタスクで使用するアプリを有効にしてください。各アプリは現在のアクション設定から開始します。",
+      "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
+      "newTaskDescription": "プラグインを有効にすると、現在のアクション設定を初期設定として使用します。",
       "workspace_disabled": "ワークスペースで無効",
       "workspace_managed": "ワークスペースで管理",
       "userManagement": "ユーザーによる承認設定の管理を許可",
@@ -15449,11 +15625,12 @@
       "disabledForTask": "このタスクで無効",
       "externalApp": "アプリ",
       "mcpServer": "MCPサーバー",
-      "taskAppsTitle": "アプリとMCPサーバー",
+      "taskAppsTitle": "プラグイン",
+      "taskAccessTitle": "プラグインへのアクセス",
+      "noEnabledApps": "このタスクで有効なプラグインはありません。",
       "actionPolicies": "承認設定",
       "policyCounts": "自動承認 {auto} · 確認 {ask} · 無効 {disabled}",
       "manageActions": "アクションを管理",
-      "viewActions": "アクションを表示",
       "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
       "searchActions": "アクションを検索",
       "setPermissions": "権限を設定",
@@ -15664,6 +15841,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "セットアップを完了"
+      },
+      "nextButton": {
+        "label": "次へ"
+      },
       "progress": {
         "label": "ステップ {current}/{total}"
       }
@@ -15675,13 +15858,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# 個のモデルを接続済み} other {# 個のモデルを接続済み}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM 互換 API",
-        "title": "カスタム LLM プロバイダー"
-      },
       "description": "{appName} はセルフホストのモデルと主要なプロバイダーの両方に対応しています。",
       "edit": {
         "ariaLabel": "LLM プロバイダーを編集"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "表示"
+        },
+        "description": "管理パネルで設定",
+        "title": "その他のプロバイダー"
       },
       "providerCard": {
         "connect": {
@@ -15689,7 +15875,8 @@
         },
         "settingsButton": {
           "ariaLabel": "プロバイダー設定"
-        }
+        },
+        "settingsLoadError": "このプロバイダーの設定を読み込めませんでした。もう一度お試しください。"
       },
       "title": "LLM モデルを接続"
     },
@@ -15716,28 +15903,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "セットアップを完了"
-        },
-        "title": "準備が完了しました。任意の設定を確認するか、「セットアップを完了」をクリックしてください"
-      },
       "llmSetup": {
-        "button": {
-          "label": "次へ"
-        },
-        "title": "あと少しです。モデルを接続してチャットを始めましょう。"
+        "title": "モデルを接続してチャットを始めましょう。"
       },
       "name": {
-        "button": {
-          "label": "次へ"
-        },
-        "title": "少しだけお時間をいただき、セットアップを行いましょう。"
+        "title": "呼び名を教えてください。"
       },
-      "welcome": {
-        "button": {
-          "label": "はじめる"
-        },
+      "optionalSetup": {
+        "title": "いくつかのオプション機能を設定しましょう。"
+      },
+      "postStep": {
+        "title": "準備が整いました。"
+      },
+      "preStep": {
         "title": "少しだけお時間をいただき、セットアップを行いましょう。"
       }
     }
@@ -15793,6 +15971,11 @@
     },
     "iconTooltip": {
       "label": "詳細情報"
+    },
+    "inputCurrency": {
+      "amount": "金額",
+      "fraction": "金額の小数部",
+      "whole": "金額の整数部"
     },
     "input": {
       "day": "日",
@@ -15857,6 +16040,12 @@
     "settingsHeader": {
       "cancel": "キャンセル"
     },
+    "settingsBody": {
+      "error": {
+        "title": "{page} を読み込めませんでした",
+        "description": "問題が発生しました。しばらくしてからもう一度お試しください。"
+      }
+    },
     "table": {
       "alwaysShown": "常に表示",
       "ascending": "昇順",
@@ -15879,6 +16068,18 @@
     "tabs": {
       "scrollLeft": "タブを左にスクロール",
       "scrollRight": "タブを右にスクロール"
+    },
+    "toast": {
+      "moreCount": "他 {count} 件"
+    },
+    "sidebar": {
+      "open": "サイドバーを開く",
+      "close": "サイドバーを閉じる"
+    },
+    "inputNumber": {
+      "outOfRange": "{min, number} から {max, number} までの数値を入力してください",
+      "belowMin": "{min, number} 以上の数値を入力してください",
+      "aboveMax": "{max, number} 以下の数値を入力してください"
     }
   },
   "settings": {
@@ -15900,6 +16101,7 @@
         "currentPassword": {
           "title": "現在のパスワード"
         },
+        "description": "他のセッションはサインアウトされ、個人用アクセストークンは無効化されます。",
         "newPassword": {
           "title": "新しいパスワード"
         },
@@ -15910,8 +16112,7 @@
         "title": "パスワードを変更",
         "toasts": {
           "networkError": "パスワードの変更中にエラーが発生しました",
-          "updateFailed": "パスワードを変更できませんでした",
-          "updated": "パスワードを更新しました"
+          "updateFailed": "パスワードを変更できませんでした"
         },
         "validation": {
           "confirmRequired": "新しいパスワードを確認してください",
@@ -15983,10 +16184,8 @@
       "toasts": {
         "createFailed": "トークンを作成できませんでした",
         "createNetworkError": "トークンの作成中にネットワークエラーが発生しました",
-        "created": "トークンを作成しました",
         "deleteFailed": "トークンを削除できませんでした",
         "deleteNetworkError": "トークンの削除中にネットワークエラーが発生しました",
-        "deleted": "トークンを削除しました",
         "loadFailed": "トークンを読み込めませんでした",
         "loadPermissionsFailed": "権限オプションを読み込めませんでした",
         "nameRequired": "トークン名は必須です"
@@ -16050,8 +16249,7 @@
       },
       "title": "チャット",
       "toasts": {
-        "saveFailed": "設定を保存できませんでした",
-        "saved": "設定を保存しました"
+        "saveFailed": "設定を保存できませんでした"
       }
     },
     "connectors": {
@@ -16071,8 +16269,7 @@
       },
       "title": "コネクター",
       "toasts": {
-        "disconnectFailed": "切断できませんでした",
-        "disconnected": "切断しました"
+        "disconnectFailed": "切断できませんでした"
       }
     },
     "dangerZone": {
@@ -16088,8 +16285,7 @@
         "description": "すべてのチャットセッションを完全に削除します。",
         "title": "すべてのチャットを削除",
         "toasts": {
-          "deleteFailed": "すべてのチャットセッションを削除できませんでした",
-          "deleted": "すべてのチャットセッションを削除しました。"
+          "deleteFailed": "すべてのチャットセッションを削除できませんでした"
         }
       },
       "title": "危険な操作"
@@ -16136,8 +16332,7 @@
       "title": "言語",
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
-      },
-      "workspaceDefault": "ワークスペースの既定 ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16224,8 +16419,7 @@
       },
       "title": "プロフィール",
       "toasts": {
-        "updateFailed": "パーソナライズ設定を更新できませんでした",
-        "updated": "パーソナライズ設定を更新しました"
+        "updateFailed": "パーソナライズ設定を更新できませんでした"
       },
       "workRole": {
         "description": "役割を入力すると、応答をより適切に調整できます。",
@@ -16243,12 +16437,9 @@
       "title": "プロンプトショートカット",
       "toasts": {
         "bothRequired": "ショートカットと展開後のテキストの両方が必要です",
-        "created": "ショートカットを作成しました",
         "deleteFailed": "ショートカットを削除できませんでした",
-        "deleted": "ショートカットを削除しました",
         "loadFailed": "ショートカットを読み込めませんでした",
-        "saveFailed": "ショートカットを保存できませんでした",
-        "updated": "ショートカットを更新しました"
+        "saveFailed": "ショートカットを保存できませんでした"
       },
       "toggle": {
         "description": "ショートカットを有効にすると、よく使うプロンプトをすばやく挿入できます。",
@@ -16411,6 +16602,9 @@
         "languageModels": {
           "label": "言語モデル"
         },
+        "decisionModels": {
+          "label": "判断モデル"
+        },
         "llmGateway": {
           "label": "LLM ゲートウェイ"
         },
@@ -16488,12 +16682,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "この機能は [Onyx の Business 版または Enterprise 版](/admin/billing) でのみ利用できます。"
-      },
-      "enterpriseOnly": {
-        "tooltip": "この機能は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。"
-      },
       "exitAdminPanel": {
         "label": "管理パネルを終了"
       },
@@ -16512,8 +16700,7 @@
         "title": "エージェント"
       },
       "craft": {
-        "label": "Craft",
-        "businessTag": "Business"
+        "label": "Craft"
       },
       "exploreAgents": {
         "label": "エージェントを探す"
@@ -16754,21 +16941,11 @@
         "title": "スキルを利用できません"
       },
       "management": {
-        "description": "このスキルを使用できるユーザーを管理します。",
-        "externalApp": {
-          "manage": {
-            "label": "アプリ設定で管理"
-          },
-          "readyDescription": "このスキルはアプリ「{appName}」を使用します。",
-          "title": "外部アプリ"
-        },
         "sharing": {
           "edit": {
             "label": "共有を編集"
-          },
-          "title": "共有"
-        },
-        "title": "管理"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "保存する前に説明を追加してください。",
@@ -16778,21 +16955,6 @@
         "noPermission": "このスキルの詳細を編集する権限がありません。",
         "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "組織内の全員がこのスキルを使用および編集できます。",
-          "title": "組織",
-          "viewerDescription": "組織内の全員がこのスキルを使用できます。"
-        },
-        "personal": {
-          "description": "このスキルを使用できるのはあなただけです。",
-          "title": "個人"
-        },
-        "shares": {
-          "description": "選択したユーザーとグループのみがこのスキルを使用できます。",
-          "title": "{count, plural, one {# 件の共有} other {# 件の共有}}"
-        }
       },
       "toasts": {
         "created": "「{name}」を作成しました",
@@ -16973,7 +17135,6 @@
         },
         "externalAppNotice": "このスキルがアプリ「{appName}」に関連付けられている間は、組織全体への閲覧者アクセスが必要です。",
         "header": {
-          "title": "*{name}* を共有",
           "transferTitle": "*{name}* を譲渡"
         },
         "loading": {
@@ -16985,7 +17146,9 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "{name} のアクセス権を更新"
+          "ariaLabel": "{name} のアクセス権を更新",
+          "canUse": "使用可能",
+          "canEdit": "編集可能"
         },
         "saveButton": {
           "label": "保存"
@@ -17007,7 +17170,23 @@
         },
         "transferredToast": {
           "message": "所有権を譲渡しました。"
-        }
+        },
+        "installation": {
+          "title": "インストール",
+          "available": "インストール可能",
+          "default": "デフォルトでインストール",
+          "required": "必須",
+          "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
+          "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
+          "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
+          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
+        },
+        "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
+        "accessTitle": "アクセス範囲",
+        "peopleTitle": "アクセスできるユーザー",
+        "manageIndividualAccess": "個別のアクセスを管理",
+        "individualAccessTitle": "個別のアクセス",
+        "ownershipTitle": "所有権"
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"

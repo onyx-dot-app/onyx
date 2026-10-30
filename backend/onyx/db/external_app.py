@@ -16,6 +16,7 @@ from onyx.db.enums import (
     ActionPolicy,
     ExternalAppType,
     GatedAppKind,
+    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import (
@@ -702,6 +703,9 @@ def delete_external_app(
 
     skills = get_skills_for_external_app(db_session, app.id)
     custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
+    for skill in skills:
+        if skill.is_custom:
+            skill.installation_policy = SkillInstallationPolicy.AVAILABLE
     if custom_skill_ids:
         db_session.execute(
             delete(UserSkillPreference).where(
@@ -788,7 +792,7 @@ def disconnect_external_app_for_user(
     external_app_id: int,
     user_id: UUID,
 ) -> None:
-    """Remove a user's app credentials and associated skill preferences.
+    """Remove app credentials and enabled selections; preserve explicit opt-outs.
 
     Flush only; the caller refreshes the user's sandbox and commits.
     """
@@ -805,6 +809,7 @@ def disconnect_external_app_for_user(
         delete(UserSkillPreference).where(
             UserSkillPreference.user_id == user_id,
             UserSkillPreference.skill_id.in_(associated_skill_ids),
+            UserSkillPreference.enabled.is_(True),
         )
     )
     db_session.flush()

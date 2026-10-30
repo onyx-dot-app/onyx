@@ -4,7 +4,7 @@ and searched the same way, and one union pages every kind newest first, so no
 page loads the runs before it."""
 
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import datetime
 from typing import Any, TypeVar
 from uuid import UUID
@@ -31,7 +31,10 @@ from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.dml import ReturningInsert
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.cc_pair_run_resolution import run_is_resolved
+from onyx.db.cc_pair_run_resolution import (
+    clear_resolved_repeated_error_states__no_commit,
+    run_is_resolved,
+)
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
     CapabilityCheckRunStatus,
@@ -93,14 +96,23 @@ _RunT = TypeVar(
 )
 
 
-# A run supersedes the failures before it once it succeeded or failed. A
+_SETTLED_GROUPS = frozenset(
+    group for group in CCPairRunStatusGroup if group is not CCPairRunStatusGroup.RUNNING
+)
+# A run supersedes the runs before it once it succeeded or failed. A
 # canceled or interrupted run, like one still going, leaves them open.
 _SUPERSEDING_GROUPS = frozenset(
     {CCPairRunStatusGroup.SUCCEEDED, CCPairRunStatusGroup.FAILED}
 )
 
 
-def _latest_finished(
+def _statuses_in(
+    statuses: type[_StatusT], groups: Collection[CCPairRunStatusGroup]
+) -> list[_StatusT]:
+    return [s for s in statuses if _STATUS_GROUPS[s.value] in groups]
+
+
+def _runs_with_no_newer_success_or_failure(
     run_id: InstrumentedAttribute[int],
     time_created: InstrumentedAttribute[datetime],
     status: InstrumentedAttribute[_StatusT],
@@ -108,21 +120,26 @@ def _latest_finished(
     history: Sequence[InstrumentedAttribute[Any]],
     *scope: ColumnElement[bool],
 ) -> Select:
-    """The newest settled run on each ``history`` within ``scope``, in the
-    feed's newest-first order. A failed run outside this set has a settled run
-    after it. A run still in progress settles nothing, and neither does one
-    that was canceled or interrupted, since it never got to retry the work.
-    One set for every row, hashed once, since a shared source's history has
-    no index a lookup per row could use."""
-    superseding = [
-        s for s in statuses if _STATUS_GROUPS[s.value] in _SUPERSEDING_GROUPS
-    ]
-    return (
-        select(run_id)
-        .distinct(*history)
-        .where(*scope, status.in_(superseding))
-        .order_by(*history, time_created.desc(), run_id.desc())
+    """The runs within ``scope`` that no newer succeeded or failed run on the
+    same ``history`` follows: each history's newest such run and any run after
+    it. One set for every row, since a shared source's history has no index."""
+    newer_successes_or_failures = (
+        func.count()
+        .filter(status.in_(_statuses_in(statuses, _SUPERSEDING_GROUPS)))
+        .over(
+            partition_by=history,
+            order_by=(time_created.desc(), run_id.desc()),
+            # Every run newer than this one, so the newest has none.
+            rows=(None, -1),
+        )
     )
+    runs = (
+        select(run_id.label("id"), newer_successes_or_failures.label("newer"))
+        .where(*scope)
+        .subquery()
+    )
+    # An equality keeps Postgres's row estimate low enough to hash the NOT IN.
+    return select(runs.c.id).where(runs.c.newer == 0)
 
 
 def _no_item_errors(run_filter: CCPairRunFilter) -> ColumnElement[bool] | None:
@@ -142,16 +159,24 @@ def _narrowed(
     with_status_filter: bool,
     matches_errors: ColumnElement[bool] | None,
     has_newer_run: ColumnElement[bool],
+    item_errors: ColumnElement[bool] | None,
     is_resolved: ColumnElement[bool],
 ) -> Select:
     """Applies the filter's shared axes. ``matches_errors`` is the kind's
-    ``errors`` filter, ``has_newer_run`` says a finished newer run of the kind
-    follows the run on the same history, and ``is_resolved`` says an admin
-    resolved the run."""
-    failed = [
-        s for s in statuses if _STATUS_GROUPS[s.value] is CCPairRunStatusGroup.FAILED
-    ]
-    superseded = and_(status.in_(failed), has_newer_run)
+    ``errors`` filter and ``is_resolved`` says an admin resolved the run."""
+    # True when a newer succeeded or failed run of the kind follows the run on its
+    # history, and the run failed or ended with item_errors. Index attempts pass none,
+    # so their document errors stay open until they index or an admin resolves the run.
+    superseded = and_(
+        has_newer_run,
+        or_(
+            status.in_(_statuses_in(statuses, {CCPairRunStatusGroup.FAILED})),
+            and_(
+                status.in_(_statuses_in(statuses, _SETTLED_GROUPS)),
+                false() if item_errors is None else item_errors,
+            ),
+        ),
+    )
     # A True closed-item axis widens what ``errors`` keeps, a False one narrows it.
     widened = [] if matches_errors is None else [matches_errors]
     narrowed: list[ColumnElement[bool]] = []
@@ -168,9 +193,7 @@ def _narrowed(
     if narrowed:
         stmt = stmt.where(*narrowed)
     # A run still going belongs to any window or slice, whenever it began.
-    active = status.in_(
-        [s for s in statuses if _STATUS_GROUPS[s.value] is CCPairRunStatusGroup.RUNNING]
-    )
+    active = status.in_(_statuses_in(statuses, {CCPairRunStatusGroup.RUNNING}))
     if run_filter.since is not None:
         stmt = stmt.where(or_(time_created >= run_filter.since, active))
     if run_filter.until is not None:
@@ -179,9 +202,7 @@ def _narrowed(
         stmt = stmt.where(matches_error(run_filter.error_query))
     groups = run_filter.status_groups
     if with_status_filter and groups is not None:
-        stmt = stmt.where(
-            status.in_([s for s in statuses if _STATUS_GROUPS[s.value] in groups])
-        )
+        stmt = stmt.where(status.in_(_statuses_in(statuses, groups)))
     return stmt
 
 
@@ -229,8 +250,8 @@ def _pairs_of_sources(sources: set[DocumentSource]) -> Select:
 
 
 def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
-    """A finished newer group sync on the run's history: its pair's, or its
-    source's when the source logs one sync for all its pairs, as
+    """A newer group sync that succeeded or failed on the run's history: its
+    pair's, or its source's when the source logs one sync for all its pairs, as
     ``_group_sync_scope`` reads."""
     ids = run_filter.cc_pair_ids
     if len(ids) == 1 and run_filter.source is not None:
@@ -243,7 +264,7 @@ def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool
         shared = run_filter.shared_sources
     run = ExternalGroupPermissionSyncAttempt
     newest = aliased(ExternalGroupPermissionSyncAttempt)
-    latest_of_pair = _latest_finished(
+    no_newer_on_pair = _runs_with_no_newer_success_or_failure(
         newest.id,
         newest.time_created,
         newest.status,
@@ -252,12 +273,12 @@ def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool
         newest.connector_credential_pair_id.in_(ids),
     )
     if not shared:
-        return ~run.id.in_(latest_of_pair)
+        return ~run.id.in_(no_newer_on_pair)
     # Own aliases: the feed already joins the pair and connector tables, and an
     # unaliased reference would correlate this set to the outer row's pair.
     pair = aliased(ConnectorCredentialPair)
     connector = aliased(Connector)
-    latest_of_source = _latest_finished(
+    no_newer_on_source = _runs_with_no_newer_success_or_failure(
         newest.id,
         newest.time_created,
         newest.status,
@@ -270,9 +291,9 @@ def _group_sync_has_newer_run(run_filter: CCPairRunFilter) -> ColumnElement[bool
     return case(
         (
             run.connector_credential_pair_id.in_(_pairs_of_sources(shared)),
-            ~run.id.in_(latest_of_source),
+            ~run.id.in_(no_newer_on_source),
         ),
-        else_=~run.id.in_(latest_of_pair),
+        else_=~run.id.in_(no_newer_on_pair),
     )
 
 
@@ -301,7 +322,7 @@ def _index_attempt_runs(
     # failure open.
     newest = aliased(IndexAttempt)
     has_newer_run = ~IndexAttempt.id.in_(
-        _latest_finished(
+        _runs_with_no_newer_success_or_failure(
             newest.id,
             newest.time_created,
             newest.status,
@@ -332,6 +353,7 @@ def _index_attempt_runs(
         with_status_filter,
         matches_errors,
         has_newer_run,
+        None,
         run_is_resolved(CCPairRunKind.INDEXING, IndexAttempt.id),
     )
 
@@ -344,7 +366,8 @@ def _doc_permission_sync_runs(
             run_filter.cc_pair_ids
         )
     )
-    # A sync counts the documents it could not read, and nothing resolves them.
+    # A sync counts the documents it could not read. Only a resolution or a
+    # newer sync closes them.
     unreadable = func.coalesce(DocPermissionSyncAttempt.docs_with_permission_errors, 0)
     matches_errors: ColumnElement[bool] | None
     match run_filter.errors:
@@ -358,7 +381,7 @@ def _doc_permission_sync_runs(
             matches_errors = None
     newest = aliased(DocPermissionSyncAttempt)
     has_newer_run = ~DocPermissionSyncAttempt.id.in_(
-        _latest_finished(
+        _runs_with_no_newer_success_or_failure(
             newest.id,
             newest.time_created,
             newest.status,
@@ -379,13 +402,14 @@ def _doc_permission_sync_runs(
         with_status_filter,
         matches_errors,
         has_newer_run,
+        unreadable > 0,
         run_is_resolved(CCPairRunKind.DOC_PERMISSION_SYNC, DocPermissionSyncAttempt.id),
     )
 
 
 def _prune_errors(run_filter: CCPairRunFilter) -> ColumnElement[bool] | None:
     """The ``errors`` filter for a prune, which counts the documents it could not
-    remove. Nothing resolves these."""
+    remove. Only a resolution or a newer prune closes them."""
     failed = SyncRecord.num_docs_failed
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
@@ -415,6 +439,7 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
         with_status_filter,
         _no_item_errors(run_filter),
         _group_sync_has_newer_run(run_filter),
+        None,
         run_is_resolved(
             CCPairRunKind.GROUP_SYNC, ExternalGroupPermissionSyncAttempt.id
         ),
@@ -428,7 +453,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
     )
     newest = aliased(SyncRecord)
     has_newer_run = ~SyncRecord.id.in_(
-        _latest_finished(
+        _runs_with_no_newer_success_or_failure(
             newest.id,
             newest.sync_start_time,
             newest.sync_status,
@@ -448,6 +473,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         with_status_filter,
         _prune_errors(run_filter),
         has_newer_run,
+        SyncRecord.num_docs_failed > 0,
         run_is_resolved(CCPairRunKind.PRUNING, SyncRecord.id),
     )
 
@@ -479,7 +505,7 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         pair.id.in_(run_filter.cc_pair_ids)
     )
     has_newer_run = ~CapabilityCheckRun.id.in_(
-        _latest_finished(
+        _runs_with_no_newer_success_or_failure(
             newest.id,
             newest.time_created,
             newest.status,
@@ -493,22 +519,23 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         run_filter,
         CapabilityCheckRun.time_created,
         # A completed run keeps its check messages in the report, not in
-        # error_message. Only the check names and messages are searched: the
-        # findings may be hidden from the response, so they stay out of it.
+        # error_message. Only the names and messages of the checks that apply
+        # are searched: the response leaves out the rest and may hide findings.
         lambda query: or_(
             CapabilityCheckRun.error_message.icontains(query, autoescape=True),
-            _report_text("$.check_results[*].display_name").icontains(
-                query, autoescape=True
-            ),
-            _report_text("$.check_results[*].message").icontains(
-                query, autoescape=True
-            ),
+            _report_text(
+                "$.check_results[*] ? (@.applicable != false).display_name"
+            ).icontains(query, autoescape=True),
+            _report_text(
+                "$.check_results[*] ? (@.applicable != false).message"
+            ).icontains(query, autoescape=True),
         ),
         CapabilityCheckRun.status,
         CapabilityCheckRunStatus,
         with_status_filter,
         _no_item_errors(run_filter),
         has_newer_run,
+        None,
         run_is_resolved(CCPairRunKind.CHECKS, CapabilityCheckRun.id),
     )
 
@@ -642,11 +669,6 @@ def _id_and_pair_columns(
             return CapabilityCheckRun.id, ConnectorCredentialPair.id
 
 
-_SETTLED_GROUPS = frozenset(
-    group for group in CCPairRunStatusGroup if group is not CCPairRunStatusGroup.RUNNING
-)
-
-
 def _settled(run_filter: CCPairRunFilter, **update: object) -> CCPairRunFilter:
     """The filter narrowed to runs that finished. A run still going can gain
     failures after it is resolved, so it has nothing to resolve yet."""
@@ -685,6 +707,64 @@ def get_resolvable_runs(
     return found
 
 
+def get_superseded_runs(
+    db_session: Session,
+    run_filter: CCPairRunFilter,
+    runs: list[tuple[CCPairRunKind, int]],
+) -> set[tuple[CCPairRunKind, int]]:
+    """The runs among ``runs`` that a newer run of their kind superseded on the
+    histories ``run_filter`` scopes."""
+    found: set[tuple[CCPairRunKind, int]] = set()
+    unfiltered = run_filter.model_copy(
+        update={
+            "since": None,
+            "until": None,
+            "error_query": None,
+            "errors": None,
+            "superseded": None,
+            "resolved": None,
+        }
+    )
+    for kind in CCPairRunKind:
+        ids = [run_id for run_kind, run_id in runs if run_kind == kind]
+        if not ids:
+            continue
+        run_id, _ = _id_and_pair_columns(kind)
+        superseded_only = unfiltered.model_copy(
+            update={
+                "superseded": True,
+                "cc_pair_ids": _pairs_of_runs(db_session, kind, unfiltered, ids),
+            }
+        )
+        stmt = (
+            _runs_of_kind(kind, superseded_only, False)
+            .with_only_columns(run_id)
+            .where(run_id.in_(ids))
+        )
+        found.update((kind, found_id) for found_id in db_session.scalars(stmt).all())
+    return found
+
+
+def _pairs_of_runs(
+    db_session: Session,
+    kind: CCPairRunKind,
+    run_filter: CCPairRunFilter,
+    ids: list[int],
+) -> list[int]:
+    """The filter's pairs narrowed to those the runs ran on, so a fleet page
+    reads only its own pairs' histories. A single pair keeps its source scope."""
+    if len(run_filter.cc_pair_ids) == 1:
+        return run_filter.cc_pair_ids
+    run_id, pair_id = _id_and_pair_columns(kind)
+    stmt = (
+        _runs_of_kind(kind, run_filter, False)
+        .with_only_columns(pair_id)
+        .where(run_id.in_(ids))
+        .distinct()
+    )
+    return [found for found in db_session.scalars(stmt).all() if found is not None]
+
+
 def count_matching_runs(
     db_session: Session,
     kinds: list[CCPairRunKind],
@@ -717,6 +797,7 @@ def resolve_matching_runs__no_commit(
         for kind in kinds:
             stmt = _resolution_insert(kind, settled, user_id)
             resolved.update(db_session.scalars(stmt).all())
+    clear_resolved_repeated_error_states__no_commit(db_session, set(resolved))
     return dict(resolved)
 
 
@@ -790,26 +871,21 @@ def count_pairs_indexing(db_session: Session, cc_pair_ids: list[int]) -> int:
 
 
 def get_index_runs_since(
-    db_session: Session, cc_pair_ids: list[int], since: datetime
+    db_session: Session, cc_pair_ids: list[int], since: datetime | None
 ) -> list[IndexAttempt]:
-    """The pairs' index runs created or finished since ``since``, plus any
-    still active, oldest first. Attempts from before ``time_finished`` existed
-    end at their last heartbeat check. ``time_updated`` is left out of the
-    window because checkpoint cleanup touches old attempts days later."""
-    stmt = (
-        _index_runs(cc_pair_ids)
-        .where(
+    """The pairs' index runs created or ended since ``since``, plus any still
+    active, oldest first; every run kept when ``since`` is None.
+    ``time_updated`` is left out of the window because checkpoint cleanup
+    touches old attempts days later."""
+    stmt = _index_runs(cc_pair_ids)
+    if since is not None:
+        stmt = stmt.where(
             or_(
                 IndexAttempt.time_created >= since,
-                func.coalesce(
-                    IndexAttempt.time_finished, IndexAttempt.last_heartbeat_time
-                )
-                >= since,
+                IndexAttempt.end_time >= since,
                 IndexAttempt.status.in_(
                     [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                 ),
             )
         )
-        .order_by(IndexAttempt.time_created)
-    )
-    return list(db_session.scalars(stmt).all())
+    return list(db_session.scalars(stmt.order_by(IndexAttempt.time_created)).all())

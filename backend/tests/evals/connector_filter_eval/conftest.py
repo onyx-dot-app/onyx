@@ -18,11 +18,13 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
+from tests.common.models import CI_OPENAI_MODEL
 
 # This suite lives outside tests/external_dependency_unit (so the EDU CI
 # matrix doesn't discover it) but runs against the same live dependencies,
 # so it reuses that tree's fixtures via explicit imports.
 from tests.external_dependency_unit.answer.conftest import (  # noqa: F401  # noqa: F401  # noqa: F401
+    mock_document_index,
     mock_external_deps,
     mock_file_store,  # noqa: F401
     mock_gpu_status,  # noqa: F401
@@ -41,7 +43,7 @@ _PACKAGE_DIR = Path(__file__).parent
 # Provider auto-provisioned (from OPENAI_API_KEY) when the database has none,
 # so the eval can run against a fresh CI database. Cheap tier per repo policy.
 _FALLBACK_PROVIDER_NAME = "connector-filter-eval"
-_FALLBACK_MODEL = "gpt-5-mini"
+_FALLBACK_MODEL = CI_OPENAI_MODEL
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

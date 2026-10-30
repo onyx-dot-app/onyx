@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from onyx.configs.app_configs import (
     DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_PRUNING_FREQ,
+    DEFAULT_REFRESH_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
@@ -83,7 +84,10 @@ class Settings(BaseModel):
 
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
-    image_analysis_max_size_mb: int | None = 20
+    # Unused. Stored and returned only so that Terraform provider releases up to
+    # 0.3.0, which still send it, do not fail apply. Remove after a provider
+    # release without it.
+    image_analysis_max_size_mb: int | None = None
 
     # Global limit on indexing embedding requests: at most this many in any
     # window of `embedding_rate_limit_period_seconds`. None means no limit.
@@ -169,6 +173,8 @@ class UserSettings(Settings):
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.
     default_pruning_freq: int = DEFAULT_PRUNING_FREQ
+    # A new connector's schedule as the create form fills it in, in seconds.
+    default_refresh_freq: int = DEFAULT_REFRESH_FREQ
     default_user_file_max_upload_size_mb: int = DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
     default_file_token_count_threshold_k: int = Field(
         default_factory=lambda: (

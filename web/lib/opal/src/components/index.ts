@@ -18,17 +18,11 @@ export {
   type SelectButtonProps,
 } from "@opal/components/buttons/select-button/components";
 
-/* OpenButton */
+/* RowAction */
 export {
-  OpenButton,
-  type OpenButtonProps,
-} from "@opal/components/buttons/open-button/components";
-
-/* FilterButton */
-export {
-  FilterButton,
-  type FilterButtonProps,
-} from "@opal/components/buttons/filter-button/components";
+  RowAction,
+  type RowActionProps,
+} from "@opal/components/buttons/row-action/components";
 
 /* AttachmentItemButton */
 export {
@@ -85,11 +79,21 @@ export {
   type InputImageProps,
 } from "@opal/components/inputs/input-image/components";
 
+/* InputCurrency */
+export {
+  InputCurrency,
+  type InputCurrencyProps,
+} from "@opal/components/inputs/numbers/input-currency/components";
+export {
+  getCurrencyParts,
+  type CurrencyParts,
+} from "@opal/components/inputs/numbers/input-currency/currency";
+
 /* InputNumber */
 export {
   default as InputNumber,
   type InputNumberProps,
-} from "@opal/components/inputs/input-number/components";
+} from "@opal/components/inputs/numbers/input-number/components";
 
 /* InputSingleUpload */
 export {
@@ -127,14 +131,30 @@ export {
 export {
   Tag,
   TAG_COLORS,
-  TAG_REMOVE_CLASS,
   type TagProps,
   type TagVariant,
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Chip */
+export {
+  Chip,
+  CHIP_REMOVE_ATTR,
+  type ChipProps,
+} from "@opal/components/chip/components";
+
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* Presence */
+export {
+  Presence,
+  type PresenceProps,
+  type PresenceSide,
+  type PresenceSwapProps,
+  type PresenceSwapDirection,
+  type PresenceSwapAxis,
+} from "@opal/components/presence/components";
 
 /* IconTooltip */
 export {

@@ -33,6 +33,7 @@ from onyx.db.fleet_telemetry import (
     license_row,
     limit_statement_time,
     stage_rows,
+    standard_user_count,
 )
 from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
@@ -73,12 +74,15 @@ VALUES
 INSERT INTO index_attempt
   (id, connector_credential_pair_id, from_beginning, status, error_msg,
    total_docs_indexed, total_chunks, total_batches, completed_batches,
-   time_updated, is_synthetic_seed)
+   time_updated, time_finished, is_synthetic_seed)
 VALUES
-  (1, 1, true, 'FAILED', 'PRIVATE: 401 unauthorized', 20, 30, 4, 2, now(), false),
-  (2, 1, false, 'IN_PROGRESS', NULL, 5, 9, 4, 1, now() - interval '3 days', false),
-  (3, 2, false, 'SUCCESS', NULL, 1, 1, 1, 1, now() - interval '3 days', false),
-  (4, 1, false, 'IN_PROGRESS', NULL, 0, 0, 0, 0, now(), true);
+  (1, 1, true, 'FAILED', 'PRIVATE: 401 unauthorized', 20, 30, 4, 2, now(),
+   now() - interval '2 days', false),
+  (2, 1, false, 'IN_PROGRESS', NULL, 5, 9, 4, 1, now() - interval '3 days', NULL,
+   false),
+  (3, 2, false, 'SUCCESS', NULL, 1, 1, 1, 1, now() - interval '3 days',
+   now() - interval '3 days', false),
+  (4, 1, false, 'IN_PROGRESS', NULL, 0, 0, 0, 0, now(), NULL, true);
 INSERT INTO index_attempt_errors
   (index_attempt_id, connector_credential_pair_id, failure_message, error_type,
    is_resolved)
@@ -105,6 +109,19 @@ INSERT INTO external_group_permission_sync_attempt
    total_groups_processed, total_group_memberships_synced, time_started,
    time_finished)
 VALUES (1, 1, 'SUCCESS', 5, 2, 7, now() - interval '5 minutes', now());
+INSERT INTO doc_permission_sync_attempt
+  (id, connector_credential_pair_id, status, total_docs_synced,
+   docs_with_permission_errors, error_message, time_started, time_finished)
+VALUES
+  (3, 1, 'FAILED', 0, 0, 'PRIVATE site: 401 Unauthorized',
+   now() - interval '10 minutes', now() - interval '2 minutes');
+INSERT INTO external_group_permission_sync_attempt
+  (id, connector_credential_pair_id, status, total_users_processed,
+   total_groups_processed, total_group_memberships_synced, error_message,
+   time_started, time_finished)
+VALUES
+  (2, 1, 'FAILED', 0, 0, 0, 'PRIVATE site: Connection refused',
+   now() - interval '10 minutes', now() - interval '3 minutes');
 INSERT INTO hierarchy_fetch_attempt (id, connector_credential_pair_id, status)
 VALUES ('6f1c62c4-6e4b-4f35-9d4b-1d2f0c7b8a10', 1, 'IN_PROGRESS');
 INSERT INTO port_attempt (id, cc_pair_id, search_settings_id, status, error_msg)
@@ -157,18 +174,24 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
         }
         domains: list[dict[str, Any]] = email_domain_rows(db_session)
         license: dict[str, Any] = license_row(db_session)
+        users: int = standard_user_count(db_session)
     # Finished work outside the window and synthetic seeds are not read. Changed
     # rows come first, oldest first, then running rows from before the window.
     assert list(attempts) == [1, 2]
     assert attempts[1]["error_count"] == 1
     assert attempts[1]["item_error_type"] == "ReadTimeout"
+    # The finished attempt ends at its finish time, not its last update.
+    assert attempts[1]["ended_at"] < attempts[1]["time_updated"] - timedelta(days=1)
+    assert attempts[2]["ended_at"] is None
     assert [(row["attempt_id"], row["stage"].value) for row in stages] == [
         (2, "EMBEDDING")
     ]
     assert set(jobs) == {
         "permission:1",
         "permission:2",
+        "permission:3",
         "group:1",
+        "group:2",
         "hierarchy:6f1c62c4-6e4b-4f35-9d4b-1d2f0c7b8a10",
         "port:1",
     }
@@ -177,16 +200,23 @@ def test_reads_return_changed_and_running_work_only(schema: str) -> None:
     assert jobs["permission:2"]["last_heartbeat_at"] is not None
     assert jobs["group:1"]["last_progress_at"] is None
     assert [job for job in jobs if job.startswith("permission:")] == [
+        "permission:3",
         "permission:1",
         "permission:2",
     ]
     assert jobs["group:1"]["memberships_synced"] == 7
+    # Error text is read for classification only.
+    assert jobs["permission:3"]["error_sample"] == "PRIVATE site: 401 Unauthorized"
+    assert jobs["permission:1"]["error_sample"] is None
+
     assert jobs["port:1"]["error_count"] == 1
     assert [(row["domain"], row["first_signup_at"].year) for row in domains] == [
         ("onyx.app", 2021),
         ("poc.example.com", 2020),
     ]
     assert license["license_present"] is True
+    # Only standard accounts count. The seeded bot does not.
+    assert users == 3
 
 
 def test_sync_canceled_by_a_new_run_is_read_as_canceled(schema: str) -> None:
@@ -243,14 +273,51 @@ def test_one_pass_sends_only_safe_events(
         "connector": 2,
         "tenant_domain": 2,
         "license": 1,
+        "users": 1,
         "attempt": 2,
         "stage": 1,
-        "job": 5,
+        "job": 7,
     }
-    failed: dict[str, Any] = next(
-        data for data in by_type["attempt"] if data["state"] == "failed"
+    jobs: dict[str, dict[str, Any]] = {
+        event["data"]["job_id"]: event
+        for event in events
+        if event["event_type"] == "job"
+    }
+    # Failed syncs report why they failed, as a category.
+    assert {job: jobs[job]["data"].get("error_code") for job in jobs} == {
+        "permission:1": None,
+        "permission:2": None,
+        "permission:3": "auth",
+        "group:1": None,
+        "group:2": "source_unavailable",
+        "hierarchy:6f1c62c4-6e4b-4f35-9d4b-1d2f0c7b8a10": None,
+        "port:1": None,
+    }
+    assert [jobs[job]["data"]["error_count"] for job in ("group:1", "group:2")] == [
+        0,
+        1,
+    ]
+    # A finished sync goes out at its end, above the revision of a running state.
+    for job in ("permission:1", "permission:3", "group:1", "group:2"):
+        assert datetime.fromisoformat(
+            jobs[job]["occurred_at"]
+        ) == datetime.fromisoformat(jobs[job]["data"]["ended_at"])
+        assert jobs[job]["revision"] == 1
+    assert jobs["permission:2"]["revision"] == 0
+    failed_event: dict[str, Any] = next(
+        event
+        for event in events
+        if event["event_type"] == "attempt" and event["data"]["state"] == "failed"
     )
+    failed: dict[str, Any] = failed_event["data"]
     assert failed["error_code"] == "auth"
+    # A later update, such as checkpoint cleanup, does not move the end.
+    ended: datetime = datetime.fromisoformat(failed["ended_at"])
+    assert ended < datetime.now(timezone.utc) - timedelta(days=1)
+    # The service orders the states of an attempt by revision, then by event time.
+    # It ranks attempts by event time.
+    assert datetime.fromisoformat(failed_event["occurred_at"]) == ended
+    assert failed_event["revision"] > 0
     assert by_type["connector"][0]["metadata"]["permission_sync_enabled"] is True
     assert {data["cc_pair_id"]: data["doc_count"] for data in by_type["connector"]} == {
         1: 1,
@@ -420,3 +487,40 @@ def test_indexed_connector_presence_scans_beyond_inventory_cap(schema: str) -> N
             row["cc_pair_id"] for row in collector.connector_rows(db_session)
         }
         assert has_indexed_connectors__no_commit(db_session)
+
+
+@pytest.mark.usefixtures("enable_ee")
+def test_a_pass_reports_permission_sync_times_of_synced_pairs(
+    schema: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        db_session.execute(
+            text(
+                f'UPDATE "{schema}".connector_credential_pair SET '
+                "last_time_perm_sync=now()-interval '5 minutes', "
+                "last_time_external_group_sync=now()-interval '20 minutes', "
+                "perm_sync_pending_since=now()-interval '1 hour'"
+            )
+        )
+        db_session.commit()
+    sender = make_sender(capacity=256)
+    monkeypatch.setattr(collector, "get_sender", lambda: sender)
+    monkeypatch.setattr(collector, "get_cache_backend", Mock(return_value=FakeCache()))
+    collector.collect_snapshots(schema)
+    connectors: dict[int, dict[str, Any]] = {
+        event["data"]["cc_pair_id"]: event["data"]
+        for event in sender._take_batch()
+        if event["event_type"] == "connector"
+    }
+    assert sender.invalid == 0
+    synced: dict[str, Any] = connectors[1]
+    assert {
+        "last_permission_sync_at",
+        "last_group_sync_at",
+        "permission_sync_pending_since",
+    } <= synced.keys()
+    # Google Drive syncs groups on a schedule, but its doc sync waits for the pair's
+    # first successful index, which pair 1 has not had.
+    assert "group_sync_seconds" in synced and "permission_sync_seconds" not in synced
+    # Pair 2 is public.
+    assert "last_permission_sync_at" not in connectors[2]

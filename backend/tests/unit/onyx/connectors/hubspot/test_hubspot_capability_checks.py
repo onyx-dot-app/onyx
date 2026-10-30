@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckNotRunReason,
     CredentialCapability,
     compute_capability_verdicts,
 )
@@ -162,11 +163,10 @@ def test_an_optional_check_samples_past_a_denied_type() -> None:
 
     _run("hubspot_associations", _context(gateway))
 
-    gateway.list_associations.assert_called_once_with(
+    gateway.read_associations.assert_called_once_with(
         object_type=HubSpotObjectType.COMPANIES,
-        object_id="1",
         to_object_type="contacts",
-        limit=1,
+        cursors={"1": None},
     )
 
 
@@ -176,6 +176,40 @@ def test_an_optional_check_with_every_type_denied_is_inconclusive() -> None:
 
     with pytest.raises(InconclusiveValidationError):
         _run("hubspot_associations", _context(gateway))
+
+
+@pytest.mark.parametrize("check_id", ["hubspot_associations", "hubspot_notes"])
+def test_a_sample_check_runs_when_one_selected_type_reads(check_id: str) -> None:
+    gateway: MagicMock = healthy_gateway()
+    gateway.list_records.side_effect = _deny_tickets
+
+    results = run_capability_checks(
+        build_hubspot_indexing_checks(), _context(gateway, ["tickets", "companies"])
+    )
+
+    statuses = {result.check_id: result.status for result in results}
+    assert statuses["hubspot_tickets_readable"] == CapabilityCheckStatus.FAILED
+    assert statuses["hubspot_companies_readable"] == CapabilityCheckStatus.PASSED
+    assert statuses[check_id] == CapabilityCheckStatus.PASSED
+
+
+@pytest.mark.parametrize("check_id", ["hubspot_associations", "hubspot_notes"])
+def test_a_sample_check_stops_when_no_selected_type_reads(check_id: str) -> None:
+    """The first selected type names the cause; unselected types do not apply
+    and are left out."""
+    gateway: MagicMock = healthy_gateway()
+    gateway.list_records.side_effect = api_refusal("listing", 403)
+
+    results = run_capability_checks(
+        build_hubspot_indexing_checks(), _context(gateway, ["deals", "contacts"])
+    )
+
+    (sample,) = [result for result in results if result.check_id == check_id]
+    assert sample.status == CapabilityCheckStatus.SKIPPED
+    assert sample.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert sample.blocked_by == "hubspot_deals_readable"
+    assert sample.summary == "Not run: Read deals failed"
+    gateway.read_associations.assert_not_called()
 
 
 def test_a_missing_users_scope_names_it() -> None:
@@ -218,22 +252,21 @@ def test_an_empty_portal_has_nothing_to_probe(check_id: str) -> None:
         _run(check_id, _context(gateway))
 
     assert gateway.list_records.call_count == len(HubSpotObjectType)
-    gateway.list_associations.assert_not_called()
+    gateway.read_associations.assert_not_called()
     gateway.get_record_viewers.assert_not_called()
 
 
 def test_a_record_without_notes_is_inconclusive() -> None:
     gateway: MagicMock = healthy_gateway()
-    gateway.list_associations.return_value = HubSpotPage(items=[])
+    gateway.read_associations.return_value = {}
 
     with pytest.raises(InconclusiveValidationError):
         _run("hubspot_notes", _context(gateway))
 
-    gateway.list_associations.assert_called_once_with(
+    gateway.read_associations.assert_called_once_with(
         object_type=HubSpotObjectType.TICKETS,
-        object_id="1",
         to_object_type="notes",
-        limit=1,
+        cursors={"1": None},
     )
     gateway.read_records.assert_not_called()
 

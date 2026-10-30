@@ -1864,13 +1864,16 @@ class SessionManager:
         Raises:
             ValueError: If session not found or upload limits exceeded
         """
+        _, sandbox = self._require_session_and_sandbox(session_id, user_id)
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
+
         # The session row owns stored-file quota across concurrent API requests.
         session = get_build_session(
             session_id, user_id, self._db_session, for_update=True
         )
         if session is None:
             raise ValueError("Session not found")
-        _, sandbox = self._require_session_and_sandbox(session_id, user_id)
 
         # Check upload limits
         file_count, total_size = self.get_upload_stats(session_id, user_id)
@@ -1923,6 +1926,9 @@ class SessionManager:
             ValueError: If session not found or path traversal attempted
         """
         _, sandbox = self._require_session_and_sandbox(session_id, user_id)
+
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         # Delegate to sandbox manager (handles both local and K8s)
         deleted = self._sandbox_manager.delete_file(

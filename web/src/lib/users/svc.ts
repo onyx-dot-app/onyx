@@ -19,6 +19,12 @@ export async function getCurrentUser(): Promise<User | null> {
   return user;
 }
 
+/** Refetches `/api/me`. When the session has ended, its 403 makes the session
+ * watcher show the session-ended modal. */
+export async function revalidateCurrentUser(): Promise<void> {
+  await mutate(SWR_KEYS.me);
+}
+
 export async function logout(): Promise<Response> {
   const response = await fetch("/auth/logout", {
     method: "POST",
@@ -30,7 +36,12 @@ export async function logout(): Promise<Response> {
       const storage = window.sessionStorage;
       for (let index = storage.length - 1; index >= 0; index--) {
         const key = storage.key(index);
-        if (key?.startsWith("onyx:craft:")) storage.removeItem(key);
+        if (
+          key?.startsWith("onyx:craft:") ||
+          key?.startsWith("onyx:draft:craft:")
+        ) {
+          storage.removeItem(key);
+        }
       }
     } catch {
       // Disabled browser storage must not prevent logout.

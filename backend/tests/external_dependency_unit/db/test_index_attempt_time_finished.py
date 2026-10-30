@@ -1,9 +1,10 @@
-"""Every terminal status write stamps the attempt's finish time, and the attempt
-snapshot reports it, falling back to the last heartbeat check for attempts
-from before the column existed."""
+"""The `mark_attempt_*` writes stamp the attempt's finish time. An attempt's end
+falls back to its last heartbeat check, start, or creation when it has none, the
+same in Python and SQL, and the attempt snapshot reports that end."""
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -72,6 +73,45 @@ def test_terminal_statuses_stamp_the_finish_time(db_session: Session) -> None:
         assert attempt.time_finished >= before
 
 
+def test_end_time_is_the_same_in_python_and_sql(db_session: Session) -> None:
+    now = datetime.now(timezone.utc)
+    running = _attempt(db_session)
+    finished = _attempt(db_session)
+    finished.status = IndexingStatus.SUCCESS
+    finished.time_finished = now - timedelta(minutes=1)
+    finished.last_heartbeat_time = now - timedelta(minutes=2)
+    # Bulk updates end attempts without a finish time.
+    heartbeat_only = _attempt(db_session)
+    heartbeat_only.status = IndexingStatus.FAILED
+    heartbeat_only.last_heartbeat_time = now - timedelta(minutes=3)
+    started_only = _attempt(db_session)
+    started_only.status = IndexingStatus.FAILED
+    never_started = _attempt(db_session)
+    never_started.status = IndexingStatus.CANCELED
+    never_started.time_started = None
+    db_session.commit()
+
+    attempts = [running, finished, heartbeat_only, started_only, never_started]
+    expected = [
+        None,
+        finished.time_finished,
+        heartbeat_only.last_heartbeat_time,
+        started_only.time_started,
+        never_started.time_created,
+    ]
+    assert [attempt.end_time for attempt in attempts] == expected
+    in_sql = dict(
+        db_session.execute(
+            select(IndexAttempt.id, IndexAttempt.end_time).where(
+                IndexAttempt.id.in_([attempt.id for attempt in attempts])
+            )
+        )
+        .tuples()
+        .all()
+    )
+    assert [in_sql[attempt.id] for attempt in attempts] == expected
+
+
 def test_snapshot_falls_back_to_the_last_heartbeat(db_session: Session) -> None:
     attempt = _attempt(db_session)
     heartbeat = datetime.now(timezone.utc) - timedelta(minutes=3)
@@ -80,7 +120,7 @@ def test_snapshot_falls_back_to_the_last_heartbeat(db_session: Session) -> None:
     db_session.commit()
 
     snapshot = IndexAttemptSnapshot.from_index_attempt_db_model(
-        attempt, error_count=0, open_doc_error_count=0
+        attempt, error_count=0, open_error_count=0, open_doc_error_count=0
     )
 
     assert snapshot.time_finished == heartbeat.isoformat()

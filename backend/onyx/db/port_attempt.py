@@ -243,6 +243,36 @@ def _reindex_port_scope(
     return cc_pair_ids, user_ids
 
 
+def connector_ports_complete(
+    db_session: Session, search_settings_id: int, cc_pair_ids: Collection[int]
+) -> bool:
+    """True once the latest port attempt of every cc_pair is SUCCESS. A cc_pair with
+    no attempt, or with an active, FAILED or PAUSED latest attempt, is not complete."""
+    if not cc_pair_ids:
+        return True
+    latest = _latest_port_status_by_cc_pair(db_session, search_settings_id, cc_pair_ids)
+    return all(
+        latest.get(cc_pair_id) == PortAttemptStatus.SUCCESS
+        for cc_pair_id in cc_pair_ids
+    )
+
+
+def reindex_finalizing(db_session: Session, future: SearchSettings | None) -> bool:
+    """The finalizing phase of a port-flow reindex: every connector's port is SUCCESS
+    and only the FUTURE index attempts still have to catch up on documents indexed
+    during the port. The indexing scheduler puts them first in this phase. INSTANT
+    swaps before the port, so it has no such phase."""
+    if (
+        future is None
+        or future.status != IndexModelStatus.FUTURE
+        or not future.use_port_flow
+        or future.switchover_type == SwitchoverType.INSTANT
+    ):
+        return False
+    cc_pair_ids, _ = _reindex_port_scope(db_session, future.id)
+    return connector_ports_complete(db_session, future.id, cc_pair_ids)
+
+
 class ReindexProgressCounts(BaseModel):
     """Combined connector + user-file port progress; buckets partition `total`."""
 
@@ -633,6 +663,26 @@ def mark_port_in_progress(
         attempt.last_progress_time = func.now()
         if celery_task_id is not None:
             attempt.celery_task_id = celery_task_id
+        db_session.commit()
+        return True
+    except Exception:
+        db_session.rollback()
+        raise
+
+
+def fail_unstarted_port_attempt(
+    db_session: Session, port_attempt_id: int, error_msg: str
+) -> bool:
+    """Flip NOT_STARTED -> FAILED, returning True. Any other status is left alone, so
+    a duplicate task cannot fail an attempt that another worker already claimed."""
+    try:
+        attempt = _get_locked(db_session, port_attempt_id)
+        if attempt.status != PortAttemptStatus.NOT_STARTED:
+            db_session.rollback()
+            return False
+        attempt.status = PortAttemptStatus.FAILED
+        attempt.time_completed = func.now()
+        attempt.error_msg = error_msg
         db_session.commit()
         return True
     except Exception:

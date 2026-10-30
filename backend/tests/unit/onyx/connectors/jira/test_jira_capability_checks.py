@@ -10,9 +10,11 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
+from onyx.connectors.jira.config import JQL_ORDER_BY_ERROR
 from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
@@ -277,7 +279,7 @@ def test_configured_project_passes() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_project.assert_called_once_with(project_key="AS")
+    gateway.get_project.assert_called_once_with(project_key="AS", fast=True)
 
 
 def test_configured_project_suggests_the_key_for_a_name() -> None:
@@ -301,7 +303,7 @@ def test_configured_project_strips_spaces_around_the_key() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
-    gateway.get_project.assert_called_once_with(project_key="AS")
+    gateway.get_project.assert_called_once_with(project_key="AS", fast=True)
 
 
 def test_whitespace_project_key_means_all_projects() -> None:
@@ -332,7 +334,7 @@ def test_jql_query_runs_the_indexing_query(is_cloud: bool) -> None:
     assert jql.startswith('(project = "AS") AND updated >= 0')
 
 
-def test_jql_query_rejects_order_by_without_a_request() -> None:
+def test_jql_query_with_order_by_fails_as_a_setting_without_a_request() -> None:
     gateway: MagicMock = _gateway(is_cloud=True)
 
     result: CapabilityCheckResult = _run(
@@ -340,7 +342,8 @@ def test_jql_query_rejects_order_by_without_a_request() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "ORDER BY" in result.message
+    assert result.error_kind == CheckErrorKind.INVALID
+    assert f"jql_query: {JQL_ORDER_BY_ERROR}" in result.message
     gateway.search_issue_ids.assert_not_called()
 
 
@@ -419,7 +422,7 @@ def test_issue_read_reads_one_issue_on_cloud() -> None:
 
     assert result.status == CapabilityCheckStatus.PASSED
     assert gateway.search_issue_ids.call_args.kwargs["max_results"] == 1
-    gateway.bulk_fetch_issues.assert_called_once_with(issue_ids=["1"])
+    gateway.bulk_fetch_issues.assert_called_once_with(issue_ids=["1"], fast=True)
     gateway.search_issues.assert_not_called()
 
 

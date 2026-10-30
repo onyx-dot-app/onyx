@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock
 from urllib.error import URLError
 
+import pytest
 from slack_sdk.web import SlackResponse
 
 from onyx.configs.constants import DocumentSource
@@ -203,6 +204,7 @@ def test_a_rate_limit_at_sign_in_is_incomplete() -> None:
     assert auth.summary == "Rate limited by Slack"
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_stops_the_checks_after_it() -> None:
     gateway = autospec_gateway()
     gateway.list_channels.side_effect = slack_error("ratelimited")
@@ -234,6 +236,27 @@ def test_a_failed_sign_in_stops_the_checks_after_it() -> None:
         assert results[check_id].status == CapabilityCheckStatus.SKIPPED
         assert results[check_id].blocked_by == "slack_token_auth"
     gateway.list_channels.assert_not_called()
+
+
+def test_a_rejected_token_names_sign_in_on_the_channel_list_row() -> None:
+    gateway = autospec_gateway()
+    gateway.check_auth.side_effect = slack_error("invalid_auth")
+
+    results = _run_all(
+        [
+            "slack_token_auth",
+            "slack_public_channel_listing",
+            "slack_readable_channel_listing",
+        ],
+        gateway,
+    )
+
+    channel_list = results["slack_readable_channel_listing"]
+    assert channel_list.status == CapabilityCheckStatus.SKIPPED
+    assert channel_list.applicable is True
+    assert channel_list.summary == "Not run: Sign in to Slack failed"
+    assert channel_list.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert channel_list.blocked_by == "slack_token_auth"
 
 
 def test_a_slack_error_carries_the_request_and_body() -> None:

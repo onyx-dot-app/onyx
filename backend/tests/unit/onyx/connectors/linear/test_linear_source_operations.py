@@ -2,6 +2,7 @@
 OAuth token is refreshed once under the provider's lock and written back,
 and Linear's refusals and listing faults surface as typed errors."""
 
+import threading
 import time
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -105,6 +106,51 @@ def test_a_token_another_sync_already_refreshed_is_reused(refresh: MagicMock) ->
     provider.set_credentials.assert_not_called()
 
 
+@patch(f"{OPS}.refresh_oauth_token")
+def test_parallel_calls_refresh_the_token_once(refresh: MagicMock) -> None:
+    """A static provider's rotation lock does nothing, so the gateway's own
+    lock keeps two threads from redeeming one refresh token. A second refresh
+    would meet the first at the barrier."""
+    expiring = {
+        "access_token": "old",
+        "refresh_token": "r",
+        "expire_at": int(time.time()) + 60,
+    }
+    fresh = {
+        "access_token": "new",
+        "refresh_token": "r2",
+        "expire_at": int(time.time()) + 3600,
+    }
+    refreshes_meet = threading.Barrier(2, timeout=0.5)
+
+    def refresh_token(_credentials: dict[str, Any]) -> dict[str, Any]:
+        try:
+            refreshes_meet.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return fresh
+
+    refresh.side_effect = refresh_token
+    ops = LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(None, "linear", expiring)
+    )
+    both_started = threading.Barrier(2, timeout=10)
+    keys: list[str] = []
+
+    def call() -> None:
+        both_started.wait()
+        keys.append(ops._api_key())
+
+    threads = [threading.Thread(target=call) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert refresh.call_count == 1
+    assert keys == ["Bearer new", "Bearer new"]
+
+
 def test_a_refused_credential_is_a_typed_error() -> None:
     response = MagicMock()
     response.status_code = 401
@@ -171,6 +217,20 @@ def test_a_rate_limit_in_a_200_answer_is_a_typed_error() -> None:
     with (
         patch(f"{OPS}._make_query", return_value=response),
         pytest.raises(LinearRateLimitError),
+    ):
+        _api_key_ops().get_viewer()
+
+
+def test_a_refused_credential_in_a_200_answer_is_a_typed_error() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "errors": [
+            {"message": "refused", "extensions": {"code": "AUTHENTICATION_ERROR"}}
+        ]
+    }
+    with (
+        patch(f"{OPS}._make_query", return_value=response),
+        pytest.raises(LinearAuthError),
     ):
         _api_key_ops().get_viewer()
 

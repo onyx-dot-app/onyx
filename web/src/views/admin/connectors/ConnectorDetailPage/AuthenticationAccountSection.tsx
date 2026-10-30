@@ -48,6 +48,7 @@ export default function AuthenticationAccountSection({
   const tAccount = useTranslations("admin.connectorsList.add.account");
   const tAdd = useTranslations("admin.connectorsList.add");
   const source = ccPair.connector.source;
+  const connectorId: number = ccPair.connector.id;
   const sourceName = getSourceDisplayName(source) ?? source;
   const tCredentials = useTranslations("admin.credentials");
   const { credentials, remove, saveSharing, refresh } =
@@ -149,8 +150,12 @@ export default function AuthenticationAccountSection({
           }}
           detailsOpen={detailsOpen}
           onDetailsOpenChange={setDetailsOpen}
-          checkReport={checkReports.reportFor(credential.id)}
-          onRerunChecks={() => checkReports.rerun(credential.id)}
+          // The pair's checks: without the connector, every check that
+          // needs its settings is skipped.
+          checkReport={
+            checkReports.reportFor(credential.id, connectorId) ??
+            checkReports.reportFor(credential.id)
+          }
           groupsLocked={!businessTier}
           onSaveAccount={(update) => saveSharing(credential.id, update)}
           onUpdateCredentials={

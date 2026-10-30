@@ -139,10 +139,12 @@ from onyx.db.engine.sql_engine import (
 )
 from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
-from onyx.db.pat import resolve_pat
+from onyx.db.pat import resolve_pat, revoke_all_pats_for_user__no_commit
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
+from onyx.db.sso_provider import lock_sso_provider_for_share
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    delete_user_from_db__no_commit,
     fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
@@ -604,6 +606,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
 
+    async def delete(
+        self,
+        user: User,
+        request: Request | None = None,
+    ) -> None:
+        await self.on_before_delete(user, request)
+        await self.user_db.session.run_sync(
+            partial(delete_user_from_db__no_commit, user)
+        )
+        await self.user_db.session.commit()
+        await self.on_after_delete(user, request)
+
     @asynccontextmanager
     async def _tenant_session_with_bound_user_db(
         self, tenant_id: str
@@ -999,6 +1013,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         return
 
+    async def _hold_sso_provider(self, sso_provider_id: int | None) -> None:
+        """Share-lock the login's provider row in the current write transaction.
+        A provider delete then waits for this write and removes its link too,
+        and a row that is already gone fails the login before the write.
+        Legacy env-configured logins have no row and pass None."""
+        if sso_provider_id is None:
+            return
+        if not await lock_sso_provider_for_share(self.user_db.session, sso_provider_id):
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider")
+
     async def _rewrite_oauth_link(
         self, user: User, link: OAuthAccount, oauth_account_dict: dict[str, Any]
     ) -> User:
@@ -1025,6 +1049,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         is_verified_by_default: bool = False,
         allowed_email_domains_override: Sequence[str] | None = None,
         enforce_verified_domain: bool = False,
+        sso_provider_id: int | None = None,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
@@ -1121,20 +1146,23 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             return user
 
                         # An owned row must not take a second provider, and a
-                        # rename stops the address identifying the row. All else
-                        # is claimable, password signups included. The same provider
-                        # with a new subject is admin-gated: the subject alone does
-                        # not prove who holds the address now.
+                        # rename stops the address identifying the row. Each has
+                        # an admin-gated window, since neither proves the holder.
                         relink_allowed: bool = (
                             stale_link is not None
                             and oauth_security_settings.allow_same_provider_subject_relink
                         )
+                        renamed_claim_allowed: bool = (
+                            not user.oauth_accounts
+                            and oauth_security_settings.allow_renamed_account_claim
+                        )
                         if not associate_by_email and (
-                            user.prior_emails
+                            (user.prior_emails and not renamed_claim_allowed)
                             or (user.oauth_accounts and not relink_allowed)
                         ):
                             raise exceptions.UserAlreadyExists()
 
+                    await self._hold_sso_provider(sso_provider_id)
                     # Rewrite rather than append: an appended link would leave the
                     # dead subject and its refresh token on the row.
                     if stale_link is None:
@@ -1176,6 +1204,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     }
 
                     user = await self.user_db.create(user_dict)
+                    await self._hold_sso_provider(sso_provider_id)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
                     await seed_pinned_personas_from_featured(
                         db_session=db_session, user=user
@@ -1190,6 +1219,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             existing_oauth_account.account_id == account_id
                             and existing_oauth_account.oauth_name == oauth_name
                         ):
+                            await self._hold_sso_provider(sso_provider_id)
                             user = await self._rewrite_oauth_link(
                                 user, existing_oauth_account, oauth_account_dict
                             )
@@ -1205,6 +1235,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Keyed on the stored email rather than the one the IdP just sent.
             # The membership row moves onto the new address at the rekey below.
+            # Held so a delete forgets this copy after it lands, not before.
+            await self._hold_sso_provider(sso_provider_id)
             fetch_ee_implementation_or_noop(
                 "onyx.db.user_tenant_mapping", "record_oauth_identity", None
             )(user.email, tenant_id, oauth_name, account_id)
@@ -1617,7 +1649,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def reset_password_as_admin(self, user_id: uuid.UUID) -> str:
         """Admin-only. Generate a random password for a user, sign out all of
-        their sessions, and return the password."""
+        their sessions, revoke their PATs, and return the password."""
         user = await self.get(user_id)
         new_password = generate_password()
         await self._update(user, {"password": new_password})
@@ -1633,7 +1665,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> None:
         """
         For normal users to change password if they know the old one. Signs
-        out the user's other sessions; ``keep_token`` is the caller's session.
+        out the user's other sessions and revokes their PATs; ``keep_token`` is
+        the caller's session.
         Raises 400 if old password doesn't match.
         """
         verified, updated_password_hash = self.password_helper.verify_and_update(
@@ -1649,6 +1682,29 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Now apply and validate the new password
         await self._update(user, {"password": new_password})
         await self.revoke_sessions(user, keep_token=keep_token)
+
+    async def _update(self, user: User, update_dict: dict[str, Any]) -> User:
+        """
+        Every password write also revokes all of ``user``'s PATs, in the same
+        commit as the new hash. API keys belong to service accounts and are
+        not affected.
+        """
+        new_password = update_dict.get("password")
+        if new_password is None:
+            return await super()._update(user, update_dict)
+
+        # Validate before staging, so a rejected password leaves nothing pending.
+        await self.validate_password(new_password, user)
+        revoked_pat_count = await revoke_all_pats_for_user__no_commit(
+            self.user_db.session, user.id
+        )
+        updated_user = await super()._update(user, update_dict)
+        logger.info(
+            "Revoked %d personal access token(s) for user %s after a password change",
+            revoked_pat_count,
+            user.id,
+        )
+        return updated_user
 
     async def revoke_sessions(self, user: User, keep_token: str | None = None) -> None:
         """
@@ -2890,6 +2946,7 @@ async def complete_login_flow(
     is_verified_by_default: bool,
     allowed_email_domains_override: Sequence[str] | None = None,
     enforce_verified_domain: bool = False,
+    sso_provider_id: int | None = None,
 ) -> RedirectResponse:
     """Shared post-token OAuth/OIDC login: read the verified identity, create or
     authenticate the user, and return a web or mobile redirect.
@@ -2951,6 +3008,7 @@ async def complete_login_flow(
             is_verified_by_default=is_verified_by_default,
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
             enforce_verified_domain=enforce_verified_domain,  # ty: ignore[unknown-argument]
+            sso_provider_id=sso_provider_id,  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(

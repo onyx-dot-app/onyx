@@ -25,7 +25,7 @@ import {
   getProviderOverrideForAgent,
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
@@ -374,7 +374,7 @@ export function getValidLlmDescriptorForProviders(
 
     // If we have parsed provider info, try to find that specific provider.
     // This ensures we don't incorrectly match a model to the wrong provider
-    // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
+    // when the same model name exists across multiple providers (e.g., gpt-6-sol in Azure and OpenAI)
     if (model.provider && model.provider.length > 0) {
       const hasModel = (p: LLMProviderDescriptor) =>
         p.model_configurations.some((mc) => mc.name === model.modelName);

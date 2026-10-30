@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from litellm.types.utils import ModelResponse as LiteLLMModelResponse
+from pydantic import JsonValue
 
 from onyx.chat.incognito import (
     BIFROST_DISABLE_CONTENT_LOGGING_HEADER,
@@ -15,8 +16,10 @@ from onyx.db.enums import IncognitoRecordMode, LLMModelFlowType
 from onyx.db.models import LLMModelFlow, ModelConfiguration
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.factory import (
     _build_provider_extra_headers,
+    get_decision_client,
     get_default_llm,
     get_default_utility_llm,
     get_llm,
@@ -32,6 +35,7 @@ from onyx.llm.well_known_providers.constants import (
     LM_STUDIO_API_KEY_CONFIG_KEY,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.utils.sensitive import SensitiveValue
 
 
 def test_build_provider_extra_headers_adds_bearer_for_lm_studio_api_key() -> None:
@@ -188,6 +192,50 @@ def test_search_selection_unset_does_not_use_naming_designation() -> None:
     cost.assert_not_called()
 
 
+def test_decision_client_unset_has_no_fallback() -> None:
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
+        patch("onyx.llm.factory.fetch_default_model", return_value=None) as fetch,
+        patch("onyx.llm.factory.get_default_llm") as fallback,
+        patch("onyx.llm.factory.DecisionClient") as client,
+    ):
+        assert get_decision_client() is None
+    fetch.assert_called_once_with(
+        sessions.return_value.__enter__.return_value, LLMModelFlowType.DECISION
+    )
+    fallback.assert_not_called()
+    client.assert_not_called()
+
+
+def test_decision_client_uses_selected_provider_and_model() -> None:
+    model = ModelConfiguration(id=22, name="typesafe/jev-latest", is_visible=False)
+    LLMProviderModel(
+        id=12,
+        provider="openrouter",
+        api_key=SensitiveValue(
+            encrypted_bytes=b"test-key", decrypt_fn=lambda value: value.decode()
+        ),
+        api_base="https://openrouter.ai/api/v1",
+        model_configurations=[model],
+    )
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant"),
+        patch("onyx.llm.factory.fetch_default_model", return_value=model),
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as cost,
+        patch(
+            "onyx.llm.decisions.factory.DecisionClient", wraps=DecisionClient
+        ) as build,
+    ):
+        client = get_decision_client(additional_headers={"X-Test": "value"})
+    assert client is not None
+    assert client.model == "typesafe/jev-latest"
+    assert client.url == "https://openrouter.ai/api/alpha/decisions"
+    assert build.call_args.kwargs["api_key"] == "test-key"
+    assert build.call_args.kwargs["extra_headers"]["X-Test"] == "value"
+    assert build.call_args.kwargs["extra_headers"]["HTTP-Referer"] == "https://onyx.app"
+    cost.assert_called_once()
+
+
 @pytest.mark.parametrize(
     "resolve",
     [
@@ -200,14 +248,17 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
 ) -> None:
     model = ModelConfiguration(
         id=2,
-        name="gpt-4o-mini-2024-07-18",
+        name="gpt-6-luna-2024-07-18",
         is_visible=False,
         max_input_tokens=2048,
         temperature_default=0.4,
         reasoning_effort_default=ReasoningEffort.LOW,
         reasoning_effort_max=ReasoningEffort.HIGH,
         is_router=True,
-        llm_model_flows=[LLMModelFlow(llm_model_flow_type=LLMModelFlowType.REASONING)],
+        llm_model_flows=[
+            LLMModelFlow(llm_model_flow_type=LLMModelFlowType.CHAT),
+            LLMModelFlow(llm_model_flow_type=LLMModelFlowType.REASONING),
+        ],
     )
     LLMProviderModel(
         id=1,
@@ -218,7 +269,7 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
         model_configurations=[
             ModelConfiguration(
                 id=1,
-                name="gpt-4o-mini",
+                name="gpt-6-luna",
                 is_visible=True,
                 max_input_tokens=128000,
                 is_router=False,
@@ -240,7 +291,7 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
         )
         assert result is build.return_value
     kwargs = build.call_args.kwargs
-    assert kwargs["model"] == "gpt-4o-mini-2024-07-18"
+    assert kwargs["model"] == "gpt-6-luna-2024-07-18"
     assert kwargs["max_input_tokens"] == 2048
     assert kwargs["temperature"] == 0.4
     assert kwargs["reasoning_effort_default"] == ReasoningEffort.LOW
@@ -251,7 +302,7 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
 
 def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
-        get_llm(
+        model = get_llm(
             provider=LlmProviderNames.OLLAMA_CHAT,
             model="test-model",
             deployment_name=None,
@@ -259,6 +310,7 @@ def test_get_llm_sets_ollama_num_ctx_model_kwarg() -> None:
             model_kwargs={"num_ctx": 8192},
         )
 
+        assert model is mock_litellm_llm.return_value
         kwargs = mock_litellm_llm.call_args.kwargs
         assert kwargs["model_kwargs"] == {"num_ctx": 8192}
 
@@ -267,7 +319,7 @@ def test_get_llm_does_not_set_ollama_num_ctx_for_non_ollama_provider() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider=LlmProviderNames.OPENAI,
-            model="gpt-4o-mini",
+            model="gpt-6-luna",
             deployment_name=None,
             max_input_tokens=4096,
         )
@@ -346,7 +398,7 @@ def test_get_llm_policy_headers_win_over_every_other_source() -> None:
     ):
         get_llm(
             provider=BIFROST_PROVIDER_NAME,
-            model="gpt-4o",
+            model="gpt-6-sol",
             deployment_name=None,
             max_input_tokens=4096,
             additional_headers={header: "false"},
@@ -361,7 +413,7 @@ def test_get_llm_without_policy_headers_keeps_the_existing_merge() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider="openai",
-            model="gpt-4o",
+            model="gpt-6-sol",
             deployment_name=None,
             max_input_tokens=4096,
             additional_headers={"x-request-scoped": "a"},
@@ -381,7 +433,7 @@ def test_llm_from_provider_resolves_policy_headers_for_the_winning_provider() ->
 
     with patch("onyx.llm.factory.get_llm") as mock_get_llm:
         llm_from_provider(
-            model_name="gpt-4o",
+            model_name="gpt-6-sol",
             llm_provider=provider,
             policy_fn=partial(
                 incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY
@@ -401,7 +453,7 @@ def test_llm_from_provider_without_policy_fn_passes_none() -> None:
     )
 
     with patch("onyx.llm.factory.get_llm") as mock_get_llm:
-        llm_from_provider(model_name="gpt-4o", llm_provider=provider)
+        llm_from_provider(model_name="gpt-6-sol", llm_provider=provider)
 
         assert mock_get_llm.call_args.kwargs["policy_headers"] is None
 
@@ -563,7 +615,7 @@ def test_client_config_is_a_defensive_snapshot() -> None:
     client: LitellmLLM = LitellmLLM(
         api_key="secret-key",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-astra",
         max_input_tokens=1000,
         custom_config=settings,
     )
@@ -619,18 +671,20 @@ def test_client_resolves_image_capability_from_deployment_name() -> None:
 
 
 def test_factory_captures_nested_request_and_policy_settings() -> None:
-    kwargs: dict[str, dict[str, str]] = {"metadata": {"source": "caller"}}
-    policy_kwargs: dict[str, dict[str, bool]] = {"extra_body": {"store": False}}
+    metadata: dict[str, JsonValue] = {"source": "caller"}
+    kwargs: dict[str, JsonValue] = {"metadata": metadata}
+    policy_body: dict[str, JsonValue] = {"store": False}
+    policy_kwargs: dict[str, JsonValue] = {"extra_body": policy_body}
     client: LitellmLLM = get_llm(
         provider="openai",
-        model="gpt-5-mini",
+        model="gpt-6-astra",
         deployment_name=None,
         max_input_tokens=4096,
         model_kwargs=kwargs,
         policy_model_kwargs=policy_kwargs,
     )
-    kwargs["metadata"]["source"] = "changed"
-    policy_kwargs["extra_body"]["store"] = True
+    metadata["source"] = "changed"
+    policy_body["store"] = True
     response: LiteLLMModelResponse = LiteLLMModelResponse(
         id="captured-settings",
         created=1,
@@ -658,7 +712,8 @@ def test_factory_captures_nested_request_and_policy_settings() -> None:
 
 
 def test_client_does_not_modify_caller_model_kwargs() -> None:
-    kwargs: dict[str, dict[str, str]] = {"metadata": {"source": "caller"}}
+    metadata: dict[str, JsonValue] = {"source": "caller"}
+    kwargs: dict[str, JsonValue] = {"metadata": metadata}
     LitellmLLM(
         api_key=None,
         model_provider="ollama_chat",
@@ -670,20 +725,20 @@ def test_client_does_not_modify_caller_model_kwargs() -> None:
 
 
 def test_client_captures_nested_deployment_settings_after_merging() -> None:
-    deployment: list[str] = ["original"]
-    defaults: dict[str, bool] = {"enabled": True}
-    deployment_body: dict[str, object] = {
+    deployment: list[JsonValue] = ["original"]
+    defaults: dict[str, JsonValue] = {"enabled": True}
+    deployment_body: dict[str, JsonValue] = {
         "metadata": {"deployment": deployment, "source": "deployment"},
         "default_only": defaults,
     }
-    request_metadata: dict[str, str] = {"source": "request"}
-    kwargs: dict[str, object] = {
+    request_metadata: dict[str, JsonValue] = {"source": "request"}
+    kwargs: dict[str, JsonValue] = {
         "extra_body": {"metadata": request_metadata},
     }
     client: LitellmLLM = LitellmLLM(
         api_key="secret-key",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-astra",
         max_input_tokens=4096,
         extra_body=deployment_body,
         model_kwargs=kwargs,

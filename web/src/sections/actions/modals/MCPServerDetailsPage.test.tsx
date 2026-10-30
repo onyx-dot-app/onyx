@@ -134,10 +134,14 @@ beforeEach(() => {
       return new Response(JSON.stringify([{ id: 42 }]));
     if (url === "/api/admin/default-assistant/configuration")
       return new Response(JSON.stringify({ tool_ids: defaultToolIds }));
-    if (url === "/api/admin/default-assistant") {
+    if (url === "/api/admin/default-assistant/tools") {
       const payload: unknown = JSON.parse(String(init?.body));
       savedRequests.push({ url, method: init?.method, payload });
-      return new Response(String(init?.body));
+      const others = defaultToolIds.filter((id) => id !== 42);
+      const enabled = String(init?.body).includes('"enabled":true');
+      return new Response(
+        JSON.stringify({ tool_ids: enabled ? [...others, 42] : others })
+      );
     }
     if (url.startsWith("/api/admin/mcp/server")) {
       savedRequests.push({
@@ -348,6 +352,7 @@ describe("inline server configuration", () => {
       .mockReturnValue({ ...base, permissions, adminCapabilities });
     const saved = jest.fn().mockResolvedValue(undefined);
     const dirty = jest.fn();
+    const authenticate = jest.fn();
     render(
       <>
         <MCPServerDetailsPage
@@ -355,6 +360,7 @@ describe("inline server configuration", () => {
           variant="page"
           server={server}
           onSaved={saved}
+          onAuthenticate={authenticate}
           onBusyChange={() => {}}
           onDirtyChange={dirty}
           {...pageOptions}
@@ -362,7 +368,7 @@ describe("inline server configuration", () => {
         <RefreshSettings />
       </>
     );
-    return { saved, dirty };
+    return { saved, dirty, authenticate };
   }
 
   test("saving metadata preserves Chat availability changed during editing", async () => {
@@ -421,8 +427,8 @@ describe("inline server configuration", () => {
     await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
     expect(savedRequests).toContainEqual(
       expect.objectContaining({
-        url: "/api/admin/default-assistant",
-        payload: { tool_ids: [99] },
+        url: "/api/admin/default-assistant/tools",
+        payload: { tool_ids: [42], enabled: false },
       })
     );
     expect(savedRequests).toContainEqual(
@@ -658,16 +664,119 @@ describe("inline server configuration", () => {
       await screen.findByRole("textbox", { name: "Server Name" }),
       " updated"
     );
-    expect(
-      screen.queryByRole("textbox", { name: /^MCP Server URL/ })
-    ).not.toBeInTheDocument();
+    const endpoint = screen.getByRole("textbox", { name: /^MCP Server URL/ });
+    expect(endpoint).toBeVisible();
+    expect(endpoint).toHaveValue(configuredServer.server_url);
+    expect(endpoint).not.toHaveAttribute("readonly");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    expect(savedRequests).toHaveLength(1);
     expect(savedRequests[0]?.payload).not.toHaveProperty("server_url");
     expect(saved).toHaveBeenCalledWith(
       expect.objectContaining({ server_url: configuredServer.server_url })
     );
   });
+
+  test("whitespace-only endpoint edits preserve credentials", async () => {
+    const { authenticate } = renderDetailsPage();
+    const user = setupUser();
+    const endpoint = await screen.findByRole("textbox", {
+      name: /^MCP Server URL/,
+    });
+    await user.type(endpoint, " ");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(endpoint).toHaveValue(configuredServer.server_url)
+    );
+    expect(savedRequests).toHaveLength(0);
+    expect(authenticate).not.toHaveBeenCalled();
+  });
+
+  test("stages an edited endpoint and metadata for authentication without saving", async () => {
+    const { saved, authenticate } = renderDetailsPage();
+    const user = setupUser();
+    const endpoint = await screen.findByRole("textbox", {
+      name: /^MCP Server URL/,
+    });
+    await user.clear(endpoint);
+    await user.type(endpoint, "https://new.example.com/mcp");
+    const name = screen.getByRole("textbox", {
+      name: messages.actions.addMcpModal.name.title,
+    });
+    await user.clear(name);
+    await user.type(name, "Draft MCP");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(authenticate).toHaveBeenCalledWith({
+        server_url: "https://new.example.com/mcp",
+        name: "Draft MCP",
+      })
+    );
+    expect(savedRequests).toHaveLength(0);
+    expect(saved).not.toHaveBeenCalled();
+    expect(endpoint).toHaveValue("https://new.example.com/mcp");
+  });
+
+  test("stages Chat availability with a changed URL without updating the saved agent", async () => {
+    defaultToolIds = [99];
+    const { authenticate } = renderDetailsPage({
+      permissions: [
+        Permission.MANAGE_ACTIONS,
+        Permission.FULL_ADMIN_PANEL_ACCESS,
+      ],
+      server: {
+        ...configuredServer,
+        permissions: { edit: true, authenticate: true },
+      },
+    });
+    const user = setupUser();
+    const endpoint = await screen.findByRole("textbox", {
+      name: /^MCP Server URL/,
+    });
+    await user.clear(endpoint);
+    await user.type(endpoint, "https://new.example.com/mcp");
+    await user.click(
+      screen.getByRole("switch", { name: "Enable in default Chat" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(authenticate).toHaveBeenCalledWith({
+        server_url: "https://new.example.com/mcp",
+        enable_chat: true,
+      })
+    );
+    expect(savedRequests).toEqual([]);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  test.each(["", "not-a-url", "ftp://example.com/mcp"])(
+    "rejects invalid endpoint %s",
+    async (url) => {
+      renderDetailsPage();
+      const user = setupUser();
+      const endpoint = await screen.findByRole("textbox", {
+        name: /^MCP Server URL/,
+      });
+      await user.clear(endpoint);
+      if (url) await user.type(endpoint, url);
+      await user.tab();
+      expect(
+        (
+          await screen.findAllByText(
+            messages.actions.addMcpModal.serverUrl.invalid
+          )
+        )[0]
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Save Changes" })
+      ).toBeDisabled();
+      expect(endpoint).toHaveAttribute("aria-invalid", "true");
+      expect(endpoint).toHaveAccessibleDescription(
+        messages.actions.addMcpModal.serverUrl.invalid
+      );
+      expect(savedRequests).toHaveLength(0);
+    }
+  );
 
   test.each([
     { adminCapabilities: [] },
@@ -679,9 +788,10 @@ describe("inline server configuration", () => {
       expect(
         await screen.findByRole("textbox", { name: "Server Name" })
       ).toBeDisabled();
-      expect(
-        screen.queryByRole("textbox", { name: /^MCP Server URL/ })
-      ).not.toBeInTheDocument();
+      const endpoint = screen.getByRole("textbox", { name: /^MCP Server URL/ });
+      expect(endpoint).toBeVisible();
+      expect(endpoint).toHaveValue(configuredServer.server_url);
+      expect(endpoint).toHaveAttribute("readonly");
       expect(
         screen.queryByRole("button", { name: "Save Changes" })
       ).not.toBeInTheDocument();

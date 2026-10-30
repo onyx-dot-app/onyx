@@ -168,7 +168,6 @@ function InputTime({
     // that recreate an equal value don't clobber in-progress typing. The
     // string form keeps distinct triples distinct (a second count would
     // collapse 01:00:00 and 00:60:00).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueKey]);
 
   function commit(next: TimeSegments) {
@@ -229,7 +228,10 @@ function InputTime({
                 )}
                 onKeyDown={handleSegmentKeyDown(
                   part,
-                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null
+                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null,
+                  i < segmentParts.length - 1
+                    ? segmentRefs[segmentParts[i + 1]!]
+                    : null
                 )}
               />
             </React.Fragment>

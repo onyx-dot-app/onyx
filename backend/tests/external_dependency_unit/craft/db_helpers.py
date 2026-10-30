@@ -188,6 +188,8 @@ def make_skill(
     placeholder values; tests that need a real bundle should use the
     ``seeded_skill`` fixture from ``conftest.py`` instead.
     """
+    if author_user_id is None and not is_public:
+        author_user_id = make_user(db_session, standard_account=True).id
     skill = Skill(
         id=uuid4(),
         name=name or f"helper-skill-{uuid4().hex[:8]}",

@@ -62,7 +62,9 @@ interface MCPServerDetailsValues extends MCPServerConfigurationValues {
 }
 
 interface MCPServerDetailsPageProps {
-  onAuthenticate?: () => void;
+  onAuthenticate?: (
+    draft?: MCPServerUpdateRequest & { enable_chat?: boolean }
+  ) => void;
   active: boolean;
   variant?: "modal" | "page";
   readOnly?: boolean;
@@ -71,6 +73,7 @@ interface MCPServerDetailsPageProps {
   onSaved: (server: MCPServer) => Promise<void>;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange: (dirty: boolean) => void;
+  onValuesChange?: () => void;
 }
 
 export default function MCPServerDetailsPage({
@@ -83,8 +86,10 @@ export default function MCPServerDetailsPage({
   onSaved,
   onBusyChange,
   onDirtyChange,
+  onValuesChange,
 }: MCPServerDetailsPageProps) {
   const formId = useId();
+  const serverUrlErrorId = useId();
   const formRef = useRef<FormikProps<MCPServerDetailsValues>>(null);
   const t = useTranslations("actions");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -137,6 +142,16 @@ export default function MCPServerDetailsPage({
   const validationSchema = Yup.object().shape({
     name: Yup.string().required(t("addMcpModal.name.required")),
     description: Yup.string(),
+    server_url: Yup.string()
+      .required(t("addMcpModal.serverUrl.invalid"))
+      .test("http-url", t("addMcpModal.serverUrl.invalid"), (value) => {
+        try {
+          const url = new URL(value ?? "");
+          return url.protocol === "http:" || url.protocol === "https:";
+        } catch {
+          return false;
+        }
+      }),
   });
 
   const initialValues: MCPServerDetailsValues = {
@@ -176,8 +191,12 @@ export default function MCPServerDetailsPage({
     const chatChanged =
       values.enabled_in_chat !== undefined &&
       values.enabled_in_chat !== chatEnabled;
+    const serverUrl = values.server_url.trim();
+    const urlChanged = serverUrl !== baseline.server_url.trim();
     const needsAuthentication =
-      chatChanged && values.enabled_in_chat && authenticationRequired;
+      chatChanged &&
+      values.enabled_in_chat &&
+      (authenticationRequired || urlChanged);
     if (
       readOnly ||
       !authorityReady ||
@@ -192,6 +211,7 @@ export default function MCPServerDetailsPage({
     setIsSubmitting(true);
 
     const payload: MCPServerUpdateRequest = {};
+    if (urlChanged) payload.server_url = serverUrl;
     if (values.name !== baseline.name) payload.name = values.name;
     if (values.description !== baseline.description)
       payload.description = values.description;
@@ -214,6 +234,16 @@ export default function MCPServerDetailsPage({
     }
 
     try {
+      if (urlChanged) {
+        if (!onAuthenticate)
+          throw new Error(t("addMcpModal.toasts.updateFailed"));
+        const draft: MCPServerUpdateRequest & { enable_chat?: boolean } = {
+          ...payload,
+        };
+        if (chatChanged) draft.enable_chat = values.enabled_in_chat;
+        onAuthenticate(draft);
+        return;
+      }
       const intent = needsAuthentication
         ? mintMcpChatEnableIntent({ userId: user?.id, serverId: server.id })
         : null;
@@ -230,7 +260,13 @@ export default function MCPServerDetailsPage({
       }
       await onSaved(savedServer);
       await refreshMemberPluginCaches(mutate);
-      helpers.resetForm({ values: { ...values, enabled_in_chat: undefined } });
+      helpers.resetForm({
+        values: {
+          ...values,
+          server_url: serverUrl,
+          enabled_in_chat: undefined,
+        },
+      });
       if (intent) {
         router.push(
           withPluginSearchParams(
@@ -284,7 +320,10 @@ export default function MCPServerDetailsPage({
               id={formId}
               className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-6"
             >
-              <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />
+              <MCPFormDirtyObserver
+                onDirtyChange={onDirtyChange}
+                onValuesChange={onValuesChange}
+              />
               <fieldset
                 disabled={isSubmitting || readOnly}
                 className="min-w-0 w-full"
@@ -312,6 +351,49 @@ export default function MCPServerDetailsPage({
                       placeholder={t("addMcpModal.name.placeholder")}
                       ref={focusOnMount}
                     />
+                  </InputVertical>
+
+                  <InputVertical
+                    withLabel="server_url"
+                    title={t("addMcpModal.serverUrl.title")}
+                  >
+                    <InputTypeIn
+                      id="server_url"
+                      name="server_url"
+                      aria-invalid={
+                        !!(
+                          formikProps.touched.server_url &&
+                          formikProps.errors.server_url
+                        )
+                      }
+                      aria-describedby={
+                        formikProps.touched.server_url &&
+                        formikProps.errors.server_url
+                          ? serverUrlErrorId
+                          : undefined
+                      }
+                      value={formikProps.values.server_url}
+                      onChange={formikProps.handleChange}
+                      onBlur={formikProps.handleBlur}
+                      variant={
+                        readOnly
+                          ? "readOnly"
+                          : formikProps.touched.server_url &&
+                              formikProps.errors.server_url
+                            ? "error"
+                            : "primary"
+                      }
+                    />
+                    {formikProps.touched.server_url &&
+                      formikProps.errors.server_url && (
+                        <Text
+                          id={serverUrlErrorId}
+                          font="secondary-body"
+                          color="status-error-05"
+                        >
+                          {formikProps.errors.server_url}
+                        </Text>
+                      )}
                   </InputVertical>
 
                   <InputVertical

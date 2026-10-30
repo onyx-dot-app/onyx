@@ -19,6 +19,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
 )
+from onyx.connectors.google_utils.google_auth import GoogleUnreachableError
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -117,6 +118,19 @@ def test_failed_token_refresh_leaves_as_a_gateway_error() -> None:
         side_effect=RefreshError("unauthorized_client: Client is unauthorized"),
     ):
         with pytest.raises(GoogleDriveRefreshError, match="unauthorized_client"):
+            gateway.authenticate()
+
+
+def test_a_token_refresh_with_no_answer_leaves_untranslated() -> None:
+    """Indexing's retries and the sign-in check expect a connection error."""
+    gateway = _gateway()
+
+    with mock.patch.object(
+        source_operations,
+        "get_google_creds",
+        side_effect=GoogleUnreachableError("no answer"),
+    ):
+        with pytest.raises(GoogleUnreachableError):
             gateway.authenticate()
 
 

@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// agentContextSkill is one skill directory of onyx-infra's agent-context/, parsed enough to
+// agentContextSkill is one skill directory of agent-context/, parsed enough to
 // install it for any agent.
 type agentContextSkill struct {
 	// Directory name, which is also the skill's invocation name.
@@ -27,7 +27,7 @@ type agentContextSkill struct {
 }
 
 // discoverAgentContextSkills reads the enforced/ and skills/ tiers of the
-// agent-context/ directory of an onyx-infra checkout. A source with no
+// agent-context/ directory of an internal infra repo checkout. A source with no
 // agent-context/ directory is treated as the root of an old onyx-llm-context
 // checkout. A missing tier directory is not an error.
 func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {

@@ -13,11 +13,7 @@ import type {
   ConnectorGroupRestrictionFormValues,
 } from "@/lib/connectors/accessType";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  connectorConfigs,
-  MIN_PRUNE_FREQ_HOURS,
-  MIN_REFRESH_FREQ_MINUTES,
-} from "@/lib/connectors/connectors";
+import { connectorConfigs } from "@/lib/connectors/connectors";
 import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
 import { getCredentialSpec, realmFields } from "@/lib/credentials/utils";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
@@ -93,6 +89,39 @@ export function withoutFormOnlyFields<V>(
   );
 }
 
+/** The config field named `name`, tab contents included. */
+export function findConfigField(
+  configuration: ConnectionConfiguration,
+  name: string
+): ConnectionConfiguration["values"][number] | undefined {
+  const find = (
+    fields: ConnectionConfiguration["values"]
+  ): ConnectionConfiguration["values"][number] | undefined => {
+    for (const field of fields) {
+      if (field.name === name) return field;
+      if (field.type === "tab") {
+        const nested = find(field.tabs.flatMap((tab) => tab.fields));
+        if (nested) return nested;
+      }
+    }
+    return undefined;
+  };
+  return find([...configuration.values, ...configuration.advanced_values]);
+}
+
+/** A list's entries as the config takes them: with the field's `transform`
+ * applied. */
+export function listConfigValue(
+  configuration: ConnectionConfiguration,
+  name: string,
+  entries: string[]
+): string[] | string {
+  const field = findConfigField(configuration, name);
+  return field?.type === "list" && field.transform
+    ? field.transform(entries)
+    : entries;
+}
+
 function withoutBlankEntries(items: readonly unknown[]): unknown[] {
   return items.filter((item) => typeof item !== "string" || item.trim() !== "");
 }
@@ -128,10 +157,10 @@ export function connectorConfigFromForm(
   for (const [key, raw] of Object.entries(values)) {
     if (formControlFieldNames.has(key)) continue;
     const value: unknown = Array.isArray(raw) ? withoutBlankEntries(raw) : raw;
-    const field = configuration.values.find((field) => field.name === key);
     config[key] =
-      field && "transform" in field && field.transform
-        ? field.transform(value as string[])
+      Array.isArray(value) &&
+      value.every((entry): entry is string => typeof entry === "string")
+        ? listConfigValue(configuration, key, value)
         : value;
   }
   return withoutFormOnlyFields(source, config);
@@ -179,7 +208,16 @@ export function splitCredentialBoundFields(
 interface ConnectorValidationMessages {
   /** A required field left empty, named by its label. */
   required?: (field: string) => string;
+  /**
+   * Set on create: Refresh Every and Prune Every must hold a value, each with
+   * this message. Edit keeps a pair's empty schedule.
+   */
+  scheduleRequired?: { refreshFreq: string; pruneFreq: string };
   oneDriveUsersRequired?: string;
+  /** Confluence's Select tab with no space and no page. */
+  confluenceScopeRequired?: string;
+  /** Confluence's CQL Query tab with no query. */
+  confluenceCqlRequired?: string;
   specificGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
   stringPairEmptyKey?: string;
@@ -258,7 +296,8 @@ export function createConnectorInitialValues(
   const configuration = connectorConfigs[connector];
 
   return {
-    name: "",
+    // Starts as the source's name; the admin can rename it.
+    name: getSourceDisplayName(connector) ?? "",
     groups: [],
     group_roles: {},
     data_access_group_ids: [],
@@ -268,6 +307,31 @@ export function createConnectorInitialValues(
     ...buildInitialValuesForFields(configuration.values),
     ...buildInitialValuesForFields(configuration.advanced_values),
   };
+}
+
+/** `schema`, required with `message` when one is given. */
+function requiredIf(
+  schema: Yup.NumberSchema<number | undefined>,
+  message: string | undefined
+): Yup.NumberSchema<number | undefined> {
+  return message === undefined ? schema : schema.required(message);
+}
+
+/** A scope list as the form holds it, or a stored comma-separated string. */
+type ScopeListValue = string[] | string | undefined;
+
+/** Confluence's scope fields, as the validation reads them. */
+interface ConfluenceScopeValues {
+  indexing_scope?: string;
+  space?: ScopeListValue;
+  page_id?: ScopeListValue;
+}
+
+/** Whether a scope list names anything. */
+function hasScopeEntry(value: ScopeListValue): boolean {
+  const entries: string[] =
+    typeof value === "string" ? value.split(",") : (value ?? []);
+  return entries.some((entry) => entry.trim() !== "");
 }
 
 export function createConnectorValidationSchema(
@@ -321,6 +385,27 @@ export function createConnectorValidationSchema(
       });
   }
 
+  if (connector === ValidSources.Confluence) {
+    // An empty selection would index every space.
+    fieldSchemas.space = Yup.mixed().test(
+      "confluence-scope",
+      messages.confluenceScopeRequired ?? "Add at least one space or page.",
+      function hasScope(): boolean {
+        const values: ConfluenceScopeValues = this.parent;
+        if (values.indexing_scope !== "select") return true;
+        return [values.space, values.page_id].some(hasScopeEntry);
+      }
+    );
+    // A blank query would index every page too.
+    fieldSchemas.cql_query = Yup.string().when("indexing_scope", {
+      is: "cql",
+      then: (schema) =>
+        schema
+          .trim()
+          .required(messages.confluenceCqlRequired ?? "Add a CQL query."),
+    });
+  }
+
   const object = Yup.object().shape({
     access_type: Yup.string().required("Access Type is required"),
     name: Yup.string().required("Connector Name is required"),
@@ -343,13 +428,11 @@ export function createConnectorValidationSchema(
     ...fieldSchemas,
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(
-      MIN_PRUNE_FREQ_HOURS,
-      "Prune frequency must be at least 0.083 hours (5 minutes)"
-    ),
-    refreshFreq: Yup.number().min(
-      MIN_REFRESH_FREQ_MINUTES,
-      "Refresh frequency must be at least 1 minute"
+    // Their ranges are checked by the fields themselves (InputNumberField).
+    pruneFreq: requiredIf(Yup.number(), messages.scheduleRequired?.pruneFreq),
+    refreshFreq: requiredIf(
+      Yup.number(),
+      messages.scheduleRequired?.refreshFreq
     ),
   });
 

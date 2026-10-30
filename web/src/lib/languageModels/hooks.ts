@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -16,12 +17,40 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "@/lib/languageModels/types";
 import type {
+  DefaultModel,
   CustomProviderOption,
   DefaultLlmReference,
   LlmDefaults,
   ModelConfigurationPage,
   ModelPaging,
 } from "@/lib/languageModels/types";
+
+export function useDecisionModel() {
+  const t = useTranslations("admin.decisionModels.decisionModel");
+  const { data, error, mutate } = useSWR<
+    {
+      model: DefaultModel | null;
+      providers: RawLLMProviderView[];
+      supported_providers: string[];
+    },
+    Error
+  >(SWR_KEYS.decisionModel, errorHandlingFetcher);
+  const openAiDecisionName = t("openAiDecisionsModelName");
+  const providers = useMemo(
+    () =>
+      data
+        ? enrichDecisionViews(data.providers, openAiDecisionName)
+        : undefined,
+    [data, openAiDecisionName]
+  );
+  return {
+    model: data?.model ?? null,
+    providers,
+    supportedProviders: data?.supported_providers ?? [],
+    error,
+    refetch: mutate,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Raw API shapes — local to this module, never exposed to consumers.
@@ -79,11 +108,13 @@ function hasUnloadedModels(provider: PageableProvider): boolean {
 function fetchModelConfigurationPage(
   providerId: number,
   agentId: number | undefined,
-  params: ModelPageParams
+  params: ModelPageParams,
+  flowType?: "chat"
 ): Promise<RawModelConfigurationPage> {
   const search = new URLSearchParams({ offset: String(params.offset) });
   if (params.query !== undefined) search.set("query", params.query);
   if (agentId !== undefined) search.set("persona_id", String(agentId));
+  if (flowType !== undefined) search.set("flow_type", flowType);
   return errorHandlingFetcher<RawModelConfigurationPage>(
     `${SWR_KEYS.llmProviderModels(providerId)}?${search}`
   );
@@ -130,7 +161,8 @@ function mergeModelConfigurationPage<P extends PageableProvider>(
 function useModelPaging<P extends PageableProvider>(
   raw: LLMProviderResponse<P> | undefined,
   mutate: KeyedMutator<LLMProviderResponse<P>>,
-  agentId?: number
+  agentId?: number,
+  flowType?: "chat"
 ): ModelPaging {
   // One page request at a time, later calls are dropped: a scroll burst or
   // keystroke storm must not fan out into parallel fetches.
@@ -148,7 +180,8 @@ function useModelPaging<P extends PageableProvider>(
         const page = await fetchModelConfigurationPage(
           providerId,
           agentId,
-          params
+          params,
+          flowType
         );
         await mutate(
           (current) =>
@@ -162,7 +195,7 @@ function useModelPaging<P extends PageableProvider>(
         setIsLoadingPage(false);
       }
     },
-    [agentId, mutate]
+    [agentId, flowType, mutate]
   );
 
   const truncatedProviders = useMemo(
@@ -183,10 +216,11 @@ function useModelPaging<P extends PageableProvider>(
             : providerIds
                 .map((id) => truncatedProviders.find((p) => p.id === id))
                 .find((p) => p !== undefined);
-        if (provider?.next_model_configuration_offset == null) return;
+        if (provider?.next_model_configuration_offset == null) return false;
         await applyModelPage(provider.id, {
           offset: provider.next_model_configuration_offset,
         });
+        return true;
       },
       search: async (query: string) => {
         const nextOffsets: Record<number, number | null> = {};
@@ -255,6 +289,26 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
   }));
 }
 
+function enrichDecisionViews(
+  providers: RawLLMProviderView[],
+  openAiDecisionName: string
+): LLMProviderView[] {
+  return providers.map((provider) => ({
+    ...provider,
+    model_configurations: provider.model_configurations.map((model) => {
+      const enriched = enrichModelConfiguration(model);
+      return provider.provider === LLMProviderName.OPENAI &&
+        model.name === "gpt-6-luna" &&
+        !model.custom_display_name
+        ? {
+            ...enriched,
+            effectiveDisplayName: openAiDecisionName,
+          }
+        : enriched;
+    }),
+  }));
+}
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -302,7 +356,7 @@ function useLanguageModelsRequest(agentId?: number) {
     () => (raw ? { ...raw, providers: enrichDescriptors(raw.providers) } : raw),
     [raw]
   );
-  const modelPaging = useModelPaging(raw, mutate, agentId);
+  const modelPaging = useModelPaging(raw, mutate, agentId, "chat");
 
   return {
     llmProviders: data?.providers,
@@ -383,6 +437,9 @@ export function useLanguageModelsForCurrentAgent() {
  * or need to display admin-only metadata. **Do not use in user-facing UI**
  * — use `useLanguageModels` instead.
  *
+ * Pass `revalidateIfStale` on pages whose providers other pages can delete
+ * (Voice removes linked Zoom providers), so a cached list refetches on mount.
+ *
  * @returns
  * - `llmProviders`: Provider views carrying only each provider's first page
  *    of models (see `next_model_configuration_offset`), or `undefined` while
@@ -397,7 +454,9 @@ export function useLanguageModelsForCurrentAgent() {
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
-export function useAdminLanguageModels() {
+export function useAdminLanguageModels({
+  revalidateIfStale = false,
+}: { revalidateIfStale?: boolean } = {}) {
   const {
     data: raw,
     error,
@@ -407,7 +466,7 @@ export function useAdminLanguageModels() {
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
-      revalidateIfStale: false,
+      revalidateIfStale,
       dedupingInterval: 60000,
     }
   );
@@ -466,7 +525,7 @@ export function useAdminLanguageModel(providerId: number | null) {
  * @param providerName - The provider's API endpoint name (e.g. "openai", "anthropic").
  *   Pass `null` to suppress the request.
  */
-export function useWellKnownLLMProvider(providerName: LLMProviderName) {
+export function useWellKnownLLMProvider(providerName: string) {
   const {
     data: raw,
     error,

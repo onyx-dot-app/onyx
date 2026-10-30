@@ -1,0 +1,44 @@
+---
+title: "Agents & Actions"
+description: "Manage the API keys your agents use to reach the wiki"
+icon: "robot"
+---
+
+**Agents & Actions** in the left sidebar is where you manage the keys that let agents read and update your wiki,
+and where you set up the launcher.
+
+## API keys
+
+Click **Create**, name the key for the device or agent that will hold it, and copy the `mcp_…` value.
+It is shown once — if you lose it, create another and revoke the old one.
+
+Keys are per-user, and an agent holding one acts **as you, with your permissions**.
+It reads exactly the pages you can read and writes exactly where you can write.
+A key minted by an admin is an admin key, so create keys from the account whose access the agent should actually have.
+
+**Revoke** takes effect immediately: any agent using that key stops working.
+
+Naming keys per device rather than reusing one is worth the small effort — it's the only way to revoke access for a lost
+laptop without breaking every other agent you've connected.
+
+## Connecting an agent
+
+The endpoint is your wiki's origin followed by `/api/mcp`. Setup for Claude Code, Cursor, Codex,
+and Onyx Craft — with the argument-order gotcha that trips up the Claude Code command — is on [Connect an
+Agent](/agent-wiki/automate/mcp), along with the full list of tools an agent gets.
+
+## Launcher
+
+**Set up launcher** installs the Run-Agent launcher for your platform — macOS, Linux,
+or Windows — so the wiki can hand a page directly to a local agent session.
+The page detects your platform and offers the matching installer.
+
+<Note>
+  The Windows build is unsigned today, so Windows may show a SmartScreen warning on first run.
+</Note>
+
+## What an agent can do once connected
+
+Search and read pages, edit and create them, move things, take part in comment threads, set update policies,
+and delete pages to [Trash](/agent-wiki/using/trash). Every write is an ordinary git commit attributed to you,
+visible in the page's history — so an agent's work is reviewable and reversible like anyone else's.

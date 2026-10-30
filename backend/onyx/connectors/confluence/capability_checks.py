@@ -22,7 +22,6 @@ API tokens and personal access tokens act as their user, so they need that
 user's Confluence permissions.
 """
 
-import re
 from collections.abc import Iterator
 from typing import Any, NoReturn, TypeVar
 from urllib.parse import urlparse
@@ -39,14 +38,16 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
-    CheckRowText,
+    CheckStep,
     CredentialCapability,
     OptionsFinding,
+    sign_in_timeout_text,
 )
 from onyx.connectors.confluence.config import (
     ConfluenceConnectorConfig,
     ConfluenceIndexingMode,
     get_indexing_mode,
+    parse_scope_keys,
 )
 from onyx.connectors.confluence.connector import (
     ATTACHMENT_EXPANSION_FIELDS,
@@ -86,21 +87,34 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
+from onyx.connectors.models import CheckRowText
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/confluence"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "Request timed out after {time_limit}. Unable to confirm access.\n"
+        "Re-run, or check the site's status."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Confluence")
 _SITE_FIELDS = frozenset({"wiki_base", "is_cloud"})
 _SPACE_FIELD = "space"
+_PAGE_ID_FIELD = "page_id"
+_CQL_QUERY_FIELD = "cql_query"
 
 # Pages sampled when a probe needs a page with attachments.
 _SAMPLE_PAGES = 5
 # Spaces per page when listing every visible space.
 _SPACE_LISTING_PAGE_SIZE = 250
+_PAGE_LISTING_PAGE_SIZE = 250
 _SAMPLE_ATTACHMENTS = 25
 # The attachment probe downloads one file; larger files only prove the listing.
 _MAX_PROBE_DOWNLOAD_BYTES = 5 * 1024 * 1024
@@ -115,11 +129,6 @@ _CONFLUENCE_USERNAME_KEY = "confluence_username"
 # Results of the CQL query whose content types the CQL check inspects.
 _CQL_SAMPLE_RESULTS = 5
 _PAGE_TYPE = "page"
-
-_LAST_MODIFIED_PATTERN = re.compile(r"\blastmodified\b", re.IGNORECASE)
-_ORDER_BY_PATTERN = re.compile(r"\border\s+by\b", re.IGNORECASE)
-# A quoted CQL value; a backslash escapes the next character.
-_QUOTED_PATTERN = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'")
 
 
 def _gateway(context: CapabilityCheckContext) -> ConfluenceSourceOperations:
@@ -335,6 +344,7 @@ _USER_LISTING_CHECK_IDS = ("confluence_user_listing", "confluence_user_listing_d
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     "confluence_spaces_visible": _SIGN_IN_CHECK_IDS,
     "confluence_space_listing": ("confluence_spaces_visible",),
+    "confluence_page_listing": ("confluence_spaces_visible",),
     "confluence_configured_space": ("confluence_spaces_visible",),
     "confluence_configured_page": ("confluence_spaces_visible",),
     "confluence_cql_query": ("confluence_spaces_visible",),
@@ -376,6 +386,9 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         discovery: bool = False,
         fails_when_unreachable: bool = False,
         row_id: str | None = None,
+        step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
+        reports_field: str | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -391,6 +404,9 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             discovery=discovery,
             fails_when_unreachable=fails_when_unreachable,
             depends_on=_DEPENDS_ON.get(check_id, ()),
+            step=step,
+            timeout_text=timeout_text,
+            reports_field=reports_field,
         )
 
 
@@ -410,6 +426,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                 row_id="confluence_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
                 display_name="Sign in to Confluence",
                 remediation=(
                     "Scoped API tokens work only with Confluence Cloud. Check the "
@@ -421,6 +438,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                 check_id="confluence_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
                 display_name="Sign in to Confluence",
                 remediation=(
                     "Check the site URL and the Cloud setting. For an API token, "
@@ -505,7 +523,13 @@ class _SiteAuthCheck(_ConfluenceCheck):
                     ),
                 ),
             )
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"{config.wiki_base} did not answer the sign-in in time: {e}",
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot connect to {config.wiki_base}. Check the site URL.",
                 summary=f"Cannot reach {urlparse(config.wiki_base).hostname}",
@@ -624,6 +648,11 @@ class _SpaceListingCheck(_ConfluenceCheck):
             display_name="List spaces",
             remediation="Give the token's user view permission on the spaces to index.",
             discovery=True,
+            step=CheckStep(
+                step_of="confluence_spaces_visible",
+                running_summary="Spaces visible, counting…",
+                unfinished_caveat="Could not count every space.",
+            ),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -648,6 +677,46 @@ class _SpaceListingCheck(_ConfluenceCheck):
         return CheckOutput(summary=f"{count} spaces visible", findings=[finding])
 
 
+class _PageListingCheck(_ConfluenceCheck):
+    """Lists the visible pages, as options for the page field. The listing
+    stops at the finding's option cap, so a large site reads as "N+"."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            check_id="confluence_page_listing",
+            display_name="List pages",
+            remediation="Give the token's user view permission on the pages to index.",
+            discovery=True,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        try:
+            finding: OptionsFinding = bounded_options(
+                _gateway(context).search_pages(
+                    variant=ConfluenceSearchVariant.SLIM,
+                    cql="type=page",
+                    expand="space",
+                    limit=_PAGE_LISTING_PAGE_SIZE,
+                ),
+                key=CheckFindingKey.VISIBLE_PAGES,
+                field_name=_PAGE_ID_FIELD,
+                value=lambda page: str(page["id"]),
+                label=lambda page: page.get("title") or str(page["id"]),
+                detail=lambda page: (page.get("space") or {}).get("key"),
+            )
+        except HTTPError as e:
+            _raise_for_http_error(
+                e,
+                denied="The credential cannot search Confluence pages.",
+                denied_row=CheckRowText(
+                    summary="No permission to list pages",
+                    description="The account cannot search pages. (HTTP 403)",
+                ),
+            )
+        count = f"{len(finding.options):,}{'+' if finding.truncated else ''}"
+        return CheckOutput(summary=f"{count} pages visible", findings=[finding])
+
+
 class _ConfiguredSpaceCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
@@ -660,47 +729,56 @@ class _ConfiguredSpaceCheck(_ConfluenceCheck):
         )
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
-        return _mode(form_state.config) == ConfluenceIndexingMode.SPACE
+        # Spaces count in PAGE mode too: the scope is their union with pages.
+        return _mode(form_state.config) in (
+            ConfluenceIndexingMode.SPACE,
+            ConfluenceIndexingMode.PAGE,
+        ) and bool(parse_scope_keys(form_state.config.space))
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
-        space_key = config.space.strip()
-        try:
-            space = _gateway(context).get_space(space_key=space_key)
-        except ConfluenceSpaceNotFoundError as e:
-            raise ConnectorValidationError(
-                f"No space with the key `{space_key}` is visible to this "
-                "credential. Check the key (keys are case sensitive), or give the "
-                "token's user view permission on the space.",
-                summary="No selected space found",
-                description=(
-                    f"{space_key} is not visible to this account. (HTTP 404)\n"
-                    "Requires view access to the space. Keys are case sensitive."
-                ),
-            ) from e
-        except HTTPError as e:
-            _raise_for_http_error(
-                e,
-                denied=f"The credential cannot read the space `{space_key}`",
-                denied_row=CheckRowText(
-                    summary=f"No permission to read {space_key}",
+        names: list[str] = []
+        # A config-less run has no keys and looks up the blank one, as before.
+        for space_key in parse_scope_keys(config.space) or (config.space.strip(),):
+            try:
+                space = _gateway(context).get_space(space_key=space_key)
+            except ConfluenceSpaceNotFoundError as e:
+                raise ConnectorValidationError(
+                    f"No space with the key `{space_key}` is visible to this "
+                    "credential. Check the key (keys are case sensitive), or give the "
+                    "token's user view permission on the space.",
+                    summary="No selected space found",
                     description=(
-                        "The account cannot read the selected space. (HTTP 403)\n"
-                        "Give the account view permission on the space."
+                        f"{space_key} is not visible to this account. (HTTP 404)\n"
+                        "Requires view access to the space. Keys are case sensitive."
                     ),
-                ),
-            )
-        except ConfluenceRetriesExhaustedError as e:
-            raise InconclusiveValidationError(
-                f"Confluence did not return the space `{space_key}`: it refused "
-                "or rate limited every try. Run the checks again.",
-                summary=_REFUSED_ROW.summary,
-                description=(
-                    f"{_REFUSED_ROW.description}\n"
-                    "Repeated refusals can mean no access to the space."
-                ),
-            ) from e
-        return CheckOutput(summary=f"Found space {space.get('name') or space_key}")
+                ) from e
+            except HTTPError as e:
+                _raise_for_http_error(
+                    e,
+                    denied=f"The credential cannot read the space `{space_key}`",
+                    denied_row=CheckRowText(
+                        summary=f"No permission to read {space_key}",
+                        description=(
+                            "The account cannot read the selected space. (HTTP 403)\n"
+                            "Give the account view permission on the space."
+                        ),
+                    ),
+                )
+            except ConfluenceRetriesExhaustedError as e:
+                raise InconclusiveValidationError(
+                    f"Confluence did not return the space `{space_key}`: it refused "
+                    "or rate limited every try. Run the checks again.",
+                    summary=_REFUSED_ROW.summary,
+                    description=(
+                        f"{_REFUSED_ROW.description}\n"
+                        "Repeated refusals can mean no access to the space."
+                    ),
+                ) from e
+            names.append(str(space.get("name") or space_key))
+        if len(names) == 1:
+            return CheckOutput(summary=f"Found space {names[0]}")
+        return CheckOutput(summary=f"Found {len(names)} spaces")
 
 
 class _ConfiguredPageCheck(_ConfluenceCheck):
@@ -719,14 +797,14 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
-        page_id = config.page_id.strip()
-        if not page_id.isdigit():
-            raise ConnectorValidationError(
-                f"The page ID `{page_id}` is not a number. Use the number after "
-                "/pages/ in the page URL, e.g. `131368`.",
-                summary=f"No page with ID {page_id}",
-                description="Enter the number from the page URL, e.g. 131368.",
-            )
+        keys = parse_scope_keys(config.page_id) or (config.page_id.strip(),)
+        titles = [self._find_page(context, page_id) for page_id in keys]
+        if len(titles) == 1:
+            return CheckOutput(summary=f"Found page {titles[0]}")
+        return CheckOutput(summary=f"Found {len(titles)} pages")
+
+    def _find_page(self, context: CapabilityCheckContext, page_id: str) -> str:
+        """The page's title. Raises when the account cannot see it."""
         try:
             page = next(
                 _gateway(context).search_pages(
@@ -770,33 +848,7 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
                     "Use the number after /pages/ in the page URL."
                 ),
             )
-        return CheckOutput(summary=f"Found page {page.get('title') or page_id}")
-
-
-def _validate_cql_shape(cql: str) -> None:
-    """Rejects a lastModified filter and ORDER BY outside quoted values. Onyx
-    adds both to the query, and the two copies conflict."""
-    unquoted = _QUOTED_PATTERN.sub('""', cql)
-    if _LAST_MODIFIED_PATTERN.search(unquoted):
-        raise ConnectorValidationError(
-            "Remove the lastModified filter from the CQL query. Onyx adds its "
-            "own lastModified filter on each poll, and the two conflict.",
-            summary="Unsupported filter: lastModified",
-            description=(
-                "The connector adds its own lastModified filter on each poll, "
-                "and the two conflict."
-            ),
-        )
-    if _ORDER_BY_PATTERN.search(unquoted):
-        raise ConnectorValidationError(
-            "Remove ORDER BY from the CQL query. Onyx adds filters after the "
-            "query and orders the results itself.",
-            summary="Unsupported clause: ORDER BY",
-            description=(
-                "The connector adds filters after the query and sorts the "
-                "results itself."
-            ),
-        )
+        return str(page.get("title") or page_id)
 
 
 class _CqlQueryCheck(_ConfluenceCheck):
@@ -809,6 +861,7 @@ class _CqlQueryCheck(_ConfluenceCheck):
                 "AND. Use no lastModified filter and no ORDER BY. Test the query "
                 "in Confluence search."
             ),
+            reports_field=_CQL_QUERY_FIELD,
         )
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
@@ -816,7 +869,6 @@ class _CqlQueryCheck(_ConfluenceCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
-        _validate_cql_shape((config.cql_query or "").strip())
         try:
             # The query the indexing run sends, with its label filter.
             results = _take(
@@ -1221,7 +1273,16 @@ class _UserNamesCheck(_ConfluenceCheck):
                 summary=_REFUSED_ROW.summary,
                 description=_REFUSED_ROW.description,
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"{config.wiki_base} did not answer the user lookup in time: {e}",
+                summary="Timed out",
+                description=(
+                    "Confluence did not answer the user lookup in time.\n"
+                    "Re-run the checks."
+                ),
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot connect to {config.wiki_base} to read user details.",
                 summary=f"Cannot reach {urlparse(config.wiki_base).hostname}",
@@ -1252,6 +1313,7 @@ def build_confluence_indexing_checks() -> list[CapabilityCheck]:
         _SiteAuthCheck(scoped=True),
         _SpacesVisibleCheck(),
         _SpaceListingCheck(),
+        _PageListingCheck(),
         _ConfiguredSpaceCheck(),
         _ConfiguredPageCheck(),
         _CqlQueryCheck(),
@@ -1309,8 +1371,12 @@ def _probe_space_key(
 ) -> str:
     """The configured space for a space scope, else the first visible space.
     Permission sync reads the permissions of every visible space."""
-    if _mode(config) == ConfluenceIndexingMode.SPACE:
-        return config.space.strip()
+    spaces = parse_scope_keys(config.space)
+    if spaces and _mode(config) in (
+        ConfluenceIndexingMode.SPACE,
+        ConfluenceIndexingMode.PAGE,
+    ):
+        return spaces[0]
     try:
         space = next(_gateway(context).list_spaces(limit=1), None)
     except HTTPError as e:

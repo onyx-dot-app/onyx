@@ -540,12 +540,16 @@ def get_connector_credential_pairs_for_user_parallel(
 
 
 def get_connector_credential_pairs(
-    db_session: Session, ids: list[int] | None = None
+    db_session: Session,
+    ids: list[int] | None = None,
+    eager_load_connector: bool = False,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
 
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+    if eager_load_connector:
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.connector))
 
     return list(db_session.scalars(stmt).all())
 
@@ -761,6 +765,19 @@ def verify_user_can_edit_connector(
     )
 
 
+def get_cc_pairs_in_repeated_error_state(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """Every pair flagged in repeated error state, whatever its status."""
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair)
+            .where(ConnectorCredentialPair.in_repeated_error_state.is_(True))
+            .options(selectinload(ConnectorCredentialPair.connector))
+        ).all()
+    )
+
+
 def get_connector_credential_pair_from_id(
     db_session: Session,
     cc_pair_id: int,
@@ -777,6 +794,34 @@ def get_connector_credential_pair_from_id(
 
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def lock_connector_credential_pair_row(
+    db_session: Session, cc_pair_id: int
+) -> ConnectorCredentialPair | None:
+    """Row-locks the pair (FOR UPDATE) and reloads it. The lock holds until the
+    caller commits or rolls back.
+
+    Lock order: the Redis attempt-creation lock (when taken), the pair's open
+    doc permission sync attempt (a pause takes it first), then this row, then
+    the pair's index attempt rows and its queued permission sync attempts.
+    Attempt creation and status changes that stop indexing (pause, delete)
+    take this lock, so they run one after the other. A doc permission sync
+    attempt is created under a key share lock on this row, so it waits for
+    them too. Deletion's final cleanup deletes the pair's attempt rows before
+    this row, without this lock.
+
+    Never wait under this lock for a running sync's attempt row. The sync's
+    writes hold that row while they wait for this one: a group sync write
+    through its foreign key to this row, a doc sync write through another
+    writer that needs this row."""
+    return db_session.execute(
+        select(ConnectorCredentialPair)
+        .where(ConnectorCredentialPair.id == cc_pair_id)
+        .with_for_update()
+        # Read the locked row, not a stale copy from the identity map.
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
 
 
 def get_connector_credential_pairs_for_source(

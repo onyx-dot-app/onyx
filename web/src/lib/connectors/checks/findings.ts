@@ -3,6 +3,7 @@ import type {
   CheckFinding,
   CheckFindingKey,
   FindingOption,
+  OptionsFinding,
 } from "@/lib/connectors/checks/types";
 import { configFields } from "@/lib/connectors/checks/formState";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
@@ -13,23 +14,35 @@ interface WithFindings {
   findings: CheckFinding[];
 }
 
-/** The first non-empty options the checks listed under `key`, else empty. */
-export function findingOptions(
+/**
+ * The first non-empty listing the checks found under `key`, else null. With
+ * `keepEmpty`, an empty listing counts too: it found nothing.
+ */
+export function optionsFinding(
   checks: readonly WithFindings[],
-  key: CheckFindingKey
-): FindingOption[] {
+  key: CheckFindingKey,
+  keepEmpty: boolean = false
+): OptionsFinding | null {
   for (const check of checks) {
     for (const finding of check.findings) {
       if (
         finding.type === "options" &&
         finding.key === key &&
-        finding.options.length > 0
+        (keepEmpty || finding.options.length > 0)
       ) {
-        return finding.options;
+        return finding;
       }
     }
   }
-  return [];
+  return null;
+}
+
+/** The first non-empty options the checks listed under `key`, else empty. */
+export function findingOptions(
+  checks: readonly WithFindings[],
+  key: CheckFindingKey
+): FindingOption[] {
+  return optionsFinding(checks, key)?.options ?? [];
 }
 
 /** The stored reports a form or page may read listings from. */

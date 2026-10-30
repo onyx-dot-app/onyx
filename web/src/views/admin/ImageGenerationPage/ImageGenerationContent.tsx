@@ -67,6 +67,12 @@ export default function ImageGenerationContent() {
     })).filter((g) => g.providers.length > 0);
   }, [connectedProviderIds]);
 
+  const connectedDeprecatedProviders = useMemo(() => {
+    return IMAGE_PROVIDER_GROUPS.flatMap((group) => group.providers).filter(
+      (p) => p.deprecated && connectedProviderIds.has(p.image_provider_id)
+    );
+  }, [connectedProviderIds]);
+
   const defaultConfig = useMemo(() => {
     return configs.find((c) => c.is_default);
   }, [configs]);
@@ -94,9 +100,6 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await setDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(
-          t("setDefaultSuccess.message", { title: provider.title })
-        );
         refetchConfigs();
       } catch (error) {
         toast.error(
@@ -113,7 +116,6 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await unsetDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(t("deselectSuccess.message", { title: provider.title }));
         refetchConfigs();
       } catch (error) {
         toast.error(
@@ -190,7 +192,7 @@ export default function ImageGenerationContent() {
       const firstModel = firstGroup?.providers[0];
       if (firstModel) setReplacementProviderId(firstModel.image_provider_id);
     }
-  }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disconnectProvider]);
 
   if (configError) {
     return <div className="text-error">{t("loadError.message")}</div>;
@@ -209,6 +211,17 @@ export default function ImageGenerationContent() {
         {connectedProviderIds.size === 0 && (
           <MessageCard variant="info" title={t("emptyState.title")} />
         )}
+
+        {connectedDeprecatedProviders.map((provider) => (
+          <MessageCard
+            key={provider.image_provider_id}
+            variant="warning"
+            title={t("retiredModelWarning.title", { title: provider.title })}
+            description={t("retiredModelWarning.description", {
+              title: provider.title,
+            })}
+          />
+        ))}
 
         {/* Provider Groups */}
         {visibleGroups.map((group) => (
