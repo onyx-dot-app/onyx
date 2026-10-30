@@ -42,13 +42,37 @@
   --sidebar-tab-actions-display: none;
 }
 
-/* The label is `ContentSm`'s title node — the one child of the content row
-   that is not the icon container.
+/* A string label's row. It reproduces the `ContentAction` > `ContentSm`
+   layout the tab used before: the label and icon start-aligned with a 2px
+   gap, and the truncation spacer 1rem after them. */
+.opal-sidebar-tab__row {
+  @apply flex flex-row w-full items-stretch gap-4;
+}
+
+.opal-sidebar-tab__content {
+  @apply flex flex-row flex-1 min-w-0 self-start items-start gap-0.5;
+}
+
+.opal-sidebar-tab__icon {
+  @apply flex shrink-0 items-center justify-center p-0.5;
+  min-height: 1.25rem;
+}
+
+.opal-sidebar-tab__icon-svg {
+  @apply size-4;
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-sidebar-tab__spacer {
+  @apply flex shrink-0 items-stretch;
+}
+
+/* The label is the content's one child that is not the icon.
 
    `visibility` (not `opacity` alone) keeps the folded label out of the
    accessibility tree and out of the tab order, so a screen reader never
    announces a label the sidebar is hiding. */
-.opal-sidebar-tab .opal-content-sm > :not(.opal-content-sm-icon-container) {
+.opal-sidebar-tab__content > :not(.opal-sidebar-tab__icon) {
   opacity: var(--sidebar-tab-label-opacity);
   visibility: var(--sidebar-tab-label-visibility);
   text-overflow: var(--sidebar-tab-label-overflow);

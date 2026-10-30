@@ -12,7 +12,7 @@ div.opal-sidebar-tab      <- folded styling hook (see styles.css)
        └─ Interactive.Container  <- rounding, height, width
             ├─ Link | button?    (absolute overlay — the click target; also the tooltip trigger)
             ├─ rightChildren?    (absolute, above the overlay for inline actions)
-            └─ ContentAction     (icon + title + truncation spacer)
+            └─ content row       (icon + title + truncation spacer; see styles.css)
 ```
 
 - **`sidebar-heavy`** (default) — muted when unselected (text-03/text-02), bold when selected (text-04/text-03)

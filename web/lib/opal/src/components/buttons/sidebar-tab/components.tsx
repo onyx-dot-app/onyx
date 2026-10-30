@@ -5,9 +5,8 @@ import React from "react";
 import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
-import { ContentAction } from "@opal/layouts";
 import { useSidebarFolded } from "@opal/layouts/sidebar/context";
-import { Tooltip } from "@opal/components";
+import { Text, Tooltip } from "@opal/components";
 import { cn } from "@opal/utils";
 import Link from "next/link";
 
@@ -227,17 +226,28 @@ function SidebarTab({
           )}
 
           {label !== undefined ? (
-            <ContentAction
-              icon={Icon ?? undefined}
-              title={label}
-              sizePreset="main-ui"
-              variant="body"
-              color="interactive"
-              width="full"
-              padding={0}
-              rightChildren={truncationSpacer}
-              titleMaxLines={1}
-            />
+            <div className="opal-sidebar-tab__row">
+              <div className="opal-sidebar-tab__content">
+                {Icon && (
+                  <div className="opal-sidebar-tab__icon">
+                    <Icon className="opal-sidebar-tab__icon-svg" />
+                  </div>
+                )}
+                <Text
+                  font="main-ui-body"
+                  color="inherit"
+                  maxLines={1}
+                  title={label}
+                >
+                  {label}
+                </Text>
+              </div>
+              {truncationSpacer && (
+                <div className="opal-sidebar-tab__spacer">
+                  {truncationSpacer}
+                </div>
+              )}
+            </div>
           ) : (
             <div
               id={labelId}
