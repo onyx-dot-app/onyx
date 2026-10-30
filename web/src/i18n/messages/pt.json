@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "Usar documento de metadados do cliente",
-        "description": "Quando ativado, o provedor busca o documento de metadados do cliente do {appName} pela Internet pública. Desative isto se esta instância do {appName} for privada. O {appName} então usa o registro automático de cliente.",
-        "turnOff": "Desativar documento de metadados do cliente"
+        "description": "Quando ativado, o provedor busca o documento de metadados do cliente do {appName} pela Internet pública. Desative isto se esta instância do {appName} for privada. O {appName} então usa o registro automático de cliente."
       },
       "discovery": {
         "checking": "Verificando a configuração automática…",
@@ -1115,18 +1114,6 @@
         "openapi": "Adicionar plugin OpenAPI"
       },
       "catalog": {
-        "slack": {
-          "summary": "Pesquise conversas e envie mensagens",
-          "description": "Pesquise conversas e envie mensagens. Requer um aplicativo Slack registrado."
-        },
-        "hubspot": {
-          "summary": "Trabalhe com contatos e negócios",
-          "description": "Trabalhe com contatos e negócios. Requer um conector MCP do HubSpot."
-        },
-        "asana": {
-          "summary": "Gerencie tarefas e projetos",
-          "description": "Gerencie tarefas e projetos. Requer um cliente OAuth registrado."
-        },
         "linear": {
           "summary": "Gerencie tarefas, projetos e equipes",
           "description": "Gerencie tarefas, projetos e equipes."

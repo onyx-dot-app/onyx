@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "Client-Metadatendokument verwenden",
-        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung.",
-        "turnOff": "Client-Metadatendokument deaktivieren"
+        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung."
       },
       "discovery": {
         "checking": "Automatische Einrichtung wird geprüft…",
@@ -1115,18 +1114,6 @@
         "openapi": "OpenAPI-Plugin hinzufügen"
       },
       "catalog": {
-        "slack": {
-          "summary": "Unterhaltungen durchsuchen und Nachrichten senden",
-          "description": "Unterhaltungen durchsuchen und Nachrichten senden. Erfordert eine registrierte Slack-App."
-        },
-        "hubspot": {
-          "summary": "Mit Kontakten und Deals arbeiten",
-          "description": "Mit Kontakten und Deals arbeiten. Erfordert einen HubSpot-MCP-Konnektor."
-        },
-        "asana": {
-          "summary": "Aufgaben und Projekte verwalten",
-          "description": "Aufgaben und Projekte verwalten. Erfordert einen registrierten OAuth-Client."
-        },
         "linear": {
           "summary": "Issues, Projekte und Teams verwalten",
           "description": "Issues, Projekte und Teams verwalten."

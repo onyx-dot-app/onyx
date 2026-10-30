@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "使用客户端元数据文档",
-        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。",
-        "turnOff": "关闭客户端元数据文档"
+        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。"
       },
       "discovery": {
         "checking": "正在检查自动设置…",
@@ -1115,18 +1114,6 @@
         "openapi": "添加 OpenAPI 插件"
       },
       "catalog": {
-        "slack": {
-          "summary": "搜索对话并发送消息",
-          "description": "搜索对话并发送消息。需要已注册的 Slack 应用。"
-        },
-        "hubspot": {
-          "summary": "管理联系人和交易",
-          "description": "管理联系人和交易。需要 HubSpot MCP 连接器。"
-        },
-        "asana": {
-          "summary": "管理任务和项目",
-          "description": "管理任务和项目。需要已注册的 OAuth 客户端。"
-        },
         "linear": {
           "summary": "管理问题、项目和团队",
           "description": "管理问题、项目和团队。"

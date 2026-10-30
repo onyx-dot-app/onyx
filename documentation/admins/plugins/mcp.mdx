@@ -26,7 +26,7 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
   <Step title="Open the MCP catalog">
     Go to **Admin Panel → Plugins**, click **Add**, then select **MCP**.
 
-    <img className="rounded-image" src="/assets/admins/plugins/add_mcp_catalog.webp" alt="The MCP catalog with Slack, HubSpot, Asana, Linear, Notion, Sentry, Atlassian, and Add custom MCP server"/>
+    <img className="rounded-image" src="/assets/admins/plugins/add_mcp_catalog.webp" alt="The MCP catalog with Linear, Notion, Sentry, Atlassian, and Add custom MCP server"/>
 
     Select a catalog entry to fill in the server name and URL for that vendor.
     Select **Add custom MCP server** for any other server.
@@ -86,7 +86,7 @@ OAuth is the best choice for most hosted vendor servers, such as Linear, Notion,
 | --- | --- |
 | **Set up automatically** | Onyx registers an OAuth client with the server's published settings. Use this when the server supports dynamic client registration. |
 | **Use your own OAuth client** | Enter a client ID from your provider. Add a client secret only if the provider requires it. |
-| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. Turn this off if your Onyx instance is private. Onyx then uses automatic client registration. |
+| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. If the provider cannot fetch the document, Onyx uses automatic client registration. |
 
 If you create your own OAuth client, set its redirect URI to:
 

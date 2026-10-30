@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "클라이언트 메타데이터 문서 사용",
-        "description": "켜면 공급자가 공용 인터넷을 통해 {appName}의 클라이언트 메타데이터 문서를 가져옵니다. 이 {appName} 인스턴스가 비공개이면 끄세요. 그러면 {appName}은(는) 자동 클라이언트 등록을 사용합니다.",
-        "turnOff": "클라이언트 메타데이터 문서 끄기"
+        "description": "켜면 공급자가 공용 인터넷을 통해 {appName}의 클라이언트 메타데이터 문서를 가져옵니다. 이 {appName} 인스턴스가 비공개이면 끄세요. 그러면 {appName}은(는) 자동 클라이언트 등록을 사용합니다."
       },
       "discovery": {
         "checking": "자동 설정 확인 중…",
@@ -1115,18 +1114,6 @@
         "openapi": "OpenAPI 플러그인 추가"
       },
       "catalog": {
-        "slack": {
-          "summary": "대화를 검색하고 메시지를 보냅니다",
-          "description": "대화를 검색하고 메시지를 보냅니다. 등록된 Slack 앱이 필요합니다."
-        },
-        "hubspot": {
-          "summary": "연락처와 거래를 관리합니다",
-          "description": "연락처와 거래를 관리합니다. HubSpot MCP 커넥터가 필요합니다."
-        },
-        "asana": {
-          "summary": "작업과 프로젝트를 관리합니다",
-          "description": "작업과 프로젝트를 관리합니다. 등록된 OAuth 클라이언트가 필요합니다."
-        },
         "linear": {
           "summary": "이슈, 프로젝트, 팀을 관리합니다",
           "description": "이슈, 프로젝트, 팀을 관리합니다."

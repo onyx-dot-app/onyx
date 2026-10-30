@@ -111,7 +111,8 @@ the provider must fetch. A deployment that the provider cannot reach must turn
 CIMD off for that server, and the SDK then uses DCR.
 `server/features/mcp/oauth_flow.py:validate_client_metadata_authorization`
 pre-fetches the authorization URL, so that a provider that cannot read the
-document fails in the Onyx form with that advice. The redirect URI and the
+document fails with `client_metadata_rejected`. The setup page then turns CIMD
+off and retries with DCR. The redirect URI and the
 metadata URL both come from the backend `WEB_DOMAIN`. If `WEB_DOMAIN` does not
 match the origin that users open, the provider rejects the callback.
 

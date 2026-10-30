@@ -336,6 +336,15 @@ export default function MCPAuthenticationPage({
       });
       await onComplete();
     } catch (error) {
+      if (
+        error instanceof MCPOAuthError &&
+        error.reason === "client_metadata_rejected" &&
+        values.oauth_cimd_enabled
+      ) {
+        const registrationValues = { ...values, oauth_cimd_enabled: false };
+        await helpers.setValues(registrationValues, false);
+        return handleSubmit(registrationValues, helpers);
+      }
       if (error instanceof MCPAuthValidationError) {
         helpers.setFieldError("oauth_additional_auth_params", error.message);
       }
@@ -557,19 +566,6 @@ export default function MCPAuthenticationPage({
                           }}
                         >
                           {t("mcpAuthModal.discovery.useOwnClient")}
-                        </Button>
-                      )}
-                      {connectionError.reason ===
-                        "client_metadata_rejected" && (
-                        <Button
-                          type="button"
-                          prominence="secondary"
-                          onClick={() => {
-                            setFieldValue("oauth_cimd_enabled", false);
-                            setConnectionError(null);
-                          }}
-                        >
-                          {t("mcpAuthModal.cimd.turnOff")}
                         </Button>
                       )}
                       {connectionError.reason === "discovery_failed" && (

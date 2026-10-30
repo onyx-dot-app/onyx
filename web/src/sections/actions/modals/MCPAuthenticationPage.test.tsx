@@ -1102,17 +1102,33 @@ test("registration failures show a clear recovery action instead of provider HTM
   ).toBeVisible();
 });
 
-test("rejected client metadata documents offer to turn off the switch", async () => {
+test("rejected client metadata documents fall back to automatic registration", async () => {
   const configuredServer: MCPServer = {
     ...server,
     admin_credentials: {},
   };
-  mockNetwork(configuredServer, "Invalid client_id", false, {
-    oauthReason: "client_metadata_rejected",
+  const network = mockNetwork(configuredServer);
+  const fallback = network.getMockImplementation();
+  network.mockImplementation(async (input, init) => {
+    if (
+      String(input) === "/api/admin/mcp/setup" &&
+      JSON.parse(String(init?.body)).oauth_cimd_enabled
+    ) {
+      return new Response(
+        JSON.stringify({
+          detail: "Invalid client_id",
+          oauth_error: "client_metadata_rejected",
+        }),
+        { status: 400 }
+      );
+    }
+    if (!fallback) throw new Error("Missing network fixture");
+    return fallback(input, init);
   });
+  const onPublished = jest.fn();
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} onPublished={jest.fn()} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByRole("radio", { name: copy.oauthSetup.automatic.label });
@@ -1125,14 +1141,11 @@ test("rejected client metadata documents offer to turn off the switch", async ()
       name: copy.submitButton.label,
     })
   );
-  const recovery = await screen.findByRole("button", {
-    name: copy.cimd.turnOff,
-  });
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    copy.errors.clientMetadataRejected
-  );
-  await user.click(recovery);
-  expect(cimdSwitch).not.toBeChecked();
+  await waitFor(() => expect(onPublished).toHaveBeenCalled());
+  const submissions = network.mock.calls
+    .filter(([url]) => url === "/api/admin/mcp/setup")
+    .map(([, init]) => JSON.parse(String(init?.body)).oauth_cimd_enabled);
+  expect(submissions).toEqual([true, false]);
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
