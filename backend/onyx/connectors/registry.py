@@ -13,6 +13,7 @@ from onyx.connectors.box.config import BoxConnectorConfig
 from onyx.connectors.braintrust.config import BraintrustConnectorConfig
 from onyx.connectors.canvas.config import CanvasConnectorConfig
 from onyx.connectors.clickup.config import ClickupConnectorConfig
+from onyx.connectors.clickup_docs.config import ClickupDocsConnectorConfig
 from onyx.connectors.coda.config import CodaConnectorConfig
 from onyx.connectors.confluence.config import ConfluenceConnectorConfig
 from onyx.connectors.connector_config import ConnectorConfig
@@ -249,6 +250,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.clickup.connector",
         class_name="ClickupConnector",
         config_class=ClickupConnectorConfig,
+    ),
+    DocumentSource.CLICKUP_DOCS: ConnectorMapping(
+        module_path="onyx.connectors.clickup_docs.connector",
+        class_name="ClickupDocsConnector",
+        config_class=ClickupDocsConnectorConfig,
     ),
     DocumentSource.MEDIAWIKI: ConnectorMapping(
         module_path="onyx.connectors.mediawiki.wiki",
