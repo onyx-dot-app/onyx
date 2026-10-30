@@ -1,0 +1,249 @@
+"""Who Azure RBAC lets read every file of a container.
+
+A role assignment at the container scope or above grants read to all files
+when its role's data actions include the blob read action and its not-data
+actions do not take it away. ACLs are not checked for such a principal. Deny
+assignments override role assignments and, to fail closed, ACL entries too.
+Assignments with an ABAC condition are left out and reported, since Onyx cannot
+evaluate the condition.
+"""
+
+import re
+from collections.abc import Iterable
+
+from pydantic import BaseModel
+
+from ee.onyx.external_permissions.azure_datalake.principals import (
+    EMPTY_SET,
+    EntraDirectory,
+    PrincipalSet,
+    PrincipalTerm,
+    exclude_from_set,
+    group_term,
+    intersect,
+    simplify,
+    union,
+    user_term,
+)
+from onyx.connectors.azure_datalake.models import (
+    AzureDenyAssignment,
+    AzurePrincipal,
+    AzurePrincipalType,
+    AzureRoleAssignment,
+    AzureRoleDefinition,
+    AzureRolePermission,
+    AzureStorageAccountResource,
+)
+from onyx.connectors.azure_datalake.source_operations import (
+    AzureDataLakeSourceOperations,
+)
+from onyx.connectors.exceptions import ConnectorValidationError
+
+BLOB_READ_DATA_ACTION = (
+    "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"
+)
+# A deny assignment's principal that stands for every principal.
+_ALL_PRINCIPALS_ID = "00000000-0000-0000-0000-000000000000"
+_MAX_SUBSCRIPTION_PAGES = 1_000
+_MAX_STORAGE_ACCOUNT_PAGES = 1_000
+# A deny principal without a type could be either, so it denies both.
+_USER_TYPES = (AzurePrincipalType.USER, None)
+_GROUP_TYPES = (AzurePrincipalType.GROUP, None)
+
+
+class ReadingAssignments(BaseModel):
+    # Assignments of a role that reads blobs, without a condition.
+    assignments: list[AzureRoleAssignment]
+    # Assignments of a reading role that carry a condition. Onyx cannot
+    # evaluate the condition, so they grant nothing.
+    conditioned_assignment_ids: list[str]
+
+
+class RbacReaders(BaseModel):
+    principals: PrincipalSet
+    # Assignments of a reading role that carry a condition. They can hide real
+    # access, so the checks report them.
+    conditioned_assignment_ids: list[str]
+    # Deny assignments that block blob reads under the scope. Already applied
+    # to ``principals``; the ACL readers need them too.
+    read_denies: list[AzureDenyAssignment]
+
+
+def _pattern_matches(pattern: str, action: str) -> bool:
+    regex: str = ".*".join(re.escape(part) for part in pattern.split("*"))
+    return re.fullmatch(regex, action, flags=re.IGNORECASE) is not None
+
+
+def _matches_any(patterns: Iterable[str], action: str) -> bool:
+    return any(_pattern_matches(pattern, action) for pattern in patterns)
+
+
+def permission_grants(permission: AzureRolePermission, data_action: str) -> bool:
+    return _matches_any(permission.data_actions, data_action) and not _matches_any(
+        permission.not_data_actions, data_action
+    )
+
+
+def role_reads_blobs(role: AzureRoleDefinition) -> bool:
+    """Azure takes the union of a role's permission blocks."""
+    return any(
+        permission_grants(permission, BLOB_READ_DATA_ACTION)
+        for permission in role.permissions
+    )
+
+
+def container_scope(account: AzureStorageAccountResource, container_name: str) -> str:
+    return f"{account.id}/blobServices/default/containers/{container_name}"
+
+
+def _find_in_subscription(
+    ops: AzureDataLakeSourceOperations, subscription_id: str, account_name: str
+) -> AzureStorageAccountResource | None:
+    account_link: str | None = None
+    for _ in range(_MAX_STORAGE_ACCOUNT_PAGES):
+        accounts = ops.list_storage_accounts(
+            subscription_id=subscription_id, next_link=account_link
+        )
+        for account in accounts.accounts:
+            if account.name.lower() == account_name.lower():
+                return account
+        account_link = accounts.next_link
+        if account_link is None:
+            return None
+    raise RuntimeError(
+        f"The storage accounts of subscription {subscription_id} passed "
+        f"{_MAX_STORAGE_ACCOUNT_PAGES} pages"
+    )
+
+
+def find_storage_account(
+    ops: AzureDataLakeSourceOperations, account_name: str
+) -> AzureStorageAccountResource:
+    """The account's ARM resource, from the subscriptions the app can read."""
+    subscription_link: str | None = None
+    for _ in range(_MAX_SUBSCRIPTION_PAGES):
+        subscriptions = ops.list_subscriptions(next_link=subscription_link)
+        for subscription in subscriptions.subscriptions:
+            if account := _find_in_subscription(
+                ops, subscription.subscription_id, account_name
+            ):
+                return account
+        subscription_link = subscriptions.next_link
+        if subscription_link is None:
+            raise ConnectorValidationError(
+                f"The app registration cannot see the storage account "
+                f"'{account_name}' in Azure Resource Manager. Give it the Reader "
+                "role on the storage account."
+            )
+    raise RuntimeError(f"The subscriptions passed {_MAX_SUBSCRIPTION_PAGES} pages")
+
+
+def _principal_term(principal: AzurePrincipal) -> PrincipalTerm | None:
+    if principal.type == AzurePrincipalType.USER:
+        return user_term(principal.id)
+    if principal.type == AzurePrincipalType.GROUP:
+        return group_term(principal.id)
+    return None
+
+
+def _denies_read(deny: AzureDenyAssignment, scope: str) -> bool:
+    if deny.do_not_apply_to_child_scopes and deny.scope.lower() != scope.lower():
+        return False
+    return any(
+        permission_grants(permission, BLOB_READ_DATA_ACTION)
+        for permission in deny.permissions
+    )
+
+
+def _apply_deny(
+    readers: PrincipalSet, deny: AzureDenyAssignment, directory: EntraDirectory
+) -> PrincipalSet:
+    """``readers`` without the principals the deny assignment covers:
+    readers - (denied - excluded) = (readers - denied) | (readers & excluded)."""
+    excluded: PrincipalSet = simplify(
+        term
+        for principal in deny.exclude_principals
+        if (term := _principal_term(principal)) is not None
+    )
+    kept: PrincipalSet = (
+        intersect(readers, excluded, directory) if excluded else EMPTY_SET
+    )
+    if any(principal.id == _ALL_PRINCIPALS_ID for principal in deny.principals):
+        return kept
+    denied_users: frozenset[str] = frozenset(
+        principal.id for principal in deny.principals if principal.type in _USER_TYPES
+    )
+    denied_groups: frozenset[str] = frozenset(
+        principal.id for principal in deny.principals if principal.type in _GROUP_TYPES
+    )
+    narrowed: PrincipalSet = exclude_from_set(
+        readers, denied_users, denied_groups, directory
+    )
+    return union(narrowed, kept)
+
+
+def apply_denies(
+    readers: PrincipalSet,
+    denies: list[AzureDenyAssignment],
+    directory: EntraDirectory,
+) -> PrincipalSet:
+    for deny in denies:
+        readers = _apply_deny(readers, deny, directory)
+    return readers
+
+
+def reading_assignments(
+    ops: AzureDataLakeSourceOperations, scope: str
+) -> ReadingAssignments:
+    """The role assignments at ``scope`` and above whose role reads blobs."""
+    definitions: dict[str, AzureRoleDefinition] = {}
+    reading: list[AzureRoleAssignment] = []
+    conditioned: list[str] = []
+    for assignment in ops.list_role_assignments(scope=scope):
+        key: str = assignment.role_definition_id.lower()
+        if key not in definitions:
+            definitions[key] = ops.get_role_definition(
+                role_definition_id=assignment.role_definition_id
+            )
+        if not role_reads_blobs(definitions[key]):
+            continue
+        if assignment.condition:
+            conditioned.append(assignment.id)
+        else:
+            reading.append(assignment)
+    return ReadingAssignments(
+        assignments=reading, conditioned_assignment_ids=conditioned
+    )
+
+
+def rbac_readers(
+    ops: AzureDataLakeSourceOperations,
+    scope: str,
+    directory: EntraDirectory,
+) -> RbacReaders:
+    """The principals a role assignment lets read every file under ``scope``,
+    the container's ARM id. Readers that are not users or groups, e.g.
+    service principals, are left out."""
+    assignments: ReadingAssignments = reading_assignments(ops, scope)
+    terms: list[PrincipalTerm] = [
+        term
+        for assignment in assignments.assignments
+        if (
+            term := _principal_term(
+                AzurePrincipal(
+                    id=assignment.principal_id, type=assignment.principal_type
+                )
+            )
+        )
+        is not None
+    ]
+    read_denies: list[AzureDenyAssignment] = [
+        deny
+        for deny in ops.list_deny_assignments(scope=scope)
+        if _denies_read(deny, scope)
+    ]
+    return RbacReaders(
+        principals=apply_denies(simplify(terms), read_denies, directory),
+        conditioned_assignment_ids=assignments.conditioned_assignment_ids,
+        read_denies=read_denies,
+    )

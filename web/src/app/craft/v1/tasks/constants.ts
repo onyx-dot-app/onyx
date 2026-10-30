@@ -28,3 +28,6 @@ export const TASKS_PAGE_SIZE = 20;
 
 // Default page size for run history.
 export const RUNS_PAGE_SIZE = 50;
+
+// Largest run-history page the API returns.
+export const RUNS_MAX_PAGE_SIZE = 100;

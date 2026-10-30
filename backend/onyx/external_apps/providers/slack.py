@@ -1,8 +1,18 @@
+from collections.abc import Mapping
 from typing import Any
 
 from onyx.configs.app_configs import (
     EXT_APP_SLACK_CLIENT_ID,
     EXT_APP_SLACK_CLIENT_SECRET,
+)
+from onyx.configs.slack_configs import (
+    SLACK_API_URL,
+    SLACK_APPS_URL,
+    SLACK_FILES_HOST,
+    SLACK_OAUTH_ACCESS_URL,
+    SLACK_OAUTH_AUTHORIZE_URL,
+    slack_files_url_pattern,
+    slack_url_pattern,
 )
 from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -36,8 +46,8 @@ class SlackAction(ExternalAppAction):
     FILES_WRITE = "slack.files.write"
 
 
-# Slack Web API calls are POST to https://slack.com/api/<method>; the action is
-# the method segment of the path.
+# Slack Web API calls are POST to https://<slack cloud>/api/<method>; the action
+# is the method segment of the path.
 _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=SlackAction.AUTH_TEST,
@@ -112,7 +122,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/api/files.getUploadURLExternal"),
             RestRoute(method="POST", path="/api/files.completeUploadExternal"),
             # The raw bytes POST to a pre-signed /upload/v1/<token> URL on
-            # files.slack.com — route it to FILES_WRITE, not the domain fallback.
+            # the cloud's files host — route it to FILES_WRITE, not the domain
+            # fallback.
             RestRoute(method="POST", path="/upload/v1/{token...}"),
         ),
     ),
@@ -136,8 +147,8 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         app_type=ExternalAppType.SLACK,
         app_name="Slack",
         oauth=OAuthFlowSpec(
-            authorize_url="https://slack.com/oauth/v2/authorize",
-            token_url="https://slack.com/api/oauth.v2.access",
+            authorize_url=SLACK_OAUTH_AUTHORIZE_URL,
+            token_url=SLACK_OAUTH_ACCESS_URL,
             scope=",".join(
                 [
                     "channels:history",
@@ -157,10 +168,10 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         ),
         descriptor=AdminDescriptorSpec(
             upstream_url_patterns=[
-                "https://slack\\.com/api/.*",
+                slack_url_pattern("/api/.*"),
                 # files.getUploadURLExternal hands back a pre-signed upload URL
-                # on the files.slack.com host that the raw bytes are POSTed to.
-                "https://files\\.slack\\.com/upload/v1/.*",
+                # on the cloud's files host that the raw bytes are POSTed to.
+                slack_files_url_pattern("/upload/v1/.*"),
             ],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
@@ -183,7 +194,7 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 ),
             ],
             setup_instructions=(
-                "Create a Slack app at api.slack.com/apps. Under OAuth & "
+                f"Create a Slack app at {SLACK_APPS_URL}. Under OAuth & "
                 "Permissions, add this Onyx instance's callback URL "
                 "(/craft/v1/apps/oauth/callback) to Redirect URLs, and add the "
                 "User Token Scopes you want the agent to use (channels:history, "
@@ -201,6 +212,12 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         "client_id": EXT_APP_SLACK_CLIENT_ID,
         "client_secret": EXT_APP_SLACK_CLIENT_SECRET,
     }
+
+    def skill_template_values(
+        self,
+        org_credentials: Mapping[str, str],  # noqa: ARG002 — the cloud is global
+    ) -> dict[str, str]:
+        return {"api_url": SLACK_API_URL, "files_host": SLACK_FILES_HOST}
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
         # Slack v2 with `user_scope` returns the user token nested

@@ -17,6 +17,10 @@ from onyx.configs.app_configs import (
     WEB_DOMAIN,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.configs.slack_configs import (
+    SLACK_OAUTH_ACCESS_URL,
+    SLACK_OAUTH_AUTHORIZE_URL,
+)
 from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -42,7 +46,7 @@ class SlackOAuth:
     CLIENT_ID = OAUTH_SLACK_CLIENT_ID
     CLIENT_SECRET = OAUTH_SLACK_CLIENT_SECRET
 
-    TOKEN_URL = "https://slack.com/api/oauth.v2.access"
+    TOKEN_URL = SLACK_OAUTH_ACCESS_URL
 
     # SCOPE is per https://docs.onyx.app/admins/connectors/official/slack/slack_indexed
     BOT_SCOPE = (
@@ -75,7 +79,7 @@ class SlackOAuth:
     @classmethod
     def _generate_oauth_url_helper(cls, redirect_uri: str, state: str) -> str:
         url = (
-            f"https://slack.com/oauth/v2/authorize"
+            f"{SLACK_OAUTH_AUTHORIZE_URL}"
             f"?client_id={cls.CLIENT_ID}"
             f"&redirect_uri={redirect_uri}"
             f"&scope={cls.BOT_SCOPE}"

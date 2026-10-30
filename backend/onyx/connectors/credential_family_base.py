@@ -37,6 +37,14 @@ class FamilyCredentialCodec(ABC, Generic[FamilyCredentialT]):
     @abstractmethod
     def from_family(self, family_credential: FamilyCredentialT) -> dict[str, Any]: ...
 
+    def stores_in_family(
+        self,
+        source_json: dict[str, Any],  # noqa: ARG002
+    ) -> bool:
+        """False if a new credential keeps the source's own shape, e.g. a kind
+        of authentication no other family source can use. Defaults to True."""
+        return True
+
     def accepts(
         self,
         family_credential: FamilyCredentialT,  # noqa: ARG002

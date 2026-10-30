@@ -1400,6 +1400,11 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Concurrent ACL reads per listing page during Azure Data Lake permission sync.
+AZURE_DATALAKE_ACL_READ_CONCURRENCY = int(
+    os.environ.get("AZURE_DATALAKE_ACL_READ_CONCURRENCY") or 16
+)
+
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )

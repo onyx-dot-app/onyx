@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
+import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import {
   useSession,
   useSessionHistory,
@@ -275,6 +277,8 @@ function BuildSessionButton({
 
 const MemoizedBuildSidebarInner = memo(() => {
   const t = useTranslations("craft.sideBar");
+  const tTasks = useTranslations("craft.tasks");
+  const unviewedTaskCount = useUnviewedScheduledTaskCount();
   const { folded } = useSidebarState();
   const router = useRouter();
   const { requestNavigation } = useUnsavedChangesNavigation();
@@ -358,6 +362,14 @@ const MemoizedBuildSidebarInner = memo(() => {
             icon={SvgClock}
             onClick={() => navigate(CRAFT_TASKS_PATH)}
             selected={pathname.startsWith(CRAFT_TASKS_PATH)}
+            rightChildren={
+              unviewedTaskCount > 0 ? (
+                <UnseenMarker
+                  label={tTasks("unviewedResults")}
+                  className="pointer-events-none"
+                />
+              ) : undefined
+            }
           >
             {t("scheduledTasks.label")}
           </SidebarTab>

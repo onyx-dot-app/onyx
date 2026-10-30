@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Optional
 from pydantic import BaseModel, model_validator
 
 from ee.onyx.configs.app_configs import (
+    AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY,
+    AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY,
     BOX_PERMISSION_DOC_SYNC_FREQUENCY,
     BOX_PERMISSION_GROUP_SYNC_FREQUENCY,
     CANVAS_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -98,6 +100,22 @@ def _lazy_censoring(load: Callable[[], CensoringFuncType]) -> CensoringFuncType:
         return load()(chunks, user_email)
 
     return run
+
+
+def _load_azure_datalake_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.azure_datalake.doc_sync import (
+        azure_datalake_doc_sync,
+    )
+
+    return azure_datalake_doc_sync
+
+
+def _load_azure_datalake_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.azure_datalake.group_sync import (
+        azure_datalake_group_sync,
+    )
+
+    return azure_datalake_group_sync
 
 
 def _load_box_doc_sync() -> DocSyncFuncType:
@@ -474,6 +492,20 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_youtrack_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.AZURE_DATALAKE: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_azure_datalake_doc_sync),
+            # Indexing carries no access, so a file stays private until the
+            # first doc sync lists it.
+            initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_azure_datalake_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),

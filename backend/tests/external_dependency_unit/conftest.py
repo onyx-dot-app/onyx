@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Generator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
-from onyx.db.enums import AccountType
-from onyx.db.models import User, User__UserGroup
+from onyx.db.enums import AccountType, UserFileStatus
+from onyx.db.models import User, User__UserGroup, UserFile
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -143,6 +143,22 @@ def create_test_user(
     db_session.commit()
     db_session.refresh(user)
     return user
+
+
+def create_processing_user_file(db_session: Session, user_id: UUID) -> UserFile:
+    """Insert a UserFile in PROCESSING status and return it."""
+    uf = UserFile(
+        id=uuid4(),
+        user_id=user_id,
+        file_id=f"test_file_{uuid4().hex[:8]}",
+        name=f"test_{uuid4().hex[:8]}.txt",
+        file_type="text/plain",
+        status=UserFileStatus.PROCESSING,
+    )
+    db_session.add(uf)
+    db_session.commit()
+    db_session.refresh(uf)
+    return uf
 
 
 def delete_test_user(db_session: Session, *users: User) -> None:

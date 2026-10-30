@@ -165,6 +165,7 @@ export type MCPAuthenticationServer = Pick<
 export interface MCPOAuthDiscovery {
   status: "metadata_found" | "metadata_missing" | "unreachable";
   supports_automatic_registration: boolean | null;
+  supports_client_metadata: boolean | null;
   authorization_endpoint: string | null;
   token_endpoint: string | null;
 }

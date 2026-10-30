@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "Use client metadata document",
-        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead.",
-        "turnOff": "Turn off client metadata document"
+        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead."
       },
       "discovery": {
         "checking": "Checking automatic setup…",
@@ -1115,18 +1114,6 @@
         "openapi": "Add OpenAPI plugin"
       },
       "catalog": {
-        "slack": {
-          "summary": "Search conversations and send messages",
-          "description": "Search conversations and send messages. Requires a registered Slack app."
-        },
-        "hubspot": {
-          "summary": "Work with contacts and deals",
-          "description": "Work with contacts and deals. Requires a HubSpot MCP connector."
-        },
-        "asana": {
-          "summary": "Manage tasks and projects",
-          "description": "Manage tasks and projects. Requires a registered OAuth client."
-        },
         "linear": {
           "summary": "Manage issues, projects, and teams",
           "description": "Manage issues, projects, and teams."
@@ -1218,6 +1205,10 @@
       "blocked": "This URL is blocked by your outbound security settings.",
       "publicDetected": "No authentication required",
       "oauthDetected": "OAuth detected",
+      "clientMetadata": "Client metadata document",
+      "clientMetadataSupported": "Supported",
+      "clientMetadataUnsupported": "Not supported",
+      "clientMetadataUnknown": "Not checked",
       "manualRequired": "Choose authentication manually",
       "chooseAuthentication": "We could not determine how this server authenticates. Choose a method below.",
       "connect": "Connect",
@@ -1444,6 +1435,9 @@
         },
         "s3": {
           "description": "AWS storage buckets"
+        },
+        "azureDatalake": {
+          "description": "Files in Azure Data Lake Storage containers"
         },
         "r2": {
           "description": "Cloud storage buckets"
@@ -4593,6 +4587,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Configure Azure Data Lake Storage connector",
+          "fields": {
+            "account_name": {
+              "label": "Storage Account Name",
+              "description": "The name of the storage account, e.g. contosodata. The account must have a hierarchical namespace."
+            },
+            "container_name": {
+              "label": "Container Name",
+              "description": "The container (file system) to index."
+            },
+            "path_prefix": {
+              "label": "Path Prefix",
+              "description": "A directory in the container, e.g. reports/2026. Leave empty to index the whole container."
+            }
+          }
+        },
         "r2": {
           "description": "Configure R2 connector",
           "fields": {
@@ -5195,6 +5206,8 @@
         "integrationToken": "{source} Integration Token",
         "accessKey": "{source} Access Key",
         "accessKeySecret": "{source} Access Key Secret",
+        "storageAccountName": "Storage Account Name",
+        "accountKey": "{source} Account Key",
         "key": "{source} Key",
         "secret": "{source} Secret",
         "roleArn": "{source} Role ARN",
@@ -5216,6 +5229,7 @@
         "jiraUserEmail": "Required for Jira Cloud.",
         "lumappsServiceUser": "The user to index on behalf of.",
         "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
+        "azureDatalakeAccountKey": "In the Azure portal, open the storage account, then Security + networking, then Access keys.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
@@ -5228,6 +5242,7 @@
           "certificateAuthentication": "Certificate Authentication",
           "certificate": "Certificate",
           "accessKeyAndSecret": "Access Key and Secret",
+          "accountKey": "Account Key",
           "iamRole": "IAM Role",
           "assumeRole": "Assume Role",
           "serviceAccount": "Service Account",
@@ -5240,6 +5255,9 @@
           "teamsCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
           "outlookClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
           "outlookCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+          "azureDatalakeClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Give the app the Storage Blob Data Reader role on the container.",
+          "azureDatalakeCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Give the app the Storage Blob Data Reader role on the container.",
+          "azureDatalakeAccountKey": "The connector signs each request with a key of the storage account. Provide the account name and one of its access keys.",
           "s3AssumeRole": "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required."
         }
       },
@@ -15250,6 +15268,10 @@
         "trigger": {
           "runNow": "Run once",
           "schedule": "Schedule"
+        },
+        "markAllViewed": {
+          "label": "Mark all viewed",
+          "error": "Could not mark runs as viewed. Try again."
         }
       },
       "scheduleEditor": {
@@ -15281,7 +15303,8 @@
           "tue": "Tue",
           "wed": "Wed"
         }
-      }
+      },
+      "unviewedResults": "New results"
     },
     "todoList": {
       "empty": {

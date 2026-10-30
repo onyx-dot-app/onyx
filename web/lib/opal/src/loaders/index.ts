@@ -34,6 +34,12 @@ export {
   type PageLoaderProps,
 } from "@opal/loaders/page-loader/components";
 
+/* SidebarLoader */
+export {
+  SidebarLoader,
+  type SidebarLoaderProps,
+} from "@opal/loaders/sidebar-loader/components";
+
 /* TextLoader */
 export {
   TextLoader,
