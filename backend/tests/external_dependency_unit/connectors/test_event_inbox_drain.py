@@ -432,3 +432,37 @@ def test_the_newer_of_two_changes_to_one_document_wins(
     assert count_events_by_status(db_session, pair_id) == {
         ConnectorEventStatus.IN_PROGRESS: 2
     }
+
+
+def test_an_untimestamped_change_can_still_be_the_newest(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """A missing timestamp means the provider sent none, not that the change
+    is old. Treating it as oldest would drop a change that arrived later."""
+    pair_id, attempt_id = pair_and_attempt
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [
+            ParsedEvent(
+                document_id="doc-1",
+                event_key="k-timed",
+                payload={"title": "timed"},
+                occurred_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            ),
+            ParsedEvent(
+                document_id="doc-1",
+                event_key="k-untimed",
+                payload={"title": "arrived later"},
+            ),
+        ],
+    )
+    db_session.commit()
+
+    documents, _, _ = _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    assert [document.semantic_identifier for document in documents] == ["arrived later"]

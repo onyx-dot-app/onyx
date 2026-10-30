@@ -6,7 +6,7 @@ so a pushed event reaches the index through the ordinary docfetching run
 rather than a pipeline of its own.
 """
 
-from datetime import datetime, timezone
+from collections import defaultdict
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -41,21 +41,27 @@ def _superseded(events: list[ConnectorEventInbox]) -> set[int]:
     `upsert_documents` keeps the first entry it sees for a document id. So
     yielding both would save the older event's title, link and file and
     leave nothing to repair them: both rows settle either way.
-
-    The source's event time orders them, and the row id breaks a tie or
-    stands in when the provider sent no timestamp.
     """
-    latest: dict[str, ConnectorEventInbox] = {}
+    by_document: dict[str, list[ConnectorEventInbox]] = defaultdict(list)
     for event in events:
-        current = latest.get(event.document_id)
-        if current is None or _ordering(event) >= _ordering(current):
-            latest[event.document_id] = event
-    kept = {event.id for event in latest.values()}
+        by_document[event.document_id].append(event)
+
+    kept = {_latest(group).id for group in by_document.values()}
     return {event.id for event in events} - kept
 
 
-def _ordering(event: ConnectorEventInbox) -> tuple[datetime, int]:
-    return (event.occurred_at or datetime.min.replace(tzinfo=timezone.utc), event.id)
+def _latest(group: list[ConnectorEventInbox]) -> ConnectorEventInbox:
+    """The change that wins for one document.
+
+    The source's event time decides, but only when every change in the group
+    carries one: a missing timestamp does not mean "oldest", it means the
+    provider sent none. Mixing the two would let a timestamped change beat a
+    later untimestamped one. Rows are claimed in id order, so id is arrival
+    order and stands in whenever the times cannot all be compared.
+    """
+    if all(event.occurred_at is not None for event in group):
+        return max(group, key=lambda event: (event.occurred_at, event.id))
+    return max(group, key=lambda event: event.id)
 
 
 class EventInboxCheckpoint(ConnectorCheckpoint):
