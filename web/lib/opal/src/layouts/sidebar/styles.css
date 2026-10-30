@@ -265,8 +265,9 @@
   @apply pt-3 ps-2 pe-1 flex flex-row justify-between items-center;
 }
 
+/* min-w-0 lets the title shrink so its text can be cut. */
 .opal-sidebar-section__title {
-  @apply flex px-0.5 py-1.5;
+  @apply flex min-w-0 px-0.5 py-1.5;
 }
 
 .opal-sidebar-section__tag {

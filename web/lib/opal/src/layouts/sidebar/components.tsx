@@ -15,13 +15,14 @@ import { usePathname } from "next/navigation";
 import {
   Button,
   Divider,
+  OverflowText,
   ShadowDiv,
   Spacer,
-  Text,
+  Tag,
   Tooltip,
+  type TagProps,
 } from "@opal/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
-import { Tag, type TagProps } from "@opal/components";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -419,10 +420,12 @@ function SidebarSection({
         <Hoverable.Root group="sidebar-section">
           <Disabled disabled={disabled}>
             <div className="opal-sidebar-section__header">
+              {/* One line: a title too long for the row is cut, and shows
+                  in full in a tooltip. */}
               <div className="opal-sidebar-section__title">
-                <Text font="secondary-body" color="text-02">
+                <OverflowText font="secondary-body" color="text-02">
                   {title}
-                </Text>
+                </OverflowText>
               </div>
               {tag && (
                 <div className="opal-sidebar-section__tag">
