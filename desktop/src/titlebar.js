@@ -259,15 +259,9 @@
     );
     nav.append(back, forward);
 
-    const navigation = window.navigation;
-    if (navigation && "canGoBack" in navigation) {
-      const sync = () => {
-        back.disabled = !navigation.canGoBack;
-        forward.disabled = !navigation.canGoForward;
-      };
-      sync();
-      navigation.addEventListener("currententrychange", sync);
-    }
+    // Always enabled: navigation.canGoBack ignores cross-origin entries (e.g.
+    // an OAuth page) and misses bfcache restores, and history.back() at the
+    // first entry is a no-op.
     return nav;
   }
 
