@@ -289,3 +289,21 @@ def test_the_route_refuses_a_spec_with_no_verifier(
 
     assert response.status_code == 401
     assert count_events_by_status(db_session, event_pair.id) == {}
+
+
+def test_a_pair_still_being_set_up_can_receive(
+    client: TestClient,
+    db_session: Session,
+    event_pair: ConnectorCredentialPair,
+) -> None:
+    """A pair is SCHEDULED until its first run finishes, and the provider
+    validates the callback URL during setup — before any run."""
+    event_pair.status = ConnectorCredentialPairStatus.SCHEDULED
+    db_session.commit()
+
+    response = _post(client, {"changed": [{"id": "doc-1", "delivery": "k-1"}]})
+
+    assert response.status_code == 200
+    assert count_events_by_status(db_session, event_pair.id) == {
+        ConnectorEventStatus.PENDING: 1
+    }
