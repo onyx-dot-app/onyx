@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "Usar el documento de metadatos del cliente",
-        "description": "Si está activado, el proveedor obtiene el documento de metadatos del cliente de {appName} a través de la Internet pública. Desactívalo si esta instancia de {appName} es privada. {appName} usará entonces el registro automático de clientes.",
-        "turnOff": "Desactivar el documento de metadatos del cliente"
+        "description": "Si está activado, el proveedor obtiene el documento de metadatos del cliente de {appName} a través de la Internet pública. Desactívalo si esta instancia de {appName} es privada. {appName} usará entonces el registro automático de clientes."
       },
       "discovery": {
         "checking": "Comprobando la configuración automática…",
@@ -1115,18 +1114,6 @@
         "openapi": "Añadir plugin OpenAPI"
       },
       "catalog": {
-        "slack": {
-          "summary": "Busca conversaciones y envía mensajes",
-          "description": "Busca conversaciones y envía mensajes. Requiere una aplicación de Slack registrada."
-        },
-        "hubspot": {
-          "summary": "Trabaja con contactos y negocios",
-          "description": "Trabaja con contactos y negocios. Requiere un conector MCP de HubSpot."
-        },
-        "asana": {
-          "summary": "Gestiona tareas y proyectos",
-          "description": "Gestiona tareas y proyectos. Requiere un cliente OAuth registrado."
-        },
         "linear": {
           "summary": "Gestiona incidencias, proyectos y equipos",
           "description": "Gestiona incidencias, proyectos y equipos."
@@ -1218,6 +1205,10 @@
       "blocked": "Esta URL está bloqueada por la configuración de seguridad de salida.",
       "publicDetected": "No se requiere autenticación",
       "oauthDetected": "OAuth detectado",
+      "clientMetadata": "Documento de metadatos del cliente",
+      "clientMetadataSupported": "Compatible",
+      "clientMetadataUnsupported": "No compatible",
+      "clientMetadataUnknown": "No comprobado",
       "manualRequired": "Elige la autenticación manualmente",
       "chooseAuthentication": "No pudimos determinar cómo se autentica este servidor. Elige un método a continuación.",
       "connect": "Conectar",
