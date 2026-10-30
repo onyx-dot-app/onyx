@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  act,
-  render,
-  screen,
-  waitFor,
-  fireEvent,
-} from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MultiModelSelector, {
   MAX_MODELS,
@@ -123,22 +117,17 @@ function Harness({
 
 // Row at x 600-900, y 700-740; every control inside it at its right end.
 // Detached nodes measure 0x0 at the origin, as browsers report.
-const ROW_RECT = { x: 600, y: 700, width: 300, height: 40 };
-const CONTROL_RECT = { x: 860, y: 704, width: 32, height: 32 };
+const ROW_RECT = new DOMRect(600, 700, 300, 40);
+const CONTROL_RECT = new DOMRect(860, 704, 32, 32);
 
 function mockLayout() {
   jest
     .spyOn(Element.prototype, "getBoundingClientRect")
     .mockImplementation(function (this: Element) {
       if (!this.isConnected) return new DOMRect(0, 0, 0, 0);
-      if (this.getAttribute("data-testid") === "model-selector") {
-        const r = ROW_RECT;
-        return new DOMRect(r.x, r.y, r.width, r.height);
-      }
-      if (this.closest('[data-testid="model-selector"]')) {
-        const r = CONTROL_RECT;
-        return new DOMRect(r.x, r.y, r.width, r.height);
-      }
+      if (this.getAttribute("data-testid") === "model-selector")
+        return ROW_RECT;
+      if (this.closest('[data-testid="model-selector"]')) return CONTROL_RECT;
       return new DOMRect(0, 0, 0, 0);
     });
   // jsdom reports a 0x0 viewport, which would clamp every position.
@@ -152,22 +141,24 @@ function mockLayout() {
   });
 }
 
-function popperX(): number | null {
-  const wrapper = document.querySelector<HTMLElement>(
+function popperWrapper(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
     "[data-radix-popper-content-wrapper]"
   );
-  const match = wrapper?.style.transform.match(/translate\((-?[\d.]+)px/);
+}
+
+/** The 0-width floating pane in jsdom puts `x` exactly on the anchor's right edge. */
+function popperX(): number | null {
+  const match = popperWrapper()?.style.transform.match(
+    /translate\((-?[\d.]+)px/
+  );
   return match ? Number(match[1]) : null;
 }
 
-/** autoUpdate re-measures on window resize; the setup ResizeObserver is a no-op.
- * computePosition settles over microtasks, so one macrotask flushes it. */
+/** autoUpdate re-measures on window resize; the setup ResizeObserver is a no-op. */
 async function expectAnchoredToRow() {
-  await act(async () => {
-    fireEvent(window, new Event("resize"));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-  expect(popperX()).toBeGreaterThanOrEqual(500);
+  fireEvent(window, new Event("resize"));
+  await waitFor(() => expect(popperX()).toBe(ROW_RECT.right));
 }
 
 function settingsButton(displayName: string): HTMLElement {
@@ -193,7 +184,7 @@ describe("MultiModelSelector settings pane anchoring", () => {
     await user.click(
       screen.getByRole("button", { name: "multiModel.addModelButton.label" })
     );
-    await waitFor(() => expect(popperX()).toBeGreaterThanOrEqual(500));
+    await waitFor(() => expect(popperX()).toBe(CONTROL_RECT.right));
 
     await user.click(settingsButton("Model C"));
 
@@ -201,7 +192,7 @@ describe("MultiModelSelector settings pane anchoring", () => {
     expect(
       screen.queryByRole("button", { name: "multiModel.addModelButton.label" })
     ).toBeNull();
-    expect(screen.getByRole("button", { name: /Model C/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Model C" })).toBeInTheDocument();
     await expectAnchoredToRow();
   });
 
@@ -217,18 +208,18 @@ describe("MultiModelSelector settings pane anchoring", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /Model B/ }));
-    await waitFor(() => expect(popperX()).toBeGreaterThanOrEqual(500));
+    await user.click(screen.getByRole("button", { name: "Model B" }));
+    await waitFor(() => expect(popperX()).toBe(CONTROL_RECT.right));
 
     await user.click(settingsButton("Model D"));
 
-    // Model D took Model B's slot and its pill replaced Model B's.
     const row = screen.getByTestId("model-selector");
     expect(row).toHaveTextContent("Model D");
     expect(row).not.toHaveTextContent("Model B");
     await expectAnchoredToRow();
   });
 
+  // Guards the remove path, where the anchor pill unmounts as the pane closes.
   test("removing the model whose settings pane is open closes the popover and calls onRemove", async () => {
     const user = userEvent.setup();
     const onRemove = jest.fn();
@@ -243,23 +234,18 @@ describe("MultiModelSelector settings pane anchoring", () => {
       />
     );
 
-    const pill = screen.getByRole("button", { name: /Model B/ });
+    const pill = screen.getByRole("button", { name: "Model B" });
     await user.click(pill);
     await user.click(settingsButton("Model B"));
-    expect(
-      document.querySelector("[data-radix-popper-content-wrapper]")
-    ).not.toBeNull();
+    expect(popperWrapper()).not.toBeNull();
 
-    const icons = pill.querySelectorAll(".interactive-foreground-icon");
-    const removeIcon = icons[icons.length - 1];
-    expect(removeIcon).toBeDefined();
-    await user.click(removeIcon as Element);
+    const removeIcon = Array.from(
+      pill.querySelectorAll(".interactive-foreground-icon")
+    ).at(-1);
+    if (!removeIcon) throw new Error("remove icon not rendered");
+    await user.click(removeIcon);
 
     expect(onRemove).toHaveBeenCalledWith(1);
-    await waitFor(() =>
-      expect(
-        document.querySelector("[data-radix-popper-content-wrapper]")
-      ).toBeNull()
-    );
+    await waitFor(() => expect(popperWrapper()).toBeNull());
   });
 });

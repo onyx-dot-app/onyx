@@ -44,7 +44,7 @@ export interface MultiModelSelectorProps {
   reasoningManager?: ReasoningManager;
 }
 
-/** Radix's virtual anchor; Floating UI attaches its scroll listeners to `contextElement`. */
+/** Floating UI virtual element behind Radix's virtualRef; `contextElement` gets the scroll, resize and layout observers. */
 interface PopoverAnchor {
   getBoundingClientRect(): DOMRect;
   contextElement?: Element;
@@ -64,13 +64,15 @@ export default function MultiModelSelector({
   const rowRef = useRef<HTMLDivElement>(null);
 
   // The anchor node can unmount while the popover stays open (settings at max,
-  // replace, remove), so a detached anchor measures the selector row instead.
-  const anchorFor = (element: HTMLElement | null): PopoverAnchor => ({
+  // replace) or while the closing pane still measures it (remove), so a detached
+  // anchor measures the selector row instead.
+  const anchorFor = (element: Element | null): PopoverAnchor => ({
     getBoundingClientRect: () => {
       const target = element?.isConnected ? element : rowRef.current;
       return target?.getBoundingClientRect() ?? new DOMRect();
     },
-    contextElement: rowRef.current ?? undefined,
+    // Observing the live node keeps the pane on it as pills shift the row.
+    contextElement: element ?? rowRef.current ?? undefined,
   });
   const anchorRef = useRef<PopoverAnchor>(anchorFor(null));
 
@@ -218,9 +220,9 @@ export default function MultiModelSelector({
               size="sm"
               tooltip={t("multiModel.addModelButton.label")}
               aria-label={t("multiModel.addModelButton.label")}
-              onClick={(e: React.MouseEvent) => {
+              onClick={(e) => {
                 if (noModelsToSelect) return;
-                anchorRef.current = anchorFor(e.currentTarget as HTMLElement);
+                anchorRef.current = anchorFor(e.currentTarget);
                 setReplacingIndex(null);
                 setOpen(true);
               }}
