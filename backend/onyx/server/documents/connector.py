@@ -53,6 +53,12 @@ from onyx.connectors.credential_families import (
     is_credential_usable_for_source,
     to_source_credential_json,
 )
+from onyx.connectors.event_inbox.source_registry import (
+    registered_webhook_sources,
+    webhook_callback_url,
+    webhook_source_for,
+)
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.factory import (
     validate_ccpair_for_user,
@@ -73,6 +79,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.connectors.models import InputType
 from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.connector import (
     create_connector,
@@ -99,6 +106,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_edit_connector,
     verify_user_can_manage_all_cc_pairs,
 )
+from onyx.db.connector_event_inbox import get_active_event_cc_pairs
 from onyx.db.credentials import (
     create_credential,
     discard_credential_if_unpaired,
@@ -1653,6 +1661,15 @@ def create_connector_from_model(
         _validate_connector_request(connector_data)
 
         connector_base = connector_data.to_connector_base()
+
+        # An event source has exactly one valid input type, and the backend
+        # is where that is known: it is decided by the source registering a
+        # webhook spec. Normalising here keeps clients, the admin UI among
+        # them, from having to track the same list in their own language.
+        load_event_sources()
+        if webhook_source_for(connector_base.source) is not None:
+            connector_base.input_type = InputType.EVENT
+
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_base,
@@ -2512,3 +2529,32 @@ def trigger_indexing_for_cc_pair(
     )
 
     return num_triggers
+
+
+class EventSourceSnapshot(BaseModel):
+    """What an admin needs to wire one source's webhook up at the provider."""
+
+    source: DocumentSource
+    # Paste this into the provider's console.
+    callback_url: str
+    # False until an active event connector exists, at which point the
+    # endpoint starts accepting deliveries. Registering the URL before then
+    # fails any validation handshake the provider runs.
+    receiving: bool
+
+
+@router.get("/admin/connector/event-sources")
+def get_event_sources(
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    db_session: Session = Depends(get_session),
+) -> list[EventSourceSnapshot]:
+    """The sources that can receive pushed events, and their endpoints."""
+    load_event_sources()
+    return [
+        EventSourceSnapshot(
+            source=spec.source,
+            callback_url=webhook_callback_url(spec.slug),
+            receiving=bool(get_active_event_cc_pairs(db_session, spec.source)),
+        )
+        for spec in registered_webhook_sources()
+    ]
