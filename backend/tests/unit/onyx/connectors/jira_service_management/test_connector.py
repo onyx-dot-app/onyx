@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
@@ -388,6 +389,29 @@ def test_slim_reports_progress_and_stops_cleanly() -> None:
     with pytest.raises(RuntimeError, match="stopped by heartbeat"):
         list(stopped_connector.retrieve_all_slim_docs(callback=stopping))
     assert stopping.should_stop_calls == 1
+
+
+def test_pruning_helper_forwards_the_heartbeat_to_the_slim_path() -> None:
+    issue_ids = [str(1000 + i) for i in range(201)]
+    # Every issue is skipped, so the connector fetches all three batches without
+    # yielding one. That is the path where only its own callback can stop it.
+    issues = {
+        issue_id: _issue(issue_id, f"TEST-{issue_id}", labels=["skip-me"])
+        for issue_id in issue_ids
+    }
+    heartbeat = _Heartbeat(stop_after=2)
+    connector = _connector(
+        [_desk_page()],
+        issues=issues,
+        search_pages=[JiraIssueIdPage(issue_ids=issue_ids, next_page_token=None)],
+        labels_to_skip=["skip-me"],
+    )
+
+    with pytest.raises(RuntimeError, match="stopped by heartbeat"):
+        extract_ids_from_runnable_connector(connector, callback=heartbeat)
+
+    assert heartbeat.should_stop_calls == 2
+    assert _operations(connector).bulk_fetch_issues.call_count == 1
 
 
 def test_runner_and_pruning_use_the_same_membership() -> None:

@@ -192,10 +192,12 @@ def extract_ids_from_runnable_connector(
     ) = None
 
     if isinstance(runnable_connector, SlimConnector):
-        raw_batch_generator = runnable_connector.retrieve_all_slim_docs(start=start)
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs(
+            start=start, callback=callback
+        )
     elif isinstance(runnable_connector, SlimConnectorWithPermSync):
         raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync(
-            start=start
+            start=start, callback=callback
         )
     # If the connector isn't slim, fall back to running it normally to get ids
     elif isinstance(runnable_connector, LoadConnector):
