@@ -81,6 +81,15 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
             ConnectorCredentialPair.access_type.in_(
                 (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
             ).label("permission_sync_enabled"),
+            ConnectorCredentialPair.last_time_perm_sync.label(
+                "last_permission_sync_at"
+            ),
+            ConnectorCredentialPair.last_time_external_group_sync.label(
+                "last_group_sync_at"
+            ),
+            ConnectorCredentialPair.perm_sync_pending_since.label(
+                "permission_sync_pending_since"
+            ),
             Connector.connector_specific_config.label("config"),
         )
         .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)

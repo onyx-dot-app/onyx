@@ -32,7 +32,7 @@ inside the Cloud deployment.
 | `runtime`, `version`, `resource`, `heartbeat` | Each API server, Celery worker, and Slack bot process | At start, then every 5 minutes |
 | `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage, LLM cycles | At the end of server execution |
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
-| `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, signup email domains, license presence, the number of standard user accounts | On change, and every 6 hours |
+| `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, permission and group sync times and cadence of permission-synced connectors, signup email domains, license presence, the number of standard user accounts | Each item when it changes, and 6 hours after its own last send |
 | `feedback` | A thumbs up or down on an answer: the vote, the channel, and a digest of the answer id | When a user votes |
 | `attempt`, `stage`, `job` | Collector: index attempts, stage timings, sync and migration jobs that changed | Every 5 minutes |
 | `heartbeat` deployment fields | API: Standard or Lite; collector: whether a configured connector has an indexed document | Every 5 minutes |

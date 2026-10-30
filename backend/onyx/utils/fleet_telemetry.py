@@ -167,6 +167,11 @@ _FIELDS: dict[str, frozenset[str]] = {
             "config_hash",
             "metadata",
             "last_success_at",
+            "last_permission_sync_at",
+            "last_group_sync_at",
+            "permission_sync_pending_since",
+            "permission_sync_seconds",
+            "group_sync_seconds",
         }
     ),
     "attempt": frozenset(
