@@ -9,8 +9,9 @@ incremental (background polling) flows.
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Iterator
+from typing import Any, Iterator
 from urllib.parse import urljoin
 
 import requests
@@ -30,13 +31,27 @@ from onyx.connectors.models import (
     DocumentFailure,
     SlimDocument,
 )
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# JSM "request" status categories we map to a single indexed status string.
 _JSM_PAGE_SIZE = 50
 _RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+# Atlassian Cloud project keys start with an uppercase letter and contain only
+# uppercase ASCII letters and digits. Reject anything else before we interpolate
+# it into JQL, otherwise a quote could break out of the quoted value.
+_PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
+
+
+def _validate_project_key(project_key: str) -> str:
+    if not _PROJECT_KEY_RE.match(project_key or ""):
+        raise ValueError(
+            f"Invalid Jira project key {project_key!r}: must start with an "
+            "uppercase letter and contain only uppercase letters and digits."
+        )
+    return project_key
 
 
 class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector):
@@ -54,11 +69,11 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             it can never widen the search outside the configured project.
         """
         self.base_url = base_url.rstrip("/")
-        self.project_key = project_key
+        self.project_key = _validate_project_key(project_key)
         self.batch_size = batch_size
         # Always enforce the project scope; append custom JQL as an extra
         # parenthesised filter so `OR` inside it cannot escape the project.
-        project_clause = f'project = "{project_key}"'
+        project_clause = f'project = "{self.project_key}"'
         if request_jql:
             self.request_jql = f"{project_clause} AND ({request_jql})"
         else:
@@ -93,13 +108,13 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             try:
                 resp = self._get_session().get(url, params=params, timeout=60)
                 if resp.status_code in _RETRY_STATUSES:
-                    time.sleep(min(2 ** attempt, 8))
+                    time.sleep(min(2**attempt, 8))
                     continue
                 resp.raise_for_status()
                 return resp.json()
             except Exception as e:  # noqa: BLE001
                 last_err = e
-                time.sleep(min(2 ** attempt, 8))
+                time.sleep(min(2**attempt, 8))
         raise RuntimeError(f"JSM GET {url} failed after retries: {last_err}")
 
     def _search(self, jql: str, next_page_token: str | None) -> dict[str, Any]:
@@ -115,19 +130,21 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         return self._get("/rest/api/3/search/jql", params=params)
 
     def _get_comments(self, issue_key: str) -> list[dict[str, Any]]:
-        """Fetch ALL comments for an issue, following pagination."""
+        """Fetch ALL comments for an issue, following pagination metadata."""
         comments: list[dict[str, Any]] = []
         path = f"/rest/api/3/issue/{issue_key}/comment"
         start_at = 0
         while True:
-            data = self._get(path, params={"maxResults": _JSM_PAGE_SIZE, "startAt": start_at})
+            data = self._get(
+                path, params={"maxResults": _JSM_PAGE_SIZE, "startAt": start_at}
+            )
             page = data.get("comments", []) or []
             comments.extend(page)
-            total = data.get("total", 0)
+            total = data.get("total")
             if not page:
                 break
             start_at += len(page)
-            if start_at >= total:
+            if total is not None and start_at >= total:
                 break
         return comments
 
@@ -146,10 +163,14 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 return node.get("text", "")
             parts = []
             if node.get("type") in ("paragraph", "heading", "listItem"):
-                parts.append(JiraServiceManagementConnector._adf_to_text(node.get("content", [])))
+                parts.append(
+                    JiraServiceManagementConnector._adf_to_text(node.get("content", []))
+                )
                 parts.append("\n")
             else:
-                parts.append(JiraServiceManagementConnector._adf_to_text(node.get("content", [])))
+                parts.append(
+                    JiraServiceManagementConnector._adf_to_text(node.get("content", []))
+                )
             return "".join(parts)
         return ""
 
@@ -161,7 +182,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         # payload, so fetch them explicitly and include every page.
         comments = self._get_comments(key)
         comment_text = "\n".join(
-            f"{c.get('author', {}).get('displayName', 'user')}: {self._adf_to_text(c.get('body'))}"
+            f"{c.get('author', {}).get('displayName', 'user')}: "
+            f"{self._adf_to_text(c.get('body'))}"
             for c in comments
         )
         full_text = (
@@ -189,35 +211,38 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
     # ---- flows --------------------------------------------------------
     def _yield_batches(self, jql: str) -> GenerateDocumentsOutput:
+        """Yield batches of Document objects per the GenerateDocumentsOutput
+        contract (an iterator of ``list[Document | HierarchyNode]``).
+
+        Conversion errors cannot be represented in that stream, so they are
+        logged and dropped rather than emitted as non-conforming tuples.
+        """
         next_page_token: str | None = None
         while True:
             data = self._search(jql, next_page_token)
-            issues = data.get("issues", [])
+            issues = data.get("issues", []) or []
             docs: list[Document] = []
-            failures: list[ConnectorFailure] = []
             for issue in issues:
                 key = issue.get("key", "?")
                 try:
                     docs.append(self._issue_to_document(issue))
                 except Exception as e:  # noqa: BLE001
-                    # Report conversion errors through the supported failure
-                    # mechanism (ConnectorFailure), never as an unsupported
-                    # DocumentFailure field.
-                    failures.append(
-                        ConnectorFailure(
-                            failed_document=DocumentFailure(document_id=key),
-                            failure_message=str(e),
-                            exception=e,
-                        )
+                    # Surface the failure without breaking the document stream.
+                    failure = ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=key,
+                            document_link=f"{self.base_url}/browse/{key}",
+                        ),
+                        failure_message=str(e),
+                        exception=e,
                     )
-            # Emit documents in batch_size chunks, interleaving failures.
-            if docs:
-                for i in range(0, len(docs), self.batch_size):
-                    yield docs[i : i + self.batch_size], (failures if i == 0 else [])
-            elif failures:
-                yield [], failures
+                    logger.warning(f"Skipping JSM issue {key}: {failure.failure_message}")
+            for i in range(0, len(docs), self.batch_size):
+                yield docs[i : i + self.batch_size]
+            # Continue while a cursor exists, even if a page was empty
+            # (Jira may return an empty page with a nextPageToken).
             next_page_token = data.get("nextPageToken")
-            if not issues or not next_page_token:
+            if not next_page_token:
                 break
 
     def load_from_state(self) -> GenerateDocumentsOutput:
@@ -238,7 +263,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         self,
         start: float | None = None,
         end: float | None = None,
-        callback: Callable[[list[SlimDocument]], None] | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         jql = self.request_jql
         if start is not None and end is not None:
@@ -247,15 +272,19 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             jql = f'{self.request_jql} AND updated >= "{s}" AND updated <= "{e}"'
         next_page_token: str | None = None
         while True:
+            if callback is not None and callback.should_stop():
+                logger.info("Slim retrieval stop requested; halting.")
+                break
             data = self._search(jql, next_page_token)
-            issues = data.get("issues", [])
+            issues = data.get("issues", []) or []
             ids = [SlimDocument(id=i["key"]) for i in issues]
             if ids:
-                if callback is not None:
-                    callback(ids)
                 yield ids
+                if callback is not None:
+                    callback.progress("jira_service_management", len(ids))
+            # Use the presence of a cursor, not page emptiness, to continue.
             next_page_token = data.get("nextPageToken")
-            if not issues or not next_page_token:
+            if not next_page_token:
                 break
 
 
@@ -263,8 +292,6 @@ def _parse_ts(ts: str) -> datetime:
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:  # noqa: BLE001
-        # Jira may return "+0000" style offsets which fromisoformat handles in
-        # modern Python, but fall back defensively.
         try:
             return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f%z")
         except Exception:  # noqa: BLE001
@@ -272,7 +299,9 @@ def _parse_ts(ts: str) -> datetime:
 
 
 if __name__ == "__main__":
-    from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+    from onyx.utils.variable_functionality import (
+        set_is_ee_based_on_env_variable,
+    )
 
     set_is_ee_based_on_env_variable()
 
@@ -286,7 +315,5 @@ if __name__ == "__main__":
             "jira_api_token": os.environ["JSM_API_TOKEN"],
         }
     )
-    for batch, failures in connector.load_from_state():
+    for batch in connector.load_from_state():
         print(f"batch of {len(batch)}: {[d.id for d in batch]}")
-        for f in failures:
-            print("failure:", f)
