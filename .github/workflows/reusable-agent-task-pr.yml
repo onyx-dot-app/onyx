@@ -385,7 +385,7 @@ jobs:
           # An approved path the task did not create would fail the whole add.
           paths=()
           for path in ${FILES}; do
-            if [ -e "${path}" ] || [ -n "$(git ls-files -- "${path}")" ]; then
+            if [ -e "${path}" ] || [ -L "${path}" ] || [ -n "$(git ls-files -- "${path}")" ]; then
               paths+=("${path}")
             fi
           done
