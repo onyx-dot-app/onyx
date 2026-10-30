@@ -3,6 +3,7 @@ import {
   desktopOAuthReturnUrl,
   launchOAuth,
   notifyOAuthComplete,
+  reportOAuthCallback,
   stripDesktopOAuthState,
 } from "@/lib/oauth/launch";
 
@@ -34,7 +35,11 @@ afterEach(() => {
 });
 
 function openPopup() {
-  const popup = { close: jest.fn(), location: { href: "about:blank" } };
+  const popup = {
+    close: jest.fn(),
+    location: { href: "about:blank" },
+    sessionStorage: { setItem: jest.fn() },
+  };
   const popupWindow = popup as unknown as Window;
   jest.spyOn(window, "open").mockReturnValue(popupWindow);
   return { popup, popupWindow };
@@ -59,6 +64,10 @@ test("opens a new tab and resolves on the matching same-origin message", async (
   expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
   await flush();
   expect(popup.location.href).toBe(authUrl);
+  expect(popup.sessionStorage.setItem).toHaveBeenCalledWith(
+    "onyx:oauth-launch",
+    "abc_123"
+  );
   const emit = (origin: string, source: MessageEventSource, state: string) =>
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -141,6 +150,19 @@ test("older desktop builds without the flag keep the in-app tab", async () => {
   expect(popup.location.href).toBe(authUrl);
   notifyOAuthComplete("abc_123");
   await promise;
+});
+
+test("only a tab that launchOAuth opened closes itself", () => {
+  const close = jest.spyOn(window, "close").mockImplementation(() => {});
+  expect(reportOAuthCallback("abc_123", true)).toBe(false);
+  window.sessionStorage.setItem("onyx:oauth-launch", "other");
+  expect(reportOAuthCallback("abc_123", true)).toBe(false);
+  window.sessionStorage.setItem("onyx:oauth-launch", "abc_123");
+  expect(reportOAuthCallback("abc_123.desktop", true)).toBe(true);
+  expect(window.sessionStorage.getItem("onyx:oauth-launch")).toBeNull();
+  expect(close).toHaveBeenCalledTimes(1);
+  window.__ONYX_DESKTOP__ = { oauthCallbackWindow: true };
+  expect(reportOAuthCallback("abc_123", true)).toBe(true);
 });
 
 test("desktop state helpers", () => {
