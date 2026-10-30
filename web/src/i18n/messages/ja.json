@@ -6590,11 +6590,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "接続済みの LLM プロバイダーの画像モデルです。チャットで使うには接続してください。",
+        "title": "利用可能なモデル"
+      },
       "configureSuccess": {
         "message": "プロバイダーを設定しました"
       },
+      "connectButton": {
+        "label": "接続"
+      },
+      "connectedModels": {
+        "title": "接続済みモデル"
+      },
+      "defaultTag": {
+        "label": "デフォルト"
+      },
       "deselectError": {
         "message": "選択を解除できませんでした"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} を切断"
       },
       "disconnectError": {
         "message": "接続を解除できませんでした"
@@ -6636,6 +6652,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} の接続を解除しました"
+      },
+      "editButton": {
+        "ariaLabel": "{title} を編集"
       },
       "emptyState": {
         "title": "チャットで使用する画像生成モデルを接続してください。"
@@ -6729,10 +6748,15 @@
       },
       "model": {
         "description": "チャットで画像を生成するモデルを選択してください。",
+        "placeholder": "デフォルトのモデルを選択",
         "title": "画像生成モデル"
       },
+      "modelFilter": {
+        "all": "すべて",
+        "recommended": "おすすめ"
+      },
       "noImageModels": {
-        "description": "言語モデルページで、画像モデルを提供するLLMプロバイダーを接続してください。接続済みプロバイダーのすべてのモデルを表示するには、推奨フィルターをオフにしてください。",
+        "description": "言語モデルページで、画像モデルを提供する LLM プロバイダーを接続してください。接続済みプロバイダーのすべてのモデルを表示するには、[すべて] タブを開いてください。",
         "title": "利用できる画像モデルがありません"
       },
       "providers": {
@@ -6775,9 +6799,6 @@
         "openaiGptImage25Sunburst": {
           "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
-      },
-      "recommendedOnly": {
-        "label": "推奨画像モデルのみ"
       },
       "retiredModelWarning": {
         "description": "別のモデルを接続してデフォルトに設定してから、{title} の接続を解除してください。",

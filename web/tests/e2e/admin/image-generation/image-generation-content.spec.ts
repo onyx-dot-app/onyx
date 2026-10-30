@@ -75,7 +75,7 @@ test.describe("Image Generation models from LLM providers", () => {
     await loginAs(page, "admin");
   });
 
-  test("recommended filter hides non-image models until turned off", async ({
+  test("recommended tab hides non-image models until All is selected", async ({
     page,
   }) => {
     await mockImageGenApis(page);
@@ -90,7 +90,11 @@ test.describe("Image Generation models from LLM providers", () => {
       0
     );
 
-    await imageGenPage.recommendedOnlySwitch.click();
+    await expect(imageGenPage.recommendedTab).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await imageGenPage.allTab.click();
     await expect(
       imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-5")
     ).toBeVisible();

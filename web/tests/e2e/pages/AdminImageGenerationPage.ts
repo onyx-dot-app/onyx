@@ -10,9 +10,9 @@ export class AdminImageGenerationPage {
 
   async goto(): Promise<void> {
     await this.page.goto(ADMIN_ROUTES.IMAGE_GENERATION.path);
-    await expect(
-      this.page.getByText("Image Generation Model").first()
-    ).toBeVisible({ timeout: 20000 });
+    await expect(this.page.getByText("Available Models").first()).toBeVisible({
+      timeout: 20000,
+    });
   }
 
   providerTitle(name: string): Locator {
@@ -26,10 +26,12 @@ export class AdminImageGenerationPage {
     );
   }
 
-  get recommendedOnlySwitch(): Locator {
-    return this.page.getByRole("switch", {
-      name: "Recommended Image Models Only",
-    });
+  get recommendedTab(): Locator {
+    return this.page.getByRole("tab", { name: "Recommended" });
+  }
+
+  get allTab(): Locator {
+    return this.page.getByRole("tab", { name: "All" });
   }
 
   get dialog(): Locator {
@@ -41,6 +43,6 @@ export class AdminImageGenerationPage {
   }
 
   currentDefaultBadge(card: Locator): Locator {
-    return card.getByRole("button", { name: "Current Default" });
+    return card.getByText("Default", { exact: true });
   }
 }
