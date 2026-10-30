@@ -3857,6 +3857,9 @@ class ToolCall(Base):
         back_populates="tool_calls",
         cascade="all, delete-orphan",
         single_parent=True,
+        # Insertion order: a fetch call's replay shows its documents in this
+        # order. Without it, the order depends on how the rows are loaded.
+        order_by="SearchDoc.id",
     )
 
 

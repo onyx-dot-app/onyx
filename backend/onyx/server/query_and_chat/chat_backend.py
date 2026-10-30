@@ -429,6 +429,8 @@ def get_chat_session(
         # we need the tool call objs anyways, so just fetch them in a single call
         prefetch_top_two_level_tool_calls=True,
         prefetch_message_details=True,
+        # the replay builds search and fetch packets from these
+        prefetch_tool_call_search_docs=True,
     )
 
     # Convert messages to ChatMessageDetail format

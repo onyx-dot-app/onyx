@@ -750,6 +750,9 @@ def get_chat_messages_by_session(
     skip_permission_check: bool = False,
     prefetch_top_two_level_tool_calls: bool = True,
     prefetch_message_details: bool = False,
+    # Only the session replay reads tool call search docs; building chat
+    # history for a new message does not, so it skips this load.
+    prefetch_tool_call_search_docs: bool = False,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -777,11 +780,13 @@ def get_chat_messages_by_session(
     # This should handle both the top level tool calls and deep research
     # If there are future nested agents, this can be extended.
     if prefetch_top_two_level_tool_calls:
-        # Load tool_calls and their direct children (one level deep)
+        # Load tool_calls and their direct children (one level deep), and on
+        # request their search docs
+        tool_call_loads = [selectinload(ToolCall.tool_call_children)]
+        if prefetch_tool_call_search_docs:
+            tool_call_loads.append(selectinload(ToolCall.search_docs))
         stmt = stmt.options(
-            selectinload(ChatMessage.tool_calls).selectinload(
-                ToolCall.tool_call_children
-            )
+            selectinload(ChatMessage.tool_calls).options(*tool_call_loads)
         )
         result = db_session.scalars(stmt).unique().all()
     else:
