@@ -13,6 +13,10 @@ import type {
 import { MCPAuthenticationType, MCPConnectionStatus } from "@/lib/mcp/types";
 import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
 import {
+  isSilentOAuthOutcome,
+  openOAuthAuthorization,
+} from "@/lib/oauth/launch";
+import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
   startMCPUserOAuth,
@@ -157,7 +161,21 @@ export function useMcpAuthentication(
         window.location.pathname + window.location.search,
         { forceReauthentication }
       );
-      navigation.load(getMCPUserOAuthNavigationUrl(result));
+      const url = getMCPUserOAuthNavigationUrl(result);
+      if (result.status !== "authorization_required") {
+        navigation.load(url);
+        return;
+      }
+      setLoadingServerId(null);
+      openOAuthAuthorization(url).then(
+        () => refresh(),
+        (error: unknown) => {
+          if (isSilentOAuthOutcome(error)) return;
+          setAuthenticationError(
+            error instanceof Error ? error : new Error(String(error))
+          );
+        }
+      );
     } catch (error) {
       setLoadingServerId(null);
       throw error;

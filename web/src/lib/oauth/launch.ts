@@ -143,7 +143,7 @@ export function launchOAuth(
     let settled = false;
     let channel: BroadcastChannel | null = null;
     let state: string | null = null;
-    function finish(error?: OAuthLaunchError) {
+    function finish(error?: Error) {
       if (settled) return;
       settled = true;
       window.removeEventListener("message", receiveCompletion);
@@ -209,7 +209,12 @@ export function launchOAuth(
           finish(new OAuthLaunchError("request_failed"));
         }
       },
-      () => finish(new OAuthLaunchError("request_failed"))
+      (error: unknown) =>
+        finish(
+          error instanceof Error
+            ? error
+            : new OAuthLaunchError("request_failed")
+        )
     );
   });
 }
@@ -228,4 +233,34 @@ export function needsDesktopOAuthHandoff(state: string | null): boolean {
 export function reportOAuthCallback(state: string, ok: boolean): boolean {
   notifyOAuthComplete(stripDesktopOAuthState(state), ok);
   return closeOAuthCallbackWindow();
+}
+
+/**
+ * Opens an authorization URL that is already known. Falls back to the
+ * current-tab redirect when the browser blocks the new tab.
+ */
+export function openOAuthAuthorization(
+  authorizationUrl: string,
+  options: OAuthLaunchOptions = {}
+): Promise<void> {
+  return launchOAuth(async () => authorizationUrl, options).catch(
+    (error: unknown) => {
+      if (
+        error instanceof OAuthLaunchError &&
+        error.reason === "popup_blocked"
+      ) {
+        window.location.assign(authorizationUrl);
+        return new Promise<void>(() => {});
+      }
+      throw error;
+    }
+  );
+}
+
+/** True for outcomes the user chose, which need no error message. */
+export function isSilentOAuthOutcome(error: unknown): boolean {
+  return (
+    error instanceof OAuthLaunchError &&
+    (error.reason === "cancelled" || error.reason === "timed_out")
+  );
 }
