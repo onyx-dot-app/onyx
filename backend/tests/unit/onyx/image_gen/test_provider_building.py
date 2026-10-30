@@ -13,6 +13,7 @@ from onyx.image_gen.providers.vertex_img_gen import VertexImageGenerationProvide
 
 OPENAI_PROVIDER = "openai"
 AZURE_PROVIDER = "azure"
+GATEWAY = "https://gateway.example.com"
 VERTEX_PROVIDER = "vertex_ai"
 
 
@@ -27,20 +28,33 @@ def _get_default_image_gen_creds() -> ImageGenerationProviderCredentials:
 
 
 @pytest.mark.parametrize(
-    "provider,custom_config,expected_model",
+    "provider,custom_config,expected_model,expected_base",
     [
-        ("openrouter", None, "openrouter/google/gemini-2.5-flash-image"),
-        ("google", None, "gemini/google/gemini-2.5-flash-image"),
-        ("litellm_proxy", None, "litellm_proxy/google/gemini-2.5-flash-image"),
-        ("openai_compatible", None, "openai/google/gemini-2.5-flash-image"),
+        ("openrouter", None, "openrouter/google/gemini-2.5-flash-image", GATEWAY),
+        ("google", None, "gemini/google/gemini-2.5-flash-image", GATEWAY),
+        (
+            "litellm_proxy",
+            None,
+            "litellm_proxy/google/gemini-2.5-flash-image",
+            GATEWAY,
+        ),
+        (
+            "openai_compatible",
+            None,
+            "openai/google/gemini-2.5-flash-image",
+            f"{GATEWAY}/v1",
+        ),
     ],
 )
 def test_other_providers_route_through_litellm(
-    provider: str, custom_config: dict[str, str] | None, expected_model: str
+    provider: str,
+    custom_config: dict[str, str] | None,
+    expected_model: str,
+    expected_base: str,
 ) -> None:
     credentials = _get_default_image_gen_creds()
     credentials.api_key = "sk-test"
-    credentials.api_base = "https://gateway.example.com"
+    credentials.api_base = GATEWAY
     credentials.custom_config = custom_config
 
     image_provider = get_image_generation_provider(provider, credentials)
@@ -57,7 +71,7 @@ def test_other_providers_route_through_litellm(
     kwargs = mock_generate.call_args.kwargs
     assert kwargs["model"] == expected_model
     assert kwargs["api_key"] == "sk-test"
-    assert kwargs["api_base"] == "https://gateway.example.com"
+    assert kwargs["api_base"] == expected_base
     assert kwargs["drop_params"] is True
 
 

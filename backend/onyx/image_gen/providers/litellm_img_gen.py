@@ -57,8 +57,18 @@ class LiteLLMImageGenerationProvider(ImageGenerationProvider):
         self._litellm_provider = resolve_litellm_image_provider(
             provider, credentials.custom_config
         )
-        self._api_key = credentials.api_key
+        openai_compatible = (
+            resolve_api_surface(provider, credentials.custom_config)
+            in OPENAI_COMPATIBLE_SURFACES
+        )
+        # Same /v1 base and placeholder key the chat path applies.
+        self._api_key = credentials.api_key or (
+            "not-needed" if openai_compatible else None
+        )
         self._api_base = credentials.api_base
+        if openai_compatible and self._api_base:
+            base = self._api_base.rstrip("/")
+            self._api_base = base if base.endswith("/v1") else f"{base}/v1"
         self._api_version = credentials.api_version
         self._deployment_name = credentials.deployment_name
         self._provider_kwargs = map_custom_config_to_model_kwargs(
