@@ -2,9 +2,6 @@ import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import {
-  chooseModelOption,
-  closeModelPicker,
-  openModelList,
   selectModelFromInputPopover,
   sendMessage,
   startNewChat,
@@ -405,10 +402,11 @@ test.describe("LLM Runtime Selection", () => {
       });
     });
 
-    await new ChatPage(page).goto();
+    const chatPage = new ChatPage(page);
+    await chatPage.goto();
 
-    const dialog = await openModelList(page);
-    await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
+    const dialog = await chatPage.openModelList();
+    await chatPage.modelSearchInput.fill(sharedModelName);
 
     const sharedModelOptions = dialog.locator("[data-interactive-state]");
     await expect(sharedModelOptions).toHaveCount(2);
@@ -416,7 +414,7 @@ test.describe("LLM Runtime Selection", () => {
     // Groups are sorted alphabetically, so OpenAI (index 1) comes after Anthropic (index 0).
     const openAiModelOption = sharedModelOptions.nth(1);
     await expect(openAiModelOption).toBeVisible();
-    await chooseModelOption(page, openAiModelOption);
+    await chatPage.chooseModelOption(openAiModelOption);
 
     await sendMessage(page, "Collision payload check one.");
     await expect.poll(() => capturedPayloads.length).toBe(1);
@@ -426,10 +424,8 @@ test.describe("LLM Runtime Selection", () => {
     await startNewChat(page);
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 
-    const secondDialog = await openModelList(page);
-    await secondDialog
-      .getByPlaceholder("Search models...")
-      .fill(sharedModelName);
+    const secondDialog = await chatPage.openModelList();
+    await chatPage.modelSearchInput.fill(sharedModelName);
 
     const secondSharedModelOptions = secondDialog.locator(
       "[data-interactive-state]"
@@ -438,15 +434,15 @@ test.describe("LLM Runtime Selection", () => {
     // Anthropic is index 0 (alphabetically first).
     const anthropicModelOption = secondSharedModelOptions.nth(0);
     await expect(anthropicModelOption).toBeVisible();
-    await chooseModelOption(page, anthropicModelOption);
+    await chatPage.chooseModelOption(anthropicModelOption);
 
-    const verifyDialog = await openModelList(page);
+    const verifyDialog = await chatPage.openModelList();
     // Verify the Anthropic option (index 0) is selected.
     const selectedOption = verifyDialog.locator(
       '[data-interactive-state="selected"]'
     );
     await expect(selectedOption).toHaveCount(1);
-    await closeModelPicker(page);
+    await chatPage.closeModelPicker();
 
     await sendMessage(page, "Collision payload check two.");
     await expect.poll(() => capturedPayloads.length).toBe(2);
@@ -501,10 +497,11 @@ test.describe("LLM Runtime Selection", () => {
     providersToCleanup.push(restrictedProviderId);
 
     await loginWithCleanCookies(page, testInfo.workerIndex);
-    await new ChatPage(page).goto();
+    const chatPage = new ChatPage(page);
+    await chatPage.goto();
 
-    const dialog = await openModelList(page);
-    await dialog.getByPlaceholder("Search models...").fill(restrictedModelName);
+    const dialog = await chatPage.openModelList();
+    await chatPage.modelSearchInput.fill(restrictedModelName);
 
     const restrictedModelOption = dialog
       .locator("[data-interactive-state]")

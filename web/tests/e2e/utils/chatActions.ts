@@ -1,5 +1,6 @@
-import { Locator, Page } from "@playwright/test";
+import { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 
 export async function verifyDefaultAgentIsChosen(page: Page) {
   await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
@@ -55,78 +56,19 @@ export async function sendMessage(page: Page, message: string) {
   );
 }
 
-/** The model picker row: the "Add Model" button, then one pill per selected model. */
-function getModelSelector(page: Page): Locator {
-  return page.getByTestId("model-selector");
-}
-
-/** One pill per selected model. A pill opens its model's settings pane, not the list. */
-export function getModelPills(page: Page): Locator {
-  return getModelSelector(page).locator("button:not([aria-label='Add Model'])");
-}
-
 export async function verifyCurrentModel(page: Page, modelName: string) {
-  await expect(
-    getModelPills(page).filter({ hasText: modelName }).first()
-  ).toBeVisible();
-}
-
-/** Opens the model list from the add button and returns the popover. */
-export async function openModelList(page: Page): Promise<Locator> {
-  await getModelSelector(page)
-    .getByRole("button", { name: "Add Model", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByPlaceholder("Search models...")).toBeVisible({
-    timeout: 10000,
-  });
-  return dialog;
-}
-
-export async function closeModelPicker(page: Page): Promise<void> {
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toBeHidden();
-}
-
-/**
- * Makes a row of the open model list the only selected model. A row click
- * adds its model as the first pill and the list stays open, so this closes
- * the list and then removes the older pills with their x.
- */
-export async function chooseModelOption(
-  page: Page,
-  option: Locator
-): Promise<string> {
-  const pills = getModelPills(page);
-  if ((await option.getAttribute("data-interactive-state")) !== "selected") {
-    const before = await pills.count();
-    await option.click();
-    await expect(pills).toHaveCount(before + 1);
-  }
-  await closeModelPicker(page);
-
-  // The x is the pill's last icon and renders only while several are selected.
-  for (let count = await pills.count(); count > 1; count--) {
-    await pills.last().locator(".interactive-foreground-icon").last().click();
-    await expect(pills).toHaveCount(count - 1);
-  }
-
-  const selectedText = (await pills.first().textContent())?.trim() ?? "";
-  if (!selectedText) {
-    throw new Error("Failed to read selected model text from model selector");
-  }
-  return selectedText;
+  await expect(new ChatPage(page).modelPill(modelName).first()).toBeVisible();
 }
 
 export async function selectModelFromInputPopover(
   page: Page,
   preferredModels: string[]
 ): Promise<string> {
-  const currentModelText =
-    (await getModelPills(page).first().textContent())?.trim() ?? "";
+  const chatPage = new ChatPage(page);
+  const currentModelText = await chatPage.modelPillText();
 
-  const dialog = await openModelList(page);
-  const searchInput = dialog.getByPlaceholder("Search models...");
+  const dialog = await chatPage.openModelList();
+  const searchInput = chatPage.modelSearchInput;
 
   for (const modelName of preferredModels) {
     await searchInput.fill(modelName);
@@ -140,7 +82,7 @@ export async function selectModelFromInputPopover(
         (await nonSelectedOptions.count()) > 0
           ? nonSelectedOptions.first()
           : modelOptions.first();
-      return chooseModelOption(page, candidate);
+      return chatPage.chooseModelOption(candidate);
     }
   }
 
@@ -151,10 +93,10 @@ export async function selectModelFromInputPopover(
   if ((await nonSelectedOptions.count()) > 0) {
     const fallback = nonSelectedOptions.first();
     await expect(fallback).toBeVisible();
-    return chooseModelOption(page, fallback);
+    return chatPage.chooseModelOption(fallback);
   }
 
-  await closeModelPicker(page).catch(() => {});
+  await chatPage.closeModelPicker().catch(() => {});
 
   if (currentModelText) {
     return currentModelText;
@@ -164,13 +106,14 @@ export async function selectModelFromInputPopover(
 }
 
 export async function switchModel(page: Page, modelName: string) {
-  const dialog = await openModelList(page);
-  await dialog.getByPlaceholder("Search models...").fill(modelName);
+  const chatPage = new ChatPage(page);
+  const dialog = await chatPage.openModelList();
+  await chatPage.modelSearchInput.fill(modelName);
   const option = dialog
     .locator("[data-interactive-state]")
     .filter({ hasText: modelName })
     .first();
-  await chooseModelOption(page, option);
+  await chatPage.chooseModelOption(option);
 }
 
 export async function startNewChat(page: Page) {

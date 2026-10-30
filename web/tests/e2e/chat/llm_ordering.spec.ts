@@ -1,10 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import {
-  chooseModelOption,
-  getModelPills,
-  openModelList,
-} from "@tests/e2e/utils/chatActions";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ensureImageGenerationEnabled } from "@tests/e2e/utils/agentUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
@@ -48,10 +44,10 @@ test.describe("LLM Ordering", () => {
     await page.goto("/app");
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 10000 });
 
-    const originalModelText =
-      (await getModelPills(page).first().textContent())?.trim() ?? "";
+    const chatPage = new ChatPage(page);
+    const originalModelText = await chatPage.modelPillText();
 
-    const dialog = await openModelList(page);
+    const dialog = await chatPage.openModelList();
     const allModelItems = dialog.locator("[data-interactive-state]");
     await expect(allModelItems.first()).toBeVisible({ timeout: 5000 });
 
@@ -66,11 +62,11 @@ test.describe("LLM Ordering", () => {
     const targetItem = hasNonSelected ? nonSelectedItem : allModelItems.first();
 
     await expect(targetItem).toBeVisible();
-    const selectedModelText = await chooseModelOption(page, targetItem);
+    const selectedModelText = await chatPage.chooseModelOption(targetItem);
 
     // Verify the popover closed and the sole pill shows the new model
     await expect(dialog).toBeHidden();
-    await expect(getModelPills(page)).toHaveCount(1);
+    await expect(chatPage.modelPills).toHaveCount(1);
 
     if (hasNonSelected) {
       expect(selectedModelText).not.toBe(originalModelText);
