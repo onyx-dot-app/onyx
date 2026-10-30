@@ -11,6 +11,7 @@ mod debug_log;
 #[cfg(target_os = "macos")]
 mod macos_webview;
 mod menu;
+mod oauth_handoff;
 mod shortcuts;
 mod window;
 
@@ -116,6 +117,8 @@ fn setup_app(app: &tauri::AppHandle) {
         debug_log::log_backend_error(app, &format!("Failed to build main window: {e}"));
     }
 
+    oauth_handoff::setup(app);
+
     // Before the tray, so its menu can reflect whether the shortcut registered.
     shortcuts::setup_global_shortcuts(app);
 
@@ -181,7 +184,7 @@ fn main() {
     // `tauri::generate_context!()` also expands to code that calls
     // `std::process::exit` internally on some platforms.
     #[allow(clippy::expect_used, clippy::exit)]
-    tauri::Builder::default()
+    oauth_handoff::with_plugins(tauri::Builder::default())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(

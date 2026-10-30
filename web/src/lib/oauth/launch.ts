@@ -31,6 +31,7 @@ const completionSchema = yup.object({
 
 interface DesktopBridge {
   oauthInBrowser?: boolean;
+  oauthCallbackWindow?: boolean;
 }
 
 interface TauriInternals {
@@ -105,7 +106,8 @@ export function notifyOAuthComplete(state: string, ok = true): void {
  * nothing is waiting, so the caller keeps its redirect fallback.
  */
 export function closeOAuthCallbackWindow(): boolean {
-  if (!window.opener) return false;
+  if (!window.opener && !window.__ONYX_DESKTOP__?.oauthCallbackWindow)
+    return false;
   window.close();
   return true;
 }
