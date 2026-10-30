@@ -6590,11 +6590,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Modèles d'image de vos fournisseurs LLM connectés. Connectez-en un pour l'utiliser dans le chat.",
+        "title": "Modèles disponibles"
+      },
       "configureSuccess": {
         "message": "Fournisseur configuré avec succès"
       },
+      "connectButton": {
+        "label": "Connecter"
+      },
+      "connectedModels": {
+        "title": "Modèles connectés"
+      },
+      "defaultTag": {
+        "label": "Par défaut"
+      },
       "deselectError": {
         "message": "Échec de la désélection"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Déconnecter {title}"
       },
       "disconnectError": {
         "message": "Échec de la déconnexion"
@@ -6636,6 +6652,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} déconnecté"
+      },
+      "editButton": {
+        "ariaLabel": "Modifier {title}"
       },
       "emptyState": {
         "title": "Connectez un modèle de génération d'images à utiliser dans la discussion."
@@ -6729,10 +6748,15 @@
       },
       "model": {
         "description": "Sélectionnez un modèle pour générer des images dans la discussion.",
+        "placeholder": "Sélectionnez un modèle par défaut",
         "title": "Modèle de génération d'images"
       },
+      "modelFilter": {
+        "all": "Tous",
+        "recommended": "Recommandés"
+      },
       "noImageModels": {
-        "description": "Connectez un fournisseur LLM qui propose des modèles d'image sur la page Modèles de langage. Pour voir tous les modèles de vos fournisseurs connectés, désactivez le filtre des modèles recommandés.",
+        "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image. Pour voir tous les modèles de vos fournisseurs connectés, ouvrez l'onglet Tous.",
         "title": "Aucun modèle d'image disponible"
       },
       "providers": {
@@ -6775,9 +6799,6 @@
         "openaiGptImage25Sunburst": {
           "description": "Modèle premium de génération d'images d'OpenAI, pour les retouches les plus précises."
         }
-      },
-      "recommendedOnly": {
-        "label": "Modèles d'image recommandés uniquement"
       },
       "retiredModelWarning": {
         "description": "Connectez un autre modèle, définissez-le par défaut, puis déconnectez {title}.",

@@ -6590,11 +6590,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Bildmodelle Ihrer verbundenen LLM-Anbieter. Verbinden Sie eines, um es im Chat zu verwenden.",
+        "title": "Verfügbare Modelle"
+      },
       "configureSuccess": {
         "message": "Anbieter erfolgreich konfiguriert"
       },
+      "connectButton": {
+        "label": "Verbinden"
+      },
+      "connectedModels": {
+        "title": "Verbundene Modelle"
+      },
+      "defaultTag": {
+        "label": "Standard"
+      },
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} trennen"
       },
       "disconnectError": {
         "message": "Trennung fehlgeschlagen"
@@ -6636,6 +6652,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} getrennt"
+      },
+      "editButton": {
+        "ariaLabel": "{title} bearbeiten"
       },
       "emptyState": {
         "title": "Verbinden Sie ein Modell zur Bilderzeugung, um es im Chat zu verwenden."
@@ -6729,10 +6748,15 @@
       },
       "model": {
         "description": "Wählen Sie ein Modell, um Bilder im Chat zu erzeugen.",
+        "placeholder": "Standardmodell auswählen",
         "title": "Modell zur Bilderzeugung"
       },
+      "modelFilter": {
+        "all": "Alle",
+        "recommended": "Empfohlen"
+      },
       "noImageModels": {
-        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Deaktivieren Sie den Filter für empfohlene Modelle, um alle Modelle Ihrer verbundenen Anbieter zu sehen.",
+        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Öffnen Sie den Tab „Alle“, um jedes Modell Ihrer verbundenen Anbieter zu sehen.",
         "title": "Keine Bildmodelle verfügbar"
       },
       "providers": {
@@ -6775,9 +6799,6 @@
         "openaiGptImage25Sunburst": {
           "description": "Das Premium-Bilderzeugungsmodell von OpenAI für die präzisesten Bearbeitungen."
         }
-      },
-      "recommendedOnly": {
-        "label": "Nur empfohlene Bildmodelle"
       },
       "retiredModelWarning": {
         "description": "Verbinden Sie ein anderes Modell, legen Sie es als Standard fest und trennen Sie dann {title}.",

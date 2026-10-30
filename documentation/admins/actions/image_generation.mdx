@@ -14,9 +14,9 @@ any chat model in Onyx can invoke the action.
 Image models come from the LLM providers you have already connected. Onyx does not ask for an API key again.
 The Image Generation page lists each connected provider that has image models, and the models it serves.
 
-By default, **Recommended image models only** is on.
-The list then shows the image models in the Onyx model catalog that the vendor has not retired, for example GPT Image,
-Gemini image (Nano Banana), Imagen, and the Bedrock image models. Turn the switch off to see every model on a provider,
+**Available Models** has two tabs. The **Recommended** tab opens by default.
+It shows the image models in the Onyx model catalog that the vendor has not retired, for example GPT Image,
+Gemini image (Nano Banana), Imagen, and the Bedrock image models. Open the **All** tab to see every model on a provider,
 for example a new model or a model name that a gateway such as LiteLLM Proxy or OpenRouter defines.
 
 <Note>
@@ -35,19 +35,19 @@ for example a new model or a model name that a gateway such as LiteLLM Proxy or 
   </Step>
 
   <Step title="Connect a Model">
-    Open **Admin Panel → Image Generation** and click **Connect** on a model under its provider.
-    If no default model is set, the model becomes the default.
+    Open **Admin Panel → Image Generation**. Under **Available Models**, click **Connect** on a model.
+    The model moves to **Connected Models**. If no default model is set, the model becomes the default.
 
     <img className="rounded-image" src="/assets/admins/actions/image_generation_overview.webp" alt="Image Generation page in the Onyx Admin Panel"/>
 
     Image models that you connected with their own credentials in an earlier Onyx version stay on the page until you
-    disconnect them. You can still edit their credentials.
+    disconnect them. To edit their credentials, click the settings icon on the model.
   </Step>
 
   <Step title="Set the Default Model">
-    Click **Set as Default** on the model you want to use. Only one model can be the default.
+    Select the model in **Image Generation Model** at the top of the page. Only one model can be the default.
 
-    - To clear the default, click the **Current Default** badge. Image generation is turned off until you set
+    - To clear the default, select **No Default**. Image generation is turned off until you set
     another default.
     - If you disconnect the current default model, the dialog asks you to choose a replacement default or
     **No Default**, which turns image generation off.

@@ -6590,11 +6590,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "已连接的 LLM 提供商上的图像模型。连接一个即可在聊天中使用。",
+        "title": "可用模型"
+      },
       "configureSuccess": {
         "message": "提供商配置成功"
       },
+      "connectButton": {
+        "label": "连接"
+      },
+      "connectedModels": {
+        "title": "已连接的模型"
+      },
+      "defaultTag": {
+        "label": "默认"
+      },
       "deselectError": {
         "message": "取消选择失败"
+      },
+      "disconnectButton": {
+        "ariaLabel": "断开 {title}"
       },
       "disconnectError": {
         "message": "断开连接失败"
@@ -6636,6 +6652,9 @@
       },
       "disconnectSuccess": {
         "message": "已断开 {title} 的连接"
+      },
+      "editButton": {
+        "ariaLabel": "编辑 {title}"
       },
       "emptyState": {
         "title": "连接一个图像生成模型，以便在对话中使用。"
@@ -6729,10 +6748,15 @@
       },
       "model": {
         "description": "选择用于在对话中生成图像的模型。",
+        "placeholder": "选择默认模型",
         "title": "图像生成模型"
       },
+      "modelFilter": {
+        "all": "全部",
+        "recommended": "推荐"
+      },
       "noImageModels": {
-        "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。要查看已连接提供商的所有模型，请关闭推荐筛选。",
+        "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。要查看已连接提供商的所有模型，请打开“全部”标签页。",
         "title": "没有可用的图像模型"
       },
       "providers": {
@@ -6775,9 +6799,6 @@
         "openaiGptImage25Sunburst": {
           "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
-      },
-      "recommendedOnly": {
-        "label": "仅显示推荐的图像模型"
       },
       "retiredModelWarning": {
         "description": "请连接其他模型并将其设为默认，然后断开 {title} 的连接。",

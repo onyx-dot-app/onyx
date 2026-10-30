@@ -624,7 +624,6 @@
         "src/views/admin/GroupsPage/SharedGroupResources/index.tsx",
         "src/views/admin/GroupsPage/TokenLimitSection.tsx",
         "src/views/admin/GroupsPage/shared.tsx",
-        "src/views/admin/ImageGenerationPage/ImageGenerationContent.tsx",
         "src/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper.tsx",
         "src/views/admin/IndexSettingsPage/CCPairIdsBackfillCard.tsx",
         "src/views/admin/IndexSettingsPage/ReindexErrorsModal.tsx",

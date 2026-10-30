@@ -6590,11 +6590,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Modelos de imagem dos seus provedores de LLM conectados. Conecte um para usá-lo no chat.",
+        "title": "Modelos disponíveis"
+      },
       "configureSuccess": {
         "message": "Provedor configurado com sucesso"
       },
+      "connectButton": {
+        "label": "Conectar"
+      },
+      "connectedModels": {
+        "title": "Modelos conectados"
+      },
+      "defaultTag": {
+        "label": "Padrão"
+      },
       "deselectError": {
         "message": "Falha ao desmarcar"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Desconectar {title}"
       },
       "disconnectError": {
         "message": "Falha ao desconectar"
@@ -6636,6 +6652,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} desconectado"
+      },
+      "editButton": {
+        "ariaLabel": "Editar {title}"
       },
       "emptyState": {
         "title": "Conecte um modelo de geração de imagens para usar no chat."
@@ -6729,10 +6748,15 @@
       },
       "model": {
         "description": "Selecione um modelo para gerar imagens no chat.",
+        "placeholder": "Selecione um modelo padrão",
         "title": "Modelo de geração de imagens"
       },
+      "modelFilter": {
+        "all": "Todos",
+        "recommended": "Recomendados"
+      },
       "noImageModels": {
-        "description": "Conecte um provedor de LLM que ofereça modelos de imagem na página Modelos de linguagem. Para ver todos os modelos dos provedores conectados, desative o filtro de recomendados.",
+        "description": "Conecte na página Modelos de linguagem um provedor de LLM que ofereça modelos de imagem. Para ver todos os modelos dos seus provedores conectados, abra a guia Todos.",
         "title": "Nenhum modelo de imagem disponível"
       },
       "providers": {
@@ -6775,9 +6799,6 @@
         "openaiGptImage25Sunburst": {
           "description": "O modelo premium de geração de imagens da OpenAI, para as edições mais precisas."
         }
-      },
-      "recommendedOnly": {
-        "label": "Somente modelos de imagem recomendados"
       },
       "retiredModelWarning": {
         "description": "Conecte outro modelo, defina-o como padrão e depois desconecte {title}.",
