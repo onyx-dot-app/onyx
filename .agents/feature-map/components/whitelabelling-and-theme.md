@@ -162,7 +162,9 @@ sidebars (`FoldableLogo`), and the theme page's preview
    does.** `web/src/lib/settings/hooks.ts:useSettings` adds `?v=<logoBuster>`, a new timestamp for each new
    settings object, to beat the browser cache after an upload. The SWR
    `compare` uses reference equality so that `mutate()` always makes a new
-   buster. The logo route sends `Cache-Control: no-cache`, and the logotype
+   buster. The buster is kept per settings object for all callers, not per
+   hook call: a per-call timestamp gives every component that mounts later a
+   new URL, so the logo downloads again and flashes. The logo route sends `Cache-Control: no-cache`, and the logotype
    route sends none.
 10. `ce-404-no-branding` **A CE backend returns 404 for the enterprise settings
     route.** `useSettings` treats that 404 as "no branding" and does not retry.
