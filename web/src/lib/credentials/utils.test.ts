@@ -132,6 +132,48 @@ const MESSAGES: CredentialValidationMessages = {
   authMethodRequired: "auth method required",
 };
 
+describe("JSM authentication validation", () => {
+  const schema = createValidationSchema(
+    CREDENTIAL_SPECS[ValidSources.JiraServiceManagement],
+    MESSAGES
+  );
+  const site = { jsm_base_url: "https://acme.atlassian.net" };
+
+  it.each([
+    {},
+    { jsm_user_email: "agent@example.com" },
+    { jsm_api_token: "token" },
+    { jsm_bearer_token: "   " },
+    { jsm_user_email: "  ", jsm_api_token: " " },
+    { jsm_bearer_token: "token", jsm_user_email: "agent@example.com" },
+    { jsm_bearer_token: "token", jsm_api_token: "partial" },
+    { jsm_user_email: "not-an-email", jsm_api_token: "token" },
+  ])("rejects missing or partial credentials: %p", (credentials) => {
+    expect(schema.isValidSync({ ...site, ...credentials })).toBe(false);
+  });
+
+  it.each([
+    { jsm_user_email: " agent@example.com ", jsm_api_token: " token " },
+    { jsm_bearer_token: " token " },
+    {
+      jsm_user_email: "agent@example.com",
+      jsm_api_token: "token",
+      jsm_bearer_token: "bearer",
+    },
+  ])("accepts a complete authentication method: %p", (credentials) => {
+    expect(schema.isValidSync({ ...site, ...credentials })).toBe(true);
+  });
+
+  it("attaches the missing-pair error to its field", () => {
+    try {
+      schema.validateSync({ ...site, jsm_user_email: "agent@example.com" });
+      throw new Error("Expected invalid JSM authentication");
+    } catch (error) {
+      expect(error).toMatchObject({ path: "jsm_api_token" });
+    }
+  });
+});
+
 describe("createValidationSchema", () => {
   const schema = createValidationSchema(
     CREDENTIAL_SPECS[ValidSources.Outlook],

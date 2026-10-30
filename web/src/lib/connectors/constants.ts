@@ -145,6 +145,8 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Braintrust]: "sources.braintrust.description",
   [ValidSources.Lumapps]: "sources.lumapps.description",
   [ValidSources.YouTrack]: "sources.youtrack.description",
+  [ValidSources.JiraServiceManagement]:
+    "sources.jiraServiceManagement.description",
   [ValidSources.Canvas]: "sources.canvas.description",
   [ValidSources.CraftFile]: "sources.craftFile.description",
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
@@ -384,6 +386,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgYouTrack,
     displayName: "YouTrack",
     category: SourceCategory.TicketingAndTaskManagement,
+  },
+  jira_service_management: {
+    icon: SvgJira,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira_service_management`,
   },
   freshdesk: {
     icon: SvgFreshdesk,

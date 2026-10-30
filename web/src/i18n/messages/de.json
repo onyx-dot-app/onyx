@@ -1510,6 +1510,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira-Service-Management-Vorgänge"
         }
       }
     },
@@ -4853,6 +4856,28 @@
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
             }
           }
+        },
+        "jira_service_management": {
+          "description": "Für ein Agentenkonto sichtbare Vorgänge aus Jira Service Management indizieren.",
+          "fields": {
+            "project_key": {
+              "label": "Projektschlüssel",
+              "description": "Der JSM-Projektschlüssel (zum Beispiel ITSM). Das Konto muss ein Agent mit Zugriff auf die Projektvorgänge sein.",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "Servicedesk-IDs",
+              "description": "Optionale numerische Servicedesk-IDs. Der Agent muss auf jeden ausgewählten Servicedesk zugreifen können."
+            },
+            "include_internal_comments": {
+              "label": "Interne Kommentare einbeziehen",
+              "description": "Interne Agentenkommentare für alle Leser dieser Verbindung indizieren. Standardmäßig deaktiviert."
+            },
+            "max_active_sla_requests": {
+              "label": "Aktualisierungslimit für aktive SLAs",
+              "description": "Maximale Anzahl von Vorgängen mit aktiven SLAs pro Abfrage (1–10000). Bei Überschreitung schlägt der Lauf fehl, statt Vorgänge zu überspringen."
+            }
+          }
         }
       }
     },
@@ -5220,7 +5245,8 @@
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Google-Dienstkontos mit domainweiter Delegierung hoch oder fügen Sie ihn ein.",
-        "confluencePersonalAccessToken": "Fügen Sie das [persönliche Zugriffstoken](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) Ihres Confluence-Administratorkontos ein."
+        "confluencePersonalAccessToken": "Fügen Sie das [persönliche Zugriffstoken](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) Ihres Confluence-Administratorkontos ein.",
+        "jsmBaseUrl": "Die HTTPS-Adresse Ihrer Jira-Service-Management-Instanz (zum Beispiel https://your-domain.atlassian.net). Agentenzugriff ist erforderlich."
       },
       "methods": {
         "labels": {

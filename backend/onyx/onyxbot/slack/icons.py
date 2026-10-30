@@ -63,6 +63,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.BITBUCKET: "Bitbucket.png",
     DocumentSource.TESTRAIL: "Testrail.png",
     DocumentSource.BRAINTRUST: "Braintrust.png",
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "Jira.png",
     # LumApps ships only as an inline SVG in web; no PNG asset exists
     DocumentSource.LUMAPPS: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.YOUTRACK: _DEFAULT_SOURCE_IMAGE_FILENAME,

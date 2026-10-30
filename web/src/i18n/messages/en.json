@@ -1510,6 +1510,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management tickets"
         }
       }
     },
@@ -4853,6 +4856,28 @@
               "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
             }
           }
+        },
+        "jira_service_management": {
+          "description": "Index Jira Service Management project issues visible to an agent account.",
+          "fields": {
+            "project_key": {
+              "label": "Project Key",
+              "description": "The JSM project key (for example, ITSM). The account must be an agent with access to the project issues.",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "Service Desk IDs",
+              "description": "Optional numeric service desk IDs. The agent must have access to every selected desk."
+            },
+            "include_internal_comments": {
+              "label": "Include Internal Comments",
+              "description": "Include internal agent comments for everyone who can read this connection. Disabled by default."
+            },
+            "max_active_sla_requests": {
+              "label": "Active SLA Refresh Limit",
+              "description": "Maximum active SLA issues refreshed per poll (1–10000). Exceeding this limit fails the run instead of skipping issues."
+            }
+          }
         }
       }
     },
@@ -5220,7 +5245,8 @@
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation.",
-        "confluencePersonalAccessToken": "Paste the [Personal Access Token](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) from your Confluence admin account."
+        "confluencePersonalAccessToken": "Paste the [Personal Access Token](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) from your Confluence admin account.",
+        "jsmBaseUrl": "The HTTPS URL of your Jira Service Management instance (for example, https://your-domain.atlassian.net). Agent access is required."
       },
       "methods": {
         "labels": {

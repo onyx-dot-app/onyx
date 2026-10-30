@@ -68,6 +68,7 @@ export enum ValidSources {
   Braintrust = "braintrust",
   Lumapps = "lumapps",
   YouTrack = "youtrack",
+  JiraServiceManagement = "jira_service_management",
   Canvas = "canvas",
   Zoom = "zoom",
 

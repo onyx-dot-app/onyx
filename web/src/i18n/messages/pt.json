@@ -1510,6 +1510,9 @@
         },
         "federatedSlack": {
           "description": "Pesquisar no Slack na consulta"
+        },
+        "jiraServiceManagement": {
+          "description": "Chamados do Jira Service Management"
         }
       }
     },
@@ -4853,6 +4856,28 @@
               "description": "Especifique as caixas de correio a indexar (por exemplo, INBOX, Sent, Drafts). Deixe vazio para indexar todas as caixas de correio."
             }
           }
+        },
+        "jira_service_management": {
+          "description": "Indexar os chamados do Jira Service Management visíveis para uma conta de agente.",
+          "fields": {
+            "project_key": {
+              "label": "Chave do projeto",
+              "description": "A chave do projeto JSM (por exemplo, ITSM). A conta deve ser de um agente com acesso aos chamados do projeto.",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "IDs das centrais de serviço",
+              "description": "IDs numéricos opcionais das centrais de serviço. O agente deve ter acesso a todas as centrais selecionadas."
+            },
+            "include_internal_comments": {
+              "label": "Incluir comentários internos",
+              "description": "Incluir os comentários internos dos agentes para todos os leitores desta conexão. Desativado por padrão."
+            },
+            "max_active_sla_requests": {
+              "label": "Limite de atualização de SLAs ativos",
+              "description": "Número máximo de chamados com SLAs ativos atualizados por consulta (1–10000). Se o limite for excedido, a execução falha em vez de ignorar chamados."
+            }
+          }
         }
       }
     },
@@ -5220,7 +5245,8 @@
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio.",
-        "confluencePersonalAccessToken": "Cole o [token de acesso pessoal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) da sua conta de administrador do Confluence."
+        "confluencePersonalAccessToken": "Cole o [token de acesso pessoal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) da sua conta de administrador do Confluence.",
+        "jsmBaseUrl": "A URL HTTPS da sua instância do Jira Service Management (por exemplo, https://your-domain.atlassian.net). É necessário acesso de agente."
       },
       "methods": {
         "labels": {

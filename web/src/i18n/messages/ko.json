@@ -1510,6 +1510,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 이슈"
         }
       }
     },
@@ -4853,6 +4856,28 @@
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
             }
           }
+        },
+        "jira_service_management": {
+          "description": "상담원 계정에서 볼 수 있는 Jira Service Management 프로젝트 이슈를 색인합니다.",
+          "fields": {
+            "project_key": {
+              "label": "프로젝트 키",
+              "description": "JSM 프로젝트 키입니다(예: ITSM). 프로젝트 이슈에 접근할 수 있는 상담원 계정이 필요합니다.",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "서비스 데스크 ID",
+              "description": "선택 사항인 숫자 형식의 서비스 데스크 ID입니다. 상담원은 선택한 모든 서비스 데스크에 접근할 수 있어야 합니다."
+            },
+            "include_internal_comments": {
+              "label": "내부 댓글 포함",
+              "description": "이 연결을 읽을 수 있는 모든 사용자에게 상담원의 내부 댓글을 제공합니다. 기본적으로 비활성화되어 있습니다."
+            },
+            "max_active_sla_requests": {
+              "label": "활성 SLA 새로 고침 한도",
+              "description": "폴링마다 새로 고칠 활성 SLA 이슈의 최대 개수입니다(1~10000). 한도를 초과하면 이슈를 건너뛰는 대신 실행이 실패합니다."
+            }
+          }
         }
       }
     },
@@ -5220,7 +5245,8 @@
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요.",
-        "confluencePersonalAccessToken": "Confluence 관리자 계정의 [개인 액세스 토큰](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)을 붙여 넣으세요."
+        "confluencePersonalAccessToken": "Confluence 관리자 계정의 [개인 액세스 토큰](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)을 붙여 넣으세요.",
+        "jsmBaseUrl": "Jira Service Management 인스턴스의 HTTPS URL입니다(예: https://your-domain.atlassian.net). 상담원 접근 권한이 필요합니다."
       },
       "methods": {
         "labels": {

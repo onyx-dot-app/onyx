@@ -468,6 +468,52 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira_service_management.fields.project_key.label",
+        name: "project_key",
+        optional: false,
+        description:
+          "connectors.jira_service_management.fields.project_key.description",
+        placeholder:
+          "connectors.jira_service_management.fields.project_key.placeholder",
+      },
+      {
+        type: "list",
+        label:
+          "connectors.jira_service_management.fields.service_desk_ids.label",
+        name: "service_desk_ids",
+        optional: true,
+        description:
+          "connectors.jira_service_management.fields.service_desk_ids.description",
+      },
+      {
+        type: "checkbox",
+        label:
+          "connectors.jira_service_management.fields.include_internal_comments.label",
+        name: "include_internal_comments",
+        optional: true,
+        default: false,
+        description:
+          "connectors.jira_service_management.fields.include_internal_comments.description",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        label:
+          "connectors.jira_service_management.fields.max_active_sla_requests.label",
+        name: "max_active_sla_requests",
+        optional: true,
+        default: 1000,
+        description:
+          "connectors.jira_service_management.fields.max_active_sla_requests.description",
+      },
+    ],
+  },
   github: {
     description: "connectors.github.description",
     values: [

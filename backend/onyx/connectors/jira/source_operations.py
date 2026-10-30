@@ -299,6 +299,7 @@ class JiraSourceOperations(SourceOperations):
         jql: str,
         next_page_token: str | None = None,
         max_results: int = _MAX_RESULTS_FETCH_IDS,
+        require_completion_marker: bool = False,
         fast: bool = False,
     ) -> JiraIssueIdPage:
         """Cloud only: one page of issue ids from the enhanced JQL search
@@ -318,6 +319,14 @@ class JiraSourceOperations(SourceOperations):
             )
             response.raise_for_status()
             response_json: dict[str, Any] = response.json()
+        if (
+            require_completion_marker
+            and not response_json.get("nextPageToken")
+            and response_json.get("isLast") is not True
+        ):
+            raise JiraApiError(
+                "Enhanced search ended without a completion marker.", status_code=None
+            )
         return JiraIssueIdPage(
             issue_ids=[str(issue["id"]) for issue in response_json["issues"]],
             next_page_token=response_json.get("nextPageToken"),
@@ -355,6 +364,7 @@ class JiraSourceOperations(SourceOperations):
         start_at: int,
         max_results: int,
         fields: str | None = None,
+        require_complete_page: bool = False,
         fast: bool = False,
     ) -> list[dict[str, Any]]:
         """Server / Data Center only: one offset page of raw issues from the v2
@@ -366,6 +376,26 @@ class JiraSourceOperations(SourceOperations):
             max_results,
         )
         with _translate_errors(fast=fast):
+            if require_complete_page:
+                page: Any = self._client(fast=fast).search_issues(
+                    jql_str=jql,
+                    startAt=start_at,
+                    maxResults=max_results,
+                    fields=fields,
+                    json_result=True,
+                )
+                rows = page.get("issues") if isinstance(page, dict) else None
+                total = page.get("total") if isinstance(page, dict) else None
+                if (
+                    not isinstance(rows, list)
+                    or type(total) is not int
+                    or total < 0
+                    or page.get("startAt") != start_at
+                    or any(not isinstance(row, dict) for row in rows)
+                    or (not rows and start_at < total)
+                ):
+                    raise JiraApiError("Incomplete Jira offset page.", status_code=None)
+                return rows
             issues: Any = self._client(fast=fast).search_issues(
                 jql_str=jql,
                 startAt=start_at,

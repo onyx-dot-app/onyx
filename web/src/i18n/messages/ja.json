@@ -1510,6 +1510,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management の課題"
         }
       }
     },
@@ -4853,6 +4856,28 @@
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
             }
           }
+        },
+        "jira_service_management": {
+          "description": "エージェントアカウントが閲覧できる Jira Service Management のプロジェクト課題をインデックス化します。",
+          "fields": {
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "JSM のプロジェクトキー（例：ITSM）。プロジェクトの課題にアクセスできるエージェントアカウントが必要です。",
+              "placeholder": "ITSM"
+            },
+            "service_desk_ids": {
+              "label": "サービスデスク ID",
+              "description": "対象を絞り込む数値のサービスデスク ID（任意）。エージェントは選択したすべてのサービスデスクにアクセスできる必要があります。"
+            },
+            "include_internal_comments": {
+              "label": "内部コメントを含める",
+              "description": "この接続を閲覧できるすべてのユーザーに、エージェントの内部コメントを公開します。既定では無効です。"
+            },
+            "max_active_sla_requests": {
+              "label": "アクティブな SLA の更新上限",
+              "description": "ポーリングごとに更新する、アクティブな SLA を持つ課題の最大数（1～10000）。上限を超えると、課題を省略せずに実行が失敗します。"
+            }
+          }
         }
       }
     },
@@ -5220,7 +5245,8 @@
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。",
-        "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。"
+        "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。",
+        "jsmBaseUrl": "Jira Service Management インスタンスの HTTPS URL（例：https://your-domain.atlassian.net）。エージェント権限が必要です。"
       },
       "methods": {
         "labels": {

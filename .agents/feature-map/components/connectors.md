@@ -448,6 +448,52 @@ of meeting chats.
   through a SharePoint REST context kept per site and per thread), then the
   organizers the same way.
 
+### 4.6.3 Jira Service Management: project issues and active SLA clocks
+
+`jira_service_management/connector.py:JiraServiceManagementConnector` uses the
+existing `JiraSourceOperations` gateway for Jira project search. Cloud uses
+enhanced-search cursors and bulk fetch. Data Center uses offset pages until an
+empty page. A short page does not end enumeration. Full and slim retrieval use
+the same project scope and stable `JSM_REQUEST_<issue-key>` IDs. Non-customer
+issues are included. Attachments are not separate documents.
+
+JSM opts into strict page checks on the shared Jira gateway. Cloud requires
+either a continuation token or a literal last-page marker. Data Center requires
+valid offset/total metadata and rejects an empty page before the reported end.
+Other Jira callers keep their existing defaults.
+
+Every selected desk must pass the agent-only queue probe. Missing configured
+desks, failed probes, invalid pages, repeated IDs/cursors, and incomplete Cloud
+bulk fetches raise. Slim cancellation also raises. Partial lists must not
+authorize pruning. Agent access does not override Jira issue-security rules:
+the credential must have access to all intended project issues.
+
+Polls use Jira's `updated` field for summary, description, custom-field, and
+comment changes. They also query discovered SLA fields for `running()` or
+`paused()` clocks. This refresh covers breaches without an issue edit, including
+clocks on completed-status issues. The active set is collected before documents
+are yielded. `max_active_sla_requests` defaults to 1000, with a maximum of 10000.
+Exceeding it fails the run; the connector does not silently truncate or scan
+all historical tickets every poll. Clock refreshes use the poll end as their
+document timestamp so Onyx's timestamp dedup gate admits the changed SLA.
+`metadata.jira_updated_at` retains the source timestamp. This is an observation
+time, not a claim that Jira edited the issue. Jira API reads are not atomic.
+SLA-definition changes to already inactive historical cycles require a full
+refresh; the active-clock query is not an audit log for those changes.
+
+Jira field metadata identifies request types and SLA cycles. JSM supplies
+customer-request comments. Internal comments default off in both the config
+model and constructor. Only literal boolean visibility markers are accepted;
+unknown markers are excluded even with internal comments enabled. Comments on
+non-customer issues are internal and fetched only on explicit opt-in. That
+opt-in grants content to connection readers; no per-comment ACL is added.
+
+This remains a legacy Load/Poll connector supported by `ConnectorRunner`.
+Cloud cursors live within one call, not in a persisted connector checkpoint.
+Failures restart the current window. Tests cover security, full/slim parity,
+pagination failures, field edits, active clocks, dedup timestamps, and the cap
+in `backend/tests/unit/onyx/connectors/jira_service_management/`.
+
 ### 4.7 The `SourceOperations` gateway pattern
 
 `source_operations.py` defines an ABC, `SourceOperations`, that a connector's
