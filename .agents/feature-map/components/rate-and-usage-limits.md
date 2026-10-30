@@ -245,7 +245,9 @@ rejected signup attempt still counts.
   `git grep -n "check_token_rate_limits\|check_llm_cost_limit_for_provider" backend`.
 - `add-budget-scope` **Add a budget scope.** Change the EE parallel check list, the admin UI scope
   tabs (`web/src/app/admin/token-rate-limits/`) and
-  `backend/onyx/db/token_limit.py:get_token_rate_limit_scope_and_group_ids`.
+  `backend/onyx/db/token_limit.py:get_token_rate_limit_scope_and_group_id`. A
+  scope that names a group also goes in the `ck_token_rate_limit_group` check
+  on `token_rate_limit`.
 - `add-tenant-usage-type` **Add a tenant usage type.** Copy `UsageType.NON_STREAMING_API_CALLS`: add it to
   `backend/onyx/db/usage.py:UsageType`, the `tenant_usage` columns, the env
   defaults in `shared_configs/configs.py`, `_FIELD_AND_DEFAULT` in

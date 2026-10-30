@@ -6,7 +6,7 @@ from typing import NoReturn
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
@@ -14,7 +14,6 @@ from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import (
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     User,
     User__UserGroup,
     UserGroup,
@@ -48,17 +47,11 @@ def _remove_created_rows(db_session: Session) -> Generator[None, None, None]:
     _created_group_ids.clear()
     yield
     db_session.rollback()
-    limit_ids = db_session.scalars(
-        select(TokenRateLimit__UserGroup.rate_limit_id).where(
-            TokenRateLimit__UserGroup.user_group_id.in_(_created_group_ids)
-        )
-    ).all()
     db_session.execute(
-        delete(TokenRateLimit__UserGroup).where(
-            TokenRateLimit__UserGroup.rate_limit_id.in_(limit_ids)
+        delete(TokenRateLimit).where(
+            TokenRateLimit.user_group_id.in_(_created_group_ids)
         )
     )
-    db_session.execute(delete(TokenRateLimit).where(TokenRateLimit.id.in_(limit_ids)))
     db_session.execute(
         delete(User__UserGroup).where(
             User__UserGroup.user_group_id.in_(_created_group_ids)
@@ -175,14 +168,8 @@ def _add_group_limit(
     db_session: Session, group: UserGroup, period: TokenRateLimitPeriod
 ) -> None:
     limit = _cost_limit(TokenRateLimitScope.USER_GROUP, period)
+    limit.user_group_id = group.id
     db_session.add(limit)
-    db_session.flush()
-    db_session.add(
-        TokenRateLimit__UserGroup(
-            rate_limit_id=limit.id,
-            user_group_id=group.id,
-        )
-    )
 
 
 def test_group_blocks_only_when_every_group_is_over_budget(

@@ -34,7 +34,6 @@ from onyx.db.models import (
     ScimToken,
     StandardAnswer,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     User,
     UserFile,
     UserGroup,
@@ -112,19 +111,16 @@ def test_paid_features_are_switched_off(db_session: Session) -> None:
             period=TokenRateLimitPeriod.DAILY,
             scope=TokenRateLimitScope.GLOBAL,
         )
+        group = UserGroup(name=f"downgrade-{uuid4().hex[:8]}")
+        db_session.add_all([hook, standard_answer, rate_limit, group])
+        db_session.flush()
         group_rate_limit = TokenRateLimit(
             token_budget=1,
             period=TokenRateLimitPeriod.DAILY,
             scope=TokenRateLimitScope.USER_GROUP,
+            user_group_id=group.id,
         )
-        group = UserGroup(name=f"downgrade-{uuid4().hex[:8]}")
-        db_session.add_all([hook, standard_answer, rate_limit, group_rate_limit, group])
-        db_session.flush()
-        db_session.add(
-            TokenRateLimit__UserGroup(
-                rate_limit_id=group_rate_limit.id, user_group_id=group.id
-            )
-        )
+        db_session.add(group_rate_limit)
         scim_token = ScimToken(
             name="downgrade",
             hashed_token=uuid4().hex,
