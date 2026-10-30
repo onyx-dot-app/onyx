@@ -6,7 +6,7 @@ import re
 import ssl
 from datetime import datetime, timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any, cast
 
@@ -438,9 +438,23 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
-    return [(name, addr) for name, addr in name_addr_pairs if addr]
+    # getaddresses honors quoted display names; a naive split on ","
+    # breaks on headers like '"Lastname, Firstname" <a@b.c>'.
+    # Fragments without "@" are display-name remnants, not addresses.
+    addrs = [
+        (name, addr)
+        for name, addr in getaddresses([raw_header])
+        if addr and "@" in addr
+    ]
+    if not addrs:
+        # getaddresses can yield nothing on headers mixing comments and
+        # brackets, e.g. 'Name (comment) [TAG] <a@b.c>'; extract the
+        # angle-addr directly as a fallback.
+        match = re.search(r"<([^<>\s]+@[^<>\s]+)>", raw_header)
+        if match:
+            name = raw_header[: match.start()].strip(' "')
+            addrs = [(name, match.group(1))]
+    return addrs
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
