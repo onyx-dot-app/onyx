@@ -141,6 +141,9 @@ export default function MCPAuthenticationPage({
         recommendation.discovery.supports_automatic_registration === false
           ? ("own_client" as const)
           : ("automatic" as const),
+      oauth_cimd_enabled:
+        recommendation.kind !== "oauth" ||
+        recommendation.discovery.supports_client_metadata !== false,
     };
   });
   const [selectedAuthentication, setSelectedAuthentication] =

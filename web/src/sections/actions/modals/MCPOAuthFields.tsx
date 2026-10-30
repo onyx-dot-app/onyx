@@ -442,33 +442,42 @@ function OAuthDiscoveryStatus({
   const { values, setFieldValue, setValues, dirty, resetForm } =
     useFormikContext<MCPAuthFormValues>();
   const requiresClient = discovery?.supports_automatic_registration === false;
+  const rejectsClientMetadata = discovery?.supports_client_metadata === false;
   const hasAppliedRecommendation = useRef(false);
   useEffect(() => {
     if (
       checking ||
       failed ||
       hasChosenSetup ||
-      !requiresClient ||
+      !(requiresClient || rejectsClientMetadata) ||
       hasAppliedRecommendation.current
     )
       return;
     hasAppliedRecommendation.current = true;
-    if (values.oauth_setup_mode === "automatic") {
-      if (dirty) {
-        void setFieldValue("oauth_setup_mode", "own_client");
-      } else {
-        resetForm({ values: { ...values, oauth_setup_mode: "own_client" } });
-      }
+    const ownClient = requiresClient && values.oauth_setup_mode === "automatic";
+    const disableClientMetadata =
+      rejectsClientMetadata && values.oauth_cimd_enabled;
+    if (!ownClient && !disableClientMetadata) return;
+    const recommended: MCPAuthFormValues = {
+      ...values,
+      ...(ownClient && { oauth_setup_mode: "own_client" as const }),
+      ...(disableClientMetadata && { oauth_cimd_enabled: false }),
+    };
+    if (dirty) {
+      void setValues(recommended);
+    } else {
+      resetForm({ values: recommended });
     }
   }, [
     checking,
     failed,
     hasChosenSetup,
     requiresClient,
+    rejectsClientMetadata,
     values,
     dirty,
     resetForm,
-    setFieldValue,
+    setValues,
   ]);
 
   if (

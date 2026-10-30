@@ -108,11 +108,13 @@ first when `MCPServer.oauth_cimd_enabled` is on and `WEB_DOMAIN` gives a valid
 HTTPS metadata URL. The client ID is then the URL of
 `server/features/mcp/client_metadata.py:get_mcp_oauth_client_metadata`, which
 the provider must fetch. A deployment that the provider cannot reach must turn
-CIMD off for that server, and the SDK then uses DCR.
+CIMD off for that server, and the SDK then uses DCR. The setup probe checks this
+first: `server/features/mcp/oauth_discovery.py:_client_metadata_accepted` sends a
+status-only authorization request with the CIMD client ID and reports
+`supports_client_metadata`. The setup page sets the CIMD switch from that result.
 `server/features/mcp/oauth_flow.py:validate_client_metadata_authorization`
-pre-fetches the authorization URL, so that a provider that cannot read the
-document fails with `client_metadata_rejected`. The setup page then turns CIMD
-off and retries with DCR. The redirect URI and the
+repeats the check at connect time and fails with `client_metadata_rejected`. The
+setup page then turns CIMD off and retries with DCR. The redirect URI and the
 metadata URL both come from the backend `WEB_DOMAIN`. If `WEB_DOMAIN` does not
 match the origin that users open, the provider rejects the callback.
 

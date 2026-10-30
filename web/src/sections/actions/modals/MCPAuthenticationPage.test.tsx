@@ -151,6 +151,7 @@ function mockNetwork(
           options.discovery ?? {
             status: "metadata_found",
             supports_automatic_registration: true,
+            supports_client_metadata: null,
             authorization_endpoint: "https://identity.example.com/authorize",
             token_endpoint: "https://identity.example.com/token",
           }
@@ -998,6 +999,7 @@ test.each(["registered-client", ""])(
       discovery: {
         status: "metadata_found",
         supports_automatic_registration: false,
+        supports_client_metadata: null,
         authorization_endpoint: "https://identity.example.com/authorize",
         token_endpoint: "https://identity.example.com/token",
       },
@@ -1042,6 +1044,7 @@ test("missing metadata offers manual endpoints and retains the existing client",
     discovery: {
       status: "metadata_missing",
       supports_automatic_registration: null,
+      supports_client_metadata: null,
       authorization_endpoint: null,
       token_endpoint: null,
     },
@@ -1154,6 +1157,7 @@ test("retrying unavailable discovery refreshes support while preserving automati
     discovery: {
       status: "unreachable",
       supports_automatic_registration: null,
+      supports_client_metadata: null,
       authorization_endpoint: null,
       token_endpoint: null,
     },
@@ -1170,6 +1174,7 @@ test("retrying unavailable discovery refreshes support while preserving automati
     ...options.discovery,
     status: "metadata_found",
     supports_automatic_registration: true,
+    supports_client_metadata: null,
   };
   await user.click(screen.getByRole("button", { name: copy.discovery.retry }));
   expect(
@@ -1183,6 +1188,39 @@ test("retrying unavailable discovery refreshes support while preserving automati
       ([url]) => url === "/api/admin/mcp/oauth/discover"
     )
   ).toHaveLength(2);
+});
+
+test("a provider that cannot use client metadata starts with automatic registration", async () => {
+  const configuredServer = { ...server, admin_credentials: {} };
+  const network = mockNetwork(configuredServer, undefined, false, {
+    discovery: {
+      status: "metadata_found",
+      supports_automatic_registration: true,
+      supports_client_metadata: false,
+      authorization_endpoint: "https://example.com/authorize",
+      token_endpoint: "https://example.com/token",
+    },
+  });
+  const onPublished = jest.fn();
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  render(
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
+  );
+  await user.click(screen.getByRole("button", { name: "Open setup" }));
+  await screen.findByRole("radio", { name: copy.oauthSetup.automatic.label });
+  await waitFor(() =>
+    expect(
+      screen.getByRole("switch", { name: new RegExp(`^${copy.cimd.label}`) })
+    ).not.toBeChecked()
+  );
+  await user.click(
+    screen.getByRole("button", { name: copy.submitButton.label })
+  );
+  await waitFor(() => expect(onPublished).toHaveBeenCalled());
+  const submissions = network.mock.calls
+    .filter(([url]) => url === "/api/admin/mcp/setup")
+    .map(([, init]) => JSON.parse(String(init?.body)).oauth_cimd_enabled);
+  expect(submissions).toEqual([false]);
 });
 
 test("preserves freshly loaded server metadata when saving authentication", async () => {
@@ -1227,6 +1265,7 @@ test("keeps an explicit automatic choice when discovery finishes late", async ()
         JSON.stringify({
           status: "metadata_found",
           supports_automatic_registration: false,
+          supports_client_metadata: null,
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
         })
@@ -1309,6 +1348,7 @@ describe("inline authentication", () => {
           JSON.stringify({
             status: "metadata_found",
             supports_automatic_registration: false,
+            supports_client_metadata: null,
             authorization_endpoint: "https://identity.example.com/authorize",
             token_endpoint: "https://identity.example.com/token",
           })
@@ -1342,6 +1382,7 @@ describe("inline authentication", () => {
           discovery: {
             status: "metadata_found",
             supports_automatic_registration: false,
+            supports_client_metadata: null,
             authorization_endpoint: "https://identity.example.com/authorize",
             token_endpoint: "https://identity.example.com/token",
           },
@@ -1480,6 +1521,7 @@ describe("inline authentication", () => {
           discovery: {
             status: "metadata_found",
             supports_automatic_registration: true,
+            supports_client_metadata: null,
             authorization_endpoint: "https://example.com/authorize",
             token_endpoint: "https://example.com/token",
           },

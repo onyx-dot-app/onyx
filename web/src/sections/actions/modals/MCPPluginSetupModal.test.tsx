@@ -57,6 +57,7 @@ const oauthResult: MCPSetupProbeResult = {
   discovery: {
     status: "metadata_found",
     supports_automatic_registration: true,
+    supports_client_metadata: null,
     authorization_endpoint: "https://identity.example.com/authorize",
     token_endpoint: "https://identity.example.com/token",
   },
@@ -566,6 +567,27 @@ test("starts with name and URL fields and shows detection before Continue withou
   expect(writes).toEqual([]);
 });
 
+test.each([
+  [null, copy.clientMetadataDetected],
+  [false, copy.registrationDetected],
+])(
+  "OAuth detection shows the client registration path (client metadata %s)",
+  async (supportsClientMetadata, detected) => {
+    probeResponse = async () => ({
+      ...oauthResult,
+      discovery: {
+        ...oauthResult.discovery,
+        supports_client_metadata: supportsClientMetadata,
+      },
+    });
+    render(<SetupModal />);
+    await enterUrl();
+    const row = (await screen.findByText(detected)).closest("[data-stage]");
+    expect(row).toHaveAttribute("data-stage", "client_registration");
+    expect(row).toHaveAttribute("data-state", "success");
+  }
+);
+
 test("Cancel closes an empty setup modal", async () => {
   render(<SetupModal />);
   await screen.findByRole("textbox", { name: /^MCP Server URL/ });
@@ -887,6 +909,7 @@ test("Back retains an explicit OAuth setup choice and a changed endpoint resets 
     discovery: {
       status: "metadata_found",
       supports_automatic_registration: false,
+      supports_client_metadata: null,
       authorization_endpoint: "https://identity.example.com/authorize",
       token_endpoint: "https://identity.example.com/token",
     },
@@ -1053,6 +1076,7 @@ test.each([true, false, null])(
       discovery: {
         status: "metadata_found",
         supports_automatic_registration: supported,
+        supports_client_metadata: null,
         authorization_endpoint: "https://identity.example.com/authorize",
         token_endpoint: "https://identity.example.com/token",
       },

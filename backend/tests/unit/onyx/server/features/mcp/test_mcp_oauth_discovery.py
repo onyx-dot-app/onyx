@@ -9,20 +9,26 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import oauth_discovery
 from onyx.server.features.mcp.models import MCPOAuthDiscoveryRequest
 
+_CIMD_CLIENT_ID = "https://onyx.example/api/mcp/oauth/client-metadata"
+
 
 @pytest.mark.parametrize(
-    "registration,cimd,expected",
+    "registration,cimd,authorize_status,automatic,client_metadata",
     [
-        (None, False, False),
-        ("https://issuer.example/register", False, True),
-        (None, True, True),
+        (None, False, None, False, False),
+        ("https://issuer.example/register", False, None, True, False),
+        (None, True, 302, True, True),
+        (None, True, 400, False, False),
+        ("https://issuer.example/register", True, 500, True, False),
     ],
 )
 def test_discovery_reads_capabilities_without_registration(
     monkeypatch: pytest.MonkeyPatch,
     registration: str | None,
     cimd: bool,
-    expected: bool,
+    authorize_status: int | None,
+    automatic: bool,
+    client_metadata: bool,
 ) -> None:
     requests: list[httpx.Request] = []
 
@@ -45,6 +51,11 @@ def test_discovery_reads_capabilities_without_registration(
                     "authorization_servers": ["https://issuer.example"],
                 },
             )
+        if request.url.path == "/authorize":
+            assert authorize_status is not None
+            assert request.url.params["client_id"] == _CIMD_CLIENT_ID
+            assert request.url.params["resource"] == "https://mcp.example/mcp"
+            return httpx.Response(authorize_status)
         return httpx.Response(
             200,
             json={
@@ -62,13 +73,35 @@ def test_discovery_reads_capabilities_without_registration(
         "mcp_ssrf_httpx_client_factory",
         lambda **_: httpx.AsyncClient(transport=httpx.MockTransport(respond)),
     )
+    monkeypatch.setattr(
+        oauth_discovery,
+        "validated_mcp_oauth_client_metadata_url",
+        lambda: _CIMD_CLIENT_ID,
+    )
     result = asyncio.run(
         oauth_discovery.discover_oauth_capabilities("https://mcp.example/mcp")
     )
     assert result.status == "metadata_found"
-    assert result.supports_automatic_registration is expected
+    assert result.supports_automatic_registration is automatic
+    assert result.supports_client_metadata is client_metadata
     assert result.authorization_endpoint == "https://issuer.example/authorize"
-    assert len(requests) == 3
+    assert len(requests) == (4 if cimd else 3)
+
+
+def test_private_instance_skips_client_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oauth_discovery, "validated_mcp_oauth_client_metadata_url", lambda: None
+    )
+    assert (
+        asyncio.run(
+            oauth_discovery._client_metadata_accepted(
+                "https://issuer.example/authorize", "https://mcp.example/mcp"
+            )
+        )
+        is False
+    )
 
 
 @pytest.mark.parametrize("unreachable", [False, True])

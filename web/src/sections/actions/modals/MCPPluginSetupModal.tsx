@@ -72,6 +72,47 @@ function endpoint(value: string): string | null {
   }
 }
 
+interface ProbeStageProps {
+  stage: string;
+  state: "idle" | MCPProbeProgress["state"];
+  label: string;
+  value?: string;
+}
+
+function ProbeStage({ stage, state, label, value }: ProbeStageProps) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3",
+        styles.stage
+      )}
+      data-stage={stage}
+      data-state={state}
+    >
+      <span aria-hidden="true" className={styles.statusIcon}>
+        <span data-icon="idle">
+          <SvgMinus className="size-4 text-text-02" />
+        </span>
+        <span data-icon="pending">
+          <IconLoader size={16} />
+        </span>
+        <span data-icon="success">
+          <SvgCheck className="size-4 text-status-success-05" />
+        </span>
+        <span data-icon="error">
+          <SvgX className="size-4 text-status-error-05" />
+        </span>
+      </span>
+      <Text font="secondary-body" color="text-04">
+        {label}
+      </Text>
+      <Text font="secondary-body" color="text-03">
+        {value}
+      </Text>
+    </div>
+  );
+}
+
 interface MCPPluginSetupModalProps {
   open: boolean;
   onClose: () => void;
@@ -442,9 +483,34 @@ function MCPSetupSession({
                             className="flex flex-col gap-3"
                           >
                             {(
-                              ["authentication", "contacting_server"] as const
+                              [
+                                "authentication",
+                                "contacting_server",
+                                ...(checked?.kind === "oauth"
+                                  ? (["client_registration"] as const)
+                                  : []),
+                              ] as const
                             ).map((stage) => {
-                              let state =
+                              if (stage === "client_registration") {
+                                return checked?.kind === "oauth" ? (
+                                  <ProbeStage
+                                    key={stage}
+                                    stage={stage}
+                                    state="success"
+                                    label={t("mcpSetup.clientRegistration")}
+                                    value={t(
+                                      checked.discovery
+                                        .supports_client_metadata !== false
+                                        ? "mcpSetup.clientMetadataDetected"
+                                        : checked.discovery
+                                              .supports_automatic_registration
+                                          ? "mcpSetup.registrationDetected"
+                                          : "mcpSetup.ownClientRequired"
+                                    )}
+                                  />
+                                ) : null;
+                              }
+                              let state: ProbeStageProps["state"] =
                                 probe.kind === "idle" ||
                                 probe.url !== normalizedUrl
                                   ? "idle"
@@ -459,41 +525,17 @@ function MCPSetupSession({
                                 state = "error";
                               }
                               return (
-                                <div
+                                <ProbeStage
                                   key={stage}
-                                  className={cn(
-                                    "grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3",
-                                    styles.stage
+                                  stage={stage}
+                                  state={state}
+                                  label={t(
+                                    stage === "authentication"
+                                      ? "mcpAuthModal.authType.label"
+                                      : "mcpAuthModal.transport.label"
                                   )}
-                                  data-stage={stage}
-                                  data-state={state}
-                                >
-                                  <span
-                                    aria-hidden="true"
-                                    className={styles.statusIcon}
-                                  >
-                                    <span data-icon="idle">
-                                      <SvgMinus className="size-4 text-text-02" />
-                                    </span>
-                                    <span data-icon="pending">
-                                      <IconLoader size={16} />
-                                    </span>
-                                    <span data-icon="success">
-                                      <SvgCheck className="size-4 text-status-success-05" />
-                                    </span>
-                                    <span data-icon="error">
-                                      <SvgX className="size-4 text-status-error-05" />
-                                    </span>
-                                  </span>
-                                  <Text font="secondary-body" color="text-04">
-                                    {t(
-                                      stage === "authentication"
-                                        ? "mcpAuthModal.authType.label"
-                                        : "mcpAuthModal.transport.label"
-                                    )}
-                                  </Text>
-                                  <Text font="secondary-body" color="text-03">
-                                    {checked && checked.kind !== "unreachable"
+                                  value={
+                                    checked && checked.kind !== "unreachable"
                                       ? stage === "authentication"
                                         ? t(
                                             checked.kind === "oauth"
@@ -516,9 +558,9 @@ function MCPSetupSession({
                                               : state === "success"
                                                 ? "mcpSetup.stageSuccess"
                                                 : "mcpSetup.stageError"
-                                          )}
-                                  </Text>
-                                </div>
+                                          )
+                                  }
+                                />
                               );
                             })}
                             {checked?.kind === "unreachable" && (
