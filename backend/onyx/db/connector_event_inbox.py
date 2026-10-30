@@ -301,7 +301,12 @@ def get_active_event_cc_pairs(
             .where(
                 Connector.source == source,
                 Connector.input_type == InputType.EVENT,
-                ConnectorCredentialPair.status == ConnectorCredentialPairStatus.ACTIVE,
+                # Not just ACTIVE: a pair is SCHEDULED until its first run
+                # finishes, and a provider validates the callback URL during
+                # setup, before any run has happened.
+                ConnectorCredentialPair.status.in_(
+                    ConnectorCredentialPairStatus.active_statuses()
+                ),
             )
             .order_by(ConnectorCredentialPair.id)
         )
