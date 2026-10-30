@@ -230,17 +230,53 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
     )
 
 
+_DATED_SNAPSHOT_SUFFIX = re.compile(r"-\d{4}-?\d{2}-?\d{2}$")
+
+
+@lru_cache(maxsize=1)
+def _supplement_only_model_ids() -> dict[str, frozenset[str]]:
+    if not _SUPPLEMENT_PATH.exists():
+        return {}
+    supplement = json.loads(_SUPPLEMENT_PATH.read_text())
+    supplement_only: dict[str, frozenset[str]] = {}
+    for provider, section in supplement.items():
+        if provider.startswith("_"):
+            continue
+        upstream_path = _CATALOG_DIR / f"{provider}.json"
+        upstream = (
+            json.loads(upstream_path.read_text()).get("models") or {}
+            if upstream_path.exists()
+            else {}
+        )
+        supplement_only[provider] = frozenset(
+            model_id
+            for model_id in section.get("models") or {}
+            if model_id not in upstream
+        )
+    return supplement_only
+
+
 def iter_image_generation_models(provider: str) -> list[str]:
-    """Non-deprecated image generation models under a provider. Pricing keys
-    prefixed with a size or quality (e.g. ``1024-x-1024/dall-e-2``) are
-    skipped."""
+    """Non-deprecated image generation models under a provider.
+
+    Skips pricing keys prefixed with a size or quality (e.g.
+    ``1024-x-1024/dall-e-2``), supplement-only entries (upstream pruned them as
+    deprecated), and dated snapshots whose undated alias is also listed."""
     models = _catalog().get(provider, {}).get("models", {})
-    return sorted(
+    supplement_only = _supplement_only_model_ids().get(provider, frozenset())
+    candidates = {
         model_id
         for model_id, entry in models.items()
         if "/" not in model_id
+        and model_id not in supplement_only
         and entry.get("status") != "deprecated"
         and _catalog_mode(entry, model_id) == "image_generation"
+    }
+    return sorted(
+        model_id
+        for model_id in candidates
+        if _DATED_SNAPSHOT_SUFFIX.sub("", model_id) == model_id
+        or _DATED_SNAPSHOT_SUFFIX.sub("", model_id) not in candidates
     )
 
 

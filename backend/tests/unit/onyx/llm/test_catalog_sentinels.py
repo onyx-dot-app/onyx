@@ -143,3 +143,12 @@ def test_uncataloged_name_falls_back_to_chat(
     assert (
         model_catalog.resolve_model_mode("my-custom-text-embedding-v1") == "embedding"
     )
+
+
+def test_image_generation_models_skip_pruned_and_dated_snapshots() -> None:
+    models = model_catalog.iter_image_generation_models(LlmProviderNames.OPENAI)
+    assert "gpt-image-1.5" in models
+    assert "gpt-image-1" not in models
+    assert "dall-e-3" not in models
+    assert "gpt-image-1.5-2025-12-16" not in models
+    assert all("/" not in model for model in models)
