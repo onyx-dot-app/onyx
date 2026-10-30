@@ -117,17 +117,11 @@ pub fn handle_deep_link(app: &AppHandle, deep_link: &Url) {
     }
 }
 
-// The single-instance plugin passes owned arguments.
+// The single-instance plugin passes owned arguments. Its `deep-link` feature
+// already forwards onyx:// arguments to `on_open_url`.
 #[allow(clippy::needless_pass_by_value)]
-pub fn on_second_instance(app: &AppHandle, args: Vec<String>, _cwd: String) {
+fn on_second_instance(app: &AppHandle, _args: Vec<String>, _cwd: String) {
     focus_main_window(app);
-    for arg in args {
-        if let Ok(url) = Url::parse(&arg) {
-            if url.scheme() == SCHEME {
-                handle_deep_link(app, &url);
-            }
-        }
-    }
 }
 
 /// Registers the plugins this module needs. Single-instance must be the first
