@@ -63,9 +63,12 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 
   // ⌘E / Ctrl+E folds the sidebar wherever it can fold: a foldable column,
   // or the overlay that small screens force on every sidebar. Only a
-  // non-foldable sidebar at full width ignores it.
+  // non-foldable sidebar at full width ignores it. It works while the user
+  // types too: no text field uses the shortcut, so it always means the
+  // sidebar.
   useHotkey("mod+e", () => setFolded((prev) => !prev), {
     enabled: foldable || isMobile || isSmallScreen,
+    whileTyping: true,
   });
 
   useEffect(() => {
