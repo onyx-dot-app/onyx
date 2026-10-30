@@ -43,7 +43,7 @@ async def discover_oauth_capabilities(
 
 async def authorization_request_accepted(authorization_url: str) -> bool | None:
     """Whether the provider answers an authorization request without an error.
-    None when this server cannot reach the provider; the browser still may."""
+    None when this server cannot reach the provider or is rate limited."""
     try:
         async with (
             asyncio.timeout(AUTHORIZATION_CHECK_TIMEOUT_SECONDS),
@@ -54,6 +54,8 @@ async def authorization_request_accepted(authorization_url: str) -> bool | None:
             status_code = response.status_code
     except (httpx.HTTPError, SSRFException, TimeoutError):
         logger.warning("Could not pre-check the MCP OAuth authorization request")
+        return None
+    if status_code == httpx.codes.TOO_MANY_REQUESTS:
         return None
     # 5xx counts too: Sentry and Canva answer 500 for an unreadable document.
     return status_code < 400

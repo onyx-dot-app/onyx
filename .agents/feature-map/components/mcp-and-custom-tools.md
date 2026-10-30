@@ -111,7 +111,9 @@ the provider must fetch. A deployment that the provider cannot reach must turn
 CIMD off for that server, and the SDK then uses DCR. The setup probe checks this
 first: `server/features/mcp/oauth_discovery.py:_client_metadata_accepted` sends a
 status-only authorization request with the CIMD client ID and reports
-`supports_client_metadata`. The setup page sets the CIMD switch from that result.
+`supports_client_metadata`. A network error, a timeout or HTTP 429 gives `null`
+(unknown). The setup page sets the CIMD switch from that result, unless the admin
+already changed the switch.
 `server/features/mcp/oauth_flow.py:validate_client_metadata_authorization`
 repeats the check at connect time and fails with `client_metadata_rejected`. The
 setup page then turns CIMD off and retries with DCR. The redirect URI and the

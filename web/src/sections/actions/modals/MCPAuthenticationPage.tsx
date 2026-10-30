@@ -346,7 +346,7 @@ export default function MCPAuthenticationPage({
       ) {
         const registrationValues = { ...values, oauth_cimd_enabled: false };
         await helpers.setValues(registrationValues, false);
-        return handleSubmit(registrationValues, helpers);
+        return await handleSubmit(registrationValues, helpers);
       }
       if (error instanceof MCPAuthValidationError) {
         helpers.setFieldError("oauth_additional_auth_params", error.message);

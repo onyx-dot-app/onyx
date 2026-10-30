@@ -20,6 +20,7 @@ _CIMD_CLIENT_ID = "https://onyx.example/api/mcp/oauth/client-metadata"
         (None, True, 302, True, True),
         (None, True, 400, False, False),
         ("https://issuer.example/register", True, 500, True, False),
+        (None, True, 429, True, None),
     ],
 )
 def test_discovery_reads_capabilities_without_registration(
@@ -28,7 +29,7 @@ def test_discovery_reads_capabilities_without_registration(
     cimd: bool,
     authorize_status: int | None,
     automatic: bool,
-    client_metadata: bool,
+    client_metadata: bool | None,
 ) -> None:
     requests: list[httpx.Request] = []
 

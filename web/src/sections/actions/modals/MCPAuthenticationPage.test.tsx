@@ -58,11 +58,13 @@ function LoadedAuthentication({
   onPublished,
   onComplete,
   onBusyChange,
+  onAuthorize,
 }: {
   serverId: number;
   onPublished: (serverId: number) => Promise<void>;
   onComplete: () => void;
   onBusyChange: (busy: boolean) => void;
+  onAuthorize?: (url: string) => void;
 }) {
   const { data, isValidating } = useSWR<MCPServer>(
     SWR_KEYS.adminMcpServer(serverId),
@@ -77,6 +79,7 @@ function LoadedAuthentication({
       onSaved={async (saved) => onPublished(saved.id)}
       onBusyChange={onBusyChange}
       onComplete={onComplete}
+      onAuthorize={onAuthorize}
     />
   ) : null;
 }
@@ -84,9 +87,11 @@ function LoadedAuthentication({
 function Harness({
   configuredServer,
   onPublished,
+  onAuthorize,
 }: {
   configuredServer: MCPServer;
   onPublished: (serverId: number) => Promise<void>;
+  onAuthorize?: (url: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -111,6 +116,7 @@ function Harness({
                 onPublished={onPublished}
                 onComplete={() => setOpen(false)}
                 onBusyChange={setBusy}
+                onAuthorize={onAuthorize}
               />
             )}
           </Modal.Body>
@@ -1110,28 +1116,45 @@ test("rejected client metadata documents fall back to automatic registration", a
     ...server,
     admin_credentials: {},
   };
+  const authorizationUrl = "https://identity.example.com/authorize?client=dcr";
+  let finishRetry: () => void = () => {};
+  const retryResponse = new Promise<Response>((resolve) => {
+    finishRetry = () =>
+      resolve(
+        new Response(
+          JSON.stringify({
+            status: "authorization_required",
+            authorization_url: authorizationUrl,
+          })
+        )
+      );
+  });
   const network = mockNetwork(configuredServer);
   const fallback = network.getMockImplementation();
   network.mockImplementation(async (input, init) => {
-    if (
-      String(input) === "/api/admin/mcp/setup" &&
-      JSON.parse(String(init?.body)).oauth_cimd_enabled
-    ) {
-      return new Response(
-        JSON.stringify({
-          detail: "Invalid client_id",
-          oauth_error: "client_metadata_rejected",
-        }),
-        { status: 400 }
-      );
+    if (String(input) === "/api/admin/mcp/setup") {
+      return JSON.parse(String(init?.body)).oauth_cimd_enabled
+        ? new Response(
+            JSON.stringify({
+              detail: "Invalid client_id",
+              oauth_error: "client_metadata_rejected",
+            }),
+            { status: 400 }
+          )
+        : retryResponse;
     }
     if (!fallback) throw new Error("Missing network fixture");
     return fallback(input, init);
   });
   const onPublished = jest.fn();
+  const onAuthorize = jest.fn();
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} onPublished={onPublished} />
+    <Harness
+      configuredServer={configuredServer}
+      onPublished={onPublished}
+      onAuthorize={onAuthorize}
+    />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByRole("radio", { name: copy.oauthSetup.automatic.label });
@@ -1139,16 +1162,21 @@ test("rejected client metadata documents fall back to automatic registration", a
     name: new RegExp(`^${copy.cimd.label}`),
   });
   expect(cimdSwitch).toBeChecked();
-  await user.click(
-    screen.getByRole("button", {
-      name: copy.submitButton.label,
-    })
+  const connect = screen.getByRole("button", {
+    name: copy.submitButton.label,
+  });
+  await user.click(connect);
+  const submissions = () =>
+    network.mock.calls
+      .filter(([url]) => url === "/api/admin/mcp/setup")
+      .map(([, init]) => JSON.parse(String(init?.body)).oauth_cimd_enabled);
+  await waitFor(() => expect(submissions()).toEqual([true, false]));
+  expect(connect).toBeDisabled();
+  finishRetry();
+  await waitFor(() =>
+    expect(onAuthorize).toHaveBeenCalledWith(authorizationUrl)
   );
-  await waitFor(() => expect(onPublished).toHaveBeenCalled());
-  const submissions = network.mock.calls
-    .filter(([url]) => url === "/api/admin/mcp/setup")
-    .map(([, init]) => JSON.parse(String(init?.body)).oauth_cimd_enabled);
-  expect(submissions).toEqual([true, false]);
+  expect(onPublished).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
