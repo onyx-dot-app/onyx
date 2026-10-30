@@ -11,7 +11,7 @@ import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { completeExternalAppOAuthCallback } from "@/app/craft/services/externalAppsService";
 import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
-import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
 import { notifyOAuthComplete, reportOAuthCallback } from "@/lib/oauth/launch";
 
 type Status = "exchanging" | "success" | "error";

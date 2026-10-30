@@ -151,6 +151,7 @@ test("desktop state helpers", () => {
   );
   const returnUrl = new URL(desktopOAuthReturnUrl(callback));
   expect(returnUrl.protocol).toBe("onyx:");
+  expect(returnUrl.searchParams.get("origin")).toBe("https://onyx.example");
   expect(returnUrl.searchParams.get("path")).toBe(
     "/mcp/oauth/callback?code=x&state=abc.desktop"
   );

@@ -9,7 +9,7 @@ import CardSection from "@/components/admin/CardSection";
 import { handleOAuthAuthorizationResponse } from "@/lib/oauth_utils";
 import { SvgKey } from "@opal/icons";
 import { useTranslations } from "next-intl";
-import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
 import { reportOAuthCallback } from "@/lib/oauth/launch";
 
 function OAuthCallbackPageContent() {

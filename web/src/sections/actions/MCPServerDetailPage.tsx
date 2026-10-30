@@ -284,7 +284,8 @@ export default function MCPServerDetailPage({
     openOAuthAuthorization(url)
       .then(
         async () => {
-          await refresh();
+          const fresh = await mutateServer();
+          if (fresh) await saveAuthentication(fresh);
           selectTab("tools");
         },
         (error: unknown) => {

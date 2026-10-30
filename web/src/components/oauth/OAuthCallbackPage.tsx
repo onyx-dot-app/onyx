@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
 import { reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
