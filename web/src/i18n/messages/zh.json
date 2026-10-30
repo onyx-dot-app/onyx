@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management 工单和客户请求"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -4177,6 +4180,24 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "索引一个 Jira Service Management 项目中的工单。",
+          "fields": {
+            "jira_base_url": {
+              "description": "Jira 实例的基础 URL（例如 https://your-domain.atlassian.net）。"
+            },
+            "project_key": {
+              "description": "要索引的 Jira Service Management 项目键（例如 SUP）。"
+            },
+            "jql_query": {
+              "description": "添加条件以筛选工单。范围仍限定为所选项目。"
+            },
+            "comment_email_blacklist": {
+              "description": "不会索引来自这些地址的评论。"
             }
           }
         },

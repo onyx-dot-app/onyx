@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jira_service_management": {
+          "description": "تذاكر وطلبات العملاء في Jira Service Management"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4177,6 +4180,24 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تهيئة موصل Jira Service Management",
+          "subtext": "فهرسة التذاكر من مشروع واحد في Jira Service Management.",
+          "fields": {
+            "jira_base_url": {
+              "description": "عنوان URL الأساسي لمثيل Jira لديك (مثل https://your-domain.atlassian.net)."
+            },
+            "project_key": {
+              "description": "مفتاح مشروع Jira Service Management المراد فهرسته (مثل SUP)."
+            },
+            "jql_query": {
+              "description": "أضف شروطًا لتحديد التذاكر. يظل المشروع المحدد ضمن النطاق."
+            },
+            "comment_email_blacklist": {
+              "description": "لن تتم فهرسة التعليقات الواردة من هذه العناوين."
             }
           }
         },

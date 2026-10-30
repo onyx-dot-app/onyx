@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jira_service_management": {
+          "description": "Tickets y solicitudes de clientes de Jira Service Management"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -4177,6 +4180,24 @@
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",
               "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar el conector de Jira Service Management",
+          "subtext": "Indexa los tickets de un proyecto de Jira Service Management.",
+          "fields": {
+            "jira_base_url": {
+              "description": "La URL base de tu instancia de Jira (p. ej., https://your-domain.atlassian.net)."
+            },
+            "project_key": {
+              "description": "La clave del proyecto de Jira Service Management que se va a indexar (p. ej., SUP)."
+            },
+            "jql_query": {
+              "description": "Añade condiciones para limitar los tickets. El ámbito sigue siendo el proyecto seleccionado."
+            },
+            "comment_email_blacklist": {
+              "description": "No se indexarán los comentarios de estas direcciones."
             }
           }
         },

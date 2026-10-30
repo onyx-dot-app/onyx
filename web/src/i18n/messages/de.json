@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jira_service_management": {
+          "description": "Tickets und Kundenanfragen aus Jira Service Management"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4177,6 +4180,24 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Connector konfigurieren",
+          "subtext": "Tickets aus einem Jira Service Management-Projekt indexieren.",
+          "fields": {
+            "jira_base_url": {
+              "description": "Die Basis-URL Ihrer Jira-Instanz (z. B. https://your-domain.atlassian.net)."
+            },
+            "project_key": {
+              "description": "Der Schlüssel des zu indexierenden Jira Service Management-Projekts (z. B. SUP)."
+            },
+            "jql_query": {
+              "description": "Fügen Sie Bedingungen hinzu, um Tickets einzugrenzen. Das ausgewählte Projekt bleibt der Geltungsbereich."
+            },
+            "comment_email_blacklist": {
+              "description": "Kommentare von diesen Adressen werden nicht indexiert."
             }
           }
         },

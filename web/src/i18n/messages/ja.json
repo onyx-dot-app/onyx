@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management のチケットと顧客リクエスト"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -4177,6 +4180,24 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクターを設定",
+          "subtext": "1 つの Jira Service Management プロジェクトのチケットをインデックスします。",
+          "fields": {
+            "jira_base_url": {
+              "description": "Jira インスタンスのベース URL（例: https://your-domain.atlassian.net）。"
+            },
+            "project_key": {
+              "description": "インデックスする Jira Service Management プロジェクトのキー（例: SUP）。"
+            },
+            "jql_query": {
+              "description": "条件を追加してチケットを絞り込みます。対象は選択したプロジェクト内に限定されます。"
+            },
+            "comment_email_blacklist": {
+              "description": "これらのアドレスからのコメントはインデックスされません。"
             }
           }
         },

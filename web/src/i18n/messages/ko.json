@@ -1352,6 +1352,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management 티켓 및 고객 요청"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -4177,6 +4180,24 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "하나의 Jira Service Management 프로젝트에서 티켓을 인덱싱합니다.",
+          "fields": {
+            "jira_base_url": {
+              "description": "Jira 인스턴스의 기본 URL입니다(예: https://your-domain.atlassian.net)."
+            },
+            "project_key": {
+              "description": "인덱싱할 Jira Service Management 프로젝트의 키입니다(예: SUP)."
+            },
+            "jql_query": {
+              "description": "조건을 추가하여 티켓 범위를 좁힙니다. 범위는 선택한 프로젝트로 제한됩니다."
+            },
+            "comment_email_blacklist": {
+              "description": "이 주소에서 작성된 댓글은 인덱싱되지 않습니다."
             }
           }
         },

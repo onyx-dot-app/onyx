@@ -814,6 +814,16 @@ family keep the source's shape and stay usable by that source only.
 
 ## 5. Contracts and invariants
 
+Jira Service Management inherits Jira's `_issue_to_items` for checkpointed and
+targeted fetches. This shared method must call `self._process_issue` so JSM
+retains its public-comment filter and document source. An empty public-comment
+list must not fall back to raw Jira comments. Comment retrieval is lazy so
+issues excluded by labels do not make a comment API request.
+
+The JSM setup form uses catalog keys for all visible copy. It reuses Jira and
+Atlassian field labels. Its project scope and comment guidance have JSM-specific
+messages in every locale.
+
 1. **`Document.id` must be stable across runs.** It is the dedup key against
    `DocumentByConnectorCredentialPair`. A connector that regenerates IDs (for
    example from a mutable field) creates duplicate documents on every run.
