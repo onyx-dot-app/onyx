@@ -5,11 +5,8 @@ when the module is imported.
 """
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.event_inbox.source_registry import (
-    WebhookRequest,
-    WebhookSourceSpec,
-    register_webhook_source,
-)
+from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
+from onyx.connectors.event_inbox.source_registry import register_webhook_source
 from onyx.connectors.event_models import EventParseResult
 
 
