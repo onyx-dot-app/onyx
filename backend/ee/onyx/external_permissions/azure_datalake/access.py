@@ -119,7 +119,7 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         if self._public is None:
             self._public = (
                 self._ops.get_container_access().anonymous_read
-                and self._storage_account().allow_blob_public_access is not False
+                and self._storage_account().permits_anonymous_reads
             )
         return self._public
 

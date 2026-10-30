@@ -145,6 +145,11 @@ class AzureStorageAccountResource(ArmModel):
     # None when the account does not say, which Azure reads as allowed.
     allow_blob_public_access: bool | None = None
 
+    @property
+    def permits_anonymous_reads(self) -> bool:
+        """Whether a container's anonymous access level takes effect."""
+        return self.allow_blob_public_access is not False
+
 
 class AzureStorageAccountPage(ArmModel):
     accounts: list[AzureStorageAccountResource] = Field(

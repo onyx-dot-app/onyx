@@ -197,12 +197,17 @@ class _AnonymousAccessCheck(_PermSyncCheck):
             gateway.get_container_access,
             "The container's anonymous access level could not be read.",
         )
-        return CheckOutput(
-            summary=(
-                "The container allows anonymous reads"
-                if access.anonymous_read
-                else "The container is private"
+        if not access.anonymous_read:
+            return CheckOutput(summary="The container is private")
+        if not _find_account(context, self.config(context)).permits_anonymous_reads:
+            return CheckOutput(
+                summary=(
+                    "The container allows anonymous reads, but the storage "
+                    "account blocks them, so its files are not public"
+                )
             )
+        return CheckOutput(
+            summary="The container and the storage account allow anonymous reads"
         )
 
 

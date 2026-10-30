@@ -262,3 +262,29 @@ def test_a_refusal_for_every_group_fails_the_members_check() -> None:
         _checks()["adls_graph_group_members"].run(
             _context(ops, {"authentication_method": "client_secret"})
         )
+
+
+@pytest.mark.parametrize(
+    ("anonymous_read", "allow_blob_public_access", "summary"),
+    [
+        (False, None, "The container is private"),
+        (True, False, "but the storage account blocks them"),
+        (True, None, "The container and the storage account allow anonymous"),
+    ],
+)
+def test_the_anonymous_access_check_reports_the_effective_access(
+    anonymous_read: bool, allow_blob_public_access: bool | None, summary: str
+) -> None:
+    ops = fake_ops(
+        {},
+        anonymous_read=anonymous_read,
+        allow_blob_public_access=allow_blob_public_access,
+    )
+
+    output = _checks()["adls_anonymous_access"].run(
+        _context(ops, {"authentication_method": "client_secret"})
+    )
+
+    assert isinstance(output, CheckOutput)
+    assert output.summary is not None
+    assert summary in output.summary
