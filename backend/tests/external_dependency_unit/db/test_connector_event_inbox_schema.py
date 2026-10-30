@@ -53,6 +53,9 @@ def cc_pair_id(db_session: Session) -> Generator[int, None, None]:
     try:
         yield pair.id
     finally:
+        # A failed test leaves the session unusable, and the deletes below
+        # would then raise and mask it.
+        db_session.rollback()
         db_session.delete(pair)
         db_session.delete(connector)
         db_session.delete(credential)
