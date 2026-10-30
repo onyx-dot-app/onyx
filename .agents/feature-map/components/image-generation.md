@@ -18,13 +18,11 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   they attached or to one that the assistant made, and the model uses it as a
   reference. After an image call, the assistant answers without calling more
   tools in that turn.
-- **An admin** opens the image generation admin page. It follows the Language
-  Models page layout: a default-model selector card, a "Connected Models" list,
-  and "Available Models" grouped by connected LLM provider. Available Models
-  has "Recommended" (default) and "All" tabs: Recommended shows the
-  non-deprecated catalog image models; All shows every model on the provider.
-  One click links a model to its LLM provider with no credentials, and the
-  first linked model becomes the default. Only public providers with no agent restrictions are listed
+- **An admin** opens the image generation admin page. It lists the image
+  models of each connected LLM provider. The recommended view, the default,
+  shows the non-deprecated catalog image models; the full view shows every
+  model on the provider. One click links a model to its LLM provider with no
+  credentials, and the first linked model becomes the default. Only public providers with no agent restrictions are listed
   or can be linked, because the tool is available to all users and agents.
   Making a linked provider private or agent-restricted unlinks its image
   models. Configs made with their own credentials before this change
