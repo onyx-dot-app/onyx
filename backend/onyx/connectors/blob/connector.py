@@ -452,6 +452,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                         last_modified=last_modified,
                         image_file_id=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
                         raw_file_callback=self.raw_file_callback,
+                        include_embedded_images=False,
                     )
                 except Exception:
                     logger.exception("Error processing object %s", key)

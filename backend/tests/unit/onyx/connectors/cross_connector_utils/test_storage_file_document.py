@@ -1,6 +1,6 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
-from typing import IO
+from typing import IO, Any
 from unittest.mock import patch
 
 import pytest
@@ -47,6 +47,7 @@ def _build(
         last_modified=LAST_MODIFIED,
         image_file_id="s3_bucket_dir_image",
         raw_file_callback=raw_file_callback,
+        include_embedded_images=False,
     )
 
 
@@ -98,6 +99,53 @@ def test_tabular_file_is_staged() -> None:
 
 def test_tabular_file_without_callback_is_skipped() -> None:
     assert _build("table.csv", b"name,value\nalpha,1\n") is None
+
+
+def test_embedded_images_use_the_metadata_link() -> None:
+    metadata_link = "https://example.com/source-page"
+
+    def extract(
+        file: IO[Any],  # noqa: ARG001
+        file_name: str,  # noqa: ARG001
+        image_callback: Callable[[bytes, str], None] | None,
+    ) -> ExtractionResult:
+        assert image_callback is not None
+        image_callback(b"image", "figure.png")
+        return ExtractionResult(
+            text_content="body", embedded_images=[], metadata={"link": metadata_link}
+        )
+
+    def store(*_: Any, **__: Any) -> tuple[ImageSection, str]:
+        return ImageSection(image_file_id="figure", link=LINK), "figure"
+
+    with (
+        patch(f"{MODULE}.extract_text_and_images", side_effect=extract),
+        patch(
+            "onyx.file_processing.image_utils.get_image_type_from_bytes",
+            return_value="image/png",
+        ),
+        patch(
+            "onyx.file_processing.image_utils.store_image_and_create_section",
+            side_effect=store,
+        ),
+    ):
+        document = build_storage_file_document(
+            file_bytes=b"%PDF",
+            file_name="report.pdf",
+            document_id="s3:bucket:dir/report.pdf",
+            source=DocumentSource.S3,
+            link=LINK,
+            last_modified=LAST_MODIFIED,
+            image_file_id="s3_bucket_dir_report",
+            raw_file_callback=None,
+            include_embedded_images=True,
+        )
+
+    assert document is not None
+    assert [section.link for section in document.sections] == [
+        metadata_link,
+        metadata_link,
+    ]
 
 
 def test_onyx_metadata_overrides_the_storage_fields() -> None:

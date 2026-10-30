@@ -332,6 +332,7 @@ class DocumentSource(str, Enum):
     BRAINTRUST = "braintrust"
     LUMAPPS = "lumapps"
     YOUTRACK = "youtrack"
+    AZURE_DATALAKE = "azure_datalake"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -849,4 +850,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
     DocumentSource.LUMAPPS: "Intranet pages, news, and content",
     DocumentSource.YOUTRACK: "Issues and project tracking",
+    DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
 }

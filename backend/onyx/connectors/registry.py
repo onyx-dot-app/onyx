@@ -6,6 +6,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.airtable.config import AirtableConnectorConfig
 from onyx.connectors.asana.config import AsanaConnectorConfig
 from onyx.connectors.axero.config import AxeroConnectorConfig
+from onyx.connectors.azure_datalake.config import AzureDataLakeConnectorConfig
 from onyx.connectors.bitbucket.config import BitbucketConnectorConfig
 from onyx.connectors.blob.config import BlobStorageConnectorConfig
 from onyx.connectors.bookstack.config import BookstackConnectorConfig
@@ -359,6 +360,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.youtrack.connector",
         class_name="YouTrackConnector",
         config_class=YouTrackConnectorConfig,
+    ),
+    DocumentSource.AZURE_DATALAKE: ConnectorMapping(
+        module_path="onyx.connectors.azure_datalake.connector",
+        class_name="AzureDataLakeConnector",
+        config_class=AzureDataLakeConnectorConfig,
     ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
