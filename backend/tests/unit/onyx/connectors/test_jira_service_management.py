@@ -157,7 +157,7 @@ def test_load_from_state(
     # Mock requests endpoint (standard JSM endpoint with serviceDeskId filter)
     responses.add(
         responses.GET,
-        f"{base_url}/rest/servicedeskapi/servicedesk/1/request",
+        f"{base_url}/rest/servicedeskapi/request",
         json=sample_requests_response,
         status=200,
     )
@@ -493,3 +493,94 @@ def test_comments_multi_page_pagination() -> None:
     assert all_comments[0]["body"] == "Comment 1"
     assert all_comments[1]["body"] == "Comment 2"
     assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_get_customer_requests_service_desk_id_param() -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/request"
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={"values": []},
+        status=200,
+    )
+
+    client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
+    client.get_customer_requests(service_desk_id="5", search_term="printer")
+
+    assert len(responses.calls) == 1
+    call = responses.calls[0]
+    assert call.request.url is not None
+    assert "serviceDeskId=5" in call.request.url
+    assert "requestOwnership=ALL_REQUESTS" in call.request.url
+    assert "searchTerm=printer" in call.request.url
+
+
+@patch("time.sleep")
+@responses.activate
+def test_comments_preserves_page_on_error(mock_sleep: MagicMock) -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/request/IT-200/comment"
+
+    # Page 1: returns 1 comment, isLastPage=False
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={
+            "isLastPage": False,
+            "values": [
+                {"id": "1", "body": "Comment 1", "author": {"displayName": "User 1"}}
+            ],
+        },
+        status=200,
+    )
+    # Page 2: returns 500 error for all attempts
+    for _ in range(3):
+        responses.add(responses.GET, endpoint, status=500)
+
+    client = JsmClient(base_url=base_url, user_email="a@b.com", api_token="tok")
+    comments = client.get_request_comments("IT-200")
+    # Preserves first page comments without raising
+    assert len(comments) == 1
+    assert comments[0]["body"] == "Comment 1"
+    assert mock_sleep.call_count == 2
+
+
+@responses.activate
+def test_resolve_service_desk_id_pagination() -> None:
+    base_url = "https://company.atlassian.net"
+    endpoint = f"{base_url}/rest/servicedeskapi/servicedesk"
+
+    # Page 1: returns HR desk, isLastPage=False
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={
+            "isLastPage": False,
+            "values": [{"id": "1", "projectKey": "HR"}],
+        },
+        status=200,
+    )
+    # Page 2: returns IT desk, isLastPage=True
+    responses.add(
+        responses.GET,
+        endpoint,
+        json={
+            "isLastPage": True,
+            "values": [{"id": "2", "projectKey": "IT"}],
+        },
+        status=200,
+    )
+
+    connector = JiraServiceManagementConnector(
+        jira_base_url=base_url,
+        project_key="IT",
+    )
+    connector.load_credentials(
+        {"user_email": "admin@example.com", "api_token": "token123"}
+    )
+    client = connector._ensure_client()
+    resolved_id = connector._resolve_service_desk_id(client)
+    assert resolved_id == "2"
+    assert connector.service_desk_id == "2"

@@ -305,6 +305,7 @@ export const CREDENTIAL_SPECS = {
     brandName: "Jira Service Management",
     fields: {
       user_email: email("accountEmail", {
+        optional: true,
         hint: { key: "jiraUserEmail" },
       }),
       api_token: secret("apiToken"),

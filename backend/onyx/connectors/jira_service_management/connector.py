@@ -203,8 +203,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                         )
                         if latest_comment_dt is None or c_dt > latest_comment_dt:
                             latest_comment_dt = c_dt
-        except JsmApiError:
-            raise
         except Exception as e:
             logger.warning("Error reading comments for %s: %s", issue_key, e)
 
