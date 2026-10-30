@@ -181,7 +181,7 @@ function microsoftAppSpec<const TPrefix extends string>(
 }
 
 const AZURE_DATALAKE_APP_SPEC = microsoftAppSpec("adls", {
-  brandName: "Azure Data Lake",
+  brandName: "Azure Data Lake Storage",
   fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
   privateKeyDisplayName: "privateKey",
   certificateLabel: "certificateAuthentication",
