@@ -162,3 +162,18 @@ def test_supplement_status_retires_listed_model(
         assert entry["mode"] == "image_generation"
     finally:
         model_catalog._catalog.cache_clear()
+
+
+def test_supplement_status_only_entry_is_not_added_as_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "openai.json").write_text('{"models": {}}')
+    supplement = tmp_path / "_supplement.json"
+    supplement.write_text('{"openai": {"models": {"img-a": {"status": "deprecated"}}}}')
+    monkeypatch.setattr(model_catalog, "_CATALOG_DIR", tmp_path)
+    monkeypatch.setattr(model_catalog, "_SUPPLEMENT_PATH", supplement)
+    model_catalog._catalog.cache_clear()
+    try:
+        assert "img-a" not in model_catalog._catalog()["openai"]["models"]
+    finally:
+        model_catalog._catalog.cache_clear()

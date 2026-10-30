@@ -144,6 +144,8 @@ def _catalog() -> dict[str, dict[str, Any]]:
                 target = catalog.setdefault(provider, {"models": {}, "aliases": {}})
                 for model_id, entry in (section.get("models") or {}).items():
                     if model_id not in target["models"]:
+                        if set(entry) <= set(_SUPPLEMENT_OVERRIDE_KEYS):
+                            continue
                         target["models"][model_id] = entry
                     else:
                         existing = target["models"][model_id]
