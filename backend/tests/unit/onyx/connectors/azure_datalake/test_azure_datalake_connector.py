@@ -123,7 +123,7 @@ def test_documents_hang_under_their_directory_and_the_prefix() -> None:
                 continuation_token=None,
             )
         },
-        path_prefix="/root/",
+        path_prefix="root",
     )
 
     items, _ = _run(connector, connector.build_dummy_checkpoint())
@@ -150,7 +150,7 @@ def test_the_slim_listing_yields_the_nodes_indexing_yields() -> None:
                 continuation_token=None,
             )
         },
-        path_prefix="/root/",
+        path_prefix="root",
     )
 
     indexed, _ = _run(connector, connector.build_dummy_checkpoint())

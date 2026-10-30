@@ -6,13 +6,16 @@ prefix inside it, and files it can read. An app registration gets this from
 the Storage Blob Data Reader role; ACLs can grant it per directory instead.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import TypeVar
 
 from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.connectors.azure_datalake.config import AzureDataLakeConnectorConfig
 from onyx.connectors.azure_datalake.connector import is_indexable_file
-from onyx.connectors.azure_datalake.models import AzureDataLakePath
+from onyx.connectors.azure_datalake.models import (
+    AzureDataLakePath,
+    AzureDataLakePathPage,
+)
 from onyx.connectors.azure_datalake.source_operations import (
     AzureDataLakeRequestError,
     AzureDataLakeSourceOperations,
@@ -94,13 +97,10 @@ def _sign_in(gateway: AzureDataLakeSourceOperations) -> MicrosoftTokenInfo | Non
         raise_for_sign_in_error(error)
 
 
-def _smallest_file(
+def probe_listing_pages(
     gateway: AzureDataLakeSourceOperations, path_prefix: str
-) -> AzureDataLakePath | None:
-    """The smallest non-empty file in the first few listing pages that
-    indexing admits. Images are left out: the check cannot read the image
-    setting."""
-    files: list[AzureDataLakePath] = []
+) -> Generator[AzureDataLakePathPage, None, None]:
+    """The first few recursive listing pages under ``path_prefix``."""
     continuation_token: str | None = None
     for _ in range(_FILE_PROBE_MAX_PAGES):
         page = gateway.list_paths_page(
@@ -109,6 +109,20 @@ def _smallest_file(
             page_size=_FILE_PROBE_PAGE_SIZE,
             continuation_token=continuation_token,
         )
+        yield page
+        continuation_token = page.continuation_token
+        if continuation_token is None:
+            return
+
+
+def _smallest_file(
+    gateway: AzureDataLakeSourceOperations, path_prefix: str
+) -> AzureDataLakePath | None:
+    """The smallest non-empty file in the first few listing pages that
+    indexing admits. Images are left out: the check cannot read the image
+    setting."""
+    files: list[AzureDataLakePath] = []
+    for page in probe_listing_pages(gateway, path_prefix):
         files.extend(
             path
             for path in page.paths
@@ -117,8 +131,7 @@ def _smallest_file(
                 path, allow_images=False, size_threshold=BLOB_STORAGE_SIZE_THRESHOLD
             )
         )
-        continuation_token = page.continuation_token
-        if files or continuation_token is None:
+        if files:
             break
     if not files:
         return None

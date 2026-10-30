@@ -226,13 +226,13 @@ def build_msal_app(
     assert_never(auth_method)
 
 
-def acquire_graph_token(
+def acquire_app_token(
     msal_app: msal.ConfidentialClientApplication,
-    graph_api_host: str,
+    resource: str,
 ) -> dict[str, Any]:
-    """Acquire an app-only token for a resource host, usually Graph. Returns
-    MSAL's raw response."""
-    return msal_app.acquire_token_for_client(scopes=[f"{graph_api_host}/.default"])
+    """Acquire an app-only token for ``resource`` (e.g. the Graph host, or
+    Azure Storage). Returns MSAL's raw response."""
+    return msal_app.acquire_token_for_client(scopes=[f"{resource}/.default"])
 
 
 def build_graph_auth_context(
@@ -308,7 +308,7 @@ def acquire_token_response(
     """An app-only token for ``resource`` (e.g. the Graph host, or Azure
     Storage). Raises the Microsoft error family when sign-in fails."""
     try:
-        response = acquire_graph_token(auth_context.app, resource)
+        response = acquire_app_token(auth_context.app, resource)
     except (MsalServiceError, ValueError, requests.RequestException) as error:
         raise microsoft_error_from_exception(error) from error
     if "access_token" not in response:

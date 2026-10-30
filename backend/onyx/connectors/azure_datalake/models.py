@@ -2,13 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from onyx.connectors.microsoft_credential import ACCOUNT_KEY_AUTHENTICATION_METHOD
 from onyx.connectors.models import ConnectorCheckpoint
-
-AUTHENTICATION_METHOD_KEY = "authentication_method"
-ACCOUNT_NAME_KEY = "adls_account_name"
 
 
 class AzureDataLakeAuthMethod(str, Enum):
@@ -40,6 +37,20 @@ class AzureDataLakeCredentials(BaseModel):
     @classmethod
     def _missing_means_client_secret(cls, value: Any) -> Any:
         return value or AzureDataLakeAuthMethod.CLIENT_SECRET
+
+    @field_validator("adls_account_name", mode="before")
+    @classmethod
+    def _strip_account_name(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _account_key_is_set(self) -> "AzureDataLakeCredentials":
+        if (
+            self.authentication_method is AzureDataLakeAuthMethod.ACCOUNT_KEY
+            and not self.adls_account_key
+        ):
+            raise ValueError("The account key is missing.")
+        return self
 
 
 class AzureDataLakePath(BaseModel):

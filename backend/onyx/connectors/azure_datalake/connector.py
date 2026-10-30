@@ -57,7 +57,7 @@ logger = setup_logger()
 DOCUMENT_ID_PREFIX = "azure_datalake"
 # Paths per checkpoint step. The listing allows up to 5000.
 PAGE_SIZE = 1000
-# A listing still paging past this is a cursor that does not advance.
+# Backstop for a cursor that cycles.
 _MAX_PAGES = 1_000_000
 BLOB_ENDPOINT_SUFFIX = "blob.core.windows.net"
 
@@ -69,14 +69,6 @@ _ATTEMPT_ERRORS = (
     MicrosoftAuthError,
     MicrosoftGraphError,
 )
-
-
-def _parent_path(path: str) -> str:
-    return posixpath.dirname(path)
-
-
-def _utc(epoch_seconds: SecondsSinceUnixEpoch) -> datetime:
-    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc)
 
 
 def has_indexable_name(path: str, *, allow_images: bool) -> bool:
@@ -124,7 +116,7 @@ class AzureDataLakeConnector(
     ) -> None:
         self.account_name = account_name
         self.container_name = container_name
-        self.path_prefix = path_prefix.strip().strip("/")
+        self.path_prefix = path_prefix
         self.size_threshold: int = BLOB_STORAGE_SIZE_THRESHOLD
         self._allow_images = False
         self._ops: AzureDataLakeSourceOperations | None = None
@@ -178,24 +170,23 @@ class AzureDataLakeConnector(
         return f"{DOCUMENT_ID_PREFIX}:{self.account_name}:{self.container_name}"
 
     def _parent_node_id(self, path: str) -> str:
-        parent: str = _parent_path(path)
+        parent: str = posixpath.dirname(path)
         return self.document_id(parent) if parent else self._container_node_id()
 
-    def _link(self, path: str) -> str:
+    def _container_url(self) -> str:
         return (
-            f"https://{self.account_name}.{BLOB_ENDPOINT_SUFFIX}/"
-            f"{self.container_name}/{quote(path)}"
+            f"https://{self.account_name}.{BLOB_ENDPOINT_SUFFIX}/{self.container_name}"
         )
+
+    def _link(self, path: str) -> str:
+        return f"{self._container_url()}/{quote(path)}"
 
     def _container_node(self) -> HierarchyNode:
         return HierarchyNode(
             raw_node_id=self._container_node_id(),
             raw_parent_id=None,
             display_name=self.container_name,
-            link=(
-                f"https://{self.account_name}.{BLOB_ENDPOINT_SUFFIX}/"
-                f"{self.container_name}"
-            ),
+            link=self._container_url(),
             node_type=HierarchyNodeType.FOLDER,
         )
 
@@ -282,7 +273,8 @@ class AzureDataLakeConnector(
             page_size=PAGE_SIZE,
             continuation_token=checkpoint.continuation_token,
         )
-        window_start, window_end = _utc(start), _utc(end)
+        window_start = datetime.fromtimestamp(start, tz=timezone.utc)
+        window_end = datetime.fromtimestamp(end, tz=timezone.utc)
         for path in page.paths:
             if path.is_directory:
                 yield self._directory_node(path.name)
@@ -368,6 +360,9 @@ class AzureDataLakeConnector(
         for error in errors:
             failed: DocumentFailure | None = error.failed_document
             if failed is None:
+                logger.debug(
+                    "Skipping a failure with no document: %s", error.failure_message
+                )
                 continue
             path: str | None = self._path_in_scope(failed.document_id)
             if path is None:

@@ -61,7 +61,10 @@ _KEY_PREFIXES = (
 # Azure Data Lake's storage-account key: not an app registration, so a
 # credential that uses it stays in the Azure Data Lake shape.
 ACCOUNT_KEY_AUTHENTICATION_METHOD = "account_key"
-_ACCOUNT_KEY_FIELDS = ("adls_account_name", "adls_account_key")
+_ACCOUNT_KEY_FIELDS = (
+    f"{AZURE_DATALAKE_KEY_PREFIX}_account_name",
+    f"{AZURE_DATALAKE_KEY_PREFIX}_account_key",
+)
 
 
 class MicrosoftCredentialCodec(FamilyCredentialCodec[MicrosoftCredential]):

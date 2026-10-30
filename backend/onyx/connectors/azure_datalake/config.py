@@ -1,12 +1,11 @@
 import re
 from typing import Annotated, Any
 
-from pydantic import field_validator
+from pydantic import ValidationError, field_validator
 
 from onyx.connectors.azure_datalake.models import (
-    ACCOUNT_NAME_KEY,
-    AUTHENTICATION_METHOD_KEY,
     AzureDataLakeAuthMethod,
+    AzureDataLakeCredentials,
 )
 from onyx.connectors.connector_config import (
     ConnectorConfig,
@@ -45,12 +44,16 @@ class AzureDataLakeCredentialBinding(CredentialBinding):
 
     def validate_credential(self, credential_json: dict[str, Any]) -> None:
         """An account key opens only the account it belongs to."""
-        if (
-            credential_json.get(AUTHENTICATION_METHOD_KEY)
-            != AzureDataLakeAuthMethod.ACCOUNT_KEY
-        ):
+        try:
+            credentials = AzureDataLakeCredentials.model_validate(credential_json)
+        except ValidationError as e:
+            raise ConnectorValidationError(
+                "The Azure Data Lake credential is not valid: "
+                + "; ".join(str(error["msg"]) for error in e.errors())
+            ) from e
+        if credentials.authentication_method is not AzureDataLakeAuthMethod.ACCOUNT_KEY:
             return
-        key_account: str = str(credential_json.get(ACCOUNT_NAME_KEY) or "").strip()
+        key_account: str | None = credentials.adls_account_name
         if key_account != self.account_name:
             raise ConnectorValidationError(
                 f"This account key belongs to the storage account '{key_account}', "

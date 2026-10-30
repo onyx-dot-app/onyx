@@ -10,7 +10,7 @@ from office365.graph_client import GraphClient
 
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
-    acquire_graph_token,
+    acquire_app_token,
     build_msal_app,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
@@ -70,7 +70,7 @@ class TeamsSession:
             if self.msal_app is None:
                 raise RuntimeError("MSAL app is not initialized")
 
-            token = acquire_graph_token(self.msal_app, self.graph_api_host)
+            token = acquire_app_token(self.msal_app, self.graph_api_host)
 
             if not isinstance(token, dict):
                 raise RuntimeError("`token` instance must be of type dict")
