@@ -59,6 +59,8 @@ permissions:
 
 jobs:
   build-model-server-image:
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -91,6 +93,7 @@ jobs:
             DOCKER_TOKEN, test/docker-token
 
       - name: Build model server image
+        id: build
         uses: ./.github/actions/build-model-server-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -104,6 +107,8 @@ jobs:
           docker-token: ${{ env.DOCKER_TOKEN }}
 
   build-devcontainer-image:
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -122,6 +127,7 @@ jobs:
           persist-credentials: false
 
       - name: Build devcontainer image
+        id: build
         uses: ./.github/actions/build-devcontainer-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -246,8 +252,8 @@ jobs:
           api-version: ${{ matrix.api_version }}
           deployment-name: ${{ matrix.deployment_name }}
           custom-config-json: ${{ matrix.custom_config_env && env[matrix.custom_config_env] || '' }}
-          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
-          run-id: ${{ github.run_id }}
+          model-server-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-model-server-image.outputs.digest }}
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
           docker-username: ${{ env.DOCKER_USERNAME }}
           docker-token: ${{ env.DOCKER_TOKEN }}
 
