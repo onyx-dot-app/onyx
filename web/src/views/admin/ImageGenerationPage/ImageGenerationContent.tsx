@@ -1,5 +1,6 @@
 "use client";
 
+import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -51,6 +52,7 @@ export default function ImageGenerationContent() {
   const {
     data: configs = [],
     error: configError,
+    isLoading: configsLoading,
     mutate: refetchConfigs,
   } = useSWR<ImageGenerationConfigView[]>(
     SWR_KEYS.imageGenConfig,
@@ -60,6 +62,7 @@ export default function ImageGenerationContent() {
   const {
     data: llmProviders = [],
     error: llmProvidersError,
+    isLoading: llmProvidersLoading,
     mutate: refetchLlmProviders,
   } = useSWR<ImageGenerationLLMProvider[]>(
     SWR_KEYS.imageGenLlmProviders,
@@ -167,7 +170,7 @@ export default function ImageGenerationContent() {
       toast.success(
         t("linkSuccess.message", { title: linkedModelTitle(model) })
       );
-      refetchAll();
+      await Promise.all([refetchConfigs(), refetchLlmProviders()]);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("linkError.message")
@@ -283,6 +286,10 @@ export default function ImageGenerationContent() {
     return <div className="text-error">{t("loadError.message")}</div>;
   }
 
+  if (configsLoading || llmProvidersLoading) {
+    return <PageLoader />;
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -364,7 +371,7 @@ export default function ImageGenerationContent() {
                   status={getStatus(imageProviderId)}
                   aria-label={`image-gen-model-${llmProvider.llm_provider_id}-${model.name}`}
                   onConnect={
-                    linkingModelKey === modelKey
+                    linkingModelKey !== null
                       ? undefined
                       : () => void handleLink(llmProvider, model)
                   }
