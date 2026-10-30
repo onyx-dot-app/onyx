@@ -3,6 +3,8 @@
 import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -101,6 +103,7 @@ function ConnectedModelCard({
         padding={2}
         rounding={4}
         aria-label={ariaLabel}
+        onClick={onEdit}
       >
         <ContentAction
           icon={icon}
@@ -128,7 +131,10 @@ function ConnectedModelCard({
                   aria-label={t("disconnectButton.ariaLabel", {
                     title: ariaTitle,
                   })}
-                  onClick={onDisconnect}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDisconnect();
+                  }}
                 />
               </Hoverable.Item>
               {onEdit && (
@@ -136,7 +142,11 @@ function ConnectedModelCard({
                   icon={SvgSettings}
                   prominence="tertiary"
                   aria-label={t("editButton.ariaLabel", { title: ariaTitle })}
-                  onClick={onEdit}
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
                 />
               )}
             </Section>
@@ -212,6 +222,7 @@ function configGroups(
 
 export default function ImageGenerationContent() {
   const t = useTranslations("admin.imageGeneration");
+  const router = useRouter();
   const {
     data: configs = [],
     error: configError,
@@ -542,7 +553,9 @@ export default function ImageGenerationContent() {
                     onEdit={
                       legacyProvider
                         ? () => handleEdit(legacyProvider)
-                        : undefined
+                        : config.llm_provider_owned
+                          ? undefined
+                          : () => router.push(ADMIN_ROUTES.LLM_MODELS.path)
                     }
                   />
                 );
