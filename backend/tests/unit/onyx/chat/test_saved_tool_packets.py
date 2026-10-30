@@ -1,7 +1,6 @@
 """Saved SDK results render without tool definitions; legacy history keeps its reader."""
 
 from datetime import datetime, timezone
-from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -377,14 +376,10 @@ def test_legacy_thinking_precedes_tool_groups_and_final_answer(
             for index, call_id in enumerate((11, 12))
         ],
     )
-    with (
-        Session() as session,
-        patch(
-            "onyx.server.query_and_chat.session_loading.get_tool_by_id",
-            return_value=Tool(name="lookup", display_name="Lookup"),
-        ),
-    ):
-        packets = translate_assistant_message_to_packets(response, session)
+    with Session() as session:
+        packets = translate_assistant_message_to_packets(
+            response, {1: Tool(name="lookup", display_name="Lookup")}, session
+        )
 
     assert [
         (packet.obj.reasoning, packet.placement.turn_index)
