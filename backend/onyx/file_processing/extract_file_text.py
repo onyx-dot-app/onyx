@@ -5,6 +5,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
@@ -50,6 +51,12 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 TEXT_SECTION_SEPARATOR = "\n\n"
+
+# A full collection costs about 0.1 s in a loaded worker. One follows every
+# spreadsheet (openpyxl leaves cycles) and otherwise at most one per interval,
+# which bounds the cyclic garbage the other parsers leave in a long-lived worker.
+GC_COLLECT_INTERVAL_SECONDS = 10.0
+_last_gc_collect_at = 0.0
 
 _MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
@@ -920,13 +927,22 @@ def extract_text_and_images(
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
     )
-    # openpyxl leaves reference cycles behind a workbook, so a collection
-    # follows a spreadsheet. On any other file it only costs time, about a
-    # tenth of a second per file in a loaded process.
-    if _is_spreadsheet(file_name, content_type):
-        logger.info("Unreachable objects: %s", gc.collect())
+    _collect_garbage_if_due(file_name, content_type)
 
     return res
+
+
+def _collect_garbage_if_due(file_name: str, content_type: str | None) -> None:
+    global _last_gc_collect_at
+    now = time.monotonic()
+    if (
+        not _is_spreadsheet(file_name, content_type)
+        and now - _last_gc_collect_at < GC_COLLECT_INTERVAL_SECONDS
+    ):
+        return
+    # Racing threads may both collect. The duplicate is harmless.
+    _last_gc_collect_at = now
+    logger.info("Unreachable objects: %s", gc.collect())
 
 
 def _is_spreadsheet(file_name: str, content_type: str | None) -> bool:
