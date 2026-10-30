@@ -6,7 +6,8 @@ no later attempt claims it, and the change the source reported is silently
 lost. These tests pin that no path leaves one behind.
 """
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session
@@ -94,10 +95,12 @@ def _handler(event: ConnectorEventInbox) -> Document | None:
         return None
     if event.document_id == BAD_DOCUMENT:
         raise ValueError("payload could not be read")
+    payload = event.payload if isinstance(event.payload, Mapping) else {}
+    title = payload.get("title")
     return Document(
         id=event.document_id,
         source=SOURCE,
-        semantic_identifier=event.document_id,
+        semantic_identifier=title if isinstance(title, str) else event.document_id,
         metadata={},
         sections=[TextSection(text="body", link=None)],
     )
@@ -385,4 +388,47 @@ def test_a_stopped_attempt_returns_its_rows_to_the_queue(
     assert [document.id for document in documents] == ["doc-1"]
     assert count_events_by_status(db_session, pair_id) == {
         ConnectorEventStatus.IN_PROGRESS: 1
+    }
+
+
+def test_the_newer_of_two_changes_to_one_document_wins(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """`upsert_documents` keeps the first entry for a document id, so
+    yielding both would save the older change's fields and nothing would
+    repair them."""
+    pair_id, attempt_id = pair_and_attempt
+    earlier = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    later = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [
+            ParsedEvent(
+                document_id="doc-1",
+                event_key="k-old",
+                payload={"title": "old"},
+                occurred_at=earlier,
+            ),
+            ParsedEvent(
+                document_id="doc-1",
+                event_key="k-new",
+                payload={"title": "new"},
+                occurred_at=later,
+            ),
+        ],
+    )
+    db_session.commit()
+
+    documents, failures, _ = _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    assert [document.semantic_identifier for document in documents] == ["new"]
+    assert failures == []
+    # Both rows settle: the document is indexed from the newer one.
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.IN_PROGRESS: 2
     }

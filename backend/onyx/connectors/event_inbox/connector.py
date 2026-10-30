@@ -6,6 +6,7 @@ so a pushed event reaches the index through the ordinary docfetching run
 rather than a pipeline of its own.
 """
 
+from datetime import datetime, timezone
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -27,9 +28,34 @@ from onyx.db.connector_event_inbox import (
     settle_events_from_finished_attempts,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import ConnectorEventInbox
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _superseded(events: list[ConnectorEventInbox]) -> set[int]:
+    """Row ids that a later change to the same document replaces.
+
+    Two changes to one document can be claimed together, and
+    `upsert_documents` keeps the first entry it sees for a document id. So
+    yielding both would save the older event's title, link and file and
+    leave nothing to repair them: both rows settle either way.
+
+    The source's event time orders them, and the row id breaks a tie or
+    stands in when the provider sent no timestamp.
+    """
+    latest: dict[str, ConnectorEventInbox] = {}
+    for event in events:
+        current = latest.get(event.document_id)
+        if current is None or _ordering(event) >= _ordering(current):
+            latest[event.document_id] = event
+    kept = {event.id for event in latest.values()}
+    return {event.id for event in events} - kept
+
+
+def _ordering(event: ConnectorEventInbox) -> tuple[datetime, int]:
+    return (event.occurred_at or datetime.min.replace(tzinfo=timezone.utc), event.id)
 
 
 class EventInboxCheckpoint(ConnectorCheckpoint):
@@ -113,7 +139,15 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             # even if this generator is abandoned part way through.
             db_session.commit()
 
+            superseded = _superseded(events)
+
             for event in events:
+                # A later change to this document is in the same batch, and
+                # the first entry would win. Its row still settles with the
+                # attempt: the document is indexed from the newer event.
+                if event.id in superseded:
+                    continue
+
                 handler = get_event_handler(event.source)
                 if handler is None:
                     message = f"No event handler registered for {event.source.value}"
