@@ -16,6 +16,10 @@ SUPPLEMENT_PATH = PRICE_TABLE_DIR / "_supplement.json"
 IMAGE_GEN_DIR = Path("backend/onyx/image_gen")
 
 
+def _same_json(left: Any, right: Any) -> bool:
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
 def _upstream_models(provider: str) -> dict[str, Any]:
     path = PRICE_TABLE_DIR / f"{provider}.json"
     if not path.is_file():
@@ -41,14 +45,15 @@ def _supplement_errors() -> list[str]:
         base_section = base.get(provider)
         section = supplement.get(provider)
         if provider.startswith("_") or not isinstance(section, dict):
-            if section != base_section:
+            if not _same_json(section, base_section):
                 errors.append(f"{provider}: only model status may change")
             continue
         base_models = (base_section or {}).get("models") or {}
         models = section.get("models") or {}
-        if {k: v for k, v in section.items() if k != "models"} != {
-            k: v for k, v in (base_section or {}).items() if k != "models"
-        }:
+        if not _same_json(
+            {k: v for k, v in section.items() if k != "models"},
+            {k: v for k, v in (base_section or {}).items() if k != "models"},
+        ):
             errors.append(f"{provider}: only model status may change")
         upstream = _upstream_models(provider)
         for model_id in sorted(set(base_models) | set(models)):
@@ -57,11 +62,11 @@ def _supplement_errors() -> list[str]:
             if model_id in models and not isinstance(entry, dict):
                 errors.append(f"{provider}/{model_id}: model entry must be an object")
                 continue
-            if (model_id in models) == (
-                model_id in base_models
-            ) and entry == base_entry:
+            if (model_id in models) == (model_id in base_models) and _same_json(
+                entry, base_entry
+            ):
                 continue
-            if entry != {**(base_entry or {}), "status": "deprecated"}:
+            if not _same_json(entry, {**(base_entry or {}), "status": "deprecated"}):
                 errors.append(
                     f"{provider}/{model_id}: only 'status: deprecated' may be added"
                 )
