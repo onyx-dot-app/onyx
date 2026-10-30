@@ -154,7 +154,7 @@
         "title": "Access control",
         "description": "Choose who can use this MCP.",
         "public": {
-          "label": "Public",
+          "label": "Entire organization",
           "description": "Anyone in your organization can use this MCP"
         },
         "groups": {
@@ -1646,7 +1646,7 @@
             "label": "Private"
           },
           "public": {
-            "label": "Public"
+            "label": "Organization"
           },
           "shared": {
             "label": "Shared"
@@ -1920,7 +1920,7 @@
             "text": "Access controls are removed from this deployment. **This starts a re-index** so search results reflect the change, which can take a while on a large index."
           },
           "madePublic": {
-            "text": "**Made public:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
+            "text": "**Opened to the entire organization:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
           },
           "reset": {
             "text": "**Reset to defaults:** Custom branding and chat retention policy."
@@ -3685,7 +3685,7 @@
         "documentAccess": {
           "description": "Control who can access documents indexed by this connector.",
           "everyone": {
-            "description": "Documents indexed by this connector will be public to everyone in your organization.",
+            "description": "Documents indexed by this connector are available to everyone in your organization.",
             "title": "Everyone in Your Organization"
           },
           "specificGroups": {
@@ -5622,7 +5622,7 @@
             "label": "Private"
           },
           "public": {
-            "label": "Public"
+            "label": "Organization"
           }
         },
         "connector": {
@@ -5743,7 +5743,7 @@
             "header": "Name"
           },
           "public": {
-            "header": "Public"
+            "header": "Access"
           },
           "status": {
             "header": "Status"
@@ -7412,7 +7412,7 @@
           "deleting": "{count, plural, one {# connector deleting} other {# connectors deleting}}"
         },
         "access": {
-          "public": "Public",
+          "public": "Organization",
           "private": "Private",
           "sync": "Auto-sync",
           "sync_restricted": "Auto-sync, restricted"
@@ -9040,8 +9040,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "All Public Knowledge",
-            "sublabel": "Let OnyxBot respond based on information from all public connectors"
+            "label": "All Organization-Wide Knowledge",
+            "sublabel": "Let OnyxBot respond based on information from all organization-wide connectors"
           },
           "documentSets": {
             "label": "Specific Document Sets",
@@ -11418,7 +11418,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "Change public permission"
+          "ariaLabel": "Change organization permission"
         },
         "row": {
           "updateAccess": {
@@ -11502,7 +11502,7 @@
           "title": "Prompt Reminders"
         },
         "public": {
-          "label": "Public to your organization"
+          "label": "Available to your entire organization"
         }
       }
     },
@@ -14082,11 +14082,11 @@
         "text": "Loading..."
       },
       "makePublic": {
-        "label": "Make this {objectName} Public?",
+        "label": "Make this {objectName} available to your entire organization?",
         "subtext": "If set, then this {objectName} will be usable by <b>All {publicToWhom}</b>. Otherwise, only <b>Admins</b> and <b>{publicToWhom}</b> who have explicitly been given access to this {objectName} (e.g. via a User Group) will have access."
       },
       "publicDisabled": {
-        "message": "This {objectName} is public and available to all users."
+        "message": "This {objectName} is available to everyone in your organization."
       },
       "usersFallback": {
         "text": "Users"
@@ -16431,7 +16431,7 @@
       "row": {
         "contentPlaceholder": "Provide a concise 1–2 sentence summary of the following:",
         "promptPlaceholder": "Summarize",
-        "publicTooltip": "Cannot delete public prompt-shortcuts.",
+        "publicTooltip": "Cannot delete organization-wide prompt shortcuts.",
         "removeAriaLabel": "Remove shortcut"
       },
       "title": "Prompt Shortcuts",

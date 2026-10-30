@@ -189,7 +189,7 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
-test("Public is the only alternative to groups and clears explicit grants", async () => {
+test("Entire organization is the only alternative to groups and clears explicit grants", async () => {
   const submit = renderAccess();
   const user = setupUser();
   await user.click(screen.getByRole("combobox", { name: "Access control" }));
@@ -199,7 +199,7 @@ test("Public is the only alternative to groups and clears explicit grants", asyn
   ).not.toBeInTheDocument();
   await user.click(
     screen.getByRole("option", {
-      name: /^Public Anyone in your organization can use this MCP/,
+      name: /^Entire organization Anyone in your organization can use this MCP/,
     })
   );
   await user.click(screen.getByRole("button", { name: "Save access" }));
@@ -235,7 +235,7 @@ test("scoped managers can select groups only and must choose a group", async () 
   const user = setupUser();
   await user.click(screen.getByRole("combobox", { name: "Access control" }));
   expect(
-    screen.queryByRole("option", { name: /^Public/ })
+    screen.queryByRole("option", { name: /^Entire organization/ })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("option", { name: /^Private/ })
@@ -782,7 +782,7 @@ describe("inline server configuration", () => {
     { adminCapabilities: [] },
     { adminCapabilities: [Permission.MANAGE_ACTIONS] },
   ])(
-    "read-only configuration loads without global edit permission and preserves Public access: %j",
+    "read-only configuration loads without global edit permission and preserves organization-wide access: %j",
     async ({ adminCapabilities }) => {
       renderDetailsPage({ readOnly: true, permissions: [], adminCapabilities });
       expect(
@@ -797,7 +797,7 @@ describe("inline server configuration", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.getByRole("combobox", { name: "Access control" })
-      ).toHaveValue("Public");
+      ).toHaveValue("Entire organization");
       expect(
         screen.getByRole("combobox", { name: "Access control" })
       ).toBeDisabled();
