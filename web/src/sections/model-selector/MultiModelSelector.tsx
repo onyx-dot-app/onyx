@@ -44,6 +44,12 @@ export interface MultiModelSelectorProps {
   reasoningManager?: ReasoningManager;
 }
 
+/** Radix's virtual anchor; Floating UI attaches its scroll listeners to `contextElement`. */
+interface PopoverAnchor {
+  getBoundingClientRect(): DOMRect;
+  contextElement?: Element;
+}
+
 export default function MultiModelSelector({
   selectedModels,
   onAdd,
@@ -55,7 +61,18 @@ export default function MultiModelSelector({
   const t = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
-  const anchorRef = useRef<HTMLElement | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // The anchor node can unmount while the popover stays open (settings at max,
+  // replace, remove), so a detached anchor measures the selector row instead.
+  const anchorFor = (element: HTMLElement | null): PopoverAnchor => ({
+    getBoundingClientRect: () => {
+      const target = element?.isConnected ? element : rowRef.current;
+      return target?.getBoundingClientRect() ?? new DOMRect();
+    },
+    contextElement: rowRef.current ?? undefined,
+  });
+  const anchorRef = useRef<PopoverAnchor>(anchorFor(null));
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
@@ -174,7 +191,7 @@ export default function MultiModelSelector({
   const handlePillClick = (index: number, element: HTMLElement) => {
     // `pointer-events-none` only blocks the mouse; guard the keyboard path too.
     if (noModelsToSelect) return;
-    anchorRef.current = element;
+    anchorRef.current = anchorFor(element);
     setReplacingIndex(index);
     setOpen(true);
   };
@@ -185,6 +202,7 @@ export default function MultiModelSelector({
           container stays hoverable and this Tooltip can surface the reason. */}
       <Tooltip tooltip={selectorTooltip} side="top">
         <div
+          ref={rowRef}
           data-testid="model-selector"
           aria-disabled={noModelsToSelect || undefined}
           className={cn(
@@ -202,16 +220,14 @@ export default function MultiModelSelector({
               aria-label={t("multiModel.addModelButton.label")}
               onClick={(e: React.MouseEvent) => {
                 if (noModelsToSelect) return;
-                anchorRef.current = e.currentTarget as HTMLElement;
+                anchorRef.current = anchorFor(e.currentTarget as HTMLElement);
                 setReplacingIndex(null);
                 setOpen(true);
               }}
             />
           )}
 
-          <Popover.Anchor
-            virtualRef={anchorRef as React.RefObject<HTMLElement>}
-          />
+          <Popover.Anchor virtualRef={anchorRef} />
           {selectedModels.length > 0 && (
             <>
               {!atMax && (
