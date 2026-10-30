@@ -89,9 +89,8 @@ procedure.
 - Onyx overloads words such as Persona, Tool, turn, and SearchDoc. Read
   `.agents/feature-map/GLOSSARY.md` before trusting a name.
 
-If you change behaviour a component document describes, update that document in the
-same pull request. The `feature-map-integrity` pre-commit hook fails when a file the
-map cites is renamed or deleted.
+If your change makes a map document wrong, update it in the same pull request, as
+`.agents/feature-map/README.md` ("Keeping the map true") describes.
 
 ### Skills
 
@@ -121,10 +120,12 @@ resolved with `git rebase --continue`, and skips clean picks. The `--apply` reba
 backend logs resolved conflicts as picks, so the hook skips them. Checkout, pull, clean
 merge, and clean rebase updates do not add files to the check.
 If pre-commit fails, fix the reported problems before you finish. When the repo has the feature map
-(`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
-component whose code the turn changed but whose document the branch did not. These
-reminders appear as advisory messages and do not block completion. Update
-the document if your change alters what it states.
+(`.agents/feature-map/stale_docs.py`), the same hook blocks the stop once with an
+editing brief: the sections and keys of the feature-map documents that cite code
+the turn changed, and changed files that `PATHS.md` does not cover. Ownership
+through `PATHS.md` alone does not block. Answer it
+with "Editing judgment" in `.agents/feature-map/README.md`. No update is a normal
+answer; edit only what the change made wrong or what a future agent needs.
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 

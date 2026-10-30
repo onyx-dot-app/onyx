@@ -69,7 +69,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      integration: ${{ steps.app.outputs.integration || 'true' }}
+      integration: ${{ steps.filter.outputs.integration || 'true' }}
       gateway: ${{ steps.filter.outputs.gateway || 'true' }}
       # The live Slack suite shares its workspaces' rate limits across all CI runs,
       # so PRs run it only for related changes. Main and tag runs include it
@@ -92,7 +92,6 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request'
         with:
-          list-files: json
           filters: |
             integration:
               - 'backend/**'
@@ -156,21 +155,6 @@ jobs:
               - 'backend/onyx/indexing/**'
               - 'backend/tests/integration/tests/reindex_port/**'
               - '.github/workflows/pr-integration-tests.yml'
-            agent_hook_tests:
-              - 'backend/tests/unit/agent_hooks/**'
-              - 'backend/tests/external_dependency_unit/agent_hooks/**'
-
-      # Agent-hook tests need no app suite; the agent_hooks
-      # external-dependency directory runs them.
-      - name: Ignore agent-hook test files
-        id: app
-        if: github.event_name == 'pull_request'
-        env:
-          FILES: ${{ steps.filter.outputs.integration_files }}
-          HOOK_TEST_FILES: ${{ steps.filter.outputs.agent_hook_tests_files }}
-        run: |
-          count=$(jq -n --argjson f "$FILES" --argjson h "$HOOK_TEST_FILES" '$f - $h | length')
-          if [ "$count" -gt 0 ]; then echo "integration=true"; else echo "integration=false"; fi >> "$GITHUB_OUTPUT"
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
