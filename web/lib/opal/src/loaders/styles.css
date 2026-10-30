@@ -40,6 +40,12 @@
   background-color: var(--background-tint-03);
 }
 
+/* SidebarLoader: the sidebar has the shimmer's own tint (tint-02), so its
+   bars are a step darker to stay visible. */
+.opal-sidebar-loader .opal-shimmer-block {
+  background-color: var(--background-tint-03);
+}
+
 /* ---------------------------------------------------------------------------
    Text shimmer (TextLoader). The wave is the background of an inline
    element, clipped to its glyphs. An inline background is laid out as one
