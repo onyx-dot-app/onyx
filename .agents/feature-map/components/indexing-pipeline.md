@@ -302,7 +302,7 @@ the error type on purpose in auth code.
     document id.** Document ids share one namespace, and the prepare upsert
     rewrites a shared row and adds the pair's readers to its ACL.
     `background/celery/tasks/docprocessing/tasks.py:_docprocessing_task` drops
-    each id that `db/document.py:get_document_ids_claimed_by_other_sources`
+    each id that `backend/onyx/db/document.py:get_document_ids_claimed_by_other_sources`
     returns and records a failure for it.
     `background/indexing/run_targeted_reindex.py:_flush_batch` applies the same
     gate. Same-source pairs, OneDrive with SharePoint, and links that already
