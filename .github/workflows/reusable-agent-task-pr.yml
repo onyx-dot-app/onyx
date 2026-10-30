@@ -11,7 +11,8 @@
 ###   python3 <script> --write --rationale-file <path>
 ###                    [--failure-context-file <path>] [extra args]
 ### --rationale-file receives markdown appended to the PR body;
-### --failure-context-file carries the failed run's logs on repair runs.
+### --failure-context-file carries the failed run's logs on repair runs, or the
+### failed jobs of `failure-run-id` when a caller seeds a task from a failure.
 ###
 ### Adopting a new task = one ~30-line caller workflow + one script.
 
@@ -41,6 +42,11 @@ on:
         default: ""
       validation-script:
         description: "Trusted Python validation script; required for a coding harness"
+        required: false
+        type: string
+        default: ""
+      failure-run-id:
+        description: "Run whose failed job logs seed a fresh task (empty = none)"
         required: false
         type: string
         default: ""
@@ -259,22 +265,31 @@ jobs:
 
       - name: Collect failing validation context
         if: >-
-          github.event_name == 'workflow_run' &&
-          steps.repair-guard.outputs.proceed == 'true'
+          (github.event_name == 'workflow_run' &&
+           steps.repair-guard.outputs.proceed == 'true') ||
+          (github.event_name != 'workflow_run' && inputs.failure-run-id != '')
         env:
-          # GITHUB_TOKEN has actions:read; the App token was minted without it.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          FAILED_RUN_ID: ${{ inputs.failure-run-id || github.event.workflow_run.id }}
         run: |
-          # The agent gets the tail of the failing logs plus which jobs died.
-          gh api "repos/${{ github.repository }}/actions/runs/${FAILED_RUN_ID}/jobs?per_page=100" \
-            --jq '.jobs[] | select(.conclusion == "failure") | .name' \
+          gh api "repos/${REPO}/actions/runs/${FAILED_RUN_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure") | "\(.id) \(.name)"' \
             > /tmp/failed_jobs.txt || true
           {
             echo "Failed jobs:"
-            cat /tmp/failed_jobs.txt
+            cut -d' ' -f2- /tmp/failed_jobs.txt
             echo ""
-            gh run view "${FAILED_RUN_ID}" --repo "${{ github.repository }}" --log-failed || true
+            if [ "${EVENT_NAME}" = "workflow_run" ]; then
+              gh run view "${FAILED_RUN_ID}" --repo "${REPO}" --log-failed || true
+            else
+              # The seeding run may still be in progress, so read each finished job's log.
+              while read -r job_id job_name; do
+                echo "=== ${job_name} ==="
+                gh api "repos/${REPO}/actions/jobs/${job_id}/logs" | tail -n 3000 || true
+              done < /tmp/failed_jobs.txt
+            fi
           } > /tmp/failure_context.txt
           wc -c /tmp/failure_context.txt
 
@@ -333,7 +348,7 @@ jobs:
           max-turns: ${{ inputs.agent-max-turns }}
           timeout-seconds: ${{ inputs.agent-timeout-seconds }}
           rationale-file: /tmp/agent_rationale.md
-          failure-context-file: ${{ github.event_name == 'workflow_run' && '/tmp/failure_context.txt' || '' }}
+          failure-context-file: ${{ (github.event_name == 'workflow_run' || inputs.failure-run-id != '') && '/tmp/failure_context.txt' || '' }}
 
       - name: Run deterministic fallback
         if: >-
