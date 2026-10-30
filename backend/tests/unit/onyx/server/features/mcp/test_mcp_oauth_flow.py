@@ -22,7 +22,7 @@ from onyx.db.enums import (
 from onyx.db.models import MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp import oauth, oauth_flow
+from onyx.server.features.mcp import oauth, oauth_discovery, oauth_flow
 from onyx.server.features.mcp.models import (
     MCPOAuthFlowState,
     MCPPendingOAuthAuthorization,
@@ -237,6 +237,9 @@ def _install_discovery_responses(
         )
 
     monkeypatch.setattr(oauth_flow, "mcp_ssrf_httpx_client_factory", client_factory)
+    monkeypatch.setattr(
+        oauth_discovery, "mcp_ssrf_httpx_client_factory", client_factory
+    )
     return request_urls
 
 
@@ -629,13 +632,14 @@ def test_unreachable_authorization_endpoint_still_redirects(
     def refuse_connection(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("unreachable", request=request)
 
-    monkeypatch.setattr(
-        oauth_flow,
-        "mcp_ssrf_httpx_client_factory",
-        lambda **_kwargs: httpx.AsyncClient(
-            transport=httpx.MockTransport(refuse_connection)
-        ),
-    )
+    for module in (oauth_flow, oauth_discovery):
+        monkeypatch.setattr(
+            module,
+            "mcp_ssrf_httpx_client_factory",
+            lambda **_kwargs: httpx.AsyncClient(
+                transport=httpx.MockTransport(refuse_connection)
+            ),
+        )
 
     assert _start_flow(_server()) == oauth_flow.OAuthAuthorizationRedirect(
         "https://accounts.example.com/consent"

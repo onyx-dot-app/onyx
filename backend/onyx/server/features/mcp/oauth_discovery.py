@@ -1,6 +1,8 @@
 import asyncio
+import secrets
 
 import httpx
+from mcp.client.auth import PKCEParameters
 from mcp.client.auth.exceptions import OAuthRegistrationError
 from mcp.client.auth.utils import (
     build_oauth_authorization_server_metadata_discovery_urls,
@@ -14,9 +16,19 @@ from mcp.shared.auth_utils import check_resource_allowed, resource_url_from_serv
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.mcp.client_metadata import (
+    CODE_RESPONSE_TYPE,
+    mcp_oauth_redirect_uri,
+    validated_mcp_oauth_client_metadata_url,
+)
 from onyx.server.features.mcp.models import MCPOAuthDiscoveryResponse
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
+
+logger = setup_logger()
+
+AUTHORIZATION_CHECK_TIMEOUT_SECONDS = 5.0
 
 
 async def discover_oauth_capabilities(
@@ -27,6 +39,46 @@ async def discover_oauth_capabilities(
             return await _discover_oauth_capabilities(server_url, challenge_url)
     except (httpx.HTTPError, TimeoutError, ValueError, SSRFException):
         return MCPOAuthDiscoveryResponse(status="unreachable")
+
+
+async def authorization_request_accepted(authorization_url: str) -> bool | None:
+    """Whether the provider answers an authorization request without an error.
+    None when this server cannot reach the provider or is rate limited."""
+    try:
+        async with (
+            asyncio.timeout(AUTHORIZATION_CHECK_TIMEOUT_SECONDS),
+            mcp_ssrf_httpx_client_factory() as client,
+            # Only the status matters, so the page body is never read.
+            client.stream("GET", authorization_url, follow_redirects=False) as response,
+        ):
+            status_code = response.status_code
+    except (httpx.HTTPError, SSRFException, TimeoutError):
+        logger.warning("Could not pre-check the MCP OAuth authorization request")
+        return None
+    if status_code == httpx.codes.TOO_MANY_REQUESTS:
+        return None
+    # 5xx counts too: Sentry and Canva answer 500 for an unreadable document.
+    return status_code < 400
+
+
+async def _client_metadata_accepted(
+    authorization_endpoint: str, server_url: str
+) -> bool | None:
+    client_id = validated_mcp_oauth_client_metadata_url()
+    if client_id is None:
+        return False
+    authorization_url = httpx.URL(authorization_endpoint).copy_merge_params(
+        {
+            "response_type": CODE_RESPONSE_TYPE,
+            "client_id": client_id,
+            "redirect_uri": mcp_oauth_redirect_uri(),
+            "state": secrets.token_urlsafe(32),
+            "code_challenge": PKCEParameters.generate().code_challenge,
+            "code_challenge_method": "S256",
+            "resource": resource_url_from_server_url(server_url),
+        }
+    )
+    return await authorization_request_accepted(str(authorization_url))
 
 
 async def _discover_oauth_capabilities(
@@ -58,12 +110,20 @@ async def _discover_oauth_capabilities(
             saw_server_error |= response.status_code >= 500
             _, metadata = await handle_auth_metadata_response(response)
             if metadata:
+                supports_client_metadata = (
+                    await _client_metadata_accepted(
+                        str(metadata.authorization_endpoint), server_url
+                    )
+                    if metadata.client_id_metadata_document_supported
+                    else False
+                )
                 return MCPOAuthDiscoveryResponse(
                     status="metadata_found",
                     supports_automatic_registration=bool(
                         metadata.registration_endpoint
-                        or metadata.client_id_metadata_document_supported
+                        or supports_client_metadata is not False
                     ),
+                    supports_client_metadata=supports_client_metadata,
                     authorization_endpoint=str(metadata.authorization_endpoint),
                     token_endpoint=str(metadata.token_endpoint),
                 )

@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "Utiliser le document de métadonnées client",
-        "description": "Lorsque cette option est activée, le fournisseur récupère le document de métadonnées client de {appName} via l'Internet public. Désactivez-la si cette instance de {appName} est privée. {appName} utilise alors l'enregistrement automatique du client.",
-        "turnOff": "Désactiver le document de métadonnées du client"
+        "description": "Lorsque cette option est activée, le fournisseur récupère le document de métadonnées client de {appName} via l'Internet public. Désactivez-la si cette instance de {appName} est privée. {appName} utilise alors l'enregistrement automatique du client."
       },
       "discovery": {
         "checking": "Vérification de la configuration automatique…",
@@ -1115,18 +1114,6 @@
         "openapi": "Ajouter un plugin OpenAPI"
       },
       "catalog": {
-        "slack": {
-          "summary": "Recherchez des conversations et envoyez des messages",
-          "description": "Recherchez des conversations et envoyez des messages. Nécessite une application Slack enregistrée."
-        },
-        "hubspot": {
-          "summary": "Gérez les contacts et les transactions",
-          "description": "Gérez les contacts et les transactions. Nécessite un connecteur MCP HubSpot."
-        },
-        "asana": {
-          "summary": "Gérez les tâches et les projets",
-          "description": "Gérez les tâches et les projets. Nécessite un client OAuth enregistré."
-        },
         "linear": {
           "summary": "Gérez les tickets, les projets et les équipes",
           "description": "Gérez les tickets, les projets et les équipes."
@@ -1218,6 +1205,10 @@
       "blocked": "Cette URL est bloquée par vos paramètres de sécurité sortante.",
       "publicDetected": "Aucune authentification requise",
       "oauthDetected": "OAuth détecté",
+      "clientMetadata": "Document de métadonnées client",
+      "clientMetadataSupported": "Pris en charge",
+      "clientMetadataUnsupported": "Non pris en charge",
+      "clientMetadataUnknown": "Non vérifié",
       "manualRequired": "Choisir l’authentification manuellement",
       "chooseAuthentication": "Nous n’avons pas pu déterminer la méthode d’authentification de ce serveur. Choisissez une méthode ci-dessous.",
       "connect": "Connecter",
