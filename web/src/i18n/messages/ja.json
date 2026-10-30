@@ -7846,6 +7846,15 @@
             "tooltip": "デフォルトに戻す"
           }
         },
+        "truefoundry": {
+          "apiBaseField": {
+            "description": "TrueFoundry ゲートウェイのエンドポイントを使用するか、セルフホストしたゲートウェイのベース URL を貼り付けてください。",
+            "placeholder": "TrueFoundry ゲートウェイのベース URL"
+          },
+          "apiKeyField": {
+            "description": "[TrueFoundry](https://www.truefoundry.com/) の Personal Access Token または Virtual Account Token を貼り付けると、トークンでアクセスできるモデルを読み込みます。"
+          }
+        },
         "vercelAiGateway": {
           "apiBaseField": {
             "description": "Vercel AI Gateway のエンドポイントを使用するか、カスタムのベース URL を貼り付けてください。",

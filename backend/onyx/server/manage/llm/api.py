@@ -2997,62 +2997,77 @@ def get_openai_compatible_server_available_models(
     response_json = _get_openai_compatible_server_response(
         api_base=request.api_base, api_key=api_key
     )
+    return _catalog_backed_chat_models(
+        response_json,
+        provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        source_label="OpenAI-Compatible",
+        provider_id=request.provider_id,
+        db_session=db_session,
+    )
 
+
+def _catalog_backed_chat_models(
+    response_json: dict,
+    provider: LlmProviderNames,
+    source_label: str,
+    provider_id: int | None,
+    db_session: Session,
+) -> list[OpenAICompatibleFinalModelResponse]:
+    """Map an OpenAI-shaped `/models` listing to sorted chat model configs.
+
+    The listing names models but says nothing about what they can do, so image
+    and reasoning support come from the LiteLLM catalog. Syncs the result into
+    an existing provider when `provider_id` is given.
+    """
     models = response_json.get("data", [])
     if not isinstance(models, list) or len(models) == 0:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "No models found from your OpenAI-compatible endpoint",
+            f"No models found from your {source_label} endpoint",
         )
 
     results: list[OpenAICompatibleFinalModelResponse] = []
     for model in models:
         try:
             model_id = model.get("id", "")
-            model_name = model.get("name", model_id)
-
-            if not model_id:
+            if not model_id or is_non_chat_model(model_id):
                 continue
-
-            # Skip non-chat models
-            if is_non_chat_model(model_id):
-                continue
-
+            display_name = model.get("name") or model_id
             results.append(
                 OpenAICompatibleFinalModelResponse(
                     name=model_id,
-                    display_name=model_name,
+                    display_name=display_name,
                     max_input_tokens=model.get("context_length"),
                     supports_image_input=catalog_model_supports_image_input(
-                        model_id, LlmProviderNames.OPENAI_COMPATIBLE
+                        model_id, provider
                     ),
-                    # Reasoning support from the model catalog, with the
-                    # substring heuristic covering models LiteLLM doesn't know
-                    supports_reasoning=model_is_reasoning_model(
-                        model_id, LlmProviderNames.OPENAI_COMPATIBLE
-                    )
-                    or is_reasoning_model(model_id, model_name),
+                    # The substring heuristic covers models LiteLLM doesn't know.
+                    supports_reasoning=model_is_reasoning_model(model_id, provider)
+                    or is_reasoning_model(model_id, display_name),
                 )
             )
         except Exception as e:
             logger.warning(
-                "Failed to parse OpenAI-compatible model entry",
-                extra={"error": str(e), "item": str(model)[:1000]},
+                "Failed to parse model entry",
+                extra={
+                    "source": source_label,
+                    "error": str(e),
+                    "item": str(model)[:1000],
+                },
             )
 
     if not results:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
-            "No compatible models found from OpenAI-compatible endpoint",
+            f"No compatible models found from your {source_label} endpoint",
         )
 
     sorted_results = sorted(results, key=lambda m: m.name.lower())
 
-    # Sync new models to DB if provider_id is specified
-    if request.provider_id is not None:
+    if provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_id=request.provider_id,
+            provider_id=provider_id,
             models=[
                 SyncModelEntry(
                     name=r.name,
@@ -3063,7 +3078,7 @@ def get_openai_compatible_server_available_models(
                 )
                 for r in sorted_results
             ],
-            source_label="OpenAI-Compatible",
+            source_label=source_label,
         )
 
     return sorted_results
@@ -3192,6 +3207,36 @@ def get_vercel_ai_gateway_available_models(
         )
 
     return sorted_results
+
+
+@admin_router.post("/truefoundry/available-models")
+def get_truefoundry_available_models(
+    request: OpenAICompatibleModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[OpenAICompatibleFinalModelResponse]:
+    """Fetch the models a TrueFoundry token can reach from the gateway's /models.
+
+    The listing lives on the bare base (no `/v1`) and carries no context
+    metadata, so the limit resolves from the LiteLLM catalog, or its fallback,
+    at read time.
+    """
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+    api_base = request.api_base.strip().rstrip("/")
+    response_json = _get_openai_compatible_models_response(
+        url=f"{api_base}/models",
+        source_name="TrueFoundry",
+        api_key=api_key,
+    )
+    return _catalog_backed_chat_models(
+        response_json,
+        provider=LlmProviderNames.TRUEFOUNDRY,
+        source_label="TrueFoundry",
+        provider_id=request.provider_id,
+        db_session=db_session,
+    )
 
 
 def _get_portkey_models_response(api_base: str, api_key: str | None = None) -> dict:

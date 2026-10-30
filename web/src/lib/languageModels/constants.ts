@@ -18,6 +18,7 @@ import {
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgTrueFoundry,
   SvgTypeSafe,
   SvgVercel,
   SvgZoom,
@@ -41,6 +42,7 @@ import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompat
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
 import VercelAIGatewayModal from "@/sections/modals/languageModels/VercelAIGatewayModal";
+import TrueFoundryModal from "@/sections/modals/languageModels/TrueFoundryModal";
 import type { ProviderEntry } from "@/lib/languageModels/types";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
@@ -151,6 +153,12 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Vercel",
     Modal: VercelAIGatewayModal,
   },
+  [LLMProviderName.TRUEFOUNDRY]: {
+    icon: SvgTrueFoundry,
+    productName: "TrueFoundry",
+    companyName: "TrueFoundry",
+    Modal: TrueFoundryModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: LLMProviderName.CUSTOM,
@@ -192,6 +200,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
   LLMProviderName.VERCEL_AI_GATEWAY,
+  LLMProviderName.TRUEFOUNDRY,
   LLMProviderName.VERTEX_AI,
 ]);
 
@@ -213,6 +222,7 @@ export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
   [LLMProviderName.VERCEL_AI_GATEWAY]: SvgVercel,
+  [LLMProviderName.TRUEFOUNDRY]: SvgTrueFoundry,
 
   amazon: SvgAWS,
   gpt: SvgOpenAI,

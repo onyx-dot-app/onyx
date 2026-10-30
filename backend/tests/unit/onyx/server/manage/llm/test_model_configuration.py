@@ -704,3 +704,30 @@ def _make_model_config(
         flow_types if flow_types is not None else [LLMModelFlowType.CHAT]
     )
     return mc
+
+
+# ModelConfigurationView.from_model: TrueFoundry labels and limits
+
+
+class TestModelConfigurationViewTrueFoundry:
+    """TrueFoundry ids are `<account>/<model>`, so the stored label must survive
+    (the parser would collapse two accounts serving one model). A missing limit
+    stays unset in the view: the chat path resolves it from the catalog, and a
+    fabricated number would be echoed back by the edit form and frozen."""
+
+    def test_stored_label_kept_and_missing_limit_stays_unset(self) -> None:
+        mc = _make_model_config(
+            name="openai-backup/gpt-4o-mini",
+            display_name="openai-backup/gpt-4o-mini",
+            max_input_tokens=None,
+        )
+        with patch(
+            "onyx.server.manage.llm.models.get_max_input_tokens",
+            return_value=128_000,
+        ) as catalog_lookup:
+            view = ModelConfigurationView.from_model(mc, "truefoundry")
+
+        assert view.display_name == "openai-backup/gpt-4o-mini"
+        assert view.max_input_tokens is None
+        assert view.configured_max_input_tokens is None
+        catalog_lookup.assert_not_called()

@@ -7846,6 +7846,15 @@
             "tooltip": "استعادة الافتراضي"
           }
         },
+        "truefoundry": {
+          "apiBaseField": {
+            "description": "استخدم نقطة نهاية بوابة TrueFoundry أو الصق عنوان URL الأساسي لبوابتك المستضافة ذاتيًا.",
+            "placeholder": "عنوان URL الأساسي لبوابة TrueFoundry"
+          },
+          "apiKeyField": {
+            "description": "الصق رمز Personal Access Token أو Virtual Account Token من [TrueFoundry](https://www.truefoundry.com/) لتحميل النماذج التي يمكن لرمزك الوصول إليها."
+          }
+        },
         "vercelAiGateway": {
           "apiBaseField": {
             "description": "استخدم نقطة نهاية Vercel AI Gateway أو الصق عنوان URL أساسيًا مخصصًا.",
