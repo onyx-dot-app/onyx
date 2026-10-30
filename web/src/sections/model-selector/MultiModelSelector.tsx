@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import {
@@ -69,11 +69,23 @@ export default function MultiModelSelector({
   const rowRef = useRef<HTMLDivElement>(null);
   // The opener's rect frozen at open: a pick can move or unmount the opener
   // (pills prepend, + hides at max, a replaced pill remounts) while the menu fades.
-  // A resize while open re-runs collision handling against the same rect, so the
-  // panel stays on screen but does not follow the opener.
+  // Only a window resize while open re-measures it, since that reflows the row.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const openerRectRef = useRef<DOMRect>(new DOMRect());
   const anchorRef = useRef<PopoverAnchor>({
-    getBoundingClientRect: () => new DOMRect(),
+    getBoundingClientRect: () => openerRectRef.current,
   });
+
+  useEffect(() => {
+    if (!open) return;
+    const remeasure = () => {
+      const opener = openerRef.current;
+      if (opener?.isConnected)
+        openerRectRef.current = opener.getBoundingClientRect();
+    };
+    window.addEventListener("resize", remeasure);
+    return () => window.removeEventListener("resize", remeasure);
+  }, [open]);
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
@@ -179,9 +191,10 @@ export default function MultiModelSelector({
       handleOpenChange(false);
       return;
     }
-    const rect: DOMRect = element.getBoundingClientRect();
+    openerRef.current = element;
+    openerRectRef.current = element.getBoundingClientRect();
     anchorRef.current = {
-      getBoundingClientRect: () => rect,
+      getBoundingClientRect: () => openerRectRef.current,
       contextElement: rowRef.current ?? undefined,
     };
     setReplacingIndex(index);

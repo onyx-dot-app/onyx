@@ -284,10 +284,14 @@ async function expectAnchoredAt(anchor: string | DOMRect) {
   );
 }
 
-/** Re-measures, then checks the panel did not leave `rect`; a waitFor would pass on a stale transform. */
+/**
+ * Re-measures through a scroll, which autoUpdate also tracks, then checks the
+ * panel did not leave `rect`; a waitFor would pass on a stale transform. A
+ * resize would re-capture the opener's rect.
+ */
 async function expectStillAt(rect: DOMRect) {
   await act(async () => {
-    fireEvent(window, new Event("resize"));
+    fireEvent(window, new Event("scroll"));
   });
   expect(popperXY()).toEqual({ x: rect.right, y: rect.top - SIDE_OFFSET });
 }
@@ -518,6 +522,19 @@ describe("MultiModelSelector", () => {
       const atOpen = rectOf("Model B");
       setRect("Model B", new DOMRect(760, 704, 90, 32));
       await expectStillAt(atOpen);
+    });
+
+    test("a window resize re-measures the open menu's opener, other movement does not", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B"]);
+
+      await openFromAdd(user);
+      await expectAnchoredAt(ADD);
+
+      const atOpen = rectOf(ADD);
+      setRect(ADD, new DOMRect(220, 704, 32, 32));
+      await expectStillAt(atOpen);
+      await expectAnchoredAt(ADD);
     });
 
     test("the third add closes the menu and the fading content holds +'s rect after + is gone", async () => {
@@ -787,6 +804,21 @@ describe("MultiModelSelector", () => {
       expectPane("Model B");
       expectNoCallbacks(callbacks);
       expect(pillNames()).toEqual(["Model A", "Model B", "Model C"]);
+    });
+
+    test("a pick after settings and back still replaces by index and closes", async () => {
+      const user = setupUser();
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B", "Model C"], callbacks);
+
+      await openFromPill(user, "Model B");
+      await user.click(settingsButton("Model D"));
+      await clickBack(user);
+      await user.click(row("Model D"));
+
+      expectOnlyCall(callbacks, "onReplace", 1, selected("Model D"));
+      expect(pillNames()).toEqual(["Model A", "Model D", "Model C"]);
+      await expectClosed();
     });
   });
 
