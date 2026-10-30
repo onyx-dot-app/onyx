@@ -114,6 +114,5 @@ pre-commit run --files .github/scripts/run_coding_agent.py \
   .github/scripts/test_run_coding_agent.py \
   .github/actions/run-coding-agent/action.yml \
   .github/workflows/reusable-agent-task-pr.yml \
-  .github/workflows/cve-alerts.yml \
-  .github/workflows/pr-quality-checks.yml
+  .github/workflows/cve-alerts.yml
 ```
