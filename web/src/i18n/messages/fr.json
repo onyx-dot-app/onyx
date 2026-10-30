@@ -6608,11 +6608,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Modèles d'image de vos fournisseurs LLM connectés. Connectez-en un pour l'utiliser dans le chat.",
+        "title": "Modèles disponibles"
+      },
       "configureSuccess": {
         "message": "Fournisseur configuré avec succès"
       },
+      "connectButton": {
+        "label": "Connecter"
+      },
+      "connectedModels": {
+        "title": "Modèles connectés"
+      },
+      "defaultTag": {
+        "label": "Par défaut"
+      },
       "deselectError": {
         "message": "Échec de la désélection"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Déconnecter {title}"
       },
       "disconnectError": {
         "message": "Échec de la déconnexion"
@@ -6630,6 +6646,9 @@
         "header": {
           "description": "Cette action supprimera les identifiants enregistrés de ce fournisseur.",
           "title": "Déconnecter *{title}*"
+        },
+        "linkedHeader": {
+          "description": "Le fournisseur LLM et ses identifiants restent connectés."
         },
         "noDefaultOption": {
           "description": "(Désactiver la génération d'images)",
@@ -6651,6 +6670,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} déconnecté"
+      },
+      "editButton": {
+        "ariaLabel": "Modifier {title}"
       },
       "emptyState": {
         "title": "Connectez un modèle de génération d'images à utiliser dans la discussion."
@@ -6730,12 +6752,30 @@
         "description": "Paramètres de la génération d'images dans la discussion.",
         "title": "Génération d'images"
       },
+      "linkError": {
+        "message": "Échec de la connexion du modèle"
+      },
+      "linkSuccess": {
+        "message": "{title} connecté"
+      },
+      "linkedModel": {
+        "description": "Depuis {provider}"
+      },
       "loadError": {
         "message": "Échec du chargement de la configuration. Actualisez la page."
       },
       "model": {
         "description": "Sélectionnez un modèle pour générer des images dans la discussion.",
+        "placeholder": "Sélectionnez un modèle par défaut",
         "title": "Modèle de génération d'images"
+      },
+      "modelFilter": {
+        "all": "Tous",
+        "recommended": "Recommandés"
+      },
+      "noImageModels": {
+        "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image. Pour voir tous les modèles de vos fournisseurs connectés, ouvrez l'onglet Tous.",
+        "title": "Aucun modèle d'image disponible"
       },
       "providers": {
         "azureGptImage1": {

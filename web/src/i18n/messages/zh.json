@@ -6608,11 +6608,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "已连接的 LLM 提供商上的图像模型。连接一个即可在聊天中使用。",
+        "title": "可用模型"
+      },
       "configureSuccess": {
         "message": "提供商配置成功"
       },
+      "connectButton": {
+        "label": "连接"
+      },
+      "connectedModels": {
+        "title": "已连接的模型"
+      },
+      "defaultTag": {
+        "label": "默认"
+      },
       "deselectError": {
         "message": "取消选择失败"
+      },
+      "disconnectButton": {
+        "ariaLabel": "断开 {title}"
       },
       "disconnectError": {
         "message": "断开连接失败"
@@ -6630,6 +6646,9 @@
         "header": {
           "description": "此操作会移除为此提供商存储的凭证。",
           "title": "断开 *{title}* 的连接"
+        },
+        "linkedHeader": {
+          "description": "LLM 提供商及其凭据将保持连接。"
         },
         "noDefaultOption": {
           "description": "（禁用图像生成）",
@@ -6651,6 +6670,9 @@
       },
       "disconnectSuccess": {
         "message": "已断开 {title} 的连接"
+      },
+      "editButton": {
+        "ariaLabel": "编辑 {title}"
       },
       "emptyState": {
         "title": "连接一个图像生成模型，以便在对话中使用。"
@@ -6730,12 +6752,30 @@
         "description": "对话内图像生成的设置。",
         "title": "图像生成"
       },
+      "linkError": {
+        "message": "无法连接模型"
+      },
+      "linkSuccess": {
+        "message": "已连接 {title}"
+      },
+      "linkedModel": {
+        "description": "来自 {provider}"
+      },
       "loadError": {
         "message": "加载配置失败。请刷新页面。"
       },
       "model": {
         "description": "选择用于在对话中生成图像的模型。",
+        "placeholder": "选择默认模型",
         "title": "图像生成模型"
+      },
+      "modelFilter": {
+        "all": "全部",
+        "recommended": "推荐"
+      },
+      "noImageModels": {
+        "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。要查看已连接提供商的所有模型，请打开“全部”标签页。",
+        "title": "没有可用的图像模型"
       },
       "providers": {
         "azureGptImage1": {

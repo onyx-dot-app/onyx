@@ -6608,11 +6608,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "接続済みの LLM プロバイダーの画像モデルです。チャットで使うには接続してください。",
+        "title": "利用可能なモデル"
+      },
       "configureSuccess": {
         "message": "プロバイダーを設定しました"
       },
+      "connectButton": {
+        "label": "接続"
+      },
+      "connectedModels": {
+        "title": "接続済みモデル"
+      },
+      "defaultTag": {
+        "label": "デフォルト"
+      },
       "deselectError": {
         "message": "選択を解除できませんでした"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} を切断"
       },
       "disconnectError": {
         "message": "接続を解除できませんでした"
@@ -6630,6 +6646,9 @@
         "header": {
           "description": "このプロバイダーに保存されている認証情報を削除します。",
           "title": "*{title}* の接続を解除"
+        },
+        "linkedHeader": {
+          "description": "LLMプロバイダーとその認証情報は接続されたままです。"
         },
         "noDefaultOption": {
           "description": "(画像生成を無効にする)",
@@ -6651,6 +6670,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} の接続を解除しました"
+      },
+      "editButton": {
+        "ariaLabel": "{title} を編集"
       },
       "emptyState": {
         "title": "チャットで使用する画像生成モデルを接続してください。"
@@ -6730,12 +6752,30 @@
         "description": "チャット内の画像生成に関する設定です。",
         "title": "画像生成"
       },
+      "linkError": {
+        "message": "モデルを接続できませんでした"
+      },
+      "linkSuccess": {
+        "message": "{title} を接続しました"
+      },
+      "linkedModel": {
+        "description": "{provider} から"
+      },
       "loadError": {
         "message": "設定を読み込めませんでした。ページを再読み込みしてください。"
       },
       "model": {
         "description": "チャットで画像を生成するモデルを選択してください。",
+        "placeholder": "デフォルトのモデルを選択",
         "title": "画像生成モデル"
+      },
+      "modelFilter": {
+        "all": "すべて",
+        "recommended": "おすすめ"
+      },
+      "noImageModels": {
+        "description": "言語モデルページで、画像モデルを提供する LLM プロバイダーを接続してください。接続済みプロバイダーのすべてのモデルを表示するには、[すべて] タブを開いてください。",
+        "title": "利用できる画像モデルがありません"
       },
       "providers": {
         "azureGptImage1": {

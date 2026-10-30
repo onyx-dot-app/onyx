@@ -6608,11 +6608,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Image models on your connected LLM providers. Connect one to use it in chat.",
+        "title": "Available Models"
+      },
       "configureSuccess": {
         "message": "Provider configured successfully"
       },
+      "connectButton": {
+        "label": "Connect"
+      },
+      "connectedModels": {
+        "title": "Connected Models"
+      },
+      "defaultTag": {
+        "label": "Default"
+      },
       "deselectError": {
         "message": "Failed to deselect"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Disconnect {title}"
       },
       "disconnectError": {
         "message": "Failed to disconnect"
@@ -6630,6 +6646,9 @@
         "header": {
           "description": "This will remove the stored credentials for this provider.",
           "title": "Disconnect *{title}*"
+        },
+        "linkedHeader": {
+          "description": "The LLM provider and its credentials stay connected."
         },
         "noDefaultOption": {
           "description": "(Disable Image Generation)",
@@ -6651,6 +6670,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} disconnected"
+      },
+      "editButton": {
+        "ariaLabel": "Edit {title}"
       },
       "emptyState": {
         "title": "Connect an image generation model to use in chat."
@@ -6730,12 +6752,30 @@
         "description": "Settings for in-chat image generation.",
         "title": "Image Generation"
       },
+      "linkError": {
+        "message": "Failed to connect model"
+      },
+      "linkSuccess": {
+        "message": "{title} connected"
+      },
+      "linkedModel": {
+        "description": "From {provider}"
+      },
       "loadError": {
         "message": "Failed to load configuration. Please refresh the page."
       },
       "model": {
         "description": "Select a model to generate images in chat.",
+        "placeholder": "Select a default model",
         "title": "Image Generation Model"
+      },
+      "modelFilter": {
+        "all": "All",
+        "recommended": "Recommended"
+      },
+      "noImageModels": {
+        "description": "Connect an LLM provider that serves image models on the Language Models page. To see every model on your connected providers, open the All tab.",
+        "title": "No image models available"
       },
       "providers": {
         "azureGptImage1": {

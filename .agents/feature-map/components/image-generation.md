@@ -18,11 +18,17 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   they attached or to one that the assistant made, and the model uses it as a
   reference. After an image call, the assistant answers without calling more
   tools in that turn.
-- **An admin** opens the image generation admin page, picks a model from
-  OpenAI, Azure or Vertex AI, enters credentials, and makes it the default. A
-  test call can generate one image to check the credentials. A
-  model that the vendor withdrew shows only while it is connected, with a
-  warning to switch. Onyx does not switch a saved config by itself.
+- **An admin** opens the image generation admin page. It lists the image
+  models of each connected LLM provider. The recommended view, the default,
+  shows the non-deprecated catalog image models; the full view shows every
+  model on the provider. One click links a model to its LLM provider with no
+  credentials, and the first linked model becomes the default. Only public providers with no agent restrictions are listed
+  or can be linked, because the tool is available to all users and agents.
+  Making a linked provider private or agent-restricted unlinks its image
+  models. Configs made with their own credentials before this change
+  (legacy) show only while connected, and keep their edit form. A legacy model
+  that the vendor withdrew shows a warning to switch. Onyx does not switch a
+  saved config by itself.
 - **With no default config**, the model is not offered the tool. The user sees
   no error. A complete config with a rejected key passes this check and fails
   when the tool runs, with an error that the user can see.
@@ -52,8 +58,10 @@ It does not own:
 ## Architecture
 
 ```
-admin page -> /admin/image-generation/config    creates LLMProvider + ModelConfiguration
-                                                + ImageGenerationConfig(is_default)
+admin page -> /admin/image-generation/llm-providers   connected providers + image models
+            -> /admin/image-generation/config/link    ImageGenerationConfig on the existing
+                                                      LLMProvider (llm_provider_owned=false)
+            -> /admin/image-generation/config         legacy: own LLMProvider copy (owned)
 chat turn
   ImageGenerationTool.is_available               generation.py:is_image_generation_configured
   tool_constructor.py:_get_image_generation_config   default config -> credentials
@@ -69,17 +77,30 @@ standalone
     _GenerationRun in a bounded pool             whitespace keepalives, then one JSON body
 ```
 
-**Providers.** `image_gen/factory.py:PROVIDERS` maps a provider name to an
-`ImageGenerationProvider` subclass. Each class checks that its credentials are
+**Providers.** `image_gen/factory.py:PROVIDERS` maps OpenAI, Azure and Vertex
+AI to dedicated `ImageGenerationProvider` subclasses. Every other provider uses
+`image_gen/providers/litellm_img_gen.py:LiteLLMImageGenerationProvider`, which
+calls `litellm.image_generation` and `litellm.image_edit` with the LLM
+provider's key, base URL and custom config. Each class checks that its credentials are
 complete (`validate_credentials`) and states whether it accepts reference
 images. OpenAI and Azure use LiteLLM, and Vertex AI uses `genai.Client` for
 edits. Every call is traced with `LLMFlow.IMAGE_GENERATION` or
 `LLMFlow.IMAGE_EDIT` ([[observability]]).
 
-**Model catalogue.** The list of models that an admin can pick lives in the
-frontend, in `web/src/views/admin/ImageGenerationPage/constants.ts`. Each entry
-has a static `image_provider_id`, which is the primary key of
-`ImageGenerationConfig`.
+**Model catalogue.** `llm/model_catalog.py:iter_image_generation_models` gives
+the recommended models: catalog entries with an image mode and no deprecated
+status. `GET /admin/image-generation/llm-providers` adds every stored model of
+the provider for the unfiltered view. A linked config has the ID
+`llm-<llm_provider_id>-<model slug>`. Linked image models get the
+`IMAGE_GENERATION` model flow, so chat model lists skip them.
+`web/src/views/admin/ImageGenerationPage/constants.ts` now only names the
+legacy configs.
+
+**Ownership.** `ImageGenerationConfig.llm_provider_owned` is true for legacy
+configs, which own a hidden LLM provider copy. Deleting a linked config removes
+only the config and its image flow; the LLM provider stays. Linked configs have
+no credentials endpoint and no legacy update. Provider upserts keep model
+configurations that an image config uses.
 
 **Admin writes.** `server/manage/image_generation/api.py:update_config` renames
 the old `LLMProvider`, creates a new provider and model configuration, points the
@@ -195,10 +216,9 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
 
 ## Recipes
 
-- `model-for-existing-provider` **A model for an existing provider.** Copy an entry in
-  `web/src/views/admin/ImageGenerationPage/constants.ts` and give it a new
-  static `image_provider_id`. List the current models with
-  `git grep image_provider_id -- web/src/views/admin/ImageGenerationPage/`. If
+- `model-for-existing-provider` **A model for an existing provider.** The model
+  shows when the model catalog lists it with an image mode. Use the
+  unfiltered view for a model that the catalog does not list yet. If
   its size or `response_format` rules differ, change
   `image_gen/generation.py:resolve_image_size` and `response_format_for_model`.
 - `image-provider` **A provider.** Copy `image_gen/providers/azure_img_gen.py`. List the current
