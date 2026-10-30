@@ -6053,6 +6053,11 @@ class UserFile(Base):
         nullable=False,
         default=UserFileStatus.PROCESSING,
     )
+    # Pickups by the processing task. Counted before the slow work, so a
+    # worker the kernel kills mid-file still spent one.
+    processing_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     # Privacy is decided when the file is uploaded, from the toggle state, so
     # an attachment made before the session exists is already private.
     incognito: Mapped[bool] = mapped_column(
@@ -7445,6 +7450,10 @@ class ScheduledTaskRun(Base):
     # ~120-char snippet of the final agent message, surfaced in the run
     # history table.
     summary: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Advances each time the run reaches a status with results to review.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Highest version opened by the task owner.
+    viewed_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
     task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
