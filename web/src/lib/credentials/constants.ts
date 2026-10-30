@@ -211,6 +211,8 @@ const AZURE_DATALAKE_SPEC = defineCredentialSpec({
       label: "accountKey",
       description: "azureDatalakeAccountKey",
       fields: ["adls_account_name", "adls_account_key"],
+      // An account key cannot read role assignments or Entra groups.
+      disablePermSync: true,
     },
   ],
 });
