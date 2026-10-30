@@ -132,6 +132,16 @@ writes the state and the steps in one transaction, and beat tasks run the
 steps. A stored plan applies only to the pair state it was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
+**Pushed events.** A source that pushes instead of being polled posts to the
+webhook server (`onyx/webhook_server_main.py`, `onyx/webhook_server/api.py`),
+a separate process so the endpoint stays unauthenticated and off the
+api_server. Each document change it receives becomes one row in
+`connector_event_inbox` (`onyx/db/models.py:ConnectorEventInbox`), keyed
+`(pair, event_key)` so a redelivery writes nothing. Nothing reads or writes
+the table yet: the receipt route and the drain are later changes, and the
+server serves only `/health` and `/metrics` today. Single tenant only; the
+server refuses to start under `MULTI_TENANT`.
+
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
 EE permission sync and capability checks all call. To list them, run
