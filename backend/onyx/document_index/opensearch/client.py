@@ -1121,12 +1121,15 @@ class OpenSearchIndexClient(OpenSearchClient):
         tenant_state: TenantState,
         update_if_exists: bool = False,
         use_create_only: bool = False,
-    ) -> None:
+    ) -> set[str]:
         """Bulk indexes documents.
 
         Raises if there are any errors during the bulk index. It should be
         assumed that no documents in the batch were indexed successfully if
         there is an error.
+
+        Returns the Onyx document ids with a chunk that already existed, which a
+        create-only write leaves as it is (benign 409). Empty otherwise.
 
         Retries on 429 too many requests.
 
@@ -1155,7 +1158,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 by OpenSearch does not match the number of documents.
         """
         if not documents:
-            return
+            return set()
         logger.debug(
             "Bulk indexing %s documents for tenant %s. update_if_exists=%s "
             "use_create_only=%s.",
@@ -1165,6 +1168,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             use_create_only,
         )
         data = []
+        chunk_id_to_document_id: dict[str, str] = {}
         for document in documents:
             document_chunk_id: str = get_opensearch_doc_chunk_id(
                 tenant_state=tenant_state,
@@ -1172,6 +1176,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 chunk_index=document.chunk_index,
                 max_chunk_size=document.max_chunk_size,
             )
+            chunk_id_to_document_id[document_chunk_id] = document.document_id
             body: dict[str, Any] = document.model_dump(exclude_none=True)
             # create-only never overwrites: an existing chunk (a live/forward
             # writer already owns it) comes back as a benign 409.
@@ -1198,7 +1203,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 raise_on_error=False,
                 raise_on_exception=True,
             )
-            benign_conflicts = self._benign_create_conflict_count(errors)
+            existing_chunk_ids = self._benign_create_conflict_ids(errors)
         else:
             # any error fails the batch (the caller may refresh-retry
             # on the BulkIndexError that bulk raises)
@@ -1220,7 +1225,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 if f"type={_CLUSTER_BLOCK_ERROR_TYPE}" in message:
                     raise OpenSearchIndexWriteBlockedError(message) from None
                 raise SummarizedBulkIndexError(message, e.errors) from None
-            benign_conflicts = 0
+            existing_chunk_ids = []
+        benign_conflicts = len(existing_chunk_ids)
 
         _report_written_chunks(
             successes, len(documents) - successes - benign_conflicts, started
@@ -1236,10 +1242,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             len(documents),
             benign_conflicts,
         )
+        return {chunk_id_to_document_id[chunk_id] for chunk_id in existing_chunk_ids}
 
-    def _benign_create_conflict_count(self, errors: list[dict[str, Any]]) -> int:
-        """Count benign 409s from create-only writes (the chunk already exists,
-        so a live/forward writer owns it and the port yields); raise
+    def _benign_create_conflict_ids(self, errors: list[dict[str, Any]]) -> list[str]:
+        """The chunk ids of benign 409s from create-only writes (the chunk already
+        exists, so a live/forward writer owns it and the port yields); raise
         OpenSearchIndexError on any other error.
 
         opensearch-py exposes no typed model for bulk per-item errors (bulk() ->
@@ -1247,7 +1254,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         dicts, so we read the fields directly. A create-conflict is keyed under
         "create" (the op_type) and reports status 409 / version_conflict.
         """
-        benign = 0
+        benign: list[str] = []
         fatal: list[dict[str, Any]] = []
         for error in errors:
             item = error.get("create") or {}
@@ -1256,7 +1263,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 item.get("status") == HTTPStatus.CONFLICT
                 and err_type == _VERSION_CONFLICT_ERROR_TYPE
             ):
-                benign += 1
+                benign.append(item["_id"])
             else:
                 fatal.append(error)
         if fatal:

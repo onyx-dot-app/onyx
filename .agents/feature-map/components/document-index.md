@@ -349,6 +349,21 @@ Two state machines exist, and they interlock at the moment of promotion.
 on `switchover_type` (`INSTANT`, `REINDEX`, `ACTIVE_ONLY`) and on `use_port_flow`. With
 `use_port_flow`, INSTANT swaps at once and the port backfills the live index
 afterward. The other types wait on `_port_swap_ready` for the required cc-pairs.
+A document row has `content_hash`, which works as before: every write into PRESENT sets
+it. For reindexing it has a second hash with a search settings id, `secondary_content_hash`
+and `secondary_search_settings_id`: when the port or secondary indexing writes a doc into
+FUTURE, it stores the hash together with FUTURE's search settings id. After the swap, FUTURE's settings are
+PRESENT. So when the dedup gate compares hashes, it first looks at
+`secondary_search_settings_id`: if it is the PRESENT settings (or, during an INSTANT
+backfill, the source being copied), that hash is what the index holds; if it points to an
+older index, the doc never reached the new index and is written; otherwise `content_hash`
+is used. The function is `present_index_content_hash`
+(`db/document.py`). Every write updates both fields: a write into PRESENT sets
+`content_hash` and the pair, except during a reindex when the pair already belongs to
+FUTURE, then only `content_hash` changes; a write into FUTURE sets the pair to FUTURE's
+hash and leaves `content_hash` describing PRESENT. A PRESENT write that finishes after a
+swap changes nothing, since its index is no longer PRESENT. The swap itself changes no
+document rows.
 Once every connector port is SUCCESS the reindex is *finalizing*
 (`reindex_finalizing`, `db/port_attempt.py`): the indexing scheduler queues and
 processes FUTURE index attempts before PRESENT refreshes, since the swap waits on them.

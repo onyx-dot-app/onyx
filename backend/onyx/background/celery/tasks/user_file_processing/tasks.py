@@ -419,6 +419,7 @@ def _process_user_file_with_indexing(
                 embedder=embedding_model,
                 document_index=document_index,
                 ignore_time_skip=True,
+                written_search_settings_id=current_search_settings.id,
                 db_session=db_session,
                 tenant_id=tenant_id,
                 document_batch=documents,
@@ -501,6 +502,7 @@ def _index_user_file_to_secondary(
                 ignore_time_skip=True,
                 # skip the content_hash gate, else the PRESENT run's hash no-ops this write
                 index_to_secondary=True,
+                written_search_settings_id=bound_secondary.id,
                 db_session=db_session,
                 tenant_id=tenant_id,
                 document_batch=documents,

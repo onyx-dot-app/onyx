@@ -247,6 +247,7 @@ def _rechunk_batch(
     document_index: OpenSearchDocumentIndex,
     batch_num: int,
     index_name: str,
+    search_settings_id: int,
 ) -> tuple[int, list[str]]:
     """Re-chunks one cc-pair's worth of documents. Returns (indexed, failed)."""
     heads = _chunk_heads(document_index, [target.document.id for target in targets])
@@ -296,6 +297,7 @@ def _rechunk_batch(
             force_update=True,
             # Nothing re-fetched the document, so its row has nothing newer.
             skip_document_row_writes=True,
+            written_search_settings_id=search_settings_id,
             tenant_id=tenant_id,
             document_batch=documents,
             request_id=metadata.request_id,
@@ -350,6 +352,7 @@ def run_tabular_rechunk(
         )
         document_index = build_opensearch_document_index(search_settings)
         index_name = search_settings.index_name  # read while attached
+        search_settings_id = search_settings.id
 
     while time.monotonic() - start < time_budget_s:
         with get_session_with_current_tenant() as db_session:
@@ -384,6 +387,7 @@ def run_tabular_rechunk(
                     document_index=document_index,
                     batch_num=batch_num,
                     index_name=index_name,
+                    search_settings_id=search_settings_id,
                 )
                 indexed += batch_indexed
                 failed.extend(batch_failed)

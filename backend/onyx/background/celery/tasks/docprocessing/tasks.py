@@ -2063,6 +2063,7 @@ def _docprocessing_task(
             document_index=document_index,
             ignore_time_skip=True,  # Documents are already filtered during extraction
             index_to_secondary=index_to_secondary,
+            written_search_settings_id=search_settings_id,
             tenant_id=tenant_id,
             document_batch=documents,
             request_id=index_attempt_metadata.request_id,

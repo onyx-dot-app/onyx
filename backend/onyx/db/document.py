@@ -1,11 +1,12 @@
 import contextlib
 import time
 from collections import defaultdict
-from collections.abc import Collection, Generator, Iterable, Sequence
+from collections.abc import Collection, Generator, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
 from uuid import UUID
 
+from pydantic import BaseModel
 from sqlalchemy import (
     CompoundSelect,
     Integer,
@@ -31,7 +32,7 @@ from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.expression import null
+from sqlalchemy.sql.expression import Values, null
 
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
@@ -51,6 +52,7 @@ from onyx.db.models import (
     Credential,
     DocumentByConnectorCredentialPair,
     FileRecord,
+    SearchSettings,
     User,
 )
 from onyx.db.models import Document as DbDocument
@@ -169,6 +171,197 @@ def count_secondary_only_sync_pending_documents_for_cc_pairs(
             ConnectorCredentialPair.id.in_(cc_pair_ids),
         )
     ).scalar_one()
+
+
+class PresentSearchSettingsRef(BaseModel):
+    """The PRESENT search settings (the index search uses now), reduced to what
+    present_index_content_hash needs. Field names match SearchSettings."""
+
+    id: int
+    port_backfill_source_id: int | None
+
+    @classmethod
+    def from_settings(cls, settings: SearchSettings) -> "PresentSearchSettingsRef":
+        return cls(
+            id=settings.id,
+            port_backfill_source_id=settings.port_backfill_source_id,
+        )
+
+
+def present_index_content_hash(
+    doc: DbDocument, present: PresentSearchSettingsRef
+) -> str | None:
+    """Return the hash of the doc version that the PRESENT index holds, or None if
+    PRESENT does not have the doc. The dedup check compares against this value.
+
+    secondary_search_settings_id says which index secondary_content_hash belongs to:
+    - PRESENT, or the source of an INSTANT backfill: return secondary_content_hash.
+    - None, or a newer index: return content_hash.
+    - An older index: the doc never reached PRESENT, so return None.
+
+    _present_index_content_hash_sql is the SQL copy of these rules. Keep them the same.
+    """
+    written_for = doc.secondary_search_settings_id
+    if written_for is None:
+        return doc.content_hash
+    if written_for in _ids_that_count_as_present(present):
+        return doc.secondary_content_hash
+    if written_for > present.id:
+        return doc.content_hash
+    return None
+
+
+def _ids_that_count_as_present(present: PresentSearchSettingsRef) -> list[int]:
+    if present.port_backfill_source_id is None:
+        return [present.id]
+    return [present.id, present.port_backfill_source_id]
+
+
+def _present_index_content_hash_sql(
+    present: PresentSearchSettingsRef,
+) -> ColumnElement[str | None]:
+    """The rules of present_index_content_hash as a SQL CASE, so that
+    record_reindex_write__no_commit can apply them inside its UPDATE."""
+    written_for = DbDocument.secondary_search_settings_id
+    return case(
+        (
+            written_for.in_(_ids_that_count_as_present(present)),
+            DbDocument.secondary_content_hash,
+        ),
+        (
+            or_(written_for.is_(None), written_for > present.id),
+            DbDocument.content_hash,
+        ),
+        else_=null(),
+    )
+
+
+def get_port_source_content_hashes(
+    db_session: Session,
+    document_ids: list[str],
+    source_search_settings_id: int,
+) -> dict[str, str | None]:
+    """For each doc, the hash of the version the port copies: the one in the source
+    index. None if the source index does not have the doc.
+
+    - Recorded for the source index: secondary_content_hash.
+    - Recorded for an older index: the doc never reached the source, so None.
+    - Otherwise: content_hash.
+    """
+    if not document_ids:
+        return {}
+    # populate_existing: rows already in the session may be stale after a bulk UPDATE.
+    docs = db_session.scalars(
+        select(DbDocument)
+        .where(DbDocument.id.in_(document_ids))
+        .execution_options(populate_existing=True)
+    ).all()
+    hashes: dict[str, str | None] = {}
+    for doc in docs:
+        recorded_for = doc.secondary_search_settings_id
+        if recorded_for == source_search_settings_id:
+            hashes[doc.id] = doc.secondary_content_hash
+        elif recorded_for is not None and recorded_for < source_search_settings_id:
+            hashes[doc.id] = None
+        else:
+            hashes[doc.id] = doc.content_hash
+    return hashes
+
+
+def _doc_hash_values(ids_to_hash: Mapping[str, str | None]) -> Values:
+    return values(
+        column("id", String),
+        column("hash", String),
+        name="doc_hash",
+    ).data(list(ids_to_hash.items()))
+
+
+def record_present_index_write__no_commit(
+    db_session: Session,
+    ids_to_hash: Mapping[str, str],
+    written_search_settings_id: int,
+    present_search_settings_id: int,
+) -> None:
+    """Save the hashes of docs that indexing just wrote into the PRESENT index.
+    `ids_to_hash` maps doc id -> hash written, and `written_search_settings_id` is the
+    index it was written to.
+
+    If that index is no longer PRESENT (`present_search_settings_id`, looked up now),
+    a swap happened while the batch ran and it wrote into an index search no longer
+    uses. Then nothing is saved, so the hashes keep describing the new PRESENT.
+
+    content_hash is always set. secondary_content_hash and secondary_search_settings_id
+    are set too, unless they belong to a newer index. During a reindex that newer index
+    is FUTURE, and they are the only place that says what FUTURE holds, so they must
+    stay until the swap.
+
+    Pass the id of the index the batch wrote to, not a new lookup: a swap during the
+    batch would give the wrong index.
+    """
+    if not ids_to_hash or written_search_settings_id != present_search_settings_id:
+        return
+    doc_hash = _doc_hash_values(ids_to_hash)
+    secondary_id = DbDocument.secondary_search_settings_id
+    not_newer = or_(secondary_id.is_(None), secondary_id <= written_search_settings_id)
+    db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id == doc_hash.c.id)
+        .values(
+            content_hash=doc_hash.c.hash,
+            secondary_content_hash=case(
+                (not_newer, doc_hash.c.hash), else_=DbDocument.secondary_content_hash
+            ),
+            secondary_search_settings_id=case(
+                (not_newer, literal(written_search_settings_id)), else_=secondary_id
+            ),
+        )
+        .execution_options(synchronize_session=False)
+    )
+
+
+def record_reindex_write__no_commit(
+    db_session: Session,
+    ids_to_hash: Mapping[str, str | None],
+    written_search_settings_id: int,
+    present: PresentSearchSettingsRef,
+    skip_docs_recorded_for_target: bool,
+) -> None:
+    """Save which hash the FUTURE index now holds for each doc. The port and
+    secondary indexing call this after they write docs into a FUTURE index.
+    `ids_to_hash` maps doc id -> hash written. For each doc, this sets
+    secondary_content_hash to that hash and secondary_search_settings_id to
+    `written_search_settings_id`.
+
+    Before that, it sets content_hash to the hash the `present` index holds. After a
+    swap, the secondary fields can be the only place that knows what PRESENT holds,
+    and this update overwrites them. Example:
+    - Index 7 gets v1 and becomes PRESENT. content_hash still says v2, from the old
+      index. Row: content_hash=v2, secondary=(v1, index 7). Dedup reads v1. Correct.
+    - A new reindex writes v1 into index 9. Row: secondary=(v1, index 9).
+    - If content_hash stays v2, dedup now reads v2, skips the next fetch of v2, and
+      PRESENT keeps the old v1. Setting content_hash=v1 first prevents this.
+
+    With `skip_docs_recorded_for_target`, a doc whose secondary_search_settings_id is
+    already the target is left alone. The port uses this, because that doc was written
+    after the port read its hash.
+    """
+    if not ids_to_hash:
+        return
+    doc_hash = _doc_hash_values(ids_to_hash)
+    stmt = update(DbDocument).where(DbDocument.id == doc_hash.c.id)
+    if skip_docs_recorded_for_target:
+        stmt = stmt.where(
+            DbDocument.secondary_search_settings_id.is_distinct_from(
+                written_search_settings_id
+            )
+        )
+    db_session.execute(
+        stmt.values(
+            content_hash=_present_index_content_hash_sql(present),
+            secondary_content_hash=doc_hash.c.hash,
+            secondary_search_settings_id=written_search_settings_id,
+        ).execution_options(synchronize_session=False)
+    )
 
 
 def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
@@ -1483,19 +1676,6 @@ def update_docs_chunk_count__no_commit(
     )
     for doc in documents_to_update:
         doc.chunk_count = doc_id_to_chunk_count[doc.id]
-
-
-def update_docs_content_hash__no_commit(
-    ids_to_new_hash: dict[str, str],
-    db_session: Session,
-) -> None:
-    documents_to_update = (
-        db_session.query(DbDocument)
-        .filter(DbDocument.id.in_(ids_to_new_hash.keys()))
-        .all()
-    )
-    for doc in documents_to_update:
-        doc.content_hash = ids_to_new_hash[doc.id]
 
 
 def mark_document_as_modified__no_commit(
