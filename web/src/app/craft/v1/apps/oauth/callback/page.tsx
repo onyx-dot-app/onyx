@@ -11,10 +11,12 @@ import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { completeExternalAppOAuthCallback } from "@/app/craft/services/externalAppsService";
 import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
+import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { notifyOAuthComplete, reportOAuthCallback } from "@/lib/oauth/launch";
 
 type Status = "exchanging" | "success" | "error";
 
-export default function ExternalAppsOAuthCallbackPage() {
+function ExternalAppsOAuthCallbackPageContent() {
   const t = useTranslations("craft.apps.oauthCallback");
   const router = useRouter();
   const params = useSearchParams();
@@ -43,10 +45,10 @@ export default function ExternalAppsOAuthCallbackPage() {
     if (hasExchanged.current) return;
     hasExchanged.current = true;
 
-    async function exchange() {
+    async function exchange(code: string, state: string) {
       try {
         const { external_app_id, return_path } =
-          await completeExternalAppOAuthCallback(code!, state!);
+          await completeExternalAppOAuthCallback(code, state);
         setStatus("success");
         if (return_path) {
           const target = new URL(return_path, window.location.origin);
@@ -71,9 +73,11 @@ export default function ExternalAppsOAuthCallbackPage() {
             },
             window.location.origin
           );
+          notifyOAuthComplete(state);
           window.close();
           return;
         }
+        if (reportOAuthCallback(state, true)) return;
         await globalMutate(SWR_KEYS.buildExternalApps);
         setTimeout(
           () =>
@@ -83,12 +87,13 @@ export default function ExternalAppsOAuthCallbackPage() {
           800
         );
       } catch (e) {
+        if (reportOAuthCallback(state, false)) return;
         setStatus("error");
         setErrorMessage(e instanceof Error ? e.message : String(e));
       }
     }
 
-    exchange();
+    exchange(code, state);
   }, [code, state, slackError, router, t]);
 
   return (
@@ -128,3 +133,5 @@ export default function ExternalAppsOAuthCallbackPage() {
     </SettingsLayouts.Root>
   );
 }
+
+export default withDesktopOAuthHandoff(ExternalAppsOAuthCallbackPageContent);

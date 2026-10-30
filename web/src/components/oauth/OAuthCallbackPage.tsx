@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
@@ -33,7 +35,7 @@ interface OAuthCallbackPageProps {
   config: OAuthCallbackConfig;
 }
 
-export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
+function OAuthCallbackPageContent({ config }: OAuthCallbackPageProps) {
   const t = useTranslations("common.oauthCallback");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -98,6 +100,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     const handleOAuthCallback = async () => {
       // Handle OAuth error from provider
       if (error) {
+        if (state && reportOAuthCallback(state, false)) return;
         setStatusMessage(config.errorMessage || t("authorizationFailed.title"));
         setStatusDetails(
           errorDescription || t("authorizationFailed.description")
@@ -155,6 +158,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
 
         // Parse the response to get service and redirect information
         const responseData = await response.json();
+        if (reportOAuthCallback(state, true)) return;
         const result = {
           success: true,
           serviceName:
@@ -191,6 +195,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
         setIsLoading(false);
       } catch (error) {
         console.error("OAuth callback error:", error);
+        if (reportOAuthCallback(state, false)) return;
         setStatusMessage(config.errorMessage || t("genericError.title"));
         setStatusDetails(
           error instanceof Error ? error.message : t("genericError.description")
@@ -286,3 +291,5 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     </div>
   );
 }
+
+export default withDesktopOAuthHandoff(OAuthCallbackPageContent);

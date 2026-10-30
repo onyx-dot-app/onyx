@@ -14,6 +14,8 @@ import {
 } from "@opal/illustrations";
 import type { IconFunctionComponent } from "@opal/types";
 import { completeMCPUserOAuth } from "@/lib/mcp/svc";
+import { withDesktopOAuthHandoff } from "@/components/oauth/DesktopOAuthHandoff";
+import { reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 
 const AUTO_REDIRECT_DELAY_MS = 2000;
@@ -114,7 +116,7 @@ function buildRedirectPath(rawPath: string): string {
   return redirectUrl.pathname + redirectUrl.search;
 }
 
-export default function MCPOAuthCallbackPage() {
+function MCPOAuthCallbackPageContent() {
   const t = useTranslations("actions");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -152,6 +154,7 @@ export default function MCPOAuthCallbackPage() {
           }
         );
       }
+      if (stateParam && reportOAuthCallback(stateParam, false)) return;
       setState({ phase: "error", error: cancelledError(t, errorDescription) });
       return;
     }
@@ -164,6 +167,7 @@ export default function MCPOAuthCallbackPage() {
     const handleOAuthCallback = async () => {
       try {
         const response = await completeMCPUserOAuth(code, stateParam);
+        if (reportOAuthCallback(stateParam, true)) return;
         setState({
           phase: "success",
           serverName: response.server_name,
@@ -172,6 +176,7 @@ export default function MCPOAuthCallbackPage() {
           ),
         });
       } catch (error) {
+        if (reportOAuthCallback(stateParam, false)) return;
         setState({
           phase: "error",
           error: classifyCallbackError(
@@ -261,3 +266,5 @@ export default function MCPOAuthCallbackPage() {
     </div>
   );
 }
+
+export default withDesktopOAuthHandoff(MCPOAuthCallbackPageContent);

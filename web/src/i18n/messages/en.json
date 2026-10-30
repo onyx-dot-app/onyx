@@ -14180,6 +14180,11 @@
       "completeFailed": {
         "message": "Failed to complete authorization"
       },
+      "desktopHandoff": {
+        "button": "Open Onyx",
+        "description": "Your browser opens the Onyx desktop app to finish connecting. You can close this tab after the app opens.",
+        "title": "Return to Onyx"
+      },
       "genericError": {
         "description": "An error occurred during the OAuth process. Please try again.",
         "title": "Something Went Wrong"

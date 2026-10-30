@@ -213,3 +213,19 @@ export function launchOAuth(
     );
   });
 }
+
+/** True when a desktop-started attempt landed in a regular browser tab. */
+export function needsDesktopOAuthHandoff(state: string | null): boolean {
+  return (
+    state !== null && isDesktopOAuthState(state) && tauriInternals() === null
+  );
+}
+
+/**
+ * Reports a finished callback to the waiting page. Returns true when this tab
+ * closed itself, so the caller skips its redirect.
+ */
+export function reportOAuthCallback(state: string, ok: boolean): boolean {
+  notifyOAuthComplete(stripDesktopOAuthState(state), ok);
+  return closeOAuthCallbackWindow();
+}

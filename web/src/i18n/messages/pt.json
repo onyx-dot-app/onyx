@@ -14180,6 +14180,11 @@
       "completeFailed": {
         "message": "Falha ao concluir a autorização"
       },
+      "desktopHandoff": {
+        "button": "Abrir o Onyx",
+        "description": "Seu navegador abre o aplicativo de desktop do Onyx para concluir a conexão. Você pode fechar esta guia depois que o aplicativo abrir.",
+        "title": "Voltar ao Onyx"
+      },
       "genericError": {
         "description": "Ocorreu um erro durante o processo de OAuth. Tente novamente.",
         "title": "Algo deu errado"

@@ -14180,6 +14180,11 @@
       "completeFailed": {
         "message": "فشل إكمال التفويض"
       },
+      "desktopHandoff": {
+        "button": "فتح Onyx",
+        "description": "يفتح متصفحك تطبيق Onyx لسطح المكتب لإكمال الاتصال. يمكنك إغلاق علامة التبويب هذه بعد فتح التطبيق.",
+        "title": "العودة إلى Onyx"
+      },
       "genericError": {
         "description": "حدث خطأ أثناء عملية OAuth. يرجى المحاولة مرة أخرى.",
         "title": "حدث خطأ ما"

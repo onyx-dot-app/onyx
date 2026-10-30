@@ -14180,6 +14180,11 @@
       "completeFailed": {
         "message": "Autorisierung konnte nicht abgeschlossen werden"
       },
+      "desktopHandoff": {
+        "button": "Onyx öffnen",
+        "description": "Ihr Browser öffnet die Onyx-Desktop-App, um die Verbindung abzuschließen. Sie können diesen Tab schließen, sobald die App geöffnet ist.",
+        "title": "Zurück zu Onyx"
+      },
       "genericError": {
         "description": "Während des OAuth-Vorgangs ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
         "title": "Etwas ist schiefgelaufen"

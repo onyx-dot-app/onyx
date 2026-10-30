@@ -14180,6 +14180,11 @@
       "completeFailed": {
         "message": "인증을 완료하지 못했습니다"
       },
+      "desktopHandoff": {
+        "button": "Onyx 열기",
+        "description": "연결을 완료하기 위해 브라우저가 Onyx 데스크톱 앱을 엽니다. 앱이 열리면 이 탭을 닫아도 됩니다.",
+        "title": "Onyx로 돌아가기"
+      },
       "genericError": {
         "description": "OAuth 과정에서 오류가 발생했습니다. 다시 시도해 주세요.",
         "title": "문제가 발생했습니다"

@@ -1,6 +1,7 @@
 import { INTERNAL_URL } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import { desktopOAuthReturnUrl, isDesktopOAuthState } from "@/lib/oauth/launch";
 
 // TODO: deprecate this and just go directly to the backend via /api/...
 // For some reason Egnyte doesn't work when using /api, so leaving this as is for now
@@ -11,6 +12,10 @@ interface OAuthCallbackProxyBody extends ErrorResponseBody {
 }
 
 export async function GET(request: NextRequest) {
+  const state = request.nextUrl.searchParams.get("state");
+  if (state && isDesktopOAuthState(state)) {
+    return NextResponse.redirect(desktopOAuthReturnUrl(request.nextUrl));
+  }
   try {
     const backendUrl = new URL(INTERNAL_URL);
     // Copy path and query parameters from incoming request
