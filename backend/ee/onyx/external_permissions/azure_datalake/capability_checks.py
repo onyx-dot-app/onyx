@@ -4,7 +4,7 @@ role and deny assignments in Azure Resource Manager, and the tenant's users
 and group members in Microsoft Graph. All of them need an app registration,
 since an account key opens storage only."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import TypeVar
 
 from ee.onyx.external_permissions.azure_datalake.directory import user_email
@@ -65,6 +65,7 @@ GRAPH_USERS_CHECK_ID = "adls_graph_users"
 GRAPH_GROUP_MEMBERS_CHECK_ID = "adls_graph_group_members"
 
 _PROBE_PAGE_SIZE = 10
+_GROUP_PROBE_MAX_PAGES = 5
 _ARM_REMEDIATION = (
     "Give the app registration the Reader role on the storage account, so it "
     "can read the account's role and deny assignments."
@@ -310,6 +311,24 @@ class _GraphUsersCheck(_PermSyncCheck):
         return CheckOutput(summary="Read the tenant's users")
 
 
+def _probe_groups(
+    gateway: AzureDataLakeSourceOperations,
+) -> Generator[EntraGroup, None, None]:
+    """The groups on the first few pages of the tenant's groups."""
+    next_link: str | None = None
+    for _ in range(_GROUP_PROBE_MAX_PAGES):
+        page = _account_probe(
+            lambda link=next_link: gateway.list_groups(
+                next_link=link, page_size=_PROBE_PAGE_SIZE
+            ),
+            "The app cannot list Entra groups.",
+        )
+        yield from page.items
+        next_link = page.next_link
+        if next_link is None:
+            return
+
+
 class _GraphGroupMembersCheck(_PermSyncCheck):
     def __init__(self, capability: CredentialCapability) -> None:
         super().__init__(
@@ -324,19 +343,10 @@ class _GraphGroupMembersCheck(_PermSyncCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway = gateway_from_context(context)
-        groups: list[EntraGroup] = _account_probe(
-            lambda: gateway.list_groups(page_size=_PROBE_PAGE_SIZE).items,
-            "The app cannot list Entra groups.",
-        )
-        if not groups:
-            raise InconclusiveValidationError(
-                "The tenant has no Entra group, so no members were read.",
-                summary="No groups found",
-            )
         # One group with hidden membership must not fail the check: the group
         # sync stores such a group empty. Only a refusal for every group does.
         refusal: InsufficientPermissionsError | None = None
-        for group in groups:
+        for group in _probe_groups(gateway):
             try:
                 _account_probe(
                     lambda group_id=group.id: gateway.list_transitive_group_members(
@@ -350,7 +360,11 @@ class _GraphGroupMembersCheck(_PermSyncCheck):
             return CheckOutput(
                 summary=f"Read the members of {group.display_name or group.id}"
             )
-        assert refusal is not None
+        if refusal is None:
+            raise InconclusiveValidationError(
+                "The tenant has no Entra group, so no members were read.",
+                summary="No groups found",
+            )
         raise refusal
 
 
