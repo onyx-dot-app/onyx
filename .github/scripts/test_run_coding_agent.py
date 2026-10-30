@@ -188,6 +188,10 @@ class RunCodingAgentTest(unittest.TestCase):
         ignored_cache = package_dir / "node_modules" / "cache.txt"
         ignored_cache.parent.mkdir()
         ignored_cache.write_text("cache", encoding="utf-8")
+        unapproved_file = self.repo / "unapproved.txt"
+        unapproved_file.write_text("keep", encoding="utf-8")
+        unapproved_deleted_file = self.repo / "unapproved-deleted.txt"
+        unapproved_deleted_file.write_text("keep", encoding="utf-8")
         (self.repo / ".git").mkdir()
         (self.repo / "node_modules").mkdir()
         (self.repo / ".venv").mkdir()
@@ -209,6 +213,9 @@ class RunCodingAgentTest(unittest.TestCase):
             (cwd / "pkg" / "edited.txt").chmod(0o600)
             (cwd / "pkg" / "deleted.txt").unlink()
             (cwd / "pkg" / "new.txt").write_text("new", encoding="utf-8")
+            (cwd / "unapproved.txt").write_text("changed", encoding="utf-8")
+            (cwd / "unapproved-deleted.txt").unlink()
+            (cwd / "unapproved-new.txt").write_text("new", encoding="utf-8")
 
         with self._patch_popen(on_launch=mutate_copy):
             exit_code = run_coding_agent.run_agent(
@@ -222,6 +229,9 @@ class RunCodingAgentTest(unittest.TestCase):
         self.assertFalse(deleted_file.exists())
         self.assertEqual((package_dir / "new.txt").read_text(encoding="utf-8"), "new")
         self.assertEqual(ignored_cache.read_text(encoding="utf-8"), "cache")
+        self.assertEqual(unapproved_file.read_text(encoding="utf-8"), "keep")
+        self.assertTrue(unapproved_deleted_file.exists())
+        self.assertFalse((self.repo / "unapproved-new.txt").exists())
 
     def test_rejects_allowed_path_traversal_and_overlapping_add_dir(self) -> None:
         (self.repo / "pkg").mkdir()
@@ -285,6 +295,29 @@ class RunCodingAgentTest(unittest.TestCase):
             with self.assertRaisesRegex(AgentConfigError, "executable"):
                 run_coding_agent.run_agent(
                     replace(self._base_config(), allowed_files=("pkg",)),
+                    env=self.env,
+                )
+        self.assertEqual(trusted_file.read_text(encoding="utf-8"), "trusted")
+
+        def add_new_executable(
+            _command: Sequence[str], cwd: Path, _env: Mapping[str, str]
+        ) -> None:
+            path = cwd / "pkg" / "new.sh"
+            path.write_text("echo", encoding="utf-8")
+            path.chmod(0o755)
+
+        with self._patch_popen(on_launch=add_new_executable):
+            with self.assertRaisesRegex(AgentConfigError, "New approved files"):
+                run_coding_agent.run_agent(
+                    replace(self._base_config(), allowed_files=("pkg",)),
+                    env=self.env,
+                )
+        self.assertFalse((package_dir / "new.sh").exists())
+
+        with self._patch_popen(on_launch=make_executable):
+            with self.assertRaisesRegex(AgentConfigError, "executable flag"):
+                run_coding_agent.run_agent(
+                    replace(self._base_config(), allowed_files=("pkg/trusted.txt",)),
                     env=self.env,
                 )
         self.assertEqual(trusted_file.read_text(encoding="utf-8"), "trusted")
