@@ -125,6 +125,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
+      - name: Run desktop runtime smoke test (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get install -y webkit2gtk-driver xvfb
+          command -v tauri-driver || cargo install tauri-driver --locked
+          xvfb-run --auto-servernum python3 desktop/tests/webdriver_smoke.py \
+            desktop/src-tauri/target/release/onyx
+
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

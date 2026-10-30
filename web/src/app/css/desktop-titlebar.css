@@ -78,3 +78,8 @@ html.onyx-desktop .opal-sidebar-root__backdrop {
   top: var(--onyx-titlebar-height) !important;
   bottom: 0 !important;
 }
+
+/* Toasts are fixed to the viewport top, under the title bar's drag strip. */
+html.onyx-desktop .opal-toast-viewport {
+  top: calc(var(--onyx-titlebar-height) + 0.5rem) !important;
+}

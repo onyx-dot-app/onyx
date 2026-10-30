@@ -8,6 +8,8 @@ mod alt_menu;
 mod commands;
 mod config;
 mod debug_log;
+#[cfg(target_os = "macos")]
+mod macos_webview;
 mod menu;
 mod shortcuts;
 mod window;

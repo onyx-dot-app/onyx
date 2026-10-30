@@ -3,7 +3,7 @@ use crate::debug_log::{log_backend_error, maybe_open_devtools};
 use std::process::Command;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
-use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+use tauri::webview::{DownloadEvent, NewWindowFeatures, NewWindowResponse};
 #[cfg(target_os = "macos")]
 use tauri::Webview;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
@@ -103,9 +103,8 @@ pub fn build_and_setup_window(app: &AppHandle) -> Result<WebviewWindow, String> 
         .title(config.window_title)
         .inner_size(1232.0, 800.0)
         .min_inner_size(800.0, 600.0)
-        .on_new_window(move |url, _features: NewWindowFeatures| {
-            open_new_window_externally(&handle, &url)
-        });
+        .on_new_window(move |url, features| handle_new_window(&handle, &url, features));
+    let builder = with_shared_webview_handlers(builder);
 
     // Windows draws its own title bar in the system theme; a transparent
     // window leaves any unpainted region see-through, which produces the
@@ -129,6 +128,7 @@ pub fn build_and_setup_window(app: &AppHandle) -> Result<WebviewWindow, String> 
             log_backend_error(app, &format!("Failed to apply vibrancy effect: {e}"));
         }
         inject_titlebar(window.clone());
+        crate::macos_webview::install_ui_delegate_extensions(&window);
     }
 
     apply_settings_to_window(app, &window);
@@ -250,25 +250,137 @@ pub fn redact_url(url: &Url) -> String {
     )
 }
 
-/// Send every popup request -- `window.open` and `target="_blank"` alike -- to
-/// the user's browser and refuse the popup itself.
-///
-/// Without a handler the platform webview drops these requests on the floor,
-/// which is what made `window.open` links dead in the app: `WKWebView` returns
-/// no webview and `WebView2` marks the request handled with nothing to show,
-/// so the click does nothing at all.
-fn open_new_window_externally(app: &AppHandle, url: &Url) -> NewWindowResponse<Wry> {
-    if is_externally_openable(url) && !open_in_default_browser(url.as_str()) {
-        log_backend_error(
-            app,
-            &format!(
-                "Failed to open external URL in default browser: {}",
-                redact_url(url)
-            ),
-        );
-    }
+/// Where a `window.open` / `target="_blank"` request should go.
+#[derive(Debug, PartialEq, Eq)]
+enum NewWindowTarget {
+    /// An in-app window that shares the opener's session, keeps
+    /// `window.opener`, and can `postMessage` back -- what OAuth flows need.
+    InApp,
+    ExternalBrowser,
+    Deny,
+}
 
-    NewWindowResponse::Deny
+/// Script-built popups (a blank window navigated later, an app page, or any
+/// window opened with size features) stay in the app so their session and
+/// opener survive; plain cross-origin links go to the user's browser.
+fn classify_new_window(
+    app_url: Option<&Url>,
+    url: &Url,
+    has_popup_features: bool,
+) -> NewWindowTarget {
+    if url.as_str() == "about:blank" {
+        return NewWindowTarget::InApp;
+    }
+    if matches!(url.scheme(), "http" | "https")
+        && (has_popup_features || app_url.is_some_and(|app_url| same_origin(app_url, url)))
+    {
+        return NewWindowTarget::InApp;
+    }
+    if is_externally_openable(url) {
+        NewWindowTarget::ExternalBrowser
+    } else {
+        NewWindowTarget::Deny
+    }
+}
+
+fn app_url(app: &AppHandle) -> Option<Url> {
+    let config_state = app.state::<ConfigState>();
+    config_state
+        .app_base_url()
+        .or_else(|| config_state.config().server_url.parse().ok())
+}
+
+fn handle_new_window(
+    app: &AppHandle,
+    url: &Url,
+    features: NewWindowFeatures,
+) -> NewWindowResponse<Wry> {
+    let target = classify_new_window(app_url(app).as_ref(), url, features.size().is_some());
+    match target {
+        NewWindowTarget::InApp => match build_popup_window(app, features) {
+            Ok(window) => NewWindowResponse::Create { window },
+            Err(e) => {
+                log_backend_error(app, &format!("Failed to open popup window: {e}"));
+                NewWindowResponse::Deny
+            }
+        },
+        NewWindowTarget::ExternalBrowser => {
+            if !open_in_default_browser(url.as_str()) {
+                log_backend_error(
+                    app,
+                    &format!(
+                        "Failed to open external URL in default browser: {}",
+                        redact_url(url)
+                    ),
+                );
+            }
+            NewWindowResponse::Deny
+        }
+        NewWindowTarget::Deny => NewWindowResponse::Deny,
+    }
+}
+
+const POPUP_DEFAULT_SIZE: (f64, f64) = (650.0, 760.0);
+
+/// The platform webview loads the requested URL into the returned window
+/// itself, so the window starts blank and must reuse the opener's webview
+/// configuration (`window_features`) to share its cookies and `window.opener`.
+fn build_popup_window(
+    app: &AppHandle,
+    features: NewWindowFeatures,
+) -> Result<WebviewWindow, String> {
+    let label = format!("onyx-popup-{}", uuid::Uuid::new_v4());
+    let blank = "about:blank"
+        .parse()
+        .map_err(|e| format!("Invalid popup URL: {e}"))?;
+    let (width, height) = features
+        .size()
+        .map_or(POPUP_DEFAULT_SIZE, |size| (size.width, size.height));
+
+    let handle = app.clone();
+    let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(blank))
+        .title(app.state::<ConfigState>().config().window_title)
+        .inner_size(width, height)
+        .window_features(features)
+        .on_document_title_changed(|window, title| {
+            let _ = window.set_title(&title);
+        })
+        .on_new_window(move |url, features| handle_new_window(&handle, &url, features));
+
+    let window = with_shared_webview_handlers(builder)
+        .build()
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    crate::macos_webview::install_ui_delegate_extensions(&window);
+    maybe_open_devtools(app, &window);
+    Ok(window)
+}
+
+/// Behaviour every Onyx webview needs, whichever path built it.
+fn with_shared_webview_handlers(
+    builder: WebviewWindowBuilder<'_, Wry, AppHandle>,
+) -> WebviewWindowBuilder<'_, Wry, AppHandle> {
+    builder
+        // Tauri's own drag-and-drop handler swallows file drops, so the web
+        // app's upload drop zones never receive them.
+        .disable_drag_drop_handler()
+        // Without a download handler `WKWebView` cancels every download.
+        // Returning `true` keeps the platform's default destination
+        // (the Downloads folder, with a numbered name on collision).
+        .on_download(|webview, event| {
+            if let DownloadEvent::Finished {
+                url,
+                success: false,
+                ..
+            } = &event
+            {
+                log_backend_error(
+                    webview.app_handle(),
+                    &format!("Download failed: {}", redact_url(url)),
+                );
+            }
+            true
+        })
 }
 
 /// Build the main window. It is declared in `tauri.conf.json` with
@@ -286,13 +398,15 @@ pub fn build_main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
         .ok_or_else(|| "No \"main\" window in the Tauri config".to_string())?;
 
     let handle = app.clone();
-    WebviewWindowBuilder::from_config(app, &window_config)
+    let builder = WebviewWindowBuilder::from_config(app, &window_config)
         .map_err(|e| e.to_string())?
-        .on_new_window(move |url, _features: NewWindowFeatures| {
-            open_new_window_externally(&handle, &url)
-        })
+        .on_new_window(move |url, features| handle_new_window(&handle, &url, features));
+    let window = with_shared_webview_handlers(builder)
         .build()
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    crate::macos_webview::install_ui_delegate_extensions(&window);
+    Ok(window)
 }
 
 /// One-off titlebar re-injection on every page load, distinct from
@@ -443,5 +557,35 @@ mod tests {
             &chat,
             &url("ftp://example.com")
         ));
+    }
+
+    #[test]
+    fn classify_new_window_keeps_script_popups_in_app() {
+        let app = url("https://cloud.onyx.app/app");
+        let classify = |target: &str, popup| classify_new_window(Some(&app), &url(target), popup);
+
+        assert_eq!(classify("about:blank", false), NewWindowTarget::InApp);
+        assert_eq!(
+            classify("https://cloud.onyx.app/admin/connectors", false),
+            NewWindowTarget::InApp
+        );
+        assert_eq!(
+            classify("https://accounts.google.com/o/oauth2/auth", true),
+            NewWindowTarget::InApp
+        );
+        assert_eq!(
+            classify("https://docs.onyx.app", false),
+            NewWindowTarget::ExternalBrowser
+        );
+        assert_eq!(
+            classify("mailto:support@onyx.app", true),
+            NewWindowTarget::ExternalBrowser
+        );
+        assert_eq!(classify("file:///etc/passwd", true), NewWindowTarget::Deny);
+        assert_eq!(classify("about:srcdoc", false), NewWindowTarget::Deny);
+        assert_eq!(
+            classify_new_window(None, &url("https://cloud.onyx.app/app"), false),
+            NewWindowTarget::ExternalBrowser
+        );
     }
 }
