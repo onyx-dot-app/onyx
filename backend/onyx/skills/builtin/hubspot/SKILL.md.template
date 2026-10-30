@@ -61,7 +61,11 @@ python hubspot_api.py update deals 123456 --set dealstage=closedwon
 JSON on stdout. List commands return `{"ok": true, "<object>": [...], "count":
 N, "truncated": bool}` (`truncated` means more results existed past `--limit`).
 HTTP failures return `{"ok": false, "status": <code>, "error": "<message>"}`
-and exit non-zero — surface the error rather than retrying blindly.
+and exit non-zero — surface the error rather than retrying blindly. A
+`create`/`update` denied with 401/403 means the connected account lacks the
+HubSpot write scope; the `error` then explains that a paid HubSpot seat with
+write access is required (the upstream message is kept under `detail`). Relay
+that to the user — it is not a credential or proxy failure.
 
 ## Notes
 
