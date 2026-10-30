@@ -198,6 +198,8 @@ function RecentsSection({
             {hasMore && (
               <div
                 ref={sentinelRef}
+                // Waiting to scroll into view, nothing is loading yet.
+                aria-hidden={!isLoadingMore}
                 className={cn(
                   "transition-opacity duration-300",
                   isLoadingMore ? "opacity-100" : "opacity-40"
