@@ -3958,6 +3958,11 @@ class ImageGenerationConfig(Base):
         nullable=False,
     )
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # False when the config links a model on an admin-managed LLM provider; the
+    # provider then outlives the config.
+    llm_provider_owned: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration"

@@ -8,6 +8,9 @@ from sqlalchemy.orm.interfaces import LoaderOption
 
 from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
+from onyx.db.image_generation import (
+    unlink_image_generation_models_for_provider__no_commit,
+)
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
     DocumentSet,
@@ -632,14 +635,26 @@ def upsert_llm_provider(
         llm_provider_upsert_request, existing_by_name
     )
 
-    # Delete removed models, unless the caller asked to keep what it did not send
+    # Delete removed models, unless the caller asked to keep what it did not send.
+    # Image generation models are managed from the image generation page.
+    image_gen_model_ids = (
+        set(
+            db_session.scalars(
+                select(ImageGenerationConfig.model_configuration_id)
+                .join(ModelConfiguration)
+                .where(ModelConfiguration.llm_provider_id == existing_llm_provider.id)
+            )
+        )
+        if existing_llm_provider.id is not None
+        else set()
+    )
     removed_ids = (
         []
         if llm_provider_upsert_request.keep_existing_models
         else [
             mc.id
             for name, mc in existing_by_name.items()
-            if name not in models_to_exist
+            if name not in models_to_exist and mc.id not in image_gen_model_ids
         ]
     )
 
@@ -649,12 +664,23 @@ def upsert_llm_provider(
     # default — and both the admin form and the auto-mode transition re-send
     # every model's stored visibility. Refusing the steady state would fail
     # unrelated edits such as an API key rotation.
+    # An omitted image generation model keeps its row but leaves chat.
+    image_only_models = (
+        []
+        if llm_provider_upsert_request.keep_existing_models
+        else [
+            mc
+            for name, mc in existing_by_name.items()
+            if name not in models_to_exist and mc.id in image_gen_model_ids
+        ]
+    )
+
     defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
 
     _validate_provider_model_defaults(
         existing_by_name=existing_by_name,
         defaults_by_model_id=defaults_by_model_id,
-        removed_ids=removed_ids,
+        removed_ids=removed_ids + [mc.id for mc in image_only_models],
         requested_visibility=requested_visibility,
         merged_capabilities=merged_capabilities,
     )
@@ -664,6 +690,20 @@ def upsert_llm_provider(
             ModelConfiguration.id.in_(removed_ids)
         ).delete(synchronize_session="fetch")
         db_session.flush()
+
+    for mc in image_only_models:
+        update_model_configuration__no_commit(
+            db_session=db_session,
+            model_configuration_id=mc.id,
+            supported_flows=[],
+            is_visible=False,
+            max_input_tokens=mc.max_input_tokens,
+            display_name=mc.display_name,
+            custom_display_name=mc.custom_display_name,
+            reasoning_effort_max=mc.reasoning_effort_max,
+            reasoning_effort_default=mc.reasoning_effort_default,
+            temperature_default=mc.temperature_default,
+        )
 
     new_models: list[NewModelConfiguration] = []
     for model_config in llm_provider_upsert_request.model_configurations:
@@ -744,6 +784,13 @@ def upsert_llm_provider(
         llm_provider_id=existing_llm_provider.id,
         persona_ids=llm_provider_upsert_request.personas,
     )
+    if (
+        not llm_provider_upsert_request.is_public
+        or llm_provider_upsert_request.personas
+    ):
+        unlink_image_generation_models_for_provider__no_commit(
+            db_session, existing_llm_provider.id
+        )
 
     try:
         db_session.commit()
@@ -955,8 +1002,10 @@ def fetch_existing_llm_providers(
         stmt = stmt.where(LLMProviderModel.id.in_(providers_with_flows))
 
     if exclude_image_generation_providers:
-        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
-            ImageGenerationConfig
+        image_gen_provider_ids = (
+            select(ModelConfiguration.llm_provider_id)
+            .join(ImageGenerationConfig)
+            .where(ImageGenerationConfig.llm_provider_owned.is_(True))
         )
         stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
 

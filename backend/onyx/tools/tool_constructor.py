@@ -121,7 +121,10 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         ),
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
-        deployment_name=llm_provider.deployment_name,
+        # A linked provider's deployment serves its chat model, not this one.
+        deployment_name=(
+            llm_provider.deployment_name if default_config.llm_provider_owned else None
+        ),
         max_input_tokens=llm.config.max_input_tokens,
         custom_config=llm_provider.custom_config,
     )

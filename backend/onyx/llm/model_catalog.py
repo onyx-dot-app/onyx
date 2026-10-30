@@ -230,6 +230,30 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
     )
 
 
+_PRICING_PREFIX = re.compile(
+    r"^(?:(?:\d+|max)-x-(?:\d+|max)|hd|standard|low|medium|high)$"
+)
+
+
+def _is_pricing_or_provider_prefixed(provider: str, model_id: str) -> bool:
+    prefix, sep, _ = model_id.partition("/")
+    return bool(sep) and (prefix == provider or bool(_PRICING_PREFIX.match(prefix)))
+
+
+def iter_image_generation_models(provider: str) -> list[str]:
+    """Non-deprecated image generation models under a provider. Pricing keys
+    prefixed with a size or quality (e.g. ``1024-x-1024/dall-e-2``) are
+    skipped."""
+    models = _catalog().get(provider, {}).get("models", {})
+    return sorted(
+        model_id
+        for model_id, entry in models.items()
+        if not _is_pricing_or_provider_prefixed(provider, model_id)
+        and entry.get("status") != "deprecated"
+        and _catalog_mode(entry, model_id) == "image_generation"
+    )
+
+
 def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     """A model's vendored catalog entry for the provider (direct or alias)."""
     section = _catalog().get(provider)

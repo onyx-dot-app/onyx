@@ -143,6 +143,7 @@ class DATestImageGenerationConfig(BaseModel):
     llm_provider_id: int
     llm_provider_name: str
     is_default: bool
+    llm_provider_owned: bool = True
 
 
 class DATestDocumentSet(BaseModel):
