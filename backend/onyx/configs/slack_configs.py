@@ -24,8 +24,12 @@ def _load_slack_domain() -> str:
     raw = (os.environ.get("SLACK_API_URL") or "").strip()
     if not raw:
         return _COMMERCIAL_DOMAIN
-    parsed = urlparse(raw)
-    if parsed.scheme != "https" or parsed.hostname not in _TRUSTED_SLACK_DOMAINS:
+    try:
+        parsed = urlparse(raw)
+        scheme, hostname = parsed.scheme, parsed.hostname
+    except ValueError:
+        scheme, hostname = "", None
+    if scheme != "https" or hostname not in _TRUSTED_SLACK_DOMAINS:
         logger.error(
             "Ignoring SLACK_API_URL=%r: expected https on one of %s. "
             "Falling back to %s.",
@@ -34,7 +38,7 @@ def _load_slack_domain() -> str:
             _COMMERCIAL_DOMAIN,
         )
         return _COMMERCIAL_DOMAIN
-    return parsed.hostname
+    return hostname
 
 
 # The Slack cloud domain: "slack.com" or "slack-gov.com".

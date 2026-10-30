@@ -73,6 +73,8 @@ def test_govslack_derives_every_host(raw: str, reload_with: Reload) -> None:
         "https://slack-gov.com.evil.example.com/api/",
         "https://notslack-gov.com/api/",
         "slack-gov.com/api/",
+        # urlparse raises ValueError on an unclosed IPv6 bracket.
+        "https://[slack-gov.com/api/",
     ],
 )
 def test_untrusted_value_falls_back_loudly(
