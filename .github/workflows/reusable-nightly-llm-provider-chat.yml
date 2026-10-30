@@ -38,8 +38,8 @@ on:
         required: false
         default: ""
         type: string
-      google_models:
-        description: "Comma-separated models for google"
+      gemini_models:
+        description: "Comma-separated models for gemini"
         required: false
         default: ""
         type: string
@@ -202,8 +202,8 @@ jobs:
             api_version: ""
             deployment_name: ""
             required: false
-          - provider: google
-            models: ${{ inputs.google_models }}
+          - provider: gemini
+            models: ${{ inputs.gemini_models }}
             api_key_env: GEMINI_API_KEY
             custom_config_env: ""
             api_base: ""
