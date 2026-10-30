@@ -421,6 +421,7 @@ export interface ModelSelectorContentProps {
   /** Controls which model's pane shows (an `llmOptionKey`, null for the list),
    *  so a host can open a pane. Uncontrolled when omitted. */
   detailKey?: string | null;
+  /** Required with `detailKey`; the gear and back buttons report through it. */
   onDetailKeyChange?: (key: string | null) => void;
 }
 
@@ -453,8 +454,10 @@ export default function ModelSelectorContent({
   );
   const detailKey: string | null =
     detailKeyProp === undefined ? internalDetailKey : detailKeyProp;
-  const setDetailKey: (key: string | null) => void =
-    onDetailKeyChange ?? setInternalDetailKey;
+  const setDetailKey = (key: string | null): void => {
+    if (detailKeyProp === undefined) setInternalDetailKey(key);
+    onDetailKeyChange?.(key);
+  };
   const {
     llmProviders: currentAgentProviderOptions,
     isLoading: currentAgentProvidersLoading,
@@ -492,8 +495,9 @@ export default function ModelSelectorContent({
     return { ...backing, displayName: t("autoItem.label"), isAuto: true };
   }, [llmOptions, modelRoutingEnabled, routingModelId, t]);
 
-  // Ignores selection, so a pane outlives its model's removal. Auto shares its
-  // backing model's key and wins so the header reads the Auto label.
+  // Ignores selection, so the pane of a removed model holds through the
+  // popover's exit animation. Auto shares its backing model's key and wins so
+  // the header reads the Auto label.
   const detailOption = useMemo<LLMOption | null>(() => {
     if (detailKey === null) return null;
     if (autoOption && llmOptionKey(autoOption) === detailKey) return autoOption;

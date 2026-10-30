@@ -67,6 +67,9 @@ export default function MultiModelSelector({
   // Radix reports an outside pointerdown only on the following click, by which
   // time a pill x has unmounted its target, so the row's last one is kept.
   const rowPointerDownRef = useRef<PointerEvent | null>(null);
+  // A removed pill's last rect, so the closing popover does not jump during its
+  // exit animation. Keyed so it never applies to another model's pane.
+  const lastPillRef = useRef<{ key: string; rect: DOMRect } | null>(null);
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
@@ -119,7 +122,6 @@ export default function MultiModelSelector({
   // come and go. A new object per target makes Radix re-anchor and move the
   // observers. An unselected model's pane has no pill and shares the list's place.
   const anchorRef = useMemo<RefObject<PopoverAnchor>>(() => {
-    let pillRect: DOMRect | null = null;
     const pill = (): HTMLElement | undefined =>
       detailKey === null ? undefined : pillRefs.current.get(detailKey);
     const listElement = (): HTMLElement | undefined =>
@@ -128,13 +130,17 @@ export default function MultiModelSelector({
       current: {
         getBoundingClientRect: () => {
           const element = pill();
-          if (element) {
-            pillRect = element.getBoundingClientRect();
-            return pillRect;
+          if (detailKey !== null && element) {
+            const rect: DOMRect = element.getBoundingClientRect();
+            lastPillRef.current = { key: detailKey, rect };
+            return rect;
           }
-          // A removed pill holds its place while the closing popover animates out.
+          const held: DOMRect | null =
+            lastPillRef.current?.key === detailKey
+              ? lastPillRef.current.rect
+              : null;
           return (
-            pillRect ?? listElement()?.getBoundingClientRect() ?? new DOMRect()
+            held ?? listElement()?.getBoundingClientRect() ?? new DOMRect()
           );
         },
         get contextElement() {
@@ -152,16 +158,11 @@ export default function MultiModelSelector({
     displayName: option.displayName,
   });
 
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen && noModelsToSelect) return;
-    setOpen(nextOpen);
-  };
-
   // The pane of a removed model has no pill left to sit on, so the menu closes.
   const removeAt = (index: number) => {
     const removed: SelectedModel | undefined = selectedModels[index];
     onRemove(index);
-    if (removed && llmOptionKey(removed) === detailKey) handleOpenChange(false);
+    if (removed && llmOptionKey(removed) === detailKey) setOpen(false);
   };
 
   const handleSelect = (option: LLMOption) => {
@@ -193,8 +194,11 @@ export default function MultiModelSelector({
   // The row has no Popover.Trigger, so its +, pills and x need the trigger's
   // exemption from dismissal.
   const keepOpenOnRowEvent = (event: CustomEvent<{ originalEvent: Event }>) => {
+    const fromRowPointerDown: boolean =
+      event.detail.originalEvent === rowPointerDownRef.current;
+    if (fromRowPointerDown) rowPointerDownRef.current = null;
     const fromRow: boolean =
-      event.detail.originalEvent === rowPointerDownRef.current ||
+      fromRowPointerDown ||
       (event.target instanceof Node &&
         !!rowRef.current?.contains(event.target));
     if (fromRow) event.preventDefault();
@@ -212,7 +216,7 @@ export default function MultiModelSelector({
   };
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       {/* Disabled state blocks pointer events on children only, so the
           container stays hoverable and this Tooltip can surface the reason. */}
       <Tooltip tooltip={selectorTooltip} side="top">

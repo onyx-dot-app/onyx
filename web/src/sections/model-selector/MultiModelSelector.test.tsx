@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  act,
   render,
   screen,
   waitFor,
@@ -271,6 +272,8 @@ async function expectAnchoredAt(key: string) {
 // Row, pill and pane queries
 // ---------------------------------------------------------------------------
 
+type User = ReturnType<typeof setupUser>;
+
 function selectorRow(): HTMLElement {
   return screen.getByTestId("model-selector");
 }
@@ -299,10 +302,7 @@ function pillX(pillElement: HTMLElement): Element | null {
   );
 }
 
-async function clickPillX(
-  user: ReturnType<typeof setupUser>,
-  displayName: string
-) {
+async function clickPillX(user: User, displayName: string) {
   const x = pillX(pill(displayName));
   if (!x) throw new Error(`pill ${displayName} has no x`);
   await user.click(x);
@@ -368,17 +368,28 @@ function expectPane(displayName: string) {
 }
 
 /** The pane's back arrow is its first (icon-only) button. */
-async function clickBack(user: ReturnType<typeof setupUser>) {
+async function clickBack(user: User) {
   const back = within(openPopper()).getAllByRole("button")[0];
   if (!back) throw new Error("pane has no back button");
   await user.click(back);
 }
 
-async function openFromAdd(user: ReturnType<typeof setupUser>) {
+async function openFromAdd(user: User) {
   const add = addButton();
   if (!add) throw new Error("add button is hidden");
   await user.click(add);
   await waitFor(() => expect(popperWrapper()).not.toBeNull());
+}
+
+async function openFromPill(user: User, displayName: string) {
+  await user.click(pill(displayName));
+  await waitFor(() => expect(popperWrapper()).not.toBeNull());
+}
+
+async function typeSearch(user: User, text: string) {
+  const search = searchInput();
+  if (!search) throw new Error("list has no search input");
+  await user.type(search, text);
 }
 
 function expectNoCallbacks(callbacks: Callbacks) {
@@ -405,7 +416,7 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("anchoring", () => {
-    test("D-16: the list sits on + and follows it through row adds and removes, and on the row while + is hidden", async () => {
+    test("the list sits on + and follows it through row adds and removes, and on the row while + is hidden", async () => {
       const user = setupUser();
       renderPicker(["Model A"]);
 
@@ -435,12 +446,11 @@ describe("MultiModelSelector", () => {
       await expectAnchoredAt(ADD);
     });
 
-    test("D-16: a pill opens its pane on that pill, and the pane follows the pill when it moves", async () => {
+    test("a pill opens its pane on that pill, and the pane follows the pill when it moves", async () => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
-      await user.click(pill("Model B"));
-      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await openFromPill(user, "Model B");
       expectPane("Model B");
       await expectAnchoredAt("Model B");
 
@@ -452,7 +462,7 @@ describe("MultiModelSelector", () => {
       await expectAnchoredAt("Model A");
     });
 
-    test("D-16: settings on a selected row moves the menu to that pill, back returns it to +", async () => {
+    test("settings on a selected row moves the menu to that pill, back returns it to +", async () => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
@@ -468,7 +478,7 @@ describe("MultiModelSelector", () => {
       await expectAnchoredAt(ADD);
     });
 
-    test("D-16: the pane of an unselected model sits on +", async () => {
+    test("the pane of an unselected model sits on +", async () => {
       const user = setupUser();
       renderPicker(["Model A"]);
 
@@ -480,13 +490,12 @@ describe("MultiModelSelector", () => {
 
     // At max the unselected rows, settings included, are disabled, so the flag
     // is the reachable way to hide + with an unselected pane available.
-    test("D-16: with multi-model off the list and an unselected model's pane sit on the row", async () => {
+    test("with multi-model off the list and an unselected model's pane sit on the row", async () => {
       mockSettings = { ...DEFAULT_SETTINGS, multi_model_chat_enabled: false };
       const user = setupUser();
       renderPicker(["Model A"]);
 
-      await user.click(pill("Model A"));
-      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await openFromPill(user, "Model A");
       expectPane("Model A");
       await expectAnchoredAt("Model A");
 
@@ -499,7 +508,7 @@ describe("MultiModelSelector", () => {
       await expectAnchoredAt(ROW);
     });
 
-    test("D-16: a pill keeps its node from one model to two and back", async () => {
+    test("a pill keeps its node from one model to two and back", async () => {
       const user = setupUser();
       renderPicker(["Model A"]);
       const pillA = pill("Model A");
@@ -519,15 +528,13 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("row toggle", () => {
-    test("AC-3: adds an unselected row once, keeps the menu open and the search text", async () => {
+    test("adds an unselected row once, keeps the menu open and the search text", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A"], callbacks);
 
       await openFromAdd(user);
-      const search = searchInput();
-      if (!search) throw new Error("list has no search input");
-      await user.type(search, "Model");
+      await typeSearch(user, "Model");
       const wrapper = openPopper();
 
       await user.click(row("Model C"));
@@ -561,7 +568,7 @@ describe("MultiModelSelector", () => {
         stillShown: "Model F",
       },
     ])(
-      "AC-3, AC-5 (D-7): keeps a group the user expanded when a row $action changes the first selected group",
+      "keeps a group the user expanded when a row $action changes the first selected group",
       async ({ initial, expand, click, stillShown }) => {
         const user = setupUser();
         renderPicker(initial);
@@ -581,7 +588,7 @@ describe("MultiModelSelector", () => {
       }
     );
 
-    test("AC-4: adds the third model with the menu open, hides + and disables every unselected row", async () => {
+    test("adds the third model with the menu open, hides + and disables every unselected row", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
@@ -600,19 +607,16 @@ describe("MultiModelSelector", () => {
       }
     });
 
-    test("AC-5: removes a selected row with the menu open, calls onRemove with its index, keeps the search text", async () => {
+    test("removes a selected row with the menu open, calls onRemove with its index, keeps the search text", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B", "Model C"], callbacks);
 
       // At max there is no +, so the list is reached from a pill's pane.
-      await user.click(pill("Model A"));
-      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await openFromPill(user, "Model A");
       expectPane("Model A");
       await clickBack(user);
-      const search = searchInput();
-      if (!search) throw new Error("list has no search input");
-      await user.type(search, "Model");
+      await typeSearch(user, "Model");
       const wrapper = openPopper();
 
       await user.click(row("Model B"));
@@ -625,7 +629,7 @@ describe("MultiModelSelector", () => {
       expect(rowFieldset("Model B")).not.toBeDisabled();
     });
 
-    test("AC-6: ignores a click on the sole selected row and keeps its settings button enabled", async () => {
+    test("ignores a click on the sole selected row and keeps its settings button enabled", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A"], callbacks);
@@ -642,7 +646,7 @@ describe("MultiModelSelector", () => {
       expectPane("Model A");
     });
 
-    test("AC-7: removing down to one keeps the menu open, drops the x and restores +", async () => {
+    test("removing down to one keeps the menu open, drops the x and restores +", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
@@ -678,7 +682,7 @@ describe("MultiModelSelector", () => {
         removedIndex: 1,
       },
     ])(
-      "AC-8: pill x removes with the menu open in the $view and the menu in place",
+      "pill x removes with the menu open in the $view and the menu in place",
       async ({ view, initial, remove, removedIndex }) => {
         const user = setupUser();
         const callbacks = makeCallbacks();
@@ -687,8 +691,7 @@ describe("MultiModelSelector", () => {
         if (view === "list") {
           await openFromAdd(user);
         } else {
-          await user.click(pill("Model A"));
-          await waitFor(() => expect(popperWrapper()).not.toBeNull());
+          await openFromPill(user, "Model A");
           expectPane("Model A");
         }
         const wrapper = openPopper();
@@ -708,13 +711,12 @@ describe("MultiModelSelector", () => {
       }
     );
 
-    test("D-16: x on the pane's own model removes it and closes the menu", async () => {
+    test("x on the pane's own model removes it and closes the menu", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B", "Model C"], callbacks);
 
-      await user.click(pill("Model B"));
-      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await openFromPill(user, "Model B");
       expectPane("Model B");
 
       await clickPillX(user, "Model B");
@@ -723,6 +725,31 @@ describe("MultiModelSelector", () => {
       expect(pillNames()).toEqual(["Model A", "Model C"]);
       await waitFor(() => expect(popperWrapper()).toBeNull());
     });
+
+    test("the closing pane holds its removed pill's place through the exit animation", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B", "Model C"]);
+
+      await openFromPill(user, "Model B");
+      expectPane("Model B");
+      await expectAnchoredAt("Model B");
+      const content = openPopper().firstElementChild;
+      if (!(content instanceof HTMLElement))
+        throw new Error("no popover content");
+      // Presence keeps the content mounted until animationend, which jsdom never fires.
+      content.style.animationName = "exit";
+      const last = rectOf("Model B");
+
+      await clickPillX(user, "Model B");
+
+      expect(pillNames()).toEqual(["Model A", "Model C"]);
+      expect(content).toHaveAttribute("data-state", "closed");
+      // act flushes the re-measure; a waitFor would also pass on a stale transform.
+      await act(async () => {
+        fireEvent(window, new Event("resize"));
+      });
+      expect(popperXY()).toEqual({ x: last.right, y: last.top - SIDE_OFFSET });
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -730,13 +757,12 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("panes", () => {
-    test("AC-10: pill click opens that model's pane with no add, remove or replace; back shows every selected model checked", async () => {
+    test("pill click opens that model's pane with no add, remove or replace; back shows every selected model checked", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
 
-      await user.click(pill("Model B"));
-      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await openFromPill(user, "Model B");
 
       expectPane("Model B");
       expectNoCallbacks(callbacks);
@@ -752,7 +778,7 @@ describe("MultiModelSelector", () => {
       }
     });
 
-    test("AC-11: settings button opens the pane without selecting, on an unselected and a selected row", async () => {
+    test("settings button opens the pane without selecting, on an unselected and a selected row", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A"], callbacks);
@@ -772,7 +798,7 @@ describe("MultiModelSelector", () => {
       expect(pillNames()).toEqual(["Model A"]);
     });
 
-    test("AC-12: pill clicks while open switch panes, a repeat reopens the pane, + returns to the list", async () => {
+    test("pill clicks while open switch panes, a repeat reopens the pane, + returns to the list", async () => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
@@ -793,9 +819,7 @@ describe("MultiModelSelector", () => {
       expect(popperWrapper()).toBe(wrapper);
       expectPane("Model A");
 
-      const add = addButton();
-      if (!add) throw new Error("add button is hidden");
-      await user.click(add);
+      await openFromAdd(user);
       expect(popperWrapper()).toBe(wrapper);
       expectList();
     });
@@ -809,15 +833,13 @@ describe("MultiModelSelector", () => {
     test.each([
       {
         how: "Escape",
-        dismiss: (user: ReturnType<typeof setupUser>) =>
-          user.keyboard("{Escape}"),
+        dismiss: (user: User) => user.keyboard("{Escape}"),
       },
       {
         how: "an outside pointerdown",
-        dismiss: (user: ReturnType<typeof setupUser>) =>
-          user.click(document.body),
+        dismiss: (user: User) => user.click(document.body),
       },
-    ])("AC-13: $how closes the menu", async ({ dismiss }) => {
+    ])("$how closes the menu", async ({ dismiss }) => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
@@ -827,16 +849,14 @@ describe("MultiModelSelector", () => {
       await waitFor(() => expect(popperWrapper()).toBeNull());
     });
 
-    test("AC-13: stays open on + click, pill click and pill x", async () => {
+    test("stays open on + click, pill click and pill x", async () => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
       await openFromAdd(user);
       const wrapper = openPopper();
 
-      const add = addButton();
-      if (!add) throw new Error("add button is hidden");
-      await user.click(add);
+      await openFromAdd(user);
       expect(popperWrapper()).toBe(wrapper);
 
       await user.click(pill("Model A"));
@@ -852,7 +872,7 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("flags", () => {
-    test("AC-15: multi-model off: unselected rows are enabled, a click replaces the sole model with the menu open, the selected row is a no-op, no x and no +", async () => {
+    test("multi-model off: unselected rows are enabled, a click replaces the sole model with the menu open, the selected row is a no-op, no x and no +", async () => {
       mockSettings = { ...DEFAULT_SETTINGS, multi_model_chat_enabled: false };
       const user = setupUser();
       const callbacks = makeCallbacks();
@@ -861,8 +881,7 @@ describe("MultiModelSelector", () => {
       expect(addButton()).toBeNull();
       expect(pillX(pill("Model A"))).toBeNull();
 
-      await user.click(pill("Model A"));
-      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await openFromPill(user, "Model A");
       expectPane("Model A");
       await clickBack(user);
       const wrapper = openPopper();
@@ -883,14 +902,13 @@ describe("MultiModelSelector", () => {
       expect(pillNames()).toEqual(["Model C"]);
     });
 
-    test("AC-16: reasoning override off: pill click opens the list with no settings buttons, and rows toggle", async () => {
+    test("reasoning override off: pill click opens the list with no settings buttons, and rows toggle", async () => {
       mockSettings = { ...DEFAULT_SETTINGS, reasoning_override_enabled: false };
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
 
-      await user.click(pill("Model A"));
-      await waitFor(() => expect(popperWrapper()).not.toBeNull());
+      await openFromPill(user, "Model A");
 
       expectList();
       expect(
@@ -911,7 +929,7 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("keyboard", () => {
-    test("AC-17: Enter on a focused row toggles it, Enter on a focused pill opens its pane without removing", async () => {
+    test("Enter on a focused row toggles it, Enter on a focused pill opens its pane without removing", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
