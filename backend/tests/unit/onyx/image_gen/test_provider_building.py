@@ -437,14 +437,22 @@ def test_azure_provider_rejects_reference_images_for_unsupported_model() -> None
         )
 
 
-def test_build_vertex_provider_defaults_location_to_global() -> None:
+def test_vertex_defaults_location_to_global_and_prefixes_model() -> None:
     credentials = _get_default_image_gen_creds()
     credentials.custom_config = {
         "vertex_auth_method": "workload_identity",
         "vertex_project": "demo_project_wi",
     }
+    provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
 
-    image_gen_provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
+    with patch("litellm.image_generation", return_value=object()) as mock_gen:
+        provider.generate_image(
+            prompt="draw a mountain",
+            model="gemini-nano-banana-2.1",
+            size="1024x1024",
+            n=1,
+        )
 
-    assert isinstance(image_gen_provider, VertexImageGenerationProvider)
-    assert image_gen_provider._vertex_location == "global"
+    call_kwargs = mock_gen.call_args.kwargs
+    assert call_kwargs["vertex_location"] == "global"
+    assert call_kwargs["model"] == "vertex_ai/gemini-nano-banana-2.1"
