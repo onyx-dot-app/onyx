@@ -59,17 +59,15 @@ export type PreviewHighlightTarget =
 
 function PreviewLogo({
   logoSrc,
-  forceOnyxIcon,
   size,
   className,
 }: {
   logoSrc?: string;
-  forceOnyxIcon?: boolean;
   size: number;
   className?: string;
 }) {
   const t = useTranslations("admin.theme");
-  return logoSrc && !forceOnyxIcon ? (
+  return logoSrc ? (
     <img
       src={logoSrc}
       alt={t("preview.logo.alt")}
@@ -198,14 +196,7 @@ function PreviewStart({
             )}
           >
             {logoDisplayStyle !== "name_only" && (
-              <PreviewLogo
-                logoSrc={logoSrc}
-                size={16}
-                forceOnyxIcon={
-                  logoDisplayStyle === "logo_and_name" &&
-                  !applicationDisplayName
-                }
-              />
+              <PreviewLogo logoSrc={logoSrc} size={16} />
             )}
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (

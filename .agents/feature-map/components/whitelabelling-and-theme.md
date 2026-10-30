@@ -87,6 +87,16 @@ on `ee_features_enabled`. There is no CE copy of the page.
 static connector and service icons. It does not render the uploaded logo.
 `web/src/lib/app/components.tsx:Logo` renders it as a plain `<img>`.
 
+**Branding cases.** The custom logo and the custom name are independent
+overrides: the logo replaces the stock mark, the name replaces the stock
+wordmark, and each falls back on its own. A custom name adds the "Powered by"
+line unless `hide_onyx_branding` is set. The
+display style can then leave out the logo or the name. Three places implement
+this and must agree: the app sidebar (`web/src/lib/app/components.tsx:SidebarLogoMark`
+and `SidebarWordmark`, split so the name can fade on fold), the admin and Craft
+sidebars (`FoldableLogo`), and the theme page's preview
+(`web/src/app/ee/admin/theme/Preview.tsx`).
+
 ---
 
 ## Contracts and traps
@@ -152,7 +162,9 @@ static connector and service icons. It does not render the uploaded logo.
    does.** `web/src/lib/settings/hooks.ts:useSettings` adds `?v=<logoBuster>`, a new timestamp for each new
    settings object, to beat the browser cache after an upload. The SWR
    `compare` uses reference equality so that `mutate()` always makes a new
-   buster. The logo route sends `Cache-Control: no-cache`, and the logotype
+   buster. The buster is kept per settings object for all callers, not per
+   hook call: a per-call timestamp gives every component that mounts later a
+   new URL, so the logo downloads again and flashes. The logo route sends `Cache-Control: no-cache`, and the logotype
    route sends none.
 10. `ce-404-no-branding` **A CE backend returns 404 for the enterprise settings
     route.** `useSettings` treats that 404 as "no branding" and does not retry.

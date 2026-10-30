@@ -219,6 +219,15 @@ specific routes under `web/src/app/api/` take precedence over this one.
 
 ---
 
+**The sidebar.** `web/src/sections/sidebar/AppSidebar.tsx:AppSidebar` shows
+its header tabs and section titles at once. Each section (agents, projects,
+recents) shows Opal's `SidebarLoader` until its own data loads, so a fast
+section does not wait for a slow one; `usePinnedAgents` stays loading until the
+user's pins are in its list. Folded, the header keeps the unfolded button
+order. The header row is the logo mark and the wordmark from
+[[whitelabelling-and-theme]], and the fold button, which moves with the
+column's edge as the sidebar folds.
+
 ## Contracts and traps
 
 1. `packet-list-append-only` **A message's packet list is append-only.**

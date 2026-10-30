@@ -50,7 +50,7 @@ import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { SidebarLoader } from "@opal/loaders";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
+import { SidebarLogoMark, SidebarWordmark } from "@/lib/app/components";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton, Text } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -613,7 +613,8 @@ export default function AppSidebar() {
       <SidebarLayouts.Root foldable>
         <SidebarLayouts.Header
           showLogoWhenFolded={showLogoWhenFolded}
-          renderAppLogo={renderSidebarLogo}
+          logo={<SidebarLogoMark size={28} />}
+          wordmark={<SidebarWordmark size={28} />}
         >
           <div data-testid="AppSidebar/new-session">
             <SidebarTab

@@ -751,9 +751,9 @@ jobs:
           DEVCONTAINER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
         run: |
           echo "Running multi-tenant integration tests..."
-          # A test that runs past faulthandler_timeout prints every thread's
-          # stack. The in-process api_server has no request timeout, so a hung
-          # chat stream otherwise ends at timeout-minutes with no trace.
+          # multitenant_tests/conftest.py writes the in-process api_server logs
+          # and repeated thread dumps to backend/log, which the worker-log
+          # upload keeps when a hung job is cancelled.
           docker run --rm --network onyx_default \
             --name test-runner \
             -v ${{ github.workspace }}:/workspace \
@@ -788,7 +788,6 @@ jobs:
             -e DEV_MODE=true \
             ${DEVCONTAINER_IMAGE} \
             uv run --no-sync pytest -v --tb=short -rs \
-              -o faulthandler_timeout=240 \
               tests/integration/multitenant_tests
 
       - name: Dump all-container logs (multi-tenant)
