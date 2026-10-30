@@ -128,7 +128,7 @@ jobs:
       - name: Run desktop runtime smoke test (Linux)
         if: matrix.platform == 'linux'
         run: |
-          sudo apt-get install -y webkit2gtk-driver xvfb
+          sudo apt-get install -y webkit2gtk-driver xvfb x11-utils
           command -v tauri-driver || cargo install tauri-driver --locked
           xvfb-run --auto-servernum python3 desktop/tests/webdriver_smoke.py \
             desktop/src-tauri/target/release/onyx

@@ -43,6 +43,10 @@ FIXTURE_HTML = b"""<!doctype html>
 ">same-origin popup</button>
 <button id="closable-popup" onclick="window.closablePopup = window.open('about:blank', '_blank');">
 closable popup</button>
+<button id="self-closing-popup" onclick="
+  const popup = window.open('about:blank', '_blank');
+  if (popup) popup.location.href = window.location.origin + '/close';
+">self-closing popup</button>
 <button id="external" onclick="
   window.externalOpened = window.open('https://docs.onyx.app/smoke', '_blank') !== null;
 ">external</button>
@@ -52,11 +56,25 @@ window.addEventListener("message", (event) => window.popupMessages.push(event.da
 </script>
 </body></html>
 """
+SELF_CLOSING_POPUP_TITLE = "Onyx smoke closing popup"
+SELF_CLOSING_POPUP_HTML = f"""<!doctype html>
+<html><head><title>{SELF_CLOSING_POPUP_TITLE}</title></head><body><script>
+setTimeout(() => window.close(), 1000);
+</script></body></html>
+""".encode()
 POPUP_HTML = b"""<!doctype html>
 <html><body><script>
 window.opener.postMessage("popup-ready", window.location.origin);
 </script></body></html>
 """
+
+
+def has_native_window(title: str) -> bool:
+    """WebDriver only sees webviews, so ask X11 whether the window is still open."""
+    tree = subprocess.run(
+        ["xwininfo", "-root", "-tree"], capture_output=True, text=True, check=True
+    ).stdout
+    return f'"{title}"' in tree
 
 
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
@@ -71,6 +89,8 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         body = FIXTURE_HTML
         if self.path.startswith("/popup"):
             body = POPUP_HTML
+        elif self.path.startswith("/close"):
+            body = SELF_CLOSING_POPUP_HTML
         elif self.path.startswith("/download"):
             body = DOWNLOAD_BODY
             headers = {
@@ -273,14 +293,13 @@ def main() -> int:
             )
 
         def popup_closes_itself() -> None:
-            driver.click("closable-popup")
+            driver.click("self-closing-popup")
             wait_for(
-                "the popup window", lambda: len(driver.session("/window/handles")) == 2
+                "the popup window", lambda: has_native_window(SELF_CLOSING_POPUP_TITLE)
             )
-            driver.execute("window.closablePopup.close();")
             wait_for(
-                "the popup to close",
-                lambda: len(driver.session("/window/handles")) == 1,
+                "the popup window to close",
+                lambda: not has_native_window(SELF_CLOSING_POPUP_TITLE),
             )
 
         def external_link_opens_in_browser() -> None:

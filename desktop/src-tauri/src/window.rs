@@ -352,8 +352,29 @@ fn build_popup_window(
         .map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     crate::macos_webview::install_ui_delegate_extensions(&window);
+    #[cfg(target_os = "linux")]
+    close_window_with_webview(&window);
     maybe_open_devtools(app, &window);
     Ok(window)
+}
+
+/// wry destroys the webview on `window.close()` but leaves its GTK window open.
+#[cfg(target_os = "linux")]
+fn close_window_with_webview(window: &WebviewWindow) {
+    use gtk::prelude::WidgetExt;
+
+    let handle = window.clone();
+    let result = window.with_webview(move |webview| {
+        webview.inner().connect_destroy(move |_| {
+            let _ = handle.close();
+        });
+    });
+    if let Err(e) = result {
+        log_backend_error(
+            window.app_handle(),
+            &format!("Failed to watch popup window close: {e}"),
+        );
+    }
 }
 
 /// Behaviour every Onyx webview needs, whichever path built it.
