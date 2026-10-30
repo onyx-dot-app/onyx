@@ -333,7 +333,8 @@ termination grace period is much shorter, so it ends running turns first
 - [[projects]]: project fields change the prompt and the file scope.
 - [[hooks]]: the Query Processing hook in setup.
 - [[rate-and-usage-limits]]: `check_token_rate_limits` and `check_api_key_usage`
-  at the endpoint, and the LLM cost check in setup.
+  at the endpoint, and the LLM cost check and per-model spending limits
+  (`check_model_spend_limits`) in setup.
 - [[multi-tenancy]]: tenant context in threads.
 
 ---

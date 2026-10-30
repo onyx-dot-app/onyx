@@ -86,6 +86,7 @@ def search_dependencies() -> Generator[MagicMock, None, None]:
     with (
         patch(f"{_API}.get_default_llm"),
         patch(f"{_API}.check_llm_cost_limit_for_provider"),
+        patch(f"{_API}.check_model_spend_limits"),
         patch(f"{_API}.get_current_search_settings"),
         patch(f"{_API}.get_default_document_index"),
         patch(f"{_API}.load_settings"),

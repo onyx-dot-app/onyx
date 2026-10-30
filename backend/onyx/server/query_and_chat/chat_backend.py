@@ -154,7 +154,10 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamCursor,
     heartbeat_packet,
 )
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.usage_limits import (
     check_llm_cost_limit_for_provider,
     check_usage_and_raise,
@@ -550,6 +553,7 @@ def _generate_or_fallback_chat_session_name(
                     tenant_id=get_current_tenant_id(),
                     llm_provider_api_key=llm.config.api_key,
                 )
+            check_model_spend_limits(user, llm.config.model_configuration_id)
 
         token_counter = get_llm_token_counter(llm)
         simple_chat_history = convert_chat_history_basic(

@@ -96,8 +96,8 @@ def over_budget_user(
     monkeypatch.setattr(token_limit, "any_rate_limit_exists", lambda: True)
     monkeypatch.setattr(
         token_limit,
-        "fetch_all_global_token_rate_limits",
-        lambda **_: [global_limit],
+        "fetch_enforced_token_rate_limits",
+        lambda *_: [global_limit],
     )
 
     yield user
