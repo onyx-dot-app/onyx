@@ -45,6 +45,7 @@ import {
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
 import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
+import { isAnthropic } from "@/lib/languageModels/svc";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -64,7 +65,6 @@ const AUTOFILL_CAP = 3;
 export interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
-  maxTemperature: number;
   /** True only when an override was set locally or is stored on the session. */
   hasTemperatureOverride: boolean;
 }
@@ -120,19 +120,27 @@ export function useModelDetailManagers(
   ]);
 }
 
+/** The pane can show a model other than the selected one, so the cap comes
+ *  from the option, by the same rule as the LLM manager's. */
+function maxTemperatureOf(option: LLMOption): number {
+  return isAnthropic(option.provider, option.modelName) ? 1 : 2;
+}
+
 /** Where the slider parks on open: the session's own choice, else the admin
- *  default, else the user's own default, bounded by the selected model's
- *  slider maximum. */
+ *  default, else the user's own default, bounded by the pane model's cap. */
 function initialTemperature(
   option: LLMOption,
   manager: TemperatureManager | undefined,
   userTemperatureDefault: number | null
 ): number {
   const sessionTemperature = manager?.temperature ?? 0.5;
-  if (manager?.hasTemperatureOverride) return sessionTemperature;
   return Math.min(
-    option.temperatureDefault ?? userTemperatureDefault ?? sessionTemperature,
-    manager?.maxTemperature ?? 2
+    manager?.hasTemperatureOverride
+      ? sessionTemperature
+      : (option.temperatureDefault ??
+          userTemperatureDefault ??
+          sessionTemperature),
+    maxTemperatureOf(option)
   );
 }
 
@@ -224,7 +232,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const effortLabel =
     reasoningStopLabels[ALL_REASONING_STOPS[localEffortStop] ?? "medium"];
 
-  const maxTemperature = temperatureManager?.maxTemperature ?? 2;
+  const maxTemperature = maxTemperatureOf(option);
   const temperatureFraction =
     maxTemperature > 0 ? displayTemperature / maxTemperature : 0;
   let temperatureAnchor = 1;

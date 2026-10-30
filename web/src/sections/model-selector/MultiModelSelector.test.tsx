@@ -12,7 +12,10 @@ import MultiModelSelector, {
   MAX_MODELS,
   type SelectedModel,
 } from "@/sections/model-selector/MultiModelSelector";
-import type { ReasoningManager } from "@/sections/model-selector/ModelSelectorContent";
+import type {
+  ReasoningManager,
+  TemperatureManager,
+} from "@/sections/model-selector/ModelSelectorContent";
 import { llmOptionKey } from "@/lib/languageModels/options";
 import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
@@ -48,8 +51,10 @@ const mockProviderNames = (entry: {
 jest.mock("@/lib/languageModels/useProviderNames", () => ({
   useProviderNames: () => mockProviderNames,
 }));
+// Reset per test; a user with the temperature override shows the slider.
+let mockUser: { preferences: Record<string, unknown> } | null = null;
 jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ user: null }),
+  useUser: () => ({ user: mockUser }),
 }));
 // The real module pulls in provider modals through a circular import. The
 // empty icon also leaves the pill's x as its only svg.
@@ -64,6 +69,8 @@ interface ModelFixture {
   provider: { id: number; name: string; provider: string };
   modelName: string;
   configId: number;
+  /** Defaults to true; a non-reasoning model enables the temperature slider. */
+  reasoning?: boolean;
 }
 
 const PROVIDER = { id: 1, name: "Provider", provider: "openai" };
@@ -77,6 +84,12 @@ const MODELS: Record<string, ModelFixture> = {
   "Model D": { provider: PROVIDER, modelName: "model-4", configId: 4 },
   "Model E": { provider: OTHER_PROVIDER, modelName: "model-5", configId: 5 },
   "Model F": { provider: OTHER_PROVIDER, modelName: "model-6", configId: 6 },
+  "Model G": {
+    provider: PROVIDER,
+    modelName: "model-7",
+    configId: 7,
+    reasoning: false,
+  },
 };
 
 const mockProviders: LLMProviderDescriptor[] = [PROVIDER, OTHER_PROVIDER].map(
@@ -92,7 +105,7 @@ const mockProviders: LLMProviderDescriptor[] = [PROVIDER, OTHER_PROVIDER].map(
           is_visible: true,
           max_input_tokens: 128000,
           supports_image_input: false,
-          supports_reasoning: true,
+          supports_reasoning: model.reasoning ?? true,
           effectiveDisplayName: displayName,
         })),
     })
@@ -129,9 +142,11 @@ function makeCallbacks(): Callbacks {
 function Harness({
   initial,
   callbacks,
+  temperatureManager,
 }: {
   initial: SelectedModel[];
   callbacks?: Callbacks;
+  temperatureManager?: TemperatureManager;
 }) {
   const [models, setModels] = useState(initial);
   return (
@@ -154,6 +169,7 @@ function Harness({
         callbacks?.onReplace(index, model);
         setModels((prev) => prev.map((m, i) => (i === index ? model : m)));
       }}
+      temperatureManager={temperatureManager}
       reasoningManager={reasoningManager}
     />
   );
@@ -452,6 +468,7 @@ function expectOnlyCall(
 describe("MultiModelSelector", () => {
   beforeEach(() => {
     mockSettings = { ...DEFAULT_SETTINGS };
+    mockUser = null;
     mockLayout();
   });
 
@@ -632,6 +649,31 @@ describe("MultiModelSelector", () => {
 
       await clickBack(user);
       expect(searchInput()).toHaveValue("Model");
+    });
+
+    // The pane sizes the slider by its own model, not the session's selected one.
+    test("an unselected model's pane takes its own temperature cap", async () => {
+      mockUser = { preferences: { temperature_override_enabled: true } };
+      const user = setupUser();
+      const temperatureManager: TemperatureManager = {
+        temperature: 0.5,
+        updateTemperature: jest.fn(),
+        hasTemperatureOverride: false,
+      };
+      render(
+        <Harness
+          initial={[selected("Model E")]}
+          temperatureManager={temperatureManager}
+        />
+      );
+
+      await openFromAdd(user);
+      await user.click(groupHeader("Provider"));
+      await user.click(settingsButton("Model G"));
+
+      expectPane("Model G");
+      const [temperature] = within(openPopper()).getAllByRole("slider");
+      expect(temperature).toHaveAttribute("aria-valuemax", "2");
     });
 
     // The default group follows the first group holding a selected model; it
