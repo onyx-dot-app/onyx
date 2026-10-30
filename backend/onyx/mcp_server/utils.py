@@ -88,6 +88,9 @@ async def get_indexed_sources(
         response = await get_http_client().get(
             f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/manage/indexed-sources",
             headers=headers,
+            # Ingested documents are searchable even though their source is
+            # hidden from the connector UI. Raw Craft files remain excluded.
+            params={"include_internal": "true"},
         )
         response.raise_for_status()
         payload = response.json()

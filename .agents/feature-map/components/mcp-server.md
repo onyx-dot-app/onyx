@@ -83,7 +83,7 @@ Three read-only MCP resources, registered via `@mcp_server.resource(...)` in
 
 | Resource URI | Function | Returns | Why it exists |
 |---|---|---|---|
-| `resource://indexed_sources` | `indexed_sources.py:indexed_sources_resource` | Sorted list of connector source strings currently indexed for the tenant (`utils.py:get_indexed_sources`, backed by `GET /manage/indexed-sources`). | Lets a client discover valid values for the tool's `source_types` filter before calling it. |
+| `resource://indexed_sources` | `indexed_sources.py:indexed_sources_resource` | Sorted list of searchable connector source strings for the tenant, including ingestion API sources while excluding raw Craft files (`utils.py:get_indexed_sources`, backed by `GET /manage/indexed-sources?include_internal=true`). | Lets a client discover valid values for the tool's `source_types` filter before calling it. |
 | `resource://document_sets` | `document_sets.py:document_sets_resource` | List of `{name, description}` for Document Sets the user can access (`utils.py:get_accessible_document_sets`, backed by `GET /manage/document-set`, projected through `utils.py:DocumentSetEntry`). | Lets a client discover valid `document_set_names` values. |
 | `resource://agents` | `agents.py:agents_resource` | List of `{id, name, description}` for personas the user can search with (`utils.py:get_accessible_agents`, backed by `GET /persona`, projected through `utils.py:AgentEntry`). | Lets a client discover valid `agent` names, which apply that agent's knowledge scope (document sets, attached documents, start date) and model. |
 

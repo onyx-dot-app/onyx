@@ -314,13 +314,19 @@ _INTERNAL_ONLY_SOURCES = {
 }
 
 
-def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
+def fetch_unique_document_sources(
+    db_session: Session, *, include_internal: bool = False
+) -> list[DocumentSource]:
+    """List searchable sources, optionally including the internal ingestion API."""
     distinct_sources = db_session.query(Connector.source).distinct().all()
 
     sources = [
         source[0]
         for source in distinct_sources
         if source[0] not in _INTERNAL_ONLY_SOURCES
+        # Craft files use RAW_BINARY storage without text indexing. Only the
+        # ingestion API is a searchable internal source.
+        or (include_internal and source[0] == DocumentSource.INGESTION_API)
     ]
 
     return sources
