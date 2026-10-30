@@ -263,13 +263,14 @@ function popperXY(): { x: number; y: number } | null {
   return match ? { x: Number(match[1]), y: Number(match[2]) } : null;
 }
 
+
 /**
  * The 0x0 jsdom pane sits with its right edge on the anchor's right and its
  * bottom SIDE_OFFSET above the anchor's top. autoUpdate re-measures on window
  * resize; the setup ResizeObserver and IntersectionObserver are no-ops.
  */
-async function expectAnchoredAt(key: string) {
-  const rect = rectOf(key);
+async function expectAnchoredAt(anchor: string | DOMRect) {
+  const rect = typeof anchor === "string" ? rectOf(anchor) : anchor;
   fireEvent(window, new Event("resize"));
   await waitFor(() =>
     expect(popperXY()).toEqual({
@@ -277,6 +278,26 @@ async function expectAnchoredAt(key: string) {
       y: rect.top - SIDE_OFFSET,
     })
   );
+}
+
+/** Re-measures, then checks the panel did not leave `rect`; a waitFor would pass on a stale transform. */
+async function expectStillAt(rect: DOMRect) {
+  await act(async () => {
+    fireEvent(window, new Event("resize"));
+  });
+  expect(popperXY()).toEqual({ x: rect.right, y: rect.top - SIDE_OFFSET });
+}
+
+/** Presence keeps the content mounted until animationend, which jsdom never fires. */
+function holdExitAnimation(): HTMLElement {
+  const content = openPopper().firstElementChild;
+  if (!(content instanceof HTMLElement)) throw new Error("no popover content");
+  content.style.animationName = "exit";
+  return content;
+}
+
+async function expectClosed() {
+  await waitFor(() => expect(popperWrapper()).toBeNull());
 }
 
 // ---------------------------------------------------------------------------
@@ -350,9 +371,20 @@ function expectRowSelected(displayName: string, isSelected: boolean) {
   );
 }
 
+function expectRowEnabled(displayName: string, isEnabled: boolean) {
+  if (isEnabled) expect(rowFieldset(displayName)).not.toBeDisabled();
+  else expect(rowFieldset(displayName)).toBeDisabled();
+}
+
 function settingsButton(displayName: string): HTMLElement {
   return within(openPopper()).getByRole("button", {
     name: `modelSettingsButton.ariaLabel:${displayName}`,
+  });
+}
+
+function querySettingsButtons(): HTMLElement[] {
+  return within(openPopper()).queryAllByRole("button", {
+    name: /^modelSettingsButton\.ariaLabel/,
   });
 }
 
@@ -376,11 +408,6 @@ function expectPane(displayName: string) {
   expect(
     within(popper).getByText(MODELS[displayName]?.modelName ?? "")
   ).toBeInTheDocument();
-}
-
-/** The pane's reasoning slider stop; the harness passes no temperature manager. */
-function paneReasoningStop(): string | null {
-  return within(openPopper()).getByRole("slider").getAttribute("aria-valuenow");
 }
 
 /** The pane's back arrow is its first (icon-only) button. */
@@ -432,96 +459,74 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("anchoring", () => {
-    test("the list sits on + and follows it through row adds and removes, and on the row while + is hidden", async () => {
+    test("+ opens the add list on + and the rect stays when + moves", async () => {
       const user = setupUser();
-      renderPicker(["Model A"]);
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B"], callbacks);
 
       await openFromAdd(user);
       expectList();
       await expectAnchoredAt(ADD);
+      for (const name of ["Model A", "Model B"]) {
+        expectRowSelected(name, true);
+        expectRowEnabled(name, true);
+      }
+      for (const name of ["Model C", "Model D"]) {
+        expectRowSelected(name, false);
+        expectRowEnabled(name, true);
+      }
+      expectNoCallbacks(callbacks);
 
-      await user.click(row("Model B"));
-      expect(pillNames()).toEqual(["Model B", "Model A"]);
+      const atOpen = rectOf(ADD);
       setRect(ADD, new DOMRect(220, 704, 32, 32));
-      await expectAnchoredAt(ADD);
-
-      await user.click(row("Model B"));
-      expect(pillNames()).toEqual(["Model A"]);
-      setRect(ADD, new DOMRect(320, 704, 32, 32));
-      await expectAnchoredAt(ADD);
-
-      await user.click(row("Model B"));
-      await user.click(row("Model C"));
-      expect(pillNames()).toEqual(["Model C", "Model B", "Model A"]);
-      expect(addButton()).toBeNull();
-      await expectAnchoredAt(ROW);
-
-      await clickPillX(user, "Model C");
-      expect(pillNames()).toEqual(["Model B", "Model A"]);
-      expectList();
-      await expectAnchoredAt(ADD);
+      await expectStillAt(atOpen);
     });
 
-    test("a pill opens its pane on that pill, and the pane follows the pill when it moves", async () => {
+    test("a pill opens its switch list on the pill and the rect stays when the pill moves", async () => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
       await openFromPill(user, "Model B");
-      expectPane("Model B");
+      expectList();
       await expectAnchoredAt("Model B");
 
+      const atOpen = rectOf("Model B");
       setRect("Model B", new DOMRect(760, 704, 90, 32));
-      await expectAnchoredAt("Model B");
-
-      await user.click(pill("Model A"));
-      expectPane("Model A");
-      await expectAnchoredAt("Model A");
+      await expectStillAt(atOpen);
     });
 
-    test("settings on a selected row moves the menu to that pill, back returns it to +", async () => {
+    test("the third add closes the menu and the fading content holds +'s rect after + is gone", async () => {
       const user = setupUser();
-      renderPicker(["Model A", "Model B"]);
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B"], callbacks);
 
       await openFromAdd(user);
       await expectAnchoredAt(ADD);
+      const atOpen = rectOf(ADD);
+      const content = holdExitAnimation();
 
-      await user.click(settingsButton("Model B"));
-      expectPane("Model B");
+      await user.click(row("Model C"));
+
+      expect(callbacks.onAdd).toHaveBeenCalledWith(selected("Model C"));
+      expect(addButton()).toBeNull();
+      expect(content).toHaveAttribute("data-state", "closed");
+      await expectStillAt(atOpen);
+    });
+
+    test("a replace closes and the fading content holds the pill's rect after the pill remounted", async () => {
+      const user = setupUser();
+      renderPicker(["Model A", "Model B", "Model C"]);
+
+      await openFromPill(user, "Model B");
       await expectAnchoredAt("Model B");
+      const atOpen = rectOf("Model B");
+      const content = holdExitAnimation();
 
-      await clickBack(user);
-      expectList();
-      await expectAnchoredAt(ADD);
-    });
+      await user.click(row("Model D"));
 
-    test("the pane of an unselected model sits on +", async () => {
-      const user = setupUser();
-      renderPicker(["Model A"]);
-
-      await openFromAdd(user);
-      await user.click(settingsButton("Model C"));
-      expectPane("Model C");
-      await expectAnchoredAt(ADD);
-    });
-
-    // At max the unselected rows, settings included, are disabled, so the flag
-    // is the reachable way to hide + with an unselected pane available.
-    test("with multi-model off the list and an unselected model's pane sit on the row", async () => {
-      mockSettings = { ...DEFAULT_SETTINGS, multi_model_chat_enabled: false };
-      const user = setupUser();
-      renderPicker(["Model A"]);
-
-      await openFromPill(user, "Model A");
-      expectPane("Model A");
-      await expectAnchoredAt("Model A");
-
-      await clickBack(user);
-      expectList();
-      await expectAnchoredAt(ROW);
-
-      await user.click(settingsButton("Model C"));
-      expectPane("Model C");
-      await expectAnchoredAt(ROW);
+      expect(pillNames()).toEqual(["Model A", "Model D", "Model C"]);
+      expect(content).toHaveAttribute("data-state", "closed");
+      await expectStillAt(atOpen);
     });
 
     test("a pill keeps its node from one model to two and back", async () => {
@@ -531,390 +536,325 @@ describe("MultiModelSelector", () => {
 
       await openFromAdd(user);
       await user.click(row("Model B"));
+      expect(pillNames()).toEqual(["Model B", "Model A"]);
       expect(pill("Model A")).toBe(pillA);
 
-      await user.click(row("Model B"));
+      await clickPillX(user, "Model B");
       expect(pillNames()).toEqual(["Model A"]);
       expect(pill("Model A")).toBe(pillA);
     });
   });
 
   // -------------------------------------------------------------------------
-  // Row clicks toggle with the menu open
+  // Add list
   // -------------------------------------------------------------------------
 
-  describe("row toggle", () => {
-    test("adds an unselected row once, keeps the menu open and the search text", async () => {
+  describe("add list", () => {
+    test("adds once and closes", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A"], callbacks);
 
       await openFromAdd(user);
-      await typeSearch(user, "Model");
-      const wrapper = openPopper();
-
       await user.click(row("Model C"));
 
       expect(callbacks.onAdd).toHaveBeenCalledTimes(1);
       expect(callbacks.onAdd).toHaveBeenCalledWith(selected("Model C"));
+      expect(callbacks.onRemove).not.toHaveBeenCalled();
+      expect(callbacks.onReplace).not.toHaveBeenCalled();
       expect(pillNames()).toEqual(["Model C", "Model A"]);
-      expect(popperWrapper()).toBe(wrapper);
-      expect(searchInput()).toHaveValue("Model");
+      await expectClosed();
     });
 
-    // The default group follows the first group holding a selected model;
-    // it must not re-apply while the menu is open.
-    test.each([
-      {
-        action: "add",
-        initial: ["Model E"],
-        // Provider Two starts expanded; the user also opens Provider.
-        expand: "Provider",
-        click: "Model A",
-        // In the group open from the start.
-        stillShown: "Model F",
-      },
-      {
-        action: "remove",
-        initial: ["Model A", "Model E"],
-        // Provider starts expanded; the user also opens Provider Two.
-        expand: "Provider Two",
-        click: "Model A",
-        // In the group the user expanded.
-        stillShown: "Model F",
-      },
-    ])(
-      "keeps a group the user expanded when a row $action changes the first selected group",
-      async ({ initial, expand, click, stillShown }) => {
-        const user = setupUser();
-        renderPicker(initial);
-
-        await openFromAdd(user);
-        const hidden = expand === "Provider" ? click : stillShown;
-        expect(queryRow(hidden)).toBeNull();
-        await user.click(groupHeader(expand));
-        expect(queryRow(click)).not.toBeNull();
-        expect(queryRow(stillShown)).not.toBeNull();
-
-        await user.click(row(click));
-
-        expect(popperWrapper()).not.toBeNull();
-        expect(queryRow(click)).not.toBeNull();
-        expect(queryRow(stillShown)).not.toBeNull();
-      }
-    );
-
-    test("adds the third model with the menu open, hides + and disables every unselected row", async () => {
+    test("a selected row removes by index and closes", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
 
       await openFromAdd(user);
-      const wrapper = openPopper();
-      await user.click(row("Model C"));
-
-      expect(callbacks.onAdd).toHaveBeenCalledWith(selected("Model C"));
-      expect(popperWrapper()).toBe(wrapper);
-      expect(addButton()).toBeNull();
-      expect(rowFieldset("Model D")).toBeDisabled();
-      for (const name of ["Model A", "Model B", "Model C"]) {
-        expectRowSelected(name, true);
-        expect(rowFieldset(name)).not.toBeDisabled();
-      }
-    });
-
-    test("removes a selected row with the menu open, calls onRemove with its index, keeps the search text", async () => {
-      const user = setupUser();
-      const callbacks = makeCallbacks();
-      renderPicker(["Model A", "Model B", "Model C"], callbacks);
-
-      // At max there is no +, so the list is reached from a pill's pane.
-      await openFromPill(user, "Model A");
-      expectPane("Model A");
-      await clickBack(user);
-      await typeSearch(user, "Model");
-      const wrapper = openPopper();
-
       await user.click(row("Model B"));
 
+      expect(callbacks.onRemove).toHaveBeenCalledTimes(1);
       expect(callbacks.onRemove).toHaveBeenCalledWith(1);
-      expect(pillNames()).toEqual(["Model A", "Model C"]);
-      expect(popperWrapper()).toBe(wrapper);
-      expect(searchInput()).toHaveValue("Model");
-      expectRowSelected("Model B", false);
-      expect(rowFieldset("Model B")).not.toBeDisabled();
+      expect(callbacks.onAdd).not.toHaveBeenCalled();
+      expect(pillNames()).toEqual(["Model A"]);
+      await expectClosed();
     });
 
-    test("ignores a click on the sole selected row and keeps its settings button enabled", async () => {
+    test("the sole selected row is a no-op with its settings enabled", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A"], callbacks);
 
       await openFromAdd(user);
+      const wrapper = openPopper();
       await user.click(row("Model A"));
 
       expectNoCallbacks(callbacks);
-      expect(pillNames()).toEqual(["Model A"]);
+      expect(popperWrapper()).toBe(wrapper);
       expectRowSelected("Model A", true);
-      expect(rowFieldset("Model A")).not.toBeDisabled();
+      expectRowEnabled("Model A", true);
 
       await user.click(settingsButton("Model A"));
       expectPane("Model A");
     });
 
-    test("removing down to one keeps the menu open, drops the x and restores +", async () => {
+    test("settings opens the pane without selecting, back keeps the search and groups", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
-      renderPicker(["Model A", "Model B"], callbacks);
+      renderPicker(["Model A"], callbacks);
 
       await openFromAdd(user);
+      await user.click(groupHeader("Provider Two"));
+      await user.click(settingsButton("Model E"));
+
+      expectPane("Model E");
+      expectNoCallbacks(callbacks);
+      expect(pillNames()).toEqual(["Model A"]);
+      await expectAnchoredAt(ADD);
+
+      await clickBack(user);
+      expectList();
+      expect(queryRow("Model F")).not.toBeNull();
+
+      await typeSearch(user, "Model");
+      await user.click(settingsButton("Model A"));
+
+      expectPane("Model A");
+      expectNoCallbacks(callbacks);
+      expect(pillNames()).toEqual(["Model A"]);
+      await expectAnchoredAt(ADD);
+
+      await clickBack(user);
+      expect(searchInput()).toHaveValue("Model");
+    });
+
+    // The default group follows the first group holding a selected model; it
+    // must not re-apply while the closing content fades out.
+    test("the fading content keeps an expanded group", async () => {
+      const user = setupUser();
+      renderPicker(["Model E"]);
+
+      await openFromAdd(user);
+      expect(queryRow("Model A")).toBeNull();
+      await user.click(groupHeader("Provider"));
+      const content = holdExitAnimation();
+
       await user.click(row("Model A"));
 
-      expect(callbacks.onRemove).toHaveBeenCalledWith(0);
-      expect(pillNames()).toEqual(["Model B"]);
-      expect(pillX(pill("Model B"))).toBeNull();
-      expect(addButton()).not.toBeNull();
-      expect(popperWrapper()).not.toBeNull();
-      await expectAnchoredAt(ADD);
+      expect(pillNames()).toEqual(["Model A", "Model E"]);
+      expect(content).toHaveAttribute("data-state", "closed");
+      expect(queryRow("Model A")).not.toBeNull();
+      expect(queryRow("Model F")).not.toBeNull();
+    });
+
+    test("a second click while closing is ignored", async () => {
+      const user = setupUser();
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A"], callbacks);
+
+      await openFromAdd(user);
+      const content = holdExitAnimation();
+      await user.click(row("Model C"));
+      expect(content).toHaveAttribute("data-state", "closed");
+
+      await user.click(row("Model C"));
+
+      expect(callbacks.onAdd).toHaveBeenCalledTimes(1);
+      expect(callbacks.onRemove).not.toHaveBeenCalled();
+      expect(pillNames()).toEqual(["Model C", "Model A"]);
     });
   });
 
   // -------------------------------------------------------------------------
-  // Pill x
+  // Switch list
   // -------------------------------------------------------------------------
 
-  describe("pill x", () => {
-    test.each([
-      {
-        view: "list",
-        initial: ["Model A", "Model B"],
-        remove: "Model B",
-        removedIndex: 1,
-      },
-      {
-        view: "pane",
-        initial: ["Model A", "Model B", "Model C"],
-        remove: "Model B",
-        removedIndex: 1,
-      },
-    ])(
-      "pill x removes with the menu open in the $view and the menu in place",
-      async ({ view, initial, remove, removedIndex }) => {
-        const user = setupUser();
-        const callbacks = makeCallbacks();
-        renderPicker(initial, callbacks);
-
-        if (view === "list") {
-          await openFromAdd(user);
-        } else {
-          await openFromPill(user, "Model A");
-          expectPane("Model A");
-        }
-        const wrapper = openPopper();
-
-        await clickPillX(user, remove);
-
-        expect(callbacks.onRemove).toHaveBeenCalledWith(removedIndex);
-        expect(pillNames()).not.toContain(remove);
-        expect(popperWrapper()).toBe(wrapper);
-        if (view === "list") {
-          expectList();
-          await expectAnchoredAt(ADD);
-        } else {
-          expectPane("Model A");
-          await expectAnchoredAt("Model A");
-        }
-      }
-    );
-
-    test("x on the pane's own model removes it and closes the menu", async () => {
+  describe("switch list", () => {
+    test("checks the pill's model, disables the other selected rows, enables the rest, no callbacks", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B", "Model C"], callbacks);
 
       await openFromPill(user, "Model B");
-      expectPane("Model B");
 
-      await clickPillX(user, "Model B");
-
-      expect(callbacks.onRemove).toHaveBeenCalledWith(1);
-      expect(pillNames()).toEqual(["Model A", "Model C"]);
-      await waitFor(() => expect(popperWrapper()).toBeNull());
+      expectList();
+      expectRowSelected("Model B", true);
+      expectRowEnabled("Model B", true);
+      for (const name of ["Model A", "Model C"]) {
+        expectRowSelected(name, false);
+        expectRowEnabled(name, false);
+        expect(settingsButton(name)).toBeDisabled();
+      }
+      expectRowSelected("Model D", false);
+      expectRowEnabled("Model D", true);
+      expectNoCallbacks(callbacks);
     });
 
-    test("the closing pane holds its removed pill's place through the exit animation", async () => {
+    test("a pick replaces by index and closes", async () => {
       const user = setupUser();
-      renderPicker(["Model A", "Model B", "Model C"]);
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B", "Model C"], callbacks);
 
       await openFromPill(user, "Model B");
-      expectPane("Model B");
-      await expectAnchoredAt("Model B");
-      const content = openPopper().firstElementChild;
-      if (!(content instanceof HTMLElement))
-        throw new Error("no popover content");
-      // Presence keeps the content mounted until animationend, which jsdom never fires.
-      content.style.animationName = "exit";
-      const last = rectOf("Model B");
+      await user.click(row("Model D"));
 
-      await clickPillX(user, "Model B");
-
-      expect(pillNames()).toEqual(["Model A", "Model C"]);
-      expect(content).toHaveAttribute("data-state", "closed");
-      // act flushes the re-measure; a waitFor would also pass on a stale transform.
-      await act(async () => {
-        fireEvent(window, new Event("resize"));
-      });
-      expect(popperXY()).toEqual({ x: last.right, y: last.top - SIDE_OFFSET });
+      expect(callbacks.onReplace).toHaveBeenCalledTimes(1);
+      expect(callbacks.onReplace).toHaveBeenCalledWith(1, selected("Model D"));
+      expect(callbacks.onAdd).not.toHaveBeenCalled();
+      expect(callbacks.onRemove).not.toHaveBeenCalled();
+      expect(pillNames()).toEqual(["Model A", "Model D", "Model C"]);
+      await expectClosed();
     });
 
-    test("a reopened menu drops the removed pill's place: its settings sit on +", async () => {
-      const user = setupUser();
-      renderPicker(["Model A", "Model B", "Model C"]);
-
-      await openFromPill(user, "Model B");
-      await expectAnchoredAt("Model B");
-      await clickPillX(user, "Model B");
-      await waitFor(() => expect(popperWrapper()).toBeNull());
-
-      await openFromAdd(user);
-      await user.click(settingsButton("Model B"));
-
-      expectPane("Model B");
-      await expectAnchoredAt(ADD);
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // Panes
-  // -------------------------------------------------------------------------
-
-  describe("panes", () => {
-    test("pill click opens that model's pane with no add, remove or replace; back shows every selected model checked", async () => {
+    test("own row closes with no callback", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
 
       await openFromPill(user, "Model B");
+      await user.click(row("Model B"));
 
-      expectPane("Model B");
       expectNoCallbacks(callbacks);
       expect(pillNames()).toEqual(["Model A", "Model B"]);
-
-      await clickBack(user);
-      expectList();
-      expectRowSelected("Model A", true);
-      expectRowSelected("Model B", true);
-      for (const name of ["Model C", "Model D"]) {
-        expectRowSelected(name, false);
-        expect(rowFieldset(name)).not.toBeDisabled();
-      }
+      await expectClosed();
     });
 
-    test("settings button opens the pane without selecting, on an unselected and a selected row", async () => {
+    test("settings opens the pane, back returns to the same switch list", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
-      renderPicker(["Model A"], callbacks);
+      renderPicker(["Model A", "Model B", "Model C"], callbacks);
 
-      await openFromAdd(user);
-      await user.click(settingsButton("Model C"));
+      await openFromPill(user, "Model B");
+      await expectAnchoredAt("Model B");
 
-      expectPane("Model C");
+      await user.click(settingsButton("Model D"));
+      expectPane("Model D");
       expectNoCallbacks(callbacks);
-      expect(pillNames()).toEqual(["Model A"]);
-
-      await clickBack(user);
-      await user.click(settingsButton("Model A"));
-
-      expectPane("Model A");
-      expectNoCallbacks(callbacks);
-      expect(pillNames()).toEqual(["Model A"]);
-    });
-
-    test("pill clicks while open switch panes, a repeat reopens the pane, + returns to the list", async () => {
-      const user = setupUser();
-      renderPicker(["Model A", "Model B"]);
-
-      await openFromAdd(user);
-      const wrapper = openPopper();
-
-      await user.click(pill("Model B"));
-      expect(popperWrapper()).toBe(wrapper);
-      expectPane("Model B");
-
-      await user.click(pill("Model A"));
-      expect(popperWrapper()).toBe(wrapper);
-      expectPane("Model A");
+      await expectAnchoredAt("Model B");
 
       await clickBack(user);
       expectList();
-      await user.click(pill("Model A"));
-      expect(popperWrapper()).toBe(wrapper);
-      expectPane("Model A");
+      expectRowSelected("Model B", true);
+      expectRowEnabled("Model A", false);
+      expectRowEnabled("Model C", false);
 
-      await openFromAdd(user);
-      expect(popperWrapper()).toBe(wrapper);
-      expectList();
-    });
-
-    test("a pill click while a pane is open shows that model's own settings, not the last pane's", async () => {
-      const user = setupUser();
-      renderPicker(["Model A", "Model B"]);
-
-      await openFromPill(user, "Model A");
-      expectPane("Model A");
-      // Unset parks at medium (2). End raises A to its top stop, high (3).
-      expect(paneReasoningStop()).toBe("2");
-      const slider = within(openPopper()).getByRole("slider");
-      act(() => slider.focus());
-      await user.keyboard("{End}");
-      expect(paneReasoningStop()).toBe("3");
-
-      // B supports low and medium only, so A's high must not carry over.
-      await user.click(pill("Model B"));
+      await user.click(settingsButton("Model B"));
       expectPane("Model B");
-      expect(paneReasoningStop()).toBe("2");
+      expectNoCallbacks(callbacks);
+      expect(pillNames()).toEqual(["Model A", "Model B", "Model C"]);
     });
   });
 
   // -------------------------------------------------------------------------
-  // Closing
+  // Closing and switching menus
   // -------------------------------------------------------------------------
 
-  describe("closing", () => {
+  describe("closing and switching", () => {
     test.each([
+      { how: "Escape", dismiss: (user: User) => user.keyboard("{Escape}") },
       {
-        how: "Escape",
-        dismiss: (user: User) => user.keyboard("{Escape}"),
-      },
-      {
-        how: "an outside pointerdown",
+        how: "an outside click",
         dismiss: (user: User) => user.click(document.body),
       },
     ])("$how closes the menu", async ({ dismiss }) => {
       const user = setupUser();
-      renderPicker(["Model A", "Model B"]);
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B"], callbacks);
 
       await openFromAdd(user);
       await dismiss(user);
+      await expectClosed();
 
-      await waitFor(() => expect(popperWrapper()).toBeNull());
+      await openFromPill(user, "Model A");
+      await dismiss(user);
+      await expectClosed();
+      expectNoCallbacks(callbacks);
     });
 
-    test("stays open on + click, pill click and pill x", async () => {
+    test.each([
+      { view: "add list", opener: ADD, pane: null, remove: "Model B" },
+      { view: "switch list", opener: "Model B", pane: null, remove: "Model A" },
+      {
+        view: "own switch list",
+        opener: "Model B",
+        pane: null,
+        remove: "Model B",
+      },
+      { view: "pane", opener: ADD, pane: "Model A", remove: "Model B" },
+      {
+        view: "own pane",
+        opener: "Model B",
+        pane: "Model B",
+        remove: "Model B",
+      },
+    ])(
+      "x closes from the $view and the content holds its rect",
+      async ({ opener, pane, remove }) => {
+        const user = setupUser();
+        const callbacks = makeCallbacks();
+        const initial = ["Model A", "Model B"];
+        renderPicker(initial, callbacks);
+
+        if (opener === ADD) await openFromAdd(user);
+        else await openFromPill(user, opener);
+        await expectAnchoredAt(opener);
+        if (pane) {
+          await user.click(settingsButton(pane));
+          expectPane(pane);
+        }
+        const atOpen = rectOf(opener);
+        const content = holdExitAnimation();
+
+        await clickPillX(user, remove);
+
+        expect(callbacks.onRemove).toHaveBeenCalledTimes(1);
+        expect(callbacks.onRemove).toHaveBeenCalledWith(initial.indexOf(remove));
+        expect(pillNames()).not.toContain(remove);
+        expect(content).toHaveAttribute("data-state", "closed");
+        await expectStillAt(atOpen);
+      }
+    );
+
+    test("x with the menu closed only removes", async () => {
+      const user = setupUser();
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B"], callbacks);
+
+      await clickPillX(user, "Model B");
+
+      expect(callbacks.onRemove).toHaveBeenCalledTimes(1);
+      expect(callbacks.onRemove).toHaveBeenCalledWith(1);
+      expect(callbacks.onAdd).not.toHaveBeenCalled();
+      expect(callbacks.onReplace).not.toHaveBeenCalled();
+      expect(pillNames()).toEqual(["Model A"]);
+      expect(popperWrapper()).toBeNull();
+    });
+
+    test("+ then pill then + switches menus with a fresh rect each time", async () => {
       const user = setupUser();
       renderPicker(["Model A", "Model B"]);
 
       await openFromAdd(user);
-      const wrapper = openPopper();
+      await expectAnchoredAt(ADD);
 
+      await openFromPill(user, "Model B");
+      expectRowSelected("Model B", true);
+      expectRowSelected("Model A", false);
+      expectRowEnabled("Model A", false);
+      await expectAnchoredAt("Model B");
+
+      await openFromPill(user, "Model A");
+      expectRowSelected("Model A", true);
+      expectRowEnabled("Model B", false);
+      await expectAnchoredAt("Model A");
+
+      setRect(ADD, new DOMRect(220, 704, 32, 32));
       await openFromAdd(user);
-      expect(popperWrapper()).toBe(wrapper);
-
-      await user.click(pill("Model A"));
-      expect(popperWrapper()).toBe(wrapper);
-
-      await clickPillX(user, "Model B");
-      expect(popperWrapper()).toBe(wrapper);
+      expectRowSelected("Model A", true);
+      expectRowSelected("Model B", true);
+      expectRowEnabled("Model B", true);
+      await expectAnchoredAt(ADD);
     });
   });
 
@@ -923,7 +863,7 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("flags", () => {
-    test("multi-model off: unselected rows are enabled, a click replaces the sole model with the menu open, the selected row is a no-op, no x and no +", async () => {
+    test("multi-model off: no +, no x, pick replaces index 0 and closes", async () => {
       mockSettings = { ...DEFAULT_SETTINGS, multi_model_chat_enabled: false };
       const user = setupUser();
       const callbacks = makeCallbacks();
@@ -933,45 +873,68 @@ describe("MultiModelSelector", () => {
       expect(pillX(pill("Model A"))).toBeNull();
 
       await openFromPill(user, "Model A");
-      expectPane("Model A");
-      await clickBack(user);
-      const wrapper = openPopper();
+      expectList();
+      await expectAnchoredAt("Model A");
+      expectRowSelected("Model A", true);
+      expectRowEnabled("Model C", true);
 
-      expect(rowFieldset("Model C")).not.toBeDisabled();
       await user.click(row("Model C"));
 
+      expect(callbacks.onReplace).toHaveBeenCalledTimes(1);
       expect(callbacks.onReplace).toHaveBeenCalledWith(0, selected("Model C"));
       expect(callbacks.onAdd).not.toHaveBeenCalled();
       expect(pillNames()).toEqual(["Model C"]);
       expect(pillX(pill("Model C"))).toBeNull();
-      expect(addButton()).toBeNull();
-      expect(popperWrapper()).toBe(wrapper);
+      await expectClosed();
 
       callbacks.onReplace.mockClear();
+      await openFromPill(user, "Model C");
       await user.click(row("Model C"));
       expectNoCallbacks(callbacks);
-      expect(pillNames()).toEqual(["Model C"]);
+      await expectClosed();
     });
 
-    test("reasoning override off: pill click opens the list with no settings buttons, and rows toggle", async () => {
+    test("multi-model off with two restored models disables the other selected row", async () => {
+      mockSettings = { ...DEFAULT_SETTINGS, multi_model_chat_enabled: false };
+      const user = setupUser();
+      const callbacks = makeCallbacks();
+      renderPicker(["Model A", "Model B"], callbacks);
+
+      expect(addButton()).toBeNull();
+
+      await openFromPill(user, "Model B");
+      expectRowSelected("Model B", true);
+      expectRowEnabled("Model A", false);
+      expectRowEnabled("Model D", true);
+
+      await user.click(row("Model D"));
+
+      expect(callbacks.onReplace).toHaveBeenCalledWith(1, selected("Model D"));
+      expect(pillNames()).toEqual(["Model A", "Model D"]);
+      await expectClosed();
+    });
+
+    test("reasoning off: no settings buttons, lists unchanged", async () => {
       mockSettings = { ...DEFAULT_SETTINGS, reasoning_override_enabled: false };
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
 
       await openFromPill(user, "Model A");
-
       expectList();
-      expect(
-        within(openPopper()).queryByRole("button", {
-          name: /^modelSettingsButton\.ariaLabel/,
-        })
-      ).toBeNull();
+      expect(querySettingsButtons()).toEqual([]);
+      expectRowEnabled("Model B", false);
 
       await user.click(row("Model C"));
-      expect(callbacks.onAdd).toHaveBeenCalledWith(selected("Model C"));
-      expect(callbacks.onReplace).not.toHaveBeenCalled();
-      expect(pillNames()).toEqual(["Model C", "Model A", "Model B"]);
+      expect(callbacks.onReplace).toHaveBeenCalledWith(0, selected("Model C"));
+      await expectClosed();
+
+      await openFromAdd(user);
+      expect(querySettingsButtons()).toEqual([]);
+      await user.click(row("Model D"));
+      expect(callbacks.onAdd).toHaveBeenCalledWith(selected("Model D"));
+      expect(pillNames()).toEqual(["Model D", "Model C", "Model B"]);
+      await expectClosed();
     });
   });
 
@@ -980,32 +943,36 @@ describe("MultiModelSelector", () => {
   // -------------------------------------------------------------------------
 
   describe("keyboard", () => {
-    test("Enter on a focused row toggles it, Enter on a focused pill opens its pane without removing", async () => {
+    test("Enter on +, a pill and a row", async () => {
       const user = setupUser();
       const callbacks = makeCallbacks();
       renderPicker(["Model A", "Model B"], callbacks);
 
-      await openFromAdd(user);
-      const wrapper = openPopper();
+      const add = addButton();
+      if (!add) throw new Error("add button is hidden");
+      act(() => add.focus());
+      await user.keyboard("{Enter}");
+      expectList();
+      await expectAnchoredAt(ADD);
 
-      row("Model C").focus();
+      act(() => row("Model C").focus());
       await user.keyboard("{Enter}");
       expect(callbacks.onAdd).toHaveBeenCalledWith(selected("Model C"));
       expect(pillNames()).toEqual(["Model C", "Model A", "Model B"]);
-      expect(popperWrapper()).toBe(wrapper);
+      await expectClosed();
 
-      row("Model A").focus();
-      await user.keyboard("{Enter}");
-      expect(callbacks.onRemove).toHaveBeenCalledWith(1);
-      expect(pillNames()).toEqual(["Model C", "Model B"]);
-
-      callbacks.onRemove.mockClear();
-      pill("Model B").focus();
+      act(() => pill("Model B").focus());
       await user.keyboard("{Enter}");
       expect(callbacks.onRemove).not.toHaveBeenCalled();
-      expect(pillNames()).toEqual(["Model C", "Model B"]);
-      expect(popperWrapper()).toBe(wrapper);
-      expectPane("Model B");
+      expectList();
+      expectRowSelected("Model B", true);
+      await expectAnchoredAt("Model B");
+
+      act(() => row("Model D").focus());
+      await user.keyboard("{Enter}");
+      expect(callbacks.onReplace).toHaveBeenCalledWith(2, selected("Model D"));
+      expect(pillNames()).toEqual(["Model C", "Model A", "Model D"]);
+      await expectClosed();
     });
   });
 });
