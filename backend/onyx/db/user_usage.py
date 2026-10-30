@@ -19,7 +19,13 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import UsageActorKind
 from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
-from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
+from onyx.db.models import (
+    USAGE_MODEL_CONFIGURATION_KEY,
+    TokenRateLimit,
+    User,
+    User__UserGroup,
+    UserUsage,
+)
 from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -40,7 +46,15 @@ _invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] 
 )
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
-_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
+_CONFLICT_COLS = [
+    "user_id",
+    "window_start",
+    "model",
+    "flow",
+    "provider",
+    "incognito",
+    USAGE_MODEL_CONFIGURATION_KEY,
+]
 _USER_ACTOR_INDEX_PREDICATE = text("actor_kind = 'USER'")
 
 
@@ -207,6 +221,7 @@ def record_user_usage(
         flow=usage.flow,
         provider=provider,
         incognito=incognito,
+        model_configuration_id=usage.model_configuration_id,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         cache_read_tokens=usage.cache_read_tokens,

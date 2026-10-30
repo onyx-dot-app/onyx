@@ -203,6 +203,7 @@ class TestRecordUserUsage:
                 model="claude-3",
                 flow="CHAT",
                 provider="anthropic",
+                model_configuration_id=None,
                 input_tokens=100,
                 output_tokens=50,
                 cache_read_tokens=10,
@@ -234,6 +235,7 @@ class TestRecordUserUsage:
                 model="model-a",
                 flow="CHAT",
                 provider=None,
+                model_configuration_id=None,
                 input_tokens=10,
                 output_tokens=5,
                 cache_read_tokens=0,
@@ -259,6 +261,7 @@ class TestRecordUserUsage:
                 model="model-a",
                 flow="CHAT",
                 provider="openai",
+                model_configuration_id=None,
                 input_tokens=10,
                 output_tokens=5,
                 cache_read_tokens=0,
@@ -283,6 +286,9 @@ class TestRecordUserUsage:
         with engine.begin() as conn:
             conn.exec_driver_sql(
                 'CREATE TABLE "user" (id CHAR(36) PRIMARY KEY, email VARCHAR)'
+            )
+            conn.exec_driver_sql(
+                "CREATE TABLE model_configuration (id INTEGER PRIMARY KEY)"
             )
         cast(Table, UserUsage.__table__).create(bind=engine)
         SessionLocal = sessionmaker(bind=engine)

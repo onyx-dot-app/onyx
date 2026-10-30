@@ -96,6 +96,7 @@ def _record_cost(db_session: Session, user: User, cost_cents: float) -> None:
             model=_TEST_MODEL,
             flow=LLMFlow.CHAT_RESPONSE.value,
             provider=None,
+            model_configuration_id=None,
             input_tokens=1,
             output_tokens=1,
             cache_read_tokens=0,

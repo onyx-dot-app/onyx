@@ -12,6 +12,7 @@ class LLMUsageRecord(BaseModel):
     model: str
     flow: str
     provider: str | None
+    model_configuration_id: int | None
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int

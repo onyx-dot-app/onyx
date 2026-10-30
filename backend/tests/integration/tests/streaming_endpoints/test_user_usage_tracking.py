@@ -1,7 +1,8 @@
 """End-to-end: a real streamed chat message must flow through the whole
 per-user usage seam — generation span -> tracing processor registration ->
 background drain thread -> user_usage rollup -> readable back through
-GET /user/usage, attributed to the calling user.
+GET /user/usage, attributed to the calling user and keyed by the model
+configuration the turn ran.
 
 Every other test for this feature mocks that seam (sqlite / MagicMock /
 monkeypatched record_user_usage). This one exercises the wiring that unit tests
@@ -11,6 +12,10 @@ thread lands a row in Postgres for the right user.
 
 import time
 
+from sqlalchemy import select
+
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import UserUsage
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -38,8 +43,19 @@ def _usage_token_total(user: DATestUser) -> int:
     )
 
 
+def _recorded_model_configuration_ids(user: DATestUser) -> set[int | None]:
+    with get_session_with_current_tenant() as db_session:
+        return set(
+            db_session.scalars(
+                select(UserUsage.model_configuration_id).where(
+                    UserUsage.user_id == user.id
+                )
+            )
+        )
+
+
 def test_streamed_chat_records_per_user_usage(admin_user: DATestUser) -> None:
-    LLMProviderManager.create(user_performing_action=admin_user)
+    provider = LLMProviderManager.create(user_performing_action=admin_user)
 
     baseline_tokens = _usage_token_total(admin_user)
 
@@ -64,4 +80,7 @@ def test_streamed_chat_records_per_user_usage(admin_user: DATestUser) -> None:
         "expected the caller's windowed token usage to increase after a streamed "
         f"chat message (baseline={baseline_tokens}, latest={latest_tokens}); the "
         "usage recorder never landed a row"
+    )
+    assert _recorded_model_configuration_ids(admin_user) == set(
+        provider.model_configuration_ids
     )
