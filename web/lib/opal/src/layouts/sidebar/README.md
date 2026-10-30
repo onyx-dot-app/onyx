@@ -20,6 +20,9 @@ The following must be defined by the consuming app:
 | `--sidebar-width-folded`   | `4rem`  | Width when the sidebar is collapsed |
 | `--sidebar-width-expanded` | `15rem` | Width when the sidebar is open      |
 
+Every part of a fold takes the shared `--duration-sidebar-fold` token: the
+column width, the mobile overlay and backdrop, and each `SidebarTab` label.
+
 ## Components
 
 ### `SidebarLayouts.Root`

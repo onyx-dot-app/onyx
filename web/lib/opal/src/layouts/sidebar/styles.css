@@ -25,7 +25,7 @@
 .opal-sidebar-root__column {
   @apply h-full min-h-0 flex flex-col bg-background-tint-02 pb-2 shrink-0;
   width: var(--sidebar-width-expanded);
-  transition: width 200ms ease-in-out;
+  transition: width var(--duration-sidebar-fold) ease-in-out;
 }
 .opal-sidebar-root__column[data-folded="true"] {
   width: var(--sidebar-width-folded);
@@ -39,7 +39,7 @@
 .opal-sidebar-root__overlay {
   @apply flex flex-col bg-background-tint-02 pb-2;
   width: var(--sidebar-width-expanded);
-  transition: width 200ms ease-in-out;
+  transition: width var(--duration-sidebar-fold) ease-in-out;
 }
 .opal-sidebar-root__overlay[data-folded="true"] {
   width: var(--sidebar-width-folded);
@@ -47,7 +47,8 @@
 
 /* Mobile: full-height overlay that slides in/out */
 .opal-sidebar-root__overlay[data-variant="mobile"] {
-  @apply fixed inset-y-0 start-0 z-50 transition-transform duration-200;
+  @apply fixed inset-y-0 start-0 z-50 transition-transform;
+  transition-duration: var(--duration-sidebar-fold);
 }
 .opal-sidebar-root__overlay[data-variant="mobile"][data-folded="true"] {
   /* rtl: the overlay anchors at the inline start, so it hides the other way */
@@ -70,7 +71,8 @@
 
 /* Shared backdrop */
 .opal-sidebar-root__backdrop {
-  @apply fixed inset-0 z-40 backdrop-blur-03 transition-opacity duration-200;
+  @apply fixed inset-0 z-40 backdrop-blur-03 transition-opacity;
+  transition-duration: var(--duration-sidebar-fold);
 }
 .opal-sidebar-root__backdrop[data-variant="mobile"] {
   @apply bg-mask-03;
@@ -151,6 +153,9 @@
    Thin themed scrollbar keeps position/drag affordance without the default bar. */
 .opal-sidebar-body__scroll {
   @apply flex-1 min-h-0 flex flex-col;
+  /* Never scrolls sideways: while the column widens, content that cannot
+     shrink yet (e.g. a section header with its action) overflows briefly. */
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--border-02) transparent;
 }

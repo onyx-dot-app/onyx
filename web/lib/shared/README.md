@@ -37,8 +37,8 @@ When extending it:
 ## Tokens
 
 This package is the **single source of truth for Onyx's design tokens** (colors,
-spacing, radius, padding, weights, backdrop-blur, and typography metrics + font
-families + presets). Opal consumes them via `@import "@onyx-ai/shared/tokens.css"` and
+spacing, radius, padding, weights, backdrop-blur, motion durations, and typography
+metrics + font families + presets). Opal consumes them via `@import "@onyx-ai/shared/tokens.css"` and
 defines no design-token values of its own; mobile consumes the NativeWind fragment +
 the `vars()` maps. (Web-app-only concerns — modal/sidebar/page widths, image heights
 in Opal's `sizes.css`, and overlay stacking values in `z-index.css` — remain in Opal;
