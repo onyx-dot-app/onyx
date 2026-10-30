@@ -8,7 +8,7 @@ PRESENTATION_MIME_TYPE = (
 SPREADSHEET_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-# Macro-enabled Excel workbooks (.xlsm) — parseable by openpyxl just like xlsx.
+# Macro-enabled Excel workbooks (.xlsm) — parseable by wolfxl just like xlsx.
 # Stored lowercase; chat MIME classification normalizes to lowercase before
 # membership checks.
 SPREADSHEET_MACRO_MIME_TYPE = "application/vnd.ms-excel.sheet.macroenabled.12"
