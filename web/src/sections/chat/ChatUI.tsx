@@ -24,12 +24,13 @@ import {
 import { cn } from "@opal/utils";
 
 /** Width constraint for normal (non-multi-model) messages. */
-// Reading-width cap only applies at md and up — below that the window is too
-// narrow for it to matter, so chat is always full width (and the top-bar
-// toggle is hidden).
-const MSG_MAX_W = "md:max-w-chat-message";
-// Full width keeps a max-width (100%), so the switch animates instead of jumping.
-const MSG_FULL_W = "md:max-w-full";
+// The chat column's width comes from the page (`--app-chat-column-width`, set
+// by AppPage for its compact and full-width modes). A page that does not set
+// it gets the compact reading width. The cap only applies at md and up — below
+// that the window is too narrow for it to matter, so chat is always full width
+// (and the top-bar toggle is hidden).
+const MSG_W =
+  "md:max-w-[var(--app-chat-column-width,var(--width-chat-message-max))]";
 
 /** Animates the full-width toggle; every surface it widens uses this. */
 export const FULL_WIDTH_TRANSITION =
@@ -71,7 +72,11 @@ export interface ChatUIProps {
   /** Currently selected models for multi-model comparison. */
   selectedModels?: SelectedModel[];
 
-  /** When on, messages drop the reading-width cap and fill the window. */
+  /**
+   * When on, the chat is in full-width mode: messages use its padding layout.
+   * Their width comes from the page's `--app-chat-column-width`, not from
+   * this prop.
+   */
   fullWidthChat?: boolean;
 }
 
@@ -100,11 +105,8 @@ const ChatUI = React.memo(
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
 
-    // Reading-width cap on messages; full-width mode widens it to 100%.
-    const msgWidth = cn(
-      fullWidthChat ? MSG_FULL_W : MSG_MAX_W,
-      FULL_WIDTH_TRANSITION
-    );
+    // Reading-width cap on messages, from the page's chat column width.
+    const msgWidth = cn(MSG_W, FULL_WIDTH_TRANSITION);
 
     // Lookup: model identifier → provider slug (for icon resolution).
     const modelProviderLookup = useMemo(
