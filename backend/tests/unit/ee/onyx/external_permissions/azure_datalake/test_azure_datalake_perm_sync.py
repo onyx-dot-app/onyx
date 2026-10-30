@@ -164,7 +164,16 @@ def test_account_key_fails_the_app_registration_check() -> None:
     check = _checks()["adls_perm_sync_app_registration"]
 
     with pytest.raises(ConnectorValidationError, match="app registration"):
-        check.run(_context(fake_ops({}), {"authentication_method": "account_key"}))
+        check.run(
+            _context(
+                fake_ops({}),
+                {
+                    "authentication_method": "account_key",
+                    "adls_account_name": ACCOUNT,
+                    "adls_account_key": "key",
+                },
+            )
+        )
 
 
 def test_conditioned_role_assignment_is_an_advisory() -> None:

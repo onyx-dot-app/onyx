@@ -28,7 +28,6 @@ from tests.unit.ee.onyx.external_permissions.azure_datalake.azure_datalake_fakes
     ACCOUNT,
     ACCOUNT_ID,
     ADMIN,
-    APP,
     DATA_OWNER_ROLE,
     DATA_READER_ROLE,
     GROUP_B,
@@ -88,8 +87,8 @@ def _readers(
 def test_readers_skip_service_principals_and_control_plane_roles() -> None:
     readers = _readers()
 
+    # The app is a service principal, so it is not a reader.
     assert readers.principals == frozenset({user_term(OWNER), group_term(RBAC_GROUP)})
-    assert readers.skipped_principal_ids == [APP]
 
 
 def test_conditioned_assignments_are_reported_not_granted() -> None:

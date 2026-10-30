@@ -4,7 +4,7 @@ class, and the exclusion groups the cc-pair's stored access names. Group ids
 are bare: the source prefix is added when the groups are stored."""
 
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 from ee.onyx.db.external_perm import (
     ExternalUserGroup,
@@ -24,6 +24,7 @@ from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
     exclusion_group_members,
     parse_exclusion_group_id,
 )
+from ee.onyx.external_permissions.azure_datalake.principals import user_emails
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
 from onyx.configs.constants import DocumentSource
@@ -39,13 +40,17 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _emails(directory: GraphDirectory, user_ids: frozenset[str]) -> list[str]:
-    return sorted(
-        {
-            email
-            for user_id in user_ids
-            if (email := directory.user_email(user_id)) is not None
-        }
+def _group(
+    group_id: str, directory: GraphDirectory, members: Callable[[], frozenset[str]]
+) -> ExternalUserGroup:
+    try:
+        member_ids: frozenset[str] = members()
+    except GroupMembersUnreadableError as e:
+        # Unreadable members: sync the group empty so it grants nothing.
+        logger.warning("%s", e)
+        member_ids = frozenset()
+    return ExternalUserGroup(
+        id=group_id, user_emails=sorted(user_emails(directory, member_ids))
     )
 
 
@@ -69,13 +74,11 @@ def _exclusion_groups(
         if term is None:
             logger.warning("Azure Data Lake exclusion group %s is unknown", group_id)
             continue
-        try:
-            members: frozenset[str] = exclusion_group_members(term, directory)
-        except GroupMembersUnreadableError as e:
-            # Synced empty, the group grants nothing.
-            logger.warning("%s", e)
-            members = frozenset()
-        yield ExternalUserGroup(id=group_id, user_emails=_emails(directory, members))
+        yield _group(
+            group_id,
+            directory,
+            lambda term=term: exclusion_group_members(term, directory),
+        )
 
 
 def tenant_groups(
@@ -90,20 +93,18 @@ def tenant_groups(
     _check_deadline(deadline)
     yield ExternalUserGroup(
         id=everyone_group_id(ops),
-        user_emails=_emails(directory, directory.all_users()),
+        user_emails=sorted(user_emails(directory, directory.all_users())),
     )
     for group in iter_entra_items(
         lambda next_link: ops.list_groups(next_link=next_link),
         "Entra group listing",
     ):
         _check_deadline(deadline)
-        try:
-            members: frozenset[str] = directory.group_members(group.id)
-        except GroupMembersUnreadableError as e:
-            # Synced empty, the group grants nothing.
-            logger.warning("%s", e)
-            members = frozenset()
-        yield ExternalUserGroup(id=group.id, user_emails=_emails(directory, members))
+        yield _group(
+            group.id,
+            directory,
+            lambda group_id=group.id: directory.group_members(group_id),
+        )
 
 
 def azure_datalake_group_sync(

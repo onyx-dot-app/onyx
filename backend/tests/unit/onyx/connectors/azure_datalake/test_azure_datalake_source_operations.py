@@ -199,7 +199,14 @@ def test_role_assignments_follow_next_link_and_read_properties() -> None:
             ],
             "nextLink": "https://management.azure.com/next",
         },
-        {"value": [{"id": "a2", "properties": {"principalId": "group"}}]},
+        {
+            "value": [
+                {
+                    "id": "a2",
+                    "properties": {"principalId": "group", "roleDefinitionId": "/role"},
+                }
+            ]
+        },
     ]
 
     with (

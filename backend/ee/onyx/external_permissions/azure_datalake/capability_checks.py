@@ -11,7 +11,7 @@ from ee.onyx.external_permissions.azure_datalake.directory import user_email
 from ee.onyx.external_permissions.azure_datalake.rbac import (
     container_scope,
     find_storage_account,
-    role_reads_blobs,
+    reading_assignments,
 )
 from onyx.connectors.azure_datalake.capability_checks import (
     ACCOUNT_LABELS,
@@ -20,14 +20,13 @@ from onyx.connectors.azure_datalake.capability_checks import (
     DOCS_LINK,
     gateway_from_context,
     probe,
+    probe_listing_pages,
 )
 from onyx.connectors.azure_datalake.config import AzureDataLakeConnectorConfig
 from onyx.connectors.azure_datalake.models import (
     AzureDataLakeAuthMethod,
     AzureDataLakeCredentials,
     AzureDataLakePath,
-    AzureRoleAssignment,
-    AzureRoleDefinition,
     AzureStorageAccountResource,
 )
 from onyx.connectors.azure_datalake.source_operations import (
@@ -66,8 +65,6 @@ GRAPH_USERS_CHECK_ID = "adls_graph_users"
 GRAPH_GROUP_MEMBERS_CHECK_ID = "adls_graph_group_members"
 
 _PROBE_PAGE_SIZE = 10
-_FILE_PROBE_PAGE_SIZE = 100
-_FILE_PROBE_MAX_PAGES = 5
 _ARM_REMEDIATION = (
     "Give the app registration the Reader role on the storage account, so it "
     "can read the account's role and deny assignments."
@@ -92,20 +89,10 @@ def _account_probe(action: Callable[[], T], failed: str) -> T:
 def _first_file(
     gateway: AzureDataLakeSourceOperations, path_prefix: str
 ) -> AzureDataLakePath | None:
-    continuation_token: str | None = None
-    for _ in range(_FILE_PROBE_MAX_PAGES):
-        page = gateway.list_paths_page(
-            path_prefix=path_prefix,
-            recursive=True,
-            page_size=_FILE_PROBE_PAGE_SIZE,
-            continuation_token=continuation_token,
-        )
+    for page in probe_listing_pages(gateway, path_prefix):
         for path in page.paths:
             if not path.is_directory:
                 return path
-        continuation_token = page.continuation_token
-        if continuation_token is None:
-            return None
     return None
 
 
@@ -262,19 +249,9 @@ class _RoleAssignmentsCheck(_PermSyncCheck):
 
         def read_assignments() -> list[str]:
             """The ids of conditioned assignments of a reading role."""
-            assignments: list[AzureRoleAssignment] = gateway.list_role_assignments(
-                scope=scope
-            )
-            definitions: dict[str, AzureRoleDefinition] = {}
-            conditioned: list[str] = []
-            for assignment in assignments:
-                key: str = assignment.role_definition_id.lower()
-                if key not in definitions:
-                    definitions[key] = gateway.get_role_definition(
-                        role_definition_id=assignment.role_definition_id
-                    )
-                if assignment.condition and role_reads_blobs(definitions[key]):
-                    conditioned.append(assignment.id)
+            conditioned: list[str] = reading_assignments(
+                gateway, scope
+            ).conditioned_assignment_ids
             gateway.list_deny_assignments(scope=scope)
             return conditioned
 

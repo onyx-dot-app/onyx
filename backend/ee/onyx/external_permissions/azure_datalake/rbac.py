@@ -45,9 +45,18 @@ BLOB_READ_DATA_ACTION = (
 # A deny assignment's principal that stands for every principal.
 _ALL_PRINCIPALS_ID = "00000000-0000-0000-0000-000000000000"
 _MAX_SUBSCRIPTION_PAGES = 1_000
+_MAX_STORAGE_ACCOUNT_PAGES = 1_000
 # A deny principal without a type could be either, so it denies both.
 _USER_TYPES = (AzurePrincipalType.USER, None)
 _GROUP_TYPES = (AzurePrincipalType.GROUP, None)
+
+
+class ReadingAssignments(BaseModel):
+    # Assignments of a role that reads blobs, without a condition.
+    assignments: list[AzureRoleAssignment]
+    # Assignments of a reading role that carry a condition. Onyx cannot
+    # evaluate the condition, so they grant nothing.
+    conditioned_assignment_ids: list[str]
 
 
 class RbacReaders(BaseModel):
@@ -55,8 +64,6 @@ class RbacReaders(BaseModel):
     # Assignments of a reading role that carry a condition. They can hide real
     # access, so the checks report them.
     conditioned_assignment_ids: list[str]
-    # Readers that are not users or groups, e.g. service principals.
-    skipped_principal_ids: list[str]
     # Deny assignments that block blob reads under the scope. Already applied
     # to ``principals``; the ACL readers need them too.
     read_denies: list[AzureDenyAssignment]
@@ -89,6 +96,26 @@ def container_scope(account: AzureStorageAccountResource, container_name: str) -
     return f"{account.id}/blobServices/default/containers/{container_name}"
 
 
+def _find_in_subscription(
+    ops: AzureDataLakeSourceOperations, subscription_id: str, account_name: str
+) -> AzureStorageAccountResource | None:
+    account_link: str | None = None
+    for _ in range(_MAX_STORAGE_ACCOUNT_PAGES):
+        accounts = ops.list_storage_accounts(
+            subscription_id=subscription_id, next_link=account_link
+        )
+        for account in accounts.accounts:
+            if account.name.lower() == account_name.lower():
+                return account
+        account_link = accounts.next_link
+        if account_link is None:
+            return None
+    raise RuntimeError(
+        f"The storage accounts of subscription {subscription_id} passed "
+        f"{_MAX_STORAGE_ACCOUNT_PAGES} pages"
+    )
+
+
 def find_storage_account(
     ops: AzureDataLakeSourceOperations, account_name: str
 ) -> AzureStorageAccountResource:
@@ -97,25 +124,18 @@ def find_storage_account(
     for _ in range(_MAX_SUBSCRIPTION_PAGES):
         subscriptions = ops.list_subscriptions(next_link=subscription_link)
         for subscription in subscriptions.subscriptions:
-            account_link: str | None = None
-            for _ in range(_MAX_SUBSCRIPTION_PAGES):
-                accounts = ops.list_storage_accounts(
-                    subscription_id=subscription.subscription_id,
-                    next_link=account_link,
-                )
-                for account in accounts.accounts:
-                    if account.name.lower() == account_name.lower():
-                        return account
-                account_link = accounts.next_link
-                if account_link is None:
-                    break
+            if account := _find_in_subscription(
+                ops, subscription.subscription_id, account_name
+            ):
+                return account
         subscription_link = subscriptions.next_link
         if subscription_link is None:
-            break
-    raise ConnectorValidationError(
-        f"The app registration cannot see the storage account '{account_name}' in "
-        "Azure Resource Manager. Give it the Reader role on the storage account."
-    )
+            raise ConnectorValidationError(
+                f"The app registration cannot see the storage account "
+                f"'{account_name}' in Azure Resource Manager. Give it the Reader "
+                "role on the storage account."
+            )
+    raise RuntimeError(f"The subscriptions passed {_MAX_SUBSCRIPTION_PAGES} pages")
 
 
 def _principal_term(principal: AzurePrincipal) -> PrincipalTerm | None:
@@ -172,19 +192,14 @@ def apply_denies(
     return readers
 
 
-def rbac_readers(
-    ops: AzureDataLakeSourceOperations,
-    scope: str,
-    directory: EntraDirectory,
-) -> RbacReaders:
-    """The principals a role assignment lets read every file under ``scope``,
-    the container's ARM id."""
+def reading_assignments(
+    ops: AzureDataLakeSourceOperations, scope: str
+) -> ReadingAssignments:
+    """The role assignments at ``scope`` and above whose role reads blobs."""
     definitions: dict[str, AzureRoleDefinition] = {}
-    terms: list[PrincipalTerm] = []
+    reading: list[AzureRoleAssignment] = []
     conditioned: list[str] = []
-    skipped: list[str] = []
-    assignments: list[AzureRoleAssignment] = ops.list_role_assignments(scope=scope)
-    for assignment in assignments:
+    for assignment in ops.list_role_assignments(scope=scope):
         key: str = assignment.role_definition_id.lower()
         if key not in definitions:
             definitions[key] = ops.get_role_definition(
@@ -194,14 +209,34 @@ def rbac_readers(
             continue
         if assignment.condition:
             conditioned.append(assignment.id)
-            continue
-        term = _principal_term(
-            AzurePrincipal(id=assignment.principal_id, type=assignment.principal_type)
+        else:
+            reading.append(assignment)
+    return ReadingAssignments(
+        assignments=reading, conditioned_assignment_ids=conditioned
+    )
+
+
+def rbac_readers(
+    ops: AzureDataLakeSourceOperations,
+    scope: str,
+    directory: EntraDirectory,
+) -> RbacReaders:
+    """The principals a role assignment lets read every file under ``scope``,
+    the container's ARM id. Readers that are not users or groups, e.g.
+    service principals, are left out."""
+    assignments: ReadingAssignments = reading_assignments(ops, scope)
+    terms: list[PrincipalTerm] = [
+        term
+        for assignment in assignments.assignments
+        if (
+            term := _principal_term(
+                AzurePrincipal(
+                    id=assignment.principal_id, type=assignment.principal_type
+                )
+            )
         )
-        if term is None:
-            skipped.append(assignment.principal_id)
-            continue
-        terms.append(term)
+        is not None
+    ]
     read_denies: list[AzureDenyAssignment] = [
         deny
         for deny in ops.list_deny_assignments(scope=scope)
@@ -209,7 +244,6 @@ def rbac_readers(
     ]
     return RbacReaders(
         principals=apply_denies(simplify(terms), read_denies, directory),
-        conditioned_assignment_ids=conditioned,
-        skipped_principal_ids=skipped,
+        conditioned_assignment_ids=assignments.conditioned_assignment_ids,
         read_denies=read_denies,
     )

@@ -11,7 +11,11 @@ A term with exclusions becomes an exclusion group (``exclusion_groups``).
 import posixpath
 from collections.abc import Callable
 
-from ee.onyx.external_permissions.azure_datalake.acl import AclBit, granted_principals
+from ee.onyx.external_permissions.azure_datalake.acl import (
+    AclBit,
+    MalformedAclError,
+    granted_principals,
+)
 from ee.onyx.external_permissions.azure_datalake.directory import (
     GraphDirectory,
     GroupMembersUnreadableError,
@@ -57,10 +61,6 @@ logger = setup_logger()
 ROOT = ""
 
 
-def _parent(path: str) -> str:
-    return posixpath.dirname(path)
-
-
 def _on_path(directory: str, path_directory: str) -> bool:
     """Whether ``directory`` is ``path_directory`` or one above it."""
     return (
@@ -76,12 +76,10 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         ops: AzureDataLakeSourceOperations,
         account_name: str,
         container_name: str,
-        max_users: int = ExternalAccess.MAX_NUM_ENTRIES,
     ) -> None:
         self._ops = ops
         self._account_name = account_name
         self._container_name = container_name
-        self._max_users = max_users
         self._directory = GraphDirectory(ops)
         self._tenant_id: str | None = None
         self._everyone_group_id: str | None = None
@@ -149,13 +147,19 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
                 acl_readers(), rbac.read_denies, self._directory
             )
             resolved: ResolvedPrincipals = resolve(
-                union(rbac.principals, acl), self._directory, self._max_users
+                union(rbac.principals, acl),
+                self._directory,
+                ExternalAccess.MAX_NUM_ENTRIES,
             )
             group_ids: set[str] = resolved.group_ids | {
                 exclusion_group_id(term, self._tenant())
                 for term in resolved.exclusion_terms
             }
-        except (ExpansionLimitError, GroupMembersUnreadableError) as e:
+        except (
+            ExpansionLimitError,
+            GroupMembersUnreadableError,
+            MalformedAclError,
+        ) as e:
             logger.error("Azure Data Lake path %s stays private: %s", name, e)
             return ExternalAccess.empty()
         if resolved.everyone:
@@ -167,24 +171,21 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         )
         # The permission writer skips an oversized entry and keeps the old
         # access, which can be wider than the new one.
-        if access.num_entries > self._max_users:
+        if access.num_entries > ExternalAccess.MAX_NUM_ENTRIES:
             logger.error(
                 "Azure Data Lake path %s stays private: %s entries is over %s",
                 name,
                 access.num_entries,
-                self._max_users,
+                ExternalAccess.MAX_NUM_ENTRIES,
             )
             return ExternalAccess.empty()
         return access
-
-    def _read_acl(self, path: str, is_directory: bool) -> AzureDataLakeAccessControl:
-        return self._ops.get_access_control(path=path, is_directory=is_directory)
 
     def _read_acl_if_present(
         self, path: str, is_directory: bool
     ) -> AzureDataLakeAccessControl | None:
         try:
-            return self._read_acl(path, is_directory)
+            return self._ops.get_access_control(path=path, is_directory=is_directory)
         except AzureDataLakeNotFoundError:
             logger.info("Azure Data Lake path %s was deleted during the walk", path)
             return None
@@ -209,7 +210,9 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
             executors
             if directory == ROOT
             else intersect(
-                self._reach(_parent(directory), known), executors, self._directory
+                self._reach(posixpath.dirname(directory), known),
+                executors,
+                self._directory,
             )
         )
         self._traversal[directory] = reach
@@ -240,7 +243,9 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
             )
         if path == ROOT:
             return readers
-        return intersect(self._reach(_parent(path), known), readers, self._directory)
+        return intersect(
+            self._reach(posixpath.dirname(path), known), readers, self._directory
+        )
 
     def container_access(self) -> ExternalAccess:
         root_acl = self._read_acl_if_present(ROOT, True)
@@ -249,7 +254,7 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         )
 
     def directory_access(self, path: str) -> ExternalAccess:
-        self._leave_other_directories(_parent(path))
+        self._leave_other_directories(posixpath.dirname(path))
         acl = self._read_acl_if_present(path, True)
         return self._external_access(
             lambda: self._readers(path, True, acl, {path: acl}), path
@@ -272,7 +277,7 @@ class AzureDataLakeAccessResolver(AzureDataLakeAccessWalker):
         }
         access: dict[str, ExternalAccess] = {}
         for path, acl in zip(paths, acls, strict=True):
-            self._leave_other_directories(_parent(path.name))
+            self._leave_other_directories(posixpath.dirname(path.name))
             access[path.name] = self._external_access(
                 lambda path=path, acl=acl: self._readers(
                     path.name, path.is_directory, acl, known

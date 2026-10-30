@@ -9,7 +9,12 @@ import pytest
 from ee.onyx.external_permissions.azure_datalake.access import (
     AzureDataLakeAccessResolver,
 )
-from ee.onyx.external_permissions.azure_datalake.acl import AclBit, granted_principals
+from ee.onyx.external_permissions.azure_datalake.acl import (
+    AclBit,
+    MalformedAclError,
+    granted_principals,
+    parse_acl,
+)
 from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
     exclusion_group_id,
     parse_exclusion_group_id,
@@ -113,11 +118,8 @@ def _matrix() -> dict[str, AzureDataLakeAccessControl]:
 
 def _resolver(
     acls: dict[str, AzureDataLakeAccessControl],
-    max_users: int = ExternalAccess.MAX_NUM_ENTRIES,
 ) -> AzureDataLakeAccessResolver:
-    return AzureDataLakeAccessResolver(
-        fake_ops(acls), ACCOUNT, CONTAINER, max_users=max_users
-    )
+    return AzureDataLakeAccessResolver(fake_ops(acls), ACCOUNT, CONTAINER)
 
 
 def _walk(acls: dict[str, AzureDataLakeAccessControl]) -> dict[str, ExternalAccess]:
@@ -178,10 +180,11 @@ def test_other_minus_a_group_is_an_exclusion_group_of_the_tenant() -> None:
     assert synced[exclusion_group] == EXCLUSION_GROUP_EMAILS
 
 
-def test_users_over_the_cap_fail_closed() -> None:
+def test_users_over_the_cap_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     acls = _matrix()
     # The owner and Raunak.
-    resolver = _resolver(acls, max_users=1)
+    monkeypatch.setattr(ExternalAccess, "MAX_NUM_ENTRIES", 1)
+    resolver = _resolver(acls)
     name = "10-named-user/named-user.txt"
 
     result = resolver.page_access([directory("10-named-user"), file(name)])[name]
@@ -341,6 +344,30 @@ def test_permissions_string_without_acl() -> None:
     assert granted_principals(no_acl, AclBit.READ) == frozenset({user_term(OWNER)})
 
 
+@pytest.mark.parametrize(
+    "acl",
+    [
+        # A mask entry without its fields.
+        "user::rwx,group::r-x,mask,other::---",
+        # An entry type Onyx does not know.
+        f"user::rwx,principal:{RAUNAK}:r--,other::---",
+    ],
+)
+def test_an_unreadable_acl_entry_raises(acl: str) -> None:
+    with pytest.raises(MalformedAclError):
+        parse_acl(acl)
+
+
+def test_an_unreadable_acl_keeps_the_file_private() -> None:
+    acls = _matrix()
+    name = "10-named-user/named-user.txt"
+    acls[name] = access(f"user::rw-,user:{RAUNAK}:r--,mask,other::r--")
+
+    result = _resolver(acls).page_access([directory("10-named-user"), file(name)])[name]
+
+    assert result == ExternalAccess.empty()
+
+
 def test_group_shared_by_both_sides_stays_a_group() -> None:
     acls = _matrix()
     resolver = _resolver(acls)
@@ -417,7 +444,6 @@ def test_a_deny_assignment_also_overrides_acl_access() -> None:
         fake_ops(acls, denies=[deny]),
         ACCOUNT,
         CONTAINER,
-        max_users=ExternalAccess.MAX_NUM_ENTRIES,
     )
     paths = [
         directory(name) if not name.endswith(".txt") else file(name)
@@ -434,9 +460,7 @@ def test_a_deny_assignment_also_overrides_acl_access() -> None:
 def test_a_group_intersection_over_the_entry_limit_fails_closed() -> None:
     acls = _matrix()
     # Raunak is in both groups, so any shared member is over a limit of 0.
-    resolver = AzureDataLakeAccessResolver(
-        fake_ops(acls), ACCOUNT, CONTAINER, max_users=ExternalAccess.MAX_NUM_ENTRIES
-    )
+    resolver = AzureDataLakeAccessResolver(fake_ops(acls), ACCOUNT, CONTAINER)
     paths = [
         directory(name) if not name.endswith(".txt") else file(name)
         for name in sorted(acls)
@@ -449,8 +473,11 @@ def test_a_group_intersection_over_the_entry_limit_fails_closed() -> None:
     assert result == ExternalAccess.empty()
 
 
-def test_users_and_groups_over_the_entry_limit_fail_closed() -> None:
+def test_users_and_groups_over_the_entry_limit_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     acls = _matrix()
+    monkeypatch.setattr(ExternalAccess, "MAX_NUM_ENTRIES", 1)
     # The owner's email and the RBAC group: 2 entries, 1 user.
     paths = [
         directory(name) if not name.endswith(".txt") else file(name)
@@ -458,7 +485,7 @@ def test_users_and_groups_over_the_entry_limit_fail_closed() -> None:
         if name
     ]
 
-    result = _resolver(acls, max_users=1).page_access(paths)["00-private/private.txt"]
+    result = _resolver(acls).page_access(paths)["00-private/private.txt"]
 
     assert result == ExternalAccess.empty()
 
@@ -475,7 +502,6 @@ def test_a_deny_principal_without_a_type_denies_users_and_groups() -> None:
         fake_ops(acls, denies=[deny]),
         ACCOUNT,
         CONTAINER,
-        max_users=ExternalAccess.MAX_NUM_ENTRIES,
     )
     paths = [
         directory(name) if not name.endswith(".txt") else file(name)

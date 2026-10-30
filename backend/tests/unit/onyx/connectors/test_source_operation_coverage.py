@@ -369,7 +369,6 @@ def _configure_azure_datalake_spy(spy: MagicMock) -> None:
             principal_id="user",
             principal_type="User",
             role_definition_id="/providers/Microsoft.Authorization/roleDefinitions/r",
-            scope="/subscriptions/sub",
         )
     ]
     spy.get_role_definition.return_value = AzureRoleDefinition(id="r")

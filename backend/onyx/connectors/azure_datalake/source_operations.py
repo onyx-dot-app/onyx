@@ -29,7 +29,7 @@ from azure.storage.filedatalake import (
     FileSystemClient,
     PathProperties,
 )
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.azure_datalake.config import (
@@ -37,6 +37,7 @@ from onyx.connectors.azure_datalake.config import (
     AzureDataLakeCredentialBinding,
 )
 from onyx.connectors.azure_datalake.models import (
+    ArmModel,
     AzureDataLakeAccessControl,
     AzureDataLakeAuthMethod,
     AzureDataLakeContainerAccess,
@@ -45,13 +46,9 @@ from onyx.connectors.azure_datalake.models import (
     AzureDataLakePath,
     AzureDataLakePathPage,
     AzureDenyAssignment,
-    AzurePrincipal,
     AzureRoleAssignment,
     AzureRoleDefinition,
-    AzureRolePermission,
     AzureStorageAccountPage,
-    AzureStorageAccountResource,
-    AzureSubscription,
     AzureSubscriptionPage,
 )
 from onyx.connectors.capabilities import CredentialCapability
@@ -118,6 +115,7 @@ _NOT_FOUND_STATUS = 404
 _CONTAINER_NOT_FOUND_CODES = frozenset({"ContainerNotFound", "FilesystemNotFound"})
 
 T = TypeVar("T")
+ArmModelT = TypeVar("ArmModelT", bound=ArmModel)
 
 
 class AzureDataLakeRequestError(SourceApiError):
@@ -174,57 +172,24 @@ def _path(properties: PathProperties) -> AzureDataLakePath:
     )
 
 
-def _permissions(raw: list[dict[str, Any]] | None) -> list[AzureRolePermission]:
-    return [
-        AzureRolePermission(
-            actions=entry.get("actions") or [],
-            not_actions=entry.get("notActions") or [],
-            data_actions=entry.get("dataActions") or [],
-            not_data_actions=entry.get("notDataActions") or [],
-        )
-        for entry in raw or []
-    ]
+class _ArmListPage(ArmModel):
+    # Each item is parsed into the caller's model.
+    value: list[dict[str, Any]] = Field(default_factory=list)
+    next_link: str | None = None
 
 
-def _principals(raw: list[dict[str, Any]] | None) -> list[AzurePrincipal]:
-    return [
-        AzurePrincipal(id=str(entry.get("id") or ""), type=entry.get("type"))
-        for entry in raw or []
-    ]
-
-
-def _role_assignment(raw: dict[str, Any]) -> AzureRoleAssignment:
-    properties: dict[str, Any] = raw.get("properties") or {}
-    return AzureRoleAssignment(
-        id=str(raw.get("id") or ""),
-        principal_id=str(properties.get("principalId") or ""),
-        principal_type=str(properties.get("principalType") or ""),
-        role_definition_id=str(properties.get("roleDefinitionId") or ""),
-        scope=str(properties.get("scope") or ""),
-        condition=properties.get("condition") or None,
-    )
-
-
-def _deny_assignment(raw: dict[str, Any]) -> AzureDenyAssignment:
-    properties: dict[str, Any] = raw.get("properties") or {}
-    return AzureDenyAssignment(
-        id=str(raw.get("id") or ""),
-        scope=str(properties.get("scope") or ""),
-        permissions=_permissions(properties.get("permissions")),
-        principals=_principals(properties.get("principals")),
-        exclude_principals=_principals(properties.get("excludePrincipals")),
-        do_not_apply_to_child_scopes=bool(properties.get("doNotApplyToChildScopes")),
-    )
-
-
-def _storage_account(raw: dict[str, Any]) -> AzureStorageAccountResource:
-    properties: dict[str, Any] = raw.get("properties") or {}
-    return AzureStorageAccountResource(
-        id=str(raw.get("id") or ""),
-        name=str(raw.get("name") or ""),
-        allow_blob_public_access=properties.get("allowBlobPublicAccess"),
-        is_hns_enabled=properties.get("isHnsEnabled"),
-    )
+def _parse_arm(model: type[ArmModelT], data: Any, url: str, target: str) -> ArmModelT:
+    """``data`` as ``model``. A response without a field the model needs
+    raises, so missing data never reads as an empty value."""
+    try:
+        return model.model_validate(data)
+    except ValidationError as e:
+        raise AzureDataLakeRequestError(
+            f"Azure Resource Manager returned {target} in an unknown shape.",
+            status_code=None,
+            method="GET",
+            url=url,
+        ) from e
 
 
 class AzureDataLakeSourceOperations(SourceOperations):
@@ -354,16 +319,36 @@ class AzureDataLakeSourceOperations(SourceOperations):
     ) -> dict[str, Any]:
         return self._get_json(ARM_RESOURCE, url, params, target)
 
-    def _arm_list(self, url: str, params: dict[str, str], target: str) -> list[Any]:
+    def _arm_model(
+        self,
+        model: type[ArmModelT],
+        url: str,
+        params: dict[str, str] | None,
+        target: str,
+    ) -> ArmModelT:
+        """One ARM GET, parsed into ``model``. A response without a field
+        the model needs raises."""
+        return _parse_arm(model, self._arm_get(url, params, target), url, target)
+
+    def _arm_list(
+        self,
+        item_model: type[ArmModelT],
+        url: str,
+        params: dict[str, str],
+        target: str,
+    ) -> list[ArmModelT]:
         """Every item of an ARM collection, following ``nextLink``."""
-        items: list[Any] = []
+        items: list[ArmModelT] = []
         next_link: str | None = None
         for _ in range(_MAX_ARM_PAGES):
-            data = self._arm_get(
-                next_link or url, None if next_link else params, target
+            page_url: str = next_link or url
+            page: _ArmListPage = self._arm_model(
+                _ArmListPage, page_url, None if next_link else params, target
             )
-            items.extend(data.get("value") or [])
-            next_link = data.get("nextLink")
+            items.extend(
+                _parse_arm(item_model, raw, page_url, target) for raw in page.value
+            )
+            next_link = page.next_link
             if not next_link:
                 return items
         raise RuntimeError(f"{target} passed {_MAX_ARM_PAGES} pages")
@@ -578,20 +563,11 @@ class AzureDataLakeSourceOperations(SourceOperations):
         self, *, next_link: str | None = None
     ) -> AzureSubscriptionPage:
         """The subscriptions where the app holds a role."""
-        data = self._arm_get(
+        return self._arm_model(
+            AzureSubscriptionPage,
             next_link or f"{ARM_RESOURCE}/subscriptions",
             None if next_link else {"api-version": _SUBSCRIPTIONS_API_VERSION},
             "the Azure subscriptions",
-        )
-        return AzureSubscriptionPage(
-            subscriptions=[
-                AzureSubscription(
-                    subscription_id=str(raw.get("subscriptionId") or ""),
-                    display_name=raw.get("displayName"),
-                )
-                for raw in data.get("value") or []
-            ],
-            next_link=data.get("nextLink"),
         )
 
     @source_operation(
@@ -602,7 +578,8 @@ class AzureDataLakeSourceOperations(SourceOperations):
         self, *, subscription_id: str, next_link: str | None = None
     ) -> AzureStorageAccountPage:
         """The storage accounts of one subscription that the app can read."""
-        data = self._arm_get(
+        return self._arm_model(
+            AzureStorageAccountPage,
             next_link
             or (
                 f"{ARM_RESOURCE}/subscriptions/{quote(subscription_id)}"
@@ -611,10 +588,6 @@ class AzureDataLakeSourceOperations(SourceOperations):
             None if next_link else {"api-version": _STORAGE_API_VERSION},
             f"the storage accounts of subscription {subscription_id}",
         )
-        return AzureStorageAccountPage(
-            accounts=[_storage_account(raw) for raw in data.get("value") or []],
-            next_link=data.get("nextLink"),
-        )
 
     @source_operation(
         capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
@@ -622,17 +595,12 @@ class AzureDataLakeSourceOperations(SourceOperations):
     )
     def list_role_assignments(self, *, scope: str) -> list[AzureRoleAssignment]:
         """The role assignments at ``scope`` (an ARM resource id) and above."""
-        return [
-            _role_assignment(raw)
-            for raw in self._arm_list(
-                f"{ARM_RESOURCE}{scope}/providers/Microsoft.Authorization/roleAssignments",
-                {
-                    "api-version": _AUTHORIZATION_API_VERSION,
-                    "$filter": _AT_SCOPE_FILTER,
-                },
-                "the role assignments of the container",
-            )
-        ]
+        return self._arm_list(
+            AzureRoleAssignment,
+            f"{ARM_RESOURCE}{scope}/providers/Microsoft.Authorization/roleAssignments",
+            {"api-version": _AUTHORIZATION_API_VERSION, "$filter": _AT_SCOPE_FILTER},
+            "the role assignments of the container",
+        )
 
     @source_operation(
         capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
@@ -641,16 +609,11 @@ class AzureDataLakeSourceOperations(SourceOperations):
     def get_role_definition(self, *, role_definition_id: str) -> AzureRoleDefinition:
         """A role's actions and data actions. ``role_definition_id`` is the
         ARM id a role assignment names."""
-        data = self._arm_get(
+        return self._arm_model(
+            AzureRoleDefinition,
             f"{ARM_RESOURCE}{role_definition_id}",
             {"api-version": _AUTHORIZATION_API_VERSION},
             f"the role definition {role_definition_id}",
-        )
-        properties: dict[str, Any] = data.get("properties") or {}
-        return AzureRoleDefinition(
-            id=str(data.get("id") or role_definition_id),
-            role_name=properties.get("roleName"),
-            permissions=_permissions(properties.get("permissions")),
         )
 
     @source_operation(
@@ -659,17 +622,12 @@ class AzureDataLakeSourceOperations(SourceOperations):
     )
     def list_deny_assignments(self, *, scope: str) -> list[AzureDenyAssignment]:
         """The deny assignments at ``scope`` (an ARM resource id) and above."""
-        return [
-            _deny_assignment(raw)
-            for raw in self._arm_list(
-                f"{ARM_RESOURCE}{scope}/providers/Microsoft.Authorization/denyAssignments",
-                {
-                    "api-version": _AUTHORIZATION_API_VERSION,
-                    "$filter": _AT_SCOPE_FILTER,
-                },
-                "the deny assignments of the container",
-            )
-        ]
+        return self._arm_list(
+            AzureDenyAssignment,
+            f"{ARM_RESOURCE}{scope}/providers/Microsoft.Authorization/denyAssignments",
+            {"api-version": _AUTHORIZATION_API_VERSION, "$filter": _AT_SCOPE_FILTER},
+            "the deny assignments of the container",
+        )
 
     @source_operation(
         capabilities=(

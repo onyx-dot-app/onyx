@@ -8,7 +8,10 @@ from onyx.connectors.azure_datalake.source_operations import (
     AzureDataLakeNotFoundError,
     AzureDataLakeSourceOperations,
 )
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.microsoft_utils.entra import (
     EntraDirectoryObjectType,
     EntraUser,
@@ -27,7 +30,10 @@ def entra_tenant_id(ops: AzureDataLakeSourceOperations) -> str:
     credentials = AzureDataLakeCredentials.model_validate(
         ops.credentials_provider.get_credentials()
     )
-    return (credentials.adls_directory_id or "").strip().lower()
+    tenant_id: str = (credentials.adls_directory_id or "").strip().lower()
+    if not tenant_id:
+        raise CredentialInvalidError("The credential has no directory (tenant) ID.")
+    return tenant_id
 
 
 def everyone_group_id(ops: AzureDataLakeSourceOperations) -> str:

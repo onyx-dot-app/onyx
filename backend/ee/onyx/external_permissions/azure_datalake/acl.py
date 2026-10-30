@@ -39,6 +39,11 @@ class AclEntryType(str, Enum):
     OTHER = "other"
 
 
+class MalformedAclError(ValueError):
+    """An ACL entry Onyx cannot read. A lost ``mask`` or named-user entry
+    could widen access, so the path fails closed."""
+
+
 class AclEntry(BaseModel):
     entry_type: AclEntryType
     # The Entra object id. Empty for the owner, owning group, mask and other.
@@ -47,19 +52,20 @@ class AclEntry(BaseModel):
 
 
 def parse_acl(acl: str) -> list[AclEntry]:
-    """The access entries of an ACL string, without ``default:`` entries."""
+    """The access entries of an ACL string, without ``default:`` entries.
+    Raises ``MalformedAclError`` for any other entry it cannot read."""
     entries: list[AclEntry] = []
     for raw in acl.split(","):
         parts: list[str] = raw.strip().split(":")
-        if parts and parts[0] == _DEFAULT_SCOPE:
+        if parts[0] == _DEFAULT_SCOPE:
             continue
         if len(parts) != 3:
-            continue
+            raise MalformedAclError(f"Malformed ACL entry: '{raw}'")
         type_name, qualifier, permissions = parts
         try:
             entry_type = AclEntryType(type_name)
-        except ValueError:
-            continue
+        except ValueError as e:
+            raise MalformedAclError(f"Unknown ACL entry type: '{raw}'") from e
         entries.append(
             AclEntry(
                 entry_type=entry_type, qualifier=qualifier, permissions=permissions

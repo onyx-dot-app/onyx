@@ -121,7 +121,7 @@ def role(
 
 ROLES: dict[str, AzureRoleDefinition] = {
     READER_ROLE: AzureRoleDefinition(
-        id=READER_ROLE, permissions=[AzureRolePermission(actions=["*/read"])]
+        id=READER_ROLE, permissions=[AzureRolePermission()]
     ),
     DATA_READER_ROLE: role(
         DATA_READER_ROLE,
@@ -145,7 +145,6 @@ def assignment(
         principal_id=principal_id,
         principal_type=principal_type,
         role_definition_id=role_id,
-        scope=SCOPE,
         condition=condition,
     )
 

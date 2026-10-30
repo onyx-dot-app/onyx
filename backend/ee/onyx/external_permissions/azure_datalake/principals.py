@@ -266,6 +266,15 @@ def intersect(
     )
 
 
+def user_emails(directory: EntraDirectory, user_ids: Iterable[str]) -> set[str]:
+    """The emails of the users the directory knows."""
+    return {
+        email
+        for user_id in user_ids
+        if (email := directory.user_email(user_id)) is not None
+    }
+
+
 def resolve(
     principals: PrincipalSet, directory: EntraDirectory, max_users: int
 ) -> ResolvedPrincipals:
@@ -287,11 +296,7 @@ def resolve(
     if len(user_ids) > max_users:
         raise ExpansionLimitError(f"Exact access needs more than {max_users} users.")
     return ResolvedPrincipals(
-        user_emails={
-            email
-            for user_id in user_ids
-            if (email := directory.user_email(user_id)) is not None
-        },
+        user_emails=user_emails(directory, user_ids),
         group_ids=group_ids,
         everyone=everyone,
         exclusion_terms=exclusion_terms,
