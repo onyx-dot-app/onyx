@@ -198,6 +198,9 @@ def pair(db_session: Session) -> Generator[ConnectorCredentialPair, None, None]:
     try:
         yield cc_pair
     finally:
+        # A failed test leaves the session unusable, and the deletes below
+        # would then raise and mask it.
+        db_session.rollback()
         db_session.query(IndexAttempt).filter_by(
             connector_credential_pair_id=cc_pair.id
         ).delete()
