@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "AWS 存储桶"
         },
+        "azureDatalake": {
+          "description": "Azure Data Lake Storage 容器中的文件"
+        },
         "r2": {
           "description": "云存储桶"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "配置 Azure Data Lake Storage 连接器",
+          "fields": {
+            "account_name": {
+              "label": "存储帐户名称",
+              "description": "存储帐户的名称，例如 contosodata。该帐户必须启用分层命名空间。"
+            },
+            "container_name": {
+              "label": "容器名称",
+              "description": "要编制索引的容器（文件系统）。"
+            },
+            "path_prefix": {
+              "label": "路径前缀",
+              "description": "容器中的目录，例如 reports/2026。留空则为整个容器编制索引。"
+            }
+          }
+        },
         "r2": {
           "description": "配置 R2 连接器",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "{source} 集成令牌",
         "accessKey": "{source} 访问密钥",
         "accessKeySecret": "{source} 访问密钥 Secret",
+        "storageAccountName": "存储帐户名称",
+        "accountKey": "{source} 帐户密钥",
         "key": "{source} 密钥",
         "secret": "{source} Secret",
         "roleArn": "{source} 角色 ARN",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "Jira Cloud 必填。",
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "youtrackToken": "可读取所有待索引项目的 YouTrack 用户的永久令牌。请在 YouTrack 个人资料的“账户安全”中创建。",
+        "azureDatalakeAccountKey": "在 Azure 门户中打开存储帐户,然后打开“安全性 + 网络”,再打开“访问密钥”。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "证书身份验证",
           "certificate": "证书",
           "accessKeyAndSecret": "访问密钥和 Secret",
+          "accountKey": "帐户密钥",
           "iamRole": "IAM 角色",
           "assumeRole": "代入角色",
           "serviceAccount": "服务账号",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。“包含附件”需要此选项，该功能会从 SharePoint 读取频道文件及其读者。",
           "outlookClientSecret": "连接器使用应用注册的客户端密钥登录。请提供客户端 ID、目录 ID 和密钥。",
           "outlookCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。",
+          "azureDatalakeClientSecret": "连接器使用应用注册的客户端密码登录。请提供客户端 ID、目录 ID 和密码。请在容器上为应用分配 Storage Blob Data Reader 角色。",
+          "azureDatalakeCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件及其密码。请在容器上为应用分配 Storage Blob Data Reader 角色。",
+          "azureDatalakeAccountKey": "连接器使用存储帐户的密钥为每个请求签名。请提供帐户名称及其一个访问密钥。",
           "s3AssumeRole": "选择此模式后，Amazon EC2 实例将代入其现有角色来访问 S3。无需其他凭据。"
         }
       },

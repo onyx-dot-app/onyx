@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "Buckets de almacenamiento de AWS"
         },
+        "azureDatalake": {
+          "description": "Archivos en contenedores de Azure Data Lake Storage"
+        },
         "r2": {
           "description": "Buckets de almacenamiento en la nube"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Configurar el conector de Azure Data Lake Storage",
+          "fields": {
+            "account_name": {
+              "label": "Nombre de la Cuenta de Almacenamiento",
+              "description": "El nombre de la cuenta de almacenamiento, p. ej. contosodata. La cuenta debe tener un espacio de nombres jerárquico."
+            },
+            "container_name": {
+              "label": "Nombre del Contenedor",
+              "description": "El contenedor (sistema de archivos) que se indexará."
+            },
+            "path_prefix": {
+              "label": "Prefijo de Ruta",
+              "description": "Un directorio del contenedor, p. ej. reports/2026. Déjelo vacío para indexar todo el contenedor."
+            }
+          }
+        },
         "r2": {
           "description": "Configurar conector de R2",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "Token de integración de {source}",
         "accessKey": "Clave de acceso de {source}",
         "accessKeySecret": "Secreto de la clave de acceso de {source}",
+        "storageAccountName": "Nombre de la Cuenta de Almacenamiento",
+        "accountKey": "Clave de Cuenta de {source}",
         "key": "Clave de {source}",
         "secret": "Secreto de {source}",
         "roleArn": "ARN del rol de {source}",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "Obligatorio para Jira Cloud.",
         "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
         "youtrackToken": "Un token permanente de un usuario de YouTrack que puede leer todos los proyectos que se indexarán. Créelo en su perfil de YouTrack, en Seguridad de la cuenta.",
+        "azureDatalakeAccountKey": "En Azure Portal, abra la cuenta de almacenamiento, luego Seguridad y redes, luego Claves de acceso.",
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
         "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",
         "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io.",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "Autenticación con certificado",
           "certificate": "Certificado",
           "accessKeyAndSecret": "Clave de acceso y secreto",
+          "accountKey": "Clave de Cuenta",
           "iamRole": "Rol de IAM",
           "assumeRole": "Asumir rol",
           "serviceAccount": "Cuenta de servicio",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "El conector inicia sesión con un certificado cargado en el registro de la aplicación. Proporciona el ID de cliente, el ID de directorio, el paquete PFX y su contraseña. Es obligatorio para Incluir archivos adjuntos, que lee los archivos de los canales y sus lectores desde SharePoint.",
           "outlookClientSecret": "El conector inicia sesión con un secreto de cliente del registro de la aplicación. Proporciona el ID de cliente, el ID de directorio y el secreto.",
           "outlookCertificate": "El conector inicia sesión con un certificado cargado en el registro de la aplicación. Proporciona el ID de cliente, el ID de directorio, el paquete PFX y su contraseña.",
+          "azureDatalakeClientSecret": "El conector inicia sesión con un secreto de cliente del registro de la aplicación. Proporcione el ID de cliente, el ID de directorio y el secreto. Asigne a la aplicación el rol Storage Blob Data Reader en el contenedor.",
+          "azureDatalakeCertificate": "El conector inicia sesión con un certificado cargado en el registro de la aplicación. Proporcione el ID de cliente, el ID de directorio, el paquete PFX y su contraseña. Asigne a la aplicación el rol Storage Blob Data Reader en el contenedor.",
+          "azureDatalakeAccountKey": "El conector firma cada solicitud con una clave de la cuenta de almacenamiento. Proporcione el nombre de la cuenta y una de sus claves de acceso.",
           "s3AssumeRole": "Si seleccionas este modo, la instancia de Amazon EC2 asumirá su rol existente para acceder a S3. No se necesitan más credenciales."
         }
       },

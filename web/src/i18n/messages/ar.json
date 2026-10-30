@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "حاويات تخزين AWS"
         },
+        "azureDatalake": {
+          "description": "ملفات في حاويات Azure Data Lake Storage"
+        },
         "r2": {
           "description": "حاويات التخزين السحابي"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "تكوين موصل Azure Data Lake Storage",
+          "fields": {
+            "account_name": {
+              "label": "اسم حساب التخزين",
+              "description": "اسم حساب التخزين، مثل contosodata. يجب أن يحتوي الحساب على مساحة أسماء هرمية."
+            },
+            "container_name": {
+              "label": "اسم الحاوية",
+              "description": "الحاوية (نظام الملفات) المراد فهرستها."
+            },
+            "path_prefix": {
+              "label": "بادئة المسار",
+              "description": "دليل في الحاوية، مثل reports/2026. اتركه فارغًا لفهرسة الحاوية بأكملها."
+            }
+          }
+        },
         "r2": {
           "description": "تهيئة موصل R2",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "رمز تكامل {source}",
         "accessKey": "مفتاح الوصول إلى {source}",
         "accessKeySecret": "سر مفتاح الوصول إلى {source}",
+        "storageAccountName": "اسم حساب التخزين",
+        "accountKey": "مفتاح حساب {source}",
         "key": "مفتاح {source}",
         "secret": "سر {source}",
         "roleArn": "ARN لدور {source}",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "مطلوب لـ Jira Cloud.",
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "youtrackToken": "رمز دائم لمستخدم YouTrack يمكنه قراءة كل المشاريع المراد فهرستها. أنشئه في ملفك الشخصي في YouTrack ضمن أمان الحساب.",
+        "azureDatalakeAccountKey": "في مدخل Azure، افتح حساب التخزين، ثم الأمان + الشبكات، ثم مفاتيح الوصول.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "المصادقة بالشهادة",
           "certificate": "الشهادة",
           "accessKeyAndSecret": "مفتاح الوصول والسر",
+          "accountKey": "مفتاح الحساب",
           "iamRole": "دور IAM",
           "assumeRole": "تولّي الدور",
           "serviceAccount": "حساب الخدمة",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها. مطلوب لخيار تضمين المرفقات، الذي يقرأ ملفات القنوات وقرّاءها من SharePoint.",
           "outlookClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل الخاص بتسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل والسر.",
           "outlookCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها.",
+          "azureDatalakeClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل لتسجيل التطبيق. أدخل معرّف العميل ومعرّف الدليل والسر. امنح التطبيق دور Storage Blob Data Reader على الحاوية.",
+          "azureDatalakeCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. أدخل معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها. امنح التطبيق دور Storage Blob Data Reader على الحاوية.",
+          "azureDatalakeAccountKey": "يوقّع الموصل كل طلب بمفتاح حساب التخزين. أدخل اسم الحساب وأحد مفاتيح الوصول الخاصة به.",
           "s3AssumeRole": "إذا اخترت هذا الوضع، فسيتولّى مثيل Amazon EC2 دوره الحالي للوصول إلى S3. لا حاجة إلى بيانات اعتماد إضافية."
         }
       },

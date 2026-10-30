@@ -1445,6 +1445,9 @@
         "s3": {
           "description": "AWS-Storage-Buckets"
         },
+        "azureDatalake": {
+          "description": "Dateien in Azure Data Lake Storage-Containern"
+        },
         "r2": {
           "description": "Cloud-Storage-Buckets"
         },
@@ -4593,6 +4596,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Azure Data Lake Storage-Connector konfigurieren",
+          "fields": {
+            "account_name": {
+              "label": "Name des Speicherkontos",
+              "description": "Der Name des Speicherkontos, z. B. contosodata. Das Konto muss einen hierarchischen Namespace haben."
+            },
+            "container_name": {
+              "label": "Containername",
+              "description": "Der Container (Dateisystem), der indiziert wird."
+            },
+            "path_prefix": {
+              "label": "Pfadpräfix",
+              "description": "Ein Verzeichnis im Container, z. B. reports/2026. Leer lassen, um den ganzen Container zu indizieren."
+            }
+          }
+        },
         "r2": {
           "description": "R2-Konnektor konfigurieren",
           "fields": {
@@ -5195,6 +5215,8 @@
         "integrationToken": "{source}-Integrationstoken",
         "accessKey": "{source}-Zugriffsschlüssel",
         "accessKeySecret": "{source}-Zugriffsschlüssel-Geheimnis",
+        "storageAccountName": "Name des Speicherkontos",
+        "accountKey": "{source}-Kontoschlüssel",
         "key": "{source}-Schlüssel",
         "secret": "{source}-Geheimnis",
         "roleArn": "{source}-Rollen-ARN",
@@ -5216,6 +5238,7 @@
         "jiraUserEmail": "Erforderlich für Jira Cloud.",
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indexiert wird.",
         "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
+        "azureDatalakeAccountKey": "Öffnen Sie im Azure-Portal das Speicherkonto, dann Sicherheit + Netzwerkbetrieb, dann Zugriffsschlüssel.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder Ihre selbst gehostete URL.",
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
@@ -5228,6 +5251,7 @@
           "certificateAuthentication": "Zertifikatsauthentifizierung",
           "certificate": "Zertifikat",
           "accessKeyAndSecret": "Zugriffsschlüssel und Secret",
+          "accountKey": "Kontoschlüssel",
           "iamRole": "IAM-Rolle",
           "assumeRole": "Rolle übernehmen",
           "serviceAccount": "Dienstkonto",
@@ -5240,6 +5264,9 @@
           "teamsCertificate": "Der Konnektor meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an. Erforderlich für „Anhänge einbeziehen“, das Kanaldateien und ihre Leser aus SharePoint liest.",
           "outlookClientSecret": "Der Konnektor meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an.",
           "outlookCertificate": "Der Konnektor meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an.",
+          "azureDatalakeClientSecret": "Der Connector meldet sich mit einem geheimen Clientschlüssel der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und den Schlüssel an. Weisen Sie der App die Rolle Storage Blob Data Reader für den Container zu.",
+          "azureDatalakeCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, die PFX-Datei und ihr Kennwort an. Weisen Sie der App die Rolle Storage Blob Data Reader für den Container zu.",
+          "azureDatalakeAccountKey": "Der Connector signiert jede Anfrage mit einem Schlüssel des Speicherkontos. Geben Sie den Kontonamen und einen seiner Zugriffsschlüssel an.",
           "s3AssumeRole": "In diesem Modus übernimmt die Amazon-EC2-Instanz ihre vorhandene Rolle, um auf S3 zuzugreifen. Es sind keine weiteren Anmeldedaten erforderlich."
         }
       },
