@@ -226,8 +226,7 @@ section does not wait for a slow one; `usePinnedAgents` stays loading until the
 user's pins are in its list. Folded, the header keeps the unfolded button
 order. The header row is the logo mark and the wordmark from
 [[whitelabelling-and-theme]], and the fold button, which moves with the
-column's edge as the sidebar folds. Every part of a fold takes the shared
-`--duration-sidebar-fold` token.
+column's edge as the sidebar folds.
 
 ## Contracts and traps
 
