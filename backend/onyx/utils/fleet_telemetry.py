@@ -206,6 +206,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "docs_processed",
             "duration_ms",
             "error_count",
+            "error_code",
             "started_at",
             "ended_at",
             "entity_id",
