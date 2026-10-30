@@ -161,14 +161,16 @@ class AppPosition {
     // the history API, and no server round trip holds the switch back (the
     // sidebar, the URL and the loading view update at once). Leaving or
     // entering /app is a real navigation.
-    if (
-      typeof window !== "undefined" &&
-      window.location.pathname === "/app" &&
-      new URL(href, window.location.origin).pathname === "/app"
-    ) {
-      if (replace) window.history.replaceState(null, "", href);
-      else window.history.pushState(null, "", href);
-      return;
+    if (typeof window !== "undefined" && window.location.pathname === "/app") {
+      const target = new URL(href, window.location.origin);
+      if (target.pathname === "/app") {
+        // Already there: a second entry for the same URL would make Back
+        // look like it does nothing.
+        if (target.search === window.location.search) return;
+        if (replace) window.history.replaceState(null, "", href);
+        else window.history.pushState(null, "", href);
+        return;
+      }
     }
     if (replace) this.router.replace(href);
     else this.router.push(href);
