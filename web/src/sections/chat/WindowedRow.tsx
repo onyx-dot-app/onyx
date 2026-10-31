@@ -1,10 +1,19 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useOptionalScrollContainer } from "@/components/chat/ScrollContainerContext";
+import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 
 /** How far beyond the viewport, above and below, a row stays mounted. */
-const OVERSCAN_MARGIN = "200% 0px";
+const OVERSCAN_VIEWPORTS = 2;
+
+/**
+ * `rootMargin` of an observer on the chat scroll container: `OVERSCAN_VIEWPORTS`
+ * viewport heights above and below. In pixels, because browsers do not agree
+ * on what a percentage of the root is.
+ */
+export function overscanMargin(root: HTMLElement): string {
+  return `${root.clientHeight * OVERSCAN_VIEWPORTS}px 0px`;
+}
 
 /** Placeholder height of a row that has never been measured. */
 const ESTIMATED_ROW_HEIGHT_PX = 320;
@@ -24,7 +33,7 @@ export interface WindowedRowProps {
 
 /**
  * A row of a long scrolling list that mounts its content only while the row
- * is within `OVERSCAN_MARGIN` of the scroll container's viewport. Away from
+ * is within `OVERSCAN_VIEWPORTS` viewport heights of the scroll container's viewport. Away from
  * it, the row is an empty placeholder at its last measured height.
  *
  * When a row above the viewport changes height (a placeholder mounts, or
@@ -47,6 +56,7 @@ export default function WindowedRow({
   const scrollContainerRef = scrollContainer?.scrollContainerRef;
   const rowRef = useRef<HTMLDivElement>(null);
   const hasFocusRef = useRef(false);
+  const isIntersectingRef = useRef(initiallyMounted);
   const [nearViewport, setNearViewport] = useState(initiallyMounted);
 
   const mounted = !scrollContainer || pinned || nearViewport;
@@ -58,10 +68,11 @@ export default function WindowedRow({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) setNearViewport(true);
+        isIntersectingRef.current = entry?.isIntersecting ?? false;
+        if (isIntersectingRef.current) setNearViewport(true);
         else if (!hasFocusRef.current) setNearViewport(false);
       },
-      { root, rootMargin: OVERSCAN_MARGIN }
+      { root, rootMargin: overscanMargin(root) }
     );
     observer.observe(row);
     return () => observer.disconnect();
@@ -113,6 +124,8 @@ export default function WindowedRow({
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           hasFocusRef.current = false;
+          // The row may have left the margin while it held focus.
+          if (!isIntersectingRef.current) setNearViewport(false);
         }
       }}
     >

@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ScrollContainerProvider } from "@/components/chat/ScrollContainerContext";
+import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
 import { cn } from "@opal/utils";
 
 // Size constants
@@ -185,11 +185,14 @@ const ChatScrollContainer = React.memo(
             setTimeout(() => {
               isAutoScrollingRef.current = false;
               if (container) {
-                // Rows that mounted on the way can move the end; settle on it.
-                container.scrollTo({
-                  top: container.scrollHeight - container.clientHeight,
-                  behavior: "instant",
-                });
+                // Rows that mounted on the way can move the end; settle on
+                // it, unless the user scrolled away during the glide.
+                if (container.scrollTop >= targetScrollTop - 1) {
+                  container.scrollTo({
+                    top: container.scrollHeight - container.clientHeight,
+                    behavior: "instant",
+                  });
+                }
                 prevScrollTopRef.current = container.scrollTop;
               }
               // Refresh scroll state so the scroll-to-bottom button hides
