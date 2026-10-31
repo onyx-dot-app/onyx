@@ -38,6 +38,8 @@ test.each([true, false])(
         detail: "private-response-marker",
       }),
     } as Response);
+    // jsdom has no window.open; a blocked tab takes the same-tab redirect path.
+    jest.spyOn(window, "open").mockReturnValue(null);
     const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
     const errorToast = jest.spyOn(toast, "error").mockReturnValue("test-toast");
     const originalLocation = window.location.href;
