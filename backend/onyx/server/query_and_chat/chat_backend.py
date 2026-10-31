@@ -4,6 +4,7 @@ import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from datetime import timedelta
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
@@ -372,24 +373,29 @@ def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
     include_deleted: bool = False,
-    limit: int | None = Query(
-        None,
-        ge=1,
-        le=MAX_CHAT_SESSION_PAGE_SIZE,
-        description=(
-            "Return one page of the current branch: its last `limit` messages "
-            "and their children. `has_older_messages` tells whether the branch "
-            "has messages before the page. Without it, every message on every "
-            "branch is returned."
+    # In `Annotated`, so a direct call (as in tests) gets the plain default.
+    limit: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            le=MAX_CHAT_SESSION_PAGE_SIZE,
+            description=(
+                "Return one page of the current branch: its last `limit` "
+                "messages and their children. `has_older_messages` tells "
+                "whether the branch has messages before the page. Without it, "
+                "every message on every branch is returned."
+            ),
         ),
-    ),
-    before_message_id: int | None = Query(
-        None,
-        description=(
-            "With `limit`, return the page that ends before this message. Pass "
-            "the oldest loaded message to load the next older page."
+    ] = None,
+    before_message_id: Annotated[
+        int | None,
+        Query(
+            description=(
+                "With `limit`, return the page that ends before this message. "
+                "Pass the oldest loaded message to load the next older page."
+            ),
         ),
-    ),
+    ] = None,
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
