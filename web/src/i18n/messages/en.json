@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Atlassian issue tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian service management"
+        },
         "productboard": {
           "description": "Product management"
         },
@@ -4171,6 +4174,29 @@
             "comment_email_blacklist": {
               "label": "Comment Email Blacklist",
               "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Configure which Jira issues to index. You can index every visible service desk or specify a Jira project.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "project": {
+                  "label": "Project"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexes issues in every service desk the account can read",
+              "description": "Onyx indexes all issues in the Jira projects behind every service desk that the selected account can read, including internal issues. To index fewer, choose the Project tab."
+            },
+            "project_key": {
+              "description": "The key of the Jira project that backs a service desk (e.g., 'PROJ')."
             }
           }
         },

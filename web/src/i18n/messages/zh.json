@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian 服务管理"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -4171,6 +4174,29 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "配置要索引的 Jira 问题。您可以索引所有可见的服务台，也可以指定某个 Jira 项目。",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "project": {
+                  "label": "项目"
+                }
+              }
+            },
+            "everything": {
+              "label": "索引该账户可读取的所有服务台中的问题",
+              "description": "Onyx 会索引所选账户可读取的每个服务台所对应 Jira 项目中的所有问题（包括内部问题）。如需缩小范围，请选择“项目”标签页。"
+            },
+            "project_key": {
+              "description": "服务台所使用的 Jira 项目键（例如“PROJ”）。"
             }
           }
         },

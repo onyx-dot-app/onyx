@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian-Service-Management"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4171,6 +4174,29 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira-Service-Management-Konnektor konfigurieren",
+          "subtext": "Legen Sie fest, welche Jira-Vorgänge indexiert werden. Sie können alle sichtbaren Service-Desks oder ein Jira-Projekt angeben.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Alles"
+                },
+                "project": {
+                  "label": "Projekt"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexiert Vorgänge in allen Service-Desks, die das Konto lesen kann",
+              "description": "Onyx indexiert alle Vorgänge in den Jira-Projekten hinter jedem Service-Desk, den das ausgewählte Konto lesen kann, einschließlich interner Vorgänge. Um weniger zu indexieren, wählen Sie den Tab Projekt."
+            },
+            "project_key": {
+              "description": "Der Schlüssel des Jira-Projekts, das einem Service-Desk zugeordnet ist (z. B. 'PROJ')."
             }
           }
         },

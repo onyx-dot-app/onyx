@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian のサービス管理"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -4171,6 +4174,29 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management コネクターを設定",
+          "subtext": "インデックスする Jira 課題を設定します。表示されるすべてのサービスデスクをインデックスすることも、特定の Jira プロジェクトを指定することもできます。",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                }
+              }
+            },
+            "everything": {
+              "label": "アカウントが読み取れるすべてのサービスデスクの課題をインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れる各サービスデスクの Jira プロジェクト内のすべての課題（内部課題を含む）をインデックスします。対象を絞るには、プロジェクトタブを選択してください。"
+            },
+            "project_key": {
+              "description": "サービスデスクに対応する Jira プロジェクトのキー (例: 'PROJ')。"
             }
           }
         },

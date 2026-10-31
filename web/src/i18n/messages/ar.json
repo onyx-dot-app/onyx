@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "إدارة خدمات Atlassian"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4171,6 +4174,29 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "تهيئة موصل Jira Service Management",
+          "subtext": "حدّد مشكلات Jira المراد فهرستها. يمكنك فهرسة كل مكاتب الخدمة الظاهرة أو تحديد مشروع Jira معين.",
+          "fields": {
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "project": {
+                  "label": "مشروع"
+                }
+              }
+            },
+            "everything": {
+              "label": "يفهرس المشكلات في كل مكتب خدمة يمكن للحساب قراءته",
+              "description": "يفهرس Onyx كل المشكلات في مشاريع Jira التي تدعم كل مكتب خدمة يمكن للحساب المحدد قراءته، بما في ذلك المشكلات الداخلية. لفهرسة عدد أقل، اختر علامة تبويب مشروع."
+            },
+            "project_key": {
+              "description": "مفتاح مشروع Jira المرتبط بمكتب خدمة (مثل 'PROJ')."
             }
           }
         },
