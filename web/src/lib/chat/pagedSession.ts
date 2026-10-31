@@ -43,6 +43,14 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
     const current = useChatSessionStore.getState().sessions.get(sessionId);
     if (!current) return;
 
+    // An empty page: the oldest loaded message is no longer on the server's
+    // branch (it was switched elsewhere, for example in another tab). Load
+    // that branch instead.
+    if (page.messages.length === 0) {
+      void reloadLatestChatPage(sessionId);
+      return;
+    }
+
     // The tree was replaced meanwhile (a reload or a branch switch): the
     // page no longer attaches to it. The loader asks again for the new tree.
     const head = getLatestMessageChain(current.messageTree)[0];
@@ -79,12 +87,10 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
 /**
  * Replaces the chat's message tree with the last page of its current branch,
  * for example after a switch to a branch whose messages are not loaded. Does
- * nothing if the tree changed while the page loaded.
+ * nothing if the latest message changed while the page loaded.
  */
 export async function reloadLatestChatPage(sessionId: string): Promise<void> {
-  const treeAtStart = useChatSessionStore
-    .getState()
-    .sessions.get(sessionId)?.messageTree;
+  const tailAtStart = latestMessageNodeId(sessionId);
   try {
     const response = await fetch(chatPageUrl(sessionId));
     if (!response.ok) {
@@ -92,9 +98,14 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
     }
     const page: BackendChatSession = await response.json();
     const store = useChatSessionStore.getState();
-    const session = store.sessions.get(sessionId);
-    // The chat changed meanwhile (for example, a message was sent): keep it.
-    if (!session || session.messageTree !== treeAtStart) return;
+    // The latest message changed meanwhile (for example, a message was
+    // sent): keep the chat. An older page merged above does not count.
+    if (
+      !store.sessions.has(sessionId) ||
+      latestMessageNodeId(sessionId) !== tailAtStart
+    ) {
+      return;
+    }
 
     store.updateSessionMessageTree(
       sessionId,
@@ -106,4 +117,12 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
   } catch (error) {
     console.error("Failed to reload the chat", { sessionId, error });
   }
+}
+
+/** Node id of the last message of the chat's current branch. */
+function latestMessageNodeId(sessionId: string): number | undefined {
+  const tree = useChatSessionStore
+    .getState()
+    .sessions.get(sessionId)?.messageTree;
+  return tree ? getLatestMessageChain(tree).at(-1)?.nodeId : undefined;
 }
