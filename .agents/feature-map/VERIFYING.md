@@ -30,94 +30,103 @@ rather than anchoring you.
 Look every changed path up in [PATHS.md](PATHS.md). Longest prefix wins. Collect
 the set of components.
 
-If a path is not in the table, the area is unmapped. Do not treat that as low
-risk. Read the nearest code and its tests yourself, and say in your report that
-you verified against an unmapped area.
+A path under `## Not mapped` has no component; its row gives the reason. If no
+row covers a path, the area is unmapped. Do not treat
+that as low risk. Read the nearest code and its tests yourself, and say in your
+report that you verified against an unmapped area.
 
 ## Step 3: Read the components
 
 For each component, read its document in [components/](components/).
 
-- **§1 and §4** tell you what the code is supposed to do. Compare that to what the
-  diff now makes it do. A mismatch is either a bug or a doc that needs updating in
-  this same PR.
-- **§3** tells you which tables are involved. If the diff adds a column, check
-  whether a migration exists and whether the component doc still describes the
-  schema correctly.
+- **User experience** (or **Callers**, for a component that other code builds
+  on) tells you what the component must do for the people and code that use it.
+  **Scope** and **Architecture** tell you how the code does it and what it owns.
+  Compare that to what the diff makes it do. A mismatch is either a bug or a
+  document that needs an edit in this same PR.
+- **Decisions** tell you which designs were chosen on purpose. A change that
+  reverses one needs a reason.
 
-Follow the "Depends on" links in **§6** for any component the change reaches into.
+Follow the links in **Dependencies** for any component the change reaches into.
 
-## Step 4: Check the invariants
+## Step 4: Check the contracts
 
-Walk **§5 Contracts and invariants** for every component, line by line.
+Check two sets of contracts:
+
+- every contract or recipe that cites a file the diff touches, from any document:
+
+  ```bash
+  python3 .agents/feature-map/stale_docs.py --cited $(git diff --name-only <base>...HEAD)
+  ```
+
+- each contract of the components from Step 2 whose rule the diff plausibly
+  affects, even when the contract does not cite a changed file.
 
 This is the highest-value step and the one an agent is most tempted to skip. These
 are the rules a change breaks *silently*. Nothing fails; the product is just wrong
 later, under load, or for one tenant.
 
-For each invariant, state explicitly whether the change preserves it, breaks it, or
-does not touch it. Do not summarize. An unchecked invariant is an unverified change.
+Read **Contracts and traps** of each component from Step 2 to find the second set.
+For each contract in the two sets, name it by key (`[[slug#key]]`) and state
+whether the change preserves it or breaks it. Do not summarize. You do not need a
+verdict on a contract that neither cites the diff nor governs what it changes.
 
-## Step 5: Walk the blast radius
+## Step 5: Check what else the change must touch
 
-Find the row in **§7 Blast radius** matching the *kind* of change in the diff. Check
-each item it names. Most real defects in a review live here, in the file the author
-did not think to open.
+Each contract names what else to check when its code changes. **Recipes** list
+every place a common addition must reach, and the Common tasks table in
+[INDEX.md](INDEX.md) gives the order across components. Check each item. Most
+real defects in a review live here, in the file the author did not think to open.
 
-Pay particular attention to hand-mirrored contracts, because nothing enforces them:
-
-- The streaming packet enum exists in Python, in web TypeScript, and in mobile
-  TypeScript.
-- A new built-in tool needs a class, a `BUILT_IN_TOOL_MAP` entry, a seeded database
-  row, and a frontend renderer. Custom tools follow other registration paths.
-- Prompt text and reminder placement change model behaviour without changing any
-  type.
+Pay particular attention to contracts that the code mirrors by hand, because
+nothing enforces them. The owning components name them, for example
+[[streaming-protocol]] for packet types and [[tools-framework]] for built-in
+tools.
 
 ## Step 6: Gather evidence
 
-Run **§8 How to verify a change** for each component.
+1. **Tests.** Run the tests the component's **Verification** names, and the
+   tests next to the changed code. If the change adds behaviour and adds no test,
+   say so plainly. Integration tests are preferred in this repo.
 
-1. **Tests.** Run the ones the component names. If the change adds behaviour and
-   adds no test, say so plainly. Integration tests are preferred in this repo. Check
-   `backend/AGENTS.md` for the commands and the required environment.
-2. **Manual reproduction.** Follow the steps in §8. For browser flows, drive the
-   browser with `claude-in-chrome` against the user's real Chrome. For other surfaces,
-   use the client the component's §8 names. Read
+   ```bash
+   uv run pytest -xv backend/tests/unit/<path>
+   uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/<path>
+   uv run --env-file .vscode/.env pytest backend/tests/integration/<path>
+   cd web && bun run playwright <spec>
+   ```
+
+   `backend/AGENTS.md` has the required environment and secrets.
+2. **Manual reproduction.** Use the checks in the component's **Verification**.
+   The local app is at `http://localhost:3000`. Sign in as
+   `admin_user@example.com` with `TestPassword123!`. Call the backend through the
+   frontend (`http://localhost:3000/api/...`). Read
    `backend/log/<service>_debug.log` for backend behaviour.
 3. **Negative check.** Verify the failure mode too, not only the happy path. Stop
    mid-stream, revoke a permission, send an empty input, reload the page.
 
 State what you ran and what you saw. "Tests pass" with no output is not evidence.
 
-## Step 7: Read the footguns
+## Step 7: Check the repo-wide rules
 
-**§9 Footguns** lists the traps in each component. Check whether the change walked
-into one. This is short and it catches a specific class of confident mistake.
+Independent of the map, check the change against the rules in these files:
 
-## Step 8: Check the repo-wide rules
-
-Independent of the map, every change is subject to:
-
-- `AGENTS.md` at the repo root: typing, Simplified Technical English in prose.
-- `backend/AGENTS.md`: Celery, migrations, error handling, LLM tracing. Every LLM
-  call needs a generation span tagged with `LLMFlow`. Shared-client calls that set no
-  flow emit `UNTAGGED_*` sentinels (`backend/onyx/llm/multi_llm.py:MultiLLM.invoke`,
-  `MultiLLM.stream`). Direct-provider calls without a span emit nothing.
-- `web/AGENTS.md`: the component rules. Opal over refresh-components, no raw HTML
-  form elements, no raw text nodes, no `lucide-react`, no `dark:` modifier, design
-  tokens only.
-- `mobile/AGENTS.md`: mobile does **not** follow the web rules.
+- `AGENTS.md` at the repo root, and the `AGENTS.md` of each area the diff touches:
+  `backend/AGENTS.md`, `web/AGENTS.md`, `mobile/AGENTS.md`. Mobile does not follow
+  the web rules.
+- [CROSS-CUTTING.md](CROSS-CUTTING.md), for the rules every component follows.
 - `CONTRIBUTING.md`, "Engineering Best Practices".
 - `pre-commit run --files <changed paths>`.
 
-## Step 9: Report
+## Step 8: Report
 
 Structure the report so a human can act on it:
 
 - **What the change does**, in your own words, from reading the diff.
 - **Components touched**, and whether each behaves as its document describes.
-- **Invariants checked**, with the verdict on each. Name the ones you could not check.
-- **Blast radius items checked**, and anything the change missed.
+- **Contracts checked**, by key, with the verdict on each. Name the ones you
+  could not check.
+- **Related changes checked**, and anything the change missed.
 - **Evidence**: commands run, output, manual steps, what you observed.
 - **Findings**, ranked by severity, each with a concrete failure scenario.
 - **Gaps**: what you could not verify, and why. Be explicit. An honest gap is worth
@@ -125,12 +134,10 @@ Structure the report so a human can act on it:
 
 ---
 
-## Keeping the map honest
+## Keeping the map true
 
-If the change alters behaviour a component document describes, the document must
-change in the same pull request. A stale map is worse than no map, because the next
-agent will trust it.
-
-If you verified against an area with no component document, add one, or at minimum
-add the path to [PATHS.md](PATHS.md) and the component to [INDEX.md](INDEX.md) as a
-planned entry.
+If the change makes a document wrong, the document changes in the same pull
+request. "Editing judgment" in [README.md](README.md) says what to edit: only the
+parts the change touches, and only what a future agent needs. A diff that
+rewrites untouched parts of a document belongs in a verify pass, not in a code
+PR.

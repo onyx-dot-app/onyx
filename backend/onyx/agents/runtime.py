@@ -1404,6 +1404,10 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         cancellation_signal.check()
         if time.monotonic() >= deadline:
             raise LLMTimeoutError("Model generation exceeded its total timeout")
+        logger.debug(
+            "Agent run %s step %d: generation started", run._state.run_id, step.index
+        )
+        generation_started = time.monotonic()
         completed = False
         try:
             with closing(llm.stream(request, generation_context)) as events:
@@ -1443,6 +1447,13 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         cancellation_signal.check()
         if not completed:
             raise RuntimeError("Model stream ended without completed output")
+        logger.debug(
+            "Agent run %s step %d: generation ended after %.1fs with %d tool calls",
+            run._state.run_id,
+            step.index,
+            time.monotonic() - generation_started,
+            len(recorded_step.message.tool_calls or []),
+        )
 
     try:
         generate()

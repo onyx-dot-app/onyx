@@ -154,7 +154,7 @@
         "title": "액세스 제어",
         "description": "이 MCP를 사용할 수 있는 사용자를 선택하세요.",
         "public": {
-          "label": "공개",
+          "label": "조직",
           "description": "조직의 누구나 이 MCP를 사용할 수 있습니다"
         },
         "groups": {
@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "클라이언트 메타데이터 문서 사용",
-        "description": "켜면 공급자가 공용 인터넷을 통해 {appName}의 클라이언트 메타데이터 문서를 가져옵니다. 이 {appName} 인스턴스가 비공개이면 끄세요. 그러면 {appName}은(는) 자동 클라이언트 등록을 사용합니다.",
-        "turnOff": "클라이언트 메타데이터 문서 끄기"
+        "description": "켜면 공급자가 공용 인터넷을 통해 {appName}의 클라이언트 메타데이터 문서를 가져옵니다. 이 {appName} 인스턴스가 비공개이면 끄세요. 그러면 {appName}은(는) 자동 클라이언트 등록을 사용합니다."
       },
       "discovery": {
         "checking": "자동 설정 확인 중…",
@@ -1115,18 +1114,6 @@
         "openapi": "OpenAPI 플러그인 추가"
       },
       "catalog": {
-        "slack": {
-          "summary": "대화를 검색하고 메시지를 보냅니다",
-          "description": "대화를 검색하고 메시지를 보냅니다. 등록된 Slack 앱이 필요합니다."
-        },
-        "hubspot": {
-          "summary": "연락처와 거래를 관리합니다",
-          "description": "연락처와 거래를 관리합니다. HubSpot MCP 커넥터가 필요합니다."
-        },
-        "asana": {
-          "summary": "작업과 프로젝트를 관리합니다",
-          "description": "작업과 프로젝트를 관리합니다. 등록된 OAuth 클라이언트가 필요합니다."
-        },
         "linear": {
           "summary": "이슈, 프로젝트, 팀을 관리합니다",
           "description": "이슈, 프로젝트, 팀을 관리합니다."
@@ -1218,6 +1205,10 @@
       "blocked": "아웃바운드 보안 설정에 의해 차단된 URL입니다.",
       "publicDetected": "인증이 필요하지 않습니다",
       "oauthDetected": "OAuth 감지됨",
+      "clientMetadata": "클라이언트 메타데이터 문서",
+      "clientMetadataSupported": "지원됨",
+      "clientMetadataUnsupported": "지원되지 않음",
+      "clientMetadataUnknown": "확인되지 않음",
       "manualRequired": "인증 방법 직접 선택",
       "chooseAuthentication": "이 서버의 인증 방법을 확인할 수 없습니다. 아래에서 방법을 선택하세요.",
       "connect": "연결",
@@ -1254,7 +1245,7 @@
       "decisionModel": {
         "title": "판단 모델",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
+        "description": "내부 검색은 이 모델로 결과의 순위를 매기고 추가할 컨텍스트의 양을 정합니다. 채팅 환경설정에서도 설정할 수 있습니다.",
         "clear": "해제",
         "notConfigured": "설정되지 않음",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
@@ -1447,6 +1438,9 @@
         },
         "s3": {
           "description": "AWS 스토리지 버킷"
+        },
+        "azureDatalake": {
+          "description": "Azure Data Lake Storage 컨테이너의 파일"
         },
         "r2": {
           "description": "클라우드 스토리지 버킷"
@@ -1649,7 +1643,7 @@
             "label": "비공개"
           },
           "public": {
-            "label": "공개"
+            "label": "조직"
           },
           "shared": {
             "label": "공유됨"
@@ -1923,7 +1917,7 @@
             "text": "이 배포에서 액세스 제어가 제거됩니다. **재인덱싱이 시작되어** 검색 결과에 변경 사항이 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
           },
           "madePublic": {
-            "text": "**공개:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
+            "text": "**조직에 개방:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
           },
           "reset": {
             "text": "**기본값으로 재설정:** 사용자 지정 브랜딩과 채팅 보존 정책"
@@ -2225,9 +2219,9 @@
         "description": "세션 제목을 생성합니다. 빠르고 저렴한 모델이 적합합니다.",
         "title": "채팅 이름 지정 모델"
       },
-      "searchSelectionModel": {
-        "description": "검색된 문서를 선택하고 확인합니다. 빠르고 저렴한 모델은 검색 비용을 줄일 수 있지만 답변 품질에 영향을 줄 수 있습니다.",
-        "title": "검색 문서 선택 모델"
+      "searchDecisionModel": {
+        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다. 결정 모델은 한 번의 호출로 순위를 매깁니다. 언어 모델은 이전처럼 선택합니다.",
+        "title": "검색 결정 모델"
       },
       "taskModels": {
         "loadFailed": "작업 모델을 불러오지 못했습니다",
@@ -2408,7 +2402,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "채팅 이름 생성 모델을 업데이트하지 못했습니다",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
-        "searchSelectionUpdateFailed": "검색 선택 모델을 업데이트하지 못했습니다",
+        "searchDecisionUpdateFailed": "검색 결정 모델을 업데이트하지 못했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "systemPromptUpdateFailed": "시스템 프롬프트를 업데이트하지 못했습니다",
         "toolsUpdateFailed": "도구를 업데이트하지 못했습니다",
@@ -3688,7 +3682,7 @@
         "documentAccess": {
           "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
           "everyone": {
-            "description": "이 커넥터가 색인한 문서는 조직의 모든 사용자에게 공개됩니다.",
+            "description": "이 커넥터로 인덱싱된 문서는 조직의 모든 구성원이 사용할 수 있습니다.",
             "title": "조직의 모든 사용자"
           },
           "specificGroups": {
@@ -4619,6 +4613,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Azure Data Lake Storage 커넥터 구성",
+          "fields": {
+            "account_name": {
+              "label": "스토리지 계정 이름",
+              "description": "스토리지 계정의 이름(예: contosodata). 계정에 계층 구조 네임스페이스가 있어야 합니다."
+            },
+            "container_name": {
+              "label": "컨테이너 이름",
+              "description": "인덱싱할 컨테이너(파일 시스템)입니다."
+            },
+            "path_prefix": {
+              "label": "경로 접두사",
+              "description": "컨테이너의 디렉터리(예: reports/2026). 전체 컨테이너를 인덱싱하려면 비워 두세요."
+            }
+          }
+        },
         "r2": {
           "description": "R2 커넥터 구성",
           "fields": {
@@ -5221,6 +5232,8 @@
         "integrationToken": "{source} 통합 토큰",
         "accessKey": "{source} 액세스 키",
         "accessKeySecret": "{source} 액세스 키 시크릿",
+        "storageAccountName": "스토리지 계정 이름",
+        "accountKey": "{source} 계정 키",
         "key": "{source} 키",
         "secret": "{source} 시크릿",
         "roleArn": "{source} 역할 ARN",
@@ -5242,6 +5255,7 @@
         "jiraUserEmail": "Jira Cloud에 필요합니다.",
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
+        "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
@@ -5254,6 +5268,7 @@
           "certificateAuthentication": "인증서 인증",
           "certificate": "인증서",
           "accessKeyAndSecret": "액세스 키 및 시크릿",
+          "accountKey": "계정 키",
           "iamRole": "IAM 역할",
           "assumeRole": "역할 수임",
           "serviceAccount": "서비스 계정",
@@ -5266,6 +5281,9 @@
           "teamsCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요. 첨부 파일 포함에 필요하며, 이 기능은 SharePoint에서 채널 파일과 해당 열람자를 읽습니다.",
           "outlookClientSecret": "커넥터가 앱 등록의 클라이언트 시크릿으로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 시크릿을 입력하세요.",
           "outlookCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요.",
+          "azureDatalakeClientSecret": "커넥터는 앱 등록의 클라이언트 암호로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 암호를 입력하세요. 컨테이너에서 앱에 Storage Blob Data Reader 역할을 부여하세요.",
+          "azureDatalakeCertificate": "커넥터는 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 암호를 입력하세요. 컨테이너에서 앱에 Storage Blob Data Reader 역할을 부여하세요.",
+          "azureDatalakeAccountKey": "커넥터는 스토리지 계정의 키로 각 요청에 서명합니다. 계정 이름과 액세스 키 중 하나를 입력하세요.",
           "s3AssumeRole": "이 모드를 선택하면 Amazon EC2 인스턴스가 기존 역할을 수임하여 S3에 액세스합니다. 추가 자격 증명은 필요하지 않습니다."
         }
       },
@@ -5648,7 +5666,7 @@
             "label": "비공개"
           },
           "public": {
-            "label": "공개"
+            "label": "조직"
           }
         },
         "connector": {
@@ -5769,7 +5787,7 @@
             "header": "이름"
           },
           "public": {
-            "header": "공개"
+            "header": "액세스"
           },
           "status": {
             "header": "상태"
@@ -6616,11 +6634,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "연결된 LLM 공급자의 이미지 모델입니다. 채팅에서 사용하려면 연결하세요.",
+        "title": "사용 가능한 모델"
+      },
       "configureSuccess": {
         "message": "제공업체를 설정했습니다"
       },
+      "connectButton": {
+        "label": "연결"
+      },
+      "connectedModels": {
+        "title": "연결된 모델"
+      },
+      "defaultTag": {
+        "label": "기본값"
+      },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} 연결 해제"
       },
       "disconnectError": {
         "message": "연결 해제에 실패했습니다"
@@ -6638,6 +6672,9 @@
         "header": {
           "description": "이 제공업체에 저장된 자격 증명을 삭제합니다.",
           "title": "*{title}* 연결 해제"
+        },
+        "linkedHeader": {
+          "description": "LLM 공급자와 해당 자격 증명은 연결된 상태로 유지됩니다."
         },
         "noDefaultOption": {
           "description": "(이미지 생성 비활성화)",
@@ -6659,6 +6696,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} 연결을 해제했습니다"
+      },
+      "editButton": {
+        "ariaLabel": "{title} 편집"
       },
       "emptyState": {
         "title": "채팅에서 사용할 이미지 생성 모델을 연결하세요."
@@ -6738,12 +6778,30 @@
         "description": "채팅 내 이미지 생성 설정입니다.",
         "title": "이미지 생성"
       },
+      "linkError": {
+        "message": "모델을 연결하지 못했습니다"
+      },
+      "linkSuccess": {
+        "message": "{title} 연결됨"
+      },
+      "linkedModel": {
+        "description": "{provider}에서 제공"
+      },
       "loadError": {
         "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."
       },
       "model": {
         "description": "채팅에서 이미지를 생성할 모델을 선택하세요.",
+        "placeholder": "기본 모델 선택",
         "title": "이미지 생성 모델"
+      },
+      "modelFilter": {
+        "all": "전체",
+        "recommended": "추천"
+      },
+      "noImageModels": {
+        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요. 연결된 공급자의 모든 모델을 보려면 전체 탭을 여세요.",
+        "title": "사용 가능한 이미지 모델이 없습니다"
       },
       "providers": {
         "azureGptImage1": {
@@ -7438,7 +7496,7 @@
           "deleting": "{count, plural, other {커넥터 #개 삭제 중}}"
         },
         "access": {
-          "public": "공개",
+          "public": "조직",
           "private": "비공개",
           "sync": "자동 동기화",
           "sync_restricted": "자동 동기화(제한됨)"
@@ -9066,8 +9124,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "모든 공개 지식",
-            "sublabel": "OnyxBot이 모든 공개 커넥터의 정보를 바탕으로 응답하도록 합니다"
+            "label": "조직 전체의 모든 지식",
+            "sublabel": "OnyxBot이 조직 전체의 모든 커넥터 정보를 바탕으로 응답하도록 합니다"
           },
           "documentSets": {
             "label": "특정 문서 세트",
@@ -11444,7 +11502,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "공개 권한 변경"
+          "ariaLabel": "조직 권한 변경"
         },
         "row": {
           "updateAccess": {
@@ -11528,7 +11586,7 @@
           "title": "프롬프트 리마인더"
         },
         "public": {
-          "label": "조직에 공개"
+          "label": "조직에서 사용 가능"
         }
       }
     },
@@ -14108,11 +14166,11 @@
         "text": "불러오는 중..."
       },
       "makePublic": {
-        "label": "이 {objectName}을(를) 공개하시겠습니까?",
+        "label": "이 {objectName}을(를) 조직에서 사용할 수 있게 하시겠습니까?",
         "subtext": "설정하면 이 {objectName}은(는) <b>모든 {publicToWhom}</b>이 사용할 수 있습니다. 그렇지 않으면 <b>관리자</b>와 (예: 사용자 그룹을 통해) 이 {objectName}에 대한 액세스 권한을 명시적으로 부여받은 <b>{publicToWhom}</b>만 액세스할 수 있습니다."
       },
       "publicDisabled": {
-        "message": "이 {objectName}은(는) 공개되어 모든 사용자가 사용할 수 있습니다."
+        "message": "이 {objectName}은(는) 조직의 모든 구성원이 사용할 수 있습니다."
       },
       "usersFallback": {
         "text": "사용자"
@@ -15276,6 +15334,10 @@
         "trigger": {
           "runNow": "한 번 실행",
           "schedule": "예약"
+        },
+        "markAllViewed": {
+          "label": "모두 확인한 것으로 표시",
+          "error": "실행을 확인함으로 표시할 수 없습니다. 다시 시도하세요."
         }
       },
       "scheduleEditor": {
@@ -15307,7 +15369,8 @@
           "tue": "화",
           "wed": "수"
         }
-      }
+      },
+      "unviewedResults": "새 결과"
     },
     "todoList": {
       "empty": {
@@ -16457,7 +16520,7 @@
       "row": {
         "contentPlaceholder": "다음 내용을 1~2문장으로 간결하게 요약하세요:",
         "promptPlaceholder": "요약",
-        "publicTooltip": "공개 프롬프트 단축어는 삭제할 수 없습니다.",
+        "publicTooltip": "조직 전체 프롬프트 단축어는 삭제할 수 없습니다.",
         "removeAriaLabel": "단축어 제거"
       },
       "title": "프롬프트 단축어",

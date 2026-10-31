@@ -69,7 +69,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      integration: ${{ steps.app.outputs.integration || 'true' }}
+      integration: ${{ steps.filter.outputs.integration || 'true' }}
       gateway: ${{ steps.filter.outputs.gateway || 'true' }}
       # The live Slack suite shares its workspaces' rate limits across all CI runs,
       # so PRs run it only for related changes. Main and tag runs include it
@@ -92,7 +92,6 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request'
         with:
-          list-files: json
           filters: |
             integration:
               - 'backend/**'
@@ -156,21 +155,6 @@ jobs:
               - 'backend/onyx/indexing/**'
               - 'backend/tests/integration/tests/reindex_port/**'
               - '.github/workflows/pr-integration-tests.yml'
-            agent_hook_tests:
-              - 'backend/tests/unit/agent_hooks/**'
-              - 'backend/tests/external_dependency_unit/agent_hooks/**'
-
-      # Agent-hook tests need no app suite; the agent_hooks
-      # external-dependency directory runs them.
-      - name: Ignore agent-hook test files
-        id: app
-        if: github.event_name == 'pull_request'
-        env:
-          FILES: ${{ steps.filter.outputs.integration_files }}
-          HOOK_TEST_FILES: ${{ steps.filter.outputs.agent_hook_tests_files }}
-        run: |
-          count=$(jq -n --argjson f "$FILES" --argjson h "$HOOK_TEST_FILES" '$f - $h | length')
-          if [ "$count" -gt 0 ]; then echo "integration=true"; else echo "integration=false"; fi >> "$GITHUB_OUTPUT"
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -244,6 +228,8 @@ jobs:
   build-model-server-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -260,6 +246,7 @@ jobs:
           persist-credentials: false
 
       - name: Build model server image
+        id: build
         uses: ./.github/actions/build-model-server-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -333,10 +320,12 @@ jobs:
           # stable across runs and caps out at 100 per subject.
           provenance: false
           sbom: false
+          # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
+          # which get no secrets, import it. Other runs import only the published image.
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, github.event.pull_request.head.sha) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, steps.format-branch.outputs.cache-suffix) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
@@ -395,7 +384,7 @@ jobs:
       - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          MODEL_SERVER_DIGEST: ${{ needs.build-model-server-image.outputs.digest }}
           EDITION: ${{ matrix.edition }}
         run: |
           # Base config shared by both editions
@@ -406,7 +395,7 @@ jobs:
           POSTGRES_USE_NULL_POOL=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}@${MODEL_SERVER_DIGEST}
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
           # The MCP client tests register a mock MCP server on a private/loopback
@@ -731,11 +720,11 @@ jobs:
       - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          MODEL_SERVER_DIGEST: ${{ needs.build-model-server-image.outputs.digest }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}@${MODEL_SERVER_DIGEST}
           EOF
 
       # NOTE: `indexing_model_server` is intentionally not started. See the
@@ -762,9 +751,9 @@ jobs:
           DEVCONTAINER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
         run: |
           echo "Running multi-tenant integration tests..."
-          # A test that runs past faulthandler_timeout prints every thread's
-          # stack. The in-process api_server has no request timeout, so a hung
-          # chat stream otherwise ends at timeout-minutes with no trace.
+          # multitenant_tests/conftest.py writes the in-process api_server logs
+          # and repeated thread dumps to backend/log, which the worker-log
+          # upload keeps when a hung job is cancelled.
           docker run --rm --network onyx_default \
             --name test-runner \
             -v ${{ github.workspace }}:/workspace \
@@ -799,7 +788,6 @@ jobs:
             -e DEV_MODE=true \
             ${DEVCONTAINER_IMAGE} \
             uv run --no-sync pytest -v --tb=short -rs \
-              -o faulthandler_timeout=240 \
               tests/integration/multitenant_tests
 
       - name: Dump all-container logs (multi-tenant)

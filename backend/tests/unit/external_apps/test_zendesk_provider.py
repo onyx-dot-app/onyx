@@ -11,6 +11,7 @@ import pytest
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import PROVIDERS
+from onyx.external_apps.providers.slack import SlackProvider
 from onyx.external_apps.providers.zendesk import ZendeskProvider, normalise_subdomain
 
 
@@ -100,8 +101,8 @@ def test_spec_urls_stay_templates() -> None:
 def test_providers_on_a_fixed_host_contribute_no_skill_values() -> None:
     """Empty unless a provider's skill needs its own configuration."""
     for provider in PROVIDERS.values():
-        if isinstance(provider, ZendeskProvider):
-            continue  # per-account: covered above
+        if isinstance(provider, ZendeskProvider | SlackProvider):
+            continue  # per-account or per-cloud: covered in their own tests
         assert provider.skill_template_values({}) == {}
 
 

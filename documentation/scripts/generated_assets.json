@@ -14,6 +14,10 @@
       "src": "logos/axero"
     },
     {
+      "out": "assets/overview/core_features/connectors/azure_datalake.svg",
+      "src": "logos/azure"
+    },
+    {
       "out": "assets/overview/core_features/connectors/bitbucket.svg",
       "src": "logos/bitbucket"
     },
@@ -260,13 +264,13 @@
     },
     {
       "out": "assets/logo/onyx_logo.svg",
-      "src": ["logos/onyx-logo", "logos/onyx-typed"],
+      "src": ["logos/onyx-logo", "logos/onyx-wordmark"],
       "gapRatio": 0.3125,
       "size": 32
     },
     {
       "out": "assets/logo/onyx_logo_inverted.svg",
-      "src": ["logos/onyx-logo", "logos/onyx-typed"],
+      "src": ["logos/onyx-logo", "logos/onyx-wordmark"],
       "theme": "dark",
       "gapRatio": 0.3125,
       "size": 32

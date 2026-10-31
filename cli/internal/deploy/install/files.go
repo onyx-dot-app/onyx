@@ -31,6 +31,7 @@ func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
 			deployfiles.NginxRunScript,
 			deployfiles.NginxMcpConf,
 			deployfiles.NginxMcpUpstreamConf,
+			deployfiles.NginxWebhookConf,
 		}
 	} else {
 		files = []deployfiles.File{
@@ -41,6 +42,7 @@ func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
 			deployfiles.NginxRunScript,
 			deployfiles.NginxMcpConf,
 			deployfiles.NginxMcpUpstreamConf,
+			deployfiles.NginxWebhookConf,
 		}
 	}
 	if lite {

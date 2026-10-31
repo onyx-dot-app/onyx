@@ -87,7 +87,7 @@ def oauth_proxy(request: pytest.FixtureRequest, tmp_path: Path) -> Generator[str
             )
         upstreams: str = "\n".join(
             f"upstream {name} {{ server host.docker.internal:{backend.server_port}; }}"
-            for name in ("api_server", "mcp_server", "web_server")
+            for name in ("api_server", "mcp_server", "web_server", "webhook_server")
         )
         config: Path = tmp_path / "nginx.conf"
         config.write_text(

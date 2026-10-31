@@ -34,6 +34,7 @@ backend = [
     "azure-cognitiveservices-speech==1.50.0",
     "azure-identity>=1.23.0,<2.0.0",
     "azure-storage-blob>=12.24.0,<13.0.0",
+    "azure-storage-file-datalake>=12.19.0,<13.0.0",
     "beautifulsoup4==4.12.3",
     "boto3==1.43.3",
     "boxsdk==10.12.0",

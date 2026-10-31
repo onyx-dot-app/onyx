@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import {
@@ -44,6 +44,12 @@ export interface MultiModelSelectorProps {
   reasoningManager?: ReasoningManager;
 }
 
+/** Floating UI virtual element behind Radix's virtualRef; `contextElement` gets the scroll, resize and layout observers. */
+interface PopoverAnchor {
+  getBoundingClientRect(): DOMRect;
+  readonly contextElement?: Element;
+}
+
 export default function MultiModelSelector({
   selectedModels,
   onAdd,
@@ -54,8 +60,32 @@ export default function MultiModelSelector({
 }: MultiModelSelectorProps) {
   const t = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
+  // The pill whose switch list is open; null for the add list.
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
-  const anchorRef = useRef<HTMLElement | null>(null);
+  // Remounts the content per open, so a menu opened over another starts on its list.
+  const [menuKey, setMenuKey] = useState(0);
+  // A removal unmounts the content with no exit animation; the next open resets it.
+  const [closedByRemoval, setClosedByRemoval] = useState<boolean>(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  // The opener's rect frozen at open: a pick can move or unmount the opener
+  // (pills prepend, + hides at max, a replaced pill remounts) while the menu fades.
+  // Only a window resize while open re-measures it, since that reflows the row.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const openerRectRef = useRef<DOMRect>(new DOMRect());
+  const anchorRef = useRef<PopoverAnchor>({
+    getBoundingClientRect: () => openerRectRef.current,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const remeasure = () => {
+      const opener = openerRef.current;
+      if (opener?.isConnected)
+        openerRectRef.current = opener.getBoundingClientRect();
+    };
+    window.addEventListener("resize", remeasure);
+    return () => window.removeEventListener("resize", remeasure);
+  }, [open]);
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
@@ -79,7 +109,8 @@ export default function MultiModelSelector({
   );
 
   const isMultiModel = selectedModels.length > 1;
-  const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;
+  const canAdd: boolean =
+    multiModelAllowed && selectedModels.length < MAX_MODELS;
 
   // Container-level tooltip carries only the disabled reason. The add button
   // labels itself, so an enabled row shows no tooltip outside the button.
@@ -92,20 +123,11 @@ export default function MultiModelSelector({
     [selectedModels]
   );
 
-  const otherSelectedKeys = useMemo(() => {
-    if (replacingIndex === null) return new Set<string>();
-    return new Set(
-      selectedModels.filter((_, i) => i !== replacingIndex).map(llmOptionKey)
-    );
-  }, [selectedModels, replacingIndex]);
-
-  const replacingKey =
-    replacingIndex !== null
-      ? (() => {
-          const m = selectedModels[replacingIndex];
-          return m ? llmOptionKey(m) : null;
-        })()
-      : null;
+  const replacingModel: SelectedModel | undefined =
+    replacingIndex === null ? undefined : selectedModels[replacingIndex];
+  const replacingKey: string | null = replacingModel
+    ? llmOptionKey(replacingModel)
+    : null;
 
   const isSelected = (option: LLMOption) => {
     const key = llmOptionKey(option);
@@ -113,10 +135,12 @@ export default function MultiModelSelector({
     return selectedKeys.has(key);
   };
 
+  // The switch list cannot pick a model another pill already shows.
   const isDisabled = (option: LLMOption) => {
     const key = llmOptionKey(option);
-    if (replacingIndex !== null) return otherSelectedKeys.has(key);
-    return !selectedKeys.has(key) && atMax;
+    const selected: boolean = selectedKeys.has(key);
+    if (replacingIndex !== null) return selected && key !== replacingKey;
+    return !selected && !canAdd;
   };
 
   const toSelectedModel = (option: LLMOption): SelectedModel => ({
@@ -127,56 +151,82 @@ export default function MultiModelSelector({
     displayName: option.displayName,
   });
 
-  const handleSelect = (option: LLMOption) => {
-    const model = toSelectedModel(option);
-
-    if (replacingIndex !== null) {
-      onReplace(replacingIndex, model);
-      setOpen(false);
-      setReplacingIndex(null);
-      return;
-    }
-
-    const key = llmOptionKey(option);
-    const existingIndex = selectedModels.findIndex(
-      (m) => llmOptionKey(m) === key
-    );
-    if (existingIndex >= 0) {
-      onRemove(existingIndex);
-    } else if (!atMax) {
-      onAdd(model);
-      if (selectedModels.length + 1 >= MAX_MODELS) {
-        setOpen(false);
-      }
-    }
-  };
-
-  // The settings button selects its model but keeps the popover open for the
-  // pane, and it never deselects: opening settings must not remove a model.
-  const handleDetailSelect = (option: LLMOption) => {
-    if (replacingIndex !== null) {
-      onReplace(replacingIndex, toSelectedModel(option));
-      setReplacingIndex(null);
-      return;
-    }
-    const key = llmOptionKey(option);
-    if (!selectedModels.some((m) => llmOptionKey(m) === key) && !atMax) {
-      onAdd(toSelectedModel(option));
-    }
-  };
-
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen && noModelsToSelect) return;
     setOpen(nextOpen);
     if (!nextOpen) setReplacingIndex(null);
   };
 
-  const handlePillClick = (index: number, element: HTMLElement) => {
+  const handleSelect = (option: LLMOption) => {
+    // The content still takes clicks while it fades out after a pick.
+    if (!open) return;
+    const key = llmOptionKey(option);
+
+    if (replacingIndex !== null) {
+      if (key !== replacingKey)
+        onReplace(replacingIndex, toSelectedModel(option));
+      handleOpenChange(false);
+      return;
+    }
+
+    const existingIndex = selectedModels.findIndex(
+      (m) => llmOptionKey(m) === key
+    );
+    if (existingIndex >= 0) {
+      // The sole model stays: single-model chat always needs one.
+      if (!isMultiModel) return;
+      onRemove(existingIndex);
+    } else {
+      if (!canAdd) return;
+      onAdd(toSelectedModel(option));
+    }
+    handleOpenChange(false);
+  };
+
+  const openPicker = (element: HTMLElement, index: number | null) => {
     // `pointer-events-none` only blocks the mouse; guard the keyboard path too.
     if (noModelsToSelect) return;
-    anchorRef.current = element;
+    // A second click on the open menu's own opener puts it away.
+    if (open && replacingIndex === index) {
+      handleOpenChange(false);
+      return;
+    }
+    openerRef.current = element;
+    openerRectRef.current = element.getBoundingClientRect();
+    anchorRef.current = {
+      getBoundingClientRect: () => openerRectRef.current,
+      contextElement: rowRef.current ?? undefined,
+    };
     setReplacingIndex(index);
+    setMenuKey((key) => key + 1);
+    setClosedByRemoval(false);
     setOpen(true);
+  };
+
+  const removeModel = (index: number) => {
+    setClosedByRemoval(true);
+    handleOpenChange(false);
+    onRemove(index);
+  };
+
+  // A multi-model pill's last foreground icon is its x.
+  const isRemoveIcon = (pill: Element, target: EventTarget | null): boolean => {
+    if (!isMultiModel) return false;
+    const icons = pill.querySelectorAll(".interactive-foreground-icon");
+    const lastIcon = icons[icons.length - 1];
+    return !!lastIcon && target instanceof Node && lastIcon.contains(target);
+  };
+
+  // Radix Popover runs its outside-pointerdown dismissal at the document click,
+  // after a + or pill onClick opened its menu; the row's buttons own their close instead.
+  const keepOpenForRowButton = (
+    event: CustomEvent<{ originalEvent: Event }>
+  ) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest("button");
+    if (!button || !rowRef.current?.contains(button)) return;
+    event.preventDefault();
   };
 
   return (
@@ -185,6 +235,7 @@ export default function MultiModelSelector({
           container stays hoverable and this Tooltip can surface the reason. */}
       <Tooltip tooltip={selectorTooltip} side="top">
         <div
+          ref={rowRef}
           data-testid="model-selector"
           aria-disabled={noModelsToSelect || undefined}
           className={cn(
@@ -193,28 +244,22 @@ export default function MultiModelSelector({
               "cursor-not-allowed select-none opacity-50 [&>*]:pointer-events-none"
           )}
         >
-          {!atMax && (
+          {canAdd && (
             <Button
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
               tooltip={t("multiModel.addModelButton.label")}
               aria-label={t("multiModel.addModelButton.label")}
-              onClick={(e: React.MouseEvent) => {
-                if (noModelsToSelect) return;
-                anchorRef.current = e.currentTarget as HTMLElement;
-                setReplacingIndex(null);
-                setOpen(true);
-              }}
+              onClick={(e: React.MouseEvent<HTMLElement>) =>
+                openPicker(e.currentTarget, null)
+              }
             />
           )}
 
-          <Popover.Anchor
-            virtualRef={anchorRef as React.RefObject<HTMLElement>}
-          />
           {selectedModels.length > 0 && (
             <>
-              {!atMax && (
+              {canAdd && (
                 <Divider
                   orientation="vertical"
                   paddingParallel={2}
@@ -232,9 +277,7 @@ export default function MultiModelSelector({
 
                   return (
                     <div
-                      key={
-                        isMultiModel ? llmOptionKey(model) : "single-model-pill"
-                      }
+                      key={llmOptionKey(model)}
                       className="flex items-center"
                     >
                       {index > 0 && (
@@ -250,23 +293,12 @@ export default function MultiModelSelector({
                         state="empty"
                         variant="select-input"
                         size="lg"
-                        onClick={(e: React.MouseEvent) => {
-                          if (isMultiModel) {
-                            const target = e.target as HTMLElement;
-                            const btn = e.currentTarget as HTMLElement;
-                            const icons = btn.querySelectorAll(
-                              ".interactive-foreground-icon"
-                            );
-                            const lastIcon = icons[icons.length - 1];
-                            if (lastIcon && lastIcon.contains(target)) {
-                              onRemove(index);
-                              return;
-                            }
+                        onClick={(e: React.MouseEvent<HTMLElement>) => {
+                          if (isRemoveIcon(e.currentTarget, e.target)) {
+                            removeModel(index);
+                            return;
                           }
-                          handlePillClick(
-                            index,
-                            e.currentTarget as HTMLElement
-                          );
+                          openPicker(e.currentTarget, index);
                         }}
                       >
                         {isAutoModel ? t("autoItem.label") : model.displayName}
@@ -279,20 +311,24 @@ export default function MultiModelSelector({
           )}
         </div>
       </Tooltip>
+      <Popover.Anchor virtualRef={anchorRef} />
 
-      {/* Always mounted while open: a settings click that adds the third
-          model (or completes a replacement at max) must not unmount the pane
-          it just opened. Opening at max is still blocked at the entry points:
-          the add button hides and pill clicks set replacingIndex. */}
-      <Popover.Content side="top" align="end" width={70}>
-        <ModelSelectorContent
-          onSelect={handleSelect}
-          isSelected={isSelected}
-          isDisabled={isDisabled}
-          modelDetail={modelDetail}
-          onDetailSelect={handleDetailSelect}
-        />
-      </Popover.Content>
+      {!closedByRemoval && (
+        <Popover.Content
+          side="top"
+          align="end"
+          width={70}
+          onInteractOutside={keepOpenForRowButton}
+        >
+          <ModelSelectorContent
+            key={menuKey}
+            onSelect={handleSelect}
+            isSelected={isSelected}
+            isDisabled={isDisabled}
+            modelDetail={modelDetail}
+          />
+        </Popover.Content>
+      )}
     </Popover>
   );
 }

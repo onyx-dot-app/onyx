@@ -2,7 +2,7 @@
 
 These run no git process and touch no files. The tests that run the hook against
 real git repos live in
-`backend/tests/external_dependency_unit/agent_hooks/test_ensure_latest_main_repos.py`.
+`.agents/tests/test_ensure_latest_main_repos.py`.
 """
 
 import importlib.util
@@ -12,7 +12,7 @@ from types import ModuleType
 
 import pytest
 
-_HOOK = Path(__file__).resolve().parents[4] / ".agents/hooks/ensure_latest_main.py"
+_HOOK = Path(__file__).resolve().parents[2] / ".agents/hooks/ensure_latest_main.py"
 _REPO = Path("/nonexistent/repo")  # never read: `_git` is stubbed
 
 

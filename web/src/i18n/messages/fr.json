@@ -154,7 +154,7 @@
         "title": "Contrôle d’accès",
         "description": "Choisissez qui peut utiliser ce MCP.",
         "public": {
-          "label": "Public",
+          "label": "Organisation",
           "description": "Toute personne de votre organisation peut utiliser ce MCP"
         },
         "groups": {
@@ -412,8 +412,7 @@
       },
       "cimd": {
         "label": "Utiliser le document de métadonnées client",
-        "description": "Lorsque cette option est activée, le fournisseur récupère le document de métadonnées client de {appName} via l'Internet public. Désactivez-la si cette instance de {appName} est privée. {appName} utilise alors l'enregistrement automatique du client.",
-        "turnOff": "Désactiver le document de métadonnées du client"
+        "description": "Lorsque cette option est activée, le fournisseur récupère le document de métadonnées client de {appName} via l'Internet public. Désactivez-la si cette instance de {appName} est privée. {appName} utilise alors l'enregistrement automatique du client."
       },
       "discovery": {
         "checking": "Vérification de la configuration automatique…",
@@ -1115,18 +1114,6 @@
         "openapi": "Ajouter un plugin OpenAPI"
       },
       "catalog": {
-        "slack": {
-          "summary": "Recherchez des conversations et envoyez des messages",
-          "description": "Recherchez des conversations et envoyez des messages. Nécessite une application Slack enregistrée."
-        },
-        "hubspot": {
-          "summary": "Gérez les contacts et les transactions",
-          "description": "Gérez les contacts et les transactions. Nécessite un connecteur MCP HubSpot."
-        },
-        "asana": {
-          "summary": "Gérez les tâches et les projets",
-          "description": "Gérez les tâches et les projets. Nécessite un client OAuth enregistré."
-        },
         "linear": {
           "summary": "Gérez les tickets, les projets et les équipes",
           "description": "Gérez les tickets, les projets et les équipes."
@@ -1218,6 +1205,10 @@
       "blocked": "Cette URL est bloquée par vos paramètres de sécurité sortante.",
       "publicDetected": "Aucune authentification requise",
       "oauthDetected": "OAuth détecté",
+      "clientMetadata": "Document de métadonnées client",
+      "clientMetadataSupported": "Pris en charge",
+      "clientMetadataUnsupported": "Non pris en charge",
+      "clientMetadataUnknown": "Non vérifié",
       "manualRequired": "Choisir l’authentification manuellement",
       "chooseAuthentication": "Nous n’avons pas pu déterminer la méthode d’authentification de ce serveur. Choisissez une méthode ci-dessous.",
       "connect": "Connecter",
@@ -1254,7 +1245,7 @@
       "decisionModel": {
         "title": "Modèle de décision",
         "openAiDecisionsModelName": "Décisions OpenAI (GPT-6 Luna)",
-        "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
+        "description": "La recherche interne utilise ce modèle pour classer les résultats et choisir la quantité de contexte à ajouter. Vous pouvez aussi le définir dans les préférences de chat.",
         "clear": "Effacer",
         "notConfigured": "Non configuré",
         "saveFailed": "Impossible de mettre à jour le modèle de décision"
@@ -1447,6 +1438,9 @@
         },
         "s3": {
           "description": "Buckets de stockage AWS"
+        },
+        "azureDatalake": {
+          "description": "Fichiers dans des conteneurs Azure Data Lake Storage"
         },
         "r2": {
           "description": "Buckets de stockage cloud"
@@ -1649,7 +1643,7 @@
             "label": "Privé"
           },
           "public": {
-            "label": "Public"
+            "label": "Organisation"
           },
           "shared": {
             "label": "Partagé"
@@ -1923,7 +1917,7 @@
             "text": "Les contrôles d'accès sont supprimés de ce déploiement. **Cela lance une réindexation** pour que les résultats de recherche reflètent le changement, ce qui peut prendre du temps sur un grand index."
           },
           "madePublic": {
-            "text": "**Rendus publics :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
+            "text": "**Ouverts à votre organisation :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
           },
           "reset": {
             "text": "**Réinitialisés :** personnalisation de la marque et politique de conservation des conversations."
@@ -2225,9 +2219,9 @@
         "description": "Génère les titres des sessions. Un modèle rapide et peu coûteux convient bien.",
         "title": "Modèle de nommage des chats"
       },
-      "searchSelectionModel": {
-        "description": "Sélectionne et vérifie les documents récupérés. Un modèle rapide et peu coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
-        "title": "Modèle de sélection de recherche"
+      "searchDecisionModel": {
+        "description": "Sélectionne les documents récupérés et décide de la quantité de contexte à ajouter. Un modèle de décision les classe en un seul appel. Un modèle de langage les sélectionne comme avant.",
+        "title": "Modèle de décision de recherche"
       },
       "taskModels": {
         "loadFailed": "Impossible de charger les modèles de tâches",
@@ -2408,7 +2402,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
-        "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
+        "searchDecisionUpdateFailed": "Échec de la mise à jour du modèle de décision de recherche",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
         "toolsUpdateFailed": "Échec de la mise à jour des outils",
@@ -3688,7 +3682,7 @@
         "documentAccess": {
           "description": "Contrôlez qui peut accéder aux documents indexés par ce connecteur.",
           "everyone": {
-            "description": "Les documents indexés par ce connecteur seront publics pour tout le monde dans votre organisation.",
+            "description": "Les documents indexés par ce connecteur sont accessibles à tous les membres de votre organisation.",
             "title": "Tout le monde dans votre organisation"
           },
           "specificGroups": {
@@ -4619,6 +4613,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Configurer le connecteur Azure Data Lake Storage",
+          "fields": {
+            "account_name": {
+              "label": "Nom du Compte de Stockage",
+              "description": "Le nom du compte de stockage, par ex. contosodata. Le compte doit avoir un espace de noms hiérarchique."
+            },
+            "container_name": {
+              "label": "Nom du Conteneur",
+              "description": "Le conteneur (système de fichiers) à indexer."
+            },
+            "path_prefix": {
+              "label": "Préfixe de Chemin",
+              "description": "Un répertoire du conteneur, par ex. reports/2026. Laissez vide pour indexer tout le conteneur."
+            }
+          }
+        },
         "r2": {
           "description": "Configurer le connecteur R2",
           "fields": {
@@ -5221,6 +5232,8 @@
         "integrationToken": "Jeton d'intégration {source}",
         "accessKey": "Clé d'accès {source}",
         "accessKeySecret": "Secret de la clé d'accès {source}",
+        "storageAccountName": "Nom du Compte de Stockage",
+        "accountKey": "Clé de Compte {source}",
         "key": "Clé {source}",
         "secret": "Secret {source}",
         "roleArn": "ARN du rôle {source}",
@@ -5242,6 +5255,7 @@
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "youtrackToken": "Un jeton permanent d'un utilisateur YouTrack qui peut lire tous les projets à indexer. Créez-le dans votre profil YouTrack, sous Sécurité du compte.",
+        "azureDatalakeAccountKey": "Dans le portail Azure, ouvrez le compte de stockage, puis Sécurité + mise en réseau, puis Clés d'accès.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
@@ -5254,6 +5268,7 @@
           "certificateAuthentication": "Authentification par certificat",
           "certificate": "Certificat",
           "accessKeyAndSecret": "Clé d'accès et secret",
+          "accountKey": "Clé de Compte",
           "iamRole": "Rôle IAM",
           "assumeRole": "Endosser un rôle",
           "serviceAccount": "Compte de service",
@@ -5266,6 +5281,9 @@
           "teamsCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe. Obligatoire pour Inclure les pièces jointes, qui lit les fichiers des canaux et leurs lecteurs depuis SharePoint.",
           "outlookClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret.",
           "outlookCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe.",
+          "azureDatalakeClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Indiquez l'ID client, l'ID d'annuaire et le secret. Donnez à l'application le rôle Storage Blob Data Reader sur le conteneur.",
+          "azureDatalakeCertificate": "Le connecteur se connecte avec un certificat chargé dans l'inscription d'application. Indiquez l'ID client, l'ID d'annuaire, le fichier PFX et son mot de passe. Donnez à l'application le rôle Storage Blob Data Reader sur le conteneur.",
+          "azureDatalakeAccountKey": "Le connecteur signe chaque requête avec une clé du compte de stockage. Indiquez le nom du compte et l'une de ses clés d'accès.",
           "s3AssumeRole": "Dans ce mode, l'instance Amazon EC2 endosse son rôle existant pour accéder à S3. Aucun autre identifiant n'est nécessaire."
         }
       },
@@ -5648,7 +5666,7 @@
             "label": "Privé"
           },
           "public": {
-            "label": "Public"
+            "label": "Organisation"
           }
         },
         "connector": {
@@ -5769,7 +5787,7 @@
             "header": "Nom"
           },
           "public": {
-            "header": "Public"
+            "header": "Accès"
           },
           "status": {
             "header": "Statut"
@@ -6616,11 +6634,27 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Modèles d'image de vos fournisseurs LLM connectés. Connectez-en un pour l'utiliser dans le chat.",
+        "title": "Modèles disponibles"
+      },
       "configureSuccess": {
         "message": "Fournisseur configuré avec succès"
       },
+      "connectButton": {
+        "label": "Connecter"
+      },
+      "connectedModels": {
+        "title": "Modèles connectés"
+      },
+      "defaultTag": {
+        "label": "Par défaut"
+      },
       "deselectError": {
         "message": "Échec de la désélection"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Déconnecter {title}"
       },
       "disconnectError": {
         "message": "Échec de la déconnexion"
@@ -6638,6 +6672,9 @@
         "header": {
           "description": "Cette action supprimera les identifiants enregistrés de ce fournisseur.",
           "title": "Déconnecter *{title}*"
+        },
+        "linkedHeader": {
+          "description": "Le fournisseur LLM et ses identifiants restent connectés."
         },
         "noDefaultOption": {
           "description": "(Désactiver la génération d'images)",
@@ -6659,6 +6696,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} déconnecté"
+      },
+      "editButton": {
+        "ariaLabel": "Modifier {title}"
       },
       "emptyState": {
         "title": "Connectez un modèle de génération d'images à utiliser dans la discussion."
@@ -6738,12 +6778,30 @@
         "description": "Paramètres de la génération d'images dans la discussion.",
         "title": "Génération d'images"
       },
+      "linkError": {
+        "message": "Échec de la connexion du modèle"
+      },
+      "linkSuccess": {
+        "message": "{title} connecté"
+      },
+      "linkedModel": {
+        "description": "Depuis {provider}"
+      },
       "loadError": {
         "message": "Échec du chargement de la configuration. Actualisez la page."
       },
       "model": {
         "description": "Sélectionnez un modèle pour générer des images dans la discussion.",
+        "placeholder": "Sélectionnez un modèle par défaut",
         "title": "Modèle de génération d'images"
+      },
+      "modelFilter": {
+        "all": "Tous",
+        "recommended": "Recommandés"
+      },
+      "noImageModels": {
+        "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image. Pour voir tous les modèles de vos fournisseurs connectés, ouvrez l'onglet Tous.",
+        "title": "Aucun modèle d'image disponible"
       },
       "providers": {
         "azureGptImage1": {
@@ -7438,7 +7496,7 @@
           "deleting": "{count, plural, one {# connecteur en cours de suppression} other {# connecteurs en cours de suppression}}"
         },
         "access": {
-          "public": "Public",
+          "public": "Organisation",
           "private": "Privé",
           "sync": "Synchronisation automatique",
           "sync_restricted": "Synchronisation automatique, restreinte"
@@ -9066,8 +9124,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "Toutes les connaissances publiques",
-            "sublabel": "Laissez OnyxBot répondre à partir des informations de tous les connecteurs publics"
+            "label": "Toutes les connaissances de l'organisation",
+            "sublabel": "Laissez OnyxBot répondre à partir des informations de tous les connecteurs de l'organisation"
           },
           "documentSets": {
             "label": "Ensembles de documents précis",
@@ -11444,7 +11502,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "Changer l'autorisation publique"
+          "ariaLabel": "Changer l'autorisation de l'organisation"
         },
         "row": {
           "updateAccess": {
@@ -11528,7 +11586,7 @@
           "title": "Rappels de prompt"
         },
         "public": {
-          "label": "Public dans votre organisation"
+          "label": "Disponible pour votre organisation"
         }
       }
     },
@@ -14108,11 +14166,11 @@
         "text": "Chargement..."
       },
       "makePublic": {
-        "label": "Rendre ce {objectName} public ?",
+        "label": "Rendre ce {objectName} disponible pour votre organisation ?",
         "subtext": "Si activé, ce {objectName} sera utilisable par <b>tous les {publicToWhom}</b>. Sinon, seuls les <b>administrateurs</b> et les <b>{publicToWhom}</b> ayant reçu un accès explicite à ce {objectName} (par ex. via un groupe d'utilisateurs) y auront accès."
       },
       "publicDisabled": {
-        "message": "Ce {objectName} est public et accessible à tous les utilisateurs."
+        "message": "Ce {objectName} est accessible à tous les membres de votre organisation."
       },
       "usersFallback": {
         "text": "Utilisateurs"
@@ -15276,6 +15334,10 @@
         "trigger": {
           "runNow": "Exécuter une fois",
           "schedule": "Planification"
+        },
+        "markAllViewed": {
+          "label": "Tout marquer comme vu",
+          "error": "Impossible de marquer les exécutions comme vues. Réessayez."
         }
       },
       "scheduleEditor": {
@@ -15307,7 +15369,8 @@
           "tue": "Mar",
           "wed": "Mer"
         }
-      }
+      },
+      "unviewedResults": "Nouveaux résultats"
     },
     "todoList": {
       "empty": {
@@ -16457,7 +16520,7 @@
       "row": {
         "contentPlaceholder": "Fournissez un résumé concis en 1 à 2 phrases de ce qui suit :",
         "promptPlaceholder": "Résumer",
-        "publicTooltip": "Impossible de supprimer les raccourcis d'invite publics.",
+        "publicTooltip": "Impossible de supprimer les raccourcis d'invite de l'organisation.",
         "removeAriaLabel": "Supprimer le raccourci"
       },
       "title": "Raccourcis d'invite",

@@ -1,8 +1,8 @@
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import SvgOnyxTyped from "@opal/logos/onyx-typed";
+import SvgOnyxWordmark from "@opal/logos/onyx-wordmark";
 import { cn } from "@opal/utils";
 
-interface OnyxLogoTypedProps {
+interface OnyxLogoWordmarkProps {
   size?: number;
   className?: string;
 }
@@ -11,7 +11,10 @@ interface OnyxLogoTypedProps {
 // This ratio is not some random, magical number; it is available on Figma.
 const HEIGHT_TO_GAP_RATIO = 5 / 16;
 
-const SvgOnyxLogoTyped = ({ size: height, className }: OnyxLogoTypedProps) => {
+const SvgOnyxLogoWordmark = ({
+  size: height,
+  className,
+}: OnyxLogoWordmarkProps) => {
   const gap = height != null ? height * HEIGHT_TO_GAP_RATIO : undefined;
 
   return (
@@ -20,8 +23,8 @@ const SvgOnyxLogoTyped = ({ size: height, className }: OnyxLogoTypedProps) => {
       style={{ gap }}
     >
       <SvgOnyxLogo size={height} />
-      <SvgOnyxTyped size={height} />
+      <SvgOnyxWordmark size={height} />
     </div>
   );
 };
-export default SvgOnyxLogoTyped;
+export default SvgOnyxLogoWordmark;

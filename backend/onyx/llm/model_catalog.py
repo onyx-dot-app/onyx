@@ -31,6 +31,8 @@ logger = setup_logger()
 _CATALOG_DIR = Path(__file__).parent / "price_table"
 _SUPPLEMENT_PATH = _CATALOG_DIR / "_supplement.json"
 _ENRICHMENTS_PATH = Path(__file__).parent / "model_metadata_enrichments.json"
+# Supplement fields that override an entry the upstream feed still lists.
+_SUPPLEMENT_OVERRIDE_KEYS = ("supports_decisions", "status")
 
 # Bedrock cross-region inference-profile prefixes (us., eu., global., apac.,
 # ...). Matches the sync script's alias derivation.
@@ -142,11 +144,14 @@ def _catalog() -> dict[str, dict[str, Any]]:
                 target = catalog.setdefault(provider, {"models": {}, "aliases": {}})
                 for model_id, entry in (section.get("models") or {}).items():
                     if model_id not in target["models"]:
+                        if set(entry) <= set(_SUPPLEMENT_OVERRIDE_KEYS):
+                            continue
                         target["models"][model_id] = entry
-                    elif "supports_decisions" in entry:
-                        target["models"][model_id]["supports_decisions"] = entry[
-                            "supports_decisions"
-                        ]
+                    else:
+                        existing = target["models"][model_id]
+                        for key in _SUPPLEMENT_OVERRIDE_KEYS:
+                            if key in entry:
+                                existing[key] = entry[key]
                     if provider == "bedrock":
                         for region in _BEDROCK_REGION_PREFIXES:
                             target["aliases"].setdefault(
@@ -227,6 +232,30 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
         model_id
         for model_id, entry in models.items()
         if _catalog_mode(entry, model_id) == mode
+    )
+
+
+_PRICING_PREFIX = re.compile(
+    r"^(?:(?:\d+|max)-x-(?:\d+|max)|hd|standard|low|medium|high)$"
+)
+
+
+def _is_pricing_or_provider_prefixed(provider: str, model_id: str) -> bool:
+    prefix, sep, _ = model_id.partition("/")
+    return bool(sep) and (prefix == provider or bool(_PRICING_PREFIX.match(prefix)))
+
+
+def iter_image_generation_models(provider: str) -> list[str]:
+    """Non-deprecated image generation models under a provider. Pricing keys
+    prefixed with a size or quality (e.g. ``1024-x-1024/dall-e-2``) are
+    skipped."""
+    models = _catalog().get(provider, {}).get("models", {})
+    return sorted(
+        model_id
+        for model_id, entry in models.items()
+        if not _is_pricing_or_provider_prefixed(provider, model_id)
+        and entry.get("status") != "deprecated"
+        and _catalog_mode(entry, model_id) == "image_generation"
     )
 
 

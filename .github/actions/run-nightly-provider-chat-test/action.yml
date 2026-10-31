@@ -30,11 +30,11 @@ inputs:
     description: "Optional NIGHTLY_LLM_CUSTOM_CONFIG_JSON"
     required: false
     default: ""
-  runs-on-ecr-cache:
-    description: "ECR cache registry from runs-on/action"
+  model-server-image:
+    description: "Model server image reference, pinned by digest (<registry>@<digest>)"
     required: true
-  run-id:
-    description: "GitHub run ID used in image tags"
+  devcontainer-image:
+    description: "Devcontainer image reference, pinned by digest (<registry>@<digest>)"
     required: true
   docker-username:
     description: "Docker Hub username"
@@ -54,8 +54,7 @@ runs:
     - name: Create .env file for Docker Compose
       shell: bash
       env:
-        ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
-        RUN_ID: ${{ inputs.run-id }}
+        MODEL_SERVER_IMAGE: ${{ inputs.model-server-image }}
       run: |
         cat <<EOF2 > deployment/docker_compose/.env
         COMPOSE_PROFILES=s3-filestore
@@ -67,7 +66,7 @@ runs:
         INTEGRATION_TESTS_MODE=true
         AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
         AWS_REGION_NAME=us-west-2
-        ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:nightly-llm-it-model-server-${RUN_ID}
+        ONYX_MODEL_SERVER_IMAGE=${MODEL_SERVER_IMAGE}
         EOF2
 
     # The api_server runs in-process inside pytest via FastAPI TestClient (see
@@ -87,7 +86,7 @@ runs:
     - name: Install Python deps
       uses: ./.github/actions/install-python-deps
       with:
-        devcontainer-image: ${{ inputs.runs-on-ecr-cache }}:nightly-llm-it-devcontainer-${{ inputs.run-id }}
+        devcontainer-image: ${{ inputs.devcontainer-image }}
 
     - name: Run nightly provider integration test
       uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -100,8 +99,7 @@ runs:
         NIGHTLY_LLM_DEPLOYMENT_NAME: ${{ inputs.deployment-name }}
         NIGHTLY_LLM_CUSTOM_CONFIG_JSON: ${{ inputs.custom-config-json }}
         NIGHTLY_LLM_STRICT: ${{ inputs.strict }}
-        RUNS_ON_ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
-        RUN_ID: ${{ inputs.run-id }}
+        DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
       with:
         timeout_minutes: 20
         max_attempts: 2
@@ -138,5 +136,5 @@ runs:
             -e NIGHTLY_LLM_CUSTOM_CONFIG_JSON="${NIGHTLY_LLM_CUSTOM_CONFIG_JSON}" \
             -e NIGHTLY_LLM_STRICT="${NIGHTLY_LLM_STRICT}" \
             -e ONYX_DEV_LICENSE \
-            ${RUNS_ON_ECR_CACHE}:nightly-llm-it-devcontainer-${RUN_ID} \
+            "${DEVCONTAINER_IMAGE}" \
             uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py

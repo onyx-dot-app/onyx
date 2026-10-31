@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-_HOOK = Path(__file__).resolve().parents[4] / ".agents/hooks/pre_commit_on_stop.py"
+_HOOK = Path(__file__).resolve().parents[2] / ".agents/hooks/pre_commit_on_stop.py"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -23,13 +23,20 @@ def _commit(repo: Path, name: str, content: str = "new\n") -> None:
     _git(repo, "commit", "-qm", f"Update {name}")
 
 
-def _run(repo: Path, event: str) -> subprocess.CompletedProcess[str]:
+def _run(
+    repo: Path, event: str, stop_hook_active: bool = False
+) -> subprocess.CompletedProcess[str]:
+    payload: dict[str, str | bool] = {
+        "cwd": str(repo),
+        "session_id": "test",
+        "hook_event_name": event,
+    }
+    if stop_hook_active:
+        payload["stop_hook_active"] = True
     return subprocess.run(
         [sys.executable, str(_HOOK)],
         cwd=repo,
-        input=json.dumps(
-            {"cwd": str(repo), "session_id": "test", "hook_event_name": event}
-        ),
+        input=json.dumps(payload),
         text=True,
         capture_output=True,
         timeout=30,
@@ -155,20 +162,91 @@ def test_expired_reflog_does_not_check_imported_files(repo: Path) -> None:
     assert _checked(repo) == {"new.txt"}
 
 
-def test_reminder_is_advisory(repo: Path) -> None:
+def _add_brief(repo: Path) -> None:
     script = repo / ".agents/feature-map/stale_docs.py"
     script.parent.mkdir(parents=True)
-    script.write_text("print('Review feature documentation')\n")
+    script.write_text(
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "base = args[args.index('--base') + 1] if '--base' in args else ''\n"
+        "Path(os.environ['CHECKED_FILES']).with_name('base.txt').write_text(base)\n"
+        "print('Brief for', *args[args.index('--') + 1 :])\n"
+    )
     _git(repo, "add", ".agents")
-    _git(repo, "commit", "-qm", "Add reminder")
+    _git(repo, "commit", "-qm", "Add brief")
+
+
+def test_brief_blocks_the_stop_once(repo: Path) -> None:
+    _add_brief(repo)
     _start(repo)
     (repo / "base.txt").write_text("edit")
     result = _run(repo, "Stop")
     assert result.returncode == 0
+    # The turn's files only; the brief script finds the branch's documents itself.
     assert json.loads(result.stdout) == {
-        "systemMessage": "Review feature documentation"
+        "decision": "block",
+        "reason": "Brief for base.txt",
     }
     assert result.stderr == ""
+
+    second = _run(repo, "Stop", stop_hook_active=True)
+    assert (second.returncode, second.stdout, second.stderr) == (0, "", "")
+
+
+def test_stop_after_a_brief_checks_the_edits_once(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_brief(repo)
+    _start(repo)
+    (repo / "base.txt").write_text("edit")
+    assert json.loads(_run(repo, "Stop").stdout)["decision"] == "block"
+
+    # The edits the brief led to fail pre-commit on the next stop.
+    (repo / "doc.md").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "1")
+    second = _run(repo, "Stop", stop_hook_active=True)
+    assert second.returncode == 2
+    assert "pre-commit failed" in second.stderr
+    assert "Brief for" not in second.stderr
+    assert _checked(repo) == {"base.txt", "doc.md"}
+
+    third = _run(repo, "Stop", stop_hook_active=True)
+    assert (third.returncode, third.stdout, third.stderr) == (0, "", "")
+
+
+def test_continued_stop_without_a_brief_does_nothing(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _start(repo)
+    (repo / "base.txt").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "1")
+    assert _run(repo, "Stop").returncode == 2
+    (repo.parent / "checked.json").unlink()
+    result = _run(repo, "Stop", stop_hook_active=True)
+    assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
+    assert _checked(repo) == set()
+
+
+def test_brief_follows_a_pre_commit_failure(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_brief(repo)
+    _start(repo)
+    (repo / "base.txt").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "1")
+    result = _run(repo, "Stop")
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr.index("pre-commit failed") < result.stderr.index("Brief for")
+
+    # The edits that answer the brief are checked on the next stop.
+    (repo / "doc.md").write_text("edit")
+    monkeypatch.setenv("CHECK_EXIT", "0")
+    (repo.parent / "checked.json").unlink()
+    second = _run(repo, "Stop", stop_hook_active=True)
+    assert second.returncode == 0
+    assert _checked(repo) == {"base.txt", "doc.md"}
 
 
 @pytest.mark.parametrize("failure", ["CHECK_EXIT", "REWRITE"])
@@ -327,3 +405,83 @@ def test_linked_worktree_uses_its_own_reflog(repo: Path) -> None:
     _commit(linked, "local.txt")
     _stop(linked)
     assert _checked(linked) == {"local.txt"}
+
+
+def test_brief_measures_changes_from_the_turn_start(repo: Path) -> None:
+    _add_brief(repo)
+    start = _git(repo, "rev-parse", "HEAD")
+    _start(repo)
+    _commit(repo, "base.txt", "committed\n")
+    (repo / "base.txt").write_text("edited again\n")
+    result = _run(repo, "Stop")
+    assert json.loads(result.stdout)["reason"] == "Brief for base.txt"
+    assert (repo.parent / "base.txt").read_text() == start
+
+
+_COMPONENT = """# App
+
+> Runs the app.
+
+## Architecture
+
+The app has two steps.
+
+## Contracts and traps
+
+1. `a-key` **Step A runs first.** `app.py:step_a` starts the run.
+2. `b-key` **Step B runs last.** `app.py:step_b` ends the run.
+"""
+_APP = "def step_a():\n    return 1\n\n\ndef step_b():\n    return 2\n"
+
+
+def test_brief_skips_edits_made_before_the_turn(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # stale_docs keeps its per-session record in the temporary directory.
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    map_dir = repo / ".agents/feature-map"
+    (map_dir / "components").mkdir(parents=True)
+    for name in ("stale_docs.py", "check_feature_map.py"):
+        (map_dir / name).write_text(
+            (_HOOK.parents[1] / "feature-map" / name).read_text()
+        )
+    (map_dir / "components/app.md").write_text(_COMPONENT)
+    (map_dir / "PATHS.md").write_text(
+        "# Paths\n\n| Path | Component(s) |\n|---|---|\n| `app.py` | app |\n"
+    )
+    _commit(repo, "app.py", _APP)
+    _git(repo, "add", ".agents")
+    _git(repo, "commit", "-qm", "Add map")
+
+    (repo / "app.py").write_text(_APP.replace("return 1", "return 10"))
+    _start(repo)
+    (repo / "app.py").write_text(
+        (repo / "app.py").read_text().replace("return 2", "return 20")
+    )
+    result = _run(repo, "Stop")
+    reason = json.loads(result.stdout)["reason"]
+    assert "`b-key`" in reason
+    assert "`a-key`" not in reason
+
+
+def test_turn_start_records_files_with_unusual_names(repo: Path) -> None:
+    odd = 'quote"d\nname.txt'
+    (repo / odd).write_text("dirty before the turn")
+    _start(repo)
+    git_dir = subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    snapshot = json.loads((Path(git_dir) / "agent-turns" / "test.json").read_text())
+    blob = snapshot["blobs"][odd]
+    content = subprocess.run(
+        ["git", "cat-file", "blob", blob],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert content == "dirty before the turn"
