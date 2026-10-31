@@ -18,14 +18,13 @@ from onyx.db.token_limit import (
     delete_token_rate_limit,
     fetch_all_global_token_rate_limits,
     fetch_all_user_token_rate_limits,
-    get_token_rate_limit_scope_and_group_ids,
+    get_token_rate_limit_scope_and_group_id,
     insert_global_token_rate_limit,
     insert_user_token_rate_limit,
     update_token_rate_limit,
 )
 from onyx.db.user_group import (
     assert_group_config_is_editable,
-    assert_groups_config_are_editable,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -190,10 +189,8 @@ def _authorize_group_token_rate_limit_write(
     user: User, db_session: Session, *, group_id: int, rate_limit_id: int
 ) -> None:
     """Manager-scope gate for a group token-limit write: caller must manage group_id AND the
-    limit must belong to it — so a global/per-user id or another group's limit can't be reached
-    through this path. No current path attaches a limit to more than one group, but the schema
-    allows many-to-many; defensively, if a limit ever spans groups (a mutation hits all of them),
-    require the caller to manage every one, not just the group_id in the URL.
+    limit must be that group's pool, so a global/per-user id or another group's limit can't
+    be reached through this path.
 
     A default group carries no limits, so this path refuses it outright — but only after
     the scope gate, or the conflict would tell an out-of-scope caller which ids are
@@ -208,27 +205,15 @@ def _authorize_group_token_rate_limit_write(
     )
     assert_group_config_is_editable(db_session, group_id, "set token limits on")
     try:
-        scope, group_ids = get_token_rate_limit_scope_and_group_ids(
+        scope, limit_group_id = get_token_rate_limit_scope_and_group_id(
             db_session, rate_limit_id
         )
     except ValueError:
-        scope, group_ids = None, []
-    if scope != TokenRateLimitScope.USER_GROUP or group_id not in group_ids:
+        scope, limit_group_id = None, None
+    if scope != TokenRateLimitScope.USER_GROUP or limit_group_id != group_id:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "Token rate limit not found for this group."
         )
-    # Defensive: no current path attaches a limit to >1 group, but the schema allows it. If one
-    # ever did, the mutation would hit all of them, so require the caller to manage every one —
-    # and none of them to be a default group, which the URL's id alone wouldn't catch.
-    assert_within_scope(
-        user,
-        db_session,
-        permission=Permission.MANAGE_USER_GROUPS,
-        current_group_ids=group_ids,
-        requested_group_ids=group_ids,
-        is_non_public=True,
-    )
-    assert_groups_config_are_editable(db_session, group_ids, "set token limits on")
 
 
 # Separate from the shared by-id routes so this route's require_permission caps a scoped
