@@ -10780,6 +10780,13 @@
         "proceedButton": {
           "label": "Create Connector Anyway"
         }
+      },
+      "runLost": "The checks stopped responding. Try again.",
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "cancelFailed": {
+        "toast": "Couldn't cancel the checks. Try again."
       }
     },
     "connectorEdit": {

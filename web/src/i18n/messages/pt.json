@@ -10780,6 +10780,13 @@
         "proceedButton": {
           "label": "Criar conector mesmo assim"
         }
+      },
+      "runLost": "As verificações pararam de responder. Tente novamente.",
+      "cancelButton": {
+        "label": "Cancelar"
+      },
+      "cancelFailed": {
+        "toast": "Não foi possível cancelar as verificações. Tente novamente."
       }
     },
     "connectorEdit": {

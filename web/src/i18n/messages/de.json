@@ -10780,6 +10780,13 @@
         "proceedButton": {
           "label": "Konnektor trotzdem erstellen"
         }
+      },
+      "runLost": "Die Prüfungen reagieren nicht mehr. Versuchen Sie es erneut.",
+      "cancelButton": {
+        "label": "Abbrechen"
+      },
+      "cancelFailed": {
+        "toast": "Die Prüfungen konnten nicht abgebrochen werden. Versuchen Sie es erneut."
       }
     },
     "connectorEdit": {

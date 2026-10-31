@@ -9,6 +9,7 @@ import type {
   CredentialWithPrivateKey,
 } from "@/lib/credentials/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
+import { fetchErrorFrom } from "@/lib/fetcher";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import type { ConnectorBase } from "@/lib/connectors/types";
@@ -277,7 +278,10 @@ export async function startCredentialCheckRun(
     }
   );
   if (!response.ok) {
-    throw new Error(`Credential check run request failed: ${response.status}`);
+    throw await fetchErrorFrom(
+      response,
+      `Credential check run request failed: ${response.status}`
+    );
   }
   return response.json();
 }
