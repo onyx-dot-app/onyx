@@ -89,7 +89,8 @@ def search(
     expansion, hybrid retrieval, reranking and section merging — and returns the
     ranked sections without generating an answer. Results are ordered most
     relevant first and are always filtered by the calling user's document
-    permissions.
+    permissions. With `retrieval_only`, the search makes no LLM calls and
+    returns the sections in retrieval order.
     """
     # 1. Load persona
     persona = None
@@ -146,7 +147,8 @@ def search(
         llm = get_default_llm()
 
     auto_detect_filters = load_settings().auto_detect_search_filters is not False
-    primary_provider_checked = (
+    # Retrieval-only search makes no LLM calls, so it has no LLM cost to check.
+    primary_provider_checked = not request.retrieval_only and (
         bool(request.provider)
         or not request.skip_query_expansion
         or auto_detect_filters
@@ -207,6 +209,7 @@ def search(
         enable_slack_search=True,
         include_link=True,
         auto_detect_filters=auto_detect_filters,
+        retrieval_only=request.retrieval_only,
     )
 
     # This endpoint calls search directly, so it must open its own trace and tool span.

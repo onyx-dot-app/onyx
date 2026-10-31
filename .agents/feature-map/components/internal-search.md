@@ -25,7 +25,8 @@
   insufficient-permissions error, not a silent fallback.
 - **An API caller** sends `POST /search` and gets the selected, expanded
   sections with no LLM answer. It is for programmatic callers such as the
-  onyx-cli and the Craft sandbox.
+  onyx-cli and the Craft sandbox. With `retrieval_only`, it gets the top
+  sections in retrieval order and the search makes no LLM call.
 - **An EE user** on the Search page gets ranked documents and the LLM's picks.
   If selection fails, the page still shows the documents.
 - When no connector, federated connector or user file exists, or the vector DB
@@ -250,7 +251,7 @@ calls the index directly for admin document inspection.
 11. `decision-path-gate` **The decision path needs a configured model, a turn
     that persists content and, on cloud, a flag.**
     `tools/tool_implementations/search/search_tool.py:SearchTool._resolve_decision_client`
-    runs once per search call. It returns a client only when the DECISION
+    runs at most once per search call. It returns a client only when the DECISION
     default exists, `chat/incognito.py:current_turn_persists_content` is true,
     and the PostHog flag `onyx-search-decision-rerank-expansion` is on for the
     tenant. With the NoOp flag provider (self-hosted) the flag counts as on.
@@ -276,6 +277,14 @@ calls the index directly for admin document inspection.
     model, with no LLM fallback. A failed rerank then raises the primary
     model's budget error. Keep `_resolve_decision_client` ahead of
     `check_primary_llm_cost` in `SearchTool.search`.
+15. `retrieval-only-makes-no-model-calls` **`retrieval_only` makes no LLM or
+    decision-model call.**
+    `tools/tool_implementations/search/search_tool.py:SearchTool.search` skips
+    query expansion, scope and time detection and the Slack lane, and returns
+    the top sections before the decision client or selection model resolves.
+    The `/search` API skips the primary cost check for it. A new model call in
+    `search` must check `retrieval_only`, or it adds cost that callers chose to
+    avoid.
 
 ---
 

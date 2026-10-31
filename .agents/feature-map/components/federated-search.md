@@ -24,7 +24,8 @@
   The search then uses the tokens of the tenant's Slack bot, not the asker's own
   account.
 - **An API caller** of `POST /search` gets Slack results from their own
-  connected Slack account, ranked with the indexed results.
+  connected Slack account, ranked with the indexed results. A `retrieval_only`
+  call skips this Slack search. Indexed Slack documents can still match.
 - **When it fails**, the user sees no error. With no token, an expired token, or
   a Slack API error, the search runs without Slack and the answer has no Slack
   sources. The user must reconnect Slack after the token expires.
@@ -80,7 +81,8 @@ which runs once per tool call as its own lane. One lane per call avoids one
 Slack API search for each expanded query.
 
 **Token choice.** `SearchTool._prefetch_slack_data` runs only when
-`enable_slack_search` is true or the call has a `slack_context`.
+`enable_slack_search` is true or the call has a `slack_context`, and never with
+`retrieval_only`.
 - Bot context: the persona's document sets must map to a `FEDERATED_SLACK`
   connector through `FederatedConnector__DocumentSet`. If they do, it picks an
   enabled Slack bot, and prefers one with a `user_token`. The access token is

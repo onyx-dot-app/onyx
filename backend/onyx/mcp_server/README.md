@@ -133,6 +133,8 @@ Pass `agent` with an agent name to run the search as that Onyx agent. The search
 
 `agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
 
+Pass `retrieval_only` to skip every LLM step (query expansion, filter detection, document selection and context expansion). The tool then returns the top retrieved sections in retrieval order. `MCP_SERVER_SEARCH_RETRIEVAL_ONLY=true` turns it on for every search.
+
 Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types` and `document_set_names` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
 
 2. `search_web`
@@ -224,6 +226,7 @@ Expected response:
 - `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
 - `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
+- `MCP_SERVER_SEARCH_RETRIEVAL_ONLY`: Run every document search with no LLM calls (default: false)
 
 **API Server Connection:**
 - `API_SERVER_PROTOCOL`: Protocol for API server connection (default: "http")
