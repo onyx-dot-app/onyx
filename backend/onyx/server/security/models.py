@@ -15,7 +15,8 @@ class SSRFProtectionLevel(str, Enum):
     web connector's former WEB_CONNECTOR_VALIDATE_URLS toggle."""
 
     # Default. Most restrictive: every outbound path (incl. web connectors)
-    # blocks private/internal IPs.
+    # blocks private/internal IPs, except self-hosted custom tools, which may
+    # reach private ranges (accepted risk, ENG-4421).
     VALIDATE_ALL = "validate_all"
     # LLM-initiated fetches (open_url, MCP, OAuth) are validated; admin-configured
     # connectors may still reach private IPs.
@@ -69,10 +70,11 @@ def outbound_allow_private_network(level: SSRFProtectionLevel) -> bool:
     return level == SSRFProtectionLevel.DISABLED
 
 
-def web_connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
-    """Whether the web connector validates crawl targets. Only the most
-    restrictive level guards connectors; at VALIDATE_LLM admin-configured
-    connectors may still reach private IPs."""
+def connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
+    """The shared SSRF policy for admin-configured connector endpoints (web
+    crawl targets, self-hosted server URLs, SharePoint sites). Only the most
+    restrictive level guards connectors; at VALIDATE_LLM and above they may
+    reach private IPs."""
     return level == SSRFProtectionLevel.VALIDATE_ALL
 
 
@@ -83,6 +85,7 @@ PASSWORD_MAX_LENGTH_FLOOR = 4
 
 
 _OPERATOR_LOCKED_MARKER = "operator_locked"
+_ENV_PINNED_MARKER = "env_pinned"
 
 
 def _operator_locked() -> dict[str, bool]:
@@ -93,6 +96,14 @@ def _operator_locked() -> dict[str, bool]:
 def _tenant_editable() -> dict[str, bool]:
     """Field marker: tenant admins may override at runtime."""
     return {_OPERATOR_LOCKED_MARKER: False}
+
+
+def _env_pinned() -> dict[str, bool]:
+    """Field marker: a set env var wins over any stored override, so infra can
+    keep auth-gating values as reviewable config-as-code that an app-level
+    admin compromise cannot flip. Also operator-locked: never tenant-editable
+    in multi-tenant, and single-tenant editable only while env is unset."""
+    return {_OPERATOR_LOCKED_MARKER: True, _ENV_PINNED_MARKER: True}
 
 
 class IncognitoAvailability(str, Enum):
@@ -119,10 +130,24 @@ class SecuritySettingsOverrides(BaseModel):
     track_external_idp_expiry: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
+    # Relink window for an IdP client change. KV-backed, see KV_BACKED_OVERRIDE_KEYS.
+    allow_same_provider_subject_relink: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    # Claim window for renamed accounts after an SSO provider delete. KV-backed.
+    allow_renamed_account_claim: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
     incognito_availability: IncognitoAvailability | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
     incognito_record_mode: IncognitoRecordMode | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    allow_connector_group_restrictions: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    allow_connector_check_findings: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
@@ -160,6 +185,15 @@ class SecuritySettingsOverrides(BaseModel):
     # backports without a schema migration.
     password_auth_enabled: bool | None = Field(
         default=None, json_schema_extra=_operator_locked()
+    )
+    jwt_public_key_url: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
+    )
+    jwt_expected_audience: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
+    )
+    jwt_expected_issuer: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
     )
 
     @field_validator("valid_email_domains")
@@ -199,6 +233,18 @@ def _derive_operator_locked_fields() -> frozenset[str]:
 OPERATOR_LOCKED_FIELDS: frozenset[str] = _derive_operator_locked_fields()
 
 
+def _derive_env_pinned_fields() -> frozenset[str]:
+    return frozenset(
+        name
+        for name, info in SecuritySettingsOverrides.model_fields.items()
+        if isinstance(info.json_schema_extra, dict)
+        and info.json_schema_extra.get(_ENV_PINNED_MARKER)
+    )
+
+
+ENV_PINNED_FIELDS: frozenset[str] = _derive_env_pinned_fields()
+
+
 class SecuritySettings(BaseModel):
     """Effective, env-merged, immutable security settings."""
 
@@ -206,8 +252,12 @@ class SecuritySettings(BaseModel):
 
     user_directory_admin_only: bool
     track_external_idp_expiry: bool
+    allow_same_provider_subject_relink: bool
+    allow_renamed_account_claim: bool
     incognito_availability: IncognitoAvailability
     incognito_record_mode: IncognitoRecordMode
+    allow_connector_group_restrictions: bool
+    allow_connector_check_findings: bool
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool
@@ -219,6 +269,10 @@ class SecuritySettings(BaseModel):
     password_require_digit: bool
     password_require_special_char: bool
     password_auth_enabled: bool
+    # None disables JWT bearer auth / the corresponding claim check entirely.
+    jwt_public_key_url: str | None
+    jwt_expected_audience: str | None
+    jwt_expected_issuer: str | None
 
     @model_validator(mode="after")
     def _check_password_length_invariants(self) -> Self:

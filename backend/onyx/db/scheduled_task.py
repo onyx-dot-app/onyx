@@ -16,26 +16,25 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, desc, literal, select
+from sqlalchemy import and_, case, desc, func, literal, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.db.action_policy import replace_task_action_policies
 from onyx.db.enums import (
-    GatedAppKind,
     ScheduledTaskErrorClass,
     ScheduledTaskRunStatus,
     ScheduledTaskSkipReason,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import (
-    GatedApp,
     ScheduledTask,
-    ScheduledTaskPreApprovedTarget,
     ScheduledTaskRun,
+    User,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import TaskAppActionPolicies
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EditorMode,
     compute_next_run_at,
@@ -59,8 +58,7 @@ def create_scheduled_task(
     cron_expression: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
-    pre_approved_external_app_ids: list[int] | None = None,
-    pre_approved_mcp_server_ids: list[int] | None = None,
+    action_policies: list[TaskAppActionPolicies] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
@@ -85,60 +83,14 @@ def create_scheduled_task(
         status=status,
         next_run_at=next_run_at,
     )
-    _replace_pre_approved_targets(
-        db_session,
-        task,
-        external_app_ids=pre_approved_external_app_ids or [],
-        mcp_server_ids=pre_approved_mcp_server_ids or [],
-    )
     db_session.add(task)
     db_session.flush()
+    user = db_session.get(User, user_id)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    if action_policies is not None:
+        replace_task_action_policies(db_session, user, task, action_policies)
     return task
-
-
-def _replace_pre_approved_targets(
-    db_session: Session,
-    task: ScheduledTask,
-    *,
-    external_app_ids: list[int] | None = None,
-    mcp_server_ids: list[int] | None = None,
-) -> None:
-    """Replace supplied target kinds and preserve omitted kinds.
-
-    Reuse unchanged rows to avoid deleting and inserting the same unique key
-    in one flush. The orphan cascade deletes removed grants.
-    """
-    replacements = {
-        kind: target_ids
-        for kind, target_ids in (
-            (GatedAppKind.EXTERNAL_APP, external_app_ids),
-            (GatedAppKind.MCP_SERVER, mcp_server_ids),
-        )
-        if target_ids is not None
-    }
-    if not replacements:
-        return
-
-    existing_by_target = {
-        grant.gated_app.target_key: grant for grant in task.pre_approved_targets
-    }
-    replacement_grants = [
-        existing_by_target.get((kind, target_id))
-        or ScheduledTaskPreApprovedTarget(
-            gated_app_id=get_or_create_gated_app_id(db_session, kind, target_id)
-        )
-        for kind, target_ids in replacements.items()
-        for target_id in set(target_ids)
-    ]
-    retained_grants = [
-        grant
-        for grant in task.pre_approved_targets
-        if grant.gated_app.kind not in replacements
-    ]
-    task.pre_approved_targets = [
-        *replacement_grants,
-        *retained_grants,
-    ]
 
 
 def get_scheduled_task(
@@ -146,6 +98,7 @@ def get_scheduled_task(
     db_session: Session,
     task_id: UUID,
     user_id: UUID,
+    lock: bool = False,
 ) -> ScheduledTask:
     """Fetch a non-deleted task owned by ``user_id``.
 
@@ -153,13 +106,14 @@ def get_scheduled_task(
     or belongs to a different user. Callers should never need to inspect
     ``deleted`` themselves.
     """
-    task = db_session.execute(
-        select(ScheduledTask).where(
-            ScheduledTask.id == task_id,
-            ScheduledTask.user_id == user_id,
-            ScheduledTask.deleted.is_(False),
-        )
-    ).scalar_one_or_none()
+    query = select(ScheduledTask).where(
+        ScheduledTask.id == task_id,
+        ScheduledTask.user_id == user_id,
+        ScheduledTask.deleted.is_(False),
+    )
+    if lock:
+        query = query.with_for_update()
+    task = db_session.scalar(query)
     if task is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task not found")
     return task
@@ -193,8 +147,7 @@ def update_scheduled_task(
     cron_expression: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
-    pre_approved_external_app_ids: list[int] | None = None,
-    pre_approved_mcp_server_ids: list[int] | None = None,
+    action_policies: list[TaskAppActionPolicies] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
@@ -204,15 +157,15 @@ def update_scheduled_task(
         ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
-      - Each pre-approved target field follows normal patch semantics: supplied
-        replaces that target kind, and omitted leaves it unchanged.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
             the caller.
         OnyxError(INVALID_INPUT): the new cron is invalid.
     """
-    task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user_id)
+    task = get_scheduled_task(
+        db_session=db_session, task_id=task_id, user_id=user_id, lock=True
+    )
     now = now or datetime.now(tz=timezone.utc)
 
     schedule_changed = False
@@ -220,12 +173,6 @@ def update_scheduled_task(
         task.name = name
     if prompt is not None:
         task.prompt = prompt
-    _replace_pre_approved_targets(
-        db_session,
-        task,
-        external_app_ids=pre_approved_external_app_ids,
-        mcp_server_ids=pre_approved_mcp_server_ids,
-    )
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:
@@ -242,6 +189,11 @@ def update_scheduled_task(
     elif schedule_changed and task.status == ScheduledTaskStatus.ACTIVE:
         task.next_run_at = compute_next_run_at(task.cron_expression, now)
 
+    if action_policies is not None:
+        user = db_session.get(User, user_id)
+        if user is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+        replace_task_action_policies(db_session, user, task, action_policies)
     db_session.flush()
     return task
 
@@ -420,10 +372,15 @@ def mark_run_status(
     leave it NULL.
     """
     run = db_session.execute(
-        select(ScheduledTaskRun).where(ScheduledTaskRun.id == run_id)
+        select(ScheduledTaskRun)
+        .where(ScheduledTaskRun.id == run_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if run is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
+    if status.is_terminal() and run.status != status:
+        run.version += 1
     run.status = status
     if session_id is not None:
         run.session_id = session_id
@@ -468,6 +425,7 @@ def list_runs_for_task(
     user_id: UUID,
     cursor: datetime | None = None,
     limit: int = 50,
+    unviewed_only: bool = False,
 ) -> list[ScheduledTaskRun]:
     """List runs for a task, newest first, optionally paginated by ``started_at``.
 
@@ -487,6 +445,11 @@ def list_runs_for_task(
     conditions = [ScheduledTaskRun.task_id == task_id]
     if cursor is not None:
         conditions.append(ScheduledTaskRun.started_at < cursor)
+    if unviewed_only:
+        conditions.append(
+            func.coalesce(ScheduledTaskRun.viewed_revision, 0)
+            < ScheduledTaskRun.version
+        )
 
     stmt = (
         select(ScheduledTaskRun)
@@ -495,6 +458,69 @@ def list_runs_for_task(
         .limit(limit)
     )
     return list(db_session.execute(stmt).scalars())
+
+
+def unread_run_counts_for_user(
+    *,
+    db_session: Session,
+    user_id: UUID,
+) -> dict[UUID, int]:
+    """Count runs with unviewed results per non-deleted task of ``user_id``."""
+    rows = db_session.execute(
+        select(ScheduledTaskRun.task_id, func.count())
+        .join(ScheduledTask, ScheduledTaskRun.task_id == ScheduledTask.id)
+        .where(
+            ScheduledTask.user_id == user_id,
+            ScheduledTask.deleted.is_(False),
+            func.coalesce(ScheduledTaskRun.viewed_revision, 0)
+            < ScheduledTaskRun.version,
+        )
+        .group_by(ScheduledTaskRun.task_id)
+    ).tuples()
+    return dict(rows.all())
+
+
+def mark_runs_viewed(
+    *,
+    db_session: Session,
+    task_id: UUID,
+    user_id: UUID,
+    revisions: dict[UUID, int],
+) -> list[ScheduledTaskRun]:
+    """Acknowledge only supplied revisions; newer results stay unread.
+
+    Raises ``OnyxError(NOT_FOUND)`` for a task the user cannot see and
+    ``ValueError`` when a revision is newer than the run's current version.
+    """
+    get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user_id)
+    if not revisions:
+        return []
+    # Lock before validating so the complete request succeeds or fails together.
+    rows = db_session.execute(
+        select(ScheduledTaskRun.id, ScheduledTaskRun.version)
+        .where(
+            ScheduledTaskRun.task_id == task_id,
+            ScheduledTaskRun.id.in_(revisions),
+        )
+        .order_by(ScheduledTaskRun.id)
+        .with_for_update()
+    ).all()
+    if any(revisions[run_id] > version for run_id, version in rows):
+        raise ValueError("Run revision is newer than the current run")
+    if not rows:
+        return []
+    viewed = case(revisions, value=ScheduledTaskRun.id)
+    return list(
+        db_session.scalars(
+            update(ScheduledTaskRun)
+            .where(ScheduledTaskRun.id.in_([run_id for run_id, _ in rows]))
+            .values(
+                viewed_revision=func.greatest(ScheduledTaskRun.viewed_revision, viewed)
+            )
+            .returning(ScheduledTaskRun)
+            .execution_options(populate_existing=True, synchronize_session=False)
+        )
+    )
 
 
 def find_stuck_runs(
@@ -529,49 +555,6 @@ def find_stuck_runs(
         )
     )
     return list(db_session.execute(stmt).scalars())
-
-
-# ---------------------------------------------------------------------------
-# Egress-gate pre-approval lookup
-# ---------------------------------------------------------------------------
-
-# (run_id, granted gated targets) for a RUNNING scheduled run, else None. A
-# target is a (kind, id) pair spanning external apps and MCP servers.
-GrantedTarget = tuple[GatedAppKind, int]
-ScheduledRunGrants = tuple[UUID, set[GrantedTarget]] | None
-
-
-def get_live_scheduled_run_grants(
-    *,
-    db_session: Session,
-    session_id: UUID,
-) -> ScheduledRunGrants:
-    """``(run_id, granted_targets)`` when ``session_id`` is a currently
-    RUNNING scheduled run; ``None`` otherwise.
-
-    The ``scheduled_task_run`` lookup subsumes the session-origin check
-    (only SCHEDULED-origin sessions have run rows); the RUNNING filter means
-    interactive follow-ups on a finished scheduled session park as usual.
-    """
-    run = db_session.execute(
-        select(ScheduledTaskRun.id, ScheduledTaskRun.task_id).where(
-            ScheduledTaskRun.session_id == session_id,
-            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
-        )
-    ).first()
-    if run is None:
-        return None
-    run_id, task_id = run
-    gated_targets = db_session.scalars(
-        select(GatedApp)
-        .join(
-            ScheduledTaskPreApprovedTarget,
-            ScheduledTaskPreApprovedTarget.gated_app_id == GatedApp.id,
-        )
-        .where(ScheduledTaskPreApprovedTarget.scheduled_task_id == task_id)
-    ).all()
-    granted: set[GrantedTarget] = {target.target_key for target in gated_targets}
-    return run_id, granted
 
 
 # ---------------------------------------------------------------------------
@@ -620,4 +603,6 @@ def get_scheduled_run_context(
         "status": run.status,
         "started_at": run.started_at,
         "finished_at": run.finished_at,
+        "revision": run.version,
+        "viewed_revision": run.viewed_revision,
     }

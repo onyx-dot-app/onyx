@@ -35,6 +35,8 @@ test("enforces a positive cost limit", async () => {
 
   const costLimit = screen.getByPlaceholderText("Cost limit");
   await user.type(costLimit, "0");
+  // InputNumber clamps to its minimum on blur.
+  await user.tab();
 
   expect(costLimit).toHaveValue("0.01");
 });
@@ -45,6 +47,7 @@ test("enforces a positive token limit", async () => {
 
   const tokenLimit = screen.getByPlaceholderText("Token limit (thousands)");
   await user.type(tokenLimit, "0");
+  await user.tab();
 
   expect(tokenLimit).toHaveValue("1");
 });

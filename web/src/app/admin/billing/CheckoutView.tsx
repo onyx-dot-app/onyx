@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
-import { Button, Divider } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Divider, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import Card from "@/refresh-components/cards/Card";
 import { SvgUsers, SvgCheck } from "@opal/icons";
 import { createCheckoutSession } from "@/lib/billing/svc";
 import { useUser } from "@/providers/UserProvider";
 import { formatDateShort } from "@/lib/dateUtils";
-import type { PlanType } from "@/lib/billing/interfaces";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import type { PlanType } from "@/lib/billing/types";
+import { InputNumber } from "@opal/components";
 import useUsers from "@/hooks/useUsers";
 
 // ----------------------------------------------------------------------------
@@ -33,6 +34,8 @@ function BillingOption({
   price,
   badge,
 }: BillingOptionProps) {
+  const t = useTranslations("admin.billing");
+
   return (
     <Card
       onClick={onClick}
@@ -54,15 +57,21 @@ function BillingOption({
           height="fit"
           width="fit"
         >
-          <Text mainUiAction className="billing-option-title">
-            {title}
-          </Text>
-          <div className="billing-option-price">
-            <Text mainContentEmphasis text04>
-              ${price}
+          <span className="billing-option-title">
+            <Text font="main-ui-action" color="inherit">
+              {title}
             </Text>
-            <Text secondaryBody text03 nowrap>
-              per seat/month
+          </span>
+          <div className="billing-option-price">
+            <Text font="main-content-emphasis" color="text-04">
+              {t("checkout.price.label", { price })}
+            </Text>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
+              {t("checkout.perSeatMonth.label")}
             </Text>
           </div>
         </Section>
@@ -75,7 +84,7 @@ function BillingOption({
             width="fit"
             height="fit"
           >
-            <Text secondaryAction className="billing-option-badge">
+            <Text font="secondary-action" color="action-selection-05">
               {badge}
             </Text>
             <SvgCheck className="billing-option-check" />
@@ -95,6 +104,8 @@ interface CheckoutViewProps {
 }
 
 export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
+  const t = useTranslations("admin.billing");
+  const locale = useLocale();
   const { user } = useUser();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 
@@ -124,8 +135,8 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const trialEndDate = useMemo(() => {
     const date = new Date();
     date.setMonth(date.getMonth() + 1);
-    return formatDateShort(date.toISOString());
-  }, []);
+    return formatDateShort(date.toISOString(), locale);
+  }, [locale]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -146,7 +157,9 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
     } catch (err) {
       console.error("Error creating checkout session:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to create checkout session"
+        err instanceof Error
+          ? err.message
+          : t("checkout.createSessionFailed.error")
       );
     } finally {
       setIsSubmitting(false);
@@ -171,12 +184,12 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           width="fit"
         >
           <SvgUsers size={24} />
-          <Text headingH2 text04>
-            Business
+          <Text font="heading-h2" color="text-04">
+            {t("checkout.plan.title")}
           </Text>
         </Section>
         <Button prominence="secondary" onClick={onAdjustPlan}>
-          Adjust Plan
+          {t("checkout.adjustPlan.label")}
         </Button>
       </Section>
 
@@ -191,8 +204,8 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         >
           {/* Billing Cycle */}
           <InputHorizontal
-            title="Billing Cycle"
-            description="after your 1-month free trial"
+            title={t("checkout.billingCycle.title")}
+            description={t("checkout.billingCycle.description")}
             withLabel
           >
             <Section
@@ -205,15 +218,15 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
               <BillingOption
                 selected={billingPeriod === "monthly"}
                 onClick={() => setBillingPeriod("monthly")}
-                title="Monthly"
+                title={t("checkout.monthly.label")}
                 price={monthlyPrice}
               />
               <BillingOption
                 selected={billingPeriod === "annual"}
                 onClick={() => setBillingPeriod("annual")}
-                title="Annual"
+                title={t("checkout.annual.label")}
                 price={annualPrice}
-                badge="Save 20%"
+                badge={t("checkout.annualBadge.label")}
               />
             </Section>
           </InputHorizontal>
@@ -222,10 +235,10 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
 
           {/* Seats */}
           <InputHorizontal
-            title="Seats"
-            description={`Minimum ${minRequiredSeats} seat${
-              minRequiredSeats !== 1 ? "s" : ""
-            } required for your current users and Slack accounts.`}
+            title={t("checkout.seats.title")}
+            description={t("checkout.seats.description", {
+              count: minRequiredSeats,
+            })}
             withLabel
           >
             <InputNumber
@@ -248,23 +261,30 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         height="auto"
       >
         {error ? (
-          <Text secondaryBody className="billing-error-text">
+          <Text font="secondary-body" color="status-error-05">
             {error}
           </Text>
         ) : !annualPriceSelected ? (
-          <Text secondaryBody text03>
-            You will be billed on{" "}
-            <Text secondaryBody text04>
-              {trialEndDate}
-            </Text>{" "}
-            After your 1-month free trial ends.
+          <Text font="secondary-body" color="text-03">
+            {richNodes(
+              t.rich("checkout.trialBilling.text", {
+                date: trialEndDate,
+                value: (chunks) => (
+                  <Text font="secondary-body" color="text-04">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         ) : (
           // Empty div to maintain space-between alignment
           <div></div>
         )}
         <Button disabled={isSubmitting} onClick={handleSubmit}>
-          {isSubmitting ? "Loading..." : "Continue to Payment"}
+          {isSubmitting
+            ? t("checkout.loading.label")
+            : t("checkout.continueToPayment.label")}
         </Button>
       </Section>
     </Card>

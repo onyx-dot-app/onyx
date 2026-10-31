@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import Keycap from "@/refresh-components/Keycap";
 
@@ -11,10 +12,11 @@ interface InterruptHintProps {
  * requested it becomes `Stopping…`.
  */
 export default function InterruptHint({ interrupting }: InterruptHintProps) {
+  const t = useTranslations("craft.interruptHint");
   if (interrupting) {
     return (
       <Text font="secondary-body" color="text-02">
-        Stopping…
+        {t("stopping.label")}
       </Text>
     );
   }
@@ -23,7 +25,7 @@ export default function InterruptHint({ interrupting }: InterruptHintProps) {
     <div className="flex items-center gap-1 select-none">
       <Keycap>esc</Keycap>
       <Text font="secondary-body" color="text-02">
-        to interrupt
+        {t("toInterrupt.label")}
       </Text>
     </div>
   );

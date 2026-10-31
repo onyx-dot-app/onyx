@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import sync_model_configurations
+from onyx.db.llm import _model_protocol_flows, sync_model_configurations
 from onyx.server.manage.llm.models import SyncModelEntry
 
 
@@ -17,8 +17,105 @@ def _make_existing_model(name: str, flow_types: list[LLMModelFlowType]) -> Magic
     return model
 
 
+@pytest.mark.parametrize("stored", [None, {LLMModelFlowType.CHAT}])
+def test_custom_name_does_not_remove_chat_capability(
+    stored: set[LLMModelFlowType] | None,
+) -> None:
+    assert _model_protocol_flows("ollama", "instructor-chat", stored) == {
+        LLMModelFlowType.CHAT
+    }
+
+
+@pytest.mark.parametrize("provider", ["openrouter", "vercel_ai_gateway"])
+def test_unselected_discovered_model_does_not_gain_chat_on_save(provider: str) -> None:
+    assert _model_protocol_flows(provider, "vendor/evaluation", set()) == set()
+
+
+def test_decision_discovery_does_not_select_model() -> None:
+    assert _model_protocol_flows(
+        "openrouter",
+        "vendor/decision",
+        {LLMModelFlowType.CHAT},
+    ) == {LLMModelFlowType.CHAT}
+
+
+def test_vercel_gateway_chat_save_preserves_decision_only_flow() -> None:
+    assert _model_protocol_flows(
+        "vercel_ai_gateway",
+        "openai/gpt-6-luna-decisions",
+        {LLMModelFlowType.DECISION},
+    ) == {LLMModelFlowType.DECISION}
+
+
 class TestSyncModelConfigurations:
     """Tests for sync_model_configurations function."""
+
+    def test_discovery_adds_chat_to_existing_decision_model(self) -> None:
+        provider = MagicMock()
+        provider.id = 1
+        provider.provider = "openrouter"
+        provider.model_configurations = [
+            _make_existing_model("vendor/dual", [LLMModelFlowType.DECISION])
+        ]
+        session = MagicMock()
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=provider
+        ):
+            result = sync_model_configurations(
+                session,
+                1,
+                [
+                    SyncModelEntry(
+                        name="vendor/dual",
+                        display_name="Dual",
+                        supports_chat=True,
+                        supports_decisions=True,
+                    )
+                ],
+            )
+        assert result == 0
+        assert session.execute.call_count == 1
+        assert session.execute.call_args.args[0].compile().params == {
+            "model_configuration_id": 42,
+            "llm_model_flow_type": LLMModelFlowType.CHAT,
+            "is_default": False,
+        }
+        session.commit.assert_called_once()
+
+    def test_keeps_chat_capability_when_model_holds_chat_default(self) -> None:
+        provider = MagicMock()
+        provider.id = 1
+        provider.provider = "openrouter"
+        provider.model_configurations = [
+            _make_existing_model("vendor/decision", [LLMModelFlowType.CHAT])
+        ]
+        session = MagicMock()
+        with (
+            patch(
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=provider,
+            ),
+            patch(
+                "onyx.db.llm.fetch_default_flows_by_model_id",
+                return_value={42: {LLMModelFlowType.CHAT}},
+            ),
+        ):
+            result = sync_model_configurations(
+                session,
+                1,
+                [
+                    SyncModelEntry(
+                        name="vendor/decision",
+                        display_name="Decision",
+                        supports_chat=False,
+                        supports_decisions=True,
+                    )
+                ],
+            )
+
+        assert result == 0
+        session.execute.assert_not_called()
+        session.commit.assert_not_called()
 
     def test_inserts_new_models(self) -> None:
         """Test that new models are inserted."""
@@ -40,11 +137,17 @@ class TestSyncModelConfigurations:
                     supports_image_input=True,
                 ),
                 SyncModelEntry(
-                    name="gpt-4o",
-                    display_name="GPT-4o",
+                    name="gpt-6-sol",
+                    display_name="GPT-6 Sol",
                     max_input_tokens=128000,
                     supports_image_input=True,
                 ),
+            ]
+
+            # The bulk model insert returns the inserted (id, name) rows.
+            mock_session.execute.return_value.all.return_value = [
+                (1, "gpt-4"),
+                (2, "gpt-6-sol"),
             ]
 
             result = sync_model_configurations(
@@ -54,9 +157,8 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 2  # Two new models
-            assert (
-                mock_session.execute.call_count == 2 * 3
-            )  # 2 models * (model insert + chat insert + vision insert)
+            # One bulk insert for the models, one for their flows.
+            assert mock_session.execute.call_count == 2
             mock_session.commit.assert_called_once()
 
     def test_skips_existing_models(self) -> None:
@@ -83,12 +185,14 @@ class TestSyncModelConfigurations:
                     supports_image_input=True,
                 ),
                 SyncModelEntry(
-                    name="gpt-4o",  # New - should be inserted
-                    display_name="GPT-4o",
+                    name="gpt-6-sol",  # New - should be inserted
+                    display_name="GPT-6 Sol",
                     max_input_tokens=128000,
                     supports_image_input=True,
                 ),
             ]
+
+            mock_session.execute.return_value.all.return_value = [(2, "gpt-6-sol")]
 
             result = sync_model_configurations(
                 db_session=mock_session,
@@ -97,7 +201,8 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 1  # Only one new model
-            assert mock_session.execute.call_count == 3
+            # One bulk insert for the new model, one for its flows.
+            assert mock_session.execute.call_count == 2
 
     def test_no_commit_when_no_new_models(self) -> None:
         """Test that commit is not called when nothing new or upgraded."""
@@ -165,6 +270,8 @@ class TestSyncModelConfigurations:
                 ),
             ]
 
+            mock_session.execute.return_value.all.return_value = [(1, "deepseek-r1")]
+
             result = sync_model_configurations(
                 db_session=mock_session,
                 provider_id=1,
@@ -172,8 +279,20 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 1
-            # 1 model insert + 3 flow inserts (CHAT + VISION + REASONING)
-            assert mock_session.execute.call_count == 4
+            # One bulk insert for the model, one for its CHAT, VISION and
+            # REASONING flows.
+            assert mock_session.execute.call_count == 2
+            inserted_flow_types = {
+                value
+                for call in mock_session.execute.call_args_list
+                for key, value in call.args[0].compile().params.items()
+                if key.startswith("llm_model_flow_type")
+            }
+            assert inserted_flow_types == {
+                LLMModelFlowType.CHAT,
+                LLMModelFlowType.VISION,
+                LLMModelFlowType.REASONING,
+            }
             mock_session.commit.assert_called_once()
 
     def test_handles_missing_optional_fields(self) -> None:
@@ -240,6 +359,42 @@ class TestSyncModelConfigurations:
 
             assert result == 0  # No new models, only an upgraded flow
             assert mock_session.execute.call_count == 1  # One VISION flow insert
+            mock_session.commit.assert_called_once()
+
+    def test_marks_existing_model_as_router(self) -> None:
+        """An existing row gains is_router when the source newly reports it
+        (e.g. a row synced before router detection existed). Returns 0 new
+        models but commits the flag."""
+        mock_existing_model = _make_existing_model(
+            "openrouter/auto", [LLMModelFlowType.CHAT]
+        )
+        mock_existing_model.is_router = False
+
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = [mock_existing_model]
+
+        mock_session = MagicMock()
+
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
+        ):
+            models = [
+                SyncModelEntry(
+                    name="openrouter/auto",
+                    display_name="Auto Router",
+                    is_router=True,
+                ),
+            ]
+
+            result = sync_model_configurations(
+                db_session=mock_session,
+                provider_id=1,
+                models=models,
+            )
+
+            assert result == 0
+            assert mock_existing_model.is_router is True
             mock_session.commit.assert_called_once()
 
     def test_does_not_remove_flows(self) -> None:

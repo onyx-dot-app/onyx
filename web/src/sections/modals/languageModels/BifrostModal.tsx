@@ -1,10 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
-import { Tabs, Text } from "@opal/components";
+import { Tabs } from "@opal/components";
 import {
   BifrostApiMode,
   LLMProviderFormProps,
@@ -33,22 +34,22 @@ import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 const DEFAULT_API_MODE: BifrostApiMode = "chat_completions";
 const BIFROST_API_MODE_KEY = "bifrost_api_mode";
 
-const API_MODE_TABS: {
-  value: BifrostApiMode;
-  title: string;
-  subtitle: string;
-}[] = [
+const API_MODE_TABS = [
   {
     value: "chat_completions",
-    title: "Chat Completions API",
+    titleKey: "bifrost.apiMode.chatCompletions.label",
     subtitle: "/v1/chat/completions",
   },
   {
     value: "responses",
-    title: "Responses API",
+    titleKey: "bifrost.apiMode.responses.label",
     subtitle: "/v1/responses",
   },
-];
+] as const satisfies readonly {
+  value: BifrostApiMode;
+  titleKey: string;
+  subtitle: string;
+}[];
 
 interface BifrostModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -64,6 +65,8 @@ function BifrostModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: BifrostModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   const formikProps = useFormikContext<BifrostModalValues>();
   const { setFieldValue, values } = formikProps;
 
@@ -99,30 +102,25 @@ function BifrostModalInternals({
       >
         <Tabs.List>
           {API_MODE_TABS.map((tab) => (
-            <Tabs.Trigger key={tab.value} value={tab.value}>
-              <div className="flex flex-col items-start">
-                <Text font="main-ui-action" color="inherit">
-                  {tab.title}
-                </Text>
-                <Text font="secondary-body" color="text-03">
-                  {tab.subtitle}
-                </Text>
-              </div>
+            <Tabs.Trigger
+              key={tab.value}
+              value={tab.value}
+              description={tab.subtitle}
+            >
+              {t(tab.titleKey)}
             </Tabs.Trigger>
           ))}
         </Tabs.List>
       </Tabs>
 
       <APIBaseField
-        subDescription="Paste your Bifrost gateway endpoint URL (including API version)."
-        placeholder="https://your-bifrost-gateway.com/v1"
+        subDescription={t("bifrost.apiBaseField.description")}
+        placeholder={tPlaceholders("bifrost.apiBase")}
       />
 
       <APIKeyField
         optional
-        subDescription={markdown(
-          "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
-        )}
+        subDescription={markdown(t("bifrost.apiKeyField.description"))}
       />
 
       {!isOnboarding && (
@@ -156,6 +154,7 @@ export default function BifrostModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -178,7 +177,7 @@ export default function BifrostModal({
     [BIFROST_API_MODE_KEY]: initialMode,
   };
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
   });
 
@@ -191,6 +190,7 @@ export default function BifrostModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -211,8 +211,8 @@ export default function BifrostModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

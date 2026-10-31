@@ -10,7 +10,7 @@ export const getBackendVersion = async (): Promise<string | null> => {
     }
 
     const data: { backend_version: string } = await res.json();
-    return data.backend_version as string;
+    return data.backend_version;
   } catch (e) {
     console.log(`Error fetching backend version info: ${e}`);
     return null;

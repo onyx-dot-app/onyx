@@ -1,11 +1,11 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
-import { MessageCard } from "@opal/components";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTracingProviders } from "@/lib/tracing/hooks";
@@ -21,20 +21,24 @@ import {
 import { TracingDisconnectModal } from "@/views/admin/TracingPage/TracingDisconnectModal";
 
 const route = ADMIN_ROUTES.TRACING;
-const DESCRIPTION =
-  "Connect observability platforms to monitor and evaluate LLM calls.";
 
 interface ShellProps {
   children: ReactNode;
+  loading?: boolean;
+  /** The page failed to load; the string is its description. */
+  error?: string | false;
 }
 
-function Shell({ children }: ShellProps) {
+function Shell({ children, loading, error }: ShellProps) {
+  const t = useTranslations("admin.tracing");
+  const adminRouteTitle = useAdminRouteTitle();
+
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={loading} error={error}>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
-        description={DESCRIPTION}
+        title={adminRouteTitle(route)}
+        description={t("page.description")}
         divider
       />
       <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
@@ -43,6 +47,7 @@ function Shell({ children }: ShellProps) {
 }
 
 export default function TracingPage() {
+  const t = useTranslations("admin.tracing");
   const [activeProvider, setActiveProvider] =
     useState<TracingSetupModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
@@ -52,33 +57,16 @@ export default function TracingPage() {
   const { providers, error, isLoading, mutateProviders } =
     useTracingProviders();
 
-  if (error) {
-    const detail =
-      error instanceof FetchError && typeof error.info?.detail === "string"
+  // The server's detail when it gives one, else the generic description.
+  const loadError: string | false = error
+    ? (error instanceof FetchError && typeof error.info?.detail === "string"
         ? error.info.detail
-        : error.message;
-    return (
-      <Shell>
-        <MessageCard
-          variant="error"
-          title="Failed to load tracing settings"
-          description={detail ?? "Unable to load tracing configuration."}
-        />
-      </Shell>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <Shell>
-        <PageLoader />
-      </Shell>
-    );
-  }
+        : error.message) || t("loadError.description")
+    : false;
 
   return (
     <>
-      <Shell>
+      <Shell loading={isLoading} error={loadError}>
         <div className="flex w-full flex-col gap-2">
           {TRACING_PROVIDER_ORDER.map((providerType) => {
             const detail = TRACING_PROVIDER_DETAILS[providerType];
@@ -91,9 +79,9 @@ export default function TracingPage() {
                 key={providerType}
                 icon={detail.logo}
                 title={detail.label}
-                description={detail.description}
+                description={t(detail.descriptionKey)}
                 status={connected ? "selected" : "disconnected"}
-                selectedLabel="Connected"
+                selectedLabel={t("provider.connected.label")}
                 onConnect={() => {
                   setActiveProvider({ providerType, detail, provider });
                   setupModal.toggle(true);

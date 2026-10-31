@@ -49,10 +49,11 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
+@pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """Collect the union of `@pytest.mark.secrets(...)` args across all items."""
+    """Collect secret requirements after pytest applies test selection filters."""
     needed: set[TestSecret] = set()
     for item in items:
         for marker in item.iter_markers(name="secrets"):
@@ -69,5 +70,7 @@ def pytest_collection_modifyitems(
 @pytest.fixture(scope="session")
 def test_secrets(request: pytest.FixtureRequest) -> RedactedDict[TestSecret, str]:
     """Resolve only the secrets declared by collected tests, in one batch."""
-    needed: set[TestSecret] = getattr(request.config, _NEEDED_SECRETS_KEY, set())
+    needed: set[TestSecret] = getattr(  # ods: ignore[getattr]
+        request.config, _NEEDED_SECRETS_KEY, set()
+    )
     return RedactedDict(get_secrets(sorted(needed, key=lambda s: s.value)))

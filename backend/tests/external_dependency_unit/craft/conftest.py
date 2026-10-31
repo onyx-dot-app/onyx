@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -20,24 +20,25 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
     AccountType,
     BuildSessionStatus,
+    LLMModelFlowType,
     SandboxStatus,
     SkillSharePermission,
 )
 from onyx.db.llm import (
-    fetch_default_llm_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.db.models import (
     BuildSession,
     Sandbox,
+    ScheduledTask,
     Skill,
     Skill__UserGroup,
     User,
     UserGroup,
-    UserRole,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
@@ -55,6 +56,8 @@ from tests.common.craft.skill_table_isolation import (
     snapshot_skill_tables,
 )
 from tests.common.craft.stubs import StubSandboxManager
+from tests.common.models import CI_OPENAI_MODEL
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -65,7 +68,7 @@ def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
-                session.execute(text("SET lock_timeout = '10s'"))
+                session.execute(text("SET LOCAL lock_timeout = '10s'"))
                 for row_id in ids:
                     row = session.get(model, row_id)
                     if row is not None:
@@ -97,7 +100,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
     seeded_name: str | None = None
     try:
         with get_session_with_current_tenant() as session:
-            if fetch_default_llm_model(session) is None:
+            if fetch_default_model(session, LLMModelFlowType.CHAT) is None:
                 seeded_name = f"craft-ci-default-{uuid4().hex[:8]}"
                 provider = upsert_llm_provider(
                     LLMProviderUpsertRequest(
@@ -107,16 +110,17 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                         api_key_changed=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
-                                name="gpt-5-mini", is_visible=True
+                                name=CI_OPENAI_MODEL, is_visible=True
                             )
                         ],
                     ),
                     db_session=session,
                 )
-                update_default_provider(
+                update_default_model(
                     provider_id=provider.id,
-                    model_name="gpt-5-mini",
+                    model=CI_OPENAI_MODEL,
                     db_session=session,
+                    flow_type=LLMModelFlowType.CHAT,
                 )
                 session.commit()
         yield
@@ -160,6 +164,11 @@ def test_user(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[User, None, None]:
+    """A group-less, permission-less external-permission placeholder.
+
+    That is deliberate: it matches the row production's permission sync creates.
+    Use ``make_user(standard_account=True)`` when a test needs real authority.
+    """
     password_helper = PasswordHelper()
     user = User(
         id=uuid4(),
@@ -168,16 +177,18 @@ def test_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
+    user_id = user.id
     yield user
-    # Release uncommitted locks before the separate-session delete cascades from this user.
     db_session.rollback()
-    _best_effort_delete(User, [user.id])
+    # Remove recurring jobs even if the later best-effort user cleanup fails.
+    db_session.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user_id))
+    db_session.commit()
+    _best_effort_delete(User, [user_id])
 
 
 @pytest.fixture(scope="function")
@@ -309,6 +320,9 @@ def seeded_skill(
             file_type="application/zip",
         )
         bundle_file_ids.append(bundle_file_id)
+
+        if author_user_id is None and not public:
+            author_user_id = make_user(db_session, standard_account=True).id
 
         skill = Skill(
             id=uuid4(),

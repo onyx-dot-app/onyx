@@ -3,7 +3,7 @@ LiteLLM Monkey Patches
 
 This module addresses the following issues in LiteLLM:
 
-Status checked against LiteLLM v1.93.0 (2026-07-20):
+Status checked against LiteLLM v1.100.4 (2026-10-27):
 
 1. Ollama Streaming Reasoning Content (_patch_ollama_chunk_parser):
    - LiteLLM's chunk_parser doesn't properly handle reasoning content in streaming
@@ -11,10 +11,9 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - Processes native "thinking" field from Ollama responses
    - Also handles <think>...</think> tags in content for models that use that format
    - Tracks reasoning state to properly separate thinking from regular content
-   STATUS: STILL NEEDED - Upstream v1.85.1 adopted the truthy check on thinking and the
-           elif→if fix for simultaneous thinking+content chunks, but still does not track
-           <think>...</think> tag boundaries within content. Our `_in_think_tag_block`
-           state is required to correctly classify content that crosses a </think> boundary.
+   STATUS: STILL NEEDED - Upstream v1.100.4 strips the tags and flips its started/finished
+           flags, but classifies a whole chunk one way, so text before and after a </think>
+           in the same chunk lands together. Our `_in_think_tag_block` state splits it.
 
 2. Reasoning Summary Newlines (_patch_responses_reasoning_summary_newlines):
    - LiteLLM passes through reasoning_summary_text.delta content as-is without
@@ -26,15 +25,15 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - Also turns empty function_call_arguments.delta events into no-op chunks;
      Anthropic-backed gateways open tool-call streams with an empty delta and
      upstream raises ValueError on falsy deltas
-   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections,
-           does not guard against null output in terminal events, and rejects empty
-           tool-argument deltas.
+   STATUS: STILL NEEDED - v1.100.4 guards null output in terminal events and skips empty
+           tool-argument deltas, but still inserts no separators between summary sections.
 
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
    - We prefer double newlines for readability
-   STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
-           parts, but we override to use "\\n\\n".join() for readable section breaks.
+   STATUS: STILL NEEDED - v1.100.4 joins the parts with " "; we override to
+           "\\n\\n".join() for readable section breaks. It also maps an incomplete reply
+           with no message item to an empty message itself, so that part of the patch is gone.
 
 4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
    - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
@@ -45,7 +44,8 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - Patched on the base OpenAIResponsesAPIConfig; AzureOpenAIResponsesAPIConfig
      inherits it (no upstream override). Models the registry explicitly marks
      supports_native_streaming=False (e.g. o1-pro) keep the fake stream
-   STATUS: STILL NEEDED - v1.93.0 treats a registry miss as "cannot stream".
+   STATUS: STILL NEEDED - v1.100.4 still treats a registry miss as "cannot stream":
+           supports_native_streaming returns False when the lookup fails.
 
 # Note: 5 and 6 suppress a warning and may fix usage info but are not strictly required
 5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
@@ -63,7 +63,7 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
      serialization warnings
    STATUS: STILL NEEDED - Upstream still mutates result.response.usage in place via
-         setattr in v1.93.0. Our patch rebuilds the response via model_construct so the
+         setattr in v1.100.4. Our patch rebuilds the response via model_construct so the
          original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
          ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream), and
          tolerates result.response being a plain dict (validation-fallback payloads
@@ -79,12 +79,56 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - The prefix is only ever set deliberately (Onyx API-surface routing for
      OpenAI-compatible gateways such as Bifrost and Portkey), so honor it
      unconditionally and pass the remainder through as the literal model id
-   STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
+   STATUS: STILL NEEDED - v1.100.4 consults the registry before honoring the prefix.
+
+8. Thinking Dropped On Tool Turns (_patch_anthropic_keeps_requested_thinking):
+   - AnthropicConfig.transform_request drops the thinking param when the last
+     assistant message with tool_calls carries no thinking blocks, guarding against
+     "Expected thinking or redacted_thinking, but found tool_use"
+   - The guard tests `thinking is not None` rather than whether thinking is enabled,
+     so it also drops the off types, thinking={"type": "disabled"} and Sonnet 5.5's
+     {"type": "between_tools"}, the values that cannot produce that error: off
+     thinking is the state in which Anthropic requires those blocks to be absent
+   - Reasoning off then silently becomes the API's own default on every turn after a
+     tool call, which on the Claude 5 line is full reasoning
+   - The API also accepts enabled thinking after tool calls without thinking
+     blocks. Onyx sends that only when the model chose not to think on a step or
+     a replayed block's prefix changed, and the drop then keeps thinking off for
+     the rest of the session. So every thinking type is kept
+   - Bedrock Converse carries its own copy of the same check in
+     AmazonConverseConfig._transform_request_helper, and keeps thinking under
+     additionalModelRequestFields rather than at the top level, so both transforms
+     are wrapped
+   STATUS: STILL NEEDED - v1.100.4 gates on presence, not on the thinking type, in both
+           transforms.
+
+9. OpenRouter Routed Model Lost In Streams (_patch_openrouter_routed_model):
+   - OpenRouter stream chunks carry the model a router (openrouter/auto) actually
+     served, but CustomStreamWrapper overwrites every chunk's `model` with the
+     requested name, so routed calls cannot be priced
+   - Our patch keeps the served name in provider_specific_fields["routed_model"],
+     which the wrapper copies through to the consumer
+   STATUS: STILL NEEDED - v1.100.4 only preserves chunk models for Azure.
+
+10. Gemini 4+ And Content-less Candidates (_patch_vertex_gemini_newer_models):
+   - VertexGeminiConfig._is_gemini_3_or_newer matches the "gemini-3" substring, so
+     gemini-4-argon takes the Gemini 2 path: reasoning maps to thinkingBudget,
+     which Gemini 4 rejects. get_supported_openai_params also looks the bare name
+     up in the registry, which lists gemini-4-argon only as vertex_ai/gemini-4-argon,
+     so reasoning_effort is reported unsupported and dropped
+   - _map_reasoning_effort_to_thinking_level maps medium to high outside Gemini
+     3 Flash and 3.1 Pro; Gemini 4 supports medium
+   - _process_candidates skips a candidate with a finishReason but no content,
+     e.g. a reply whose whole output budget went to thinking. A non-streamed
+     response then has no choices; streaming adds an empty choice for the same reply
+   STATUS: STILL NEEDED - Fixed upstream by v1.106.4; drop once we are on it.
 
 """
 
+import re
 import time
 import uuid
+from collections.abc import Mapping
 from typing import Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
@@ -93,7 +137,15 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 )
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.common_utils import OllamaError
-from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
+from litellm.llms.openrouter.chat.transformation import (
+    OpenRouterChatCompletionStreamingHandler,
+)
+from litellm.types.llms.vertex_ai import Candidates, GeminiThinkingConfig
+from litellm.types.utils import (
+    ChatCompletionUsageBlock,
+    ModelResponse,
+    ModelResponseStream,
+)
 
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
@@ -107,7 +159,9 @@ def _patch_ollama_chunk_parser() -> None:
     reasoning content and content in streaming responses.
     """
     if (
-        getattr(OllamaChatCompletionResponseIterator.chunk_parser, "__name__", "")
+        getattr(  # ods: ignore[getattr]
+            OllamaChatCompletionResponseIterator.chunk_parser, "__name__", ""
+        )
         == "_patched_chunk_parser"
     ):
         return
@@ -165,7 +219,9 @@ def _patch_ollama_chunk_parser() -> None:
             if chunk["message"].get("content") is not None:
                 message_content = chunk["message"].get("content")
                 # Track whether we are inside <think>...</think> tagged content.
-                in_think_tag_block = bool(getattr(self, "_in_think_tag_block", False))
+                in_think_tag_block = bool(
+                    getattr(self, "_in_think_tag_block", False)  # ods: ignore[getattr]
+                )
                 if "<think>" in message_content:
                     message_content = message_content.replace("<think>", "")
                     self.started_reasoning_content = True
@@ -262,7 +318,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     the summary_index changes, producing readable section breaks.
     """
     if (
-        getattr(
+        getattr(  # ods: ignore[getattr]
             OpenAiResponsesToChatCompletionStreamIterator.chunk_parser,
             "__name__",
             "",
@@ -294,7 +350,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
                 summary_index = parsed_chunk.get("summary_index", 0)
 
                 # Track the last summary index to insert newlines between parts
-                last_summary_index = getattr(
+                last_summary_index = getattr(  # ods: ignore[getattr]
                     self, "_last_reasoning_summary_index", None
                 )
                 if (
@@ -357,7 +413,7 @@ def _patch_openai_responses_transform_response() -> None:
     )
 
     if (
-        getattr(
+        getattr(  # ods: ignore[getattr]
             original_transform_response,
             "__name__",
             "",
@@ -407,7 +463,11 @@ def _patch_openai_responses_transform_response() -> None:
                 summary_texts = [
                     text
                     for summary_item in item.summary
-                    if (text := getattr(summary_item, "text", ""))
+                    if (
+                        text := getattr(  # ods: ignore[getattr]
+                            summary_item, "text", ""
+                        )
+                    )
                 ]
                 if len(summary_texts) > 1:
                     combined_text = "\n\n".join(summary_texts)
@@ -415,8 +475,10 @@ def _patch_openai_responses_transform_response() -> None:
 
         if combined_text and hasattr(result, "choices"):
             for choice in result.choices:
-                message = getattr(choice, "message", None)
-                if message is not None and getattr(message, "reasoning_content", None):
+                message = getattr(choice, "message", None)  # ods: ignore[getattr]
+                if message is not None and getattr(  # ods: ignore[getattr]
+                    message, "reasoning_content", None
+                ):
                     message.reasoning_content = combined_text
 
         return result
@@ -439,7 +501,9 @@ def _patch_openai_responses_should_fake_stream() -> None:
     from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
 
     if (
-        getattr(OpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
+        getattr(  # ods: ignore[getattr]
+            OpenAIResponsesAPIConfig.should_fake_stream, "__name__", ""
+        )
         == "_patched_openai_should_fake_stream"
     ):
         return
@@ -491,7 +555,7 @@ def _patch_responses_api_usage_format() -> None:
 
     original_model_construct = ResponsesAPIResponse.model_construct
 
-    if getattr(original_model_construct, "_is_patched", False):
+    if getattr(original_model_construct, "_is_patched", False):  # ods: ignore[getattr]
         return
 
     @classmethod
@@ -566,7 +630,7 @@ def _patch_logging_assembled_streaming_response() -> None:
 
     original_method = LiteLLMLoggingObj._get_assembled_streaming_response
 
-    if getattr(original_method, "_is_patched", False):
+    if getattr(original_method, "_is_patched", False):  # ods: ignore[getattr]
         return
 
     def _patched_get_assembled_streaming_response(
@@ -662,7 +726,9 @@ def _patch_responses_api_bridge_check() -> None:
     import litellm.main as litellm_main
 
     if (
-        getattr(litellm_main.responses_api_bridge_check, "__name__", "")
+        getattr(  # ods: ignore[getattr]
+            litellm_main.responses_api_bridge_check, "__name__", ""
+        )
         == "_patched_responses_api_bridge_check"
     ):
         return
@@ -676,6 +742,7 @@ def _patch_responses_api_bridge_check() -> None:
         tools: Optional[list[Any]] = None,
         reasoning_effort: Optional[Any] = None,
         reasoning_summary: Optional[Any] = None,
+        api_base: Optional[str] = None,
     ) -> tuple[dict, str]:
         if model.startswith("responses/"):
             return {"mode": "responses"}, model.removeprefix("responses/")
@@ -686,11 +753,237 @@ def _patch_responses_api_bridge_check() -> None:
             tools=tools,
             reasoning_effort=reasoning_effort,
             reasoning_summary=reasoning_summary,
+            api_base=api_base,
         )
 
     _patched_responses_api_bridge_check.__name__ = "_patched_responses_api_bridge_check"
     litellm_main.responses_api_bridge_check = (  # ty: ignore[invalid-assignment]
         _patched_responses_api_bridge_check
+    )
+
+
+# The thinking types that turn up-front thinking off: disabled everywhere it is
+# accepted, between_tools on Sonnet 5.5, which rejects disabled.
+def _requested_thinking(optional_params: dict) -> dict | None:
+    thinking = optional_params.get("thinking")
+    return thinking if isinstance(thinking, dict) else None
+
+
+def _patch_anthropic_keeps_requested_thinking() -> None:
+    """
+    Patches the two Anthropic request transforms to keep the requested
+    thinking param on a turn whose history carries tool calls with no
+    thinking blocks.
+
+    Upstream drops the param there to avoid "Expected thinking or
+    redacted_thinking, but found tool_use". The Anthropic API accepts that
+    history on every current Claude model, and Onyx sends it only when the
+    model chose not to think or a replayed block's prefix changed. Dropping
+    the param instead turns thinking off for the rest of the session, or on
+    the Claude 5 line resets it to the model's default effort.
+
+    Bedrock Converse carries its own copy of the same check, and puts thinking
+    under additionalModelRequestFields rather than at the top level, so it
+    needs its own wrapper.
+    """
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+    from litellm.llms.bedrock.chat.converse_transformation import AmazonConverseConfig
+
+    if (
+        AnthropicConfig.transform_request.__name__
+        != "_patched_anthropic_transform_request"
+    ):
+        original_transform_request = AnthropicConfig.transform_request
+
+        def _patched_anthropic_transform_request(
+            self: Any,
+            model: str,
+            messages: list[Any],
+            optional_params: dict,
+            litellm_params: dict,
+            headers: dict,
+        ) -> dict:
+            thinking = _requested_thinking(optional_params)
+            body = original_transform_request(
+                self, model, messages, optional_params, litellm_params, headers
+            )
+            if thinking is not None and "thinking" not in body:
+                body["thinking"] = thinking
+            return body
+
+        _patched_anthropic_transform_request.__name__ = (
+            "_patched_anthropic_transform_request"
+        )
+        AnthropicConfig.transform_request = _patched_anthropic_transform_request
+
+    if (
+        AmazonConverseConfig._transform_request_helper.__name__
+        != "_patched_converse_transform_request_helper"
+    ):
+        original_request_helper = AmazonConverseConfig._transform_request_helper
+
+        def _patched_converse_transform_request_helper(
+            self: Any,
+            model: str,
+            system_content_blocks: list[Any],
+            optional_params: dict,
+            messages: Optional[list[Any]] = None,
+            headers: Optional[dict] = None,
+            drop_params: bool = False,
+            litellm_params: Optional[Mapping[str, object]] = None,
+        ) -> Any:
+            thinking = _requested_thinking(optional_params)
+            data = original_request_helper(
+                self,
+                model=model,
+                system_content_blocks=system_content_blocks,
+                optional_params=optional_params,
+                messages=messages,
+                headers=headers,
+                drop_params=drop_params,
+                litellm_params=litellm_params,
+            )
+            if thinking is not None:
+                fields = data.get("additionalModelRequestFields") or {}
+                fields.setdefault("thinking", thinking)
+                data["additionalModelRequestFields"] = fields
+            return data
+
+        _patched_converse_transform_request_helper.__name__ = (
+            "_patched_converse_transform_request_helper"
+        )
+        AmazonConverseConfig._transform_request_helper = (
+            _patched_converse_transform_request_helper
+        )
+
+
+_original_openrouter_chunk_parser = (
+    OpenRouterChatCompletionStreamingHandler.chunk_parser
+)
+
+
+def _patch_openrouter_routed_model() -> None:
+    if (
+        OpenRouterChatCompletionStreamingHandler.chunk_parser.__name__
+        == "_patched_openrouter_chunk_parser"
+    ):
+        return
+
+    def _patched_openrouter_chunk_parser(self: Any, chunk: dict) -> ModelResponseStream:
+        response: ModelResponseStream = _original_openrouter_chunk_parser(self, chunk)
+        served_model: Any = chunk.get("model")
+        if isinstance(served_model, str) and served_model:
+            fields: dict[str, Any] = dict(response.provider_specific_fields or {})
+            fields["routed_model"] = served_model
+            response.provider_specific_fields = fields
+        return response
+
+    OpenRouterChatCompletionStreamingHandler.chunk_parser = (  # type: ignore[method-assign]
+        _patched_openrouter_chunk_parser
+    )
+
+
+_GEMINI_PRE_3_PATTERN = re.compile(
+    r"^gemini-(?:[12](?:\.\d+)?|exp|(?:pro|flash)(?!-(?:lite-)?latest$))(?:-|$)"
+)
+
+
+def _is_gemini_3_or_newer(model: str) -> bool:
+    model_name = model.split("/")[-1].lower()
+    if not model_name.startswith("gemini-"):
+        return False
+    return _GEMINI_PRE_3_PATTERN.match(model_name) is None
+
+
+def _gemini_major_version(model: str) -> int | None:
+    match = re.match(r"gemini-(\d+)", model.split("/")[-1].lower())
+    return int(match.group(1)) if match else None
+
+
+def _patch_vertex_gemini_newer_models() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    if (
+        VertexGeminiConfig.get_supported_openai_params.__name__
+        == "_patched_gemini_get_supported_openai_params"
+    ):
+        return
+
+    original_get_supported_openai_params = (
+        VertexGeminiConfig.get_supported_openai_params
+    )
+    original_process_candidates = VertexGeminiConfig._process_candidates
+    original_map_thinking_level = (
+        VertexGeminiConfig._map_reasoning_effort_to_thinking_level
+    )
+
+    def _patched_gemini_get_supported_openai_params(self: Any, model: str) -> list[str]:
+        params: list[str] = original_get_supported_openai_params(self, model)
+        if _is_gemini_3_or_newer(model):
+            params += [p for p in ("reasoning_effort", "thinking") if p not in params]
+        return params
+
+    def _patched_gemini_process_candidates(
+        _candidates: list[Candidates],
+        model_response: ModelResponse | ModelResponseStream,
+        standard_optional_params: dict[str, Any],
+        cumulative_tool_call_index: int = 0,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[Any], list[Any], int]:
+        grounding_metadata: list[dict[str, Any]] = []
+        url_context_metadata: list[dict[str, Any]] = []
+        safety_ratings: list[Any] = []
+        citation_metadata: list[Any] = []
+        # One call per candidate: upstream shares message state across candidates.
+        for idx, candidate in enumerate(_candidates):
+            if "content" not in candidate and "finishReason" in candidate:
+                candidate = cast(
+                    Candidates, {**candidate, "content": {"role": "model", "parts": []}}
+                )
+            candidate = cast(Candidates, {"index": idx, **candidate})
+            (
+                grounding,
+                url_context,
+                safety,
+                citations,
+                cumulative_tool_call_index,
+            ) = original_process_candidates(
+                [candidate],
+                model_response,
+                standard_optional_params,
+                cumulative_tool_call_index,
+            )
+            grounding_metadata.extend(grounding)
+            url_context_metadata.extend(url_context)
+            safety_ratings.extend(safety)
+            citation_metadata.extend(citations)
+        return (
+            grounding_metadata,
+            url_context_metadata,
+            safety_ratings,
+            citation_metadata,
+            cumulative_tool_call_index,
+        )
+
+    def _patched_gemini_map_thinking_level(
+        reasoning_effort: str, model: Optional[str] = None
+    ) -> GeminiThinkingConfig:
+        config = original_map_thinking_level(reasoning_effort, model)
+        major = _gemini_major_version(model) if model else None
+        if reasoning_effort == "medium" and major is not None and major >= 4:
+            config["thinkingLevel"] = "medium"
+        return config
+
+    VertexGeminiConfig._is_gemini_3_or_newer = staticmethod(_is_gemini_3_or_newer)  # ty: ignore[invalid-assignment]
+    VertexGeminiConfig.get_supported_openai_params = (  # type: ignore[method-assign]
+        _patched_gemini_get_supported_openai_params
+    )
+    VertexGeminiConfig._map_reasoning_effort_to_thinking_level = staticmethod(  # ty: ignore[invalid-assignment]
+        _patched_gemini_map_thinking_level
+    )
+    VertexGeminiConfig._process_candidates = staticmethod(  # ty: ignore[invalid-assignment]
+        _patched_gemini_process_candidates
     )
 
 
@@ -707,6 +1000,9 @@ def apply_monkey_patches() -> None:
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
+    - Patching AnthropicConfig.transform_request to keep requested thinking on tool turns
+    - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
+    - Patching VertexGeminiConfig for Gemini 4+ thinking and content-less candidates
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -715,3 +1011,6 @@ def apply_monkey_patches() -> None:
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()
+    _patch_anthropic_keeps_requested_thinking()
+    _patch_openrouter_routed_model()
+    _patch_vertex_gemini_newer_models()

@@ -5,13 +5,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
+from onyx.agents.models import RunStatus
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
@@ -109,8 +111,6 @@ class SendMessageRequest(BaseModel):
     # For multi-model mode: up to 3 LLM overrides to run in parallel.
     # When provided with >1 entry, triggers multi-model streaming.
     llm_overrides: list[LLMOverride] | None = None
-    # Test-only override for deterministic LiteLLM mock responses.
-    mock_llm_response: str | None = None
 
     allowed_tool_ids: list[int] | None = None
     forced_tool_id: int | None = None
@@ -189,6 +189,10 @@ class RenameChatSessionResponse(BaseModel):
     new_name: str  # This is only really useful if the name is generated
 
 
+class StopChatResponse(BaseModel):
+    message: str
+
+
 class ChatSessionDetails(BaseModel):
     id: UUID
     name: str | None
@@ -234,12 +238,14 @@ class ChatMessageDetail(BaseModel):
     time_sent: datetime
     files: list[FileDescriptor]
     error: str | None = None
+    error_info: StreamingError | None = None
+    response_status: RunStatus | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
     processing_duration_seconds: float | None = None
     preferred_response_id: int | None = None
     model_display_name: str | None = None
     # Absent on messages written before this was captured.
-    request_params: dict[str, Any] | None = None
+    request_params: GenerationRequestParams | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]
@@ -258,10 +264,14 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
-class CurrentRunInfo(BaseModel):
-    """In-flight run whose stream buffer can be replayed/tailed."""
+class CurrentStreamInfo(BaseModel):
+    """Unfinished response available for stream reconnection."""
 
-    run_id: int
+    stream_id: int
+
+
+class ChatSessionProcessingStatus(BaseModel):
+    is_processing: bool
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -279,12 +289,15 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
-    # Set while a run is in flight and resumable: cursor-0 replay+tail is
-    # available at /chat-session/{id}/resume-stream.
-    current_run: CurrentRunInfo | None = None
+    # The buffer also retains interrupted work until its cache TTL expires.
+    current_stream: CurrentStreamInfo | None = None
+    # Readiness is independent of whether a stream can be replayed.
+    is_processing: bool = False
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.
     incognito: bool = False
+    # Set on a paged load when the current branch has messages before the page.
+    has_older_messages: bool = False
 
 
 class AdminSearchRequest(BaseModel):

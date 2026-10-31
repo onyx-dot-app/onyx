@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import httpx
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -50,7 +52,6 @@ def _set_new_search_settings(
         "provider_type": current_settings.get("provider_type"),
         "index_name": None,
         "multipass_indexing": current_settings.get("multipass_indexing", False),
-        "embedding_precision": current_settings["embedding_precision"],
         "reduced_dimension": current_settings.get("reduced_dimension"),
         "enable_contextual_rag": enable_contextual_rag,
         "contextual_rag_model_configuration_id": contextual_rag_model_configuration_id,
@@ -82,7 +83,7 @@ def test_get_current_search_settings(
     assert "enable_contextual_rag" in settings
     assert "contextual_rag_model_configuration_id" in settings
     assert "index_name" in settings
-    assert "embedding_precision" in settings
+    assert "vector_quantization" in settings
 
 
 def test_get_all_search_settings(
@@ -107,13 +108,14 @@ def test_get_secondary_search_settings_none_by_default(
     assert secondary is None
 
 
-def test_contextual_rag_model_update_requires_enabled_feature(
+def test_contextual_rag_enabled_in_place_without_reindex(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
     mc_id = llm_provider.model_configuration_ids[0]
     settings = _get_current_search_settings(admin_user)
+    assert settings["enable_contextual_rag"] is False
     settings["enable_contextual_rag"] = True
     settings["contextual_rag_model_configuration_id"] = mc_id
     response = client.post(
@@ -121,14 +123,29 @@ def test_contextual_rag_model_update_requires_enabled_feature(
         json=settings,
         headers=admin_user.headers,
     )
-    assert response.status_code == 400
-    assert "must be enabled" in response.json()["detail"]
-    assert (
-        _get_current_search_settings(admin_user)[
-            "contextual_rag_model_configuration_id"
-        ]
-        is None
+    assert response.status_code == 200
+    assert response.json()["contextual_rag_model_configuration_id"] == mc_id
+    current = _get_current_search_settings(admin_user)
+    assert current["enable_contextual_rag"] is True
+    assert current["contextual_rag_model_configuration_id"] == mc_id
+    assert _get_secondary_search_settings(admin_user) is None
+
+
+def test_contextual_rag_enable_requires_a_model(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    settings = _get_current_search_settings(admin_user)
+    settings["enable_contextual_rag"] = True
+    settings["contextual_rag_model_configuration_id"] = None
+    response = client.post(
+        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
+        json=settings,
+        headers=admin_user.headers,
     )
+    assert response.status_code == 400
+    assert "Select a Contextual Retrieval model" in response.json()["detail"]
+    assert _get_current_search_settings(admin_user)["enable_contextual_rag"] is False
 
 
 def test_disabled_contextual_rag_rejected_before_embedding_model_change(
@@ -147,7 +164,7 @@ def test_disabled_contextual_rag_rejected_before_embedding_model_change(
         headers=admin_user.headers,
     )
     assert response.status_code == 400
-    assert "must be enabled" in response.json()["detail"]
+    assert "already off" in response.json()["detail"]
 
 
 def test_set_new_search_settings_with_contextual_rag(
@@ -234,40 +251,57 @@ def test_inference_update_rejects_active_reindex(
     _cancel_new_embedding(admin_user)
 
 
-def test_set_new_search_settings_replaces_previous_secondary(
+def test_new_reindex_refused_while_one_in_progress(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
-    """Calling set-new-search-settings twice should retire the first secondary
-    and replace it with the second."""
+    """Only one re-index at a time: starting a second while the first is in progress is
+    refused (409), and the first is left untouched (not superseded). To change it, cancel
+    the in-progress re-index and start a new one."""
     mc_id = llm_provider.model_configuration_ids[0]
     current = _get_current_search_settings(admin_user)
 
-    # First: no contextual RAG
     resp1 = _set_new_search_settings(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=False,
     )
     resp1.raise_for_status()
-    first_id = resp1.json()["id"]
 
-    # Second: with contextual RAG
     resp2 = _set_new_search_settings(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=True,
         contextual_rag_model_configuration_id=mc_id,
     )
-    resp2.raise_for_status()
-    second_id = resp2.json()["id"]
-
-    assert second_id != first_id
+    assert resp2.status_code == 409
 
     secondary = _get_secondary_search_settings(admin_user)
     assert secondary is not None
-    assert secondary["enable_contextual_rag"] is True
-    assert secondary["contextual_rag_model_configuration_id"] == mc_id
+    assert secondary["enable_contextual_rag"] is False
 
+    _cancel_new_embedding(admin_user)
+
+
+def test_concurrent_reindex_submissions_serialize(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
+    """Two admins pressing Re-index at the same moment. A row lock on the current
+    settings serializes them, so the loser gets the same 409 a sequential caller sees
+    instead of a raw 500 from the unique index on the FUTURE row."""
+    current = _get_current_search_settings(admin_user)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        submissions = [
+            pool.submit(_set_new_search_settings, admin_user, current) for _ in range(2)
+        ]
+        statuses = sorted(submission.result().status_code for submission in submissions)
+
+    assert statuses == [200, 409]
+
+    # The winning submission's FUTURE survived the race intact and cancels normally.
+    assert _get_secondary_search_settings(admin_user) is not None
     _cancel_new_embedding(admin_user)

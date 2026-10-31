@@ -8,6 +8,7 @@ from onyx.server.manage.llm.models import (
     LLMProviderView,
     ModelConfigurationUpsertRequest,
 )
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
@@ -27,7 +28,11 @@ class LLMProviderManager:
         personas: list[int] | None = None,
         is_public: bool | None = None,
         set_as_default: bool = True,
+        model_names: list[str] | None = None,
+        router_model_names: list[str] | None = None,
     ) -> DATestLLMProvider:
+        """`model_names` adds visible models beside the default one.
+        `router_model_names` adds visible router models."""
         print(f"Seeding LLM Providers for {user_performing_action.email}...")
 
         llm_provider = LLMProviderUpsertRequest(
@@ -41,13 +46,30 @@ class LLMProviderManager:
             groups=groups or [],
             personas=personas or [],
             model_configurations=[
-                ModelConfigurationUpsertRequest(
-                    name=default_model_name or "gpt-4o-mini",
-                    is_visible=True,
-                    max_input_tokens=None,
-                    display_name=default_model_name or "gpt-4o-mini",
-                    supports_image_input=True,
-                )
+                *(
+                    ModelConfigurationUpsertRequest(
+                        name=model_name,
+                        is_visible=True,
+                        max_input_tokens=None,
+                        display_name=model_name,
+                        supports_image_input=True,
+                    )
+                    for model_name in [
+                        default_model_name or CI_OPENAI_MODEL,
+                        *(model_names or []),
+                    ]
+                ),
+                *(
+                    ModelConfigurationUpsertRequest(
+                        name=model_name,
+                        is_visible=True,
+                        max_input_tokens=None,
+                        display_name=model_name,
+                        supports_image_input=True,
+                        is_router=True,
+                    )
+                    for model_name in (router_model_names or [])
+                ),
             ],
             api_key_changed=True,
         )
@@ -65,7 +87,7 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
-            default_model_name=default_model_name or "gpt-4o-mini",
+            default_model_name=default_model_name or CI_OPENAI_MODEL,
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
@@ -81,7 +103,7 @@ class LLMProviderManager:
 
         if set_as_default:
             if default_model_name is None:
-                default_model_name = "gpt-4o-mini"
+                default_model_name = CI_OPENAI_MODEL
             set_default_response = client.post(
                 f"{API_SERVER_URL}/admin/llm/default",
                 json={
@@ -158,6 +180,24 @@ class LLMProviderManager:
                     return
         if not verify_deleted:
             raise ValueError(f"LLM Provider {llm_provider.id} not found")
+
+    @staticmethod
+    def set_default_vision(
+        provider_id: int,
+        user_performing_action: DATestUser,
+        model_name: str,
+    ) -> None:
+        """Point image captioning at this provider's model. Without a default
+        vision model, indexing skips captions entirely."""
+        response = client.post(
+            f"{API_SERVER_URL}/admin/llm/default-vision",
+            json={
+                "provider_id": provider_id,
+                "model_name": model_name,
+            },
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
 
     @staticmethod
     def get_default_model(

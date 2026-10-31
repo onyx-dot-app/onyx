@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 /* =============================================================================
    CONTEXT
@@ -8,6 +8,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 
 export interface TabsContextValue {
   variant: "contained" | "pill" | "underline";
+  /** The selected tab's value, so a trigger knows whether it is selected. */
+  activeValue: string | undefined;
 }
 
 export const TabsContext = React.createContext<TabsContextValue | undefined>(
@@ -19,62 +21,73 @@ export function useTabsContext(): TabsContextValue | undefined {
 }
 
 /* =============================================================================
-   usePillIndicator
+   useTabIndicator
    ============================================================================= */
 
+/** The active tab's box, relative to the element the indicators live in. */
 export interface IndicatorStyle {
   left: number;
+  top: number;
   width: number;
+  height: number;
   opacity: number;
 }
 
 /**
- * Tracks the position of the sliding underline indicator for pill/underline
- * variants. Uses MutationObserver to react to Radix's data-state changes and
- * ResizeObserver to react to tab width changes.
+ * Tracks the active tab's box so the sliding indicators (every variant's
+ * active surface, and the pill/underline bar) can move to it. Uses
+ * MutationObserver to react to Radix's data-state changes and ResizeObserver
+ * to react to tab size changes.
+ *
+ * The box is measured in `originRef`'s content coordinates: the element the
+ * indicators are absolutely positioned in. When that element scrolls, the
+ * indicators scroll (and overscroll) with the tabs, so scrolling never
+ * changes the box.
+ *
+ * `measured` turns true once the first position is known, so the indicators
+ * can hold their transition until then and not sweep in from the edge.
  */
-export function usePillIndicator(
+export function useTabIndicator(
   listRef: React.RefObject<HTMLElement | null>,
-  enabled: boolean,
-  scrollContainerRef?: React.RefObject<HTMLElement | null>
-): { style: IndicatorStyle; isScrolling: boolean } {
+  originRef: React.RefObject<HTMLElement | null>
+): { style: IndicatorStyle; measured: boolean } {
   const [style, setStyle] = useState<IndicatorStyle>({
     left: 0,
+    top: 0,
     width: 0,
+    height: 0,
     opacity: 0,
   });
-  const [isScrolling, setIsScrolling] = useState(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [measured, setMeasured] = useState(false);
 
-  // The scroll-debounce timer is ref-held and cleared in this effect's
-  // cleanup. The rule cannot trace handler-created timers.
-  // oxlint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
-    if (!enabled) return;
-
     const list = listRef.current;
-    if (!list) return;
+    const origin = originRef.current;
+    if (!list || !origin) return;
 
     const updateIndicator = () => {
       const activeTab = list.querySelector<HTMLElement>(
         '[data-state="active"]'
       );
-      if (activeTab) {
-        const listRect = list.getBoundingClientRect();
-        const tabRect = activeTab.getBoundingClientRect();
-        setStyle({
-          left: tabRect.left - listRect.left,
-          width: tabRect.width,
-          opacity: 1,
-        });
-      }
-    };
-
-    const handleScroll = () => {
-      setIsScrolling(true);
-      updateIndicator();
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 150);
+      if (!activeTab) return;
+      const originRect = origin.getBoundingClientRect();
+      const tabRect = activeTab.getBoundingClientRect();
+      // Visible offset plus the scroll, from the padding edge: the frame an
+      // absolutely positioned child of the origin is placed in. Holds in RTL
+      // too, where scrollLeft runs negative.
+      setStyle({
+        left:
+          tabRect.left -
+          originRect.left -
+          origin.clientLeft +
+          origin.scrollLeft,
+        top: tabRect.top - originRect.top - origin.clientTop + origin.scrollTop,
+        width: tabRect.width,
+        height: tabRect.height,
+        opacity: 1,
+      });
+      // A frame later, so the first position lands without a transition.
+      requestAnimationFrame(() => setMeasured(true));
     };
 
     updateIndicator();
@@ -100,21 +113,13 @@ export function usePillIndicator(
       attributeFilter: ["data-state"],
     });
 
-    const scrollContainer = scrollContainerRef?.current;
-    if (scrollContainer) {
-      scrollContainer.addEventListener("scroll", handleScroll);
-    }
-
     return () => {
       mutationObserver.disconnect();
       resizeObserver.disconnect();
-      if (scrollContainer)
-        scrollContainer.removeEventListener("scroll", handleScroll);
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
-  }, [enabled, listRef, scrollContainerRef]);
+  }, [listRef, originRef]);
 
-  return { style, isScrolling };
+  return { style, measured };
 }
 
 /* =============================================================================
@@ -146,10 +151,16 @@ export function useHorizontalScroll(
     const container = containerRef.current;
     if (!container) return;
     const { scrollLeft, scrollWidth, clientWidth } = container;
-    setCanScrollLeft(scrollLeft > 0);
-    setCanScrollRight(
-      scrollLeft + clientWidth < scrollWidth - SCROLL_TOLERANCE_PX
-    );
+    // RTL scrollers run scrollLeft from 0 down to negative values, so
+    // normalize to distance from the physical left edge. The arrows and
+    // scrollBy already speak physical directions.
+    const maxScroll = scrollWidth - clientWidth;
+    const fromLeft =
+      getComputedStyle(container).direction === "rtl"
+        ? maxScroll + scrollLeft
+        : scrollLeft;
+    setCanScrollLeft(fromLeft > 0);
+    setCanScrollRight(fromLeft < maxScroll - SCROLL_TOLERANCE_PX);
   }, [containerRef]);
 
   useEffect(() => {

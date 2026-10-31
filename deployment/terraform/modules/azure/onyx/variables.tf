@@ -264,30 +264,27 @@ variable "tenant_id" {
 
 # --- Redis -------------------------------------------------------------------
 
+# Azure stopped accepting new Azure Cache for Redis instances, so the redis
+# module now provisions Azure Managed Redis. That sizes by a single SKU name
+# rather than the tier, family and capacity the retiring service used.
 variable "redis_sku_name" {
   type        = string
-  description = "Cache tier. Null uses the t-shirt size default."
+  description = "Managed Redis SKU, for example \"Balanced_B5\" for 5 GB. Null uses the t-shirt size default."
   default     = null
 }
 
-variable "redis_family" {
-  type        = string
-  description = "Cache family. Null uses the t-shirt size default."
-  default     = null
-}
-
-variable "redis_capacity" {
-  type        = number
-  description = "Cache size within the family. Null uses the t-shirt size default."
-  default     = null
+variable "redis_high_availability_enabled" {
+  type        = bool
+  description = "Keep a Redis replica in another availability zone. Roughly doubles cache cost."
+  default     = false
 }
 
 # --- Cluster -----------------------------------------------------------------
 
 variable "kubernetes_version" {
   type        = string
-  description = "Kubernetes version for the control plane"
-  default     = "1.33"
+  description = "Kubernetes version for the control plane Versions age out of standard support and become Long-Term-Support only, at which point AKS refuses to build a cluster on them: check with az aks get-versions."
+  default     = "1.34"
 }
 
 variable "main_node_vm_size" {
@@ -338,6 +335,15 @@ variable "api_server_authorized_ip_ranges" {
   type        = list(string)
   description = "CIDR ranges allowed to reach the public API server"
   default     = []
+}
+
+# On by default because the alternative is a cluster that cannot bootstrap its
+# own nodes. Turn it off only when something else already covers the egress
+# address, such as a firewall rule or a range that contains it.
+variable "trust_nat_gateway_ip_on_api_server" {
+  type        = bool
+  description = "Add the NAT gateway's egress address to api_server_authorized_ip_ranges. Only applies when this module creates the network and the list is non-empty."
+  default     = true
 }
 
 variable "allow_unrestricted_api_server_access" {
@@ -400,6 +406,12 @@ variable "create_workload_service_account" {
 }
 
 # --- WAF ---------------------------------------------------------------------
+
+variable "enable_redis" {
+  type        = bool
+  description = "Create an Azure Managed Redis cache. Off by default because the in-cluster Redis needs no extra configuration, not because a managed one cannot work. Managed Redis serves only database 0, where Onyx defaults to 0, 14 and 15, so a caller who turns this on must also set REDIS_DB_NUMBER, REDIS_DB_NUMBER_CELERY and REDIS_DB_NUMBER_CELERY_RESULT_BACKEND to 0. The redis module defaults to the NoCluster policy for the same reason: both sharded policies break Celery with CROSSSLOT."
+  default     = false
+}
 
 variable "enable_waf" {
   type        = bool

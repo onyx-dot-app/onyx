@@ -8,7 +8,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_new_group_gets_basic_permission(reset: None) -> None:  # noqa: ARG001

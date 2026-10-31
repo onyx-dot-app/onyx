@@ -1,4 +1,7 @@
-import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
+import {
+  buildEntryMenuItems,
+  type EntryMenuTranslate,
+} from "@/app/craft/components/buildEntryMenuItems";
 import type { PickerSections } from "@/lib/skills/picker";
 
 function sections(over: Partial<PickerSections> = {}): PickerSections {
@@ -13,6 +16,9 @@ const ACME_APP = {
   authenticated: true,
 };
 
+// Identity translator keeps assertions on stable key names.
+const tStub = ((key: string) => key) as unknown as EntryMenuTranslate;
+
 const ASANA_MCP = {
   kind: "mcp" as const,
   mcpServerId: 8,
@@ -22,12 +28,16 @@ const ASANA_MCP = {
 };
 
 function appsFlyout(input: PickerSections) {
-  const items = buildEntryMenuItems(input, {
-    onAttachFiles: jest.fn(),
-    onSelectEntry: jest.fn(),
-    onBrowseSkills: jest.fn(),
-    onBrowseApps: jest.fn(),
-  });
+  const items = buildEntryMenuItems(
+    input,
+    {
+      onAttachFiles: jest.fn(),
+      onSelectEntry: jest.fn(),
+      onBrowseSkills: jest.fn(),
+      onBrowseApps: jest.fn(),
+    },
+    tStub
+  );
   const apps = items.find((item) => item?.key === "apps");
   return apps?.flyoutItems ?? [];
 }
@@ -48,7 +58,7 @@ describe("buildEntryMenuItems Apps flyout", () => {
 
     expect(flyout.map((item) => [item.key, item.description])).toEqual([
       ["app:3", undefined],
-      ["mcp:8", "MCP server"],
+      ["mcp:8", "mcpServer.description"],
     ]);
   });
 
@@ -73,7 +83,8 @@ describe("buildEntryMenuItems Apps flyout", () => {
         onSelectEntry,
         onBrowseSkills: jest.fn(),
         onBrowseApps: jest.fn(),
-      }
+      },
+      tStub
     );
     const flyout =
       items.find((item) => item?.key === "apps")?.flyoutItems ?? [];

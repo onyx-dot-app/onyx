@@ -12,14 +12,17 @@ from ee.onyx.external_permissions.slack.utils import (
 from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slack.connector import (
     SlackConnector,
+    channel_keys,
     filter_channels,
     get_channels,
     get_channels_across_teams,
     list_grid_team_ids,
+    normalize_channel_entries,
 )
 from onyx.connectors.slack.models import ChannelType
 from onyx.connectors.slack.source_operations import SlackSourceOperations
@@ -53,11 +56,10 @@ def _filter_channels_for_permissions(
     exclude_regex_enabled: bool = False,
 ) -> list[ChannelType]:
     if channels_to_include and not include_regex_enabled:
-        available_channel_names = {channel["name"] for channel in all_channels}
+        channels_to_include = normalize_channel_entries(channels_to_include)
+        available_channels = channel_keys(all_channels)
         available_channels_to_include = [
-            channel
-            for channel in channels_to_include
-            if channel in available_channel_names
+            channel for channel in channels_to_include if channel in available_channels
         ]
         missing_channels = sorted(
             set(channels_to_include) - set(available_channels_to_include)
@@ -209,7 +211,9 @@ def _get_slack_document_access(
                     "Please check to make sure that your Slack bot token has the "
                     "`channels:read` scope"
                 )
-            channel_id = getattr(doc_metadata, "parent_hierarchy_raw_node_id", None)
+            channel_id = getattr(  # ods: ignore[getattr]
+                doc_metadata, "parent_hierarchy_raw_node_id", None
+            )
             if channel_id is not None:
                 override_access = channel_permissions.get(channel_id)
                 if override_access is not None:
@@ -244,7 +248,11 @@ def slack_doc_sync(
     provider = build_db_credentials_provider(
         DocumentSource.SLACK, cc_pair.credential.id
     )
-    slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
+    slack_connector = SlackConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     slack_connector.set_credentials_provider(provider)
     slack_client = slack_connector.slack_client
     assert slack_client is not None, "set_credentials_provider builds the gateway."

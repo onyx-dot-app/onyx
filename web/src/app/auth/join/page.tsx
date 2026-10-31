@@ -6,10 +6,12 @@ import { redirect } from "next/navigation";
 import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
+import { getTranslations } from "next-intl/server";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
+  const t = await getTranslations("auth");
   const searchParams = await props.searchParams;
   const nextUrl = Array.isArray(searchParams?.next)
     ? searchParams?.next[0]
@@ -65,7 +67,7 @@ const Page = async (props: {
         <div className="absolute top-10x w-full"></div>
         <div className="flex w-full flex-col justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
-            Re-authenticate to join team
+            {t("join.heading.title")}
           </h2>
 
           {cloud && authUrl && (
@@ -73,7 +75,9 @@ const Page = async (props: {
               <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-background-300"></div>
-                <span className="px-4 text-text-500">or</span>
+                <span className="px-4 text-text-500">
+                  {t("join.orDivider.text")}
+                </span>
                 <div className="grow border-t border-background-300"></div>
               </div>
             </div>

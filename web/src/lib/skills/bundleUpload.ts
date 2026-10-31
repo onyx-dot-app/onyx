@@ -1,7 +1,9 @@
-import type { FileWithPath } from "react-dropzone";
-
 const ZIP_MIME_TYPE = "application/zip";
 const IGNORED_FILE_NAMES = new Set([".DS_Store", "Thumbs.db"]);
+
+// react-dropzone attaches `path` to dropped files, but types its callbacks with
+// plain `File`. Callers can pass either.
+export type SkillUploadFile = File & { readonly path?: string };
 
 export interface PreparedSkillBundle {
   file: File;
@@ -22,11 +24,11 @@ interface SkillDirectoryEntry {
 }
 
 interface SelectedFile {
-  file: FileWithPath;
+  file: SkillUploadFile;
   parts: string[];
 }
 
-function pathParts(file: FileWithPath): string[] {
+function pathParts(file: SkillUploadFile): string[] {
   const rawPath = file.path || file.webkitRelativePath || file.name;
   if (rawPath.includes("\\")) {
     throw new Error(`Invalid path "${rawPath}".`);
@@ -48,7 +50,7 @@ function isSkillMd(file: File): boolean {
 }
 
 function selectedFilesWithParts(
-  files: readonly FileWithPath[]
+  files: readonly SkillUploadFile[]
 ): SelectedFile[] {
   return files
     .map((file) => ({ file, parts: pathParts(file) }))
@@ -84,7 +86,7 @@ async function packageFiles(
 }
 
 export async function prepareSkillBundleUpload(
-  files: readonly FileWithPath[]
+  files: readonly SkillUploadFile[]
 ): Promise<PreparedSkillBundle> {
   if (files.length === 1) {
     const [file] = files;
@@ -140,7 +142,7 @@ export async function prepareSkillBundleUpload(
 }
 
 export async function prepareSkillFilesUpload(
-  files: readonly FileWithPath[]
+  files: readonly SkillUploadFile[]
 ): Promise<PreparedSkillFilesUpload> {
   const entries = selectedFilesWithParts(files).map(({ file, parts }) => ({
     file,

@@ -46,12 +46,6 @@ export function buildAgentAvatarUrl(agentId: number) {
   return `/api/persona/${agentId}/avatar`;
 }
 
-// TODO(ENG-3766): rename to agent
-/** Returns the URL for patching a user's per-agent preferences. */
-export function buildUpdateAgentPreferenceUrl(agentId: number) {
-  return `/api/user/assistant/${agentId}/preferences`;
-}
-
 /**
  * Whether this is the built-in Assistant (id 0) rather than a chosen agent —
  * the "plain chat" case, which the UI shows without an agent description or a

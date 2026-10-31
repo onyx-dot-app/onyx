@@ -4,12 +4,16 @@ Uses the ``cache_store`` table for key-value storage, PostgreSQL advisory locks
 for distributed locking, and a polling loop for the BLPOP pattern.
 """
 
+import builtins
 import hashlib
 import struct
 import time
 import uuid
+from collections.abc import Collection
 from contextlib import AbstractContextManager
 from datetime import datetime, timedelta, timezone
+from itertools import batched
+from typing import cast
 
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -24,13 +28,15 @@ from onyx.cache.interface import (
 from onyx.db.models import CacheStore
 
 _LIST_KEY_PREFIX = "_q:"
+_SET_KEY_PREFIX = "_s:"
 # ASCII: ':' (0x3A) < ';' (0x3B). Upper bound for range queries so [prefix+, prefix;)
 # captures all list-item keys (e.g. _q:mylist:123:uuid) without including other
 # lists whose names share a prefix (e.g. _q:mylist2:...).
-_LIST_KEY_RANGE_TERMINATOR = ";"
+_COLLECTION_KEY_RANGE_TERMINATOR = ";"
 _LIST_ITEM_TTL_SECONDS = 3600
 _LOCK_POLL_INTERVAL = 0.1
 _BLPOP_POLL_INTERVAL = 0.25
+_EXISTS_BATCH_SIZE = 1000
 
 
 def _list_item_key(key: str) -> str:
@@ -40,10 +46,23 @@ def _list_item_key(key: str) -> str:
     return f"{_LIST_KEY_PREFIX}{key}:{time.time_ns()}:{uuid.uuid4().hex}"
 
 
+def _set_key_prefix(key: str) -> str:
+    # A fixed-width digest prevents one set's name from matching another set's prefix.
+    return f"{_SET_KEY_PREFIX}{hashlib.sha256(key.encode()).hexdigest()}:"
+
+
 def _to_bytes(value: str | bytes | int | float) -> bytes:
     if isinstance(value, bytes):
         return value
     return str(value).encode()
+
+
+def _set_statement_timeout(session: Session, timeout_ms: int | None) -> None:
+    """Limit statements and lock waits for this transaction, not connection acquisition."""
+    if timeout_ms is None:
+        return
+    for setting in ("statement_timeout", "lock_timeout"):
+        session.execute(select(func.set_config(setting, str(timeout_ms), True)))
 
 
 # ------------------------------------------------------------------
@@ -62,10 +81,17 @@ class PostgresCacheLock(CacheLock):
     called or when the session is closed.
     """
 
-    def __init__(self, lock_id: int, timeout: float | None, tenant_id: str) -> None:
+    def __init__(
+        self,
+        lock_id: int,
+        timeout: float | None,
+        tenant_id: str,
+        statement_timeout_ms: int | None = None,
+    ) -> None:
         self._lock_id = lock_id
         self._timeout = timeout
         self._tenant_id = tenant_id
+        self._statement_timeout_ms = statement_timeout_ms
         self._session_cm: AbstractContextManager[Session] | None = None
         self._session: Session | None = None
         self._acquired = False
@@ -80,6 +106,7 @@ class PostgresCacheLock(CacheLock):
         self._session_cm = get_session_with_tenant(tenant_id=self._tenant_id)
         self._session = self._session_cm.__enter__()
         try:
+            _set_statement_timeout(self._session, self._statement_timeout_ms)
             if not blocking:
                 return self._try_lock()
 
@@ -145,8 +172,11 @@ class PostgresCacheBackend(CacheBackend):
     SQLAlchemy's ``schema_translate_map`` (set by ``get_session_with_tenant``).
     """
 
-    def __init__(self, tenant_id: str) -> None:
+    def __init__(
+        self, tenant_id: str, *, statement_timeout_ms: int | None = None
+    ) -> None:
         self._tenant_id = tenant_id
+        self._statement_timeout_ms = statement_timeout_ms
 
     # -- basic key/value ---------------------------------------------------
 
@@ -158,6 +188,7 @@ class PostgresCacheBackend(CacheBackend):
             or_(CacheStore.expires_at.is_(None), CacheStore.expires_at > func.now()),
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             value = session.execute(stmt).scalar_one_or_none()
         if value is None:
             return None
@@ -178,7 +209,9 @@ class PostgresCacheBackend(CacheBackend):
             .returning(CacheStore.value)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
-            value = session.execute(stmt).scalar_one_or_none()
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            # Execute through Core; this session has no ORM objects to synchronize.
+            value = session.connection().execute(stmt).scalar_one_or_none()
             session.commit()
         if value is None:
             return None
@@ -207,6 +240,7 @@ class PostgresCacheBackend(CacheBackend):
             )
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             session.execute(stmt)
             session.commit()
 
@@ -238,6 +272,7 @@ class PostgresCacheBackend(CacheBackend):
             .returning(CacheStore.key)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             stored_key = session.execute(stmt).scalar_one_or_none()
             session.commit()
         return stored_key is not None
@@ -246,7 +281,22 @@ class PostgresCacheBackend(CacheBackend):
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             session.execute(delete(CacheStore).where(CacheStore.key == key))
+            session.commit()
+
+    def delete_prefix(self, prefix: str) -> None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        if not prefix:
+            raise ValueError("Cache deletion requires a nonempty prefix")
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            session.execute(
+                delete(CacheStore).where(
+                    CacheStore.key.startswith(prefix, autoescape=True)
+                )
+            )
             session.commit()
 
     def exists(self, key: str) -> bool:
@@ -264,7 +314,66 @@ class PostgresCacheBackend(CacheBackend):
             .limit(1)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             return session.execute(stmt).first() is not None
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        if not keys:
+            return set()
+        existing: set[str] = set()
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            for batch in batched(keys, _EXISTS_BATCH_SIZE, strict=False):
+                stmt = select(CacheStore.key).where(
+                    CacheStore.key.in_(batch),
+                    or_(
+                        CacheStore.expires_at.is_(None),
+                        CacheStore.expires_at > func.now(),
+                    ),
+                )
+                existing.update(session.scalars(stmt))
+        return existing
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        value = _to_bytes(member)
+        member_key = _set_key_prefix(key) + hashlib.sha256(value).hexdigest()
+        stmt = (
+            pg_insert(CacheStore)
+            .values(key=member_key, value=value)
+            .on_conflict_do_nothing(index_elements=[CacheStore.key])
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            session.execute(stmt)
+            session.commit()
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        self.delete(
+            _set_key_prefix(key) + hashlib.sha256(_to_bytes(member)).hexdigest()
+        )
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        prefix = _set_key_prefix(key)
+        stmt = (
+            select(CacheStore.value)
+            .where(
+                CacheStore.key >= prefix,
+                CacheStore.key < prefix[:-1] + _COLLECTION_KEY_RANGE_TERMINATOR,
+            )
+            .limit(limit)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            # Set entries always contain bytes; other cache rows may have NULL values.
+            return [cast(bytes, value) for value in session.scalars(stmt)]
 
     # -- TTL ---------------------------------------------------------------
 
@@ -276,14 +385,45 @@ class PostgresCacheBackend(CacheBackend):
             update(CacheStore).where(CacheStore.key == key).values(expires_at=new_exp)
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             session.execute(stmt)
             session.commit()
+
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        """Renew a matching unexpired lease and commit the update.
+
+        The row lock is taken first so the expiry check and the new deadline
+        use the clock after any lock wait, not the transaction start time.
+        """
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        lock_stmt = (
+            select(CacheStore.key).where(CacheStore.key == key).with_for_update()
+        )
+        now = func.clock_timestamp()
+        stmt = (
+            update(CacheStore)
+            .where(
+                CacheStore.key == key,
+                CacheStore.value == expected,
+                or_(CacheStore.expires_at.is_(None), CacheStore.expires_at > now),
+            )
+            .values(expires_at=now + timedelta(seconds=seconds))
+            .returning(CacheStore.key)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            session.execute(lock_stmt)
+            renewed = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        return renewed is not None
 
     def ttl(self, key: str) -> int:
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
         stmt = select(CacheStore.expires_at).where(CacheStore.key == key)
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
             result = session.execute(stmt).first()
         if result is None:
             return TTL_KEY_NOT_FOUND
@@ -299,7 +439,10 @@ class PostgresCacheBackend(CacheBackend):
 
     def lock(self, name: str, timeout: float | None = None) -> CacheLock:
         return PostgresCacheLock(
-            self._lock_id_for(name), timeout, tenant_id=self._tenant_id
+            self._lock_id_for(name),
+            timeout,
+            tenant_id=self._tenant_id,
+            statement_timeout_ms=self._statement_timeout_ms,
         )
 
     # -- blocking list (MCP OAuth BLPOP pattern) ---------------------------
@@ -320,7 +463,7 @@ class PostgresCacheBackend(CacheBackend):
         while True:
             for key in keys:
                 lower = f"{_LIST_KEY_PREFIX}{key}:"
-                upper = f"{_LIST_KEY_PREFIX}{key}{_LIST_KEY_RANGE_TERMINATOR}"
+                upper = f"{_LIST_KEY_PREFIX}{key}{_COLLECTION_KEY_RANGE_TERMINATOR}"
                 stmt = (
                     select(CacheStore)
                     .where(
@@ -336,6 +479,7 @@ class PostgresCacheBackend(CacheBackend):
                     .with_for_update(skip_locked=True)
                 )
                 with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+                    _set_statement_timeout(session, self._statement_timeout_ms)
                     row = session.execute(stmt).scalars().first()
                     if row is not None:
                         value = bytes(row.value) if row.value else b""

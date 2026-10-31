@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Text } from "@opal/components";
+import { Button, OverflowText, Text } from "@opal/components";
 import type { TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
@@ -9,6 +9,7 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +43,9 @@ interface ContentLgProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -50,6 +54,12 @@ interface ContentLgProps {
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
+
+  /**
+   * Tooltip and accessible name of the edit button. Pass translated text;
+   * unset, it is the generic "Edit".
+   */
+  editTooltip?: string;
 
   /** Size preset. Default: `"headline"`. */
   sizePreset?: ContentLgSizePreset;
@@ -90,13 +100,16 @@ function ContentLg({
   description,
   titleMaxLines,
   descriptionMaxLines,
+  strikethrough,
   editable,
   onTitleChange,
+  editTooltip,
   ref,
 }: ContentLgProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
+  const strings = useOpalStrings();
 
   const config = CONTENT_LG_PRESETS[sizePreset];
 
@@ -164,6 +177,7 @@ function ContentLg({
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >
@@ -182,8 +196,9 @@ function ContentLg({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                tooltip="Edit"
-                tooltipSide="right"
+                aria-label={editTooltip || strings.edit}
+                tooltip={editTooltip || strings.edit}
+                tooltipSide="end"
                 onClick={startEditing}
               />
             </div>
@@ -200,14 +215,21 @@ function ContentLg({
               : undefined
           }
         >
-          <Text
-            font="secondary-body"
-            color="text-03"
-            as="p"
-            maxLines={descriptionMaxLines}
-          >
-            {description}
-          </Text>
+          {/* Clamped, the full description shows in a tooltip when it is cut. */}
+          {descriptionMaxLines ? (
+            <OverflowText
+              font="secondary-body"
+              color="inherit"
+              as="p"
+              maxLines={descriptionMaxLines}
+            >
+              {description}
+            </OverflowText>
+          ) : (
+            <Text font="secondary-body" color="inherit" as="p">
+              {description}
+            </Text>
+          )}
         </div>
       )}
     </div>

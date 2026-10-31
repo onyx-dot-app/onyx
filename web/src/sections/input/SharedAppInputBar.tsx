@@ -1,8 +1,8 @@
 "use client";
 
-import Text from "@/refresh-components/texts/Text";
-import { Button, OpenButton, SelectButton } from "@opal/components";
-import { SvgOpenai } from "@opal/logos";
+import { useTranslations } from "next-intl";
+import { Text, Button, SelectButton } from "@opal/components";
+import { SvgOpenAI } from "@opal/logos";
 import {
   SvgPlusCircle,
   SvgArrowUp,
@@ -10,16 +10,22 @@ import {
   SvgHourglass,
   SvgEditBig,
 } from "@opal/icons";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function SharedAppInputBar() {
+  const t = useTranslations("chat.input");
+  const { appName } = useSettings();
+
   return (
     <div className="relative w-full">
       <div className="w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16">
         {/* Textarea area */}
         <div className="flex flex-row items-center w-full">
-          <Text text03 className="w-full px-3 pt-3 pb-2 select-none">
-            How can Onyx help you today
-          </Text>
+          <div className="w-full px-3 pt-3 pb-2 select-none">
+            <Text color="text-03">
+              {t("sharedAppInputBar.input.placeholder", { appName })}
+            </Text>
+          </div>
         </div>
 
         {/* Bottom toolbar */}
@@ -33,9 +39,10 @@ export default function SharedAppInputBar() {
 
           {/* Right side controls */}
           <div className="flex flex-row items-center gap-1">
-            <OpenButton disabled icon={SvgOpenai}>
-              GPT-4o
-            </OpenButton>
+            <SelectButton chevron disabled icon={SvgOpenAI}>
+              {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- model name, not copy */}
+              GPT-6 Luna
+            </SelectButton>
             <Button disabled icon={SvgArrowUp} />
           </div>
         </div>
@@ -47,7 +54,7 @@ export default function SharedAppInputBar() {
       {/* CTA button */}
       <div className="absolute inset-0 flex items-center justify-center">
         <Button prominence="secondary" icon={SvgEditBig} href="/app">
-          Start New Session
+          {t("sharedAppInputBar.startSessionButton.label")}
         </Button>
       </div>
     </div>

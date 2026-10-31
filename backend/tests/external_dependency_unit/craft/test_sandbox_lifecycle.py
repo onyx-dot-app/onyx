@@ -23,15 +23,20 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, User
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.db.sandbox import (
     create_snapshot__no_commit,
     get_running_sandboxes,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+    OutputsManifestEntry,
+    OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
-    FilesystemEntry,
     SandboxInfo,
 )
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
@@ -438,6 +443,85 @@ class TestListArtifacts:
 
         assert result is not None
         assert [a["type"] for a in result] == ["web_app"]
+
+    def test_output_inventory_is_flat_precise_and_read_only(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        stub_sandbox_manager: StubSandboxManager,
+        session_manager_with_stub: SessionManager,
+    ) -> None:
+        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session = self._seed_session(db_session, test_user)
+        stub_sandbox_manager.outputs_manifest_returns = OutputsManifestResponse(
+            entries=[
+                OutputsManifestEntry(
+                    path="slides/deck.pptx",
+                    size=123,
+                    mtime_ns=1780000000000000001,
+                    ctime_ns=1780000000000000002,
+                ),
+            ]
+        )
+        result = session_manager_with_stub.get_output_inventory(
+            session.id, test_user.id
+        )
+        assert result.model_dump() == {
+            "files": [
+                {
+                    "path": "outputs/slides/deck.pptx",
+                    "revision": "1780000000000000001:1780000000000000002:123",
+                    "size": 123,
+                }
+            ],
+            "complete": True,
+        }
+        assert stub_sandbox_manager.last_outputs_manifest_payload is not None
+        assert not session.artifacts
+        stub_sandbox_manager.outputs_manifest_returns.entries[0].ctime_ns += 1
+        updated = session_manager_with_stub.get_output_inventory(
+            session.id, test_user.id
+        )
+        assert updated.files[0].revision != result.files[0].revision
+        stub_sandbox_manager.outputs_manifest_returns.complete = False
+        assert not session_manager_with_stub.get_output_inventory(
+            session.id, test_user.id
+        ).complete
+
+    def test_output_inventory_preserves_files_until_workspace_restore(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        stub_sandbox_manager: StubSandboxManager,
+        session_manager_with_stub: SessionManager,
+    ) -> None:
+        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session: BuildSession = self._seed_session(db_session, test_user)
+        stub_sandbox_manager.outputs_manifest_returns = OutputsManifestResponse(
+            entries=[], complete=False
+        )
+        result = session_manager_with_stub.get_output_inventory(
+            session.id, test_user.id
+        )
+        assert result.files == []
+        assert not result.complete
+
+    def test_output_inventory_checks_session_ownership_before_sandbox_access(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        stub_sandbox_manager: StubSandboxManager,
+        session_manager_with_stub: SessionManager,
+    ) -> None:
+        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session = self._seed_session(db_session, test_user)
+        with pytest.raises(OnyxError) as error:
+            session_manager_with_stub.get_output_inventory(session.id, uuid4())
+        assert error.value.status_code == 404
+        assert stub_sandbox_manager.get_outputs_manifest_count == 0
 
 
 class TestIdleCleanupSelection:

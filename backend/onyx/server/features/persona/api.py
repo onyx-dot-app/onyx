@@ -1,5 +1,6 @@
 from uuid import UUID
 
+import puremagic
 from fastapi import (
     APIRouter,
     Depends,
@@ -20,7 +21,11 @@ from onyx.auth.permissions import (
     has_permission,
     require_permission,
 )
-from onyx.auth.users import current_chat_accessible_user, current_limited_user
+from onyx.auth.users import (
+    current_chat_accessible_user,
+    current_limited_user,
+    scope_exempt,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session
@@ -61,7 +66,11 @@ from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.serving import (
+    INLINE_SAFE_IMAGE_MIME_TYPES,
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.persona.constants import (
     ADMIN_AGENTS_RESOURCE,
@@ -94,7 +103,7 @@ def _validate_user_knowledge_enabled(
     settings = load_settings()
     if not settings.user_knowledge_enabled:
         # Only user files are supported going forward; keep getattr for backward compat
-        if persona_upsert_request.user_file_ids or getattr(
+        if persona_upsert_request.user_file_ids or getattr(  # ods: ignore[getattr]
             persona_upsert_request, "user_project_ids", None
         ):
             raise HTTPException(
@@ -317,21 +326,46 @@ def undelete_persona(
     )
 
 
+# Every allowlisted image type is identified by its first few bytes.
+_AVATAR_SNIFF_BYTES = 2048
+
+
 # used for assistant profile pictures
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
+    # Store the type sniffed from the bytes, never the client-declared one.
+    header: bytes = file.file.read(_AVATAR_SNIFF_BYTES)
+    file.file.seek(0)
+    file_type: str | None = _sniff_avatar_mime_type(header)
+    if file_type is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Avatar must be a PNG, JPEG, GIF, or WebP image",
+        )
     file_store = get_default_file_store()
-    file_type = ChatFileType.IMAGE
-    file_id = file_store.save_file(
+    file_id: str = file_store.save_file(
         content=file.file,
         display_name=file.filename,
         file_origin=FileOrigin.CHAT_UPLOAD,
-        file_type=file.content_type or file_type.value,
+        file_type=file_type,
     )
     return {"file_id": file_id}
+
+
+def _sniff_avatar_mime_type(header: bytes) -> str | None:
+    try:
+        matches: list[puremagic.PureMagicWithConfidence] = puremagic.magic_string(
+            header
+        )
+    except (puremagic.PureError, ValueError):
+        return None
+    mime_type: str | None = matches[0].mime_type if matches else None
+    if mime_type not in INLINE_SAFE_IMAGE_MIME_TYPES:
+        return None
+    return mime_type
 
 
 """Endpoints for all"""
@@ -588,6 +622,35 @@ def delete_persona(
         )
     except ValueError as e:
         logger.exception("Failed to delete persona")
+        # An agent this caller may edit but which is already a tombstone is gone,
+        # not forbidden. Only checked once the delete has already failed, so the
+        # happy path costs no extra query.
+        try:
+            persona = get_persona_by_id(
+                persona_id=persona_id,
+                user=user,
+                db_session=db_session,
+                include_deleted=True,
+            )
+        except ValueError:
+            logger.info(
+                "Agent %s is not readable by this caller even including tombstones; "
+                "reporting the failed delete as an authorization error",
+                persona_id,
+            )
+        else:
+            if persona.deleted:
+                raise OnyxError(
+                    OnyxErrorCode.PERSONA_NOT_FOUND,
+                    f"Agent with ID {persona_id} is already deleted",
+                ) from e
+            if persona.builtin_persona:
+                # Editable by everyone and deletable by no one — mark_persona_as_deleted
+                # is the only other ValueError source that reaches this branch.
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Built-in agents cannot be deleted.",
+                ) from e
         # A non-owner failed the ownership check; its ValueError would 400 via the global
         # handler, so surface the real authorization failure as a 403.
         raise OnyxError(
@@ -596,7 +659,10 @@ def delete_persona(
         ) from e
 
 
-@basic_router.get("")
+# scope_exempt: the auth dependency below carries no require_permission marker,
+# so without this a scoped PAT is rejected fail-closed. MCP clients need this
+# route to resolve an agent name for a scoped search.
+@basic_router.get("", dependencies=[Depends(scope_exempt)])
 def list_personas(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
@@ -673,25 +739,31 @@ def get_persona(
     user_group_ids: set[int] = (
         get_user_group_ids_for_user(db_session, user.id) if user is not None else set()
     )
-    persona = get_persona_by_id(
-        persona_id=persona_id,
-        user=user,
-        db_session=db_session,
-        is_for_edit=False,
-        user_group_ids=user_group_ids,
-    )
+    try:
+        persona = get_persona_by_id(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+            user_group_ids=user_group_ids,
+        )
+    except ValueError as e:
+        # Caller-scoped, like GET /manage/admin/document-set/{id}: someone who
+        # cannot see the agent gets not-found rather than a 403 that leaks it.
+        raise OnyxError(
+            OnyxErrorCode.PERSONA_NOT_FOUND,
+            f"Agent with ID {persona_id} does not exist",
+        ) from e
 
-    # Validate and clear the model override if the referenced model is no longer
-    # accessible to this persona (e.g. provider was restricted after the persona was saved).
+    snapshot = FullPersonaSnapshot.from_model(persona)
+    # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
+    # it changes only the response, never the stored agent.
     if persona.default_model_configuration_id:
         valid_ids = get_valid_model_configuration_ids_for_persona(
             persona, user, db_session
         )
         if persona.default_model_configuration_id not in valid_ids:
-            persona.default_model_configuration_id = None
-            db_session.commit()
-
-    snapshot = FullPersonaSnapshot.from_model(persona)
+            snapshot.default_model_configuration_id = None
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids
@@ -772,7 +844,7 @@ def get_persona_avatar(
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
-    etag = f'"{file_id}"'
+    etag: str = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
@@ -781,8 +853,15 @@ def get_persona_avatar(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    # Older uploads kept the client-declared type, so anything that is not an
+    # allowlisted image is served as an inert attachment.
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type, inline_types=INLINE_SAFE_IMAGE_MIME_TYPES
+    )
     file_store = get_default_file_store()
     file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(
-        file_io, media_type=file_record.file_type, headers=cache_headers
+        file_io,
+        media_type=media_type,
+        headers={**cache_headers, **security_headers},
     )

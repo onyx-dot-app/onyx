@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
-import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
@@ -31,10 +31,13 @@ function MemoryTagWithTooltip({
   memoryId,
   memoryIndex,
 }: MemoryTagWithTooltipProps) {
+  const t = useTranslations("chat.messages.timeline");
   const memoriesModal = useCreateModal();
 
   const operationLabel =
-    memoryOperation === "add" ? "Added to memories" : "Updated memory";
+    memoryOperation === "add"
+      ? t("memoryTag.added.label")
+      : t("memoryTag.updated.label");
 
   const tag = <Tag icon={SvgAddLines} label={operationLabel} />;
 
@@ -64,7 +67,7 @@ function MemoryTagWithTooltip({
               height="auto"
             >
               <div className="p-1">
-                <Text as="p" secondaryBody text03>
+                <Text as="p" font="secondary-body" color="text-03">
                   {memoryText}
                 </Text>
               </div>
@@ -129,6 +132,8 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   memoryId = null,
   memoryIndex = null,
 }: CompletedHeaderProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   if (isMemoryOnly) {
     return (
       <div className="flex w-full justify-between">
@@ -146,10 +151,10 @@ export const CompletedHeader = React.memo(function CompletedHeader({
             size="md"
             onClick={noProp(onToggle)}
             rightIcon={isExpanded ? SvgFold : SvgExpand}
-            aria-label="Expand timeline"
+            aria-label={t("expandButton.ariaLabel")}
             aria-expanded={isExpanded}
           >
-            {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
+            {t("stepsButton.label", { count: totalSteps })}
           </Button>
         )}
       </div>
@@ -157,19 +162,19 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   }
 
   const durationText = processingDurationSeconds
-    ? `Thought for ${formatDurationSeconds(processingDurationSeconds)}`
-    : "Thought for some time";
+    ? t("thoughtDuration.label", {
+        duration: formatDurationSeconds(processingDurationSeconds),
+      })
+    : t("thoughtUnknownDuration.label");
 
   const imageText =
     generatedImageCount > 0
-      ? `Generated ${generatedImageCount} ${
-          generatedImageCount === 1 ? "image" : "images"
-        }`
+      ? t("generatedImages.label", { count: generatedImageCount })
       : null;
 
   const summary = (
     <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" mainUiAction text03>
+      <Text as="p" font="main-ui-action" color="text-03">
         {isExpanded ? durationText : (imageText ?? durationText)}
       </Text>
       {memoryOperation && !isExpanded && (
@@ -196,7 +201,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
     <div
       role="button"
       tabIndex={0}
-      aria-label="Toggle timeline"
+      aria-label={t("toggleRow.ariaLabel")}
       onKeyDown={clickOnKeyDown(onToggle)}
       onClick={onToggle}
       className={className}
@@ -208,10 +213,10 @@ export const CompletedHeader = React.memo(function CompletedHeader({
         size="md"
         onClick={noProp(onToggle)}
         rightIcon={isExpanded ? SvgFold : SvgExpand}
-        aria-label="Expand timeline"
+        aria-label={t("expandButton.ariaLabel")}
         aria-expanded={isExpanded}
       >
-        {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
+        {t("stepsButton.label", { count: totalSteps })}
       </Button>
     </div>
   );

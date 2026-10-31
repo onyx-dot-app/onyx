@@ -6,8 +6,10 @@ from unittest.mock import patch
 import pytest
 from litellm.exceptions import BadRequestError, RateLimitError
 
-from onyx.llm.models import ReasoningEffort, UserMessage
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError
+from onyx.llm.exceptions import LLMRateLimitError
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmLLM
 
 _SENTINEL = object()
 
@@ -109,10 +111,10 @@ def test_ladder_strips_reasoning_then_all_best_effort_kwargs() -> None:
             raise _bad_request("temperature is not supported with this model")
         return _SENTINEL
 
-    # gpt-5.4 sets both a reasoning kwarg and temperature, exercising the
+    # gpt-6.1-sol sets both a reasoning kwarg and temperature, exercising the
     # full three-attempt ladder.
     result = _run(
-        _make_llm(model_name="gpt-5.4", model_provider="openai"),
+        _make_llm(model_name="gpt-6.1-sol", model_provider="openai"),
         completion,
         ReasoningEffort.HIGH,
     )

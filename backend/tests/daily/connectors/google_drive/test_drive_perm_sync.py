@@ -3,14 +3,18 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Callable
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
+from ee.onyx.external_permissions.models import DocSyncResume
+from ee.onyx.external_permissions.perm_sync_types import DocSyncCheckpointer
 from onyx.access.models import DocExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -21,6 +25,8 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
     EXTERNAL_SHARED_FOLDER_ID,
     FOLDER_3_ID,
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+    PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
     PERM_SYNC_DRIVE_ACCESS_MAPPING,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
@@ -37,6 +43,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_ID,
     TEST_USER_2_MY_DRIVE,
     TEST_USER_3_MY_DRIVE_ID,
+    _clear_parents,
     _pick,
     assert_hierarchy_nodes_match_expected,
     assert_resource_key_shortcut_target_in_retrieved_docs,
@@ -44,6 +51,22 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     load_connector_outputs,
 )
 from tests.utils.secret_names import TestSecret
+
+
+class _FreshCrawlCheckpointer(DocSyncCheckpointer):
+    """Never resumes and keeps nothing, so the sync crawls the whole scope."""
+
+    @property
+    def resume(self) -> DocSyncResume | None:
+        return None
+
+    def save(
+        self,
+        checkpoint: ConnectorCheckpoint,  # noqa: ARG002
+        poll_range_start: datetime | None,  # noqa: ARG002
+        poll_range_end: datetime,  # noqa: ARG002
+    ) -> None:
+        return None
 
 
 def _build_connector(
@@ -123,6 +146,7 @@ def test_gdrive_perm_sync_with_real_data(
             mock_fetch_all_docs_fn,
             mock_fetch_all_docs_ids_fn,
             mock_heartbeat,
+            _FreshCrawlCheckpointer(),
         )
         doc_access_list = list(doc_access_generator)
 
@@ -260,8 +284,12 @@ def test_gdrive_perm_sync_with_real_data(
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            *PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
         )
     )
+    # The service account reaches this folder without resolving test_user_1's
+    # My Drive root, so its parent comes back unset.
+    expected_nodes = _clear_parents(expected_nodes, LIMITED_ACCESS_MY_DRIVE_FOLDER_ID)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,

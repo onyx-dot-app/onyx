@@ -13,7 +13,7 @@ This test:
 All external HTTP calls are mocked, but Postgres and Redis are running.
 """
 
-import queue
+import json
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
@@ -21,7 +21,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation, ToolResult
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -29,9 +29,10 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import OAuthAccount, Persona, Tool, User
+from onyx.db.tools import capture_persona_tool_configuration
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.factory import get_default_llm
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import CustomToolCallSummary
+from onyx.tools.models import CustomToolCallSummary, ToolContext
 from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
@@ -134,9 +135,8 @@ class TestMCPPassThroughOAuth:
         search_tool_config = SearchToolConfig()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=search_tool_config,
@@ -149,8 +149,10 @@ class TestMCPPassThroughOAuth:
         mcp_tool = constructed_tools[0]
         assert isinstance(mcp_tool, MCPTool)
 
-        # Verify the user's OAuth token was passed to the MCPTool
-        assert mcp_tool._user_oauth_token == user_oauth_token
+        assert (
+            mcp_tool._resolved_credentials.build_headers().get("Authorization")
+            == f"Bearer {user_oauth_token}"
+        )
 
     def test_pt_oauth_without_user_oauth_account(self, db_session: Session) -> None:
         """
@@ -197,9 +199,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -212,8 +213,7 @@ class TestMCPPassThroughOAuth:
         mcp_tool = constructed_tools[0]
         assert isinstance(mcp_tool, MCPTool)
 
-        # Verify NO OAuth token was passed (user has no OAuth account)
-        assert mcp_tool._user_oauth_token is None
+        assert "Authorization" not in mcp_tool._resolved_credentials.build_headers()
 
     def test_pt_oauth_vs_api_token_auth(self, db_session: Session) -> None:
         """
@@ -272,9 +272,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -288,7 +287,7 @@ class TestMCPPassThroughOAuth:
 
         # Verify the user's OAuth token was NOT passed (API_TOKEN auth type)
         # API_TOKEN auth should use connection config, not user's login token
-        assert mcp_tool._user_oauth_token is None
+        assert "Authorization" not in mcp_tool._resolved_credentials.build_headers()
 
     def test_mcp_tool_run_sets_authorization_header_for_pt_oauth(
         self, db_session: Session
@@ -347,9 +346,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -371,9 +369,9 @@ class TestMCPPassThroughOAuth:
             connection_headers: dict[str, str],
             transport: MCPTransport,  # noqa: ARG001
             auth: Any = None,  # noqa: ARG001
-        ) -> dict[str, Any]:
+        ) -> str:
             captured_headers.update(connection_headers)
-            return mocked_response
+            return json.dumps(mocked_response)
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
@@ -381,14 +379,17 @@ class TestMCPPassThroughOAuth:
         ):
             # Run the tool
             response = mcp_tool.run(
-                placement=Placement(turn_index=0, tab_index=0),
-                override_kwargs=None,
-                input="test",
+                invocation=ToolInvocation(
+                    call_id="header-test",
+                    arguments={"input": "test"},
+                    cancellation=CancellationSignal(),
+                    update=lambda _progress: None,
+                ),
+                context=ToolContext(),
             )
-            print(response.rich_response)
-            assert isinstance(response.rich_response, CustomToolCallSummary)
-            print(response.rich_response.tool_result)
-            assert response.rich_response.tool_result["tool_result"] == mocked_response
+            assert isinstance(response, ToolResult)
+            assert isinstance(response.details, CustomToolCallSummary)
+            assert response.details.tool_result == {"tool_result": mocked_response}
 
         # Verify Authorization header was set with the user's OAuth token
         assert "Authorization" in captured_headers
@@ -455,9 +456,8 @@ class TestMCPPassThroughOAuth:
 
         # Construct tools
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -471,20 +471,21 @@ class TestMCPPassThroughOAuth:
 
         # Verify the OIDC token was passed to the MCPTool
         # (code should work identically for Google OAuth and OIDC)
-        assert mcp_tool._user_oauth_token == oidc_access_token
+        assert (
+            mcp_tool._resolved_credentials.build_headers().get("Authorization")
+            == f"Bearer {oidc_access_token}"
+        )
 
-    def test_pt_oauth_uses_first_oauth_account(self, db_session: Session) -> None:
+    def test_pt_oauth_uses_latest_oauth_account(self, db_session: Session) -> None:
         """
-        Test that PT_OAUTH uses the first OAuth account when user has multiple.
-
-        Users might have OAuth accounts from multiple providers (unlikely but possible).
-        The code should consistently use the first one.
+        Test that PT_OAUTH forwards the most recently issued token when a user
+        holds several OAuth accounts, whatever order the rows come back in.
         """
         user = create_test_user(db_session, "multi_oauth_user")
         first_token = "first_oauth_token_123"
         second_token = "second_oauth_token_456"
 
-        # Add first OAuth account (Google)
+        # The first row holds the older token.
         oauth_account_1 = OAuthAccount(
             user_id=user.id,
             oauth_name="google",
@@ -492,11 +493,12 @@ class TestMCPPassThroughOAuth:
             account_email=user.email,
             access_token=first_token,
             refresh_token="",
+            expires_at=1_000,
         )
         db_session.add(oauth_account_1)
         db_session.commit()
 
-        # Add second OAuth account (OIDC)
+        # The second row holds the newer token.
         oauth_account_2 = OAuthAccount(
             user_id=user.id,
             oauth_name="openid",
@@ -504,6 +506,7 @@ class TestMCPPassThroughOAuth:
             account_email=user.email,
             access_token=second_token,
             refresh_token="",
+            expires_at=2_000,
         )
         db_session.add(oauth_account_2)
         db_session.commit()
@@ -538,9 +541,8 @@ class TestMCPPassThroughOAuth:
         llm = get_default_llm()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
-            emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
             llm=llm,
             search_tool_config=SearchToolConfig(),
@@ -549,5 +551,8 @@ class TestMCPPassThroughOAuth:
         mcp_tool = tool_dict[mcp_tool_db.id][0]
         assert isinstance(mcp_tool, MCPTool)
 
-        # Should use the first OAuth account's token
-        assert mcp_tool._user_oauth_token == first_token
+        # The later expiry wins over row order.
+        assert (
+            mcp_tool._resolved_credentials.build_headers().get("Authorization")
+            == f"Bearer {second_token}"
+        )

@@ -233,6 +233,14 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         raise ValueError("License verification failed: unexpected error")
 
 
+def _stored_tenant_id(stored_data: str) -> str | None:
+    """Tenant of the stored license, or None when the blob no longer verifies."""
+    try:
+        return verify_license_signature(stored_data).tenant_id
+    except ValueError:
+        return None
+
+
 def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
     """True when the stored license was issued after the incoming one.
 
@@ -281,16 +289,26 @@ def publish_license_cache(db_session: Session) -> None:
 def verify_and_store_license(
     db_session: Session,
     license_data: str,
-    expected_tenant_id: str | None = None,
+    *,
+    keep_stored_tenant: bool = False,
+    require_stored_license: bool = False,
 ) -> LicensePayload:
     """Persist a license blob only after its signature verifies.
 
     Raises ValueError on an unverifiable blob, leaving the stored license
     untouched. A blob older than the one already stored is discarded.
 
-    expected_tenant_id rejects a license addressed to someone else. The blob is
-    signed but not addressed, so without it an upstream mix-up would replace
-    this instance's credential with another tenant's.
+    keep_stored_tenant rejects a license for a tenant other than the stored
+    one. The blob is signed but not addressed, so without it a caller-supplied
+    checkout id could replace this instance's credential with another tenant's.
+    Nothing stored means nothing to protect; a stored blob that no longer
+    verifies fails closed, since an unreadable binding is still a binding.
+
+    require_stored_license refuses to write once the row is gone, so a renewal
+    cannot resurrect a license an admin deleted.
+
+    Both compare against the row read under the store lock, so the license they
+    protect is the one stored now rather than the one the caller last saw.
 
     Returns the incoming payload even when it was discarded as older.
     """
@@ -302,8 +320,6 @@ def verify_and_store_license(
     )
 
     payload = verify_license_signature(license_data)
-    if expected_tenant_id is not None and payload.tenant_id != expected_tenant_id:
-        raise ValueError("Control plane returned a license for a different tenant")
 
     acquire_license_store_lock(db_session)
     # The session may have loaded this row before the lock, and the identity
@@ -311,16 +327,30 @@ def verify_and_store_license(
     # the row as it stands now that writers are serialized.
     db_session.expire_all()
     stored = get_license(db_session)
+    if require_stored_license and stored is None:
+        db_session.rollback()
+        raise ValueError("Stored license was removed while the request was in flight")
+    if keep_stored_tenant and stored is not None:
+        # An unreadable blob fails closed. It is still a tenant binding, so a
+        # caller-supplied checkout must not slip past it; DELETE /license is
+        # the way out.
+        stored_tenant_id = _stored_tenant_id(stored.license_data)
+        if stored_tenant_id is None:
+            db_session.rollback()
+            raise ValueError(
+                "Stored license cannot be verified. Delete it before claiming another."
+            )
+        if stored_tenant_id != payload.tenant_id:
+            db_session.rollback()
+            raise ValueError(
+                "This license is for a different tenant than the stored one"
+            )
     if stored and _is_stale_replacement(stored.license_data, payload):
         db_session.rollback()
         # The row is already the better one, but the cache may not be, and a
         # sync is what a user clicks to clear staleness.
         publish_license_cache(db_session)
         return payload
-    if stored is None and expected_tenant_id is not None:
-        # Reclaim renews an existing credential. A deleted row must stay gone.
-        db_session.rollback()
-        raise ValueError("Stored license was removed while the reclaim was in flight")
     upsert_license(db_session, license_data, commit=False)
     # Commit inside the lock, publish outside it: the Redis cache backend has
     # no socket timeout, so a stalled publish would hold the advisory lock and
@@ -427,7 +457,8 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload:
     return verify_and_store_license(
         db_session,
         license_from_control_plane_response(response),
-        expected_tenant_id=tenant_id,
+        keep_stored_tenant=True,
+        require_stored_license=True,
     )
 
 

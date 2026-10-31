@@ -1,19 +1,20 @@
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SvgSearch, SvgGlobe } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
   constructCurrentSearchState,
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
 } from "./searchStateUtils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   id: `query-${index}`,
@@ -41,19 +42,20 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   renderType,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
   const searchState = constructCurrentSearchState(packets);
   const { queries } = searchState;
 
   const isHighlight = renderType === RenderType.HIGHLIGHT;
   const isInline = renderType === RenderType.INLINE;
 
-  const queriesHeader = "Searching the web";
+  const queriesHeader = t("webSearch.searching.status");
 
   if (queries.length === 0) {
     return children([
       {
         icon: SvgGlobe,
-        status: "Searching the web",
+        status: queriesHeader,
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -71,9 +73,11 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text04 mainUiMuted className="mb-1">
-              {queriesHeader}
-            </Text>
+            <div className="mb-1">
+              <Text as="p" font="main-ui-muted" color="text-04">
+                {queriesHeader}
+              </Text>
+            </div>
             <SearchChipList
               items={queries}
               initialCount={INITIAL_QUERIES_TO_SHOW}
@@ -118,7 +122,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   return children([
     {
       icon: SvgGlobe,
-      status: "Searching the web",
+      status: queriesHeader,
       content: (
         <SearchChipList
           items={queries}

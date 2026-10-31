@@ -1,11 +1,11 @@
 "use client";
 
-import { Modal } from "@opal/components";
+import { Modal, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -13,20 +13,26 @@ import { transformLinkUri } from "@/lib/utils";
 import { SvgAlertCircle } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import type { IconProps } from "@opal/types";
+import { useTranslations } from "next-intl";
 
 const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
   "allUsersInitialPopupFlowCompleted";
 
-const CustomLogoHeaderIcon = ({ className, size = 24 }: IconProps) => (
-  <img
-    src="/api/enterprise-settings/logo"
-    alt="Logo"
-    style={{ width: size, height: size, objectFit: "contain" }}
-    className={className}
-  />
-);
+const CustomLogoHeaderIcon = ({ className, size = 24 }: IconProps) => {
+  const t = useTranslations("chat.popup");
+
+  return (
+    <img
+      src="/api/enterprise-settings/logo"
+      alt={t("logoIcon.alt")}
+      style={{ width: size, height: size, objectFit: "contain" }}
+      className={className}
+    />
+  );
+};
 
 export function AppPopup() {
+  const t = useTranslations("chat.popup");
   const [completedFlow, setCompletedFlow] = useState(true);
   const [showConsentError, setShowConsentError] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -76,10 +82,10 @@ export function AppPopup() {
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={headerIcon}
-          title={popupTitle || "Welcome to Onyx!"}
+          title={popupTitle || t("header.title", { appName: settings.appName })}
         />
         <Modal.Body>
-          <div className="overflow-y-auto text-left">
+          <div className="overflow-y-auto text-start">
             <ReactMarkdown
               className="prose prose-neutral dark:prose-invert max-w-full"
               components={{
@@ -93,23 +99,35 @@ export function AppPopup() {
                     {children}
                   </a>
                 ),
-                p: ({ node, ...props }) => (
-                  <Text as="p" mainUiBody text03 {...props} />
+                p: ({ children }) => (
+                  <Text as="p" font="main-ui-body" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                strong: ({ node, ...props }) => (
-                  <Text mainUiBody text03 {...props} />
+                strong: ({ children }) => (
+                  <Text font="main-ui-body" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                h1: ({ node, ...props }) => (
-                  <Text as="p" headingH1 text03 {...props} />
+                h1: ({ children }) => (
+                  <Text as="p" font="heading-h1" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                h2: ({ node, ...props }) => (
-                  <Text as="p" headingH2 text03 {...props} />
+                h2: ({ children }) => (
+                  <Text as="p" font="heading-h2" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                h3: ({ node, ...props }) => (
-                  <Text as="p" headingH3 text03 {...props} />
+                h3: ({ children }) => (
+                  <Text as="p" font="heading-h3" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
-                li: ({ node, ...props }) => (
-                  <Text as="li" mainUiBody text03 {...props} />
+                li: ({ children }) => (
+                  <Text as="li" font="main-ui-body" color="text-03">
+                    {richNodes(children)}
+                  </Text>
                 ),
               }}
               remarkPlugins={[remarkGfm]}
@@ -124,8 +142,8 @@ export function AppPopup() {
               >
                 <div className="flex items-center gap-1">
                   <FormField.Control>
-                    <Checkbox
-                      aria-label="Consent checkbox"
+                    <InputCheckbox
+                      aria-label={t("consentCheckbox.label")}
                       checked={consentChecked}
                       onCheckedChange={(checked) => {
                         setConsentChecked(checked);
@@ -137,7 +155,8 @@ export function AppPopup() {
                   </FormField.Control>
                   <FormField.Label>
                     <ReactMarkdown
-                      className="prose prose-neutral dark:prose-invert max-w-full"
+                      // [&_p]:my-0! keeps the markdown aligned with the checkbox.
+                      className="prose prose-neutral dark:prose-invert max-w-full [&_p]:my-0!"
                       components={{
                         a: ({ node, children, ...props }) => (
                           <a
@@ -149,20 +168,20 @@ export function AppPopup() {
                             {children}
                           </a>
                         ),
-                        p: ({ node, ...props }) => (
-                          <Text
-                            as="p"
-                            mainUiBody
-                            text04
-                            className="my-0!" //dont remove the my-0! class, it's important for the markdown to render without any alignment issues
-                            {...props}
-                          />
+                        p: ({ children }) => (
+                          <Text as="p" font="main-ui-body" color="text-04">
+                            {richNodes(children)}
+                          </Text>
                         ),
-                        strong: ({ node, ...props }) => (
-                          <Text mainUiBody text04 {...props} />
+                        strong: ({ children }) => (
+                          <Text font="main-ui-body" color="text-04">
+                            {richNodes(children)}
+                          </Text>
                         ),
-                        li: ({ node, ...props }) => (
-                          <Text as="li" mainUiBody text04 {...props} />
+                        li: ({ children }) => (
+                          <Text as="li" font="main-ui-body" color="text-04">
+                            {richNodes(children)}
+                          </Text>
                         ),
                       }}
                       remarkPlugins={[remarkGfm]}
@@ -173,10 +192,7 @@ export function AppPopup() {
                   </FormField.Label>
                 </div>
                 <FormField.Message
-                  messages={{
-                    error:
-                      "You need to agree to the terms to access the application.",
-                  }}
+                  messages={{ error: t("consentRequired.error") }}
                 />
               </FormField>
             )}
@@ -196,7 +212,7 @@ export function AppPopup() {
               setCompletedFlow(true);
             }}
           >
-            Start
+            {t("startButton.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

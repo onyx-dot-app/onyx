@@ -1,7 +1,16 @@
+/** JSON body of a backend error response. `OnyxError` and the request
+ * validation handler both send `error_code` and a string `detail`; the
+ * validation and `ValueError` handlers also send `message`. */
+export interface ErrorResponseBody {
+  detail?: string;
+  error_code?: string;
+  message?: string;
+}
+
 export class FetchError extends Error {
   status: number;
-  info: any;
-  constructor(message: string, status: number, info: any) {
+  info: ErrorResponseBody | null;
+  constructor(message: string, status: number, info: ErrorResponseBody | null) {
     super(message);
     this.status = status;
     this.info = info;
@@ -9,7 +18,7 @@ export class FetchError extends Error {
 }
 
 export class RedirectError extends FetchError {
-  constructor(message: string, status: number, info: any) {
+  constructor(message: string, status: number, info: ErrorResponseBody | null) {
     super(message, status, info);
   }
 }
@@ -28,6 +37,24 @@ export async function parseErrorDetail(
   }
 }
 
+/** A `FetchError` for a failed Response, keeping its JSON body when it has one. */
+export async function fetchErrorFrom(
+  res: Response,
+  message: string
+): Promise<FetchError> {
+  const info: ErrorResponseBody | null = await res
+    .json()
+    .catch((): null => null);
+  return new FetchError(message, res.status, info);
+}
+
+/** The backend's text `detail` of a failed request; `null` when it gave none. */
+export function fetchErrorDetail(error: unknown): string | null {
+  if (!(error instanceof FetchError)) return null;
+  const detail: unknown = error.info?.detail;
+  return typeof detail === "string" && detail !== "" ? detail : null;
+}
+
 const DEFAULT_AUTH_ERROR_MSG =
   "An error occurred while fetching the data, related to the user's authentication status.";
 
@@ -38,6 +65,10 @@ export function isAuthStatusError(error: unknown): boolean {
     error instanceof FetchError &&
     (error.status === 401 || error.status === 402 || error.status === 403)
   );
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  return error instanceof FetchError && error.status === 404;
 }
 
 /**
@@ -74,9 +105,7 @@ export const skipRetryOnAuthError: NonNullable<
   }, delay);
 };
 
-export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
-  const res = await fetch(url);
-
+async function parseFetcherResponse<T>(res: Response): Promise<T> {
   if (res.status === 403) {
     const redirect = new RedirectError(
       DEFAULT_AUTH_ERROR_MSG,
@@ -96,4 +125,16 @@ export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
   }
 
   return res.json();
-};
+}
+
+// One argument only: SWR spreads an array key into its fetcher's arguments.
+export const errorHandlingFetcher = async <T>(url: string): Promise<T> =>
+  parseFetcherResponse<T>(await fetch(url));
+
+/** `errorHandlingFetcher` with request options, such as an abort signal. */
+export async function errorHandlingFetchWith<T>(
+  url: string,
+  init: RequestInit
+): Promise<T> {
+  return parseFetcherResponse<T>(await fetch(url, init));
+}

@@ -35,6 +35,15 @@ type AgentsLoadedMsg struct {
 	Err    error
 }
 
+// ModelsLoadedMsg carries LLM providers fetched from the API. ShowPicker is
+// true when the fetch was triggered by /model (open the modal) and false when
+// it ran during startup (only resolve the status-bar model name).
+type ModelsLoadedMsg struct {
+	Response   *models.LLMProviderResponse
+	ShowPicker bool
+	Err        error
+}
+
 // ConfigTestResultMsg carries the result of an async connection test during /configure.
 type ConfigTestResultMsg struct {
 	Err error

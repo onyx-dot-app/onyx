@@ -3,15 +3,17 @@
 import { toast } from "@opal/layouts";
 import { requestEmailVerification } from "../lib";
 import { Spinner } from "@/components/Spinner";
-import { useState, JSX } from "react";
+import { ReactNode, useState } from "react";
+import { useTranslations } from "next-intl";
 
 export function RequestNewVerificationEmail({
   children,
   email,
 }: {
-  children: JSX.Element | string;
+  children: ReactNode;
   email: string;
 }) {
+  const t = useTranslations("auth");
   const [isRequestingVerification, setIsRequestingVerification] =
     useState(false);
 
@@ -24,11 +26,11 @@ export function RequestNewVerificationEmail({
         setIsRequestingVerification(false);
 
         if (response.ok) {
-          toast.success("A new verification email has been sent!");
+          toast.success(t("waitingOnVerification.emailSent.toast"));
         } else {
           const errorDetail = (await response.json()).detail;
           toast.error(
-            `Failed to send a new verification email - ${errorDetail}`
+            t("waitingOnVerification.sendFailed.toast", { errorDetail })
           );
         }
       }}

@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
 
 import {
@@ -12,7 +13,7 @@ import {
   MessageRenderer,
   FullChatState,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { getToolName } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
 import {
@@ -21,7 +22,7 @@ import {
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
 import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   processContent,
   useMarkdownComponents,
@@ -63,6 +64,8 @@ export const ResearchAgentRenderer: MessageRenderer<
   isHover = false,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
+
   // Extract the research task from the start packet
   const startPacket = packets.find(
     (p) => p.obj.type === PacketType.RESEARCH_AGENT_START
@@ -92,7 +95,7 @@ export const ResearchAgentRenderer: MessageRenderer<
     const groups: NestedToolGroup[] = Array.from(nestedBySubTurn.entries())
       .sort(([a], [b]) => a - b)
       .map(([subTurnIndex, toolPackets]) => {
-        const name = getToolName(toolPackets);
+        const name = getToolName(toolPackets, t);
         const isComplete = toolPackets.some(
           (p) =>
             p.obj.type === PacketType.SECTION_END ||
@@ -108,7 +111,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       });
 
     return { parentPackets: parent, nestedToolGroups: groups };
-  }, [packets]);
+  }, [packets, t]);
 
   // Filter nested tool groups based on renderType (COMPACT and HIGHLIGHT show only latest)
   const visibleNestedToolGroups = useMemo(() => {
@@ -164,7 +167,8 @@ export const ResearchAgentRenderer: MessageRenderer<
   const markdownComponents = useMarkdownComponents(
     state,
     processedReportContent,
-    "text-text-03 font-main-ui-body"
+    "main-ui-body",
+    "text-03"
   );
 
   // Stable callbacks to avoid creating new functions on every render
@@ -191,12 +195,14 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col pl-(--timeline-common-text-padding)">
-              <Text as="p" text04 mainUiMuted className="mb-1">
-                Research Report
-              </Text>
+            <div className="flex flex-col ps-(--timeline-common-text-padding)">
+              <div className="mb-1">
+                <Text as="p" font="main-ui-muted" color="text-04">
+                  {t("researchAgent.report.title")}
+                </Text>
+              </div>
               <ExpandableTextDisplay
-                title="Research Report"
+                title={t("researchAgent.report.title")}
                 content={fullReportContent}
                 maxLines={5}
                 renderContent={renderReport}
@@ -256,11 +262,11 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col pl-(--timeline-common-text-padding)">
-              <Text as="p" text04 mainUiMuted>
-                Research Task
+            <div className="flex flex-col ps-(--timeline-common-text-padding)">
+              <Text as="p" font="main-ui-muted" color="text-04">
+                {t("researchAgent.task.title")}
               </Text>
-              <Text as="p" text03 mainUiMuted>
+              <Text as="p" font="main-ui-muted" color="text-03">
                 {researchTask}
               </Text>
             </div>
@@ -289,7 +295,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       {researchTask && !showOnlyReport && !showOnlyTools && (
         <StepContainer
           stepIcon={SvgCircle}
-          header="Research Task"
+          header={t("researchAgent.task.title")}
           collapsible={true}
           isLastStep={
             !stopPacketSeen &&
@@ -299,8 +305,8 @@ export const ResearchAgentRenderer: MessageRenderer<
           }
           isHover={isHover}
         >
-          <div className="pl-(--timeline-common-text-padding)">
-            <Text as="p" text02 mainUiMuted>
+          <div className="ps-(--timeline-common-text-padding)">
+            <Text as="p" font="main-ui-muted" color="text-02">
               {researchTask}
             </Text>
           </div>
@@ -344,15 +350,15 @@ export const ResearchAgentRenderer: MessageRenderer<
       {fullReportContent && !showOnlyTools && (
         <StepContainer
           stepIcon={SvgBookOpen}
-          header="Research Report"
+          header={t("researchAgent.report.title")}
           isLastStep={!stopPacketSeen && !isComplete}
           isFirstStep={!researchTask && nestedToolGroups.length === 0}
           isHover={isHover}
           noPaddingRight={true}
         >
-          <div className="pl-(--timeline-common-text-padding)">
+          <div className="ps-(--timeline-common-text-padding)">
             <ExpandableTextDisplay
-              title="Research Report"
+              title={t("researchAgent.report.title")}
               content={fullReportContent}
               renderContent={renderReport}
               isStreaming={isReportStreaming}

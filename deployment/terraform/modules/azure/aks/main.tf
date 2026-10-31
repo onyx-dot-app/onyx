@@ -110,6 +110,12 @@ resource "azurerm_kubernetes_cluster" "this" {
     # replaces the whole cluster instead of the pool.
     temporary_name_for_rotation = local.rotation_names["main"]
 
+    # Azure sets this itself, so leaving it unmanaged shows as drift on every
+    # plan and a stray apply would silently change how upgrades behave.
+    upgrade_settings {
+      max_surge = var.node_pool_max_surge
+    }
+
     tags = var.tags
   }
 
@@ -188,6 +194,12 @@ resource "azurerm_kubernetes_cluster_node_pool" "this" {
   vnet_subnet_id  = var.subnet_id
 
   temporary_name_for_rotation = local.rotation_names[each.key]
+
+  # Managed for the same reason as the system pool's: Azure sets a default and
+  # an unmanaged block reads as drift on every plan.
+  upgrade_settings {
+    max_surge = var.node_pool_max_surge
+  }
 
   tags = var.tags
 

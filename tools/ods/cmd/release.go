@@ -23,7 +23,7 @@ func NewReleaseCommand() *cobra.Command {
 With --check, no tag is cut. Instead the command validates an existing release
 tag:
 
-  - A cloud tag (vX.Y.Z-cloud.N) must be the tag "ods release cloud" would
+  - A cloud tag (vX.Y.Z-cloud.N) must be the tag "ods deploy cloud" would
     have computed: its commit is on origin/main, its base matches the release
     branches, and its counter is one past the previous counter for that base.
   - A stable tag (vX.Y.Z) must sit on origin/release/vX.Y, its patch must be
@@ -62,8 +62,12 @@ Example usage:
 	cmd.Flags().BoolVar(&check, "check", false, "Validate an existing release tag (named by --ref, or pointing at it) instead of cutting one")
 	cmd.Flags().StringVar(&ref, "ref", "HEAD", "Tag to check, or a commit-ish that a single release tag points at")
 
+	cmd.AddCommand(NewReleaseBetaCommand())
+	cmd.AddCommand(NewReleaseCLICommand())
+	cmd.AddCommand(NewReleaseClassifyCommand())
+	cmd.AddCommand(NewReleaseODSCommand())
 	cmd.AddCommand(NewReleaseOpalCommand())
-	cmd.AddCommand(NewReleaseCloudCommand())
+	cmd.AddCommand(NewReleaseTFProviderCommand())
 
 	return cmd
 }

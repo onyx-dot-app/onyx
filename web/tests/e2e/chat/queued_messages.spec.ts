@@ -1,6 +1,7 @@
 import { test, expect, Page, Route } from "@playwright/test";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 
 // Send a message and hold the API response so chatState stays non-"input".
 // Returns a release function that lets the held response proceed.
@@ -74,11 +75,12 @@ test.describe("Queued Messages", () => {
 
     release();
 
-    // Held response completes (2nd AI message), then queued message auto-sends (3rd)
-    await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(
-      3,
-      { timeout: 30000 }
-    );
+    // Held response completes, then the queued message auto-sends
+    await new ChatPage(page).expectSavedTurns([
+      "Hi, tell me a joke",
+      "Tell me another joke",
+      "And one more please",
+    ]);
 
     await expect(queueBars).toHaveCount(0);
   });
@@ -100,11 +102,14 @@ test.describe("Queued Messages", () => {
 
     release();
 
-    // 1 original + 1 held + 3 queued = 5 AI messages total
-    await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(
-      5,
-      { timeout: 60000 }
-    );
+    // The original, the held and the 3 queued messages, in order
+    await new ChatPage(page).expectSavedTurns([
+      "Hello",
+      "Tell me about dogs",
+      "First queued",
+      "Second queued",
+      "Third queued",
+    ]);
     await expect(queueBars).toHaveCount(0);
   });
 
@@ -127,11 +132,12 @@ test.describe("Queued Messages", () => {
 
     release();
 
-    // 1 original + 1 held + 1 remaining queued = 3 AI messages
-    await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(
-      3,
-      { timeout: 30000 }
-    );
+    // The original, the held and the remaining queued message
+    await new ChatPage(page).expectSavedTurns([
+      "Hello",
+      "Tell me about cats",
+      "Second queued",
+    ]);
   });
 
   test("navigates queued messages with arrow keys and edits with Enter", async ({

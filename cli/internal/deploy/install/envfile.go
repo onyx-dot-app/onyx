@@ -51,7 +51,7 @@ func Var(content, key string) string {
 }
 
 // COMPOSE_PROFILES is a list, and only one of its entries belongs to the
-// deployment mode (s3-filestore, which runs MinIO). The rest are the user's,
+// deployment mode (s3-filestore, which runs the bundled stores). The rest are the user's,
 // so mode changes add and drop that one entry instead of rewriting the value.
 
 // hasProfile reports whether a COMPOSE_PROFILES value activates profile.

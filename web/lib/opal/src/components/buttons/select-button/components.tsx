@@ -4,13 +4,25 @@ import "@opal/components/buttons/select-button/styles.css";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
-  ExtremaSizeVariants,
   IconFunctionComponent,
   RichStr,
+  Rounding,
 } from "@opal/types";
-import { Text, Tooltip, type TooltipSide } from "@opal/components";
+import {
+  Button,
+  Text,
+  Tooltip,
+  type TextColor,
+  type TextFont,
+  type TooltipSide,
+} from "@opal/components";
+import { SvgX } from "@opal/icons";
+import { Section } from "@opal/layouts/general/components";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
+import { ChevronIcon } from "@opal/components/buttons/chevron";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,32 +31,56 @@ import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 /**
  * Content props — a discriminated union on `foldable` that enforces:
  *
- * - `foldable: true`  → `icon` and `children` are required (icon stays visible,
- *                        label + rightIcon fold away)
- * - `foldable?: false` → at least one of `icon` or `children` must be provided
+ * - `foldable: boolean` → `icon` and `children` are required (icon stays
+ *                          visible, label + trailing icon fold away when true)
+ * - `foldable?: false`   → at least one of `icon` or `children` must be provided
  */
 type SelectButtonContentProps =
   | {
-      foldable: true;
+      foldable: boolean;
       icon: IconFunctionComponent;
       children: string | RichStr;
-      rightIcon?: IconFunctionComponent;
     }
   | {
       foldable?: false;
       icon?: IconFunctionComponent;
       children: string | RichStr;
-      rightIcon?: IconFunctionComponent;
     }
   | {
       foldable?: false;
       icon: IconFunctionComponent;
       children?: string | RichStr;
+    };
+
+/**
+ * The trailing slot holds one thing: a free `rightIcon`, or the dropdown
+ * `chevron`. `onClear` needs the chevron, since the clear button takes its
+ * place.
+ */
+type SelectButtonTrailingProps =
+  | {
+      /** Icon after the label. */
       rightIcon?: IconFunctionComponent;
+      chevron?: false;
+      onClear?: never;
+    }
+  | {
+      rightIcon?: never;
+      /**
+       * A trailing chevron for a dropdown or popover trigger. It rotates while
+       * the trigger is open.
+       */
+      chevron: true;
+      /**
+       * Filter triggers: while `state="selected"`, a clear (X) button replaces
+       * the chevron and calls this.
+       */
+      onClear?: () => void;
     };
 
 type SelectButtonProps = InteractiveStatefulProps &
-  SelectButtonContentProps & {
+  SelectButtonContentProps &
+  SelectButtonTrailingProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */
@@ -53,8 +89,21 @@ type SelectButtonProps = InteractiveStatefulProps &
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
-    /** Width preset. `"fit"` shrink-wraps, `"full"` stretches to parent width. */
-    width?: ExtremaSizeVariants;
+    /**
+     * Content justify mode. When `"between"`, icon + label group left and the
+     * trailing icon pushes to the right edge. Default keeps all items in a
+     * tight row.
+     */
+    justifyContent?: "between";
+
+    /** Override the label font (defaults to the size-derived body font). */
+    labelFont?: TextFont;
+
+    /** Override the label color (defaults to the variant's interactive color). */
+    labelColor?: TextColor;
+
+    /** Override the default rounding derived from `size`. */
+    rounding?: Rounding;
 
     /** Which side the tooltip appears on. */
     tooltipSide?: TooltipSide;
@@ -70,58 +119,140 @@ type SelectButtonProps = InteractiveStatefulProps &
 function SelectButton({
   icon: Icon,
   children,
-  rightIcon: RightIcon,
+  rightIcon,
+  chevron,
+  onClear,
   size = "lg",
   type = "button",
   foldable,
-  width,
+  justifyContent,
+  labelFont,
+  labelColor,
+  rounding: roundingOverride,
   tooltip,
   tooltipSide = "top",
+  interaction,
   disabled,
   ...statefulProps
 }: SelectButtonProps) {
+  const strings = useOpalStrings();
+  // Inside a Radix or Opal Dropdown trigger, the open state drives the hover
+  // look (and the chevron's rotation) unless `interaction` is set.
+  const resolvedInteraction = resolveTriggerInteraction(
+    interaction,
+    statefulProps
+  );
   const isLarge = size === "lg";
+  const showClear =
+    chevron === true &&
+    onClear !== undefined &&
+    statefulProps.state === "selected";
+  const TrailingIcon = chevron ? ChevronIcon : rightIcon;
 
   const labelEl = children ? (
     <Text
-      font={isLarge ? "main-ui-body" : "secondary-body"}
-      color="inherit"
-      nowrap
+      font={labelFont ?? (isLarge ? "main-ui-body" : "secondary-body")}
+      color={labelColor ?? "inherit"}
+      wordWrap="whitespace-nowrap"
     >
       {children}
     </Text>
   ) : null;
 
+  // The clear button overlays the chevron, which keeps its space so the
+  // button's width does not change.
+  const trailingEl = onClear ? (
+    <div style={{ visibility: showClear ? "hidden" : "visible" }}>
+      {iconWrapper(TrailingIcon, size, !!children)}
+    </div>
+  ) : (
+    iconWrapper(TrailingIcon, size, !!children)
+  );
+
+  const isBetween = justifyContent === "between";
+
   const button = (
-    <Interactive.Stateful disabled={disabled} {...statefulProps}>
+    <Interactive.Stateful
+      disabled={disabled}
+      interaction={resolvedInteraction}
+      {...statefulProps}
+    >
       <Interactive.Container
         type={type}
         size={size}
-        width={width}
-        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
+        rounding={roundingOverride ?? (isLarge ? 3 : size === "2xs" ? 1 : 2)}
       >
-        <div
-          className={cn(
-            "opal-select-content",
-            foldable && "interactive-foldable-host"
-          )}
-        >
-          {iconWrapper(Icon, size, !foldable && !!children)}
-
-          {foldable ? (
-            <Interactive.Foldable>
+        {isBetween ? (
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            gap={1}
+            height="auto"
+          >
+            <Section flexDirection="row" gap={1} width="fit" height="auto">
+              {iconWrapper(Icon, size, !!children)}
               {labelEl}
-              {iconWrapper(RightIcon, size, !!children)}
-            </Interactive.Foldable>
-          ) : (
-            <>
-              {labelEl}
-              {iconWrapper(RightIcon, size, !!children)}
-            </>
-          )}
-        </div>
+            </Section>
+            {trailingEl}
+          </Section>
+        ) : (
+          // Not a Section: its inline `gap` would override the foldable
+          // host's gap transition.
+          <div
+            className={cn(
+              "opal-select-content",
+              foldable && "interactive-foldable-host"
+            )}
+          >
+            {foldable ? (
+              <>
+                {iconWrapper(Icon, size, false)}
+                <Interactive.Foldable>
+                  {labelEl}
+                  {trailingEl}
+                </Interactive.Foldable>
+              </>
+            ) : (
+              <>
+                {iconWrapper(Icon, size, !!children)}
+                {labelEl}
+                {trailingEl}
+              </>
+            )}
+          </div>
+        )}
       </Interactive.Container>
     </Interactive.Stateful>
+  );
+
+  const withClear = onClear ? (
+    // Hugs the button so the clear button sits
+    // over the chevron, not at the edge of a wider container.
+    <div className="relative w-fit">
+      {button}
+      {showClear && (
+        <div className="absolute end-2 top-1/2 -translate-y-1/2">
+          {/* Force hover state so the X stays visually prominent against
+              the inverted selected background — without this it renders
+              dimmed and looks disabled. */}
+          <Button
+            icon={SvgX}
+            size="2xs"
+            prominence="tertiary"
+            tooltip={strings.clearFilter}
+            aria-label={strings.clearFilter}
+            disabled={disabled}
+            interaction="hover"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear();
+            }}
+          />
+        </div>
+      )}
+    </div>
+  ) : (
+    button
   );
 
   const resolvedTooltip =
@@ -129,7 +260,7 @@ function SelectButton({
 
   return (
     <Tooltip tooltip={resolvedTooltip} side={tooltipSide}>
-      {button}
+      {withClear}
     </Tooltip>
   );
 }

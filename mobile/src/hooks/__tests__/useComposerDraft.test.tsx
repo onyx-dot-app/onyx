@@ -137,13 +137,41 @@ describe("useComposerDraft", () => {
     ]);
   });
 
-  it("blocks send while an attachment is still indexing, and removing it unblocks", () => {
+  it("does not block send while an attachment is still processing/indexing on the server", () => {
     const { result } = renderHook(() => useComposerDraft("chat-1:"), {
       wrapper,
     });
     act(() =>
       result.current.addRecent(
         recent({ id: "r1", status: UserFileStatus.INDEXING }),
+      ),
+    );
+    expect(result.current.hasBlockingFiles).toBe(false);
+  });
+
+  it("blocks send while an attachment is still uploading, and removing it unblocks", () => {
+    const { result } = renderHook(() => useComposerDraft("chat-1:"), {
+      wrapper,
+    });
+    act(() =>
+      result.current.addRecent(
+        recent({ id: "r1", status: UserFileStatus.UPLOADING }),
+      ),
+    );
+    expect(result.current.hasBlockingFiles).toBe(true);
+
+    act(() => result.current.removeFile("r1"));
+    expect(result.current.files).toEqual([]);
+    expect(result.current.hasBlockingFiles).toBe(false);
+  });
+
+  it("blocks send while an attachment failed, and removing it unblocks", () => {
+    const { result } = renderHook(() => useComposerDraft("chat-1:"), {
+      wrapper,
+    });
+    act(() =>
+      result.current.addRecent(
+        recent({ id: "r1", status: UserFileStatus.FAILED }),
       ),
     );
     expect(result.current.hasBlockingFiles).toBe(true);
@@ -212,6 +240,28 @@ describe("useComposerDraft", () => {
         .removeFile("tmp-1", { kind: "draft", draftKey: "chat-1:" }),
     );
     expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps edits and attachments made while a send awaits acknowledgement", () => {
+    const { result } = renderHook(() => useComposerDraft("chat-1:"), {
+      wrapper,
+    });
+    act(() => {
+      result.current.setText("sent question");
+      result.current.addRecent(recent({ id: "r1" }));
+    });
+    const accepted = result.current.consume;
+    const starterAccepted = result.current.consumeAttachments;
+    act(() => {
+      result.current.setText("next question");
+      result.current.addRecent(recent({ id: "r2" }));
+    });
+    act(() => {
+      accepted();
+      starterAccepted();
+    });
+    expect(result.current.text).toBe("next question");
+    expect(result.current.files.map((file) => file.id)).toEqual(["r1", "r2"]);
   });
 
   it("consume clears text + attachments; consumeAttachments keeps the text", () => {

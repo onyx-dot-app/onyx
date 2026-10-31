@@ -104,7 +104,7 @@ func matchIgnore(f Finding, ignores []IgnoreEntry, now time.Time) *IgnoreEntry {
 			log.Debugf("Allowlist entry for %s expired on %s; not suppressing", entry.ID, entry.Expires)
 			continue
 		}
-		if entry.Ecosystem != "" && !strings.EqualFold(entry.Ecosystem, f.Ecosystem) {
+		if entry.Ecosystem != "" && !strings.EqualFold(canonicalEcosystem(entry.Ecosystem), canonicalEcosystem(f.Ecosystem)) {
 			continue
 		}
 		if idMatches(entry.ID, f) {

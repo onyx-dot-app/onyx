@@ -12,7 +12,7 @@ Peer dependencies (install whichever the lib actually exercises in your usage):
 
 ```sh
 bun add react react-dom next \
-  @radix-ui/react-popover @radix-ui/react-separator \
+  @radix-ui/react-popover \
   @radix-ui/react-slot @radix-ui/react-tooltip \
   @dnd-kit/core @dnd-kit/sortable @dnd-kit/modifiers @dnd-kit/utilities \
   @tanstack/react-table formik \
@@ -105,8 +105,8 @@ web/lib/opal/
 │   └── bundle-css.mjs    # Concatenates root.css + leaf component CSS into dist/styles.css
 ├── package.json
 ├── tsconfig.json         # Source typecheck config
-├── tsconfig.build.json   # Used by tsup to emit dist/
-├── tsup.config.ts
+├── tsconfig.build.json   # Used by tsdown to emit dist/
+├── tsdown.config.ts
 ├── tailwind-preset.cjs
 └── README.md
 ```
@@ -127,7 +127,7 @@ To produce the published artifact:
 
 ```sh
 cd web/lib/opal
-bun run build       # tsup -> dist/, then bundle-css.mjs -> dist/styles.css
+bun run build       # tsdown -> dist/, then bundle-css.mjs -> dist/styles.css
 ```
 
 ## Releasing to npm
@@ -150,7 +150,7 @@ Steps:
    git push origin opal/v0.1.1
    ```
 
-4. The workflow runs automatically on tag push. It builds (`tsup` + CSS barrel) and runs
+4. The workflow runs automatically on tag push. It builds (`tsdown` + CSS barrel) and runs
    `bun publish --provenance --access public`. Watch the run under the Actions tab; verify
    the new version on https://www.npmjs.com/package/@onyx-ai/opal.
 
@@ -158,10 +158,9 @@ The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 
 ## Conventions
 
-- Component directories are kebab-case (e.g. `select-button/`, `open-button/`,
+- Component directories are kebab-case (e.g. `select-button/`, `line-item-button/`,
   `content-action/`).
-- Each component dir contains `components.tsx`, `README.md`, `styles.css` (when needed), and
-  a `<PascalName>.stories.tsx` (when applicable).
+- Each component dir contains `components.tsx`, `README.md`, and `styles.css` (when needed).
 - Imports inside the lib use the `@opal/` path alias; never `@/`.
 - Types/interfaces are declared at the top of `components.tsx` without `export`; everything is
   re-exported from a single `export { Foo, type FooProps };` block at the bottom.

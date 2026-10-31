@@ -212,10 +212,10 @@ Before starting, make sure the Docker Daemon is running.
 
 You will need Docker installed to run these containers.
 
-Navigate to `onyx/deployment/docker_compose`, then start up Postgres/OpenSearch/Redis/MinIO with:
+Navigate to `onyx/deployment/docker_compose`, then start up Postgres/OpenSearch/Redis/the object store with:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relational_db cache minio
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relational_db cache object-store
 ```
 
 (index refers to OpenSearch, relational_db refers to Postgres, and cache refers to Redis)
@@ -286,7 +286,7 @@ You've successfully set up a local Onyx instance!
 
 ### Running on a Local Kubernetes Cluster
 
-For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/craft/dev/local-kubernetes.md) for the full workflow.
+For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Craft local Kubernetes development](deployment/helm/dev/README.md) for the full workflow.
 
 ### Running in Docker
 

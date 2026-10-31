@@ -5,22 +5,32 @@ import {
   SSOProviderCreateRequest,
   SSOProviderResponse,
   SSOProviderUpdateRequest,
-} from "@/lib/sso/interfaces";
+} from "@/lib/sso/types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
+
+/** Every JSON body the SSO endpoints below accept. */
+type SSORequestBody =
+  | SSOProviderCreateRequest
+  | SSOProviderUpdateRequest
+  | { email: string }
+  | { enabled: boolean }
+  | { domains: string[] }
+  | { domain: string };
 
 // FetchError carries the status the shared SWR guard reads to stop retrying and
 // send an expired session to the login page.
 async function ssoRequest<T>(
   url: string,
   method: string,
-  body: unknown
+  body?: SSORequestBody
 ): Promise<T> {
-  const response = await fetch(url, {
-    method,
-    headers: JSON_HEADERS,
-    body: JSON.stringify(body),
-  });
+  const response = await fetch(
+    url,
+    body === undefined
+      ? { method }
+      : { method, headers: JSON_HEADERS, body: JSON.stringify(body) }
+  );
   if (!response.ok) {
     const detail = await parseErrorDetail(response, "Request failed");
     throw new FetchError(detail, response.status, { detail });
@@ -82,6 +92,13 @@ export function setSSOProviderEnabled(
     `${SWR_KEYS.adminSsoProviders}/${providerId}/enabled`,
     "POST",
     { enabled }
+  );
+}
+
+export async function deleteSSOProvider(providerId: number): Promise<void> {
+  await ssoRequest<null>(
+    `${SWR_KEYS.adminSsoProviders}/${providerId}`,
+    "DELETE"
   );
 }
 

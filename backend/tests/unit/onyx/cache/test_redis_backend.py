@@ -31,13 +31,13 @@ class _RedisLikeLock:
         return True
 
     def release(self) -> None:
-        token = getattr(self.local, "token", None)
+        token = getattr(self.local, "token", None)  # ods: ignore[getattr]
         if token is None:
             raise RuntimeError("Cannot release an unlocked lock")
         self.local.token = None
 
     def owned(self) -> bool:
-        return getattr(self.local, "token", None) is not None
+        return getattr(self.local, "token", None) is not None  # ods: ignore[getattr]
 
 
 class _RecordingRedisClient:

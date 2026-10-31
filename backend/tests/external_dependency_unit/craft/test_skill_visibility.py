@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import User, UserRole
+from onyx.db.models import User
 from onyx.db.skill import (
     SkillManagementPolicy,
     fetch_skill,
@@ -36,7 +36,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        admin = make_user(db_session, role=UserRole.ADMIN)
+        admin = make_user(db_session, is_admin=True)
         skill = make_skill(db_session, is_public=False)
 
         result = fetch_skill(
@@ -63,7 +63,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
+        user = make_user(db_session, standard_account=True)
         group = make_group(db_session)
         add_user_to_group(db_session, user, group)
         skill = make_skill(db_session, is_public=False)
@@ -83,7 +83,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
+        user = make_user(db_session, standard_account=True)
         skill = make_skill(db_session, is_public=False)
         assert (
             fetch_skill(
@@ -129,7 +129,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
+        user = make_user(db_session, standard_account=True)
         group = make_group(db_session)
         membership = add_user_to_group(db_session, user, group)
         private_skill = make_skill(db_session, is_public=False)
@@ -153,8 +153,8 @@ class TestSkillVisibility:
         # Current behavior pinned: ONLY a global MANAGE_SKILLS holder bypasses the visibility
         # filter. Curators (and global curators) walk the same path as
         # regular users — no admin-style "see every row" override.
-        curator = make_user(db_session, role=UserRole.CURATOR)
-        basic = make_user(db_session, role=UserRole.BASIC)
+        curator = make_user(db_session, is_group_manager=True)
+        basic = make_user(db_session, standard_account=True)
 
         # A private skill shared with a group the curator is NOT in.
         other_group = make_group(db_session)
@@ -180,7 +180,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        curator = make_user(db_session, role=UserRole.CURATOR)
+        curator = make_user(db_session, is_group_manager=True)
         group = make_group(db_session)
         membership = add_user_to_group(db_session, curator, group)
         membership.is_manager = True
@@ -203,7 +203,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        curator = make_user(db_session, role=UserRole.CURATOR)
+        curator = make_user(db_session, is_group_manager=True)
         group = make_group(db_session)
         add_user_to_group(db_session, curator, group)
         private_skill = make_skill(db_session, is_public=False)
@@ -223,7 +223,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        curator = make_user(db_session, role=UserRole.CURATOR)
+        curator = make_user(db_session, is_group_manager=True)
         curated_group = make_group(db_session)
         other_group = make_group(db_session)
         membership = add_user_to_group(db_session, curator, curated_group)
@@ -247,7 +247,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        curator = make_user(db_session, role=UserRole.GLOBAL_CURATOR)
+        curator = make_user(db_session, is_group_manager=True)
         group = make_group(db_session)
         membership = add_user_to_group(db_session, curator, group)
         membership.is_manager = True
@@ -270,7 +270,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        curator = make_user(db_session, role=UserRole.CURATOR)
+        curator = make_user(db_session, is_group_manager=True)
         public_skill = make_skill(db_session, is_public=True)
 
         result = fetch_skill(

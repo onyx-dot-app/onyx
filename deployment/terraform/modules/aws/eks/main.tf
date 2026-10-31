@@ -17,6 +17,63 @@ locals {
     (var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null)
   )
 
+  # Settings for every IAM role the upstream modules create. Only keys that are
+  # set, so leaving both inputs unset renders exactly the previous config.
+  node_group_iam_role_settings = {
+    for k, v in {
+      iam_role_permissions_boundary = var.iam_role_permissions_boundary
+      iam_role_path                 = var.iam_role_path
+    } : k => v if v != null
+  }
+  addon_iam_role_settings = {
+    for k, v in {
+      role_permissions_boundary_arn = var.iam_role_permissions_boundary
+      role_path                     = var.iam_role_path
+    } : k => v if v != null
+  }
+
+  # The module's default chart 1.7.1 (controller v2.7.1) strips the native preStop
+  # sleep the onyx chart sets, so api and web pods fail admission once the namespace
+  # has the readiness-gate label. Its bundled IAM policy predates the actions below,
+  # scoped as in the controller's docs/install/iam_policy.json.
+  aws_load_balancer_controller_settings = merge(local.addon_iam_role_settings, {
+    chart_version = "3.6.2"
+    policy_statements = [
+      {
+        sid = "ControllerDescribeSinceModulePolicy"
+        actions = [
+          "ec2:DescribeIpamPools",
+          "ec2:DescribeRouteTables",
+          "ec2:GetSecurityGroupsForVpc",
+          "elasticloadbalancing:DescribeCapacityReservation",
+          "elasticloadbalancing:DescribeListenerAttributes",
+        ]
+        resources = ["*"]
+      },
+      {
+        sid = "ControllerModifyOwnedSinceModulePolicy"
+        actions = [
+          "elasticloadbalancing:ModifyCapacityReservation",
+          "elasticloadbalancing:ModifyIpPools",
+          "elasticloadbalancing:ModifyListenerAttributes",
+        ]
+        resources = ["*"]
+        conditions = [
+          {
+            test     = "Null"
+            variable = "aws:ResourceTag/elbv2.k8s.aws/cluster"
+            values   = ["false"]
+          },
+        ]
+      },
+      {
+        sid       = "ControllerListenerRulesSinceModulePolicy"
+        actions   = ["elasticloadbalancing:SetRulePriorities"]
+        resources = ["*"]
+      },
+    ]
+  })
+
   workload_irsa_service_account_subjects = [
     for service_account_name in distinct(concat(
       [var.irsa_service_account_name],
@@ -119,12 +176,35 @@ module "eks" {
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
-  vpc_id                                   = var.vpc_id
-  subnet_ids                               = var.subnet_ids
-  cluster_endpoint_public_access           = var.public_cluster_enabled
-  cluster_endpoint_private_access          = var.private_cluster_enabled
-  cluster_endpoint_public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
-  enable_cluster_creator_admin_permissions = true
+  vpc_id                               = var.vpc_id
+  subnet_ids                           = var.subnet_ids
+  cluster_endpoint_public_access       = var.public_cluster_enabled
+  cluster_endpoint_private_access      = var.private_cluster_enabled
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  # By default the cluster-admin access entry and the KMS key administrator
+  # are whoever runs Terraform, so an apply by a different principal moves
+  # them. cluster_admin_principal_arn pins both. It reuses the module's own
+  # cluster_creator / admin keys, so pinning the current principal plans no
+  # change.
+  enable_cluster_creator_admin_permissions = var.cluster_admin_principal_arn == null
+  access_entries = var.cluster_admin_principal_arn == null ? {} : {
+    cluster_creator = {
+      principal_arn = var.cluster_admin_principal_arn
+      type          = "STANDARD"
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
+  kms_key_administrators = var.cluster_admin_principal_arn == null ? [] : [var.cluster_admin_principal_arn]
+
+  iam_role_permissions_boundary = var.iam_role_permissions_boundary
+  iam_role_path                 = var.iam_role_path
 
   # Control plane logging
   cluster_enabled_log_types              = var.cluster_enabled_log_types
@@ -147,9 +227,10 @@ module "eks" {
     }
   } : {}
 
-  eks_managed_node_group_defaults = {
-    ami_type = "AL2023_x86_64_STANDARD"
-  }
+  eks_managed_node_group_defaults = merge(
+    { ami_type = "AL2023_x86_64_STANDARD" },
+    local.node_group_iam_role_settings,
+  )
 
   eks_managed_node_groups = {
     for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups) : k => merge(v,
@@ -160,7 +241,7 @@ module "eks" {
           v.instance_types
         )
       },
-      # Only add subnet_ids override for vespa node group if specified
+      # Only add subnet_ids override for the document-index node group if specified
       k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {
         subnet_ids = var.vespa_node_subnet_ids
       } : {},
@@ -178,7 +259,7 @@ module "eks" {
         max_size     = coalesce(var.main_node_max_size, v.max_size)
         desired_size = try(v.desired_size, coalesce(var.main_node_min_size, v.min_size))
       } : {},
-      # Disk override for the Vespa/document-index node; null keeps the map
+      # Disk override for the document-index node; null keeps the map
       # default. Merge preserves any other device mappings on the group.
       k == "vespa" && var.vespa_node_disk_size_gb != null ? {
         block_device_mappings = merge(try(v.block_device_mappings, {}), {
@@ -228,6 +309,8 @@ resource "helm_release" "nvidia_device_plugin" {
 }
 
 # https://aws.amazon.com/blogs/containers/amazon-ebs-csi-driver-is-now-generally-available-in-amazon-eks-add-ons/
+data "aws_partition" "current" {}
+
 data "aws_iam_policy" "ebs_csi_policy" {
   arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
@@ -238,6 +321,8 @@ module "irsa-ebs-csi" {
 
   create_role                   = true
   role_name                     = "AmazonEKSTFEBSCSIRole-${module.eks.cluster_name}"
+  role_path                     = coalesce(var.iam_role_path, "/")
+  role_permissions_boundary_arn = var.iam_role_permissions_boundary != null ? var.iam_role_permissions_boundary : ""
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = [data.aws_iam_policy.ebs_csi_policy.arn]
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
@@ -292,6 +377,10 @@ module "eks_blueprints_addons" {
   enable_metrics_server               = true
   enable_cluster_autoscaler           = true
 
+  # The two add-ons above that create IRSA roles.
+  aws_load_balancer_controller = local.aws_load_balancer_controller_settings
+  cluster_autoscaler           = local.addon_iam_role_settings
+
   depends_on = [module.eks]
 }
 
@@ -307,7 +396,7 @@ module "eks_blueprints_addons" {
 resource "kubernetes_cluster_role" "cluster_autoscaler_volumeattachments" {
   metadata {
     name   = "onyx-cluster-autoscaler-volumeattachments"
-    labels = { "app.kubernetes.io/managed-by" = "onyx-infra" }
+    labels = { "app.kubernetes.io/managed-by" = "terraform" }
   }
 
   rule {
@@ -322,7 +411,7 @@ resource "kubernetes_cluster_role" "cluster_autoscaler_volumeattachments" {
 resource "kubernetes_cluster_role_binding" "cluster_autoscaler_volumeattachments" {
   metadata {
     name   = "onyx-cluster-autoscaler-volumeattachments"
-    labels = { "app.kubernetes.io/managed-by" = "onyx-infra" }
+    labels = { "app.kubernetes.io/managed-by" = "terraform" }
   }
 
   role_ref {
@@ -373,6 +462,8 @@ module "irsa-workload-access" {
 
   create_role                   = true
   role_name                     = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
+  role_path                     = coalesce(var.iam_role_path, "/")
+  role_permissions_boundary_arn = var.iam_role_permissions_boundary != null ? var.iam_role_permissions_boundary : ""
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = aws_iam_policy.s3_access_policy[*].arn
   oidc_fully_qualified_subjects = local.workload_irsa_service_account_subjects

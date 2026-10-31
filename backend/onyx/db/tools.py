@@ -1,11 +1,15 @@
 from collections.abc import Collection
-from typing import TYPE_CHECKING, Any, Type, cast
+from typing import Any, Type, cast
 from uuid import UUID
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import has_permission
+from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
 from onyx.db.models import (
@@ -15,19 +19,67 @@ from onyx.db.models import (
     Persona__Tool,
     Persona__UserGroup,
     Tool,
-    ToolCall,
+    ToolUserPreference,
     User,
 )
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
+from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
 from onyx.utils.headers import HeaderItemDict
-from onyx.utils.logger import setup_logger
-from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
-if TYPE_CHECKING:
-    pass
 
-logger = setup_logger()
+def get_tool_user_preferences(
+    tool_ids: list[int], user_id: UUID, db_session: Session
+) -> dict[int, ToolUserPreference]:
+    if not tool_ids:
+        return {}
+    return {
+        preference.tool_id: preference
+        for preference in db_session.scalars(
+            select(ToolUserPreference).where(
+                ToolUserPreference.user_id == user_id,
+                ToolUserPreference.tool_id.in_(tool_ids),
+            )
+        )
+    }
+
+
+def upsert_tool_user_preference__no_commit(
+    tool_id: int, user_id: UUID, db_session: Session, *, enabled_in_chat: bool
+) -> ToolUserPreference:
+    stmt = insert(ToolUserPreference).values(
+        user_id=user_id, tool_id=tool_id, enabled_in_chat=enabled_in_chat
+    )
+    return db_session.scalars(
+        stmt.on_conflict_do_update(
+            index_elements=[ToolUserPreference.user_id, ToolUserPreference.tool_id],
+            set_={"enabled_in_chat": enabled_in_chat},
+        ).returning(ToolUserPreference),
+        execution_options={"populate_existing": True},
+    ).one()
+
+
+def capture_persona_tool_configuration(persona: Persona) -> PersonaToolConfiguration:
+    """Copy loaded configuration; the caller owns the session and transaction."""
+    return PersonaToolConfiguration(
+        persona_id=persona.id,
+        persona_name=persona.name,
+        tools=[ToolConfiguration.model_validate(tool) for tool in persona.tools],
+        search=PersonaSearchInfo(
+            document_set_names=[item.name for item in persona.document_sets],
+            search_start_date=persona.search_start_date,
+            attached_document_ids=[item.id for item in persona.attached_documents],
+            hierarchy_node_ids=[item.id for item in persona.hierarchy_nodes],
+        ),
+    )
+
+
+def _openapi_tool_clause() -> ColumnElement[bool]:
+    return and_(
+        func.jsonb_typeof(Tool.openapi_schema) == "object",
+        Tool.in_code_tool_id.is_(None),
+        Tool.mcp_server_id.is_(None),
+    )
 
 
 def get_tools(
@@ -51,17 +103,10 @@ def get_tools(
         )
 
     if only_enabled:
-        query = query.where(Tool.enabled.is_(True))
+        query = query.where(or_(Tool.enabled.is_(True), _openapi_tool_clause()))
 
     if only_openapi:
-        query = query.where(
-            Tool.openapi_schema.is_not(None),
-            # To avoid showing rows that have JSON literal `null` stored in the column to the user.
-            # tools from mcp servers will not have an openapi schema but it has `null`, so we need to exclude them.
-            func.jsonb_typeof(Tool.openapi_schema) == "object",
-            # Exclude built-in tools that happen to have an openapi_schema
-            Tool.in_code_tool_id.is_(None),
-        )
+        query = query.where(_openapi_tool_clause())
 
     return list(db_session.scalars(query).all())
 
@@ -86,6 +131,25 @@ def get_tools_by_ids(tool_ids: list[int], db_session: Session) -> list[Tool]:
         return []
     stmt = select(Tool).where(Tool.id.in_(tool_ids))
     return list(db_session.scalars(stmt).all())
+
+
+def get_default_chat_tool_ids(tool_ids: list[int], db_session: Session) -> set[int]:
+    if not tool_ids:
+        return set()
+    stmt = (
+        select(Tool.id)
+        .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
+        .join(Persona, Persona.id == Persona__Tool.persona_id)
+        .where(
+            Persona.id == DEFAULT_PERSONA_ID,
+            Persona.builtin_persona.is_(True),
+            Persona.deleted.is_(False),
+            Tool.id.in_(tool_ids),
+            or_(Tool.enabled.is_(True), _openapi_tool_clause().is_not(True)),
+        )
+        .distinct()
+    )
+    return set(db_session.scalars(stmt))
 
 
 def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
@@ -244,6 +308,8 @@ def update_tool(
     db_session: Session,
     passthrough_auth: bool | None,
     oauth_config_id: int | None | UnsetType = UNSET,
+    *,
+    commit: bool = True,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
@@ -282,7 +348,8 @@ def update_tool(
             if oauth_config:
                 db_session.delete(oauth_config)
 
-    db_session.commit()
+    if commit:
+        db_session.commit()
     return tool
 
 
@@ -340,67 +407,3 @@ def get_builtin_tool(
         raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")
 
     return db_tool
-
-
-def create_tool_call_no_commit(
-    chat_session_id: UUID,
-    parent_chat_message_id: int | None,
-    turn_number: int,
-    tool_id: int,
-    tool_call_id: str,
-    tool_call_arguments: dict[str, Any],
-    tool_call_response: Any,
-    tool_call_tokens: int,
-    db_session: Session,
-    *,
-    parent_tool_call_id: int | None = None,
-    reasoning_tokens: str | None = None,
-    generated_images: list[dict] | None = None,
-    tab_index: int = 0,
-    add_only: bool = True,
-) -> ToolCall:
-    """
-    Create a ToolCall entry in the database.
-
-    Args:
-        chat_session_id: The chat session ID
-        parent_chat_message_id: The parent chat message ID
-        turn_number: The turn number for this tool call
-        tool_id: The tool ID
-        tool_call_id: The tool call ID (string identifier from LLM)
-        tool_call_arguments: The tool call arguments
-        tool_call_response: The tool call response
-        tool_call_tokens: The number of tokens in the tool call arguments
-        db_session: The database session
-        parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
-        reasoning_tokens: Optional reasoning tokens
-        generated_images: Optional list of generated image metadata for replay
-        tab_index: Index order of tool calls from the LLM for parallel tool calls
-        commit: If True, commit the transaction; if False, flush only
-
-    Returns:
-        The created ToolCall object
-    """
-    tool_call = ToolCall(
-        chat_session_id=chat_session_id,
-        parent_chat_message_id=parent_chat_message_id,
-        parent_tool_call_id=parent_tool_call_id,
-        turn_number=turn_number,
-        tab_index=tab_index,
-        tool_id=tool_id,
-        tool_call_id=tool_call_id,
-        reasoning_tokens=(
-            sanitize_string(reasoning_tokens) if reasoning_tokens else reasoning_tokens
-        ),
-        tool_call_arguments=sanitize_json_like(tool_call_arguments),
-        tool_call_response=sanitize_json_like(tool_call_response),
-        tool_call_tokens=tool_call_tokens,
-        generated_images=sanitize_json_like(generated_images),
-    )
-
-    db_session.add(tool_call)
-    if not add_only:
-        db_session.add(tool_call)
-    else:
-        db_session.flush()
-    return tool_call

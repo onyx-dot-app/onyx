@@ -1,23 +1,16 @@
-"use client";
-
-import { SettingsLayouts } from "@opal/layouts";
-import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
+import { redirect } from "next/navigation";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import {
+  withPluginSearchParams,
+  type PluginSearchParams,
+} from "@/lib/plugins/routes";
 
-const route = ADMIN_ROUTES.OPENAPI_ACTIONS;
-
-export default function Main() {
-  return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={route.title}
-        description="Connect OpenAPI servers to add custom actions and tools for your agents."
-        divider
-      />
-      <SettingsLayouts.Body>
-        <OpenApiPageContent />
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<PluginSearchParams>;
+}) {
+  redirect(
+    withPluginSearchParams(ADMIN_ROUTES.PLUGINS.path, await searchParams)
   );
 }

@@ -26,3 +26,5 @@ export function workerUserCredentials(workerIndex: number): {
     password: "WorkerPassword123!",
   };
 }
+
+export const CI_OPENAI_MODEL = "gpt-6-luna";

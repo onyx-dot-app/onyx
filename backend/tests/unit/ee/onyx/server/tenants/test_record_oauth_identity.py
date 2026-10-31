@@ -15,6 +15,7 @@ from sqlalchemy.dialects import postgresql
 from ee.onyx.db.user_tenant_mapping import (
     accept_user_invite,
     approve_user_invite,
+    forget_oauth_identities,
     record_oauth_identity,
     rekey_user_mapping_email,
 )
@@ -613,3 +614,53 @@ def test_approve_invite_does_not_transfer_subjects_by_email() -> None:
     # the approved user's, so the rival row is only deactivated.
     db_session.delete.assert_not_called()
     assert existing_mapping.active is False
+
+
+def test_approve_invite_consumes_a_mixed_case_pending_request() -> None:
+    """The pending list holds the address as the requester typed it. An entry
+    left behind stays a standing approval for a later move into any tenant."""
+    with (
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+        patch(
+            f"{_MAPPING_MODULE}.get_pending_users",
+            return_value=["User@Example.com", "other@example.com"],
+        ),
+        patch(f"{_MAPPING_MODULE}.write_pending_users") as write_pending_users,
+        patch(f"{_MAPPING_MODULE}.get_invited_users", return_value=[]),
+        patch(f"{_MAPPING_MODULE}.write_invited_users"),
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        db_session.query.return_value.filter.return_value.with_for_update.return_value.all.return_value = []
+
+        approve_user_invite("user@example.com", "tenant_new")
+
+    write_pending_users.assert_called_once_with(["other@example.com"])
+
+
+def _run_forget(*, multi_tenant: bool) -> MagicMock:
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", multi_tenant),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        forget_oauth_identities(tenant_id="tenant_abc", oauth_name="okta")
+    return session_ctx
+
+
+def test_forget_single_tenant_opens_no_session() -> None:
+    assert _run_forget(multi_tenant=False).call_count == 0
+
+
+def test_forget_deletes_only_this_workspace_provider_links() -> None:
+    session_ctx = _run_forget(multi_tenant=True)
+
+    db_session = session_ctx.return_value.__enter__.return_value
+    db_session.commit.assert_called_once()
+    statement = db_session.execute.call_args.args[0]
+    sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert sql.startswith("DELETE FROM public.user_tenant_mapping_oauth_account")
+    assert "user_tenant_mapping_oauth_account.tenant_id = 'tenant_abc'" in sql
+    assert "user_tenant_mapping_oauth_account.oauth_name = 'okta'" in sql

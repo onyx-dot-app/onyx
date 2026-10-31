@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
+import { useTranslations } from "next-intl";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Modal } from "@opal/components";
+import { Text, Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -31,11 +31,15 @@ export interface ExpandableTextDisplayProps {
   isStreaming?: boolean;
 }
 
+type ExpandableTextTranslator = ReturnType<
+  typeof useTranslations<"common.expandableText">
+>;
+
 /** Calculate content size in human-readable format */
-function getContentSize(text: string): string {
+function getContentSize(text: string, t: ExpandableTextTranslator): string {
   const bytes = new Blob([text]).size;
-  if (bytes < 1024) return `${bytes} Bytes`;
-  return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024) return t("size.bytes", { count: bytes });
+  return t("size.kilobytes", { size: (bytes / 1024).toFixed(2) });
 }
 
 /** Count lines in text */
@@ -119,13 +123,14 @@ export default function ExpandableTextDisplay({
   renderContent,
   isStreaming = false,
 }: ExpandableTextDisplayProps) {
+  const t = useTranslations("common.expandableText");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentInnerRef = useRef<HTMLDivElement>(null);
 
   const lineCount = useMemo(() => getLineCount(content), [content]);
-  const contentSize = useMemo(() => getContentSize(content), [content]);
+  const contentSize = useMemo(() => getContentSize(content, t), [content, t]);
   const displaySubtitle = subtitle ?? contentSize;
 
   // Truncation detection (read-only, doesn't need to block paint)
@@ -239,7 +244,7 @@ export default function ExpandableTextDisplay({
       return (
         <div>
           {isTruncated && (
-            <Text as="p" text03 mainUiMuted className="my-0!">
+            <Text as="p" color="text-03" font="main-ui-muted">
               …
             </Text>
           )}
@@ -272,21 +277,26 @@ export default function ExpandableTextDisplay({
     return (
       <div ref={scrollRef} className="overflow-hidden">
         {hasTruncation && (
-          <Text as="span" mainUiMuted text03>
-            …{"\n"}
+          <Text as="span" font="main-ui-muted" color="text-03">
+            {"…\n"}
           </Text>
         )}
-        <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
-          {lines}
-        </Text>
+        <div className="whitespace-pre-wrap">
+          <Text as="p" font="main-ui-muted" color="text-03">
+            {lines}
+          </Text>
+        </div>
       </div>
     );
   };
 
   // Render plain text static (CSS line-clamp + scroll-based truncation detection)
   const renderPlainTextStatic = () => (
-    <div ref={scrollRef} className={cn("overflow-hidden", lineClampClass)}>
-      <Text as="span" mainUiMuted text03 className="whitespace-pre-wrap">
+    <div
+      ref={scrollRef}
+      className={cn("overflow-hidden whitespace-pre-wrap", lineClampClass)}
+    >
+      <Text as="span" font="main-ui-muted" color="text-03">
         {displayContent ?? content}
       </Text>
     </div>
@@ -312,7 +322,7 @@ export default function ExpandableTextDisplay({
               prominence="tertiary"
               size="sm"
               icon={SvgMaximize2}
-              tooltip="View Full Text"
+              tooltip={t("viewFullButton.tooltip")}
               onClick={() => setIsModalOpen(true)}
             />
           )}
@@ -326,12 +336,12 @@ export default function ExpandableTextDisplay({
           <div className="flex items-start justify-between px-4 py-3">
             <div className="flex flex-col">
               <DialogPrimitive.Title asChild>
-                <Text as="span" text04 headingH3>
+                <Text as="span" color="text-04" font="heading-h3">
                   {title}
                 </Text>
               </DialogPrimitive.Title>
               <DialogPrimitive.Description asChild>
-                <Text as="span" text03 secondaryBody>
+                <Text as="span" color="text-03" font="secondary-body">
                   {displaySubtitle}
                 </Text>
               </DialogPrimitive.Description>
@@ -351,17 +361,19 @@ export default function ExpandableTextDisplay({
             {renderContent ? (
               renderContent(content, true)
             ) : (
-              <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
-                {content}
-              </Text>
+              <div className="whitespace-pre-wrap">
+                <Text as="p" font="main-ui-muted" color="text-03">
+                  {content}
+                </Text>
+              </div>
             )}
           </Modal.Body>
 
           {/* Footer */}
           <div className="flex items-center justify-between p-2 bg-background-tint-01">
             <div className="px-2">
-              <Text as="span" mainUiMuted text03>
-                {lineCount} {lineCount === 1 ? "line" : "lines"}
+              <Text as="span" font="main-ui-muted" color="text-03">
+                {t("lineCount.label", { count: lineCount })}
               </Text>
             </div>
             <div className="flex items-center gap-1 bg-background-tint-00 p-1 rounded-12">
@@ -369,13 +381,13 @@ export default function ExpandableTextDisplay({
                 prominence="tertiary"
                 size="sm"
                 getCopyText={() => content}
-                tooltip="Copy"
+                tooltip={t("copyButton.tooltip")}
               />
               <Button
                 prominence="tertiary"
                 size="sm"
                 icon={SvgDownload}
-                tooltip="Download"
+                tooltip={t("downloadButton.tooltip")}
                 onClick={handleDownload}
               />
             </div>

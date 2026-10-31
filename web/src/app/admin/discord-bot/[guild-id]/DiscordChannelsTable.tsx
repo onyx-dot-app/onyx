@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableBody,
@@ -8,10 +9,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Switch } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSwitch, Text } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import {
   DiscordChannelConfig,
@@ -59,12 +59,14 @@ export function DiscordChannelsTable({
   onChannelUpdate,
   disabled = false,
 }: Props) {
+  const t = useTranslations("admin.discordBot");
+
   if (channels.length === 0) {
     return (
       <EmptyMessageCard
         sizePreset="main-ui"
-        title="No channels configured"
-        description="Run !sync-channels in Discord to add channels."
+        title={t("channels.empty.title")}
+        description={t("channels.empty.description")}
       />
     );
   }
@@ -73,11 +75,11 @@ export function DiscordChannelsTable({
     <Table>
       <TableHeader>
         <TableRow className="[&>th]:whitespace-nowrap">
-          <TableHead>Channel</TableHead>
-          <TableHead>Enabled</TableHead>
-          <TableHead>Require @mention</TableHead>
-          <TableHead>Thread Only Mode</TableHead>
-          <TableHead>Agent Override</TableHead>
+          <TableHead>{t("channels.table.channel.header")}</TableHead>
+          <TableHead>{t("channels.table.enabled.header")}</TableHead>
+          <TableHead>{t("channels.table.requireMention.header")}</TableHead>
+          <TableHead>{t("channels.table.threadOnly.header")}</TableHead>
+          <TableHead>{t("channels.table.agentOverride.header")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -96,13 +98,13 @@ export function DiscordChannelsTable({
                   width="fit"
                 >
                   <ChannelIcon width={16} height={16} />
-                  <Text text04 mainUiBody>
+                  <Text font="main-ui-body" color="text-04">
                     {channel.channel_name}
                   </Text>
                 </Section>
               </TableCell>
               <TableCell>
-                <Switch
+                <InputSwitch
                   checked={channel.enabled}
                   onCheckedChange={(checked) =>
                     onChannelUpdate(channel.id, "enabled", checked)
@@ -111,7 +113,7 @@ export function DiscordChannelsTable({
                 />
               </TableCell>
               <TableCell>
-                <Switch
+                <InputSwitch
                   checked={channel.require_bot_invocation}
                   onCheckedChange={(checked) =>
                     onChannelUpdate(
@@ -125,7 +127,7 @@ export function DiscordChannelsTable({
               </TableCell>
               <TableCell>
                 {channel.channel_type !== "forum" && (
-                  <Switch
+                  <InputSwitch
                     checked={channel.thread_only_mode}
                     onCheckedChange={(checked) =>
                       onChannelUpdate(channel.id, "thread_only_mode", checked)
@@ -135,7 +137,7 @@ export function DiscordChannelsTable({
                 )}
               </TableCell>
               <TableCell>
-                <InputSelect
+                <InputSingleSelect
                   value={channel.persona_override_id?.toString() ?? "default"}
                   onValueChange={(value: string) =>
                     onChannelUpdate(
@@ -145,20 +147,16 @@ export function DiscordChannelsTable({
                     )
                   }
                   disabled={disabled}
-                >
-                  <InputSelect.Trigger placeholder="-" />
-                  <InputSelect.Content>
-                    <InputSelect.Item value="default">-</InputSelect.Item>
-                    {personas.map((persona) => (
-                      <InputSelect.Item
-                        key={persona.id}
-                        value={persona.id.toString()}
-                      >
-                        {persona.name}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
+                  defaultOption="default"
+                  placeholder="-"
+                  options={[
+                    { value: "default", title: "-" },
+                    ...personas.map((persona) => ({
+                      value: persona.id.toString(),
+                      title: persona.name,
+                    })),
+                  ]}
+                />
               </TableCell>
             </TableRow>
           );

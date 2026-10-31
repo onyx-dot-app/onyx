@@ -2,43 +2,41 @@
 
 import { useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { APP_SLOGAN } from "@/lib/constants";
-import useAppFocus from "@/hooks/useAppFocus";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCurrentSessionPersonaId } from "@/app/app/stores/useChatSessionStore";
 import { useActiveAgent, useAgents } from "@/lib/agents/hooks";
-import {
-  SEARCH_TOOL_ID,
-  WEB_SEARCH_TOOL_ID,
-} from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID } from "@/lib/tools/constants";
 
 export function useCustomFooterContent(): string {
   const settings = useSettings();
+  const t = useTranslations("common.appFooter");
   return (
     settings.enterprise?.custom_lower_disclaimer_content ||
-    `[Onyx ${settings.version ?? "dev"}](https://www.onyx.app/) - ${APP_SLOGAN}`
+    `[Onyx ${settings.version ?? "dev"}](https://www.onyx.app/) - ${t("slogan")}`
   );
 }
 
 export function useAppDocumentTitle(): void {
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const { appName } = useSettings();
   const { currentChatSession } = useChatSessions();
   useLayoutEffect(() => {
     const appendChatNameToDocumentTitle =
-      appFocus.isChattable() && currentChatSession?.name;
+      appPosition.isChattable() && currentChatSession?.name;
     document.title = appendChatNameToDocumentTitle
-      ? `${currentChatSession.name} — ${appName}`
+      ? `${currentChatSession.name} | ${appName}`
       : appName;
-  }, [currentChatSession?.name, appName, appFocus]);
+  }, [currentChatSession?.name, appName, appPosition]);
 }
 
 export function useAdminDocumentTitle(): void {
   const pathname = usePathname();
   const { appName } = useSettings();
   useLayoutEffect(() => {
-    document.title = `Admin — ${appName}`;
+    document.title = `Admin | ${appName}`;
   }, [pathname, appName]);
 }
 

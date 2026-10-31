@@ -44,6 +44,9 @@ class FullUserSnapshot(BaseModel):
     personal_name: str | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    # Most recent chat activity. None when the user has never chatted. Distinct
+    # from `updated_at`, which only moves when the user row itself is written.
+    last_active: datetime.datetime | None = None
     groups: list[UserGroupInfo]
     is_scim_synced: bool
     # Per-user Craft override; None = follow the workspace default.
@@ -56,6 +59,7 @@ class FullUserSnapshot(BaseModel):
         groups: list[UserGroupInfo] | None = None,
         is_scim_synced: bool = False,
         is_admin: bool = False,
+        last_active: datetime.datetime | None = None,
     ) -> "FullUserSnapshot":
         return cls(
             id=user.id,
@@ -67,6 +71,7 @@ class FullUserSnapshot(BaseModel):
             personal_name=user.personal_name,
             created_at=user.created_at,
             updated_at=user.updated_at,
+            last_active=last_active,
             groups=groups or [],
             is_scim_synced=is_scim_synced,
             craft_enabled=user.craft_enabled,

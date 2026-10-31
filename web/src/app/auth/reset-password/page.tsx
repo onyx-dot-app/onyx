@@ -10,13 +10,16 @@ import Link from "next/link";
 import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { TextFormField } from "@/components/Field";
+import { FieldLabel } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { toast } from "@opal/layouts";
 import { Spinner } from "@/components/Spinner";
 import { redirect, useSearchParams } from "next/navigation";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import { useTranslations } from "next-intl";
 
 const ResetPasswordPage: React.FC = () => {
+  const t = useTranslations("auth");
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
@@ -24,11 +27,15 @@ const ResetPasswordPage: React.FC = () => {
     redirect("/auth/login");
   }
 
+  const genericError = t("resetPassword.genericError.toast");
+
   return (
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
+          <Title className="mb-2 mx-auto font-bold">
+            {t("resetPassword.heading.title")}
+          </Title>
         </div>
         {isWorking && <Spinner />}
         <Formik
@@ -37,32 +44,36 @@ const ResetPasswordPage: React.FC = () => {
             confirmPassword: "",
           }}
           validationSchema={Yup.object().shape({
-            password: Yup.string().required("Password is required"),
+            password: Yup.string().required(
+              t("resetPassword.passwordRequired.error")
+            ),
             confirmPassword: Yup.string()
-              .oneOf([Yup.ref("password"), undefined], "Passwords must match")
-              .required("Confirm Password is required"),
+              .oneOf(
+                [Yup.ref("password"), undefined],
+                t("resetPassword.passwordsMatch.error")
+              )
+              .required(t("resetPassword.confirmPasswordRequired.error")),
           })}
           onSubmit={async (values) => {
             if (!token) {
-              toast.error("Invalid or missing reset token.");
+              toast.error(t("resetPassword.missingToken.toast"));
               return;
             }
             setIsWorking(true);
             try {
-              await resetPassword(token, values.password);
-              toast.success(
-                "Password reset successfully. Redirecting to login..."
-              );
+              await resetPassword(token, values.password, {
+                invalidPassword: t("resetPassword.invalidPassword.error"),
+                genericError,
+              });
+              toast.success(t("resetPassword.successRedirect.toast"));
               setTimeout(() => {
                 redirect("/auth/login");
               }, 1000);
             } catch (error) {
               if (error instanceof Error) {
-                toast.error(
-                  error.message || "An error occurred during password reset."
-                );
+                toast.error(error.message || genericError);
               } else {
-                toast.error("An unexpected error occurred. Please try again.");
+                toast.error(t("resetPassword.unexpectedError.toast"));
               }
             } finally {
               setIsWorking(false);
@@ -71,22 +82,40 @@ const ResetPasswordPage: React.FC = () => {
         >
           {({ isSubmitting }) => (
             <Form className="w-full flex flex-col items-stretch mt-2">
-              <TextFormField
-                name="password"
-                label="New Password"
-                type="password"
-                placeholder="Enter your new password"
-              />
-              <TextFormField
-                name="confirmPassword"
-                label="Confirm New Password"
-                type="password"
-                placeholder="Confirm your new password"
-              />
+              <div className="w-full">
+                <FieldLabel
+                  name="password"
+                  label={t("resetPassword.newPasswordField.label")}
+                />
+                <div className="mt-1">
+                  <PasswordInputTypeInField
+                    name="password"
+                    autoComplete="new-password"
+                    placeholder={t(
+                      "resetPassword.newPasswordField.placeholder"
+                    )}
+                  />
+                </div>
+              </div>
+              <div className="w-full">
+                <FieldLabel
+                  name="confirmPassword"
+                  label={t("resetPassword.confirmPasswordField.label")}
+                />
+                <div className="mt-1">
+                  <PasswordInputTypeInField
+                    name="confirmPassword"
+                    autoComplete="new-password"
+                    placeholder={t(
+                      "resetPassword.confirmPasswordField.placeholder"
+                    )}
+                  />
+                </div>
+              </div>
 
               <div className="flex">
                 <Button disabled={isSubmitting} type="submit" width="full">
-                  Reset Password
+                  {t("resetPassword.submitButton.label")}
                 </Button>
               </div>
             </Form>
@@ -95,7 +124,9 @@ const ResetPasswordPage: React.FC = () => {
         <Spacer rem={1} />
         <div className="flex">
           <div className="mx-auto">
-            <Text as="p">{markdown("[Back to Login](/auth/login)")}</Text>
+            <Text as="p">
+              {markdown(t("resetPassword.backToLoginLink.label"))}
+            </Text>
           </div>
         </div>
       </div>

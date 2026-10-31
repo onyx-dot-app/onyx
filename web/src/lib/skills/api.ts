@@ -14,6 +14,7 @@ import type {
   SkillBundleContents,
   SkillEditableDetail,
   SkillSharePermission,
+  SkillInstallationPolicy,
 } from "@/lib/skills/types";
 
 async function handle<T>(res: Response): Promise<T> {
@@ -39,7 +40,7 @@ async function handle<T>(res: Response): Promise<T> {
   if (res.status === 204) {
     return undefined as T;
   }
-  return (await res.json()) as T;
+  return await res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,7 @@ export interface CreateCustomSkillInput {
   instructions_markdown: string;
   auto_enable?: boolean;
   external_app_id?: number;
+  sharing?: SkillShareUpdatePayload;
 }
 
 export async function createCustomSkillFromEditor(
@@ -94,6 +96,7 @@ export async function createCustomSkillFromEditor(
   if (input.external_app_id !== undefined) {
     form.append("external_app_id", String(input.external_app_id));
   }
+  if (input.sharing) form.append("sharing", JSON.stringify(input.sharing));
   if (upload) form.append("upload", upload);
 
   const res = await fetch("/api/skills/custom/editor", {
@@ -131,6 +134,7 @@ export async function setSkillEnabled(
 }
 
 export interface SkillShareUpdatePayload {
+  installation_policy?: SkillInstallationPolicy;
   user_shares?: {
     user_id: string;
     permission: SkillSharePermission;

@@ -1,31 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { ensureHrefProtocol, noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { useEffect, useRef, useState } from "react";
+import { ensureHrefProtocol } from "@/lib/utils";
+import { cn, richNodes } from "@opal/utils";
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
-import { Popover } from "@opal/components";
-import { OpenButton } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Button } from "@opal/components";
+import { Button, Dropdown, SelectButton, Text } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useCustomFooterContent } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
-import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
+import { useTranslations } from "next-intl";
+
+const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 secondaryAction className="my-0! text-center">
-      {children}
-    </Text>
+    <p className="my-0! text-center">
+      <Text font="secondary-action" color="text-03">
+        {richNodes(children)}
+      </Text>
+    </p>
   ),
   a: ({
     href,
@@ -42,8 +43,8 @@ const footerMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text text03 secondaryAction>
-          {children}
+        <Text font="secondary-action" color="text-03">
+          {richNodes(children)}
         </Text>
       </a>
     );
@@ -60,23 +61,48 @@ const footerMarkdownComponents = {
  * extension doesn't need.
  */
 export default function NRFChrome() {
+  const t = useTranslations("chat");
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
+  const footerRef = useRef<HTMLElement>(null);
+
+  // Publishes the footer height so NRFPage can keep scrollable content clear of it
+  useEffect(() => {
+    const footer = footerRef.current;
+    const host = footer?.parentElement;
+    if (!footer || !host) return;
+
+    const update = () =>
+      host.style.setProperty(
+        NRF_FOOTER_HEIGHT_VAR,
+        `${footer.getBoundingClientRect().height}px`
+      );
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(footer);
+    return () => {
+      observer.disconnect();
+      host.style.removeProperty(NRF_FOOTER_HEIGHT_VAR);
+    };
+  }, []);
 
   const effectiveMode: AppMode =
-    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
+    appPosition.isNewSession() && state.phase === "idle"
+      ? state.appMode
+      : "chat";
 
   const customFooterContent = useCustomFooterContent();
 
   const showModeToggle =
     businessTier &&
     isSearchModeAvailable &&
-    appFocus.isNewSession() &&
+    appPosition.isNewSession() &&
     state.phase === "idle";
 
   const showHeader = isMobile || showModeToggle;
@@ -85,59 +111,64 @@ export default function NRFChrome() {
     <>
       {/* Header chrome — top-left, mirrors position of settings button at top-right */}
       {showHeader && (
-        <div className="absolute top-0 left-0 p-4 z-10 flex flex-row items-center gap-2">
+        <div className="absolute top-0 start-0 p-4 z-10 flex flex-row items-center gap-2">
           {isMobile && (
             <Button
               prominence="internal"
               icon={SvgSidebar}
-              aria-label="Open Sidebar"
+              aria-label={t("appChrome.openSidebar.ariaLabel")}
               onClick={() => setFolded(false)}
             />
           )}
           {showModeToggle && (
-            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
-              <Popover.Trigger asChild>
-                <OpenButton
+            <Dropdown open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+              <Dropdown.Trigger asChild>
+                <SelectButton
+                  chevron
+                  aria-label={t("appChrome.modeButton.ariaLabel")}
                   icon={
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                   }
+                  interaction={modePopoverOpen ? "hover" : "rest"}
                 >
-                  {effectiveMode === "search" ? "Search" : "Chat"}
-                </OpenButton>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="lg">
-                <Popover.Menu>
-                  <LineItem
-                    icon={SvgSearchMenu}
-                    selected={effectiveMode === "search"}
-                    description="Quick search for documents"
-                    onClick={noProp(() => {
-                      setAppMode("search");
-                      setModePopoverOpen(false);
-                    })}
-                  >
-                    Search
-                  </LineItem>
-                  <LineItem
-                    icon={SvgBubbleText}
-                    selected={effectiveMode === "chat"}
-                    description="Conversation and research"
-                    onClick={noProp(() => {
-                      setAppMode("chat");
-                      setModePopoverOpen(false);
-                    })}
-                  >
-                    Chat
-                  </LineItem>
-                </Popover.Menu>
-              </Popover.Content>
-            </Popover>
+                  {effectiveMode === "search"
+                    ? t("appChrome.mode.search.label")
+                    : t("appChrome.mode.chat.label")}
+                </SelectButton>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("appChrome.modeButton.ariaLabel")}
+                value={effectiveMode}
+                onSelect={(option) =>
+                  setAppMode(option.value === "search" ? "search" : "chat")
+                }
+                items={[
+                  {
+                    kind: "option",
+                    value: "search",
+                    icon: SvgSearchMenu,
+                    title: t("appChrome.mode.search.label"),
+                    description: t("appChrome.mode.search.description"),
+                  },
+                  {
+                    kind: "option",
+                    value: "chat",
+                    icon: SvgBubbleText,
+                    title: t("appChrome.mode.chat.label"),
+                    description: t("appChrome.mode.chat.description"),
+                  },
+                ]}
+              />
+            </Dropdown>
           )}
         </div>
       )}
 
       {/* Footer — bottom-center, transparent background */}
-      <footer className="absolute bottom-0 left-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto">
+      <footer
+        ref={footerRef}
+        className="absolute bottom-0 start-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto"
+      >
         <MinimalMarkdown
           content={customFooterContent}
           className="max-w-full text-center"

@@ -53,9 +53,35 @@ function renderMenu(overrides: Partial<ComposerTools> = {}) {
 }
 
 describe("ActionsMenu", () => {
-  it("renders nothing when the agent exposes no selectable tools", () => {
-    renderMenu({ actionTools: [] });
+  it("renders nothing when there is neither a selectable tool nor deep research", () => {
+    renderMenu({ actionTools: [], showDeepResearch: false });
     expect(screen.queryByLabelText("Manage Actions")).toBeNull();
+  });
+
+  it("still opens for a toolless agent that offers deep research", () => {
+    renderMenu({ actionTools: [], showDeepResearch: true });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+    expect(screen.getByText("Deep Research")).toBeTruthy();
+  });
+
+  it("leaves deep research out when it is gated off", () => {
+    renderMenu({ showDeepResearch: false });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+    expect(screen.queryByText("Deep Research")).toBeNull();
+  });
+
+  it("reflects the deep research state and toggles it", () => {
+    const value = renderMenu({
+      showDeepResearch: true,
+      deepResearchEnabled: true,
+    });
+    fireEvent.press(screen.getByLabelText("Manage Actions"));
+
+    const toggle = screen.getByLabelText("Toggle Deep Research");
+    expect(toggle.props.accessibilityState.checked).toBe(true);
+
+    fireEvent.press(toggle);
+    expect(value.toggleDeepResearch).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the tool list closed until the trigger is pressed", () => {

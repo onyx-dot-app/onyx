@@ -1,5 +1,6 @@
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 interface AuthTypeAPIResponse {
   multi_tenant: boolean;
@@ -62,7 +63,7 @@ export async function forgotPassword(email: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch((e) => {
+    const error: ErrorResponseBody = await response.json().catch((e) => {
       console.warn("forgotPassword: failed to parse error response", e);
       return {};
     });
@@ -104,7 +105,7 @@ export async function requestEmailVerification(email: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch((e) => {
+    const error: ErrorResponseBody = await response.json().catch((e) => {
       console.warn(
         "requestEmailVerification: failed to parse error response",
         e
@@ -142,7 +143,7 @@ export async function verifyCaptchaForOAuth(token: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const body = await response.json().catch((e) => {
+    const body: ErrorResponseBody = await response.json().catch((e) => {
       console.warn("verifyCaptchaForOAuth: failed to parse error response", e);
       return {};
     });
@@ -167,7 +168,7 @@ export async function impersonateUser(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch((e) => {
+    const error: ErrorResponseBody = await response.json().catch((e) => {
       console.warn("impersonateUser: failed to parse error response", e);
       return {};
     });

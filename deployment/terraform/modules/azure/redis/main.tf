@@ -8,37 +8,57 @@ locals {
 
   alert_frequency   = "PT5M"
   alert_window_size = "PT15M"
-  metric_namespace  = "Microsoft.Cache/redis"
+  # Managed Redis is Redis Enterprise underneath, and reports under that
+  # namespace rather than the Microsoft.Cache/redis one the retiring service used.
+  metric_namespace = "Microsoft.Cache/redisEnterprise"
+
+  # Managed Redis speaks TLS on 10000. There is no plaintext port to disable.
+  port = 10000
 }
 
-resource "azurerm_redis_cache" "this" {
+# Azure stopped accepting new Azure Cache for Redis instances -- a create now
+# returns "Azure Cache for Redis is retiring, create Azure Managed Redis
+# instance instead" -- so this is the managed service rather than azurerm_redis_cache.
+resource "azurerm_managed_redis" "this" {
   name                = var.name
   resource_group_name = var.resource_group_name
   location            = var.location
 
-  sku_name = var.sku_name
-  family   = var.family
-  capacity = var.capacity
-  zones    = var.zones
+  sku_name                  = var.sku_name
+  high_availability_enabled = var.high_availability_enabled
+  public_network_access     = local.public_network_access_enabled ? "Enabled" : "Disabled"
 
-  minimum_tls_version           = var.minimum_tls_version
-  non_ssl_port_enabled          = false
-  public_network_access_enabled = local.public_network_access_enabled
-
-  access_keys_authentication_enabled = var.access_keys_enabled
-
-  redis_configuration {
-    maxmemory_policy                        = var.maxmemory_policy
-    active_directory_authentication_enabled = var.enable_entra_authentication
+  default_database {
+    access_keys_authentication_enabled = var.access_keys_enabled
+    # Not a variable. The service this replaced had no plaintext port to turn
+    # on, and offering one here would be a weaker guarantee than the module it
+    # replaced, not a new feature.
+    client_protocol   = "Encrypted"
+    clustering_policy = var.clustering_policy
+    eviction_policy   = var.eviction_policy
   }
 
   tags = var.tags
 }
 
+# The cache resource exposes only its hostname. Managed Redis is Redis
+# Enterprise underneath, and the generated keys live on the database rather than
+# the cluster, so they are read back through the enterprise data source.
+#
+# azurerm marks this deprecated in favour of azurerm_managed_redis_database,
+# which does not exist yet: 4.81.0 is the latest 4.x and does not ship it. Swap
+# when it lands; the deprecated name works until provider v5.
+data "azurerm_redis_enterprise_database" "this" {
+  count = var.access_keys_enabled ? 1 : 0
+
+  name       = "default"
+  cluster_id = azurerm_managed_redis.this.id
+}
+
 resource "azurerm_private_dns_zone" "this" {
   count = local.create_private_dns_zone ? 1 : 0
 
-  name                = "privatelink.redis.cache.windows.net"
+  name                = "privatelink.redis.azure.net"
   resource_group_name = var.resource_group_name
   tags                = var.tags
 }
@@ -65,8 +85,8 @@ resource "azurerm_private_endpoint" "this" {
 
   private_service_connection {
     name                           = "${var.name}-psc"
-    private_connection_resource_id = azurerm_redis_cache.this.id
-    subresource_names              = ["redisCache"]
+    private_connection_resource_id = azurerm_managed_redis.this.id
+    subresource_names              = ["redisEnterprise"]
     is_manual_connection           = false
   }
 
@@ -82,7 +102,7 @@ resource "azurerm_private_endpoint" "this" {
 resource "azurerm_monitor_metric_alert" "memory_high" {
   name                = "${var.name}-memory-high"
   resource_group_name = var.resource_group_name
-  scopes              = [azurerm_redis_cache.this.id]
+  scopes              = [azurerm_managed_redis.this.id]
   description         = "Redis ${var.name} memory usage high"
   severity            = 2
   frequency           = local.alert_frequency
@@ -108,7 +128,7 @@ resource "azurerm_monitor_metric_alert" "memory_high" {
 resource "azurerm_monitor_metric_alert" "memory_critical" {
   name                = "${var.name}-memory-critical"
   resource_group_name = var.resource_group_name
-  scopes              = [azurerm_redis_cache.this.id]
+  scopes              = [azurerm_managed_redis.this.id]
   description         = "Redis ${var.name} memory usage critical, writes may be rejected"
   severity            = 1
   frequency           = local.alert_frequency
@@ -131,11 +151,11 @@ resource "azurerm_monitor_metric_alert" "memory_critical" {
   }
 }
 
-resource "azurerm_monitor_metric_alert" "server_load" {
-  name                = "${var.name}-server-load-high"
+resource "azurerm_monitor_metric_alert" "cpu" {
+  name                = "${var.name}-cpu-high"
   resource_group_name = var.resource_group_name
-  scopes              = [azurerm_redis_cache.this.id]
-  description         = "Redis ${var.name} server thread saturated"
+  scopes              = [azurerm_managed_redis.this.id]
+  description         = "Redis ${var.name} processor time high"
   severity            = 2
   frequency           = local.alert_frequency
   window_size         = local.alert_window_size
@@ -143,10 +163,10 @@ resource "azurerm_monitor_metric_alert" "server_load" {
 
   criteria {
     metric_namespace = local.metric_namespace
-    metric_name      = "serverLoad"
+    metric_name      = "percentProcessorTime"
     aggregation      = "Average"
     operator         = "GreaterThan"
-    threshold        = var.server_load_threshold_percent
+    threshold        = var.cpu_threshold_percent
   }
 
   dynamic "action" {
@@ -160,7 +180,7 @@ resource "azurerm_monitor_metric_alert" "server_load" {
 resource "azurerm_monitor_metric_alert" "evicted_keys" {
   name                = "${var.name}-evicted-keys"
   resource_group_name = var.resource_group_name
-  scopes              = [azurerm_redis_cache.this.id]
+  scopes              = [azurerm_managed_redis.this.id]
   description         = "Redis ${var.name} is evicting keys, which for a Celery broker means dropped tasks"
   severity            = 1
   frequency           = local.alert_frequency

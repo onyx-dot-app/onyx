@@ -1,6 +1,8 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Fragment } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { ContentAction } from "@opal/layouts";
 import {
@@ -18,23 +20,24 @@ import {
   SvgShield,
   SvgCpu,
   SvgFiles,
+  SvgLinkedDots,
   SvgCreateAgent,
   SvgManageAgent,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { Switch, Divider } from "@opal/components";
-import Card from "@/refresh-components/cards/Card";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { InputSwitch, Divider, Card } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { Collapsible } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { PermissionRegistryEntry } from "@/views/admin/GroupsPage/interfaces";
+import type { PermissionRegistryEntry } from "@/views/admin/GroupsPage/types";
 
 // Icon mapping — the only permission metadata kept in the frontend.
 // `id` keys must match the backend PERMISSION_REGISTRY entries.
 const ICON_MAP: Record<string, IconFunctionComponent> = {
   manage_llms: SvgCpu,
-  manage_connectors_and_document_sets: SvgFiles,
+  manage_connectors: SvgLinkedDots,
+  manage_document_sets: SvgFiles,
   manage_actions: SvgActions,
   manage_groups: SvgUsers,
   manage_service_accounts: SvgUserKey,
@@ -49,16 +52,23 @@ const ICON_MAP: Record<string, IconFunctionComponent> = {
 interface GroupPermissionsSectionProps {
   enabledPermissions: Set<string>;
   onPermissionsChange: (permissions: Set<string>) => void;
+  // A seeded default group only offers the rows the backend marks for it.
+  isDefaultGroup?: boolean;
 }
 
 function GroupPermissionsSection({
   enabledPermissions,
   onPermissionsChange,
+  isDefaultGroup = false,
 }: GroupPermissionsSectionProps) {
-  const { data: registry, isLoading } = useSWR<PermissionRegistryEntry[]>(
+  const t = useTranslations("admin.groups");
+  const { data: fullRegistry, isLoading } = useSWR<PermissionRegistryEntry[]>(
     SWR_KEYS.permissionRegistry,
     errorHandlingFetcher
   );
+  const registry = isDefaultGroup
+    ? fullRegistry?.filter((entry) => entry.default_group_toggleable)
+    : fullRegistry;
 
   function isRowEnabled(entry: PermissionRegistryEntry): boolean {
     return entry.permissions.every((p) => enabledPermissions.has(p));
@@ -77,16 +87,15 @@ function GroupPermissionsSection({
   }
 
   return (
-    <SimpleCollapsible>
-      <SimpleCollapsible.Header
-        title="Group Permissions"
-        description="Set access and permissions for members of this group."
-      />
-      <SimpleCollapsible.Content>
-        {isLoading || !registry ? (
-          <SvgSimpleLoader />
-        ) : (
-          <Card>
+    <Collapsible
+      title={t("permissions.section.title")}
+      description={t("permissions.section.description")}
+    >
+      {isLoading || !registry ? (
+        <IconLoader />
+      ) : (
+        <Card border="solid" rounding={4}>
+          <Section alignItems="start" height="fit">
             {registry.map((entry, index) => {
               const prevGroup =
                 index > 0 ? registry[index - 1]!.group : entry.group;
@@ -104,7 +113,8 @@ function GroupPermissionsSection({
                     variant="section"
                     padding={1}
                     rightChildren={
-                      <Switch
+                      <InputSwitch
+                        aria-label={entry.display_name}
                         checked={isRowEnabled(entry)}
                         onCheckedChange={(checked: boolean) =>
                           handleToggle(entry, checked)
@@ -115,10 +125,10 @@ function GroupPermissionsSection({
                 </Fragment>
               );
             })}
-          </Card>
-        )}
-      </SimpleCollapsible.Content>
-    </SimpleCollapsible>
+          </Section>
+        </Card>
+      )}
+    </Collapsible>
   );
 }
 

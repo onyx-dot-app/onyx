@@ -4,7 +4,7 @@ import React from "react";
 import { useField } from "formik";
 import { cn } from "@opal/utils";
 import { Tooltip } from "@opal/components";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 
 interface CheckboxFieldProps {
   name: string;
@@ -40,7 +40,7 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
 
   const checkboxContent = (
     <div className="flex w-fit items-start space-x-2">
-      <Checkbox
+      <InputCheckbox
         id={name}
         aria-labelledby={labelId}
         checked={field.value}

@@ -34,29 +34,23 @@ from onyx.background.celery.tasks.vespa.document_sync import (
     DOCUMENT_SYNC_PREFIX,
     DOCUMENT_SYNC_TASKSET_KEY,
 )
-from onyx.configs.app_configs import (
-    DISABLE_VECTOR_DB,
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
-    ONYX_DISABLE_VESPA,
-)
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
-from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
-from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import (
     ColoredFormatter,
     LoggerContextVars,
     PlainFormatter,
+    SkipFileLoggedFilter,
+    add_file_handlers,
     cap_third_party_log_levels,
     get_json_formatter,
     get_log_level_from_str,
@@ -246,22 +240,6 @@ def on_task_postrun(
             RedisConnectorPrune.remove_from_taskset(int(cc_pair_id), task_id, r)
         return
 
-    if task_id.startswith(RedisConnectorPermissionSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorPermissionSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
-        return
-
-    if task_id.startswith(RedisConnectorExternalGroupSync.SUBTASK_PREFIX):
-        cc_pair_id = RedisConnector.get_id_from_task_id(task_id)
-        if cc_pair_id is not None:
-            RedisConnectorExternalGroupSync.remove_from_taskset(
-                int(cc_pair_id), task_id, r
-            )
-        return
-
 
 def on_task_revoked(
     request: Any | None = None,
@@ -273,14 +251,14 @@ def on_task_revoked(
     srem's the taskset) never fires. Without this, the stranded id keeps the
     taskset non-empty and wedges the sync fence until its 7-day TTL.
     """
-    task_id = getattr(request, "id", None)
+    task_id = getattr(request, "id", None)  # ods: ignore[getattr]
     if not task_id:
         return
 
     if not task_id.startswith(DOCUMENT_SYNC_PREFIX):
         return
 
-    request_kwargs = getattr(request, "kwargs", None) or {}
+    request_kwargs = getattr(request, "kwargs", None) or {}  # ods: ignore[getattr]
     tenant_id = cast(str, request_kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -439,6 +417,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
 
 
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+    start_telemetry("worker")
     task_logger.info("worker_ready signal received.")
 
     # file based way to do readiness/liveness probes
@@ -452,8 +431,6 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
-    HttpxPool.close_all()
-
     hostname: str = cast(str, sender.hostname)
     path = make_probe_path("readiness", hostname)
     path.unlink(missing_ok=True)
@@ -559,6 +536,11 @@ def on_setup_logging(
     root_handler.setFormatter(root_formatter)
     root_logger.addHandler(root_handler)
 
+    root_file_formatter: logging.Formatter = (
+        get_json_formatter()
+        if JSON_LOGGING
+        else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
         if DEV_LOGGING_ENABLED and os.path.exists(logfile):
@@ -568,13 +550,14 @@ def on_setup_logging(
                 pass  # Ignore errors, just proceed with normal logging
 
         root_file_handler = logging.FileHandler(logfile)
-        root_file_formatter: logging.Formatter = (
-            get_json_formatter()
-            if JSON_LOGGING
-            else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         root_file_handler.setFormatter(root_file_formatter)
         root_logger.addHandler(root_file_handler)
+
+    # Also write to the onyx log files, which the admin log export collects; on
+    # Kubernetes nothing keeps stdout. setup_logger records are already there.
+    add_file_handlers(
+        root_logger, root_file_formatter, log_filter=SkipFileLoggedFilter()
+    )
 
     root_logger.setLevel(effective_loglevel)
 
@@ -606,17 +589,21 @@ def on_setup_logging(
     task_handler.setFormatter(task_formatter)
     task_logger.addHandler(task_handler)
 
+    task_file_formatter: logging.Formatter = (
+        CeleryTaskJsonFormatter()
+        if JSON_LOGGING
+        else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # No need to truncate again, already done above for root logger
         task_file_handler = logging.FileHandler(logfile)
         task_file_handler.addFilter(TenantContextFilter())
-        task_file_formatter: logging.Formatter = (
-            CeleryTaskJsonFormatter()
-            if JSON_LOGGING
-            else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         task_file_handler.setFormatter(task_file_formatter)
         task_logger.addHandler(task_file_handler)
+
+    add_file_handlers(
+        task_logger, task_file_formatter, log_filter=TenantContextFilter()
+    )
 
     task_logger.setLevel(effective_loglevel)
     task_logger.propagate = False
@@ -669,30 +656,23 @@ def reset_tenant_id(
 
 def wait_for_document_index_or_shutdown() -> None:
     """
-    Waits for all configured document indices to become ready subject to a
-    timeout.
+    Waits for the document index to become ready subject to a timeout.
 
     Raises WorkerShutdown if the timeout is reached.
     """
     if DISABLE_VECTOR_DB:
-        logger.info(
-            "DISABLE_VECTOR_DB is set — skipping Vespa/OpenSearch readiness check."
-        )
+        logger.info("DISABLE_VECTOR_DB is set — skipping OpenSearch readiness check.")
         return
 
-    if not ONYX_DISABLE_VESPA:
-        if not wait_for_vespa_with_timeout():
-            msg = (
-                "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
-            )
-            logger.error(msg)
-            raise WorkerShutdown(msg)
+    # Imported here: opensearchpy costs ~18 MB and not every worker needs it.
+    from onyx.document_index.opensearch.client import (
+        wait_for_opensearch_with_timeout,
+    )
 
-    if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        if not wait_for_opensearch_with_timeout():
-            msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
-            logger.error(msg)
-            raise WorkerShutdown(msg)
+    if not wait_for_opensearch_with_timeout():
+        msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
+        logger.error(msg)
+        raise WorkerShutdown(msg)
 
 
 # File for validating worker liveness
@@ -726,7 +706,7 @@ def get_bootsteps() -> list[type]:
     return [LivenessProbe]
 
 
-# Task modules that require a vector DB (Vespa/OpenSearch).
+# Task modules that require a vector DB (OpenSearch).
 # When DISABLE_VECTOR_DB is True these are excluded from autodiscover lists.
 _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.connector_deletion",
@@ -734,7 +714,8 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.docfetching",
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
-    "onyx.background.celery.tasks.opensearch_migration",
+    "onyx.background.celery.tasks.cc_pair_ids_backfill",
+    "onyx.background.celery.tasks.tabular_rechunk",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
     # EE modules that are vector-DB-dependent

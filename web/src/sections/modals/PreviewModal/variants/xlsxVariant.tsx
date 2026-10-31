@@ -30,8 +30,7 @@ export const xlsxVariant: PreviewVariant = {
   headerDescription: (ctx) => {
     const preview = parseSpreadsheetPreview(ctx.fileContent);
     if (!preview) return "";
-    const count = preview.sheets.length;
-    return `Spreadsheet - ${count} ${count === 1 ? "sheet" : "sheets"}`;
+    return ctx.t("xlsx.headerDescription", { count: preview.sheets.length });
   },
 
   renderContent: (ctx) => {
@@ -40,7 +39,7 @@ export const xlsxVariant: PreviewVariant = {
       return (
         <Section padding={4}>
           <Text as="p" font="main-ui-body" color="text-03">
-            Unable to preview this spreadsheet.
+            {ctx.t("xlsx.parseError.message")}
           </Text>
         </Section>
       );
@@ -56,10 +55,9 @@ export const xlsxVariant: PreviewVariant = {
   renderFooterLeft: (ctx) => {
     const preview = parseSpreadsheetPreview(ctx.fileContent);
     if (!preview) return null;
-    const count = preview.sheets.length;
     return (
       <Text font="main-ui-body" color="text-03">
-        {`${count} ${count === 1 ? "sheet" : "sheets"}`}
+        {ctx.t("xlsx.sheetCount", { count: preview.sheets.length })}
       </Text>
     );
   },

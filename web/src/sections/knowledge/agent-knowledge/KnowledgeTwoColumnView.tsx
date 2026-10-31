@@ -7,8 +7,9 @@ import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
-import type { DocumentSetSummary, ValidSources } from "@/lib/types";
+} from "@/lib/hierarchy/types";
+import type { DocumentSetSummary } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type { ProjectFile } from "@/lib/projects/types";
 
 import { KnowledgeSidebar } from "@/sections/knowledge/agent-knowledge/KnowledgeSidebar";
@@ -25,7 +26,7 @@ import {
 import type {
   KnowledgeSearchResults,
   KnowledgeView,
-} from "@/sections/knowledge/agent-knowledge/interfaces";
+} from "@/sections/knowledge/agent-knowledge/types";
 
 interface KnowledgeTwoColumnViewProps {
   activeView: KnowledgeView;

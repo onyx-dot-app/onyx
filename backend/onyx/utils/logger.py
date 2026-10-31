@@ -30,19 +30,19 @@ logging.addLevelName(logging.INFO + 5, "NOTICE")
 # copy, update, then `set()` a new dict.
 pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "pruning_ctx",
-    default=dict(),  # noqa: B039
+    default={},  # noqa: B039
 )
 
 doc_permission_sync_ctx: contextvars.ContextVar[dict[str, Any]] = (
-    contextvars.ContextVar("doc_permission_sync_ctx", default=dict())  # noqa: B039
+    contextvars.ContextVar("doc_permission_sync_ctx", default={})  # noqa: B039
 )
 
 
 class LoggerContextVars:
     @staticmethod
     def reset() -> None:
-        pruning_ctx.set(dict())
-        doc_permission_sync_ctx.set(dict())
+        pruning_ctx.set({})
+        doc_permission_sync_ctx.set({})
 
 
 # Third-party loggers that are extremely chatty at DEBUG (LiteLLM logs several
@@ -159,6 +159,33 @@ class OnyxRequestIDFilter(logging.Filter):
 
         record.request_id = ONYX_REQUEST_ID_CONTEXTVAR.get() or "-"
         return True
+
+
+UVICORN_ACCESS_LOGGER_NAME = "uvicorn.access"
+# uvicorn logs WebSocket handshake lines here, not on the access logger.
+UVICORN_ERROR_LOGGER_NAME = "uvicorn.error"
+
+
+class UvicornQueryStringRedactionFilter(logging.Filter):
+    """Drops the query string from path args on uvicorn request lines. OAuth,
+    OIDC and SAML callbacks and WebSocket auth carry credentials there."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _strip_query_string_from_path(arg) for arg in record.args
+            )
+        return True
+
+
+def _strip_query_string_from_path(arg: object) -> object:
+    # uvicorn URL-quotes the path, so a "?" after a "/" can only start the query.
+    # This also covers absolute-form targets such as "http%3A//host/path?code=...".
+    if isinstance(arg, str):
+        query_start = arg.find("?")
+        if query_start != -1 and "/" in arg[:query_start]:
+            return arg[:query_start]
+    return arg
 
 
 class OnyxLoggingAdapter(logging.LoggerAdapter):
@@ -358,7 +385,31 @@ def get_standard_formatter() -> logging.Formatter:
     )
 
 
-def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> None:
+# Set on a record once a setup_logger file handler wrote it, so the root logger's
+# file handlers skip it when the record propagates up.
+_FILE_LOGGED_RECORD_ATTR = "onyx_file_logged"
+
+_truncated_log_files: set[str] = set()
+
+
+class _MarkFileLoggedFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.__dict__[_FILE_LOGGED_RECORD_ATTR] = True
+        return True
+
+
+class SkipFileLoggedFilter(logging.Filter):
+    """Drops records an onyx logger already wrote to the log files."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.__dict__.get(_FILE_LOGGED_RECORD_ATTR, False)
+
+
+def add_file_handlers(
+    logger: logging.Logger,
+    formatter: logging.Formatter,
+    log_filter: logging.Filter | None = None,
+) -> None:
     # Opt-out via LOG_TO_FILE: pods that can't write log files (e.g. read-only-root
     # containers) set it false and rely on the stdout handler.
     if not LOG_TO_FILE:
@@ -380,12 +431,18 @@ def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> 
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir, exist_ok=True)
 
-            # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
-            if DEV_LOGGING_ENABLED and os.path.exists(file_name):
+            # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience).
+            # Once per process: later calls must keep lines already written.
+            if (
+                DEV_LOGGING_ENABLED
+                and file_name not in _truncated_log_files
+                and os.path.exists(file_name)
+            ):
                 try:
                     open(file_name, "w").close()  # Truncate the file
                 except Exception:
                     pass  # Ignore errors, just proceed with normal logging
+            _truncated_log_files.add(file_name)
 
             file_handler = RotatingFileHandler(
                 file_name,
@@ -404,6 +461,8 @@ def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> 
 
         file_handler.setLevel(get_log_level_from_str(level))
         file_handler.setFormatter(formatter)
+        if log_filter is not None:
+            file_handler.addFilter(log_filter)
         logger.addHandler(file_handler)
 
 
@@ -432,7 +491,7 @@ def setup_logger(
 
     logger.addHandler(handler)
 
-    _add_file_handlers(logger, formatter)
+    add_file_handlers(logger, formatter, log_filter=_MarkFileLoggedFilter())
 
     logger.notice = (  # ty: ignore[unresolved-attribute]
         lambda msg, *args, **kwargs: logger.log(
@@ -449,11 +508,18 @@ def setup_logger(
     return OnyxLoggingAdapter(logger, extra=extra)
 
 
+def _prepend_filter(logger: logging.Logger, log_filter: logging.Filter) -> None:
+    # Filters run in list order. litellm attaches a filter to uvicorn.error at
+    # import that substitutes the args into the message and clears them, so the
+    # query string has to be stripped from the args before that filter runs.
+    logger.filters.insert(0, log_filter)
+
+
 def setup_uvicorn_logger(
     log_level: int = get_log_level_from_str(),
     shared_file_handlers: list[logging.FileHandler] | None = None,
 ) -> None:
-    uvicorn_logger = logging.getLogger("uvicorn.access")
+    uvicorn_logger = logging.getLogger(UVICORN_ACCESS_LOGGER_NAME)
     if not uvicorn_logger:
         return
 
@@ -467,6 +533,11 @@ def setup_uvicorn_logger(
     uvicorn_logger.addHandler(handler)
     uvicorn_logger.setLevel(log_level)
     uvicorn_logger.addFilter(OnyxRequestIDFilter())
+    _prepend_filter(uvicorn_logger, UvicornQueryStringRedactionFilter())
+    _prepend_filter(
+        logging.getLogger(UVICORN_ERROR_LOGGER_NAME),
+        UvicornQueryStringRedactionFilter(),
+    )
 
     if shared_file_handlers:
         for fh in shared_file_handlers:

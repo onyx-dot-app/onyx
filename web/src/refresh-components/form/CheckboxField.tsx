@@ -1,10 +1,10 @@
 "use client";
 
 import { useField } from "formik";
-import { Checkbox, type CheckboxProps } from "@opal/components";
+import { InputCheckbox, type InputCheckboxProps } from "@opal/components";
 import { useOnChangeValue } from "@/hooks/formHooks";
 
-interface CheckboxFieldProps extends Omit<CheckboxProps, "checked"> {
+interface CheckboxFieldProps extends Omit<InputCheckboxProps, "checked"> {
   name: string;
 }
 
@@ -17,6 +17,10 @@ export default function UnlabeledCheckboxField({
   const onChange = useOnChangeValue(name, onCheckedChange);
 
   return (
-    <Checkbox checked={field.value} onCheckedChange={onChange} {...props} />
+    <InputCheckbox
+      checked={field.value}
+      onCheckedChange={onChange}
+      {...props}
+    />
   );
 }

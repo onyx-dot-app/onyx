@@ -8,7 +8,7 @@ at that provider. It is the `(oauth_name, account_id)` pair.
 from collections.abc import Sequence
 
 from fastapi_users import exceptions
-from sqlalchemy import or_, select, tuple_
+from sqlalchemy import delete, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -327,6 +327,22 @@ def record_oauth_identity(
                     "OAuth identity is already linked to another tenant mapping"
                 )
                 return
+        db_session.commit()
+
+
+def forget_oauth_identities(tenant_id: str, oauth_name: str) -> None:
+    """Drop this workspace's catalog copies of one provider's links, so a deleted
+    provider's subjects stop resolving to this workspace."""
+    if not MULTI_TENANT:
+        return
+
+    with get_catalog_session() as db_session:
+        db_session.execute(
+            delete(UserTenantMappingOAuthAccount).where(
+                UserTenantMappingOAuthAccount.tenant_id == tenant_id,
+                UserTenantMappingOAuthAccount.oauth_name == oauth_name,
+            )
+        )
         db_session.commit()
 
 
@@ -661,12 +677,14 @@ def approve_user_invite(email: str, tenant_id: str) -> None:
             destination.active = True
         db_session.commit()
 
-    # Also remove the user from pending users list
-    # Remove from pending users
+    # Consume the pending request. It is stored as the requester typed it, so an
+    # exact match would leave a stale entry behind to authorize a later move.
     pending_users = get_pending_users()
-    if email in pending_users:
-        pending_users.remove(email)
-        write_pending_users(pending_users)
+    remaining_pending = [
+        pending for pending in pending_users if pending.lower() != email
+    ]
+    if len(remaining_pending) != len(pending_users):
+        write_pending_users(remaining_pending)
 
     # Add to invited users
     invited_users = get_invited_users()

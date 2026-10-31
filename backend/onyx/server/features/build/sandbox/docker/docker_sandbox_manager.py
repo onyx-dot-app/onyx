@@ -33,7 +33,7 @@ Sandbox containers run with:
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
   network. ``onyx-craft-api`` is the supported API endpoint on that bridge;
-  postgres, redis, minio, and model_server remain unreachable by service name.
+  postgres, redis, object-store, and model_server remain unreachable by service name.
 
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
@@ -62,13 +62,14 @@ import binascii
 import io
 import json
 import mimetypes
+import posixpath
 import re
 import secrets
 import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 from uuid import UUID
@@ -76,12 +77,17 @@ from uuid import UUID
 from docker import DockerClient
 from docker.errors import APIError, NotFound
 from docker.models.containers import Container
+from docker.models.networks import Network
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
     ONYX_SERVER_URL,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
@@ -97,9 +103,9 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_PORT,
 )
 from onyx.server.features.build.sandbox.base import (
-    BUN_CACHE_DIR,
-    BUN_IMAGE_CACHE_DIR,
     SandboxManager,
+    document_preview_command,
+    parse_document_preview_response,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
@@ -112,30 +118,44 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
     stream_stdout_from_container,
 )
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+    OutputsManifestResponse,
+)
 from onyx.server.features.build.sandbox.labels import (
+    LABEL_DOCKER_NETWORK,
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
     LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
+from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
+    FatalWriteError,
     FileSet,
-    FilesystemEntry,
+    RetriableWriteError,
     SandboxInfo,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
     allowed_dev_origins,
     build_webapp_restore_script,
 )
+from onyx.server.features.build.sandbox.resources import (
+    remaining_request_timeout,
+    sandbox_resource_from_labels,
+)
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
     MANAGED_SKILLS_PATH,
     MANAGED_USER_LIBRARY_PATH,
     SESSIONS_ROOT,
+    build_opencode_dependency_setup_command,
     build_session_workspace_setup_script,
     build_workspace_exists_check_script,
 )
@@ -297,17 +317,50 @@ def _validate_strict_path(path: str) -> None:
         raise ValueError("Invalid path: contains disallowed characters")
 
 
+def _validate_opencode_history_archive(archive_bytes: bytes) -> None:
+    """Rejects members that would land outside ``OPENCODE_DATA_DIR``.
+
+    The archive is built inside the sandbox, but ``put_archive`` extracts it as
+    the Docker daemon, so an unchecked member could plant a root-run file (e.g.
+    ``firewall-init.sh``) anywhere under ``WORKSPACE_ROOT``.
+    """
+    archive_root = posixpath.basename(OPENCODE_DATA_DIR)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
+            members = tar.getmembers()
+    except (tarfile.TarError, EOFError) as e:
+        # A truncated gzip stream raises EOFError, not TarError.
+        raise RuntimeError(f"Opencode history archive is unreadable: {e}") from e
+
+    for member in members:
+        if not (member.isfile() or member.isdir()):
+            raise RuntimeError(
+                f"Opencode history archive member is not a file or directory: "
+                f"{member.name}"
+            )
+        name = posixpath.normpath(member.name)
+        if (
+            member.name.startswith("/")
+            or ".." in member.name.split("/")
+            or (name != archive_root and not name.startswith(f"{archive_root}/"))
+        ):
+            raise RuntimeError(
+                f"Opencode history archive member escapes {archive_root}: {member.name}"
+            )
+
+
 _COMPOSE_INTERNAL_HOSTNAMES = {
     "api_server",
     "background",
     "relational_db",
     "cache",
     "minio",
+    "object-store",
     "model_server",
     "indexing_model_server",
     "inference_model_server",
     "web_server",
-    "vespa",
+    "opensearch",
 }
 
 
@@ -368,6 +421,7 @@ def build_sandbox_labels(
     volume, which persists across generations) for attribution.
     """
     labels: dict[str, str] = {
+        LABEL_DOCKER_NETWORK: SANDBOX_DOCKER_NETWORK,
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
         LABEL_SANDBOX_ID: str(sandbox_id),
         LABEL_TENANT_ID: tenant_id,
@@ -384,7 +438,8 @@ def build_sandbox_labels(
 
 # Sandbox should reach loopback directly; everything else (api server included)
 # goes through the proxy.
-_NO_PROXY_LIST = "127.0.0.1,localhost"
+_IPV4_LISTEN_HOST = "0.0.0.0"  # noqa: S104 — isolated sandbox bridge listener
+_NO_PROXY_LIST = "127.0.0.1,localhost,::1"
 
 
 def _proxy_env_vars(
@@ -483,6 +538,7 @@ def build_container_create_kwargs(
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
     proxy_ca_volume_name: str | None = None,
+    listen_host: str = _IPV4_LISTEN_HOST,
 ) -> ContainerCreateKwargs:
     """Builds the kwargs dict for ``DockerClient.containers.create``.
 
@@ -502,7 +558,7 @@ def build_container_create_kwargs(
     - **Single network**: joins only the caller-supplied ``network`` (the
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's default
       network; the dedicated API alias is supported there, while postgres,
-      redis, and minio remain unreachable by service name.
+      redis, and object-store remain unreachable by service name.
 
     Proxy-enabled (``sandbox_proxy_host`` set; production self-host compose with
     ``--include-craft``):
@@ -548,7 +604,7 @@ def build_container_create_kwargs(
     ``OPENCODE_CONFIG_CONTENT`` for opencode-serve to load at startup; each
     workspace provides its gateway catalog in a session-local config.
     """
-    if _looks_like_internal_compose_host(api_server_url):
+    if not sandbox_proxy_host and _looks_like_internal_compose_host(api_server_url):
         logger.warning(
             "ONYX_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
             "join the craft bridge network, so default-network DNS will fail. Use the "
@@ -568,6 +624,9 @@ def build_container_create_kwargs(
         # inherits the allowlist the managed start path also sets.
         "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS": allowed_dev_origins(),
     }
+
+    if listen_host != _IPV4_LISTEN_HOST:
+        env["SANDBOX_LISTEN_HOST"] = listen_host
 
     security_opts = ["no-new-privileges:true"]
     ports: dict[str, tuple[str, int | None]] = {}
@@ -668,6 +727,9 @@ class DockerSandboxManager(SandboxManager):
             )
 
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
+        self._cleanup_docker = DockerClient(
+            base_url=f"unix://{SANDBOX_DOCKER_SOCKET}", timeout=15
+        )
         self._image = SANDBOX_CONTAINER_IMAGE
         self._image_checked = False
         self._image_check_lock = threading.Lock()
@@ -809,6 +871,19 @@ class DockerSandboxManager(SandboxManager):
         return False
 
     def provision(
+        self,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
+    ) -> SandboxInfo:
+        with sandbox_provision_lock(sandbox_id, tenant_id):
+            return self._provision(
+                sandbox_id, user_id, tenant_id, onyx_pat, provisioning_attempt_number
+            )
+
+    def _provision(
         self,
         sandbox_id: UUID,
         user_id: UUID,
@@ -982,6 +1057,13 @@ class DockerSandboxManager(SandboxManager):
         # build_container_create_kwargs to layer on the legacy posture without
         # bifurcating this call site.
         proxy_host = SANDBOX_PROXY_HOST or None
+        network: Network = self._docker.networks.get(self._network_name)
+        # Match the sandbox bridge; dual-stack bridges retain IPv4 listeners.
+        listen_host: str = (
+            "::"
+            if network.attrs.get("EnableIPv4", True) is False
+            else _IPV4_LISTEN_HOST
+        )
         create_kwargs = build_container_create_kwargs(
             sandbox_id=sandbox_id,
             user_id=user_id,
@@ -990,6 +1072,7 @@ class DockerSandboxManager(SandboxManager):
             onyx_pat=onyx_pat,
             api_server_url=ONYX_SERVER_URL,
             network=self._network_name,
+            listen_host=listen_host,
             volume_name=volume_name,
             memory_limit=self._memory_limit,
             cpu_limit=self._cpu_limit,
@@ -1010,7 +1093,10 @@ class DockerSandboxManager(SandboxManager):
         try:
             return self._docker.containers.create(**run_kwargs), True
         except APIError as e:
-            if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
+            if (
+                "Conflict" in str(e)
+                or getattr(e, "status_code", None) == 409  # ods: ignore[getattr]
+            ):
                 logger.info("Sandbox container %s already exists, reusing.", sandbox_id)
                 return self._require_container(sandbox_id), False
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
@@ -1018,15 +1104,18 @@ class DockerSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: UUID) -> None:
         self._close_all_sandbox_buses(sandbox_id)
 
+        errors: list[Exception] = []
         container = self._get_container(sandbox_id)
         if container is not None:
             try:
                 container.remove(force=True, v=False)
                 logger.info("Removed sandbox container %s.", container.name)
-            except (APIError, NotFound) as e:
+            except NotFound:
                 logger.warning(
-                    "Error removing sandbox container %s: %s", container.name, e
+                    "Sandbox container %s disappeared during removal.", container.name
                 )
+            except Exception as e:
+                errors.append(e)
 
         # Volume removal is separate so terminate works after manual container
         # rm.
@@ -1037,8 +1126,13 @@ class DockerSandboxManager(SandboxManager):
             logger.info("Removed sandbox volume %s.", volume_name)
         except NotFound:
             pass
-        except APIError as e:
-            logger.warning("Error removing sandbox volume %s: %s", volume_name, e)
+        except Exception as e:
+            errors.append(e)
+
+        if errors:
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} cleanup incomplete: {errors}"
+            ) from errors[0]
 
         logger.info("Terminated Docker sandbox %s.", sandbox_id)
 
@@ -1052,6 +1146,114 @@ class DockerSandboxManager(SandboxManager):
             return False
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
+
+    def iter_resources(
+        self, tenant_id: str, deadline: float, sandbox_id: UUID | None = None
+    ) -> Iterator[SandboxResource]:
+        labels = [
+            f"{LABEL_COMPONENT}={LABEL_COMPONENT_VALUE}",
+            f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX}",
+            f"{LABEL_TENANT_ID}={tenant_id}",
+        ]
+        if sandbox_id is not None:
+            labels.append(f"{LABEL_SANDBOX_ID}={sandbox_id}")
+        filters: dict[str, str | list[str] | bool] = {"label": labels}
+        verified_volumes: dict[str, str] = {}
+        for kind in (
+            SandboxResourceKind.CONTAINER,
+            SandboxResourceKind.VOLUME,
+        ):
+            remaining_request_timeout(deadline)
+            items = (
+                self._cleanup_docker.containers.list(all=True, filters=filters)
+                if kind == SandboxResourceKind.CONTAINER
+                else self._cleanup_docker.volumes.list(filters=filters)
+            )
+            remaining_request_timeout(deadline)
+            for item in items:
+                remaining_request_timeout(deadline)
+                labels = (
+                    item.attrs.get("Labels")
+                    if kind == SandboxResourceKind.VOLUME
+                    else item.labels
+                )
+                labels = labels or {}
+                resource_network = labels.get(LABEL_DOCKER_NETWORK)
+                if (
+                    resource_network is not None
+                    and resource_network != self._network_name
+                ):
+                    continue
+                if resource_network is None:
+                    project_matches = (
+                        bool(self._compose_project)
+                        and labels.get("com.docker.compose.project")
+                        == self._compose_project
+                    )
+                    network_matches = (
+                        kind == SandboxResourceKind.CONTAINER
+                        and self._network_name
+                        in (item.attrs.get("NetworkSettings", {}).get("Networks") or {})
+                    )
+                    volume_matches = kind == SandboxResourceKind.VOLUME and (
+                        verified_volumes.get(item.name) == labels.get(LABEL_SANDBOX_ID)
+                    )
+                    if not (project_matches or network_matches or volume_matches):
+                        logger.warning(
+                            "Retaining Docker resource %s without verified deployment ownership",
+                            item.name,
+                        )
+                        continue
+                resource = sandbox_resource_from_labels(
+                    kind=kind,
+                    name=item.name,
+                    instance_id=item.id
+                    if kind == SandboxResourceKind.CONTAINER
+                    else item.attrs["CreatedAt"],
+                    created_at=item.attrs["Created"]
+                    if kind == SandboxResourceKind.CONTAINER
+                    else item.attrs["CreatedAt"],
+                    labels=labels,
+                    tenant_id=tenant_id,
+                )
+                if resource is not None:
+                    if kind == SandboxResourceKind.CONTAINER:
+                        for mount in item.attrs.get("Mounts") or []:
+                            if mount.get("Type") == "volume" and mount.get("Name"):
+                                verified_volumes[mount["Name"]] = str(
+                                    resource.sandbox_id
+                                )
+                    yield resource
+
+    def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
+        remaining_request_timeout(deadline)
+        container = None
+        volume = None
+        try:
+            if resource.kind == SandboxResourceKind.CONTAINER:
+                container = self._cleanup_docker.containers.get(resource.instance_id)
+                labels = container.labels or {}
+            elif resource.kind == SandboxResourceKind.VOLUME:
+                volume = self._cleanup_docker.volumes.get(resource.name)
+                if volume.attrs["CreatedAt"] != resource.instance_id:
+                    raise RuntimeError(f"Volume identity changed: {resource.name}")
+                labels = volume.attrs.get("Labels") or {}
+            else:
+                raise ValueError(f"Unsupported Docker resource: {resource.kind}")
+            if (
+                labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
+                or labels.get(LABEL_TENANT_ID) != resource.tenant_id
+                or labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
+            ):
+                raise RuntimeError(f"Resource ownership changed: {resource.name}")
+            remaining_request_timeout(deadline)
+            if container is not None:
+                container.remove(force=True, v=False)
+            elif volume is not None:
+                # Docker rejects removal while any container still uses the volume.
+                volume.remove(force=False)
+        except NotFound:
+            return
 
     def _build_agents_md(
         self,
@@ -1186,15 +1388,51 @@ echo "Session cleanup complete"
             return False
         return "WORKSPACE_FOUND" in result.stdout_text
 
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        container = self._get_container(sandbox_id)
+        if container is not None:
+            labels = container.labels or {}
+            if (
+                labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+                or labels.get(LABEL_TENANT_ID) != tenant_id
+            ):
+                raise RuntimeError("Workspace storage ownership mismatch")
+            return True
+        return False
+
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        try:
+            volume = self._docker.volumes.get(_sandbox_volume_name(sandbox_id))
+        except NotFound:
+            return None
+        labels = volume.attrs.get("Labels") or {}
+        if (
+            labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+            or labels.get(LABEL_TENANT_ID) != tenant_id
+        ):
+            raise RuntimeError("Workspace storage ownership mismatch")
+        created_at = volume.attrs["CreatedAt"]
+        if not isinstance(created_at, str) or not created_at:
+            raise RuntimeError("Workspace storage identity missing")
+        return f"{volume.name}:{created_at}"
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.runtime_exists(sandbox_id, tenant_id) or (
+            self.workspace_storage_identity(sandbox_id, tenant_id) is not None
+        )
+
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         container = self._get_container(sandbox_id)
         if container is None:
-            return []
+            raise RuntimeError(
+                f"Cannot discover workspaces without sandbox {sandbox_id}"
+            )
         try:
             result = _run_in_container_as_sandbox_user(
                 container,
-                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/ 2>/dev/null || true"],
-                check=False,
+                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/"],
             )
         except ExecError as e:
             logger.warning(
@@ -1202,7 +1440,9 @@ echo "Session cleanup complete"
                 sandbox_id,
                 e,
             )
-            return []
+            raise RuntimeError(
+                f"Workspace discovery failed for sandbox {sandbox_id}"
+            ) from e
         out: list[UUID] = []
         for line in result.stdout_text.strip().split("\n"):
             line = line.strip()
@@ -1222,8 +1462,7 @@ echo "Session cleanup complete"
     ) -> SnapshotResult | None:
         container = self._get_container(sandbox_id)
         if container is None:
-            logger.info("create_snapshot: sandbox %s has no container.", sandbox_id)
-            return None
+            raise RuntimeError(f"Cannot snapshot missing sandbox {sandbox_id}")
 
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         # Bail out if there's nothing worth snapshotting.
@@ -1233,21 +1472,27 @@ echo "Session cleanup complete"
                 [
                     "/bin/sh",
                     "-c",
-                    f'[ -d "{session_path}/outputs" ] && echo OK || echo EMPTY',
+                    f'if [ -d "{session_path}/outputs" ] || [ -d "{session_path}/attachments" ]; '
+                    "then printf OK; else printf EMPTY; fi",
                 ],
-                check=False,
             )
-        except ExecError:
+        except ExecError as e:
+            raise RuntimeError(
+                f"Snapshot discovery failed for session {session_id}"
+            ) from e
+        if probe.stdout_text.strip() == "EMPTY":
             return None
-        if "OK" not in probe.stdout_text:
-            return None
+        if probe.stdout_text.strip() != "OK":
+            raise RuntimeError(
+                f"Incomplete snapshot discovery for session {session_id}"
+            )
 
         # Stream tar bytes out of the container through FileStore.
         tar_cmd = [
             "/bin/sh",
             "-c",
             (
-                f"cd {session_path} && tar -czf - "
+                f"cd {session_path} && tar --exclude=outputs/.document-thumbnails -czf - "
                 f"$([ -d outputs ] && echo outputs) "
                 f"$([ -d attachments ] && echo attachments)"
             ),
@@ -1382,6 +1627,8 @@ echo "Session cleanup complete"
             )
             return
 
+        _validate_opencode_history_archive(archive_bytes)
+
         try:
             # put_archive untars (gzip ok) into the stopped container's writable layer.
             if not container.put_archive(WORKSPACE_ROOT, archive_bytes):
@@ -1455,7 +1702,7 @@ if [ -f "$web_dir/bun.lock" ]; then
     ) 9>{BUN_CACHE_DIR}.lock
     cd "$web_dir"
     BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
-        bun install --frozen-lockfile --backend=hardlink
+        bun install --frozen-lockfile --ignore-scripts --backend=hardlink
 fi
 """
         try:
@@ -1541,6 +1788,7 @@ fi
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
+{build_opencode_dependency_setup_command(session_path)}
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' {shlex.quote(agents_md)} > {session_path}/AGENTS.md
@@ -1620,6 +1868,33 @@ fi
 
         entries = self._parse_ls_output(output, clean_path)
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
+
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID, *, include_web: bool = False
+    ) -> OutputsManifestResponse:
+        container = self._require_container(sandbox_id)
+        try:
+            # Root-owned interpreter and module: the sandbox user owns
+            # /workspace, so anything under it could be swapped to lie.
+            # workdir=/opt is load-bearing, python -m imports the root-owned
+            # /opt/sandbox_daemon only because cwd leads sys.path. -E -s
+            # ignore PYTHON* env vars and the user site directory.
+            result = _run_in_container_as_sandbox_user(
+                container,
+                [
+                    "/usr/local/bin/python3",
+                    "-E",
+                    "-s",
+                    "-m",
+                    "sandbox_daemon.outputs_manifest",
+                    str(session_id),
+                    *(["--include-web"] if include_web else []),
+                ],
+                workdir="/opt",
+            )
+        except ExecError as e:
+            raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
+        return OutputsManifestResponse.model_validate_json(result.stdout_text)
 
     def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
         entries: list[FilesystemEntry] = []
@@ -1909,7 +2184,6 @@ echo WRITE_OK"""
             raise ValueError("mount_path is required")
         if ".." in Path(mount_path).parts:
             raise ValueError("mount_path may not contain '..'")
-        container = self._require_container(sandbox_id)
 
         # Build a deterministic tar (sorted, fixed mtime) like the K8s push.
         buf = io.BytesIO()
@@ -1925,32 +2199,47 @@ echo WRITE_OK"""
                 tar.addfile(info, io.BytesIO(data))
         tar_bytes = buf.getvalue()
 
-        target = mount_path
-        # Land atomically: extract into a temp dir alongside the target, then
-        # rename. Matches the K8s push daemon's atomic-swap semantics.
+        # Publish a symlink atomically, matching the daemon's bundle writer.
         script = (
             f"set -e\n"
-            f'target="{target}"\n'
-            f'parent=$(dirname "$target")\n'
-            f'mkdir -p "$parent"\n'
-            f'tmpdir=$(mktemp -d -p "$parent")\n'
-            f"trap 'rm -rf \"$tmpdir\"' EXIT\n"
-            f'tar -xzf - -C "$tmpdir"\n'
-            f'if [ -e "$target" ] && [ ! -L "$target" ]; then\n'
-            f'    rm -rf "$target"\n'
-            f"fi\n"
-            f'if [ -L "$target" ]; then rm -f "$target"; fi\n'
-            f'mv "$tmpdir" "$target"\n'
-            f"trap - EXIT\n"
+            f"target={shlex.quote(mount_path)}\n"
+            'parent=$(dirname "$target")\n'
+            'mkdir -p "$parent"\n'
+            'bundle_prefix="$parent/.bundle-$(basename "$target")-"\n'
+            'tmpdir=$(mktemp -d "${bundle_prefix}XXXXXXXXXX")\n'
+            'link="$tmpdir.link"\n'
+            'trap \'rm -rf "$tmpdir" "$link"\' EXIT\n'
+            'tar -xzf - -C "$tmpdir"\n'
+            'old_target=""\n'
+            'if [ -L "$target" ]; then old_target=$(readlink "$target"); fi\n'
+            'if [ -e "$target" ] && [ ! -L "$target" ]; then\n'
+            '    rm -rf "$target"\n'
+            "fi\n"
+            'ln -s "$tmpdir" "$link"\n'
+            'mv -Tf "$link" "$target"\n'
+            "trap - EXIT\n"
+            # Readers can finish against the prior directory during the grace period.
+            'case "$old_target" in "$bundle_prefix"*)\n'
+            '    case "${old_target#"$bundle_prefix"}" in ""|*/*) ;; *)\n'
+            '        (sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &\n'
+            "    ;; esac\n"
+            ";; esac\n"
         )
+
         try:
+            container = self._require_container(sandbox_id)
             _stream_stdin_to_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", script],
                 tar_bytes,
             )
-        except ExecError as e:
-            raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
+        except (ExecError, APIError) as e:
+            cause = e.__cause__ if isinstance(e, ExecError) else e
+            if isinstance(cause, APIError) and not cause.is_client_error():
+                raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
+            raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
+        except (OSError, RequestsConnectionError, Timeout) as e:
+            raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
 
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
         """Returns an http URL the api_server can reach the sandbox on.
@@ -1965,55 +2254,39 @@ echo WRITE_OK"""
             return f"http://{_sandbox_container_name(sandbox_id)}:{port}"
         return f"http://{container.name}:{port}"
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
         container = self._require_container(sandbox_id)
-        clean_pptx = _sanitize_relative_path(pptx_path)
+        clean_document = _sanitize_relative_path(document_path)
         clean_cache = _sanitize_relative_path(cache_dir)
         session_root = f"{SESSIONS_ROOT}/{session_id}"
-        pptx_abs = f"{session_root}/{clean_pptx}"
+        document_abs = f"{session_root}/{clean_document}"
         cache_abs = f"{session_root}/{clean_cache}"
 
+        def run_command(command: list[str]) -> str:
+            return _run_in_container_as_sandbox_user(container, command).stdout_text
+
         try:
-            result = _run_in_container_as_sandbox_user(
-                container,
-                [
-                    "python",
-                    f"{MANAGED_SKILLS_PATH}/pptx/scripts/preview.py",
-                    pptx_abs,
+            self._ensure_document_preview_bundle(sandbox_id, run_command)
+            output = run_command(
+                document_preview_command(
+                    document_abs,
                     cache_abs,
-                ],
+                    session_root,
+                    first_page_only=first_page_only,
+                ),
             )
         except ExecError as e:
-            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+            raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
-        lines = [
-            line.strip()
-            for line in result.stdout_text.strip().split("\n")
-            if line.strip()
-        ]
-        if not lines:
-            raise ValueError("Empty response from PPTX conversion.")
-        if lines[0] == "ERROR_NOT_FOUND":
-            raise ValueError(f"File not found: {pptx_path}")
-        if lines[0] == "ERROR_NO_PDF":
-            raise ValueError("soffice did not produce a PDF file.")
-
-        cached = lines[0] == "CACHED"
-        abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
-        prefix = f"{session_root}/"
-        rel_paths: list[str] = []
-        for p in abs_paths:
-            if p.startswith(prefix):
-                rel_paths.append(p[len(prefix) :])
-            elif p.endswith(".jpg"):
-                rel_paths.append(p)
-        return rel_paths, cached
+        return parse_document_preview_response(output, session_root)
 
 
 class _GeneratorReader:

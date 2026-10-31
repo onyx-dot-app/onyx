@@ -40,14 +40,7 @@ def test_delete_user_nulls_out_document_set_ownership(
 ) -> None:
     user = _mock_user()
     db_session = MagicMock()
-
-    # A private/unshared persona dies with its owner; a shared one is orphaned.
-    private_persona = MagicMock(
-        is_public=False, user_shares=[], group_shares=[], deleted=False
-    )
-    shared_persona = MagicMock(
-        is_public=False, user_shares=[MagicMock()], group_shares=[], deleted=False
-    )
+    db_session.scalar.return_value = None
 
     query_chains: dict[type, MagicMock] = {}
 
@@ -57,12 +50,6 @@ def test_delete_user_nulls_out_document_set_ownership(
         return query_chains[model]
 
     db_session.query.side_effect = query_side_effect
-    # Owned personas are fetched via options(...).filter(...).all() then
-    # orphaned/deleted in Python.
-    persona_chain = _make_query_chain()
-    persona_chain.options.return_value = persona_chain
-    persona_chain.all.return_value = [private_persona, shared_persona]
-    query_chains[Persona] = persona_chain
 
     delete_user_from_db(user, db_session)
 
@@ -73,12 +60,12 @@ def test_delete_user_nulls_out_document_set_ownership(
         {DocumentSet.user_id: None}
     )
 
-    # Owned personas are orphaned (user_id -> None); the private, unshared one
-    # is additionally soft-deleted while the shared one survives ownerless.
-    assert private_persona.user_id is None
-    assert private_persona.deleted is True
-    assert shared_persona.user_id is None
-    assert shared_persona.deleted is False
+    # Owned personas are orphaned the same way, never soft-deleted
+    persona_chain = query_chains[Persona]
+    persona_chain.filter.return_value.update.assert_called_once_with(
+        {Persona.user_id: None}, synchronize_session="fetch"
+    )
+    persona_chain.filter.return_value.delete.assert_not_called()
 
 
 @patch("onyx.db.users.remove_user_from_invited_users")
@@ -91,6 +78,7 @@ def test_delete_user_cleans_up_join_tables(
 ) -> None:
     user = _mock_user()
     db_session = MagicMock()
+    db_session.scalar.return_value = None
 
     query_chains: dict[type, MagicMock] = {}
 
@@ -119,6 +107,7 @@ def test_delete_user_commits_and_removes_invited(
 ) -> None:
     user = _mock_user(email="deleted@example.com")
     db_session = MagicMock()
+    db_session.scalar.return_value = None
     db_session.query.return_value = _make_query_chain()
 
     delete_user_from_db(user, db_session)
@@ -141,6 +130,7 @@ def test_delete_user_deletes_oauth_accounts(
     oauth2 = MagicMock()
     user.oauth_accounts = [oauth1, oauth2]
     db_session = MagicMock()
+    db_session.scalar.return_value = None
     db_session.query.return_value = _make_query_chain()
 
     delete_user_from_db(user, db_session)

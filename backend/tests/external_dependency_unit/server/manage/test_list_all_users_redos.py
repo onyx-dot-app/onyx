@@ -10,6 +10,8 @@ from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import Permission
+from onyx.db.models import User
 from onyx.server.manage.users import list_all_users
 
 
@@ -21,11 +23,23 @@ def test_invited_filter_is_literal_substring_not_regex(db_session: Session) -> N
     ):
         # A regex metacharacter is treated literally now: "a.b" must NOT match
         # "axb@..." (it would under the old regex, where "." is any char).
-        resp = list_all_users(q="a.b", db_session=db_session)
+        resp = list_all_users(
+            q="a.b",
+            db_session=db_session,
+            current_user=User(
+                effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value]
+            ),
+        )
         assert [u.email for u in resp.invited] == []
 
         # Plain, case-insensitive substring still matches.
-        resp = list_all_users(q="AXB", db_session=db_session)
+        resp = list_all_users(
+            q="AXB",
+            db_session=db_session,
+            current_user=User(
+                effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value]
+            ),
+        )
         assert "axb@example.com" in [u.email for u in resp.invited]
 
 
@@ -37,5 +51,11 @@ def test_invited_filter_redos_pattern_returns_quickly(db_session: Session) -> No
         patch("onyx.server.manage.users.get_invited_users", return_value=invited),
         patch("onyx.server.manage.users.get_all_users", return_value=[]),
     ):
-        resp = list_all_users(q="(a+)+$", db_session=db_session)
+        resp = list_all_users(
+            q="(a+)+$",
+            db_session=db_session,
+            current_user=User(
+                effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value]
+            ),
+        )
         assert [u.email for u in resp.invited] == []

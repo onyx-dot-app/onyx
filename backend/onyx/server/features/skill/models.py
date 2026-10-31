@@ -7,7 +7,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.db.enums import (
+    SkillAccessLevel,
+    SkillInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import Skill
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
@@ -45,6 +49,7 @@ class SkillResponse(BaseModel):
 
     enabled: bool
     can_toggle: bool
+    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -117,6 +122,7 @@ class SkillResponse(BaseModel):
             name=skill.name,
             description=skill.description,
             is_valid=skill.is_valid,
+            installation_policy=skill.installation_policy,
             enabled=enabled,
             can_toggle=can_toggle,
             author_user_id=skill.author_user_id,
@@ -262,7 +268,7 @@ class SkillCreateRequest(BaseModel):
     @model_validator(mode="after")
     def _strip_values(self) -> "SkillCreateRequest":
         for field in ("name", "description", "instructions_markdown"):
-            stripped = getattr(self, field).strip()
+            stripped = getattr(self, field).strip()  # ods: ignore[getattr]
             if not stripped:
                 raise ValueError(f"{field} cannot be empty")
             setattr(self, field, stripped)
@@ -293,7 +299,7 @@ class SkillPatchRequest(BaseModel):
     @model_validator(mode="after")
     def _strip_values(self) -> "SkillPatchRequest":
         for field in ("description", "instructions_markdown"):
-            value = getattr(self, field)
+            value = getattr(self, field)  # ods: ignore[getattr]
             if value is None:
                 continue
             stripped = value.strip()
@@ -323,6 +329,8 @@ class SkillGroupShareRequest(BaseModel):
 
 class SkillShareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
 
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None

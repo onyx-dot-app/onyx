@@ -38,6 +38,9 @@ interface ContentSmProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
+
   /** ARIA role forwarded to the title text element. */
   role?: string;
 
@@ -78,6 +81,7 @@ function ContentSm({
   orientation = "inline",
   titleMaxLines,
   role,
+  strikethrough,
   ref,
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
@@ -105,6 +109,7 @@ function ContentSm({
         font={config.titleFont}
         color="inherit"
         maxLines={titleMaxLines}
+        strikethrough={strikethrough}
         title={toPlainString(title)}
         role={role}
       >

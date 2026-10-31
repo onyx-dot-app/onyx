@@ -205,6 +205,31 @@ def fetch_web_content_provider_by_type(
     return db_session.scalars(stmt).first()
 
 
+def set_web_search_provider_base_url(
+    *, name: str, base_url: str, db_session: Session
+) -> None:
+    provider = db_session.scalars(
+        select(InternetSearchProvider).where(InternetSearchProvider.name == name)
+    ).first()
+    if provider is None:
+        return
+    provider.config = {**(provider.config or {}), "base_url": base_url}
+    db_session.flush()
+
+
+def set_web_content_provider_base_url(
+    *, name: str, base_url: str, db_session: Session
+) -> None:
+    provider = db_session.scalars(
+        select(InternetContentProvider).where(InternetContentProvider.name == name)
+    ).first()
+    if provider is None:
+        return
+    config = provider.config or WebContentProviderConfig()
+    provider.config = config.model_copy(update={"base_url": base_url})
+    db_session.flush()
+
+
 def _ensure_unique_content_name(
     name: str, provider_id: int | None, db_session: Session
 ) -> None:

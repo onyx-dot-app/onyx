@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Tag, Text } from "@opal/components";
+import { Button, OverflowText, Tag, Text, Tooltip } from "@opal/components";
 import type { TagProps, TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgAlertCircle from "@opal/icons/alert-circle";
@@ -11,6 +11,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useEffect, useRef, useState, useImperativeHandle } from "react";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +22,8 @@ type ContentMdSizePreset = "main-content" | "main-ui" | "secondary";
 type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
 type ContentMdSuffix = "optional" | (string & {});
+
+type ContentMdTag = TagProps & { tooltip?: string };
 
 interface ContentMdPresetConfig {
   /** Opal font name for the title. */
@@ -74,19 +77,31 @@ interface ContentMdProps {
   onTitleChange?: (newTitle: string) => void;
 
   /**
+   * Tooltip and accessible name of the edit button. Pass translated text;
+   * unset, it is the generic "Edit".
+   */
+  editTooltip?: string;
+
+  /**
    * Muted suffix rendered beside the title.
-   * Use `"optional"` for the standard "(Optional)" label, or pass any string.
+   * Use `"optional"` for the translated "(Optional)" label (`OpalStrings.contentOptional`), or pass any string.
    */
   suffix?: ContentMdSuffix;
 
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: ContentMdAuxIcon;
 
-  /** Tag rendered beside the title. */
-  tag?: TagProps;
+  /** Tag rendered beside the title, with an optional hover tooltip. */
+  tag?: ContentMdTag;
 
-  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  /**
+   * Clamp the title to N lines with ellipsis; a cut title shows in full in a
+   * tooltip. Omit to wrap freely.
+   */
   titleMaxLines?: number;
+
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
@@ -106,7 +121,8 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "1.25rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
-    optionalFont: "main-content-muted",
+    // A step smaller than the title, the same suffix font as main-ui.
+    optionalFont: "main-ui-muted",
     auxIconSize: "1.25rem",
     descriptionIndent: "1.625rem",
   },
@@ -154,16 +170,19 @@ function ContentMd({
   descriptionMaxLines,
   editable,
   onTitleChange,
+  editTooltip,
   suffix,
   auxIcon,
   tag,
   titleMaxLines,
+  strikethrough,
   sizePreset = "main-ui",
   ref,
   editHandle,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const strings = useOpalStrings();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Move focus to the edit input as soon as editing starts.
@@ -179,7 +198,7 @@ function ContentMd({
   }
   useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
 
-  // Starting an edit must not double as a click on the parent row.
+  // Starting or making an edit must not double as a click on the parent row.
   function handleTitleClick(e: React.MouseEvent) {
     e.stopPropagation();
     startEditing();
@@ -205,10 +224,7 @@ function ContentMd({
           : undefined
       }
     >
-      <div
-        className="opal-content-md-header"
-        data-editing={editing || undefined}
-      >
+      <div className="opal-content-md-header">
         {Icon && (
           <div
             className="opal-content-md-icon-container shrink-0"
@@ -241,6 +257,7 @@ function ContentMd({
                 )}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
                 size={1}
                 onFocus={(e) => e.currentTarget.select()}
                 onBlur={commit}
@@ -254,11 +271,26 @@ function ContentMd({
                 style={{ height: config.lineHeight }}
               />
             </div>
-          ) : (
-            <Text
+          ) : titleMaxLines ? (
+            // Clamped, the full title shows in a tooltip when it is cut, as
+            // the description's does.
+            <OverflowText
+              // Lets a host (a toast) measure whether a clamped title overflows.
+              data-opal-content-title=""
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
+              onClick={editable ? handleTitleClick : undefined}
+            >
+              {title}
+            </OverflowText>
+          ) : (
+            <Text
+              data-opal-content-title=""
+              font={config.titleFont}
+              color="inherit"
+              strikethrough={strikethrough}
               title={toPlainString(title)}
               onClick={editable ? handleTitleClick : undefined}
             >
@@ -267,9 +299,11 @@ function ContentMd({
           )}
 
           {suffix && (
-            <Text font={config.optionalFont} color="text-03">
-              {suffix === "optional" ? "(Optional)" : suffix}
-            </Text>
+            <div className="opal-content-md-suffix">
+              <Text as="p" font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? strings.contentOptional : suffix}
+              </Text>
+            </div>
           )}
 
           {auxIcon &&
@@ -291,7 +325,17 @@ function ContentMd({
               );
             })()}
 
-          {tag && <Tag {...tag} />}
+          {tag &&
+            (() => {
+              const { tooltip, ...tagProps } = tag;
+              return (
+                <span className="ms-1 flex shrink-0">
+                  <Tooltip tooltip={tooltip} side="top">
+                    <Tag {...tagProps} />
+                  </Tooltip>
+                </span>
+              );
+            })()}
 
           {editable && !editing && editHandle == null && (
             <div
@@ -304,9 +348,10 @@ function ContentMd({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                tooltip="Edit"
-                tooltipSide="right"
-                onClick={startEditing}
+                aria-label={editTooltip || strings.edit}
+                tooltip={editTooltip || strings.edit}
+                tooltipSide="end"
+                onClick={handleTitleClick}
               />
             </div>
           )}
@@ -326,14 +371,21 @@ function ContentMd({
               : undefined
           }
         >
-          <Text
-            font="secondary-body"
-            color="text-03"
-            as="p"
-            maxLines={descriptionMaxLines}
-          >
-            {description}
-          </Text>
+          {/* Clamped, the full description shows in a tooltip when it is cut. */}
+          {descriptionMaxLines ? (
+            <OverflowText
+              font="secondary-body"
+              color="inherit"
+              as="p"
+              maxLines={descriptionMaxLines}
+            >
+              {description}
+            </OverflowText>
+          ) : (
+            <Text font="secondary-body" color="inherit" as="p">
+              {description}
+            </Text>
+          )}
         </div>
       )}
     </div>
@@ -346,4 +398,5 @@ export {
   type ContentMdSizePreset,
   type ContentMdSuffix,
   type ContentMdAuxIcon,
+  type ContentMdTag,
 };

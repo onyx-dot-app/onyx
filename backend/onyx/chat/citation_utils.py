@@ -1,55 +1,37 @@
 import re
+from collections.abc import Mapping
 
-from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.context.search.models import SearchDocsResponse
-from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
-from onyx.tools.models import ToolResponse
+from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.models import ChatMessageMetadata
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
+from onyx.file_store.models import ContextFileMetadata
+from onyx.llm.models import Message, ToolResultMessage
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 
 
-def update_citation_processor_from_tool_response(
-    tool_response: ToolResponse,
-    citation_processor: DynamicCitationProcessor,
-) -> None:
-    """Update citation processor if this was a citeable tool with a SearchDocsResponse.
-
-    Checks if the tool call is citeable and if the response contains a SearchDocsResponse,
-    then creates a mapping from citation numbers to SearchDoc objects and updates the
-    citation processor.
-
-    Args:
-        tool_response: The response from the tool execution (must have tool_call set)
-        citation_processor: The DynamicCitationProcessor to update
-    """
-    # Early return if tool_call is not set
-    if tool_response.tool_call is None:
-        return
-
-    # Update citation processor if this was a search tool
-    if tool_response.tool_call.tool_name in CITEABLE_TOOLS_NAMES:
-        # Check if the rich_response is a SearchDocsResponse
-        if isinstance(tool_response.rich_response, SearchDocsResponse):
-            search_response = tool_response.rich_response
-
-            # Create mapping from citation number to SearchDoc
-            citation_to_doc: CitationMapping = {}
-            for (
-                citation_num,
-                doc_id,
-            ) in search_response.citation_mapping.items():
-                # Find the SearchDoc with this doc_id
-                matching_doc = next(
-                    (
-                        doc
-                        for doc in search_response.search_docs
-                        if doc.document_id == doc_id
-                    ),
-                    None,
-                )
-                if matching_doc:
-                    citation_to_doc[citation_num] = matching_doc
-
-            # Update the citation processor
-            citation_processor.update_citation_mapping(citation_to_doc)
+def message_citation_sources(message: Message) -> CitationMapping:
+    """Read citation numbers shared by chat answers, search results, and research reports."""
+    if isinstance(message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
+        return message.metadata.sources
+    if not isinstance(message, ToolResultMessage):
+        return {}
+    data = message.details
+    if isinstance(data, ResearchAgentCallResult):
+        return data.citation_mapping
+    if message.tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
+        data, SearchDocsResponse
+    ):
+        return {}
+    documents: dict[str, SearchDoc] = {}
+    for document in data.search_docs:
+        documents.setdefault(document.document_id, document)
+    return {
+        number: documents[document_id]
+        for number, document_id in data.citation_mapping.items()
+        if document_id in documents
+    }
 
 
 def extract_citation_order_from_text(text: str) -> list[int]:
@@ -176,11 +158,7 @@ def collapse_citations(
         citation_str = match.group()
 
         # Determine bracket style
-        if (
-            citation_str.startswith("[[")
-            or citation_str.startswith("【【")
-            or citation_str.startswith("［［")
-        ):
+        if citation_str.startswith(("[[", "【【", "［［")):
             open_bracket = citation_str[:2]
             close_bracket = citation_str[-2:]
             content = citation_str[2:-2]
@@ -218,3 +196,38 @@ def collapse_citations(
     combined_mapping.update(additional_mappings)
 
     return updated_text, combined_mapping
+
+
+def build_context_file_citation_mapping(
+    file_metadata: list[ContextFileMetadata],
+    existing_citations: Mapping[int, SearchDoc],
+) -> dict[int, SearchDoc]:
+    """Reuse file citations from history and allocate unused numbers for new files."""
+    citation_mapping: dict[int, SearchDoc] = {}
+    numbers_by_id = {
+        doc.document_id: number for number, doc in existing_citations.items()
+    }
+    next_number = max(existing_citations, default=0) + 1
+
+    for file_meta in file_metadata:
+        number = numbers_by_id.get(file_meta.file_id)
+        if number is None:
+            number = next_number
+            numbers_by_id[file_meta.file_id] = number
+            next_number += 1
+        search_doc = SearchDoc(
+            document_id=file_meta.file_id,
+            chunk_ind=0,
+            semantic_identifier=file_meta.filename,
+            link=None,
+            blurb=file_meta.file_content,
+            source_type=DocumentSource.FILE,
+            boost=1,
+            hidden=False,
+            metadata={},
+            score=0.0,
+            match_highlights=[file_meta.file_content],
+        )
+        citation_mapping[number] = search_doc
+
+    return citation_mapping

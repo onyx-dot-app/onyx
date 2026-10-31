@@ -1,23 +1,13 @@
-"use client";
+import { redirect } from "next/navigation";
+import {
+  legacyMcpListHref,
+  type PluginSearchParams,
+} from "@/lib/plugins/routes";
 
-import MCPPageContent from "@/sections/actions/MCPPageContent";
-import { SettingsLayouts } from "@opal/layouts";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
-
-const route = ADMIN_ROUTES.MCP_ACTIONS;
-
-export default function Main() {
-  return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={route.icon}
-        title={route.title}
-        description="Connect MCP (Model Context Protocol) servers to add custom actions and tools for your agents."
-        divider
-      />
-      <SettingsLayouts.Body>
-        <MCPPageContent />
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
-  );
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<PluginSearchParams>;
+}) {
+  redirect(legacyMcpListHref(await searchParams));
 }

@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import MinimalMarkdown from "./MinimalMarkdown";
 

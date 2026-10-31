@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from google.auth.exceptions import RefreshError
 
-from onyx.connectors.google_utils.resources import (
+from onyx.connectors.google_drive.models import (
     ImpersonationError,
     UserRemovedError,
     make_user_removal_checker,

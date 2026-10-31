@@ -1,16 +1,15 @@
+import { Text, OverflowText } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import { FiTag } from "react-icons/fi";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
+import { SvgTag } from "@opal/icons";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { MetadataBadge } from "@/components/MetadataBadge";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction, useMemo } from "react";
 import { openDocument } from "@/lib/search/utils";
-import { ValidSources } from "@/lib/types";
-import { cn } from "@opal/utils";
-import Truncated from "@/refresh-components/texts/Truncated";
-import Text from "@/refresh-components/texts/Text";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { cn, richNodes } from "@opal/utils";
 
 interface DocumentMetadataBlockProps {
   modal?: boolean;
@@ -38,12 +37,12 @@ function DocumentMetadataBlock({
               .map(([key, value], index) => (
                 <MetadataBadge
                   key={index}
-                  icon={FiTag}
+                  icon={SvgTag}
                   value={`${key}=${value}`}
                 />
               ))}
             {metadataEntries.length > MAX_METADATA_ITEMS && (
-              <span className="ml-1 text-xs text-text-500">...</span>
+              <span className="ms-1 text-xs text-text-500">...</span>
             )}
           </div>
         </>
@@ -83,7 +82,7 @@ export default function ChatDocumentDisplay({
       type="button"
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
-        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer text-left",
+        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer text-start",
         isSelected && "bg-action-selection-02"
       )}
     >
@@ -93,17 +92,32 @@ export default function ChatDocumentDisplay({
         ) : (
           <SourceIcon sourceType={document.source_type} iconSize={18} />
         )}
-        <Truncated className="line-clamp-2" side="left">
+        <OverflowText
+          as="p"
+          textPosition="text-start"
+          font="main-ui-body"
+          color="text-05"
+          maxLines={2}
+          wordWrap="break-all"
+        >
           {title}
-        </Truncated>
+        </OverflowText>
       </div>
 
       {hasMetadata && (
         <DocumentMetadataBlock modal={modal} document={document} />
       )}
 
-      <Text as="p" className="line-clamp-2 text-left" secondaryBody text03>
-        {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
+      <Text
+        as="p"
+        textPosition="text-start"
+        maxLines={2}
+        font="secondary-body"
+        color="text-03"
+      >
+        {richNodes(
+          buildDocumentSummaryDisplay(document.match_highlights, document.blurb)
+        )}
       </Text>
     </button>
   );

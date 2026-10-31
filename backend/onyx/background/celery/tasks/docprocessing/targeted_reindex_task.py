@@ -13,10 +13,6 @@ import logging
 from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.indexing.run_targeted_reindex import (
-    group_targets_by_cc_pair,
-    process_targets_for_cc_pair,
-)
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
@@ -39,6 +35,11 @@ def run_targeted_reindex(
     """Body of the targeted-reindex task. Lifted out of the @shared_task
     decorator so tests can call it directly without going through
     celery's binding machinery."""
+    from onyx.background.indexing.run_targeted_reindex import (
+        group_targets_by_cc_pair,
+        process_targets_for_cc_pair,
+    )
+
     log = logging.LoggerAdapter(
         task_logger,
         extra={
@@ -132,9 +133,11 @@ def run_targeted_reindex(
             total_attempted = len(target_rows)
 
             # 5. terminal state on synthetic IndexAttempts.
+            now = datetime.datetime.now(datetime.timezone.utc)
             for attempt in attempts:
                 attempt.status = IndexingStatus.SUCCESS
-                attempt.time_updated = datetime.datetime.now(datetime.timezone.utc)
+                attempt.time_updated = now
+                attempt.time_finished = now
 
             # 6. terminal state on the job + counters + summary snapshot.
             # `runtime_skipped` covers the residual: targets that neither
@@ -149,7 +152,7 @@ def run_targeted_reindex(
             job.still_failing_count = still_failing_count
             job.skipped_count = (job.skipped_count or 0) + runtime_skipped
             job.resolved_summary = summary
-            job.completed_at = datetime.datetime.now(datetime.timezone.utc)
+            job.completed_at = now
             job.status = IndexingStatus.SUCCESS
 
             db_session.commit()
@@ -176,6 +179,7 @@ def run_targeted_reindex(
                         if not attempt.status.is_terminal():
                             attempt.status = IndexingStatus.FAILED
                             attempt.time_updated = now
+                            attempt.time_finished = now
                     job.status = IndexingStatus.FAILED
                     job.completed_at = now
                     db_session.commit()

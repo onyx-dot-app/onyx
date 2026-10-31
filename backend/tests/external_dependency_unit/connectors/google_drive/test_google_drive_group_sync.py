@@ -1,16 +1,18 @@
 from collections.abc import Generator
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
-    _perform_external_group_sync,
+    connector_external_group_sync_generator_task,
 )
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, AccountType, ConnectorCredentialPairStatus
 from onyx.db.models import (
     Connector,
@@ -20,8 +22,25 @@ from onyx.db.models import (
     User,
     User__ExternalUserGroupId,
 )
+from onyx.db.permission_sync_attempt import try_create_external_group_sync_attempt
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
+
+
+def _run_group_sync(cc_pair_id: int) -> None:
+    """Dispatch an attempt as the beat would, then run the task in-process."""
+    with get_session_with_current_tenant() as db_session:
+        attempt_id = try_create_external_group_sync_attempt(
+            cc_pair_id, f"task-{uuid4().hex[:8]}", db_session
+        )
+    assert attempt_id is not None
+    connector_external_group_sync_generator_task.apply(
+        args=(cc_pair_id,),
+        kwargs={
+            "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            "attempt_id": attempt_id,
+        },
+    ).get()
 
 
 def _create_ext_perm_user(db_session: Session, name: str) -> User:
@@ -148,9 +167,7 @@ class TestPerformExternalGroupSync:
             mock_config.return_value = mock_sync_config
 
             # Run the sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify user groups were created
             user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -216,9 +233,7 @@ class TestPerformExternalGroupSync:
             mock_config.return_value = mock_sync_config
 
             # Run initial sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify initial state
             initial_user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -244,9 +259,7 @@ class TestPerformExternalGroupSync:
             mock_group_config.group_sync_func = updated_group_sync_func
 
             # Run updated sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify updated state
             updated_user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -319,9 +332,7 @@ class TestPerformExternalGroupSync:
             mock_config.return_value = mock_sync_config
 
             # Run initial sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify initial state
             initial_user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -345,9 +356,7 @@ class TestPerformExternalGroupSync:
             mock_group_config.group_sync_func = updated_group_sync_func
 
             # Run updated sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify updated state
             updated_user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -400,9 +409,7 @@ class TestPerformExternalGroupSync:
             mock_config.return_value = mock_sync_config
 
             # Run initial sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify initial state
             initial_user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -421,9 +428,7 @@ class TestPerformExternalGroupSync:
             mock_group_config.group_sync_func = empty_group_sync_func
 
             # Run updated sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify all groups were removed
             updated_user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -462,9 +467,7 @@ class TestPerformExternalGroupSync:
             mock_config.return_value = mock_sync_config
 
             # Run the sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify all users were added to the group
             user_groups = _get_user_external_groups(db_session, cc_pair.id)
@@ -510,9 +513,7 @@ class TestPerformExternalGroupSync:
             mock_config.return_value = mock_sync_config
 
             # Run the sync
-            _perform_external_group_sync(
-                cc_pair.id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-            )
+            _run_group_sync(cc_pair.id)
 
             # Verify user groups
             user_groups = _get_user_external_groups(db_session, cc_pair.id)

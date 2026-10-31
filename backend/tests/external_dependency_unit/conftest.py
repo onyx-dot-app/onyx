@@ -1,19 +1,25 @@
+import logging
 from collections.abc import Generator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete
+from sqlalchemy import create_engine, delete
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
-from onyx.db.enums import AccountType
-from onyx.db.models import User, User__UserGroup
+from onyx.db.enums import AccountType, UserFileStatus
+from onyx.db.models import User, User__UserGroup, UserFile
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
+from tests.external_dependency_unit.session_state_guard import (
+    reset_leaked_session_settings,
+)
 
 # Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
 from tests.utils.pytest_secrets import (
@@ -21,6 +27,34 @@ from tests.utils.pytest_secrets import (
 )
 from tests.utils.pytest_secrets import pytest_configure as pytest_configure
 from tests.utils.pytest_secrets import test_secrets as test_secrets
+
+
+@pytest.fixture
+def audit_stream(caplog: pytest.LogCaptureFixture) -> Generator[None, None, None]:
+    """``onyx.audit`` sets ``propagate=False``, so caplog's root handler never sees
+    its records; hang caplog's handler below that barrier instead. Not autouse — it
+    would feed audit records to tests that capture logs for other reasons.
+    """
+    audit_logger = logging.getLogger("onyx.audit")
+    audit_logger.addHandler(caplog.handler)
+    try:
+        yield
+    finally:
+        audit_logger.removeHandler(caplog.handler)
+
+
+@pytest.fixture(autouse=True)
+def no_leaked_db_session_settings() -> Generator[None, None, None]:
+    """Fail the test that returns a pooled connection with session settings on
+    it, instead of a later test that happens to check that connection out."""
+    yield
+    leaks = reset_leaked_session_settings()
+    if leaks:
+        pytest.fail(
+            "This test left Postgres session settings on pooled connections: "
+            f"{leaks}. Use SET LOCAL, reset the setting, or run on the "
+            "`isolated_engine` fixture."
+        )
 
 
 @pytest.fixture(scope="function")
@@ -35,12 +69,26 @@ def db_session() -> Generator[Session, None, None]:
         yield session
 
 
+@pytest.fixture
+def isolated_engine(
+    db_session: Session,  # noqa: ARG001 - initializes SqlEngine
+) -> Generator[Engine, None, None]:
+    """An engine with no pool, for tests that change session state (search_path,
+    lock_timeout) or hand a connection to migration code. Each connection closes
+    when the test returns it, so none of that state reaches the shared app pool."""
+    engine = create_engine(SqlEngine.get_engine().url, poolclass=NullPool)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture(scope="session")
 def full_deployment_setup() -> Generator[None, None, None]:
     """Optional fixture to perform full deployment-like setup on demand.
 
-    Import and call tests.external_dependency_unit.startup.full_setup.ensure_full_deployment_setup
-    to initialize Postgres defaults, Vespa indices, and seed initial docs.
+    Import and call tests.external_dependency_unit.full_setup.ensure_full_deployment_setup
+    to initialize Postgres defaults and the document index.
     """
     ensure_full_deployment_setup()
     yield
@@ -95,6 +143,22 @@ def create_test_user(
     db_session.commit()
     db_session.refresh(user)
     return user
+
+
+def create_processing_user_file(db_session: Session, user_id: UUID) -> UserFile:
+    """Insert a UserFile in PROCESSING status and return it."""
+    uf = UserFile(
+        id=uuid4(),
+        user_id=user_id,
+        file_id=f"test_file_{uuid4().hex[:8]}",
+        name=f"test_{uuid4().hex[:8]}.txt",
+        file_type="text/plain",
+        status=UserFileStatus.PROCESSING,
+    )
+    db_session.add(uf)
+    db_session.commit()
+    db_session.refresh(uf)
+    return uf
 
 
 def delete_test_user(db_session: Session, *users: User) -> None:

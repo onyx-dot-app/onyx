@@ -20,7 +20,7 @@ from onyx.llm.litellm_singleton import litellm
 
 # Optional: enable LiteLLM debug logs (set `LITELLM_DEBUG=1`)
 if os.getenv("LITELLM_DEBUG") == "1":
-    getattr(litellm, "_turn_on_debug", lambda: None)()
+    getattr(litellm, "_turn_on_debug", lambda: None)()  # ods: ignore[getattr]
 
 # Configuration: Update these values before running
 MODEL = "azure/responses/YOUR_MODEL_NAME_HERE"

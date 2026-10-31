@@ -1,9 +1,10 @@
 from enum import Enum
 from typing import Any, Final, TypeGuard, TypeVar
 
+from asyncpg.exceptions import CheckViolationError as AsyncpgCheckViolationError
 from psycopg2 import OperationalError, errorcodes
-from psycopg2.errors import ForeignKeyViolation, UniqueViolation
-from pydantic import BaseModel
+from psycopg2.errors import CheckViolation, ForeignKeyViolation, UniqueViolation
+from pydantic import BaseModel, Field
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
@@ -53,7 +54,20 @@ def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
     orig = exc.orig
     return (
         isinstance(orig, UniqueViolation)
-        and getattr(orig.diag, "constraint_name", None) == constraint
+        and getattr(orig.diag, "constraint_name", None)  # ods: ignore[getattr]
+        == constraint
+    )
+
+
+def is_check_violation(exc: IntegrityError, constraint: str) -> bool:
+    """True when a database write violates the named check constraint."""
+    if isinstance(exc.orig, CheckViolation):
+        return exc.orig.diag.constraint_name == constraint
+    # SQLAlchemy wraps asyncpg errors and retains the driver error as the cause.
+    cause = exc.orig.__cause__ if exc.orig is not None else None
+    return (
+        isinstance(cause, AsyncpgCheckViolationError)
+        and cause.as_dict().get("constraint_name") == constraint
     )
 
 
@@ -63,7 +77,10 @@ def is_fk_violation(exc: IntegrityError) -> bool:
 
 
 def model_to_dict(model: Base) -> dict[str, Any]:
-    return {c.key: getattr(model, c.key) for c in inspect(model).mapper.column_attrs}
+    return {
+        c.key: getattr(model, c.key)  # ods: ignore[getattr]
+        for c in inspect(model).mapper.column_attrs
+    }
 
 
 RETRYABLE_PG_CODES = {
@@ -79,7 +96,11 @@ RETRYABLE_PG_CODES = {
 def is_retryable_sqlalchemy_error(exc: BaseException) -> bool:
     """Helper function for use with tenacity's retry_if_exception as the callback"""
     if isinstance(exc, OperationalError):
-        pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
+        pgcode = getattr(  # ods: ignore[getattr]
+            getattr(exc, "orig", None),  # ods: ignore[getattr]
+            "pgcode",
+            None,
+        )
         return pgcode in RETRYABLE_PG_CODES
     return False
 
@@ -88,6 +109,7 @@ class DocumentRow(BaseModel):
     id: str
     doc_metadata: dict[str, Any]
     external_user_group_ids: list[str]
+    external_user_emails: list[str] = Field(default_factory=list)
 
 
 class SortOrder(str, Enum):

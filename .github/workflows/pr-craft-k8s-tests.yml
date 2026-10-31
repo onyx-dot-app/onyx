@@ -19,13 +19,10 @@ concurrency:
 on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
-  merge_group:
   pull_request:
-    branches: [main]
-    # NOTE: Intentionally no `paths:` filter. Trigger-level `paths:` is ignored
-    # for `merge_group`, so we always trigger and let the `changes` job below
-    # decide whether the real test job runs (matches the docker-compose lane
-    # cadence; this lane is expensive and must not run on every PR).
+    paths-ignore:
+      - "documentation/**"
+    # Not a required check, so docs-only PRs skip it entirely.
   push:
     tags:
       - "v*.*.*"
@@ -35,12 +32,18 @@ permissions:
   contents: read
 
 env:
+  # The chart's object store, and the MinIO it falls back to while copying.
   S3_ENDPOINT_URL: "http://127.0.0.1:9004"
+  S3_LEGACY_ENDPOINT_URL: "http://127.0.0.1:9005"
   S3_FILE_STORE_BUCKET_NAME: "onyx-file-store-bucket"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
   SANDBOX_BACKEND: "kubernetes"
+  SANDBOX_TEST_ISOLATED_DEPLOYMENT: "true"
+  SANDBOX_TEST_RUN_ID: ${{ github.run_id }}
+  # Shared by the test process and the deployed cleanup worker (900s default).
+  SANDBOX_RESOURCE_GRACE_SECONDS: "180"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
@@ -81,7 +84,7 @@ env:
 
 jobs:
   changes:
-    # Gates the expensive test job. On pull_request / merge_group we use
+    # Gates the expensive test job. On pull_request we use
     # paths-filter; on schedule / push (tags) / workflow_dispatch the filter is
     # skipped and the output defaults to `true` so the lane runs.
     runs-on: ubuntu-latest
@@ -93,13 +96,13 @@ jobs:
       craft_k8s: ${{ steps.filter.outputs.craft_k8s || 'true' }}
     steps:
       - name: Checkout code
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             craft_k8s:
@@ -140,7 +143,7 @@ jobs:
       test-files: ${{ steps.set-matrix.outputs.test-files }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -156,6 +159,7 @@ jobs:
             shard="${base#test_}"
             entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
           done
+          entries="${entries}{\"path\":\"backend/tests/integration/tests/craft/k8s/cleanup\",\"name\":\"cleanup-resources\"},"
           if [ -z "${entries}" ]; then
             echo "::error::no craft k8s test files discovered"
             exit 1
@@ -178,7 +182,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -286,6 +290,10 @@ jobs:
     name: build-image (${{ matrix.image }})
     needs: changes
     if: needs.changes.outputs.craft_k8s == 'true'
+    # One output per matrix leg: each leg sets only its own image's digest.
+    outputs:
+      sandbox-digest: ${{ matrix.image == 'sandbox' && steps.build.outputs.digest || '' }}
+      backend-digest: ${{ matrix.image == 'backend' && steps.build.outputs.digest || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -320,7 +328,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -333,6 +341,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and push ${{ matrix.image }} image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ${{ matrix.context }}
@@ -344,6 +353,8 @@ jobs:
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
             ${{ matrix.extra_build_args }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-${{ matrix.image }}-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -388,7 +399,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -434,7 +445,8 @@ jobs:
       - name: Mirror prebuilt images into local registry
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          SANDBOX_DIGEST: ${{ needs.build-images.outputs.sandbox-digest }}
+          BACKEND_DIGEST: ${{ needs.build-images.outputs.backend-digest }}
         run: |
           set -eo pipefail
           mirror() {
@@ -443,8 +455,8 @@ jobs:
             docker tag "$src" "$dst"
             docker push "$dst"
           }
-          mirror "${ECR_CACHE}:craft-k8s-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
-          mirror "${ECR_CACHE}:craft-k8s-backend-${RUN_ID}" "${BACKEND_IMAGE}"
+          mirror "${ECR_CACHE}@${SANDBOX_DIGEST}" "${SANDBOX_CONTAINER_IMAGE}"
+          mirror "${ECR_CACHE}@${BACKEND_DIGEST}" "${BACKEND_IMAGE}"
 
       - name: Write kind config
         run: |
@@ -510,12 +522,16 @@ jobs:
           set -eo pipefail
           kubectl create namespace "${HELM_RELEASE_NAMESPACE}" \
             --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace "${HELM_RELEASE_NAMESPACE}" \
+            "onyx.app/cleanup-test-run=${SANDBOX_TEST_RUN_ID}" --overwrite
           kubectl config set-context --current --namespace="${HELM_RELEASE_NAMESPACE}"
 
           for attempt in 1 2 3; do
             if helm upgrade --install onyx deployment/helm/charts/onyx \
               -n "${HELM_RELEASE_NAMESPACE}" \
               -f deployment/helm/charts/onyx/values-ci.yaml \
+              --set "celery_worker_heavy.logLevel=DEBUG" \
+              --set-string "configMap.SANDBOX_RESOURCE_GRACE_SECONDS=${SANDBOX_RESOURCE_GRACE_SECONDS}" \
               --set "api.image.repository=localhost:5001/onyx-backend" \
               --set "api.image.tag=ci" \
               --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
@@ -623,17 +639,38 @@ jobs:
       - name: Forward chart MinIO to runner
         run: |
           set -eo pipefail
-          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-minio 9004:9000; sleep 1; done" \
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-minio 9005:9000; sleep 1; done" \
             > "${RUNNER_TEMP}/minio-port-forward.log" 2>&1 &
           echo "$!" > "${RUNNER_TEMP}/minio-port-forward.pid"
           for _ in $(seq 1 30); do
-            if curl -fsS "${S3_ENDPOINT_URL}/minio/health/ready"; then
-              echo "chart MinIO is reachable at ${S3_ENDPOINT_URL}"
+            if curl -fsS "${S3_LEGACY_ENDPOINT_URL}/minio/health/ready"; then
+              echo "chart MinIO is reachable at ${S3_LEGACY_ENDPOINT_URL}"
               exit 0
             fi
             sleep 1
           done
           cat "${RUNNER_TEMP}/minio-port-forward.log" || true
+          exit 1
+
+      - name: Wait for chart object store ready
+        run: |
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+            deployment/onyx-object-store --timeout=180s
+
+      - name: Forward chart object store to runner
+        run: |
+          set -eo pipefail
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-object-store 9004:8333; sleep 1; done" \
+            > "${RUNNER_TEMP}/object-store-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/object-store-port-forward.pid"
+          for _ in $(seq 1 30); do
+            if curl -fsS "${S3_ENDPOINT_URL}/healthz"; then
+              echo "chart object store is reachable at ${S3_ENDPOINT_URL}"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "${RUNNER_TEMP}/object-store-port-forward.log" || true
           exit 1
 
       - name: Wait for chart app runtime ready
@@ -768,6 +805,8 @@ jobs:
           kubectl -n "${HELM_RELEASE_NAMESPACE}" get pods,svc,job -l release=onyx || true
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-minio --tail=500 || true
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs job/onyx-minio-post-job --all-containers --tail=500 || true
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-object-store --tail=500 || true
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs -l app=legacy-minio-copy --tail=500 || true
           python - <<'PY' || true
           import os, boto3
           from botocore.config import Config
@@ -798,7 +837,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::port-forward logs"
-          for f in postgres redis minio api; do
+          for f in postgres redis minio object-store api; do
             echo "--- ${f} ---"; cat "${RUNNER_TEMP}/${f}-port-forward.log" 2>/dev/null || true
           done
           echo "::endgroup::"
@@ -829,6 +868,7 @@ jobs:
             "${RUNNER_TEMP}/postgres-port-forward.pid" \
             "${RUNNER_TEMP}/redis-port-forward.pid" \
             "${RUNNER_TEMP}/minio-port-forward.pid" \
+            "${RUNNER_TEMP}/object-store-port-forward.pid" \
             "${RUNNER_TEMP}/api-port-forward.pid" \
             "${RUNNER_TEMP}/sandbox-log-watcher.pid"; do
             if [ -f "${pid_file}" ]; then

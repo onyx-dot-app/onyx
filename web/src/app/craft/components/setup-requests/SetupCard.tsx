@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 
 import { Button, Text } from "@opal/components";
@@ -50,6 +51,8 @@ export default function SetupCard({
   reason,
   userApp,
 }: SetupCardProps) {
+  const t = useTranslations("craft.setupCard");
+  const tActionPolicies = useTranslations("craft.actionPolicies");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,38 +60,57 @@ export default function SetupCard({
   const [decision, setDecision] = useState<ConnectAppDecision | null>(null);
 
   const mountedRef = useRef(true);
+  const resolvingRef = useRef(false);
+  const autoResolvedRef = useRef(false);
   // Tears down the in-flight OAuth poll/listener; run on finish and on unmount.
   const cleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       cleanupRef.current?.();
     };
   }, []);
 
-  const appName = userApp?.name ?? `External app ${externalAppId}`;
+  const appName =
+    userApp?.name ?? t("appFallback.label", { id: externalAppId });
   const supportsOauth = userApp?.supports_oauth ?? false;
   const appLoading = userApp === undefined;
 
-  async function resolve(result: ConnectAppDecision) {
-    setError(null);
-    try {
-      await postConnectAppDecision(requestId, result);
-    } catch (e) {
-      // POST failed (network error, or already resolved on another device).
-      // Keep the card actionable so the user can retry.
-      console.error("Failed to resolve connect-app request:", e);
-      if (mountedRef.current)
-        setError("Something went wrong. Please try again.");
+  const resolve = useCallback(
+    async (result: ConnectAppDecision) => {
+      if (resolvingRef.current) return;
+      resolvingRef.current = true;
+      setBusy(true);
+      setError(null);
+      try {
+        await postConnectAppDecision(requestId, result);
+      } catch (e) {
+        // POST failed (network error, or already resolved on another device).
+        // Keep the card actionable so the user can retry.
+        console.error("Failed to resolve connect-app request:", e);
+        if (mountedRef.current) setError(t("error.generic"));
+        return;
+      } finally {
+        resolvingRef.current = false;
+        if (mountedRef.current) setBusy(false);
+      }
+      if (!mountedRef.current) return;
+      setDecision(result);
+      if (result === "connected") {
+        void mutate(SWR_KEYS.buildExternalApps);
+        void mutate(SWR_KEYS.userSkills);
+      }
+    },
+    [requestId, mutate, t]
+  );
+
+  useEffect(() => {
+    if (!userApp?.authenticated || decision !== null || autoResolvedRef.current)
       return;
-    }
-    if (!mountedRef.current) return;
-    setDecision(result);
-    if (result === "connected") {
-      void mutate(SWR_KEYS.buildExternalApps);
-      void mutate(SWR_KEYS.userSkills);
-    }
-  }
+    autoResolvedRef.current = true;
+    void resolve("connected");
+  }, [userApp?.authenticated, decision, resolve]);
 
   async function confirmConnected(): Promise<boolean> {
     try {
@@ -149,7 +171,11 @@ export default function SetupCard({
     // Capabilities are unknown until the app row loads (the button is disabled).
     if (appLoading) return;
     if (!userApp) {
-      setError("This app can't be set up from here.");
+      setError(t("error.notConfigurable"));
+      return;
+    }
+    if (userApp.authenticated) {
+      await resolve("connected");
       return;
     }
     if (!supportsOauth) {
@@ -165,24 +191,20 @@ export default function SetupCard({
       const popup = window.open(authorize_url, "_blank", POPUP_FEATURES);
       if (!popup) {
         setBusy(false);
-        setError(
-          "Couldn't open the setup window — allow popups and try again."
-        );
+        setError(t("error.popupBlocked"));
         return;
       }
       awaitOAuthCompletion(popup);
     } catch (e) {
       setBusy(false);
-      setError(e instanceof Error ? e.message : "Failed to start setup");
+      setError(e instanceof Error ? e.message : t("error.startFailed"));
     }
   }
 
   const Logo = getAppTypeLogo(userApp?.app_type ?? "CUSTOM");
 
-  // `decision` is this session's click; `userApp.authenticated` is the durable
-  // truth, so a connected card stays connected after navigating away and back.
-  const connected =
-    decision === "connected" || (userApp?.authenticated ?? false);
+  // Stored credentials alone do not release the agent's pending request.
+  const connected = decision === "connected";
   const decided = connected || decision === "declined";
   // Comet travels while pending (info), then settles to the outcome tone.
   const tone = decided ? (connected ? "success" : "error") : "info";
@@ -204,10 +226,18 @@ export default function SetupCard({
             color={connected ? "muted" : "danger"}
             title={
               connected
-                ? `${appName} connected.`
-                : `Skipped connecting ${appName}.`
+                ? t("connected.title", { app: appName })
+                : t("skipped.title", { app: appName })
             }
           />
+          {connected && (
+            <Button
+              prominence="tertiary"
+              href={`/craft/v1/plugins?actionPolicies=app-${externalAppId}`}
+            >
+              {tActionPolicies("title")}
+            </Button>
+          )}
         </div>
       </CometEdge>
     );
@@ -223,10 +253,8 @@ export default function SetupCard({
           sizePreset="main-ui"
           variant="section"
           icon={Logo}
-          title={`Connect ${appName}`}
-          description={
-            reason ?? `The agent needs ${appName} to continue this task.`
-          }
+          title={t("connect.title", { app: appName })}
+          description={reason ?? t("reason.fallback", { app: appName })}
         />
         {error && (
           <Text font="secondary-body" color="text-03">
@@ -240,7 +268,7 @@ export default function SetupCard({
             disabled={busy}
             onClick={() => void resolve("declined")}
           >
-            Not now
+            {t("notNow.button")}
           </Button>
           <Button
             prominence="primary"
@@ -248,7 +276,11 @@ export default function SetupCard({
             disabled={busy || appLoading}
             onClick={() => void connect()}
           >
-            {busy ? "Waiting…" : appLoading ? "Loading…" : `Connect ${appName}`}
+            {busy
+              ? t("waiting.button")
+              : appLoading
+                ? t("loading.button")
+                : t("connect.title", { app: appName })}
           </Button>
         </div>
         {userApp && (

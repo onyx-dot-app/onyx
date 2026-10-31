@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import isEqual from "lodash/isEqual";
 import { Button, MessageCard, Modal } from "@opal/components";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
@@ -20,6 +21,7 @@ import {
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
 import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
 
 interface ExternalAppSkillsStepModalProps {
   app: ExternalAppAdminResponse;
@@ -33,6 +35,8 @@ export default function ExternalAppSkillsStepModal({
   onClose,
   onSaved,
 }: ExternalAppSkillsStepModalProps) {
+  const t = useTranslations("craft.apps.skillsStep");
+  const tApps = useTranslations("craft.apps");
   const router = useRouter();
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(app);
@@ -101,10 +105,7 @@ export default function ExternalAppSkillsStepModal({
 
   return (
     <Modal open>
-      <Modal.Content
-        width={confirmationOpen || upload.isOpen ? "sm" : "lg"}
-        height={confirmationOpen || upload.isOpen ? "fit" : "lg"}
-        preventAccidentalClose={!confirmationOpen}
+      <PluginModalContent
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
@@ -120,7 +121,10 @@ export default function ExternalAppSkillsStepModal({
                 app.associated_skills.some(
                   (skill) => skill.name === draft.contents.name
                 )
-                  ? `App “${app.name}” already has an associated skill named “${draft.contents.name}”. Upload a skill with a different name.`
+                  ? tApps("errors.duplicateSkillName", {
+                      appName: app.name,
+                      skillName: draft.contents.name,
+                    })
                   : null
               }
               onContinue={(draft) =>
@@ -134,10 +138,14 @@ export default function ExternalAppSkillsStepModal({
         ) : (
           <>
             <Modal.Header
-              title={`Add skills to ${app.name}`}
-              description="Optional — associate existing skills or create one for this app."
+              padding={4}
+              title={t("title", { name: app.name })}
+              description={t("description")}
+              onClose={() => {
+                if (!isSaving) unsavedChanges.requestLeave(onClose);
+              }}
             />
-            <Modal.Body>
+            <Modal.Body twoTone={false} alignItems="stretch" padding={6}>
               <div className="flex flex-col gap-3">
                 <AssociatedSkillsEditor
                   app={app}
@@ -155,33 +163,35 @@ export default function ExternalAppSkillsStepModal({
                 />
                 {error && (
                   <MessageCard
+                    outerPadding={1}
+                    innerPadding={1}
                     variant="error"
-                    title="Couldn't save"
+                    title={t("errors.saveFailedTitle")}
                     description={error}
                   />
                 )}
               </div>
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer padding={6}>
               <div className="flex w-full justify-end gap-2">
                 <Button
                   prominence="secondary"
                   onClick={() => unsavedChanges.requestLeave(onClose)}
                   disabled={isSaving}
                 >
-                  Skip for now
+                  {t("skipButton")}
                 </Button>
                 <Button
                   disabled={isSaving || !isDirty}
                   onClick={() => void save()}
                 >
-                  {isSaving ? "Saving…" : "Save skills"}
+                  {isSaving ? t("savingButton") : t("saveButton")}
                 </Button>
               </div>
             </Modal.Footer>
           </>
         )}
-      </Modal.Content>
+      </PluginModalContent>
     </Modal>
   );
 }

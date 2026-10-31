@@ -36,16 +36,14 @@ class Document360Connector(LoadConnector, PollConnector):
     def __init__(
         self,
         workspace: str,
-        categories: List[str] | None = None,
+        categories: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
-        portal_id: Optional[str] = None,
-        api_token: Optional[str] = None,
     ) -> None:
-        self.portal_id = portal_id
+        self.portal_id: str | None = None
         self.workspace = workspace
         self.categories = categories
         self.batch_size = batch_size
-        self.api_token = api_token
+        self.api_token: str | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> Optional[dict[str, Any]]:
         self.api_token = credentials.get("document360_api_token")

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Form, Formik, FormikProps } from "formik";
 import ProviderModal from "@/sections/modals/ProviderModal";
 import { ModelIcon } from "@/lib/languageModels/components";
 import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import {
   testImageGenerationApiKey,
-  createImageGenerationConfig,
   updateImageGenerationConfig,
   fetchImageGenerationCredentials,
 } from "@/views/admin/ImageGenerationPage/svc";
@@ -23,7 +23,6 @@ import { toast } from "@opal/layouts";
 export function ImageGenFormWrapper<T extends FormValues>({
   modal,
   imageProvider,
-  existingProviders,
   existingConfig,
   onSuccess,
   title,
@@ -34,6 +33,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
   transformValues,
   getInitialValuesFromCredentials,
 }: ImageGenFormWrapperProps<T>) {
+  const t = useTranslations("admin.imageGeneration");
   // State management
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("idle");
@@ -46,17 +46,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
     useState<T>(initialValues);
 
   const isEditMode = !!existingConfig;
-
-  // Compute API key options from existing providers matching this image provider
-  // API keys from LLM providers are already masked by backend (first 4 + **** + last 4)
-  const apiKeyOptions = useMemo(() => {
-    return existingProviders
-      .filter((p) => p.provider === imageProvider.provider_name)
-      .map((provider) => ({
-        value: `existing:${provider.id}:${provider.name}`,
-        label: provider.api_key || "****",
-      }));
-  }, [existingProviders, imageProvider.provider_name]);
 
   // Fetch credentials when modal opens in edit mode
   useEffect(() => {
@@ -123,28 +112,22 @@ export function ImageGenFormWrapper<T extends FormValues>({
         ? transformValues(values)
         : {
             modelName: imageProvider.model_name,
-            imageProviderId: imageProvider.image_provider_id,
             provider: imageProvider.provider_name,
             apiKey: (values as Record<string, unknown>).api_key as
               | string
               | undefined,
           };
 
-      // Check if user selected existing provider (clone mode)
       const apiKeyValue = (values as Record<string, unknown>).api_key as string;
-      const isCloneMode = apiKeyValue?.startsWith("existing:");
+      // Check if the API key was changed from its masked value
+      // A masked key contains "****", so if present, user hasn't entered a new key
+      const apiKeyChanged = !apiKeyValue?.includes("****");
 
-      if (isCloneMode) {
-        const parts = apiKeyValue.split(":");
-        const providerIdStr = parts[1];
-        if (!providerIdStr) {
-          throw new Error("Invalid provider selection");
-        }
-        const providerId = parseInt(providerIdStr, 10);
-
-        // Test API key from existing provider before creating config
+      // Test the API key first (only if changed)
+      if (apiKeyChanged) {
         const result = await testImageGenerationApiKey(payload.modelName, {
-          sourceLlmProviderId: providerId,
+          provider: payload.provider,
+          apiKey: payload.apiKey,
           apiBase: payload.apiBase,
           apiVersion: payload.apiVersion,
           deploymentName: payload.deploymentName,
@@ -153,82 +136,25 @@ export function ImageGenFormWrapper<T extends FormValues>({
 
         if (!result.ok) {
           setApiStatus("error");
-          setErrorMessage(result.errorMessage || "API key validation failed");
+          setErrorMessage(
+            result.errorMessage || t("form.apiKeyValidationFailed.message")
+          );
           setIsSubmitting(false);
           return;
         }
+      }
 
-        // Test passed - now create/update config
-        if (isEditMode && existingConfig) {
-          await updateImageGenerationConfig(existingConfig.image_provider_id, {
-            modelName: payload.modelName,
-            sourceLlmProviderId: providerId,
-            apiBase: payload.apiBase,
-            apiVersion: payload.apiVersion,
-            deploymentName: payload.deploymentName,
-            customConfig: payload.customConfig,
-          });
-        } else {
-          await createImageGenerationConfig({
-            imageProviderId: payload.imageProviderId,
-            modelName: payload.modelName,
-            sourceLlmProviderId: providerId,
-            apiBase: payload.apiBase,
-            apiVersion: payload.apiVersion,
-            deploymentName: payload.deploymentName,
-            customConfig: payload.customConfig,
-            isDefault: true,
-          });
-        }
-      } else {
-        // New credentials mode - check if API key was changed from masked value
-        // A masked key contains "****", so if present, user hasn't entered a new key
-        const apiKeyChanged = !apiKeyValue?.includes("****");
-
-        // Test the API key first (only if changed or creating new config)
-        if (apiKeyChanged) {
-          const result = await testImageGenerationApiKey(payload.modelName, {
-            provider: payload.provider,
-            apiKey: payload.apiKey,
-            apiBase: payload.apiBase,
-            apiVersion: payload.apiVersion,
-            deploymentName: payload.deploymentName,
-            customConfig: payload.customConfig,
-          });
-
-          if (!result.ok) {
-            setApiStatus("error");
-            setErrorMessage(result.errorMessage || "API key validation failed");
-            setIsSubmitting(false);
-            return;
-          }
-        }
-
-        // Create or update config
-        if (isEditMode && existingConfig) {
-          await updateImageGenerationConfig(existingConfig.image_provider_id, {
-            modelName: payload.modelName,
-            provider: payload.provider,
-            apiKey: payload.apiKey,
-            apiBase: payload.apiBase,
-            apiVersion: payload.apiVersion,
-            deploymentName: payload.deploymentName,
-            customConfig: payload.customConfig,
-            apiKeyChanged,
-          });
-        } else {
-          await createImageGenerationConfig({
-            imageProviderId: payload.imageProviderId,
-            modelName: payload.modelName,
-            provider: payload.provider,
-            apiKey: payload.apiKey,
-            apiBase: payload.apiBase,
-            apiVersion: payload.apiVersion,
-            deploymentName: payload.deploymentName,
-            customConfig: payload.customConfig,
-            isDefault: true,
-          });
-        }
+      if (existingConfig) {
+        await updateImageGenerationConfig(existingConfig.image_provider_id, {
+          modelName: payload.modelName,
+          provider: payload.provider,
+          apiKey: payload.apiKey,
+          apiBase: payload.apiBase,
+          apiVersion: payload.apiVersion,
+          deploymentName: payload.deploymentName,
+          customConfig: payload.customConfig,
+          apiKeyChanged,
+        });
       }
 
       setApiStatus("success");
@@ -236,7 +162,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
       setIsSubmitting(false);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unknown error occurred";
+        error instanceof Error ? error.message : t("form.unknownError.message");
       setApiStatus("error");
       setErrorMessage(message);
       toast.error(message);
@@ -265,7 +191,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
     disabled: isSubmitting || isLoadingCredentials,
     isEditMode,
     isLoadingCredentials,
-    apiKeyOptions,
     resetApiState,
     imageProvider,
   });
@@ -288,11 +213,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             description={description}
             icon={icon}
             onSubmit={formikProps.submitForm}
-            submitDisabled={
-              !formikProps.isValid ||
-              (!isEditMode && !formikProps.dirty) ||
-              isSubmitting
-            }
+            submitDisabled={!formikProps.isValid || isSubmitting}
             isSubmitting={isSubmitting}
           >
             <Form className="flex flex-col gap-0 bg-background-tint-01 w-full">

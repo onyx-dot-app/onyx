@@ -16,7 +16,7 @@ import {
   RenderType,
   RendererResult,
   RendererOutput,
-} from "./interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer";
@@ -176,6 +176,7 @@ function MixedContentHandler({
   hasTimelineThinking,
   onComplete,
   animate,
+  restoredTextLength,
   stopPacketSeen,
   stopReason,
   children,
@@ -187,6 +188,7 @@ function MixedContentHandler({
   hasTimelineThinking?: boolean;
   onComplete: () => void;
   animate: boolean;
+  restoredTextLength?: number;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
   children: (result: RendererOutput) => JSX.Element;
@@ -199,6 +201,7 @@ function MixedContentHandler({
       hasTimelineThinking={hasTimelineThinking}
       onComplete={() => {}}
       animate={animate}
+      restoredTextLength={restoredTextLength}
       renderType={RenderType.FULL}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
@@ -228,6 +231,7 @@ interface RendererComponentProps {
   hasTimelineThinking?: boolean;
   onComplete: () => void;
   animate: boolean;
+  restoredTextLength?: number;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
   children: (result: RendererOutput) => JSX.Element;
@@ -243,6 +247,7 @@ function areRendererPropsEqual(
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
+    prev.restoredTextLength === next.restoredTextLength &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.messageNodeId === next.messageNodeId
     // Skip: onComplete, children (function refs), chatState (memoized upstream)
@@ -257,6 +262,7 @@ export const RendererComponent = memo(function RendererComponent({
   hasTimelineThinking,
   onComplete,
   animate,
+  restoredTextLength,
   stopPacketSeen,
   stopReason,
   children,
@@ -293,6 +299,7 @@ export const RendererComponent = memo(function RendererComponent({
         hasTimelineThinking={hasTimelineThinking}
         onComplete={onComplete}
         animate={animate}
+        restoredTextLength={restoredTextLength}
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}
       >
@@ -309,12 +316,13 @@ export const RendererComponent = memo(function RendererComponent({
 
   return (
     <RendererFn
-      packets={packets as any}
+      packets={packets}
       state={chatState}
       messageNodeId={messageNodeId}
       hasTimelineThinking={hasTimelineThinking}
       onComplete={onComplete}
       animate={animate}
+      restoredTextLength={restoredTextLength}
       renderType={RenderType.FULL}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}

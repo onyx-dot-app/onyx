@@ -2,31 +2,13 @@
 
 import useSWR from "swr";
 import type { ScopedMutator } from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-
-/**
- * Admin-set negotiated per-model rate, overriding the built-in price book.
- * Rates are USD per MILLION tokens. Keyed on (provider, model); provider is ""
- * for a provider-agnostic override.
- */
-export interface CostOverride {
-  model: string;
-  provider: string;
-  input_cost_per_mtok: number;
-  output_cost_per_mtok: number;
-  cache_read_cost_per_mtok: number | null; // null = bill cache at the input rate
-  updated_at: string | null;
-}
-
-/** PUT body — an idempotent upsert keyed on (provider, model). */
-export interface CostOverrideUpsert {
-  model: string;
-  provider?: string; // "" / omitted = provider-agnostic
-  input_cost_per_mtok: number;
-  output_cost_per_mtok: number;
-  cache_read_cost_per_mtok: number | null;
-}
+import type {
+  CostOverride,
+  CostOverrideCreate,
+  CostOverrideUpdate,
+} from "@/lib/languageModels/types";
 
 /**
  * Lists existing cost overrides via `GET /api/admin/cost-overrides` (admin).
@@ -47,45 +29,62 @@ export function useCostOverrides() {
   };
 }
 
-/**
- * Upserts a cost override. PUT is idempotent — re-sending an existing model
- * updates its rates rather than erroring.
- * @throws Error with the API detail message on failure.
- */
-export async function upsertCostOverride(
-  body: CostOverrideUpsert
+async function sendOverride(
+  url: string,
+  method: "POST" | "PUT",
+  body: CostOverrideCreate | CostOverrideUpdate
 ): Promise<CostOverride> {
-  const response = await fetch(SWR_KEYS.costOverrides, {
-    method: "PUT",
+  const response = await fetch(url, {
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    throw new Error(await extractError(response));
+    throw new Error(await parseErrorDetail(response, response.statusText));
   }
 
   return response.json();
 }
 
 /**
- * Deletes a cost override by model name. A 404 (already gone) is swallowed —
+ * Creates an override for a model configuration that has none.
+ * @throws Error with the API detail message on failure, including a 409 when
+ * the configuration already has an override.
+ */
+export async function createCostOverride(
+  body: CostOverrideCreate
+): Promise<CostOverride> {
+  return sendOverride(SWR_KEYS.costOverrides, "POST", body);
+}
+
+/**
+ * Sets an existing override's rates, and moves it to `body.model_configuration_id`
+ * when that is another model.
+ * @throws Error with the API detail message on failure, including a 409 when
+ * the target model already has an override.
+ */
+export async function updateCostOverride(
+  modelConfigurationId: number,
+  body: CostOverrideUpdate
+): Promise<CostOverride> {
+  return sendOverride(
+    `${SWR_KEYS.costOverrides}/${modelConfigurationId}`,
+    "PUT",
+    body
+  );
+}
+
+/**
+ * Deletes a model configuration's override. A 404 (already gone) is swallowed —
  * the caller's intent (override absent) is satisfied either way.
  * @throws Error with the API detail message on non-404 failures.
  */
 export async function deleteCostOverride(
-  model: string,
-  provider: string = ""
+  modelConfigurationId: number
 ): Promise<void> {
-  // Keep "/" as real path separators (backend route is {model:path}) but encode
-  // each segment, so slash-containing model ids (e.g. "bedrock/...") delete.
-  const encodedModel = model
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
   const response = await fetch(
-    `${SWR_KEYS.costOverrides}/${encodedModel}${query}`,
+    `${SWR_KEYS.costOverrides}/${modelConfigurationId}`,
     { method: "DELETE" }
   );
 
@@ -93,7 +92,7 @@ export async function deleteCostOverride(
     return;
   }
 
-  throw new Error(await extractError(response));
+  throw new Error(await parseErrorDetail(response, response.statusText));
 }
 
 /** Revalidate the overrides list after a mutation. */
@@ -101,14 +100,4 @@ export async function refreshCostOverrides(
   mutate: ScopedMutator
 ): Promise<void> {
   await mutate(SWR_KEYS.costOverrides);
-}
-
-/** Pull the backend's `detail`/`error_code`, falling back to the status text. */
-async function extractError(response: Response): Promise<string> {
-  try {
-    const data = await response.json();
-    return data.detail || data.error_code || response.statusText;
-  } catch {
-    return response.statusText;
-  }
 }

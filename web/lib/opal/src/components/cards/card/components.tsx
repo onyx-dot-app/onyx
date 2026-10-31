@@ -1,21 +1,19 @@
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/card/styles.css";
 import type {
-  BackgroundVariants,
+  CardColor,
   BorderVariants,
   Spacing,
-  RoundingVariants,
+  Rounding,
   ShadowVariants,
-  SizeVariants,
   StatusVariants,
 } from "@opal/types";
-import {
-  cardRoundingVariants,
-  cardTopRoundingVariants,
-  cardBottomRoundingVariants,
-  spacingToRem,
-} from "@opal/shared";
+import { roundingToRem, spacingToRem } from "@opal/shared";
 import { cn } from "@opal/utils";
+import {
+  CardFold,
+  type CardFoldHeight,
+} from "@opal/components/cards/fold/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,7 +25,10 @@ type DataAttributeValue = string | number | boolean | null | undefined;
 /**
  * Props shared by both plain and expandable Card modes.
  */
-type CardBaseProps = {
+type CardBaseProps = Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "color" | "style"
+> & {
   /**
    * Padding.
    *
@@ -46,29 +47,24 @@ type CardBaseProps = {
    *
    * | Value  | Class        |
    * |--------|--------------|
-   * | `"xs"` | `rounded-04` |
-   * | `"sm"` | `rounded-08` |
-   * | `"md"` | `rounded-12` |
-   * | `"lg"` | `rounded-16` |
-   * | `"xl"` | `rounded-20` |
+   * `N` is `N / 4` rem, so `rounding={2}` is the same distance as
+   * `padding={2}`. `"full"` is a pill.
    *
    * In expandable mode when expanded, rounding applies only to the header's
    * top corners and the expandedContent's bottom corners so the two join seamlessly.
    * When collapsed, rounding applies to all four corners of the header.
    *
-   * @default "md"
+   * @default 3
    */
-  rounding?: RoundingVariants;
+  rounding?: Rounding;
 
   /**
-   * Background fill intensity.
-   * - `"none"`: transparent background.
-   * - `"light"`: subtle tinted background (`bg-background-tint-00`).
-   * - `"heavy"`: stronger tinted background (`bg-background-tint-01`).
+   * Surface color, named for the token it paints — the card analog of
+   * `Text`'s `color`. `"transparent"` renders no fill.
    *
-   * @default "light"
+   * @default "background-tint-00"
    */
-  background?: BackgroundVariants;
+  color?: CardColor;
 
   /**
    * Border style.
@@ -139,6 +135,16 @@ type CardPlainProps = CardBaseProps & {
    * @default false
    */
   expandable?: false;
+
+  /**
+   * Height mode.
+   * - `"fit"`: the content's height.
+   * - `"full"`: fills the parent and shrinks to a capped one, laying the
+   *   children out as a column so one of them can scroll.
+   *
+   * @default "fit"
+   */
+  height?: "fit" | "full";
 };
 
 type CardExpandableProps = CardBaseProps & {
@@ -165,13 +171,21 @@ type CardExpandableProps = CardBaseProps & {
   expandedContent?: React.ReactNode;
 
   /**
-   * Max-height constraint on the expandable content area.
-   * - `"md"` (default): caps at 20rem with vertical scroll.
-   * - `"fit"`: no max-height — content takes its natural height.
+   * Max-height constraint on the expandable content area, on Tailwind's
+   * spacing scale: `N` is `N / 4` rem.
+   * - `80` (default): caps at 20rem with vertical scroll.
+   * - `"full"`: no max-height — content takes its natural height.
    *
-   * @default "md"
+   * @default 80
    */
-  expandableContentHeight?: Extract<SizeVariants, "md" | "fit">;
+  expandableContentHeight?: CardFoldHeight;
+  /**
+   * Keeps the expanded content mounted while folded, e.g. so a form keeps
+   * what was typed. Off, folding drops it once the fold closes.
+   *
+   * @default false
+   */
+  expandableKeepMounted?: boolean;
 };
 
 type CardProps = CardPlainProps | CardExpandableProps;
@@ -215,50 +229,33 @@ type CardProps = CardPlainProps | CardExpandableProps;
  * </Card>
  * ```
  */
-/**
- * The `data-*` entries a caller passed in.
- *
- * A card owns how it looks, not what the surrounding app calls it — `data-*` is
- * the app's namespace, used for test hooks and analytics, and silently dropping
- * it is worse than either forwarding or rejecting it. Only `data-*` is picked
- * up: `className` and `style` stay out by design, and behavioural props like
- * `onClick` are a deliberate API decision rather than something to inherit.
- */
-function dataAttributes(props: CardProps): Record<string, DataAttributeValue> {
-  const attributes: Record<string, DataAttributeValue> = {};
-  for (const key of Object.keys(props)) {
-    if (!key.startsWith("data-")) continue;
-    // SAFETY: the prefix check above proves `key` matches the `data-${string}`
-    // index signature, which is the only shape that reads back as a value.
-    attributes[key] = props[key as `data-${string}`];
-  }
-  return attributes;
-}
-
 function Card(props: CardProps) {
   const {
     padding: paddingProp = 4,
-    rounding: roundingProp = "md",
-    background = "light",
+    rounding: roundingProp = 3,
+    color = "background-tint-00",
     border = "none",
     borderColor = "default",
     shadow = "none",
     disabled = false,
     ref,
     children,
+    className,
+    ...rest
   } = props;
 
   const paddingStyle = { padding: spacingToRem(paddingProp) };
-
-  // Plain mode — unchanged behavior
-  if (!props.expandable) {
+  const radius = roundingToRem(roundingProp);
+  if (!rest.expandable) {
+    const { expandable: _expandable, height = "fit", ...domProps } = rest;
     return (
       <div
         ref={ref}
-        className={cn("opal-card", cardRoundingVariants[roundingProp])}
-        style={paddingStyle}
-        {...dataAttributes(props)}
-        data-background={background}
+        {...domProps}
+        className={cn("opal-card", className)}
+        style={{ ...paddingStyle, borderRadius: radius }}
+        data-height={height}
+        data-color={color}
         data-border={border}
         data-opal-status-border={borderColor}
         data-shadow={shadow}
@@ -271,51 +268,50 @@ function Card(props: CardProps) {
 
   // Expandable mode
   const {
+    expandable: _expandable,
     expanded = false,
     expandedContent,
-    expandableContentHeight = "md",
-  } = props;
+    expandableContentHeight = 80,
+    expandableKeepMounted = false,
+    ...domProps
+  } = rest;
   const showContent = expanded && expandedContent !== undefined;
-  const headerRounding = showContent
-    ? cardTopRoundingVariants[roundingProp]
-    : cardRoundingVariants[roundingProp];
+  // The stylesheet rounds the header, and squares its bottom corners while
+  // the fold has any height, so the two halves stay joined as it closes.
+  const headerStyle: React.CSSProperties &
+    Record<"--opal-card-radius", string> = {
+    ...paddingStyle,
+    "--opal-card-radius": radius,
+  };
 
   return (
     <div
       ref={ref}
-      className="opal-card-expandable"
-      {...dataAttributes(props)}
+      {...domProps}
+      className={cn("opal-card-expandable", className)}
       data-shadow={shadow}
       data-disabled={disabled || undefined}
     >
       <div
-        className={cn("opal-card-expandable-header", headerRounding)}
-        style={paddingStyle}
-        data-background={background}
+        className="opal-card-expandable-header"
+        style={headerStyle}
+        data-color={color}
         data-border={border}
         data-opal-status-border={borderColor}
       >
         {children}
       </div>
       {expandedContent !== undefined && (
-        <div
-          className="opal-card-expandable-wrapper"
-          data-expanded={showContent ? "true" : "false"}
+        <CardFold
+          expanded={showContent}
+          border={border}
+          radius={radius}
+          borderColor={borderColor}
+          contentHeight={expandableContentHeight}
+          keepMounted={expandableKeepMounted}
         >
-          <div className="opal-card-expandable-inner">
-            <div
-              className={cn(
-                "opal-card-expandable-body",
-                cardBottomRoundingVariants[roundingProp]
-              )}
-              data-border={border}
-              data-opal-status-border={borderColor}
-              data-content-height={expandableContentHeight}
-            >
-              {expandedContent}
-            </div>
-          </div>
-        </div>
+          {expandedContent}
+        </CardFold>
       )}
     </div>
   );

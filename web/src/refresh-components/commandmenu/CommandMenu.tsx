@@ -8,13 +8,13 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
+import { useTranslations } from "next-intl";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { Text, InputTypeIn } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Button } from "@opal/components";
@@ -367,6 +367,7 @@ const CommandMenuContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   CommandMenuContentProps
 >(({ children }, ref) => {
+  const t = useTranslations("common.commandMenu");
   const { handleKeyDown } = useCommandMenuContext();
   const { centerX, hasContainerCenter } = useContainerCenter();
 
@@ -412,7 +413,7 @@ const CommandMenuContent = React.forwardRef<
         )}
       >
         <VisuallyHidden.Root asChild>
-          <DialogPrimitive.Title>Command Menu</DialogPrimitive.Title>
+          <DialogPrimitive.Title>{t("dialog.title")}</DialogPrimitive.Title>
         </VisuallyHidden.Root>
         {children}
       </DialogPrimitive.Content>
@@ -432,7 +433,7 @@ CommandMenuContent.displayName = "CommandMenuContent";
  * Arrow keys preventDefault at input level (to stop cursor movement) then bubble to Content.
  */
 function CommandMenuHeader({
-  placeholder = "Search...",
+  placeholder,
   filters = [],
   value = "",
   onValueChange,
@@ -440,6 +441,7 @@ function CommandMenuHeader({
   onClose,
   onEmptyBackspace,
 }: CommandMenuHeaderProps) {
+  const t = useTranslations("common.commandMenu");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   // Prevent default for arrow/enter keys so they don't move cursor or submit forms
@@ -483,7 +485,7 @@ function CommandMenuHeader({
               prominence="tertiary"
               size="sm"
               onClick={onClose}
-              aria-label="Close menu"
+              aria-label={t("closeButton.ariaLabel")}
             />
           </DialogPrimitive.Close>
         )}
@@ -492,7 +494,7 @@ function CommandMenuHeader({
       <div className="px-2 pb-2 pt-0.5">
         <InputTypeIn
           variant="internal"
-          placeholder={placeholder}
+          placeholder={placeholder ?? t("search.placeholder")}
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
@@ -514,6 +516,7 @@ function CommandMenuHeader({
  * Uses ScrollIndicatorDiv for automatic scroll shadows.
  */
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
+  const t = useTranslations("common.commandMenu");
   const { isKeyboardNav, onListMouseLeave } = useCommandMenuContext();
   const childCount = React.Children.count(children);
 
@@ -524,7 +527,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
         role="status"
         aria-live="polite"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {emptyMessage}
         </Text>
       </div>
@@ -535,7 +538,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
     <ScrollIndicatorDiv
       role="listbox"
       tabIndex={-1}
-      aria-label="Command menu options"
+      aria-label={t("options.ariaLabel")}
       className="p-1 gap-1 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
       data-command-menu-list
@@ -715,7 +718,7 @@ function CommandMenuAction({
         icon={icon}
         rightChildren={
           shortcut ? (
-            <Text figureKeystroke text02>
+            <Text font="figure-keystroke" color="text-02">
               {shortcut}
             </Text>
           ) : undefined
@@ -767,7 +770,7 @@ function CommandMenuFooterAction({
   return (
     <div className="flex items-center gap-1" aria-label={label}>
       <Icon className="w-3.5 h-3.5 stroke-text-02" aria-hidden="true" />
-      <Text mainUiBody text03>
+      <Text font="main-ui-body" color="text-03">
         {label}
       </Text>
     </div>

@@ -1,21 +1,25 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import CardSection from "@/components/admin/CardSection";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import { SvgLock } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
 
 function Main() {
+  const t = useTranslations("admin.documentProcessing");
+  const { appName } = useSettings();
   const {
     data: isApiKeySet,
     error,
@@ -31,12 +35,11 @@ function Main() {
 
   const handleSave = async () => {
     try {
-      await fetch(
-        `/api/search-settings/upsert-unstructured-api-key?unstructured_api_key=${apiKey}`,
-        {
-          method: "PUT",
-        }
-      );
+      await fetch("/api/search-settings/upsert-unstructured-api-key", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unstructured_api_key: apiKey }),
+      });
     } catch (error) {
       console.error("Failed to save API key:", error);
     }
@@ -62,37 +65,42 @@ function Main() {
     <div className="pb-36">
       <div className="w-full max-w-2xl">
         <CardSection className="flex flex-col gap-2">
-          <Text
-            as="p"
-            headingH3
-            text05
-            className="border-b border-border-01 pb-2"
-          >
-            Process with Unstructured API
-          </Text>
+          <div className="border-b border-border-01 pb-2">
+            <Text as="p" font="heading-h3" color="text-05">
+              {t("unstructured.title")}
+            </Text>
+          </div>
 
           <div className="flex flex-col gap-2">
-            <Text as="p" mainContentBody text04 className="leading-relaxed">
-              Unstructured extracts and transforms complex data from formats
-              like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to
-              ingest. Provide an API key to enable Unstructured document
-              processing.
+            <Text as="p" font="main-content-body" color="text-04">
+              {t("unstructured.description", { appName })}
             </Text>
-            <Text as="p" mainContentMuted text03>
-              <span className="font-main-ui-action text-text-03">Note:</span>{" "}
-              this will send documents to Unstructured servers for processing.
+            <Text as="p" font="main-content-muted" color="text-03">
+              {richNodes(
+                t.rich("unstructured.note", {
+                  label: (chunks) => (
+                    <span className="font-main-ui-action text-text-03">
+                      {chunks}
+                    </span>
+                  ),
+                })
+              )}
             </Text>
-            <Text as="p" mainContentBody text04 className="leading-relaxed">
-              Learn more about Unstructured{" "}
-              <a
-                href="https://docs.unstructured.io/welcome"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-action-selection-05 underline-offset-4 hover:underline"
-              >
-                here
-              </a>
-              .
+            <Text as="p" font="main-content-body" color="text-04">
+              {richNodes(
+                t.rich("unstructured.learnMore", {
+                  link: (chunks) => (
+                    <a
+                      href="https://docs.unstructured.io/welcome"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-action-selection-05 underline-offset-4 hover:underline"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                })
+              )}
             </Text>
             <div className="pt-1.5">
               {isApiKeySet ? (
@@ -109,19 +117,16 @@ function Main() {
                     "py-1.5"
                   )}
                 >
-                  <Text
-                    as="p"
-                    mainUiMuted
-                    text03
-                    className="flex-1 tracking-[0.3em] text-text-03"
-                  >
-                    ••••••••••••••••
-                  </Text>
+                  <div className="flex-1 tracking-[0.3em]">
+                    <Text as="p" font="main-ui-muted" color="text-03">
+                      ••••••••••••••••
+                    </Text>
+                  </div>
                   <SvgLock className="h-4 w-4 stroke-text-03" aria-hidden />
                 </div>
               ) : (
                 <InputTypeIn
-                  placeholder="Enter API Key"
+                  placeholder={t("unstructured.apiKey.placeholder")}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
@@ -131,15 +136,19 @@ function Main() {
               {isApiKeySet ? (
                 <>
                   <Button variant="danger" onClick={handleDelete}>
-                    Delete API Key
+                    {t("unstructured.deleteButton.label")}
                   </Button>
-                  <Text as="p" mainContentBody text04 className="sm:mt-0">
-                    Delete the current API key before updating.
+                  <Text as="p" font="main-content-body" color="text-04">
+                    {t("unstructured.deleteHint")}
                   </Text>
                 </>
               ) : (
-                <Button variant="action" onClick={handleSave}>
-                  Save API Key
+                <Button
+                  variant="action"
+                  onClick={handleSave}
+                  disabled={!apiKey.trim()}
+                >
+                  {t("unstructured.saveButton.label")}
                 </Button>
               )}
             </div>
@@ -151,9 +160,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

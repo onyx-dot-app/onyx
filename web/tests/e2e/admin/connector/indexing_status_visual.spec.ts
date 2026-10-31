@@ -5,7 +5,7 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
 
 /**
  * Visual-regression coverage for the connector status page
- * (`/admin/indexing/status`).
+ * (`/admin/indexing-status`).
  *
  * This page is deliberately excluded from the parallel admin-pages sweep (see
  * `VISUAL_REGRESSION_EXCLUDED_PATHS` in `admin_pages.spec.ts`): it renders the
@@ -23,9 +23,8 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
  * fresh context, so no explicit login is needed.
  */
 const CONNECTOR_NAME = "Visual Regression File Connector";
-const FILE_SOURCE_GROUP = "File";
 
-test.describe("Connector status page — visual @exclusive", () => {
+test.describe("Connector status page: visual @exclusive", () => {
   let ccPairId: number | null = null;
 
   test.beforeEach(async ({ page }) => {
@@ -52,7 +51,7 @@ test.describe("Connector status page — visual @exclusive", () => {
 
       const statusPage = new IndexingStatusPage(page);
       await statusPage.goto();
-      await statusPage.waitForSourceGroup(FILE_SOURCE_GROUP);
+      await statusPage.waitForConnector(CONNECTOR_NAME);
       await statusPage.expectScreenshot(`admin-${theme}-indexing--status`);
     });
   }

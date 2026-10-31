@@ -1,4 +1,5 @@
 import { JSX, Key, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import {
   SvgCheckCircle,
   SvgCircle,
@@ -9,23 +10,26 @@ import {
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import {
-  BashToolDelta,
-  BashToolStart,
   CodingAgentFinal,
   CodingAgentPacket,
   CodingAgentStart,
-  CodingAgentThinkingDelta,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import { Text } from "@opal/components";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
+
+// Timeline copy is looked up in components and threaded into the plain step
+// helpers below, which cannot call hooks themselves.
+type TimelineTranslate = ReturnType<
+  typeof useTranslations<"chat.messages.timeline">
+>;
 
 function ensureBashHljsRegistered() {
   if (!hljs.listLanguages().includes("bash")) {
@@ -54,7 +58,6 @@ function HighlightedBashCode({ code }: { code: string }) {
   );
 }
 
-// Agent alternates between thinking and bash; build a flat ordered list.
 interface ThinkingStepView {
   kind: "thinking";
   content: string;
@@ -74,51 +77,53 @@ type AgentStep = ThinkingStepView | BashStepView;
 
 function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
   const steps: AgentStep[] = [];
-  const findOpenBash = (): BashStepView | undefined => {
-    for (let i = steps.length - 1; i >= 0; i--) {
-      const c = steps[i];
-      if (c?.kind === "bash" && !c.isComplete) return c;
-    }
-    return undefined;
-  };
+  const commands = new Map<number | null, BashStepView>();
 
   for (const packet of packets) {
-    if (packet.obj.type === PacketType.BASH_TOOL_DELTA) {
-      // Fold output; finalization waits for the next non-delta packet.
-      const delta = packet.obj as BashToolDelta;
-      const open = findOpenBash();
-      if (open) {
-        open.stdout += delta.stdout || "";
-        open.stderr += delta.stderr || "";
-        open.exit_code = delta.exit_code;
-        open.timed_out = delta.timed_out;
+    const section = packet.placement.sub_turn_index ?? null;
+    const command = commands.get(section);
+    const update = packet.obj;
+    if (update.type === PacketType.BASH_TOOL_DELTA) {
+      if (command) {
+        command.stdout += update.stdout;
+        command.stderr += update.stderr;
+        command.exit_code = update.exit_code;
+        command.timed_out = update.timed_out;
+        command.isComplete ||= update.exit_code !== null || update.timed_out;
       }
       continue;
     }
 
-    // Any non-delta packet (thinking, next bash, FINAL, ERROR, …) closes the open bash.
-    const open = findOpenBash();
-    if (open) open.isComplete = true;
+    if (
+      update.type === PacketType.CODING_AGENT_FINAL ||
+      update.type === PacketType.ERROR
+    ) {
+      for (const call of commands.values()) call.isComplete = true;
+      continue;
+    }
 
-    if (packet.obj.type === PacketType.CODING_AGENT_THINKING_DELTA) {
-      const delta = packet.obj as CodingAgentThinkingDelta;
+    // Saved sequential streams can reuse a section for the next command.
+    if (command) command.isComplete = true;
+
+    if (update.type === PacketType.CODING_AGENT_THINKING_DELTA) {
       const last = steps[steps.length - 1];
       if (last && last.kind === "thinking") {
-        last.content += delta.content;
+        last.content += update.content;
       } else {
-        steps.push({ kind: "thinking", content: delta.content });
+        steps.push({ kind: "thinking", content: update.content });
       }
-    } else if (packet.obj.type === PacketType.BASH_TOOL_START) {
-      const start = packet.obj as BashToolStart;
-      steps.push({
+    } else if (update.type === PacketType.BASH_TOOL_START) {
+      const call: BashStepView = {
         kind: "bash",
-        cmd: start.cmd,
+        cmd: update.cmd,
         stdout: "",
         stderr: "",
         exit_code: null,
         timed_out: false,
         isComplete: false,
-      });
+      };
+      steps.push(call);
+      commands.set(section, call);
     }
   }
 
@@ -132,16 +137,18 @@ interface ThinkingStepProps {
 }
 
 function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={SvgSparkle}
-      header="Thinking"
+      header={t("codingAgent.thinking.header")}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
       supportsCollapsible={true}
     >
-      <div className="pl-(--timeline-common-text-padding)">
+      <div className="ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-02">
           {step.content}
         </Text>
@@ -150,10 +157,10 @@ function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
   );
 }
 
-function bashStepHeader(call: BashStepView): string {
-  if (!call.isComplete) return "Bash · running…";
-  if (call.timed_out) return "Bash · timed out";
-  return `Bash · exit ${call.exit_code ?? 0}`;
+function bashStepHeader(call: BashStepView, t: TimelineTranslate): string {
+  if (!call.isComplete) return t("codingAgent.bashRunning.header");
+  if (call.timed_out) return t("codingAgent.bashTimedOut.header");
+  return t("codingAgent.bashExit.header", { exitCode: call.exit_code ?? 0 });
 }
 
 function bashStepIcon(call: BashStepView) {
@@ -163,14 +170,15 @@ function bashStepIcon(call: BashStepView) {
 }
 
 function BashStepBody({ call }: { call: BashStepView }) {
+  const t = useTranslations("chat.messages.timeline");
   const hasStdout = call.stdout.length > 0;
   const hasStderr = call.stderr.length > 0;
   const hasResponse = hasStdout || hasStderr || call.isComplete;
 
   return (
-    <div className="flex flex-col gap-3 pl-(--timeline-common-text-padding)">
+    <div className="flex flex-col gap-3 ps-(--timeline-common-text-padding)">
       <div>
-        <IoBlockLabel label="Request" />
+        <IoBlockLabel label={t("codingAgent.bashRequest.label")} />
         <div className="prose max-w-full">
           <CodeBlock
             className="font-secondary-mono"
@@ -184,7 +192,7 @@ function BashStepBody({ call }: { call: BashStepView }) {
 
       {hasResponse && (
         <div className="flex flex-col gap-2">
-          <IoBlockLabel label="Response" />
+          <IoBlockLabel label={t("codingAgent.bashResponse.label")} />
           {hasStdout && (
             <ExpandableTextDisplay
               title="stdout"
@@ -201,7 +209,7 @@ function BashStepBody({ call }: { call: BashStepView }) {
           )}
           {!hasStdout && !hasStderr && call.isComplete && (
             <Text as="p" font="main-ui-muted" color="text-04">
-              No output
+              {t("codingAgent.noOutput.text")}
             </Text>
           )}
         </div>
@@ -217,10 +225,12 @@ interface BashCallStepProps {
 }
 
 function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={bashStepIcon(call)}
-      header={bashStepHeader(call)}
+      header={bashStepHeader(call, t)}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
@@ -266,16 +276,18 @@ function CodingTaskStep({
   isLastStep,
   isHover,
 }: CodingTaskStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={SvgCircle}
-      header="Coding Task"
+      header={t("codingAgent.task.header")}
       collapsible={true}
       isLastStep={isLastStep}
       isFirstStep={true}
       isHover={isHover}
     >
-      <div className="pl-(--timeline-common-text-padding)">
+      <div className="ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-02">
           {taskText}
         </Text>
@@ -291,16 +303,18 @@ interface ResponseStepProps {
 }
 
 function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={SvgCheckCircle}
-      header="Response"
+      header={t("codingAgent.response.header")}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
       supportsCollapsible={true}
     >
-      <div className="pl-(--timeline-common-text-padding)">
+      <div className="ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-02">
           {answer}
         </Text>
@@ -316,6 +330,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   isHover = false,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
   const startPacket = packets.find(
     (p) => p.obj.type === PacketType.CODING_AGENT_START
   )?.obj as CodingAgentStart | undefined;
@@ -331,7 +346,10 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
 
   const taskText = startPacket
     ? startPacket.repo
-      ? `${startPacket.query}\n\nRepository: ${startPacket.repo}`
+      ? t("codingAgent.taskWithRepo.text", {
+          query: startPacket.query,
+          repo: startPacket.repo,
+        })
       : startPacket.query
     : "";
 
@@ -355,24 +373,24 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
     let body: JSX.Element | null = null;
 
     if (finalPacket) {
-      header = "Response";
+      header = t("codingAgent.response.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-02">
           {finalPacket.answer}
         </Text>
       );
     } else if (latestStep?.kind === "bash") {
-      header = bashStepHeader(latestStep);
+      header = bashStepHeader(latestStep, t);
       body = <BashStepBody call={latestStep} />;
     } else if (latestStep?.kind === "thinking") {
-      header = "Thinking";
+      header = t("codingAgent.thinking.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-02">
           {latestStep.content}
         </Text>
       );
     } else if (taskText) {
-      header = "Coding Task";
+      header = t("codingAgent.task.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-03">
           {taskText}
@@ -382,7 +400,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
 
     if (header === null) return wrap(<></>);
     return wrap(
-      <div className="flex flex-col gap-1 pl-(--timeline-common-text-padding)">
+      <div className="flex flex-col gap-1 ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-04">
           {header}
         </Text>

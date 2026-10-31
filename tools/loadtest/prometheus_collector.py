@@ -1,0 +1,90 @@
+"""Prometheus collector for Locust stats — pure prometheus_client, no locust
+import (so it stays gevent-free and unit-testable alongside the fastapi tests).
+
+The locust integration (init listener + http server) lives in
+prometheus_exporter.py, which is imported by locustfile.py for its side effect.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
+
+from onyx_client.workload_metrics import METRIC_NAMES, aggregate
+from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily, Metric
+from prometheus_client.registry import Collector
+
+_LABELS = ["name", "method"]
+
+
+def _percentile(entry: Any, pct: float) -> float:
+    # Prefer the sliding-window value (better for time-series correlation);
+    # fall back to all-time when the response-times cache isn't populated.
+    val = entry.get_current_response_time_percentile(pct)
+    if val is None:
+        val = entry.get_response_time_percentile(pct) or 0
+    return float(val)
+
+
+class LocustCollector(Collector):
+    """Pulls current aggregated stats from the runner at scrape time."""
+
+    def __init__(self, environment: Any) -> None:
+        self.environment = environment
+
+    def collect(self) -> Iterator[Metric]:
+        runner = self.environment.runner
+        if runner is None:
+            return
+
+        users = GaugeMetricFamily("locust_users", "Current number of users")
+        users.add_metric([], runner.user_count)
+        yield users
+
+        reqs = CounterMetricFamily(
+            "locust_requests_total", "Total requests", labels=_LABELS
+        )
+        fails = CounterMetricFamily(
+            "locust_failures_total", "Total failed requests", labels=_LABELS
+        )
+        p50 = GaugeMetricFamily(
+            "locust_response_time_p50_milliseconds", "p50 response time", labels=_LABELS
+        )
+        p95 = GaugeMetricFamily(
+            "locust_response_time_p95_milliseconds", "p95 response time", labels=_LABELS
+        )
+        rps = GaugeMetricFamily(
+            "locust_current_rps", "Current requests per second", labels=_LABELS
+        )
+        for entry in runner.stats.entries.values():
+            labels = [entry.name, entry.method or ""]
+            reqs.add_metric(labels, entry.num_requests)
+            fails.add_metric(labels, entry.num_failures)
+            p50.add_metric(labels, _percentile(entry, 0.5))
+            p95.add_metric(labels, _percentile(entry, 0.95))
+            rps.add_metric(labels, entry.current_rps or 0)
+        yield reqs
+        yield fails
+        yield p50
+        yield p95
+        yield rps
+        clients = getattr(runner, "clients", None)
+        active_workers = (
+            {
+                worker_id
+                for worker_id, worker in clients.items()
+                if worker.state != "missing"
+            }
+            if clients is not None
+            else None
+        )
+        workload = aggregate(active_workers)
+        for name in METRIC_NAMES:
+            family = GaugeMetricFamily(
+                f"onyx_loadtest_{name}",
+                f"Workload {name}; cumulative counts reset at test start",
+                labels=["scenario"],
+            )
+            for scenario, values in workload.items():
+                family.add_metric([scenario], values.get(name, 0))
+            yield family

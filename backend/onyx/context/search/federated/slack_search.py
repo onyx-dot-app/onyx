@@ -15,6 +15,7 @@ from onyx.configs.app_configs import (
     SLACK_THREAD_CONTEXT_BATCH_SIZE,
 )
 from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.configs.slack_configs import SLACK_API_URL, SLACK_DOMAIN
 from onyx.connectors.models import IndexingDocument, TextSection
 from onyx.context.search.federated.models import (
     ChannelMetadata,
@@ -99,7 +100,7 @@ def fetch_and_cache_channel_metadata(
 
     # Cache miss - fetch from Slack API with retry logic
     logger.debug("Channel metadata cache MISS for team %s - fetching from API", team_id)
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     channel_metadata: dict[str, ChannelMetadata] = {}
 
     # Retry logic with exponential backoff
@@ -273,12 +274,12 @@ def get_cached_user_profile(
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
             )
             # Empty string means user was not found previously
-            return cached_str if cached_str else None
+            return cached_str or None
     except Exception as e:
         logger.debug("Error reading user profile cache: %s", e)
 
     # Cache miss - fetch from Slack API
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     try:
         response = slack_client.users_profile_get(user=user_id)
         response.validate()
@@ -403,7 +404,7 @@ def _should_skip_channel(
 
             # Fallback: API call only if not in cache (should be rare)
             token_to_use = bot_token or access_token
-            channel_client = WebClient(token=token_to_use)
+            channel_client = WebClient(token=token_to_use, base_url=SLACK_API_URL)
             channel_info = channel_client.conversations_info(channel=channel_id)
 
             if isinstance(channel_info.data, dict):
@@ -445,7 +446,7 @@ def _fetch_thread_from_url(
     channel_id = thread_fetch.channel_id
     thread_ts = thread_fetch.thread_ts
 
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     try:
         response = slack_client.conversations_replies(
             channel=channel_id,
@@ -501,7 +502,7 @@ def _fetch_thread_from_url(
     recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)
 
     permalink = (
-        f"https://slack.com/archives/{channel_id}/p{message_ts.replace('.', '')}"
+        f"https://{SLACK_DOMAIN}/archives/{channel_id}/p{message_ts.replace('.', '')}"
     )
 
     slack_message = SlackMessage(
@@ -565,7 +566,7 @@ def query_slack(
     # Detect if query asks for most recent results
     sort_by_time = is_recency_query(query_string)
 
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     try:
         search_params: dict[str, Any] = {
             "query": final_query,
@@ -779,7 +780,7 @@ def _fetch_thread_context(
     if thread_id is None:
         return ThreadContextResult.success(message.text)
 
-    slack_client = WebClient(token=access_token, timeout=30)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL, timeout=30)
     try:
         response = slack_client.conversations_replies(
             channel=channel_id,
@@ -993,7 +994,7 @@ def convert_slack_score(slack_score: float) -> float:
     return max(0.0, min(1.0, slack_score / 90_000))
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def slack_retrieval(
     query: ChunkIndexRequest,
     access_token: str,

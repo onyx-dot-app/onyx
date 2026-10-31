@@ -5,6 +5,8 @@ are needed.  Verifies the generate -> verify round-trip, one-time-use
 semantics, TTL propagation, and error handling.
 """
 
+import builtins
+from collections.abc import Collection
 from unittest.mock import patch
 
 import pytest
@@ -23,6 +25,7 @@ class _MemoryCacheBackend(CacheBackend):
 
     def __init__(self) -> None:
         self._store: dict[str, bytes] = {}
+        self.sets: dict[str, set[bytes]] = {}
         self.set_calls: list[dict[str, object]] = []
 
     def get(self, key: str) -> bytes | None:
@@ -57,11 +60,40 @@ class _MemoryCacheBackend(CacheBackend):
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
 
+    def delete_prefix(self, prefix: str) -> None:
+        if not prefix:
+            raise ValueError("Cache deletion requires a nonempty prefix")
+        for key in list(self._store):
+            if key.startswith(prefix):
+                self.delete(key)
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        return {key for key in keys if key in self._store}
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.setdefault(key, set()).add(value)
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.get(key, set()).discard(value)
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        return list(self.sets.get(key, set()))[:limit]
+
     def exists(self, key: str) -> bool:
         return key in self._store
 
     def expire(self, key: str, seconds: int) -> None:
         pass
+
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.expire(key, seconds)
+        return True
 
     def ttl(self, key: str) -> int:
         return -2 if key not in self._store else -1

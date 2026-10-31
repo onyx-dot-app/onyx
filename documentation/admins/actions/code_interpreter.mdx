@@ -1,0 +1,65 @@
+---
+title: "Code Interpreter"
+description: "Let your Agents write and run Python code in a sandboxed runtime"
+icon: "code"
+---
+
+The Code Interpreter action lets your Agents write and run Python code to complete tasks such as calculations,
+data analysis, and chart generation.
+The code runs in the open-source [python-sandbox](https://github.com/onyx-dot-app/python-sandbox) service,
+not in the Onyx API server.
+
+## Capabilities
+
+- **Calculations**: Run large or complex mathematical operations with exact results
+- **Data analysis**: Analyze files the user attaches to the chat (for example, CSVs and spreadsheets)
+- **File generation**: Create files such as reports, modified datasets, or exports. Users download them from the chat.
+- **Visualizations**: Generate charts and graphs that render directly in the [Chat UI](/overview/core_features/chat)
+
+The LLM decides when to run code based on the user's request. Users do not need to invoke it explicitly.
+
+Each code run is independent.
+Variables from one run are not available in the next run unless the model writes them to a file.
+
+## Availability
+
+Code Interpreter is available on all editions. Onyx Cloud has it ready to use.
+
+Self-hosted deployments run the code in a separate `code-interpreter` container that ships with the standard Docker
+Compose and Helm deployments, including the Onyx Lite overlays. The Onyx API server never runs the code itself.
+To use a Code Interpreter service you run yourself, point `CODE_INTERPRETER_BASE_URL` at it.
+
+## Connect or disconnect the Code Interpreter
+
+Open **Admin Panel → Code Interpreter**. The card shows the connection status of the Code Interpreter service.
+The status refreshes every 30 seconds.
+
+<img className="rounded-image" src="/assets/admins/actions/code_interpreter.webp" alt="Code Interpreter page in the Onyx Admin Panel"/>
+
+Click **Disconnect** to turn Code Interpreter off for the whole deployment.
+Onyx removes the action from every chat without changing any Agent configuration. Running sessions stop.
+No data is removed from the runtime.
+
+## Enable Code Interpreter for Agents
+
+- **Default Chat**: Go to **Admin Panel > Chat Preferences > Actions & Tools** and turn on **Code Interpreter**.
+- **Custom Agents**: In the [Agent editor](/admins/agents/overview), open **Actions** and turn on **Code Interpreter**.
+
+If the Code Interpreter service is disconnected or unhealthy, the action does not appear in chat,
+even when an Agent has it turned on.
+
+## Configuration
+
+The following environment variables control the self-hosted Code Interpreter. All of them are optional.
+
+| Variable | Default | Effect |
+| -------- | ------- | ------ |
+| `CODE_INTERPRETER_BASE_URL` | `http://localhost:8000` (Docker Compose sets `http://code-interpreter:8000`) | URL of the Code Interpreter service. Set it to an empty string to remove the action from all chats. |
+| `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` | `60000` | Time limit for one code run, in milliseconds. |
+| `CODE_INTERPRETER_MAX_OUTPUT_LENGTH` | `50000` | Maximum characters of stdout and stderr (each) returned to the model. Longer output is truncated. |
+| `CODE_INTERPRETER_MAX_STAGED_FILES` | `25` | Maximum number of chat files sent into one code run. |
+| `CODE_INTERPRETER_MAX_STAGED_BYTES` | `104857600` (100 MiB) | Maximum total size of chat files sent into one code run. |
+
+## Related
+
+The [Coding Agent](/admins/actions/coding_agent) action runs in the same Code Interpreter service.

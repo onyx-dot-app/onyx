@@ -1,30 +1,41 @@
 "use client";
 
 import React, { useState, useCallback, useMemo, useRef } from "react";
-import { Popover, OpenButton } from "@opal/components";
-import { getModelIcon } from "@/lib/languageModels";
+import { useTranslations } from "next-intl";
+import { Popover, SelectButton } from "@opal/components";
+import { getModelIcon } from "@/lib/languageModels/utils";
+import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
 import {
-  GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
-} from "@/lib/languageModels/options";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+  ModelPaging,
+} from "@/lib/languageModels/types";
 
 export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */
   value: number | null;
   onChange: (option: LLMOption) => void;
+  /** Limits the built-in provider list to models available to this agent. */
+  agentId?: number;
   providerOptions?: ModelOptionProvider[];
+  /** Pages in the models a host-supplied `providerOptions` list left out.
+   *  Ignored when the selector fetches its own list, which pages itself. */
+  modelPaging?: ModelPaging;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
 
   /**
-   * Custom trigger element. When omitted the default OpenButton (icon +
+   * Custom trigger element. When omitted the default SelectButton (icon +
    * display name) is rendered.
    */
   renderTrigger?: () => React.ReactNode;
@@ -61,7 +72,9 @@ export interface ModelSelectorProps {
 export default function ModelSelector({
   value,
   onChange,
+  agentId,
   providerOptions,
+  modelPaging: modelPagingProp,
   includeHiddenModels = false,
   requiresImageInput,
   renderTrigger,
@@ -73,14 +86,13 @@ export default function ModelSelector({
   open: controlledOpen,
   onOpenChange,
 }: ModelSelectorProps) {
-  // Unscoped by default. An agent narrows the model list, but only a chat has
-  // an agent. The admin and settings pages that embed this picker have none,
-  // and must not be filtered by whichever agent happens to be active. A chat
-  // caller passes its own scoped list through providerOptions.
+  const t = useTranslations("chat.modelSelector");
+  // Unscoped by default. Callers must supply agentId or providerOptions when
+  // the host has an agent context.
   // The list stays defined even before it arrives, so the child never sees
   // undefined and never falls through to its own agent-scoped list.
   const {
-    llmProviders: allProviderOptions,
+    llmProviders: fetchedProviderOptions,
     defaultText,
     isLoading: allProvidersLoading,
   } = useLLMProviders();
@@ -103,6 +115,20 @@ export default function ModelSelector({
     [isControlled, onOpenChange]
   );
 
+    isLoading: providersLoading,
+    modelPaging: fetchedModelPaging,
+  } = useLanguageModelsForAgent(agentId);
+  const {
+    llmProviders: globalProviderOptions,
+    defaultText: globalDefaultText,
+  } = useLanguageModels();
+  const {
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
+  const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
+  const isLoading = providerOptions === undefined && providersLoading;
+  const [open, setOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Resolve the currently selected option from the ID
@@ -146,7 +172,24 @@ export default function ModelSelector({
   }, [defaultText, llmProviders]);
 
   const effectiveOption = currentOption ?? defaultModelOption;
-  const currentDisplayName = effectiveOption?.displayName ?? "Select Model";
+  const isAutoSelected: boolean =
+    (modelRoutingEnabled ?? false) &&
+    routingModelId != null &&
+    value === routingModelId;
+  const currentDisplayName: string = isAutoSelected
+    ? t("autoItem.label")
+    : (effectiveOption?.displayName ?? t("trigger.noSelection.label"));
+  const globalDefaultDisplayName = useMemo(() => {
+    if (!globalDefaultText || !globalProviderOptions) return null;
+    const provider = globalProviderOptions.find(
+      (option) => option.id === globalDefaultText.provider_id
+    );
+    return (
+      provider?.model_configurations.find(
+        (model) => model.name === globalDefaultText.model_name
+      )?.effectiveDisplayName ?? null
+    );
+  }, [globalDefaultText, globalProviderOptions]);
 
   const isSelected = useCallback(
     (option: LLMOption) => {
@@ -184,25 +227,30 @@ export default function ModelSelector({
           {renderTrigger ? (
             renderTrigger()
           ) : (
-            <OpenButton disabled={disabled} icon={triggerIcon}>
+            <SelectButton chevron disabled={disabled} icon={triggerIcon}>
               {currentDisplayName}
-            </OpenButton>
+            </SelectButton>
           )}
         </Popover.Trigger>
       </div>
 
-      <Popover.Content side={side} align="end" width="xl" sticky="partial">
+      <Popover.Content side={side} align="end" width={70} sticky="partial">
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
           providerOptions={llmProviders}
+          modelPaging={
+            providerOptions === undefined ? fetchedModelPaging : modelPagingProp
+          }
           isLoading={isLoading}
           includeHiddenModels={includeHiddenModels}
           requiresImageInput={requiresImageInput}
           onSelect={handleSelect}
           isSelected={isSelected}
           includeGlobalDefault={includeGlobalDefault}
+          globalDefaultDisplayName={globalDefaultDisplayName}
           scrollContainerRef={scrollContainerRef}
           modelDetail={modelDetail}
+          onDetailSelect={onChange}
         />
       </Popover.Content>
     </Popover>

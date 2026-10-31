@@ -12,6 +12,7 @@ def _result(
     status: CapabilityCheckStatus,
     required: bool = True,
     capability: CredentialCapability = CredentialCapability.INDEXING,
+    applicable: bool = True,
 ) -> CapabilityCheckResult:
     return CapabilityCheckResult(
         capability=capability,
@@ -19,6 +20,25 @@ def _result(
         display_name="Check",
         required=required,
         status=status,
+        applicable=applicable,
+    )
+
+
+def test_required_check_that_does_not_apply_does_not_hold_back_a_pass() -> None:
+    """Verifies that a SKIPPED check that does not apply is left out."""
+    # Precondition.
+    results = [
+        _result(CapabilityCheckStatus.PASSED),
+        _result(CapabilityCheckStatus.SKIPPED, applicable=False),
+    ]
+
+    # Under test and postcondition.
+    assert aggregate_capability_verdict(True, results) == CapabilityVerdict.PASSED
+    assert (
+        aggregate_capability_verdict(
+            True, [_result(CapabilityCheckStatus.SKIPPED, applicable=False)]
+        )
+        == CapabilityVerdict.SKIPPED
     )
 
 
@@ -43,7 +63,7 @@ def test_required_failure_fails_the_capability() -> None:
         _result(CapabilityCheckStatus.PASSED),
         _result(CapabilityCheckStatus.FAILED, required=True),
         _result(CapabilityCheckStatus.FAILED, required=False),
-        _result(CapabilityCheckStatus.INDETERMINATE),
+        _result(CapabilityCheckStatus.INCOMPLETE),
     ]
 
     # Under test and postcondition.
@@ -65,7 +85,7 @@ def test_only_optional_failures_pass_with_warnings() -> None:
     )
 
 
-def test_required_indeterminate_outranks_optional_failure() -> None:
+def test_required_incomplete_outranks_optional_failure() -> None:
     """
     Verifies that an unverified required check blocks any PASSED claim, even
     when a non-required check produced a definite warning.
@@ -73,7 +93,7 @@ def test_required_indeterminate_outranks_optional_failure() -> None:
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.FAILED, required=False),
-        _result(CapabilityCheckStatus.INDETERMINATE, required=True),
+        _result(CapabilityCheckStatus.INCOMPLETE, required=True),
     ]
 
     # Under test and postcondition.
@@ -85,13 +105,13 @@ def test_required_indeterminate_outranks_optional_failure() -> None:
 def test_mixed_optional_degradations_pass_with_warnings() -> None:
     """
     Verifies that with the required core verified, non-required failures and
-    indeterminates together downgrade to a single warnings verdict.
+    incomplete checks together downgrade to a single warnings verdict.
     """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED, required=True),
         _result(CapabilityCheckStatus.FAILED, required=False),
-        _result(CapabilityCheckStatus.INDETERMINATE, required=False),
+        _result(CapabilityCheckStatus.INCOMPLETE, required=False),
     ]
 
     # Under test and postcondition.
@@ -101,14 +121,14 @@ def test_mixed_optional_degradations_pass_with_warnings() -> None:
     )
 
 
-def test_indeterminate_without_failures() -> None:
+def test_incomplete_without_failures() -> None:
     """
     Verifies that a transient error yields INDETERMINATE when nothing failed.
     """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED),
-        _result(CapabilityCheckStatus.INDETERMINATE),
+        _result(CapabilityCheckStatus.INCOMPLETE),
     ]
 
     # Under test and postcondition.
@@ -177,15 +197,15 @@ def test_optional_skip_does_not_downgrade() -> None:
     assert aggregate_capability_verdict(True, results) == CapabilityVerdict.PASSED
 
 
-def test_lone_optional_indeterminate_warns() -> None:
+def test_lone_optional_incomplete_warns() -> None:
     """
-    Verifies that a non-required indeterminate downgrades to warnings rather
+    Verifies that a non-required incomplete check downgrades to warnings rather
     than escalating to INDETERMINATE: the required core is verified.
     """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED),
-        _result(CapabilityCheckStatus.INDETERMINATE, required=False),
+        _result(CapabilityCheckStatus.INCOMPLETE, required=False),
     ]
 
     # Under test and postcondition.

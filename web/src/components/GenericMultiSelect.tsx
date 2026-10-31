@@ -1,9 +1,8 @@
 import { FormikProps, ErrorMessage } from "formik";
-import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
+import { useTranslations } from "next-intl";
+import { InputSingleComboBox, Text } from "@opal/components";
+import { Chip } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SvgX } from "@opal/icons";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
 };
@@ -44,10 +43,11 @@ export function GenericMultiSelect<
   disabled = false,
   disabledMessage,
 }: GenericMultiSelectProps<T, F>) {
+  const t = useTranslations("common.genericMultiSelect");
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text as="p" mainUiAction>
+        <Text as="p" font="main-ui-action" color="text-05">
           {label}
         </Text>
         <div className="animate-pulse bg-background-neutral-02 h-10 w-full rounded-08" />
@@ -58,11 +58,11 @@ export function GenericMultiSelect<
   if (error) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text as="p" mainUiAction>
+        <Text as="p" font="main-ui-action" color="text-05">
           {label}
         </Text>
-        <Text as="p" text03 className="text-action-danger-05">
-          Failed to load {label.toLowerCase()}. Please try again.
+        <Text as="p" color="status-error-05">
+          {t("loadFailed.text", { label: label.toLowerCase() })}
         </Text>
       </div>
     );
@@ -71,10 +71,10 @@ export function GenericMultiSelect<
   if (!items || items.length === 0) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text as="p" mainUiAction>
+        <Text as="p" font="main-ui-action" color="text-05">
           {label}
         </Text>
-        <Text as="p" text03>
+        <Text as="p" color="text-03">
           {emptyMessage}
         </Text>
       </div>
@@ -103,20 +103,20 @@ export function GenericMultiSelect<
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      <Text as="p" mainUiAction>
+      <Text as="p" font="main-ui-action" color="text-05">
         {label}
       </Text>
 
       {subtext && (
-        <Text as="p" text03>
-          {disabled ? disabledMessage : subtext}
+        <Text as="p" color="text-03">
+          {(disabled ? disabledMessage : subtext) ?? ""}
         </Text>
       )}
 
       <Disabled disabled={disabled}>
         <div>
-          <InputComboBox
-            placeholder="Search..."
+          <InputSingleComboBox
+            placeholder={t("search.placeholder")}
             value=""
             onChange={() => {}}
             onValueChange={(selectedValue) => {
@@ -128,10 +128,9 @@ export function GenericMultiSelect<
             options={items
               .filter((item) => !selectedIds.includes(item.id))
               .map((item) => ({
-                label: item.name,
+                title: item.name,
                 value: String(item.id),
               }))}
-            strict
             searchIcon
             data-testid={`${fieldName}-search-input`}
           />
@@ -141,24 +140,19 @@ export function GenericMultiSelect<
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((item) => (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button
+            <Chip
               key={item.id}
-              secondary
+              title={item.name}
               disabled={disabled}
-              rightIcon={SvgX}
-              onClick={() => handleRemove(item.id)}
-              className="px-2! py-1!"
-            >
-              {item.name}
-            </Button>
+              onRemove={() => handleRemove(item.id)}
+            />
           ))}
         </div>
       )}
 
       <ErrorMessage name={fieldName} component="div">
         {(msg) => (
-          <Text as="p" text03 className="text-action-danger-05">
+          <Text as="p" color="status-error-05">
             {msg}
           </Text>
         )}

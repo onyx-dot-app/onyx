@@ -1,19 +1,36 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import TypeVarTuple
+from typing import NamedTuple, TypeVarTuple
 
-from sqlalchemy import Select, and_, delete, desc, func, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    delete,
+    desc,
+    exists,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.orm import Session, joinedload
 
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import ConnectorFailure
+from onyx.db.backfill_models import BackfillSpec
+from onyx.db.cc_pair_run_resolution import run_is_resolved
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
 )
 from onyx.db.models import (
+    Connector,
     ConnectorCredentialPair,
+    Document,
     IndexAttempt,
     IndexAttemptError,
     SearchSettings,
@@ -22,9 +39,11 @@ from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import RecordType, optional_telemetry
 
 logger = setup_logger()
+
+# Bounds stored failure text; a raw upstream error body can run to megabytes.
+MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS = 10_000
 
 
 def get_last_attempt_for_cc_pair(
@@ -39,7 +58,9 @@ def get_last_attempt_for_cc_pair(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).first()
+    # A backfill does not move the pair's refresh schedule.
+    query = query.filter(IndexAttempt.is_backfill.is_(False))
+    return query.order_by(IndexAttempt.time_created.desc()).first()
 
 
 def get_recent_completed_attempts_for_cc_pair(
@@ -49,17 +70,24 @@ def get_recent_completed_attempts_for_cc_pair(
     db_session: Session,
     ignore_targeted_reindex: bool = True,
 ) -> list[IndexAttempt]:
-    """Most recent to least recent."""
+    """Most recent to least recent. Backfills are left out: their window and
+    checkpoint never carry over to or from a normal attempt.
+
+    Attempts that ended before docfetching set their window (e.g. cancelled by
+    a pause right after being scheduled) are left out too. They have no window,
+    checkpoint or batches, so a resuming attempt must look past them."""
     query = db_session.query(IndexAttempt).filter(
         IndexAttempt.connector_credential_pair_id == cc_pair_id,
         IndexAttempt.search_settings_id == search_settings_id,
         IndexAttempt.status.notin_(
             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
         ),
+        IndexAttempt.is_backfill.is_(False),
+        IndexAttempt.poll_range_end.is_not(None),
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
+    return query.order_by(IndexAttempt.time_created.desc()).limit(limit).all()
 
 
 def get_recent_attempts_for_cc_pair(
@@ -68,6 +96,7 @@ def get_recent_attempts_for_cc_pair(
     limit: int,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_backfill: bool = True,
 ) -> list[IndexAttempt]:
     """Most recent to least recent."""
     query = db_session.query(IndexAttempt).filter(
@@ -76,7 +105,9 @@ def get_recent_attempts_for_cc_pair(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
-    return query.order_by(IndexAttempt.time_updated.desc()).limit(limit).all()
+    if ignore_backfill:
+        query = query.filter(IndexAttempt.is_backfill.is_(False))
+    return query.order_by(IndexAttempt.time_created.desc()).limit(limit).all()
 
 
 def get_index_attempt(
@@ -131,21 +162,104 @@ def count_error_rows_for_index_attempt(
     )
 
 
-def create_index_attempt(
+def get_connector_config_hash_for_cc_pair(
+    db_session: Session, cc_pair_id: int
+) -> str | None:
+    """Returns the hash of the current config of the cc_pair's connector."""
+    connector_specific_config = db_session.execute(
+        select(Connector.connector_specific_config)
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(ConnectorCredentialPair.id == cc_pair_id)
+    ).scalar_one()
+    return compute_connector_config_hash(connector_specific_config)
+
+
+def _get_served_reindex_requests(
+    db_session: Session, cc_pair_id: int, search_settings_id: int
+) -> tuple[datetime | None, datetime | None]:
+    """The pair's pending prune-after-reindex and full re-index requests,
+    which a full re-index serves when the search settings are current. A
+    re-index of another index serves neither."""
+    row = db_session.execute(
+        select(
+            ConnectorCredentialPair.prune_after_reindex_requested_at,
+            ConnectorCredentialPair.full_reindex_requested_at,
+        ).where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            exists().where(
+                SearchSettings.id == search_settings_id,
+                SearchSettings.status == IndexModelStatus.PRESENT,
+            ),
+        )
+    ).one_or_none()
+    if row is None:
+        return None, None
+    return row.prune_after_reindex_requested_at, row.full_reindex_requested_at
+
+
+def create_index_attempt__no_commit(
     connector_credential_pair_id: int,
     search_settings_id: int,
     db_session: Session,
     from_beginning: bool = False,
     celery_task_id: str | None = None,
-) -> int:
+    backfill: BackfillSpec | None = None,
+) -> IndexAttempt:
+    """Adds and flushes the attempt, so it has its id."""
+    if backfill is not None and from_beginning:
+        raise ValueError("A backfill attempt cannot run from the beginning.")
+    config_override = backfill.connector_config_override if backfill else None
+    served_prune_after_reindex, served_full_reindex = (
+        _get_served_reindex_requests(
+            db_session, connector_credential_pair_id, search_settings_id
+        )
+        if from_beginning
+        else (None, None)
+    )
     new_attempt = IndexAttempt(
         connector_credential_pair_id=connector_credential_pair_id,
         search_settings_id=search_settings_id,
         from_beginning=from_beginning,
         status=IndexingStatus.NOT_STARTED,
         celery_task_id=celery_task_id,
+        connector_config_hash=(
+            compute_connector_config_hash(config_override)
+            if config_override is not None
+            else get_connector_config_hash_for_cc_pair(
+                db_session, connector_credential_pair_id
+            )
+        ),
+        is_backfill=backfill is not None,
+        connector_config_override=config_override,
+        poll_range_start=backfill.window_start if backfill else None,
+        poll_range_end=backfill.window_end if backfill else None,
+        prune_after_reindex_requested_at=served_prune_after_reindex,
+        full_reindex_requested_at=served_full_reindex,
     )
     db_session.add(new_attempt)
+    db_session.flush()
+    return new_attempt
+
+
+def create_index_attempt(
+    connector_credential_pair_id: int,
+    search_settings_id: int,
+    db_session: Session,
+    from_beginning: bool = False,
+    celery_task_id: str | None = None,
+    backfill: BackfillSpec | None = None,
+) -> int:
+    new_attempt = create_index_attempt__no_commit(
+        connector_credential_pair_id,
+        search_settings_id,
+        db_session,
+        from_beginning=from_beginning,
+        celery_task_id=celery_task_id,
+        backfill=backfill,
+    )
     db_session.commit()
 
     return new_attempt.id
@@ -174,6 +288,9 @@ def create_synthetic_seed_attempt(
         time_started=db_now,
         time_updated=db_now,
         poll_range_end=datetime.fromtimestamp(poll_range_end, tz=timezone.utc),
+        connector_config_hash=get_connector_config_hash_for_cc_pair(
+            db_session, connector_credential_pair_id
+        ),
     )
     db_session.add(seed)
     db_session.flush()
@@ -206,6 +323,9 @@ def mock_successful_index_attempt(
         # or the indexing rate would calculate out to infinity
         time_started=db_time - timedelta(seconds=1.92),
         time_updated=db_time,
+        connector_config_hash=get_connector_config_hash_for_cc_pair(
+            db_session, connector_credential_pair_id
+        ),
     )
     db_session.add(new_attempt)
     db_session.commit()
@@ -226,6 +346,31 @@ def get_in_progress_index_attempts(
 
     incomplete_attempts = db_session.scalars(stmt)
     return list(incomplete_attempts.all())
+
+
+def any_running_index_attempt_for_cc_pairs(
+    db_session: Session,
+    search_settings_id: int,
+    cc_pair_ids: Collection[int],
+) -> bool:
+    """Returns True if any cc_pair has an IN_PROGRESS index attempt on these settings.
+
+    Queued NOT_STARTED attempts do not count. They still run after the swap against
+    the same settings, and the queue rarely empties during a port-flow reindex.
+    """
+    if not cc_pair_ids:
+        return False
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.search_settings_id == search_settings_id,
+                    IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
+                    IndexAttempt.status == IndexingStatus.IN_PROGRESS,
+                )
+            )
+        )
+    )
 
 
 def get_all_index_attempts_by_status(
@@ -290,16 +435,6 @@ def mark_attempt_in_progress(
         attempt.status = IndexingStatus.IN_PROGRESS
         attempt.time_started = index_attempt.time_started or func.now()
         db_session.commit()
-
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt.id,
-                "status": IndexingStatus.IN_PROGRESS.value,
-                "cc_pair_id": index_attempt.connector_credential_pair_id,
-            },
-        )
     except Exception:
         db_session.rollback()
         raise
@@ -317,18 +452,10 @@ def mark_attempt_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.SUCCESS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.SUCCESS.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -357,18 +484,10 @@ def mark_attempt_partially_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.COMPLETED_WITH_ERRORS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.COMPLETED_WITH_ERRORS.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -389,29 +508,28 @@ def mark_attempt_canceled(
     index_attempt_id: int,
     db_session: Session,
     reason: str = "Unknown",
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.CANCELED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.CANCELED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -432,31 +550,30 @@ def mark_attempt_failed(
     db_session: Session,
     failure_reason: str = "Unknown",
     full_exception_trace: str | None = None,
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.FAILED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = failure_reason
         attempt.full_exception_trace = full_exception_trace
         attempt.celery_task_id = None
         db_session.commit()
 
-        # Add telemetry for index attempt status change
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.FAILED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -496,18 +613,11 @@ def mark_attempt_interrupted(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.INTERRUPTED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         attempt.celery_task_id = None
         db_session.commit()
 
-        optional_telemetry(
-            record_type=RecordType.INDEX_ATTEMPT_STATUS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "status": IndexingStatus.INTERRUPTED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
@@ -607,6 +717,7 @@ def get_latest_index_attempts_by_status(
         latest_filter_stmt = latest_filter_stmt.where(
             IndexAttempt.targeted_reindex_job_id.is_(None)
         )
+    latest_filter_stmt = latest_filter_stmt.where(IndexAttempt.is_backfill.is_(False))
     latest_failed_attempts = latest_filter_stmt.group_by(
         IndexAttempt.connector_credential_pair_id
     ).subquery()
@@ -640,6 +751,7 @@ def get_latest_index_attempts(
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
     ignore_targeted_reindex: bool = True,
+    ignore_backfill: bool = True,
 ) -> Sequence[IndexAttempt]:
     ids_stmt = select(
         IndexAttempt.connector_credential_pair_id,
@@ -650,6 +762,8 @@ def get_latest_index_attempts(
     ids_stmt = ids_stmt.where(SearchSettings.status == status)
     if ignore_targeted_reindex:
         ids_stmt = ids_stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_backfill:
+        ids_stmt = ids_stmt.where(IndexAttempt.is_backfill.is_(False))
 
     if only_finished:
         ids_stmt = _add_only_finished_clause(ids_stmt)
@@ -714,6 +828,7 @@ def get_latest_index_attempt_for_cc_pair_id(
     )
     if ignore_targeted_reindex:
         stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
+    stmt = stmt.where(IndexAttempt.is_backfill.is_(False))
     if only_finished:
         stmt = _add_only_finished_clause(stmt)
 
@@ -745,6 +860,7 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
         stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
     if ignore_synthetic_seed:
         stmt = stmt.where(IndexAttempt.is_synthetic_seed.is_(False))
+    stmt = stmt.where(IndexAttempt.is_backfill.is_(False))
     stmt = (
         stmt.join(SearchSettings)
         .where(SearchSettings.status == status)
@@ -784,6 +900,7 @@ def get_latest_successful_index_attempts_parallel(
             )
         if ignore_synthetic_seed:
             latest_ids = latest_ids.where(IndexAttempt.is_synthetic_seed.is_(False))
+        latest_ids = latest_ids.where(IndexAttempt.is_backfill.is_(False))
         latest_ids = latest_ids.group_by(
             IndexAttempt.connector_credential_pair_id
         ).subquery()
@@ -842,7 +959,45 @@ def get_error_counts_for_index_attempts(
         .where(IndexAttemptError.index_attempt_id.in_(index_attempt_ids))
         .group_by(IndexAttemptError.index_attempt_id)
     )
-    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}
+    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
+
+
+class OpenErrorCounts(NamedTuple):
+    # Whole entities (a drive, a channel) included.
+    total: int = 0
+    # Only these can be re-fetched by a targeted reindex.
+    docs: int = 0
+
+
+def get_open_error_counts_for_index_attempts(
+    db_session: Session,
+    index_attempt_ids: list[int],
+) -> dict[int, OpenErrorCounts]:
+    """Per-attempt counts of open errors. An error is open while unresolved on
+    an attempt no admin resolved. The run resolution leaves ``is_resolved``
+    alone for the poll cursor and Retry. Attempt ids with none are absent."""
+    if not index_attempt_ids:
+        return {}
+
+    stmt = (
+        select(
+            IndexAttemptError.index_attempt_id,
+            func.count(),
+            func.count().filter(IndexAttemptError.document_id.isnot(None)),
+        )
+        .where(
+            IndexAttemptError.index_attempt_id.in_(index_attempt_ids),
+            IndexAttemptError.is_resolved.is_(False),
+            ~run_is_resolved(
+                CCPairRunKind.INDEXING, IndexAttemptError.index_attempt_id
+            ),
+        )
+        .group_by(IndexAttemptError.index_attempt_id)
+    )
+    return {
+        attempt_id: OpenErrorCounts(total=total, docs=docs)
+        for attempt_id, total, docs in db_session.execute(stmt).all()
+    }
 
 
 def get_paginated_index_attempts_for_cc_pair_id(
@@ -1049,6 +1204,7 @@ def count_unique_cc_pairs_with_successful_index_attempts(
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
     if ignore_synthetic_seed:
         query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
+    query = query.filter(IndexAttempt.is_backfill.is_(False))
     return query.distinct().count()
 
 
@@ -1075,7 +1231,18 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
     if ignore_synthetic_seed:
         query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
+    query = query.filter(IndexAttempt.is_backfill.is_(False))
     return query.distinct().count()
+
+
+def _cap_failure_message(message: str) -> str:
+    if len(message) <= MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS:
+        return message
+    # Sized for the largest possible count, so the result never exceeds the cap.
+    keep = MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS - len(
+        f"... [{len(message)} chars truncated]"
+    )
+    return f"{message[:keep]}... [{len(message) - keep} chars truncated]"
 
 
 def create_index_attempt_error(
@@ -1105,7 +1272,7 @@ def create_index_attempt_error(
             if failure.failed_entity and failure.failed_entity.missed_time_range
             else None
         ),
-        failure_message=failure.failure_message,
+        failure_message=_cap_failure_message(failure.failure_message),
         is_resolved=False,
         error_type=type(exc).__name__ if exc else None,
     )
@@ -1113,6 +1280,32 @@ def create_index_attempt_error(
     db_session.commit()
 
     return new_error.id
+
+
+def resolve_index_attempt_errors_for_documents(
+    db_session: Session,
+    cc_pair_id: int,
+    document_ids: Collection[str],
+) -> None:
+    """Mark the pair's open errors for ``document_ids`` resolved in one UPDATE,
+    so the cost scales with the batch, not the pair's open-error backlog.
+    Commits."""
+    if not document_ids:
+        return
+
+    db_session.execute(
+        update(IndexAttemptError)
+        .where(
+            IndexAttemptError.connector_credential_pair_id == cc_pair_id,
+            IndexAttemptError.document_id.in_(document_ids),
+            # Must render as NOT is_resolved to match the partial index;
+            # Postgres does not match `IS false` to it.
+            ~IndexAttemptError.is_resolved,
+        )
+        .values(is_resolved=True)
+        .execution_options(synchronize_session=False)
+    )
+    db_session.commit()
 
 
 def get_index_attempt_errors(
@@ -1127,19 +1320,46 @@ def get_index_attempt_errors(
     return list(errors.all())
 
 
+def _cc_pair_errors(
+    stmt: Select,
+    cc_pair_id: int,
+    unresolved_only: bool,
+    index_attempt_id: int | None,
+    query: str | None,
+) -> Select:
+    """Narrows an ``IndexAttemptError`` select to one pair, and optionally to
+    its open errors, one attempt, and messages, document ids or entity ids
+    containing ``query``."""
+    stmt = stmt.where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
+    if unresolved_only:
+        stmt = stmt.where(~IndexAttemptError.is_resolved)
+    if index_attempt_id is not None:
+        stmt = stmt.where(IndexAttemptError.index_attempt_id == index_attempt_id)
+    if query:
+        stmt = stmt.where(
+            or_(
+                IndexAttemptError.failure_message.icontains(query, autoescape=True),
+                IndexAttemptError.document_id.icontains(query, autoescape=True),
+                IndexAttemptError.entity_id.icontains(query, autoescape=True),
+            )
+        )
+    return stmt
+
+
 def count_index_attempt_errors_for_cc_pair(
     cc_pair_id: int,
     unresolved_only: bool,
     db_session: Session,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
 ) -> int:
-    stmt = (
-        select(func.count())
-        .select_from(IndexAttemptError)
-        .where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
+    stmt = _cc_pair_errors(
+        select(func.count()).select_from(IndexAttemptError),
+        cc_pair_id,
+        unresolved_only,
+        index_attempt_id,
+        query,
     )
-    if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
-
     result = db_session.scalar(stmt)
     return 0 if result is None else result
 
@@ -1150,12 +1370,12 @@ def get_index_attempt_errors_for_cc_pair(
     db_session: Session,
     page: int | None = None,
     page_size: int | None = None,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
 ) -> list[IndexAttemptError]:
-    stmt = select(IndexAttemptError).where(
-        IndexAttemptError.connector_credential_pair_id == cc_pair_id
+    stmt = _cc_pair_errors(
+        select(IndexAttemptError), cc_pair_id, unresolved_only, index_attempt_id, query
     )
-    if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
 
     # Order by most recent first
     stmt = stmt.order_by(desc(IndexAttemptError.time_created))
@@ -1164,6 +1384,34 @@ def get_index_attempt_errors_for_cc_pair(
         stmt = stmt.offset(page * page_size).limit(page_size)
 
     return list(db_session.scalars(stmt).all())
+
+
+def get_index_attempt_errors_with_document_names_for_cc_pair(
+    cc_pair_id: int,
+    unresolved_only: bool,
+    db_session: Session,
+    page: int,
+    page_size: int,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
+) -> list[tuple[IndexAttemptError, str | None]]:
+    """One page of the pair's errors, newest first, each with the title of its
+    document. A document that never landed has no row, so its title is None."""
+    stmt = _cc_pair_errors(
+        select(IndexAttemptError, Document.semantic_id).outerjoin(
+            Document, Document.id == IndexAttemptError.document_id
+        ),
+        cc_pair_id,
+        unresolved_only,
+        index_attempt_id,
+        query,
+    )
+    stmt = (
+        stmt.order_by(desc(IndexAttemptError.time_created))
+        .offset(page * page_size)
+        .limit(page_size)
+    )
+    return list(db_session.execute(stmt).tuples())
 
 
 def get_index_attempt_errors_across_connectors(
@@ -1194,8 +1442,8 @@ def get_index_attempt_errors_across_connectors(
         count_stmt = count_stmt.where(IndexAttemptError.error_type == error_type)
 
     if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
-        count_stmt = count_stmt.where(IndexAttemptError.is_resolved.is_(False))
+        stmt = stmt.where(~IndexAttemptError.is_resolved)
+        count_stmt = count_stmt.where(~IndexAttemptError.is_resolved)
 
     if start_time is not None:
         stmt = stmt.where(IndexAttemptError.time_created >= start_time)
@@ -1211,3 +1459,149 @@ def get_index_attempt_errors_across_connectors(
     total = db_session.scalar(count_stmt) or 0
     errors = list(db_session.scalars(stmt).all())
     return errors, total
+
+
+def _is_waiting_attempt() -> ColumnElement[bool]:
+    """An attempt that is created but whose docfetching task is not sent: a
+    first attempt that waits for the pair's capability checks."""
+    return and_(
+        IndexAttempt.status == IndexingStatus.NOT_STARTED,
+        IndexAttempt.celery_task_id.is_(None),
+        IndexAttempt.targeted_reindex_job_id.is_(None),
+        IndexAttempt.is_backfill.is_(False),
+    )
+
+
+def _is_never_dispatched_attempt() -> ColumnElement[bool]:
+    """A waiting attempt, or one that a bulk cancel (e.g. an index swap) ended
+    while it waited. ``mark_attempt_failed`` and ``mark_attempt_canceled`` set
+    ``time_started``, so an attempt they end counts as dispatched."""
+    return or_(
+        _is_waiting_attempt(),
+        and_(
+            IndexAttempt.status.in_([IndexingStatus.FAILED, IndexingStatus.CANCELED]),
+            IndexAttempt.celery_task_id.is_(None),
+            IndexAttempt.time_started.is_(None),
+            IndexAttempt.targeted_reindex_job_id.is_(None),
+        ),
+    )
+
+
+def cc_pair_has_dispatched_index_attempts(db_session: Session, cc_pair_id: int) -> bool:
+    """True when the pair has an index attempt, for any search settings, whose
+    docfetching task was sent. A backfill does not count: it covers part of
+    the pair's scope, so it never stands in for the first full run."""
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                    IndexAttempt.is_backfill.is_(False),
+                    ~_is_never_dispatched_attempt(),
+                )
+            )
+        )
+    )
+
+
+def get_queued_index_attempts(db_session: Session) -> Sequence[IndexAttempt]:
+    """Every index attempt handed to the docfetching queue and not started,
+    oldest first, whatever its search settings and backfills included. An
+    attempt held for capability checks has no task yet, and a targeted
+    reindex runs on its own queue, so neither is in this line."""
+    return db_session.scalars(
+        select(IndexAttempt)
+        .where(
+            IndexAttempt.status == IndexingStatus.NOT_STARTED,
+            IndexAttempt.celery_task_id.isnot(None),
+            IndexAttempt.targeted_reindex_job_id.is_(None),
+        )
+        .order_by(IndexAttempt.time_created, IndexAttempt.id)
+    ).all()
+
+
+def get_waiting_index_attempt(
+    db_session: Session, cc_pair_id: int, search_settings_id: int
+) -> IndexAttempt | None:
+    """The pair's attempt for these search settings whose docfetching task is
+    not sent yet."""
+    return db_session.scalars(
+        select(IndexAttempt).where(
+            IndexAttempt.connector_credential_pair_id == cc_pair_id,
+            IndexAttempt.search_settings_id == search_settings_id,
+            _is_waiting_attempt(),
+        )
+    ).first()
+
+
+def claim_waiting_index_attempt(
+    db_session: Session, index_attempt_id: int, celery_task_id: str
+) -> bool:
+    """Stamps the docfetching task id on a waiting attempt and commits. False
+    when the attempt is no longer waiting, so only one caller sends its task."""
+    result = db_session.execute(
+        update(IndexAttempt)
+        .where(
+            IndexAttempt.id == index_attempt_id,
+            _is_waiting_attempt(),
+        )
+        .values(celery_task_id=celery_task_id)
+    )
+    db_session.commit()
+    return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
+
+
+def cancel_waiting_index_attempt__no_commit(
+    db_session: Session, index_attempt_id: int, reason: str
+) -> bool:
+    """Ends a waiting attempt as CANCELED, finished now. Leaves ``time_started``
+    unset (unlike ``mark_attempt_canceled``), so the attempt still counts as
+    never dispatched and the pair's next attempt still waits for the checks.
+    False when the attempt is no longer waiting. The caller commits."""
+    result = db_session.execute(
+        update(IndexAttempt)
+        .where(IndexAttempt.id == index_attempt_id, _is_waiting_attempt())
+        .values(
+            status=IndexingStatus.CANCELED,
+            error_msg=reason,
+            time_finished=func.now(),
+        )
+    )
+    return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
+
+
+def get_active_index_attempts_without_task(db_session: Session) -> list[IndexAttempt]:
+    """Active full-run attempts with no Celery task id."""
+    return list(
+        db_session.scalars(
+            select(IndexAttempt).where(
+                IndexAttempt.status.in_(
+                    [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                ),
+                IndexAttempt.celery_task_id.is_(None),
+                IndexAttempt.targeted_reindex_job_id.is_(None),
+            )
+        ).all()
+    )
+
+
+def cc_pair_has_successful_index_attempt(db_session: Session, cc_pair_id: int) -> bool:
+    """True when a full index run of the pair succeeded, for any search
+    settings. An embedding swap moves the earlier runs to past settings, but
+    the documents stay. Backfills, targeted reindexes and the port's synthetic
+    seed do not count."""
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                    IndexAttempt.status.in_(
+                        [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+                    ),
+                    IndexAttempt.is_backfill.is_(False),
+                    IndexAttempt.is_synthetic_seed.is_(False),
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
+                )
+            )
+        )
+    )

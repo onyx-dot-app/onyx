@@ -7,15 +7,15 @@ import {
   useCallback,
   useEffect,
 } from "react";
+import { useTranslations } from "next-intl";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
-import { Button, Tag } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Tag, Text } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
-import type { UserRow, UserGroupInfo } from "./interfaces";
+import type { UserRow, UserGroupInfo } from "./types";
 
 interface GroupsCellProps {
   groups: UserGroupInfo[];
@@ -37,6 +37,7 @@ export default function GroupsCell({
   user,
   onMutate,
 }: GroupsCellProps) {
+  const t = useTranslations("admin.users");
   const [showModal, setShowModal] = useState(false);
   const [visibleCount, setVisibleCount] = useState<number | null>(null);
   // below Business the editor is empty, so show pills but don't open it
@@ -133,7 +134,10 @@ export default function GroupsCell({
       ))}
       {hasOverflow && (
         <div className="shrink-0">
-          <Tag title={`+${overflowCount}`} size="md" />
+          <Tag
+            title={t("groupsCell.overflow.label", { count: overflowCount })}
+            size="md"
+          />
         </div>
       )}
     </>
@@ -152,7 +156,7 @@ export default function GroupsCell({
             ? {
                 role: "button" as const,
                 tabIndex: 0,
-                "aria-label": "Edit groups",
+                "aria-label": t("groupsCell.editCell.ariaLabel"),
                 onClick: () => setShowModal(true),
                 onKeyDown: clickOnKeyDown(() => setShowModal(true)),
               }
@@ -161,9 +165,9 @@ export default function GroupsCell({
           {groups.length === 0 ? (
             <div
               ref={containerRef}
-              className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 -mr-7"
+              className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 -me-7"
             >
-              <Text as="span" secondaryBody text03>
+              <Text as="span" font="secondary-body" color="text-03">
                 —
               </Text>
             </div>
@@ -179,7 +183,7 @@ export default function GroupsCell({
             >
               <div
                 ref={containerRef}
-                className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 -mr-7"
+                className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0 -me-7"
               >
                 {tagsContent}
               </div>
@@ -190,8 +194,8 @@ export default function GroupsCell({
               <Button
                 icon={SvgEdit}
                 prominence="tertiary"
-                tooltip="Edit"
-                tooltipSide="left"
+                tooltip={t("groupsCell.editButton.tooltip")}
+                tooltipSide="start"
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowModal(true);

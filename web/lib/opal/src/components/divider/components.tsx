@@ -2,10 +2,13 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
+import { Fold } from "@opal/components/fold/components";
 import type { OrientationVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
-import { SvgChevronRight } from "@opal/icons";
-import { Interactive } from "@opal/core";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
+import { Interactive, type InteractiveStatelessInteraction } from "@opal/core";
 import { cn } from "@opal/utils";
 import { spacingToRem } from "@opal/shared";
 
@@ -25,6 +28,9 @@ interface DividerSharedProps {
   defaultOpen?: never;
   onOpenChange?: never;
   children?: never;
+  interaction?: never;
+  headerProps?: never;
+  chevronPosition?: never;
 }
 
 /**
@@ -34,7 +40,7 @@ interface DividerSharedProps {
  * across the surfaces it separates, so an arbitrary step would only ever put one
  * divider out of step with the rest.
  */
-type DividerSpacing = 0 | 0.5 | 1 | 2 | 4 | 6;
+type DividerSpacing = 0 | 0.5 | 1 | 2 | 3 | 4 | 6;
 
 /** Plain line — no title, no description. */
 type DividerBareProps = Omit<
@@ -43,9 +49,9 @@ type DividerBareProps = Omit<
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
-  /** Padding along the line direction, as a spacing step. Default: `2` (0.5rem). */
+  /** Padding along the line direction, as a spacing step. Default: 0.375rem. */
   paddingParallel?: DividerSpacing;
-  /** Padding perpendicular to the line, as a spacing step. Default: `1` (0.25rem). */
+  /** Padding perpendicular to the line, as a spacing step. Default: 0.25rem. */
   paddingPerpendicular?: DividerSpacing;
 };
 
@@ -63,7 +69,15 @@ type DividerDescribedProps = Omit<DividerSharedProps, "description"> & {
 /** Foldable — requires title, reveals children. */
 type DividerFoldableProps = Omit<
   DividerSharedProps,
-  "title" | "foldable" | "open" | "defaultOpen" | "onOpenChange" | "children"
+  | "title"
+  | "foldable"
+  | "open"
+  | "defaultOpen"
+  | "onOpenChange"
+  | "children"
+  | "interaction"
+  | "headerProps"
+  | "chevronPosition"
 > & {
   /** Title is required when foldable. */
   title: string | RichStr;
@@ -74,8 +88,38 @@ type DividerFoldableProps = Omit<
   defaultOpen?: boolean;
   /** Callback when open state changes. */
   onOpenChange?: (open: boolean) => void;
-  /** Content revealed when open. */
+  /**
+   * Content revealed when open. Stays mounted while closed, inert and
+   * hidden from assistive tech, so the fold animates both ways.
+   */
   children?: React.ReactNode;
+  /**
+   * Overrides the header's interaction state (a listbox highlights the
+   * title the keyboard stopped on). Unset, the header follows the pointer,
+   * open or folded.
+   */
+  interaction?: InteractiveStatelessInteraction;
+  /**
+   * Attributes for the header element, for an owner that addresses it
+   * (a dropdown gives it an id, a role and `aria-expanded`, so the
+   * keyboard stop on the title reads as a control).
+   */
+  headerProps?: Omit<React.HTMLAttributes<HTMLDivElement>, "onClick"> &
+    Record<`data-${string}`, string | number | undefined>;
+  /**
+   * Where the fold chevron sits. `"end"` puts a right chevron after the
+   * line; `"start"` puts a `text-02` down chevron before the title, with a
+   * Fold / View All tooltip (`collapsibleFold`, `dividerViewAll`), and the
+   * line still follows the title.
+   * Default: `"end"`.
+   */
+  chevronPosition?: "start" | "end";
+  /**
+   * Where a `"start"` chevron points while folded. `"right"` turns it, as a
+   * fold does; `"down"` keeps it, for a footer that opens its content
+   * elsewhere. Default: `"right"`.
+   */
+  foldedChevron?: "right" | "down";
 };
 
 type DividerProps =
@@ -98,9 +142,20 @@ function Divider(props: DividerProps) {
     title,
     description,
     orientation = "horizontal",
-    paddingParallel = 2,
-    paddingPerpendicular = 1,
+    paddingParallel,
+    paddingPerpendicular,
   } = props;
+
+  // The stylesheet carries the default inset (0.375rem along the line, 0.25rem
+  // across, the same for every variant); a bare line's steps override it.
+  const inset = {
+    ...(paddingParallel !== undefined && {
+      parallel: spacingToRem(paddingParallel),
+    }),
+    ...(paddingPerpendicular !== undefined && {
+      perpendicular: spacingToRem(paddingPerpendicular),
+    }),
+  };
 
   if (orientation === "vertical") {
     return (
@@ -108,8 +163,8 @@ function Divider(props: DividerProps) {
         ref={ref}
         className="opal-divider-vertical"
         style={{
-          paddingInline: spacingToRem(paddingPerpendicular),
-          paddingBlock: spacingToRem(paddingParallel),
+          paddingInline: inset.perpendicular,
+          paddingBlock: inset.parallel,
         }}
       >
         <div className="opal-divider-line-vertical" />
@@ -122,14 +177,18 @@ function Divider(props: DividerProps) {
       ref={ref}
       className="opal-divider"
       style={{
-        paddingInline: spacingToRem(paddingParallel),
-        paddingBlock: spacingToRem(paddingPerpendicular),
+        paddingInline: inset.parallel,
+        paddingBlock: inset.perpendicular,
       }}
     >
       <div className="opal-divider-row">
         {title && (
           <div className="opal-divider-title">
-            <Text font="secondary-body" color="text-03" nowrap>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {title}
             </Text>
           </div>
@@ -157,7 +216,12 @@ function FoldableDivider({
   defaultOpen = false,
   onOpenChange,
   children,
+  interaction,
+  headerProps,
+  chevronPosition = "end",
+  foldedChevron = "right",
 }: DividerFoldableProps) {
+  const strings = useOpalStrings();
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled ? controlledOpen : internalOpen;
@@ -173,30 +237,68 @@ function FoldableDivider({
       <Interactive.Stateless
         variant="default"
         prominence="tertiary"
-        interaction={isOpen ? "hover" : "rest"}
+        interaction={interaction}
         onClick={toggle}
       >
-        <Interactive.Container rounding="sm" size="fit" width="full">
+        <Interactive.Container
+          rounding={2}
+          size="fit"
+          width="full"
+          {...headerProps}
+        >
           <div className="opal-divider">
             <div className="opal-divider-row">
+              {chevronPosition === "start" && (
+                <div
+                  className="opal-divider-chevron"
+                  data-position="start"
+                  data-open={isOpen}
+                  data-folded-chevron={foldedChevron}
+                >
+                  <Button
+                    icon={SvgChevronDown}
+                    size="sm"
+                    prominence="internal"
+                    aria-expanded={isOpen}
+                    tooltip={
+                      isOpen ? strings.collapsibleFold : strings.dividerViewAll
+                    }
+                    aria-label={
+                      isOpen
+                        ? strings.collapsibleFoldSection(toPlainString(title))
+                        : strings.collapsibleExpandSection(toPlainString(title))
+                    }
+                  />
+                </div>
+              )}
               <div className="opal-divider-title">
-                <Text font="secondary-body" color="inherit" nowrap>
+                <Text
+                  font="secondary-body"
+                  color="inherit"
+                  wordWrap="whitespace-nowrap"
+                >
                   {title}
                 </Text>
               </div>
               <div className="opal-divider-line" />
-              <div className="opal-divider-chevron" data-open={isOpen}>
-                <Button
-                  icon={SvgChevronRight}
-                  size="sm"
-                  prominence="tertiary"
-                />
-              </div>
+              {chevronPosition === "end" && (
+                <div className="opal-divider-chevron" data-open={isOpen}>
+                  <Button
+                    icon={SvgChevronRight}
+                    size="sm"
+                    prominence="tertiary"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </Interactive.Container>
       </Interactive.Stateless>
-      {isOpen && children}
+      {/* The content stays mounted, so the fold closes as smoothly as it
+          opens; closed, it is inert and hidden from assistive tech. */}
+      <Fold open={isOpen} keepMounted>
+        {children}
+      </Fold>
     </>
   );
 }

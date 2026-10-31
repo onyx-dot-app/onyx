@@ -15,7 +15,6 @@ import {
   createPacket,
   createStopPacket,
   createCitationPacket,
-  createBranchingPacket,
   createMessageStartPacket,
   createImageDeltaPacket,
   createSearchToolStartPacket,
@@ -261,6 +260,41 @@ describe("packetProcessor", () => {
       expect(result.toolGroupKeys.size).toBe(1);
     });
 
+    test("classifies a tool when debug arrives before its start, including incremental updates", () => {
+      const debug: Packet = {
+        placement: { turn_index: 0 },
+        obj: {
+          type: PacketType.TOOL_CALL_DEBUG,
+          tool_call_id: "call",
+          tool_name: "lookup",
+          tool_args: { query: "hello" },
+        },
+      };
+      const start: Packet = {
+        placement: { turn_index: 0 },
+        obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "Lookup" },
+      };
+      const pending = processPackets(createInitialState(1), [debug]);
+      expect(pending.toolGroupKeys.size).toBe(0);
+      const result = processPackets(pending, [debug, start]);
+      expect(result.toolGroupKeys.has("0-0")).toBe(true);
+      expect(result.toolGroups[0]?.packets).toEqual([debug, start]);
+    });
+
+    test("classifies display content after control packets without changing mixed-group ownership", () => {
+      const heartbeat: Packet = {
+        placement: { turn_index: 0 },
+        obj: { type: "chat_heartbeat" },
+      };
+      const result = processPackets(createInitialState(1), [
+        heartbeat,
+        createMessageStartPacket({ turn_index: 0 }),
+        createSearchToolStartPacket({ turn_index: 0 }),
+      ]);
+      expect(result.displayGroupKeys.has("0-0")).toBe(true);
+      expect(result.toolGroupKeys.size).toBe(0);
+    });
+
     // Parameterized tests for tool packet types
     test.each([
       [PacketType.SEARCH_TOOL_START, "SEARCH_TOOL_START"],
@@ -320,38 +354,6 @@ describe("packetProcessor", () => {
     });
   });
 
-  describe("handleTopLevelBranching", () => {
-    test("stores expected branch count in expectedBranches map", () => {
-      const state = createInitialState(1);
-      const packets = [createBranchingPacket(3, 0)];
-      const result = processPackets(state, packets);
-
-      expect(result.expectedBranches.get(0)).toBe(3);
-    });
-
-    test("does not add branching packet to any group", () => {
-      const state = createInitialState(1);
-      const packets = [createBranchingPacket(2, 0)];
-      const result = processPackets(state, packets);
-
-      expect(result.groupedPacketsMap.size).toBe(0);
-    });
-
-    test("handles multiple branching packets at different turns", () => {
-      const state = createInitialState(1);
-      const packets = [
-        createBranchingPacket(2, 0),
-        createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
-        createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
-        createBranchingPacket(3, 1),
-      ];
-      const result = processPackets(state, packets);
-
-      expect(result.expectedBranches.get(0)).toBe(2);
-      expect(result.expectedBranches.get(1)).toBe(3);
-    });
-  });
-
   describe("handleTurnTransition", () => {
     test("injects SECTION_END when turn_index changes", () => {
       const state = createInitialState(1);
@@ -397,7 +399,6 @@ describe("packetProcessor", () => {
     test("injects SECTION_END for all previous groups on turn change", () => {
       const state = createInitialState(1);
       const packets = [
-        createBranchingPacket(2, 0),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
         // Turn changes
@@ -539,7 +540,6 @@ describe("packetProcessor", () => {
     test("parallel search tools at same turn_index with different tab_index", () => {
       const state = createInitialState(1);
       const packets = [
-        createBranchingPacket(2, 0),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
         createSearchToolDocumentsPacket([{ document_id: "doc-a" }], {
@@ -553,7 +553,6 @@ describe("packetProcessor", () => {
       ];
       const result = processPackets(state, packets);
 
-      expect(result.expectedBranches.get(0)).toBe(2);
       expect(result.toolGroups.length).toBe(2);
       expect(result.documentMap.has("doc-a")).toBe(true);
       expect(result.documentMap.has("doc-b")).toBe(true);
@@ -1079,7 +1078,6 @@ describe("packetProcessor", () => {
     test("parallel search tools then message", () => {
       const state = createInitialState(1);
       const packets = [
-        createBranchingPacket(3, 0),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 2 }),
@@ -1104,7 +1102,6 @@ describe("packetProcessor", () => {
       const result = processPackets(state, packets);
 
       expect(result.toolGroups.length).toBe(3);
-      expect(result.expectedBranches.get(0)).toBe(3);
       expect(result.documentMap.size).toBe(3);
       expect(result.finalAnswerComing).toBe(true);
     });

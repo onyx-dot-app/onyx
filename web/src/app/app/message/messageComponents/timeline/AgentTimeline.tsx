@@ -2,11 +2,14 @@
 
 import React, { useMemo, useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState, RenderType } from "../interfaces";
+import {
+  FullChatState,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
 import { TurnGroup } from "./transformers";
 import { cn } from "@opal/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import Text from "@/refresh-components/texts/Text";
+import { TextLoader } from "@opal/loaders";
 import { useTimelineExpansion } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineExpansion";
 import { useTimelineMetrics } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineMetrics";
 import { useTimelineHeader } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineHeader";
@@ -347,10 +350,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       <TimelineContainer
         agent={chatState.agent}
         headerContent={
-          <div className="flex w-full h-full items-center pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right)">
-            <Text as="p" mainUiAction text03 className="shimmer-text">
-              {headerText}
-            </Text>
+          <div className="flex w-full h-full items-center ps-(--timeline-header-padding-left) pe-(--timeline-header-padding-right)">
+            <TextLoader>{headerText}</TextLoader>
           </div>
         }
       />

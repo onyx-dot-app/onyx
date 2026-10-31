@@ -7,6 +7,8 @@ import { useSession } from "@/state/session";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { BackendChatSession } from "@/chat/interfaces";
 
+const SESSION_CONTROL_TIMEOUT_MS = 10_000;
+
 // Pre-creates a session so the first message sends with a real chat_session_id.
 export async function createChatSession(
   personaId: number = DEFAULT_AGENT_ID,
@@ -26,13 +28,30 @@ export async function createChatSession(
 export async function getChatSession(
   sessionId: string,
 ): Promise<BackendChatSession> {
-  return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`);
+  return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`, {
+    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
+  });
+}
+
+export async function getChatSessionStatus(
+  sessionId: string,
+): Promise<{ is_processing: boolean }> {
+  return apiFetch<{ is_processing: boolean }>(
+    `/chat/chat-session/${sessionId}/status`,
+    { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
+  );
 }
 
 // client abort alone leaves the backend generating
-export async function stopChatSession(sessionId: string): Promise<void> {
-  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}`, {
+// streamId scopes Stop to one response; omitted, the backend stops whichever is in flight.
+export async function stopChatSession(
+  sessionId: string,
+  streamId?: number,
+): Promise<void> {
+  const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
     method: "POST",
+    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
   });
 }
 
@@ -95,6 +114,7 @@ export function useChatSessions() {
       // Matches web; the compound-cursor fix stays out of scope to keep the port backend-free.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
+    refetchInterval: 60_000,
   });
 
   const sessions = useMemo(

@@ -32,21 +32,28 @@ type Model struct {
 	startMode startMode
 
 	// Chat state
-	chatSessionID   *string
-	agentID         int
-	agentName       string
-	agents          []models.AgentSummary
-	parentMessageID *int
-	isStreaming     bool
-	streamCancel    context.CancelFunc
-	streamCh        <-chan models.StreamEvent
-	citations       map[int]string
-	attachedFiles   []models.FileDescriptorPayload
-	needsRename     bool
-	agentStarted    bool
+	chatSessionID    *string
+	agentID          int
+	agentName        string
+	agents           []models.AgentSummary
+	llmModels        []modelOption
+	modelOverride    *models.LLMOverride
+	parentMessageID  *int
+	submittedMessage string
+	streamCancel     context.CancelFunc
+	streamCh         <-chan models.StreamEvent
+	streamID         *int
+	settling         bool
+	citations        map[int]string
+	attachedFiles    []models.FileDescriptorPayload
 
 	// Configure state
 	configState *configState
+
+	isStreaming          bool
+	readinessUnconfirmed bool
+	needsRename          bool
+	agentStarted         bool
 
 	// Quit state
 	quitPending    bool
@@ -78,12 +85,19 @@ func NewFirstRunModel(cfg config.OnyxCliConfig) Model {
 	return model
 }
 
+// WithSessionAgent overrides the starting agent for this chat session without
+// changing the saved default (used by chat --agent-id / --agent-name).
+func (m Model) WithSessionAgent(agentID int) Model {
+	m.agentID = agentID
+	return m
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return loadAgentsCmd(m.client)
+	return tea.Batch(loadAgentsCmd(m.client), loadModelsCmd(m.client))
 }
 
 // Update handles messages.
@@ -145,9 +159,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StreamDoneMsg:
 		return m.handleStreamDone(msg)
+	case sessionReadyMsg:
+		if msg.channel != m.streamCh || !m.isStreaming {
+			return m, nil
+		}
+		if msg.err != nil && !api.IsRetryableReadinessError(msg.err) {
+			m.readinessUnconfirmed = true
+			m.viewport.addError("Cannot confirm conversation readiness: " + msg.err.Error())
+			return m, nil
+		}
+		if msg.err != nil || msg.processing {
+			if msg.err != nil && !m.readinessUnconfirmed {
+				m.readinessUnconfirmed = true
+				m.viewport.addWarning("Waiting to confirm conversation readiness.")
+			}
+			return m, checkSessionReady(m.client, msg.sessionID, msg.channel)
+		}
+		return m.finishStream(nil)
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
+
+	case ModelsLoadedMsg:
+		return m.handleModelsLoaded(msg)
 
 	case SessionsLoadedMsg:
 		return m.handleSessionsLoaded(msg)
@@ -263,11 +297,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.configState != nil {
 			return m.cancelConfigure()
 		}
-		if m.isStreaming {
-			return m.cancelStream()
-		}
 		if m.quitPending {
 			return m, tea.Quit
+		}
+		if m.isStreaming {
+			m, _ = m.cancelStream()
 		}
 		m.quitPending = true
 		m.viewport.addInfo("Press Ctrl+D again to quit.")
@@ -296,9 +330,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				case pickerSession:
 					return cmdResume(m, item.id)
 				case pickerAgent:
-					return cmdSelectAgent(m, item.id)
+					return cmdSelectAgentByID(m, item.id)
+				case pickerModel:
+					return cmdSelectModel(m, item.id)
 				}
 			}
+			return m, nil
+		}
+		if m.isStreaming && !strings.HasPrefix(strings.TrimSpace(m.input.textInput.Value()), "/") {
 			return m, nil
 		}
 
@@ -353,16 +392,20 @@ func (m Model) handleFileDrop(path string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) cancelStream() (Model, tea.Cmd) {
+	if m.settling && m.streamID != nil && m.chatSessionID != nil {
+		sessionID, streamID := *m.chatSessionID, *m.streamID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			m.client.StopChatSession(ctx, sessionID, streamID)
+		}()
+	}
 	if m.streamCancel != nil {
 		m.streamCancel()
 	}
-	if m.chatSessionID != nil {
-		sid := *m.chatSessionID
-		go m.client.StopChatSession(context.Background(), sid)
-	}
-	m, cmd := m.finishStream(nil)
-	m.viewport.addInfo("Generation stopped.")
-	return m, cmd
+	// The API stream owner sends Stop after acknowledgement. Keep input blocked.
+	m.viewport.addInfo("Stopping generation…")
+	return m, nil
 }
 
 func (m Model) sendMessage(message string) (Model, tea.Cmd) {
@@ -370,6 +413,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	m.submittedMessage = message
 	m.viewport.addUserMessage(message)
 	m.viewport.startAgent()
 
@@ -379,7 +423,10 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	m.attachedFiles = nil
 	m.input.clearFiles()
 
+	m.streamID = nil
+	m.settling = false
 	m.isStreaming = true
+	m.readinessUnconfirmed = false
 	m.agentStarted = false
 	m.citations = make(map[int]string)
 	m.status.setStreaming(true)
@@ -394,6 +441,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 		m.agentID,
 		m.parentMessageID,
 		fileDescs,
+		m.modelOverride,
 	)
 	m.streamCh = ch
 
@@ -402,7 +450,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 
 func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	// Ignore stale events after cancellation
-	if !m.isStreaming {
+	if !m.isStreaming || msg.Channel != m.streamCh {
 		return m, nil
 	}
 	switch e := msg.Event.(type) {
@@ -412,6 +460,7 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.status.setSession(e.ChatSessionID)
 
 	case models.MessageIDEvent:
+		m.streamID = &e.ReservedAgentMessageID
 		m.parentMessageID = &e.ReservedAgentMessageID
 
 	case models.MessageStartEvent:
@@ -474,22 +523,44 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.viewport.appendToken(e.Content)
 
 	case models.StopEvent:
-		return m.finishStream(nil)
+		// Delivery completion does not confirm the save. Drain the stream.
 
 	case models.ErrorEvent:
 		m.viewport.addError(e.Error)
-		return m.finishStream(nil)
+		if m.input.textInput.Value() == "" {
+			m.input.textInput.SetValue(m.submittedMessage)
+		}
 	}
 
 	return m, WaitForStreamEvent(m.streamCh)
 }
 
+type sessionReadyMsg struct {
+	sessionID  string
+	channel    <-chan models.StreamEvent
+	processing bool
+	err        error
+}
+
+func checkSessionReady(client api.ClientAPI, sessionID string, channel <-chan models.StreamEvent) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		processing, err := client.IsChatSessionProcessing(ctx, sessionID)
+		return sessionReadyMsg{sessionID, channel, processing, err}
+	}
+}
+
 func (m Model) handleStreamDone(msg StreamDoneMsg) (tea.Model, tea.Cmd) {
-	// Ignore if already cancelled
-	if !m.isStreaming {
+	if !m.isStreaming || msg.Channel != m.streamCh {
 		return m, nil
 	}
-	return m.finishStream(msg.Err)
+	if m.chatSessionID == nil {
+		return m.finishStream(msg.Err)
+	}
+	m.settling = true
+	return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
 }
 
 func (m Model) finishStream(err error) (Model, tea.Cmd) {
@@ -505,6 +576,8 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 	}
 	m.streamCancel = nil
 	m.streamCh = nil
+	m.streamID = nil
+	m.settling = false
 
 	// Auto-rename new sessions
 	if m.needsRename && m.chatSessionID != nil {
@@ -571,6 +644,73 @@ func (m Model) handleAgentsLoaded(msg AgentsLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleModelsLoaded(msg ModelsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		// Startup fetch failures are silent — the status bar just omits the
+		// model segment. Only report when the user asked for the picker.
+		if msg.ShowPicker {
+			m.viewport.addError("Could not load models: " + msg.Err.Error())
+		}
+		return m, nil
+	}
+
+	// A startup response that lands while the model picker is open must not
+	// replace the list the picker's indices point into.
+	if !msg.ShowPicker && m.viewport.pickerActive && m.viewport.pickerType == pickerModel {
+		return m, nil
+	}
+
+	m.llmModels = flattenModelOptions(msg.Response)
+	m.status.setModel(m.currentModelLabel())
+
+	if !msg.ShowPicker {
+		return m, nil
+	}
+	if len(m.llmModels) == 0 {
+		m.viewport.addInfo("No models available.")
+		return m, nil
+	}
+
+	m.viewport.addInfo("Select a model (Enter to select, Esc to cancel):")
+
+	var items []pickerItem
+	for i, opt := range m.llmModels {
+		label := opt.label
+		if m.isCurrentModel(opt) {
+			label += " *"
+		}
+		items = append(items, pickerItem{
+			id:     strconv.Itoa(i),
+			label:  label,
+			detail: opt.providerLabel,
+		})
+	}
+	m.viewport.showPicker(pickerModel, items)
+	return m, nil
+}
+
+// isCurrentModel reports whether opt is the model in effect: the explicit
+// override when one is set, otherwise the workspace default.
+func (m Model) isCurrentModel(opt modelOption) bool {
+	if m.modelOverride == nil {
+		return opt.isDefault
+	}
+	if m.modelOverride.ModelConfigurationID != nil && opt.configID != nil {
+		return *m.modelOverride.ModelConfigurationID == *opt.configID
+	}
+	return m.modelOverride.ModelVersion != nil && *m.modelOverride.ModelVersion == opt.name
+}
+
+// currentModelLabel returns the display label of the model in effect.
+func (m Model) currentModelLabel() string {
+	for _, opt := range m.llmModels {
+		if m.isCurrentModel(opt) {
+			return opt.label
+		}
+	}
+	return ""
+}
+
 func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.viewport.addError("Could not load sessions: " + msg.Err.Error())
@@ -618,9 +758,15 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
+	if m.isStreaming && m.chatSessionID != nil && *m.chatSessionID == msg.Detail.ChatSessionID {
+		// The current stream owns newer messages than this saved snapshot.
+		return m, nil
+	}
+
 	// Cancel any in-progress stream before replacing the session
 	if m.isStreaming {
 		m, _ = m.cancelStream()
+		m, _ = m.finishStream(nil)
 	}
 
 	detail := msg.Detail

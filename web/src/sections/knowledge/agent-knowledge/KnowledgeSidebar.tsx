@@ -1,15 +1,14 @@
 "use client";
 
+import { useFormatter, useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as TableLayouts from "@/layouts/table-layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
-import { getSourceMetadata } from "@/lib/sources";
-import type { ConnectedSource } from "@/lib/hierarchy/interfaces";
-import type { ValidSources } from "@/lib/types";
-import { Divider } from "@opal/components";
+import type { ConnectedSource } from "@/lib/hierarchy/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
+import { Text, Divider, LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";
 
-import type { KnowledgeView } from "@/sections/knowledge/agent-knowledge/interfaces";
+import type { KnowledgeView } from "@/sections/knowledge/agent-knowledge/types";
 
 interface KnowledgeSidebarProps {
   activeView: KnowledgeView;
@@ -38,46 +37,56 @@ export function KnowledgeSidebar({
   onNavigateToSource,
   vectorDbEnabled,
 }: KnowledgeSidebarProps) {
+  const t = useTranslations("knowledge");
+  const format = useFormatter();
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
-      <LineItem
+      <LineItemButton
+        sizePreset="main-ui"
+        variant="section"
         icon={SvgFiles}
+        title={t("sidebar.yourFiles.label")}
         onClick={onNavigateToRecent}
-        selected={activeView === "recent"}
-        emphasized={activeView === "recent" || selectedFileIds.length > 0}
+        state={activeView === "recent" ? "selected" : "empty"}
+        selectVariant={
+          activeView === "recent" || selectedFileIds.length > 0
+            ? "select-heavy"
+            : "select-light"
+        }
         aria-label="knowledge-sidebar-files"
         rightChildren={
           selectedFileIds.length > 0 ? (
-            <Text mainUiAction className="text-action-selection-05">
-              {selectedFileIds.length}
+            <Text font="main-ui-action" color="action-selection-05">
+              {format.number(selectedFileIds.length)}
             </Text>
           ) : undefined
         }
-      >
-        Your Files
-      </LineItem>
+      />
 
       {vectorDbEnabled && (
         <>
-          <LineItem
+          <LineItemButton
+            sizePreset="main-ui"
+            variant="section"
             icon={SvgFolder}
+            title={t("sidebar.documentSet.label")}
             onClick={onNavigateToDocumentSets}
-            selected={activeView === "document-sets"}
-            emphasized={
+            state={activeView === "document-sets" ? "selected" : "empty"}
+            selectVariant={
               activeView === "document-sets" ||
               selectedDocumentSetIds.length > 0
+                ? "select-heavy"
+                : "select-light"
             }
             aria-label="knowledge-sidebar-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
-                <Text mainUiAction className="text-action-selection-05">
-                  {selectedDocumentSetIds.length}
+                <Text font="main-ui-action" color="action-selection-05">
+                  {format.number(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
-          >
-            Document Set
-          </LineItem>
+          />
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
@@ -91,24 +100,28 @@ export function KnowledgeSidebar({
               sourceSelectionCounts.get(connectedSource.source) ?? 0;
 
             return (
-              <LineItem
+              <LineItemButton
                 key={connectedSource.source}
+                sizePreset="main-ui"
+                variant="section"
                 icon={sourceMetadata.icon}
-                strokeIcon={false}
+                title={sourceMetadata.displayName}
                 onClick={() => onNavigateToSource(connectedSource.source)}
-                selected={isActive}
-                emphasized={isActive || isSelected || selectionCount > 0}
+                state={isActive ? "selected" : "empty"}
+                selectVariant={
+                  isActive || isSelected || selectionCount > 0
+                    ? "select-heavy"
+                    : "select-light"
+                }
                 aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
-                    <Text mainUiAction className="text-action-selection-05">
-                      {selectionCount}
+                    <Text font="main-ui-action" color="action-selection-05">
+                      {format.number(selectionCount)}
                     </Text>
                   ) : undefined
                 }
-              >
-                {sourceMetadata.displayName}
-              </LineItem>
+              />
             );
           })}
         </>

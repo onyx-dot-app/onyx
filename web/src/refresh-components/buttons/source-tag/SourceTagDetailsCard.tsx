@@ -1,8 +1,7 @@
 "use client";
 
 import React, { memo } from "react";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import {
   SvgArrowLeft,
   SvgArrowRight,
@@ -11,10 +10,11 @@ import {
 } from "@opal/icons";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { timeAgo } from "@opal/time";
+import { useLocale } from "next-intl";
 import type { IconProps } from "@opal/types";
-import { SubQuestionDetail } from "@/app/app/interfaces";
+import { SubQuestionDetail } from "@/app/app/types";
 
 export interface SourceInfo {
   id: string;
@@ -57,9 +57,11 @@ const MetadataChip = memo(function MetadataChip({
         </div>
       )}
 
-      <Text secondaryBody text03 className="px-0.5 max-w-40 truncate">
-        {text}
-      </Text>
+      <div className="min-w-0 max-w-40">
+        <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
+          {text}
+        </Text>
+      </div>
     </div>
   );
 });
@@ -70,6 +72,7 @@ const SourceTagDetailsCardInner = ({
   onPrev,
   onNext,
 }: SourceTagDetailsCardProps) => {
+  const locale = useLocale();
   const currentSource = sources[currentIndex];
   if (!currentSource) return null;
 
@@ -81,7 +84,8 @@ const SourceTagDetailsCardInner = ({
   const relativeDate = timeAgo(
     currentSource.metadata?.date instanceof Date
       ? currentSource.metadata.date.toISOString()
-      : currentSource.metadata?.date
+      : currentSource.metadata?.date,
+    locale
   );
 
   return (
@@ -105,15 +109,17 @@ const SourceTagDetailsCardInner = ({
               size="sm"
             />
           </div>
-          <Text secondaryBody text03 className="px-1">
-            {currentIndex + 1}/{sources.length}
-          </Text>
+          <div className="px-0.5">
+            <Text font="secondary-body" color="text-03">
+              {`${currentIndex + 1}/${sources.length}`}
+            </Text>
+          </div>
         </div>
       )}
 
       <div className="p-1 flex flex-col gap-1">
         {/* Header with icon and title */}
-        <div className="flex items-start gap-1 p-0.5 min-h-7 w-full text-left hover:bg-background-tint-01 rounded-08 transition-colors">
+        <div className="flex items-start gap-1 p-0.5 min-h-7 w-full text-start hover:bg-background-tint-01 rounded-08 transition-colors">
           <div className="flex items-center justify-center p-0.5 shrink-0 w-5 h-5">
             {isQuestion ? (
               <SvgQuestionMarkSmall size={16} className="text-text-03" />
@@ -132,12 +138,8 @@ const SourceTagDetailsCardInner = ({
               />
             )}
           </div>
-          <div className="flex-1 min-w-0 px-0.5">
-            <Text
-              mainUiAction
-              text04
-              className="truncate w-full block leading-5"
-            >
+          <div className="flex-1 min-w-0">
+            <Text as="p" font="main-ui-action" color="text-04" maxLines={1}>
               {currentSource.title}
             </Text>
           </div>
@@ -159,7 +161,7 @@ const SourceTagDetailsCardInner = ({
                 <MetadataChip key={tag} text={tag} />
               ))}
               {relativeDate && (
-                <Text secondaryBody text02>
+                <Text font="secondary-body" color="text-02">
                   {relativeDate}
                 </Text>
               )}
@@ -170,7 +172,7 @@ const SourceTagDetailsCardInner = ({
         {/* Description */}
         {currentSource.description && (
           <div className="px-1.5 pb-1">
-            <Text secondaryBody text03 as="span" className="line-clamp-4">
+            <Text font="secondary-body" color="text-03" maxLines={4}>
               {currentSource.description}
             </Text>
           </div>

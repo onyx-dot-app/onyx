@@ -1,8 +1,8 @@
-import type { MutableRefObject, Ref, RefCallback } from "react";
+import type { MutableRefObject, ReactNode, Ref, RefCallback } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import copy from "copy-to-clipboard";
-import type { RichStr } from "@opal/types";
+import type { RichNodes, RichStr } from "@opal/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -18,6 +18,48 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function markdown(...lines: string[]): RichStr {
   return { __brand: "RichStr", raw: lines.join("\n") };
+}
+
+/**
+ * Title-cases an identifier in snake, kebab or camel case:
+ * `confluence_username` → "Confluence Username", `apiKey` → "Api Key".
+ */
+export function toTitleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+export function escapeMarkdown(value: string): string {
+  return value
+    .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)
+    .replace(/[\r\n]+/g, " ");
+}
+
+/**
+ * Brands React nodes as deliberate `Text` children.
+ *
+ * Use for sentences that must embed inline components — the main case is
+ * next-intl rich-text output:
+ * ```tsx
+ * <Text font="main-ui-body" color="text-04">
+ *   {richNodes(t.rich("help.text", { link: (chunks) => <a ...>{chunks}</a> }))}
+ * </Text>
+ * ```
+ * Do not use it to pass layout JSX into `Text`; the content must stay inline.
+ */
+export function richNodes(nodes: ReactNode): RichNodes {
+  return { __brand: "RichNodes", nodes };
+}
+
+export function isRichNodes(value: unknown): value is RichNodes {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as RichNodes).__brand === "RichNodes"
+  );
 }
 
 export function mergeRefs<T>(...refs: (Ref<T> | undefined)[]): RefCallback<T> {
@@ -65,4 +107,100 @@ export function clickOnKeyDown(
     event.preventDefault();
     onClick();
   };
+}
+
+/**
+ * Wraps a click handler so the event stops at this element — for controls
+ * nested inside a larger click surface (an input's action button, a card's
+ * inner control) that must not also trigger the surface.
+ */
+export function noProp(
+  f?: (event: React.MouseEvent) => void
+): React.MouseEventHandler {
+  return (event) => {
+    event.stopPropagation();
+    f?.(event);
+  };
+}
+
+/**
+ * The nearest ancestor of `element` that scrolls vertically, or `null` when
+ * only the page does.
+ */
+export function findScrollParent(element: Element): Element | null {
+  let node: Element | null = element.parentElement;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/** Where `smoothScroll` goes: to a scroll offset, or by a distance from here. */
+export type SmoothScrollTarget = { top: number } | { by: number };
+
+export interface SmoothScrollOptions {
+  /** How long the scroll takes, in ms. @default 300 */
+  duration?: number;
+}
+
+// Fast out, slow in, so the view settles gently on the target.
+function easeOutCubic(progress: number): number {
+  return 1 - (1 - progress) ** 3;
+}
+
+/**
+ * Smoothly scrolls `container` (`null` for the page) vertically, and resolves
+ * when the scroll ends, so a caller can act once the view has settled. Under
+ * reduced motion it jumps instead. A scroll that goes nowhere resolves at once.
+ */
+export function smoothScroll(
+  container: Element | null,
+  target: SmoothScrollTarget,
+  { duration = 300 }: SmoothScrollOptions = {}
+): Promise<void> {
+  const scroller: Element =
+    container ?? document.scrollingElement ?? document.documentElement;
+  const from = scroller.scrollTop;
+  const delta = "by" in target ? target.by : target.top - from;
+  if (Math.abs(delta) < 1) return Promise.resolve();
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce || duration <= 0) {
+    scroller.scrollTop = from + delta;
+    return Promise.resolve();
+  }
+  // Native smooth scrolling has no duration, so this steps it per frame.
+  return new Promise((resolve) => {
+    const start = performance.now();
+    function step(now: number) {
+      const progress = Math.min((now - start) / duration, 1);
+      scroller.scrollTop = from + delta * easeOutCubic(progress);
+      if (progress < 1) requestAnimationFrame(step);
+      else resolve();
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+/**
+ * `smoothScroll`s the nearest scroll parent of `element` until the element
+ * sits in the middle of the view, like `scrollIntoView({ block: "center" })`
+ * with an animation.
+ */
+export function smoothScrollToCenter(
+  element: Element,
+  options?: SmoothScrollOptions
+): Promise<void> {
+  const container: Element | null = findScrollParent(element);
+  const view = container?.getBoundingClientRect() ?? {
+    top: 0,
+    height: window.innerHeight,
+  };
+  const box: DOMRect = element.getBoundingClientRect();
+  return smoothScroll(
+    container,
+    { by: box.top + box.height / 2 - (view.top + view.height / 2) },
+    options
+  );
 }

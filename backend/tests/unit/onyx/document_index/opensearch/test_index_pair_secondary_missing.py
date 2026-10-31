@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
     TenantState,

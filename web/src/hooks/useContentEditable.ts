@@ -56,6 +56,7 @@ export interface UseContentEditableReturn {
   message: string;
   setMessage: (text: string) => void;
   clearMessage: () => void;
+  deleteBeforeToken: (token: string) => boolean;
   handleInput: (event: React.SyntheticEvent<HTMLDivElement>) => string;
   handleCompositionStart: () => void;
   handleCompositionEnd: () => void;
@@ -119,7 +120,7 @@ export function useContentEditable({
   useEffect(() => {
     if (disabled) return;
     ref.current?.focus();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -198,13 +199,13 @@ export function useContentEditable({
   }, []);
 
   /** Push the current state as an undo restore point (starts a new undo unit). */
-  const pushUndoSnapshot = useCallback(() => {
+  const pushUndoSnapshot = useCallback((previous?: EditableSnapshot) => {
     const el = ref.current;
     if (!el) return;
     redoStackRef.current = [];
     lastEditKindRef.current = null;
     const stack = undoStackRef.current;
-    const snapshot = captureSnapshot(el);
+    const snapshot = previous ?? captureSnapshot(el);
     const top = stack[stack.length - 1];
     if (top && snapshotsEqual(top, snapshot)) return;
     pushBoundedSnapshot(stack, snapshot);
@@ -450,6 +451,20 @@ export function useContentEditable({
     onContentChangeRef.current?.("");
   }, [resize, clearTileSelection, clearUndoHistory]);
 
+  const deleteBeforeToken = useCallback(
+    (token: string): boolean => {
+      const el = ref.current;
+      if (!el) return false;
+      const snapshot = captureSnapshot(el);
+      if (!deleteTokenBeforeCursor(el, token)) return false;
+      pushUndoSnapshot(snapshot);
+      syncFromDOM();
+      resize();
+      return true;
+    },
+    [pushUndoSnapshot, syncFromDOM, resize]
+  );
+
   const insertTextAtCursor = useCallback(
     (text: string) => {
       if (!ref.current) return;
@@ -688,6 +703,7 @@ export function useContentEditable({
       if (meta) {
         meta.textContent = getPasteTileMeta(newText);
       }
+      syncFromDOM();
     },
     [tilePopover, syncFromDOM, resize, pushUndoSnapshot, noteEdit]
   );
@@ -799,7 +815,11 @@ export function useContentEditable({
       if (isDelete) {
         direction = event.key === "Backspace" ? "before" : "after";
       } else {
-        direction = event.key === "ArrowLeft" ? "before" : "after";
+        // Arrow keys are physical, so in RTL the left arrow moves toward
+        // the DOM-following tile.
+        const rtl = el ? getComputedStyle(el).direction === "rtl" : false;
+        const towardStart = (event.key === "ArrowLeft") !== rtl;
+        direction = towardStart ? "before" : "after";
       }
 
       let tile = getAdjacentRichTile(range, direction);
@@ -878,6 +898,7 @@ export function useContentEditable({
     message,
     setMessage,
     clearMessage,
+    deleteBeforeToken,
     handleInput,
     handleCompositionStart,
     handleCompositionEnd,

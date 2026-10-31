@@ -93,8 +93,8 @@ def rotate_encryption_key(
 
     for model_cls, col_name, pk_names, is_json in encrypted_columns:
         table_name: str = model_cls.__tablename__  # ty: ignore[unresolved-attribute]
-        col_attr = getattr(model_cls, col_name)
-        pk_attrs = [getattr(model_cls, pk) for pk in pk_names]
+        col_attr = getattr(model_cls, col_name)  # ods: ignore[getattr]
+        pk_attrs = [getattr(model_cls, pk) for pk in pk_names]  # ods: ignore[getattr]
 
         # Read raw bytes directly, bypassing the TypeDecorator
         raw_col = col_attr.property.columns[0]

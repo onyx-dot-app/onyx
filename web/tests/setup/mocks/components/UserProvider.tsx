@@ -41,10 +41,13 @@ const mockUserContext: UserContextType = {
   updateUserTemperatureOverrideEnabled: async () => {},
   updateUserPersonalization: async () => {},
   updateUserThemePreference: async () => {},
+  updateUserLanguage: async () => {},
   updateUserChatBackground: async () => {},
   updateUserDefaultModel: async () => {},
   updateUserDefaultAppMode: async () => {},
   updateUserVoiceSettings: async () => {},
+  updateUserTemperatureDefault: async () => {},
+  updateUserReasoningEffortDefault: async () => {},
 };
 
 const UserContext = createContext<UserContextType | undefined>(mockUserContext);

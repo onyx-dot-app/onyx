@@ -111,6 +111,70 @@ class TestVerifyAndStoreLicense:
         mock_upsert.assert_not_called()
         mock_publish_cache.assert_called_once_with(db_session)
 
+    @patch("ee.onyx.utils.license.publish_license_cache")
+    @patch("ee.onyx.db.license.get_license")
+    @patch("ee.onyx.db.license.upsert_license")
+    @patch("ee.onyx.utils.license.verify_license_signature")
+    def test_a_license_for_another_tenant_cannot_replace_the_stored_one(
+        self,
+        mock_verify: MagicMock,
+        mock_upsert: MagicMock,
+        mock_get_license: MagicMock,
+        _mock_publish_cache: MagicMock,
+    ) -> None:
+        """The tenant compared against is the row read under the store lock, so
+        a license stored while this call was in flight is the one protected. A
+        tenant the caller sampled before its request went out is already stale.
+        """
+        incoming = _make_license_payload()
+        other_tenant = _make_license_payload()
+        other_tenant.tenant_id = "tenant_other"
+        # Older, so only the tenant compare can stop the write.
+        other_tenant.issued_at = incoming.issued_at - timedelta(hours=1)
+        mock_get_license.return_value = MagicMock(license_data="stored-license")
+        mock_verify.side_effect = lambda blob: (
+            other_tenant if blob == "stored-license" else incoming
+        )
+
+        with pytest.raises(ValueError, match="different tenant"):
+            verify_and_store_license(
+                MagicMock(), "signed-license", keep_stored_tenant=True
+            )
+
+        mock_upsert.assert_not_called()
+
+    @patch("ee.onyx.utils.license.publish_license_cache")
+    @patch("ee.onyx.db.license.get_license")
+    @patch("ee.onyx.db.license.upsert_license")
+    @patch("ee.onyx.utils.license.verify_license_signature")
+    def test_an_unverifiable_stored_license_blocks_the_claim(
+        self,
+        mock_verify: MagicMock,
+        mock_upsert: MagicMock,
+        mock_get_license: MagicMock,
+        _mock_publish_cache: MagicMock,
+    ) -> None:
+        """A stored blob that no longer verifies yields no tenant to compare, so
+        treating it as unbound would let any checkout id replace it. It is still
+        a binding; the admin deletes the license to get past it.
+        """
+        incoming = _make_license_payload()
+        mock_get_license.return_value = MagicMock(license_data="corrupt-license")
+
+        def _verify(blob: str) -> LicensePayload:
+            if blob == "corrupt-license":
+                raise ValueError("Invalid license signature")
+            return incoming
+
+        mock_verify.side_effect = _verify
+
+        with pytest.raises(ValueError, match="cannot be verified"):
+            verify_and_store_license(
+                MagicMock(), "signed-license", keep_stored_tenant=True
+            )
+
+        mock_upsert.assert_not_called()
+
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
     def test_rejects_unverifiable_blob_without_persisting(

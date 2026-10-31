@@ -6,13 +6,10 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import (
     AUTO_LLM_CONFIG_URL,
-    AUTO_LLM_UPDATE_INTERVAL_SECONDS,
-    DISABLE_OPENSEARCH_MIGRATION_TASK,
+    DISABLE_TELEMETRY,
     DISABLE_VECTOR_DB,
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
-    ENTERPRISE_EDITION_ENABLED,
-    ONYX_DISABLE_VESPA,
     SCHEDULED_EVAL_DATASET_NAMES,
+    TABULAR_RECHUNK_ENABLED,
 )
 from onyx.configs.constants import (
     ONYX_CLOUD_CELERY_TASK_PREFIX,
@@ -20,9 +17,13 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
+from onyx.document_index.opensearch.constants import (
+    RESOURCE_CHECK_INTERVAL_SECONDS,
+)
 from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
-from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
-from shared_configs.configs import MULTI_TENANT
+from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
+from onyx.utils.variable_functionality import is_ee_available
+from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, MULTI_TENANT
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
 # we might be able to reduce this greatly if we can run a unified
@@ -32,6 +33,10 @@ from shared_configs.configs import MULTI_TENANT
 # it's only important that they run relatively regularly
 BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 
+# Under the re-chunk interval: the tick resumes from a stored cursor, so one
+# that waited longer than that has no value.
+TABULAR_RECHUNK_EXPIRES = 4 * 60  # 4 minutes (in seconds)
+
 # hack to slow down task dispatch in the cloud until
 # we have a better implementation (backpressure, etc)
 # Note that DynamicTenantScheduler can adjust the runtime value for this via Redis
@@ -40,6 +45,18 @@ CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = [
+    {
+        "name": "cleanup-oauth-provider-grants",
+        "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_GRANTS,
+        "schedule": timedelta(days=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
     {
         "name": "check-for-user-file-processing",
         "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_PROCESSING,
@@ -102,6 +119,21 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-old-index-reclaim",
+        "task": OnyxCeleryTask.CHECK_FOR_OLD_INDEX_RECLAIM,
+        "schedule": timedelta(minutes=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — freeing our storage matters most for non-paying
+            # tenants. Safe because the PAST + is_active_port_backfill_source gates only
+            # reclaim an index once its reindex has truly completed (a gated tenant's
+            # deferred reindex never swaps / never drains, so it's never fetched).
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-checkpoint-cleanup",
         "task": OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
         "schedule": timedelta(hours=1),
@@ -110,6 +142,68 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
             # Run on gated tenants too — they may still have stale checkpoints to clean.
             "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        "name": "check-for-staged-connector-file-cleanup",
+        "task": OnyxCeleryTask.CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still hold staged uploads to delete.
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        # Runs monthly (x8 in cloud, with the beat multiplier) because it rarely
+        # has work. It selects by age, so the cadence does not decide what is stale.
+        "name": "cleanup-stale-draft-credentials",
+        "task": OnyxCeleryTask.CLEANUP_STALE_DRAFT_CREDENTIALS,
+        "schedule": timedelta(days=30),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        # Daily: the retention window selects by age, so the cadence only bounds
+        # how far past the window a run can live.
+        "name": "cleanup-old-capability-check-runs",
+        "task": OnyxCeleryTask.CLEANUP_OLD_CAPABILITY_CHECK_RUNS,
+        "schedule": timedelta(days=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        "name": "check-for-stale-capability-runs",
+        "task": OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
+        "schedule": timedelta(minutes=10),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still hold dead RUNNING marks to retire.
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
+        "name": "check-for-scheduled-capability-checks",
+        "task": OnyxCeleryTask.CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
             "work_gated": True,
         },
     },
@@ -166,16 +260,6 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
-    {
-        "name": "monitor-background-processes",
-        "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-        "schedule": timedelta(minutes=5),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.MONITORING,
-        },
-    },
     # Craft scheduled tasks (per-tenant dispatcher + stuck-run sweeper).
     # Both are lightweight DB-only coordination tasks and run on the
     # primary queue. The dedicated `scheduled_tasks` worker is reserved
@@ -224,9 +308,9 @@ beat_task_templates: list[dict] = [
     },
 ]
 
-# Mirror set_is_ee_based_on_env_variable(): EE features are active when either
-# ENABLE_PAID_ENTERPRISE_EDITION_FEATURES or LICENSE_ENFORCEMENT_ENABLED is set.
-if ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:
+# These tasks live in the Enterprise Edition code, so only a build that ships it
+# can run them.
+if is_ee_available():
     beat_task_templates.extend(
         [
             {
@@ -285,32 +369,56 @@ if SCHEDULED_EVAL_DATASET_NAMES:
         }
     )
 
-# Add OpenSearch migration task if enabled.
-if (
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-    and not DISABLE_OPENSEARCH_MIGRATION_TASK
-    and not ONYX_DISABLE_VESPA
-):
+if not DISABLE_TELEMETRY:
     beat_task_templates.append(
         {
-            "name": "migrate-chunks-from-vespa-to-opensearch",
-            "task": OnyxCeleryTask.MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK,
-            # Try to enqueue an invocation of this task with this frequency.
-            "schedule": timedelta(seconds=120),  # 2 minutes
+            "name": "collect-fleet-telemetry",
+            "task": OnyxCeleryTask.COLLECT_FLEET_TELEMETRY,
+            "schedule": timedelta(seconds=COLLECTION_INTERVAL_SECONDS),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
-                # If the task was not dequeued in this time, revoke it.
-                "expires": BEAT_EXPIRES_DEFAULT,
-                "queue": OnyxCeleryQueues.OPENSEARCH_MIGRATION,
+                "expires": COLLECTION_INTERVAL_SECONDS,
+                "queue": OnyxCeleryQueues.MONITORING,
             },
         }
     )
 
+beat_task_templates.append(
+    {
+        "name": "backfill-cc-pair-ids",
+        "task": OnyxCeleryTask.BACKFILL_CC_PAIR_IDS_TASK,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.INDEX_RECLAIM,
+        },
+    }
+)
 
+# Gated here as well as in the task body, which would still cost one message
+# per tenant every 5 minutes.
+if TABULAR_RECHUNK_ENABLED:
+    beat_task_templates.append(
+        {
+            "name": "tabular-rechunk",
+            "task": OnyxCeleryTask.TABULAR_RECHUNK_TASK,
+            "schedule": timedelta(minutes=5),
+            "options": {
+                # Level with a first-time index. The pool has no preemption, so
+                # a lower tier is starved while a crawl keeps the queue busy.
+                "priority": OnyxCeleryPriority.HIGH,
+                "expires": TABULAR_RECHUNK_EXPIRES,
+                "queue": OnyxCeleryQueues.DOCPROCESSING,
+            },
+        }
+    )
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
+    "tabular-rechunk",
     "check-for-indexing",
     "check-for-port",
+    "check-for-old-index-reclaim",
     "check-for-connector-deletion",
     "check-for-vespa-sync",
     "check-for-pruning",
@@ -319,7 +427,7 @@ _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-index-attempt-cleanup",
     "check-for-doc-permissions-sync",
     "check-for-external-group-sync",
-    "migrate-chunks-from-vespa-to-opensearch",
+    "backfill-cc-pair-ids",
 }
 
 if DISABLE_VECTOR_DB:
@@ -356,6 +464,16 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
 # the name attribute must start with ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud" to be seen
 # by the DynamicTenantScheduler as system wide task and not a per tenant task
 beat_cloud_tasks: list[dict] = [
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_cleanup-oauth-provider-clients",
+        "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_CLIENTS,
+        "schedule": timedelta(days=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
     # cloud specific tasks
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-alembic",
@@ -405,6 +523,16 @@ if not MULTI_TENANT:
     tasks_to_schedule.extend(
         [
             {
+                "name": "cleanup-oauth-provider-clients",
+                "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_CLIENTS,
+                "schedule": timedelta(days=1),
+                "options": {
+                    "queue": OnyxCeleryQueues.PRIMARY,
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                },
+            },
+            {
                 "name": "monitor-celery-queues",
                 "task": OnyxCeleryTask.MONITOR_CELERY_QUEUES,
                 "schedule": timedelta(seconds=10),
@@ -434,17 +562,6 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
-            # hourly tick; the task itself enforces a once-per-day cadence
-            {
-                "name": "emit-version-telemetry",
-                "task": OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
-                "schedule": timedelta(hours=1),
-                "options": {
-                    "priority": OnyxCeleryPriority.LOW,
-                    "expires": BEAT_EXPIRES_DEFAULT,
-                    "queue": OnyxCeleryQueues.MONITORING,
-                },
-            },
         ]
     )
 
@@ -457,6 +574,26 @@ if not MULTI_TENANT:
         _self_hosted_template["options"].pop("skip_gated", None)
         _self_hosted_template["options"].pop("work_gated", None)
         tasks_to_schedule.append(_self_hosted_template)
+
+
+if not DISABLE_VECTOR_DB:
+    # Cluster-wide in cloud; never fan this probe out to each tenant.
+    _resource_health_task: dict[str, Any] = {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-opensearch-resources"
+        if MULTI_TENANT
+        else "monitor-opensearch-resources",
+        "task": OnyxCeleryTask.MONITOR_OPENSEARCH_RESOURCES,
+        "schedule": timedelta(seconds=RESOURCE_CHECK_INTERVAL_SECONDS),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": RESOURCE_CHECK_INTERVAL_SECONDS,
+        },
+    }
+    if MULTI_TENANT:
+        beat_cloud_tasks.append(_resource_health_task)
+    else:
+        tasks_to_schedule.append(_resource_health_task)
 
 
 def generate_cloud_tasks(

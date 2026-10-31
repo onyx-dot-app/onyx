@@ -8,7 +8,7 @@ import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
-import { useFilters, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { getPanelOrigin } from "@/lib/extension/utils";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
@@ -19,8 +19,9 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import { useActiveAgent } from "@/lib/agents/hooks";
@@ -36,10 +37,9 @@ import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -48,6 +48,8 @@ import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { Section } from "@/layouts/general-layouts";
+import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 
 const SearchUI = paidTierGated(EESearchUI);
 
@@ -56,14 +58,15 @@ interface NRFPageProps {
 }
 
 // Reserve half of the context window for the model's response output
-const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
 
 export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
+  const t = useTranslations("chat");
+  const { appName } = useSettings();
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
-  const filterManager = useFilters();
-  const { user, authTypeMetadata } = useUser();
+  // Shared with the tools popover in AppInputBar below. Mounted by the route.
+  const { user, authTypeMetadata, refreshUser } = useUser();
 
   // Chat sessions
   const { refreshChatSessions } = useChatSessions();
@@ -85,13 +88,14 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
       toast.error(
-        lastFailedFiles.length === 1
-          ? `File failed and was removed: ${names}`
-          : `Files failed and were removed: ${names}`
+        t("nrf.page.filesFailed.toast", {
+          count: lastFailedFiles.length,
+          names,
+        })
       );
       clearLastFailedFiles();
     }
-  }, [lastFailedFiles, clearLastFailedFiles]);
+  }, [lastFailedFiles, clearLastFailedFiles, t]);
 
   // Assistant controller
   const activeAgent = useActiveAgent();
@@ -129,8 +133,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         });
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.selectedModels]);
+
+  const toolConfiguration = useToolConfiguration();
 
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -214,6 +219,23 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   useSendMessageToParent();
 
+  // Sign-in from this embedded page happens in another tab, so re-check the
+  // session whenever the user comes back to this one.
+  useEffect(() => {
+    if (user) return;
+
+    function handleVisible() {
+      if (document.visibilityState === "visible") void refreshUser();
+    }
+
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", handleVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+    };
+  }, [user, refreshUser]);
+
   // Listen for tab URL updates from the Chrome extension
   useEffect(() => {
     if (!isSidePanel) return;
@@ -238,7 +260,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setSettingsOpen((prev) => !prev);
   };
 
-  // If user toggles the "Use Onyx" switch to off, prompt a modal
+  // Turning the new-tab toggle off prompts a modal first
   const handleUseOnyxToggle = (checked: boolean) => {
     if (!checked) {
       setShowTurnOffModal(true);
@@ -261,24 +283,31 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.reset();
   }, [setMessage, setCurrentMessageFiles]);
 
+  const restoreInputBar = useCallback(
+    (message: string, files: ProjectFile[]) => {
+      chatInputBarRef.current?.restore(message, files);
+    },
+    []
+  );
+
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
-      filterManager,
       llmManager,
+      toolConfiguration,
       availableAgents: availableAgents || [],
       activeAgent,
       existingChatSessionId,
       selectedDocuments: [],
       searchParams: searchParams!,
       resetInputBar,
+      restoreInputBar,
     });
 
   // Chat session controller for loading sessions
-  const { currentSessionFileTokenCount } = useChatSessionController({
+  useChatSessionController({
     existingChatSessionId,
     searchParams: searchParams!,
-    filterManager,
     firstMessage: undefined,
     setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
     setCurrentMessageFiles,
@@ -362,7 +391,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error(t("nrf.page.noResubmitMessage.toast"));
       return;
     }
 
@@ -378,6 +407,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     currentMessageFiles,
     deepResearchEnabled,
     multiModel.isMultiModelActive,
+    t,
   ]);
 
   // Start a new chat session in the side panel
@@ -444,22 +474,23 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Settings button */}
       {!isSidePanel && (
-        <div className="absolute top-0 right-0 p-4 z-10">
+        <div className="absolute top-0 end-0 p-4 z-10">
           <Button
             prominence="secondary"
             icon={SvgMenu}
             onClick={toggleSettings}
-            tooltip="Open settings"
+            tooltip={t("nrf.page.settingsButton.tooltip")}
           />
         </div>
       )}
 
-      <Dropzone onDrop={handleFileUpload} noClick>
+      {/* noPaste: the input bar already uploads pasted files itself. */}
+      <Dropzone onDrop={handleFileUpload} noClick noPaste>
         {({ getRootProps }) => (
           <div
             {...getRootProps()}
             className={cn(
-              "flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
+              "relative flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
               isSidePanel && "px-3"
             )}
           >
@@ -517,6 +548,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
+            {/* Keeps the input bar below the absolute settings button when pinned to the top */}
+            {!hasMessages && isSearch && !isSidePanel && <Spacer rem={4} />}
+
             {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
@@ -538,18 +572,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
                 isMultiModelActive={multiModel.isMultiModelActive}
-                filterManager={filterManager}
                 llmManager={llmManager}
                 initialMessage={message}
                 stopGenerating={stopGenerating}
                 onSubmit={handleChatInputSubmit}
                 chatState={currentChatState}
-                currentSessionFileTokenCount={currentSessionFileTokenCount}
-                availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
                 activeAgent={activeAgent}
                 handleFileUpload={handleFileUpload}
                 disabled={
@@ -566,7 +598,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Search results - shown when query is classified as search */}
             {isSearch && (
-              <div className="flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-auto">
+              <div
+                className={cn(
+                  "flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-hidden flex flex-col",
+                  !isSidePanel &&
+                    "pb-[calc(var(--nrf-footer-height,0px)_+_0.5rem)]"
+                )}
+              >
                 <Spacer rem={0.75} />
                 <SearchUI onDocumentClick={handleSearchDocumentClick} />
               </div>
@@ -581,7 +619,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Document sidebar - shown when sources are clicked */}
       <div
         className={cn(
-          "absolute right-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
+          "absolute end-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
           documentSidebarVisible ? "w-100" : "w-0"
         )}
       >
@@ -614,8 +652,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             <Modal.Content width="sm">
               <Modal.Header
                 icon={SvgAlertTriangle}
-                title="Turn off Onyx new tab page?"
-                description="You'll see your browser's default new tab page instead. You can turn it back on anytime in your Onyx settings."
+                title={t("nrf.page.turnOffModal.title", { appName })}
+                description={t("nrf.page.turnOffModal.description", {
+                  appName,
+                })}
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
@@ -623,10 +663,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   prominence="secondary"
                   onClick={() => setShowTurnOffModal(false)}
                 >
-                  Cancel
+                  {t("nrf.page.turnOffModal.cancelButton.label")}
                 </Button>
                 <Button variant="danger" onClick={confirmTurnOff}>
-                  Turn off
+                  {t("nrf.page.turnOffModal.confirmButton.label")}
                 </Button>
               </Modal.Footer>
             </Modal.Content>
@@ -637,13 +677,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {!user && (
         <Modal open onOpenChange={() => {}}>
           <Modal.Content width="sm" height="sm">
-            <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
+            <Modal.Header
+              icon={SvgUser}
+              title={t("nrf.page.loginModal.title", { appName })}
+            />
             <Modal.Body>
+              {/* Every new tab opens this page, so it never bounces to the IdP on its own. */}
               {authTypeMetadata?.multiTenant === false ? (
                 <LoginPage
                   authUrl={null}
                   authTypeMetadata={authTypeMetadata ?? null}
                   nextUrl="/nrf"
+                  autoRedirectToSso={false}
                 />
               ) : (
                 <div className="flex flex-col items-center">
@@ -658,7 +703,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       }
                     }}
                   >
-                    Log in
+                    {t("nrf.page.loginModal.loginButton.label")}
                   </Button>
                 </div>
               )}
@@ -675,7 +720,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
           }}
         >
-          Set up an LLM.
+          {t("nrf.page.setupLlmButton.label")}
         </Button>
       )}
     </div>

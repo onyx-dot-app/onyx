@@ -11,7 +11,9 @@ def is_craft_gateway_request(request: Request, user: User) -> bool:
     """Session/API-key auth carries no token scopes and must never match —
     ``require_permission`` alone can't express "a gateway-capable scope must
     be present"."""
-    token_scopes: list[Permission] | None = getattr(request.state, "token_scopes", None)
+    token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
+        request.state, "token_scopes", None
+    )
     token_grants_gateway = (
         token_scopes is not None
         and Permission.USE_LLM_GATEWAY.value
@@ -25,7 +27,9 @@ def gateway_request_flow(request: Request, user: User) -> LLMFlow | None:
     requirement included; only a directly granted USE_LLM_GATEWAY skips it.
     Future caller-declared sources should become additional LLMFlow return
     values here, not booleans."""
-    token_scopes: list[Permission] | None = getattr(request.state, "token_scopes", None)
+    token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
+        request.state, "token_scopes", None
+    )
     if token_scopes is None:
         return None
     raw_scopes = {s.value for s in token_scopes}

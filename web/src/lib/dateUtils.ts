@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useState } from "react";
+import { humanReadableFormatShort } from "@opal/time";
 
 export const useNightTime = () => {
   const [isNight, setIsNight] = useState(false);
@@ -112,7 +113,8 @@ export const buildDateString = (date: Date | null) => {
 
 export const getFormattedDateRangeString = (
   from: Date | null,
-  to: Date | null
+  to: Date | null,
+  locale: string
 ) => {
   if (!from || !to) return null;
 
@@ -121,8 +123,8 @@ export const getFormattedDateRangeString = (
     day: "numeric",
     year: "numeric",
   };
-  const fromString = from.toLocaleDateString("en-US", options);
-  const toString = to.toLocaleDateString("en-US", options);
+  const fromString = from.toLocaleDateString(locale, options);
+  const toString = to.toLocaleDateString(locale, options);
 
   return `${fromString} - ${toString}`;
 };
@@ -165,29 +167,36 @@ export const getTimeAgoString = (date: Date | null) => {
   return `${diffMonths}mo ago`;
 };
 
-/**
- * Format a date to short format like "Jan 27, 2026".
- * Always shows date, never time.
- */
-export const formatDateShort = (dateStr: string | null | undefined): string => {
-  if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
+/** Short date like "Jan 27, 2026", or an em dash when there is no date. */
+export const formatDateShort = (
+  dateStr: string | null | undefined,
+  locale: string
+): string => (dateStr ? humanReadableFormatShort(dateStr, locale) : "—");
 
 // Parses at local midnight so the day never shifts the way `formatDateShort` can for callers west of UTC.
 export const formatCalendarDay = (
   dateStr: string,
+  locale: string,
   { withYear = false }: { withYear?: boolean } = {}
 ): string =>
-  new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+  new Date(`${dateStr}T00:00:00`).toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
     ...(withYear && { year: "numeric" }),
   });
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+const formatDatePart = (d: Date) =>
+  `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+
+/**
+ * Format an ISO timestamp as "YYYY/MM/DD" (local time), the date half of
+ * `formatDateTimeLog`, for "Added on" style labels beside it.
+ */
+export function formatDateLog(iso: string): string {
+  return formatDatePart(new Date(iso));
+}
 
 /**
  * Format an ISO timestamp as "YYYY/MM/DD HH:MM:SS" (24-hour, local time).
@@ -195,10 +204,9 @@ export const formatCalendarDay = (
  */
 export function formatDateTimeLog(iso: string): string {
   const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${formatDatePart(d)} ${pad2(d.getHours())}:${pad2(
+    d.getMinutes()
+  )}:${pad2(d.getSeconds())}`;
 }
 
 /**
@@ -230,7 +238,7 @@ export function formatElapsedTime(totalSeconds: number): string {
     .padStart(2, "0")}`;
 }
 
-export const getFormattedDateTime = (date: Date | null) => {
+export const getFormattedDateTime = (date: Date | null, locale: string) => {
   if (!date) return null;
 
   const now = new Date();
@@ -238,14 +246,14 @@ export const getFormattedDateTime = (date: Date | null) => {
 
   if (isToday) {
     // If it's today, return the time in format like "3:45 PM"
-    return date.toLocaleTimeString("en-US", {
+    return date.toLocaleTimeString(locale, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     });
   } else {
     // Otherwise return the date in format like "Jan 15, 2023"
-    return date.toLocaleDateString("en-US", {
+    return date.toLocaleDateString(locale, {
       month: "short",
       day: "numeric",
       year: "numeric",

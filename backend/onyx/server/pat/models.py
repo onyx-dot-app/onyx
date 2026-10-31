@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 from onyx.auth.permissions import resolve_effective_permissions
 from onyx.db.enums import Permission
 from onyx.db.permissions import parse_permission_values
+from onyx.server.gateway.configs import LLM_GATEWAY_MIN_TIER
 from onyx.server.settings.models import Tier
 
 # Assignable token scopes, grouped by `group_label`. `implies` is derived from the
@@ -19,8 +20,7 @@ class PatScopeOption(BaseModel):
     group_label: str
     label: str
     description: str
-    # Minimum license tier at which the FE offers this scope. Not enforced at
-    # minting time; the gated API surface itself rejects lower tiers.
+    # Minimum license tier at which this scope is listed and can be minted.
     min_tier: Tier = Tier.COMMUNITY
 
     @computed_field
@@ -54,7 +54,7 @@ _ASSIGNABLE_SCOPES: list[PatScopeOption] = [
         group_label="LLM Gateway",
         label="Use",
         description="Call the LLM gateway from external tools.",
-        min_tier=Tier.ENTERPRISE,
+        min_tier=LLM_GATEWAY_MIN_TIER,
     ),
 ]
 

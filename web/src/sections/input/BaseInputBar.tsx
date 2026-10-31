@@ -1,23 +1,26 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   forwardRef,
   memo,
   useCallback,
   useImperativeHandle,
   useRef,
+  useState,
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
   type SyntheticEvent,
 } from "react";
+import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { deleteTokenBeforeCursor, getTextContent } from "@/lib/contentEditable";
+import { getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
+import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
 import Keycap from "@/refresh-components/Keycap";
 import { useContentEditable } from "@/hooks/useContentEditable";
@@ -28,7 +31,7 @@ import {
   EMPTY_QUEUED_MESSAGES,
   MAX_QUEUED_MESSAGES,
   type QueuedMessage,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 
 export interface BaseInputBarHandle {
   reset: () => void;
@@ -42,7 +45,7 @@ export interface BaseInputBarHandle {
 }
 
 export interface BaseInputBarProps {
-  onSubmit: (message: string) => void;
+  onSubmit: (message: string) => boolean | void | Promise<boolean | void>;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -53,7 +56,7 @@ export interface BaseInputBarProps {
   submitBlocked?: boolean;
 
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string) => void;
+  onQueueMessage?: (text: string) => boolean | void;
   onRemoveQueuedMessage?: (index: number) => void;
 
   onInterrupt?: () => void;
@@ -67,6 +70,7 @@ export interface BaseInputBarProps {
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
   onPasteFiles?: (files: File[]) => void;
+  onContentChange?: (text: string) => void;
   onInputCallback?: () => void;
   onSelectionChange?: () => void;
 }
@@ -77,8 +81,8 @@ const BaseInputBar = memo(
       {
         onSubmit,
         isRunning,
-        disabled = false,
-        placeholder = "Describe your task...",
+        disabled: disabledProp = false,
+        placeholder,
         noBottomRounding = false,
         pasteTilesEnabled = false,
         sandboxInitializing = false,
@@ -93,13 +97,20 @@ const BaseInputBar = memo(
         bottomRightSlot,
         onPasteText,
         onPasteFiles,
+        onContentChange,
         onInputCallback,
         onSelectionChange,
       },
       ref
     ) => {
+      const [submitting, setSubmitting] = useState(false);
+      const submittingRef = useRef(false);
+      const disabled = disabledProp || submitting;
+      const t = useTranslations("chat.input");
       const queueEnabled = !!onQueueMessage;
       const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+      const resolvedPlaceholder =
+        placeholder ?? t("baseInputBar.input.placeholder");
 
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
@@ -107,6 +118,7 @@ const BaseInputBar = memo(
         message,
         setMessage,
         clearMessage,
+        deleteBeforeToken,
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
@@ -124,6 +136,7 @@ const BaseInputBar = memo(
         expandTile,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        onContentChange,
         pasteTilesEnabled,
         disabled,
       });
@@ -175,11 +188,7 @@ const BaseInputBar = memo(
           }
           return rect;
         },
-        deleteBeforeToken: (token: string): boolean => {
-          const el = inputRef.current;
-          if (!el) return false;
-          return deleteTokenBeforeCursor(el, token);
-        },
+        deleteBeforeToken,
       }));
 
       const handlePaste = useCallback(
@@ -200,20 +209,33 @@ const BaseInputBar = memo(
         [disabled, onPasteFiles, onPasteText, pasteText]
       );
 
-      const handleSubmit = useCallback(() => {
-        if (disabled || submitBlocked || sandboxInitializing || isInterrupting)
+      const handleSubmit = useCallback(async () => {
+        if (
+          submittingRef.current ||
+          disabled ||
+          submitBlocked ||
+          sandboxInitializing ||
+          isInterrupting
+        )
           return;
         const text = message.trim();
         if (isRunning) {
           if (onQueueMessage && text && queue.length < MAX_QUEUED_MESSAGES) {
-            onQueueMessage(text);
-            clearMessage();
+            if (onQueueMessage(text) !== false) clearMessage();
           }
           return;
         }
         if (text) {
-          onSubmit(text);
-          clearMessage();
+          submittingRef.current = true;
+          setSubmitting(true);
+          try {
+            if ((await onSubmit(text)) !== false) clearMessage();
+          } catch (error) {
+            console.error("Message submission failed", error);
+          } finally {
+            submittingRef.current = false;
+            setSubmitting(false);
+          }
         }
       }, [
         message,
@@ -291,6 +313,14 @@ const BaseInputBar = memo(
               <div
                 ref={inputRef}
                 contentEditable={!disabled}
+                // Direction follows what the user types. While empty it
+                // follows the placeholder so its punctuation sits on the
+                // correct side in every locale.
+                dir={
+                  message
+                    ? "auto"
+                    : (firstStrongTextDir(resolvedPlaceholder) ?? "auto")
+                }
                 suppressContentEditableWarning
                 onPaste={handlePaste}
                 onInput={handleInput}
@@ -311,11 +341,11 @@ const BaseInputBar = memo(
                   scrollbarColor: "var(--border-02) transparent",
                 }}
                 role="textbox"
-                aria-label="Message input"
+                aria-label={t("baseInputBar.input.ariaLabel")}
                 aria-multiline={true}
                 aria-disabled={disabled}
-                aria-placeholder={placeholder}
-                data-placeholder={placeholder}
+                aria-placeholder={resolvedPlaceholder}
+                data-placeholder={resolvedPlaceholder}
                 data-empty={!message ? "" : undefined}
                 onCopy={handleCopy}
                 onCut={handleCut}
@@ -330,7 +360,7 @@ const BaseInputBar = memo(
                 {pasteExpandHintVisible ? (
                   <div className="flex items-center gap-1 select-none">
                     <Text font="secondary-body" color="text-02">
-                      Paste again to expand
+                      {t("baseInputBar.pasteExpandHint.text")}
                     </Text>
                   </div>
                 ) : (
@@ -340,7 +370,7 @@ const BaseInputBar = memo(
                     <div className="flex items-center gap-1 select-none">
                       <Keycap>↑</Keycap>
                       <Text font="secondary-body" color="text-02">
-                        to edit queued messages
+                        {t("baseInputBar.queuedMessagesHint.text")}
                       </Text>
                     </div>
                   )
@@ -356,32 +386,39 @@ const BaseInputBar = memo(
                       : "w-0 opacity-0 pointer-events-none"
                   )}
                 >
-                  <IconButton
-                    main
-                    tertiary
-                    icon={isInterrupting ? SvgLoader : SvgStop}
-                    iconClassName={isInterrupting ? "animate-spin" : undefined}
-                    className="border-[1.5px] border-border-02"
+                  <Button
+                    prominence="tertiary"
+                    icon={isInterrupting ? IconLoader : SvgStop}
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
-                    tooltip="Stop · esc"
-                    aria-label="Stop generating"
+                    tooltip={t("baseInputBar.stopButton.tooltip")}
+                    aria-label={t("baseInputBar.stopButton.ariaLabel")}
                   />
                 </div>
-                <IconButton
-                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                <Button
+                  icon={
+                    sandboxInitializing
+                      ? ({ className, style }) => (
+                          <SvgLoader
+                            className={cn(className, "animate-spin")}
+                            style={style}
+                          />
+                        )
+                      : SvgArrowUp
+                  }
                   onClick={handleSubmit}
                   disabled={!canSubmit}
                   tooltip={
                     sandboxInitializing
-                      ? "Initializing sandbox..."
+                      ? t("baseInputBar.sendButton.initializingTooltip")
                       : isRunning
-                        ? "Queue message"
-                        : "Send"
+                        ? t("baseInputBar.sendButton.queueLabel")
+                        : t("baseInputBar.sendButton.sendLabel")
                   }
-                  aria-label={isRunning ? "Queue message" : "Send"}
-                  iconClassName={
-                    sandboxInitializing ? "animate-spin" : undefined
+                  aria-label={
+                    isRunning
+                      ? t("baseInputBar.sendButton.queueLabel")
+                      : t("baseInputBar.sendButton.sendLabel")
                   }
                 />
               </div>

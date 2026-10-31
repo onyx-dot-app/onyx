@@ -7,7 +7,7 @@
    effective fold state as `data-folded` on `.opal-sidebar-root__inner`, and
    the rules below read it from any depth. Tabs therefore render once and stay
    rendered while the sidebar folds, and the label fades in step with the
-   200ms column width transition instead of popping.
+   column width transition (`--duration-sidebar-fold`) instead of popping.
 
    An explicit `folded` prop sets `data-folded` on the tab itself and wins over
    the enclosing sidebar. Tabs outside a sidebar have no `data-folded`
@@ -26,10 +26,6 @@
   --sidebar-tab-label-visibility: visible;
   /* Applied to visibility, so it flips only after the label has faded out. */
   --sidebar-tab-label-visibility-delay: 0s;
-  /* Clipped while folding, so the label never flashes an ellipsis as the
-     column narrows. */
-  --sidebar-tab-label-overflow: ellipsis;
-  --sidebar-tab-actions-display: flex;
 }
 
 .opal-sidebar-tab[data-folded="true"],
@@ -37,30 +33,66 @@
   .opal-sidebar-tab:not([data-folded="false"]) {
   --sidebar-tab-label-opacity: 0;
   --sidebar-tab-label-visibility: hidden;
-  --sidebar-tab-label-visibility-delay: 200ms;
-  --sidebar-tab-label-overflow: clip;
-  --sidebar-tab-actions-display: none;
+  --sidebar-tab-label-visibility-delay: var(--duration-sidebar-fold);
 }
 
-/* The label is `ContentSm`'s title node — the one child of the content row
-   that is not the icon container.
+/* A string label's row. It reproduces the `ContentAction` > `ContentSm`
+   layout the tab used before: the label and icon start-aligned with a 2px
+   gap, and the truncation spacer 1rem after them. */
+.opal-sidebar-tab__row {
+  @apply flex flex-row w-full items-stretch gap-4;
+}
+
+.opal-sidebar-tab__content {
+  @apply flex flex-row flex-1 min-w-0 self-start items-start gap-0.5;
+}
+
+.opal-sidebar-tab__icon {
+  @apply flex shrink-0 items-center justify-center p-0.5;
+  min-height: 1.25rem;
+}
+
+.opal-sidebar-tab__icon-svg {
+  @apply size-4;
+  color: var(--interactive-foreground-icon);
+}
+
+.opal-sidebar-tab__spacer {
+  @apply flex shrink-0 items-stretch;
+}
+
+/* The fold wrapper holds the label and `rightChildren`, so both fade as one.
 
    `visibility` (not `opacity` alone) keeps the folded label out of the
    accessibility tree and out of the tab order, so a screen reader never
    announces a label the sidebar is hiding. */
-.opal-sidebar-tab .opal-content-sm > :not(.opal-content-sm-icon-container) {
+.opal-sidebar-tab__fold {
+  @apply flex flex-row flex-1 min-w-0 items-start;
+
   opacity: var(--sidebar-tab-label-opacity);
   visibility: var(--sidebar-tab-label-visibility);
-  text-overflow: var(--sidebar-tab-label-overflow);
   transition:
-    opacity 200ms ease-in-out,
+    opacity var(--duration-sidebar-fold) ease-in-out,
     visibility 0s linear var(--sidebar-tab-label-visibility-delay);
 }
 
-/* `rightChildren` — absolutely positioned above the `Link` overlay. Hidden
-   outright when folded: there is no room for them beside the icon. */
-.opal-sidebar-tab__actions {
-  @apply absolute z-100 right-1.5 top-0 bottom-0 flex-col justify-center items-center pointer-events-auto;
+/* Element labels (e.g. a rename input) keep their row's centring and gap. */
+.opal-sidebar-tab__fold[data-label="element"] {
+  @apply items-center gap-2;
+}
 
-  display: var(--sidebar-tab-actions-display);
+/* `rightChildren` — absolutely positioned above the `Link` overlay, inside
+   the fold wrapper: there is no room for it beside the folded icon. */
+.opal-sidebar-tab__actions {
+  @apply absolute z-100 end-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-none;
+}
+
+.opal-sidebar-tab__actions > * {
+  @apply pointer-events-auto;
+}
+
+/* A passive tag lets clicks fall through to the row's click target. */
+.opal-sidebar-tab__actions
+  > .opal-auxiliary-tag:not([data-clickable]):not([data-type="editable"]) {
+  @apply pointer-events-none;
 }

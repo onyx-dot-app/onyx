@@ -1,6 +1,9 @@
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
+# A tenant is eligible for cleanup once it has been inactive this long.
+DEFAULT_INACTIVE_DAYS = 60
+
 CRAFT_ACTIVITY_FIELD = "last_craft_activity_time"
 ACTIVITY_CSV_FIELDNAMES = (
     "last_query_time",
@@ -14,7 +17,7 @@ def _parse_activity_time(value: object) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
 
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return datetime.fromisoformat(value)
 
 
 def get_last_activity_time(tenant: Mapping[str, object]) -> datetime | None:

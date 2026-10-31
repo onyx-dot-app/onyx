@@ -1,20 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Text } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { Collapsible, Text } from "@opal/components";
 import { SvgFold, SvgChevronDown } from "@opal/icons";
 import { cn } from "@opal/utils";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 
 interface CompactionMarkerProps {
   summary: string | null;
 }
 
 export default function CompactionMarker({ summary }: CompactionMarkerProps) {
+  const t = useTranslations("craft.compaction");
   const [open, setOpen] = useState(false);
   const summaryLines = useMemo(
     () => (summary?.trim() ? summary.replace(/\s+$/, "").split("\n") : []),
@@ -26,8 +23,8 @@ export default function CompactionMarker({ summary }: CompactionMarkerProps) {
     return (
       <span className="flex items-center gap-1.5">
         <SvgFold className="size-3.5 shrink-0 stroke-text-04" />
-        <Text font="main-ui-muted" color="text-04" nowrap>
-          Context compacted to free up space
+        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
+          {t("marker.label")}
         </Text>
         {withChevron && (
           <SvgChevronDown
@@ -53,18 +50,18 @@ export default function CompactionMarker({ summary }: CompactionMarkerProps) {
   }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible.Root open={open} onOpenChange={setOpen}>
       <div className="py-3">
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-border-02" />
-          <CollapsibleTrigger asChild>
+          <Collapsible.Trigger asChild>
             <button className="flex items-center rounded-08 px-1 py-0.5 transition-colors hover:bg-background-tint-01 motion-reduce:transition-none">
               {label(true)}
             </button>
-          </CollapsibleTrigger>
+          </Collapsible.Trigger>
           <div className="h-px flex-1 bg-border-02" />
         </div>
-        <CollapsibleContent>
+        <Collapsible.Content>
           <div className="mt-3 flex flex-col gap-1 rounded-12 bg-background-tint-01 px-3 py-2.5">
             {summaryLines.map((line, i) =>
               line.trim() ? (
@@ -76,8 +73,8 @@ export default function CompactionMarker({ summary }: CompactionMarkerProps) {
               )
             )}
           </div>
-        </CollapsibleContent>
+        </Collapsible.Content>
       </div>
-    </Collapsible>
+    </Collapsible.Root>
   );
 }

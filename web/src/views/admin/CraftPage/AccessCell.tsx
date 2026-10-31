@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Switch } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { InputSwitch } from "@opal/components";
 import { toast } from "@opal/layouts";
-import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import type { UserRow } from "@/views/admin/UsersPage/types";
 import { setUsersCraftAccess } from "./svc";
 
 interface AccessCellProps {
@@ -20,6 +21,7 @@ export default function AccessCell({
   defaultEnabled,
   onMutate,
 }: AccessCellProps) {
+  const t = useTranslations("admin.craft");
   const [isUpdating, setIsUpdating] = useState(false);
 
   const effective = user.craft_enabled ?? defaultEnabled;
@@ -31,12 +33,9 @@ export default function AccessCell({
         [user.email],
         checked === defaultEnabled ? null : checked
       );
-      toast.success(
-        checked ? "Craft enabled for user" : "Craft disabled for user"
-      );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update Craft access"
+        err instanceof Error ? err.message : t("accessCell.error.message")
       );
     } finally {
       setIsUpdating(false);
@@ -45,7 +44,7 @@ export default function AccessCell({
   };
 
   return (
-    <Switch
+    <InputSwitch
       checked={effective}
       disabled={isUpdating}
       onCheckedChange={(checked) => {

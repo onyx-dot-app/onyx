@@ -8,9 +8,17 @@ import {
 import {
   ALL_REASONING_STOPS,
   maxReasoningStop,
+  minReasoningStop,
 } from "@/sections/model-selector/setting-controls";
 import * as Yup from "yup";
+import type { useTranslations } from "next-intl";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
+
+/** Translator for the `admin.languageModels.modals` namespace, threaded into
+ *  helpers that live outside a component and so cannot call the hook. */
+export type LlmModalsTranslator = ReturnType<
+  typeof useTranslations<"admin.languageModels.modals">
+>;
 
 // ─── useInitialValues ─────────────────────────────────────────────────────
 
@@ -45,13 +53,12 @@ export function useInitialValues(
   const testModelName =
     modelConfigurations.find((m) => m.is_visible)?.name ??
     wellKnownLLMProvider?.recommended_default_model?.name;
-
   return {
     id: existingLlmProvider?.id,
     provider: existingLlmProvider?.provider ?? providerName,
-    name: isOnboarding
-      ? providerName
-      : (existingLlmProvider?.name ?? undefined),
+    // Editing keeps the saved name; a new onboarding provider takes the type.
+    name:
+      existingLlmProvider?.name ?? (isOnboarding ? providerName : undefined),
     api_key: existingLlmProvider?.api_key ?? undefined,
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,
@@ -74,6 +81,7 @@ interface ValidationSchemaOptions {
 /**
  * Builds the validation schema for a modal.
  *
+ * @param t — translator for the modal namespace.
  * @param isOnboarding — controls the base schema:
  *   - `true`:  minimal (only `test_model_name`).
  *   - `false`: full admin schema (display name, access, models, etc.).
@@ -82,22 +90,23 @@ interface ValidationSchemaOptions {
  * @param options.extra — arbitrary Yup fields for provider-specific validation.
  */
 export function buildValidationSchema(
+  t: LlmModalsTranslator,
   isOnboarding: boolean,
   { apiKey, apiBase, extra }: ValidationSchemaOptions = {}
 ) {
   const providerFields: Yup.ObjectShape = {
     ...(apiKey && {
-      api_key: Yup.string().required("API Key is required"),
+      api_key: Yup.string().required(t("validation.apiKeyRequired")),
     }),
     ...(apiBase && {
-      api_base: Yup.string().required("API Base URL is required"),
+      api_base: Yup.string().required(t("validation.apiBaseRequired")),
     }),
     ...extra,
   };
 
   if (isOnboarding) {
     return Yup.object().shape({
-      test_model_name: Yup.string().required("Model name is required"),
+      test_model_name: Yup.string().required(t("validation.modelNameRequired")),
       ...providerFields,
     });
   }
@@ -108,7 +117,7 @@ export function buildValidationSchema(
     is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
-    test_model_name: Yup.string().required("Model name is required"),
+    test_model_name: Yup.string().required(t("validation.modelNameRequired")),
     ...providerFields,
   });
 }
@@ -143,10 +152,13 @@ export function clampModelSettings<
 >(model: T): T {
   const highestIndex = maxReasoningStop(model.supported_reasoning_efforts);
   if (highestIndex < 0) return model;
-  const bound = (effort: ReasoningEffortOverride | null | undefined) =>
-    effort && ALL_REASONING_STOPS.indexOf(effort) > highestIndex
-      ? ALL_REASONING_STOPS[highestIndex]
-      : effort;
+  const lowestIndex = minReasoningStop(model.supported_reasoning_efforts);
+  const bound = (effort: ReasoningEffortOverride | null | undefined) => {
+    if (!effort) return effort;
+    const index = ALL_REASONING_STOPS.indexOf(effort);
+    if (index > highestIndex) return ALL_REASONING_STOPS[highestIndex];
+    return index < lowestIndex ? ALL_REASONING_STOPS[lowestIndex] : effort;
+  };
   return {
     ...model,
     reasoning_effort_max: bound(model.reasoning_effort_max),

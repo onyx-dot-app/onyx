@@ -28,6 +28,7 @@ class TestSecret(StrEnum):
     LITELLM_API_KEY = "LITELLM_API_KEY"
     LITELLM_API_URL = "LITELLM_API_URL"
     OLLAMA_API_KEY = "OLLAMA_API_KEY"
+    VERCEL_AI_GATEWAY_API_KEY = "VERCEL_AI_GATEWAY_API_KEY"
     BEDROCK_API_KEY = "bedrock-api-key"
     ONYX_DEV_LICENSE = "onyx-dev-license"
 
@@ -81,9 +82,17 @@ class TestSecret(StrEnum):
     TEAMS_APPLICATION_ID = "teams-application-id"
     TEAMS_DIRECTORY_ID = "teams-directory-id"
     TEAMS_SECRET = "teams-secret"
+    ADLS_ACCOUNT_KEY = "adls-account-key"
     BITBUCKET_WORKSPACE = "bitbucket-workspace"
     BITBUCKET_API_TOKEN = "bitbucket-api-token"
     FIREFLIES_API_KEY = "fireflies-api-key"
+    ZOOM_ACCOUNT_ID = "zoom-account-id"
+    ZOOM_CLIENT_ID = "zoom-client-id"
+    ZOOM_CLIENT_SECRET = "zoom-client-secret"
+    ZOOM_TEST_MEETING_ID = "zoom-test-meeting-id"
+    ZOOM_TEST_WEBINAR_ID = "zoom-test-webinar-id"
+    ZOOM_TEST_HOST_EMAIL = "zoom-test-host-email"
+    ZOOM_TEST_GROUP_ID = "zoom-test-group-id"
     CANVAS_ADMIN_ACCESS_TOKEN = "canvas-admin-access-token"
     CANVAS_TEACHER_ACCESS_TOKEN = "canvas-teacher-access-token"
     CANVAS_STUDENT_ACCESS_TOKEN = "canvas-student-access-token"
@@ -92,6 +101,7 @@ class TestSecret(StrEnum):
     BOX_ENTERPRISE_ID = "box-enterprise-id"
     BOX_USER_EMAIL = "box-user-email"
     BOX_COLLABORATOR_EMAIL = "box-collaborator-email"
+    LINEAR_API_KEY = "linear-api-key"
 
     @classmethod
     def aws_prefix(cls) -> str:

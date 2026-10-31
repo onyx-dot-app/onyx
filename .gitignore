@@ -5,10 +5,9 @@
 !/.vscode/.env.k8s.template
 !/.vscode/launch.json
 !/.vscode/tasks.json
-.zed
-.cursor
+.cursor/*
 !/.cursor/mcp.json
-!/.cursor/skills/
+!/.cursor/skills
 
 # macos
 .DS_store
@@ -68,3 +67,5 @@ plans
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 !.claude/settings.json
+
+/test-results/

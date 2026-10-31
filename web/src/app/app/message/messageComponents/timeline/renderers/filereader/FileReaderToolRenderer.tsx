@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { Card } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { Card, Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import {
   PacketType,
@@ -9,10 +10,9 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 
 interface FileReaderState {
   fileName: string | null;
@@ -54,18 +54,11 @@ function constructFileReaderState(
   };
 }
 
-function formatCharRange(
-  startChar: number,
-  endChar: number,
-  totalChars: number
-): string {
-  return `chars ${startChar.toLocaleString()}\u2013${endChar.toLocaleString()} of ${totalChars.toLocaleString()}`;
-}
-
 export const FileReaderToolRenderer: MessageRenderer<
   FileReaderToolPacket,
   {}
 > = ({ packets, onComplete, stopPacketSeen, renderType, children }) => {
+  const t = useTranslations("chat.messages.timeline");
   const state = constructFileReaderState(packets);
 
   useEffect(() => {
@@ -74,13 +67,15 @@ export const FileReaderToolRenderer: MessageRenderer<
     }
   }, [state.isComplete, onComplete]);
 
+  const charRange = {
+    start: state.startChar,
+    end: state.endChar,
+    total: state.totalChars,
+  };
+
   const statusText = state.fileName
-    ? `Read ${state.fileName} (${formatCharRange(
-        state.startChar,
-        state.endChar,
-        state.totalChars
-      )})`
-    : "Reading file";
+    ? t("fileReader.read.status", { fileName: state.fileName, ...charRange })
+    : t("fileReader.reading.status");
 
   const isCompact = renderType === RenderType.COMPACT;
 
@@ -115,33 +110,27 @@ export const FileReaderToolRenderer: MessageRenderer<
                 gap={2}
                 height="fit"
               >
-                <Text as="span" mainUiAction text02>
+                <Text as="span" font="main-ui-action" color="text-02">
                   {state.fileName}
                 </Text>
-                <Text as="span" mainUiMuted text04>
-                  {formatCharRange(
-                    state.startChar,
-                    state.endChar,
-                    state.totalChars
-                  )}
+                <Text as="span" font="main-ui-muted" color="text-04">
+                  {t("fileReader.charRange.label", charRange)}
                 </Text>
               </Section>
               {hasPreview && (
                 <Card
-                  background="none"
+                  color="transparent"
                   border="solid"
                   padding={2}
-                  rounding="lg"
+                  rounding={4}
                 >
                   <Section alignItems="start" height="fit" gap={1}>
-                    <Text as="span" secondaryMono text04>
-                      {state.previewStart}
-                      {state.previewEnd && "\u2026"}
+                    <Text as="span" font="secondary-mono" color="text-04">
+                      {`${state.previewStart}${state.previewEnd ? "\u2026" : ""}`}
                     </Text>
                     {state.previewEnd && (
-                      <Text as="span" secondaryMono text04>
-                        {"\u2026"}
-                        {state.previewEnd}
+                      <Text as="span" font="secondary-mono" color="text-04">
+                        {`\u2026${state.previewEnd}`}
                       </Text>
                     )}
                   </Section>

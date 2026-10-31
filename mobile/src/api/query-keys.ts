@@ -23,4 +23,8 @@ export const QUERY_KEYS = {
     ["connector-sources", serverUrl] as const,
   federatedSources: (serverUrl: string | null) =>
     ["federated-sources", serverUrl] as const,
+  availableTools: (serverUrl: string | null) =>
+    ["available-tools", serverUrl] as const,
+  llmProviders: (serverUrl: string | null, agentId: number | null) =>
+    ["llm-providers", serverUrl, agentId] as const,
 };

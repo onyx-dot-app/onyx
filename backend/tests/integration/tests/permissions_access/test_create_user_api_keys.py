@@ -4,6 +4,9 @@ Covers the personal-access-token creation endpoint in
 ``backend/onyx/server/pat/api.py`` (router prefix ``/user/pats``).
 The basic-access GET endpoints on the same router are covered by
 ``test_basic_access.py`` — this file only exercises the CREATE token.
+
+The seeded Basic group grants this permission, so every standard user is a
+holder. The matrix below replaces the shared USER_KINDS to expect that.
 """
 
 import os
@@ -14,7 +17,6 @@ import pytest
 from onyx.db.enums import Permission
 from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 from tests.integration.tests.permissions._access_matrix import (
-    USER_KINDS,
     Endpoint,
     assert_response,
     call_endpoint,
@@ -22,11 +24,22 @@ from tests.integration.tests.permissions._access_matrix import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Custom group permission assignment is enterprise only",
 )
 
 PERMISSION = Permission.CREATE_USER_API_KEYS.value
+
+USER_KINDS: list[tuple[str, str]] = [
+    ("admin", "allowed"),
+    ("holder", "allowed"),
+    ("service_account_holder", "allowed"),
+    ("basic", "allowed"),
+    ("service_account", "denied"),
+    ("bot", "denied"),
+    ("ext_perm", "denied"),
+    ("anonymous", "anon_denied"),
+]
 
 _CREATE_PAT_BODY: dict[str, Any] = {
     "name": "perm-test-pat",

@@ -4,7 +4,8 @@ This directory contains the implementation of Onyx's sandbox system for running 
 
 ## Local Development
 
-Craft requires a local kind cluster — see [Local Kubernetes Development](/docs/craft/dev/local-kubernetes.md). One-shot setup: `make craft-up`.
+Craft development uses a local kind cluster. See [Craft local Kubernetes development](../../../../../../deployment/helm/dev/README.md). One-shot setup: `make craft-up`.
+For the Docker backend, see [docker/README.md](docker/README.md).
 
 ## Overview
 
@@ -28,7 +29,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Production-ready with resource isolation, security context, and NetworkPolicies
    - Requires Kubernetes `>= 1.33` for native restartable init sidecar containers
    - Used by Onyx's Helm chart / cloud deployment
-   - For local-cluster development, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md).
+   - For local-cluster development, see [deployment/helm/dev/README.md](../../../../../../deployment/helm/dev/README.md).
 
 2. **Docker Mode** (`SANDBOX_BACKEND=docker`)
    - Sandboxes run as Docker containers on the same host as the rest of the compose stack, one per user
@@ -36,7 +37,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Snapshots tar-streamed through api_server-owned `FileStore` — agent containers never receive S3/MinIO credentials
    - Auto-cleanup of idle sandboxes (background worker uses the same Docker socket)
    - For self-hosted `docker compose` deployments enabled by `install.sh --include-craft`
-   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `minio` / model servers are not reachable by compose DNS
+   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `object-store` / model servers are not reachable by compose DNS
 
 #### Kubernetes → Docker mapping
 
@@ -195,7 +196,7 @@ SANDBOX_DOCKER_SOCKET=/var/run/docker.sock      # Default: /var/run/docker.sock
 SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox       # Default: onyx_craft_sandbox
 
 # Prefix for per-sandbox named volumes (mounted at /workspace/sessions).
-SANDBOX_DOCKER_VOLUME_PREFIX=onyx-sandbox       # Default: onyx-sandbox
+SANDBOX_DOCKER_VOLUME_PREFIX=onyx-craft-sandbox-  # Default: onyx-craft-sandbox-
 
 # Per-container resource limits. Defaults match K8s pod *requests* (1 CPU / 2Gi)
 # rather than limits, since single-VM compose deployments rarely have headroom
@@ -208,7 +209,7 @@ SANDBOX_DOCKER_CPU_LIMIT=1.0                    # Default: 1.0
 
 ```bash
 # Idle timeout before cleanup (seconds)
-SANDBOX_IDLE_TIMEOUT_SECONDS=900          # Default: 900 (15 minutes)
+SANDBOX_IDLE_TIMEOUT_SECONDS=3600         # Default: 3600 (1 hour)
 
 ```
 
@@ -264,7 +265,7 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
 - **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`)
-- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
+- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/object-store/model servers) is unreachable by DNS from inside a sandbox
 - **EC2 IMDS** must be blocked at the host level (require IMDSv2 via `HttpTokens=required`, or add a `DOCKER-USER` iptables rule — the installer does not do this automatically) — there is no app-level fallback
 
 ### Credentials Management
@@ -323,8 +324,185 @@ The Python venv (built into the sandbox image at `/workspace/.venv`) includes pa
 - HTTP clients: requests, httpx
 - Utilities: python-dotenv, pydantic
 
+## IPv6-only clusters
+
+Craft keeps IPv4 listeners by default. Use these Helm values for an IPv6-only cluster:
+
+```yaml
+sandboxProxy:
+  listenHost: "::"
+  allowGlobalClients: true
+  egressAllowIPv6: true
+  # Replace these example ranges with all your internal network ranges.
+  internalCIDRs:
+    - "10.0.0.0/8"
+    - "2001:db8:100::/56"
+    - "2001:db8:200::/108"
+sandboxPod:
+  listenHost: "::"
+```
+
+The proxy and daemon listeners serve IPv6 only with these settings. Do not use them for IPv4 sandbox clients.
+
+Enable `allowGlobalClients` only when NetworkPolicy restricts proxy ingress to authorized cluster workloads.
+Global IPv6 pod addresses otherwise trigger mitmproxy's global-client restriction. The proxy still requires a known sandbox identity.
+
+Set `internalCIDRs` to all internal VPC, pod, Service, and node ranges, including globally routable IPv6 ranges.
+The chart requires this list when IPv6 egress, global clients, or an IPv6 proxy listener is enabled.
+The proxy also checks it at startup when global clients or an IPv6 listener is enabled.
+The proxy rejects invalid CIDRs at startup.
+
+HTTP requests and CONNECT tunnels use the same destination policy: only public addresses outside these ranges are allowed.
+The exact `ONYX_SERVER_URL` host and port form an internal destination exception.
+Craft-enabled MCP servers also permit their exact scheme, host, and port for users with access.
+The tenant’s SSRF Protection setting still applies to every resolved address.
+Raw TCP forwarding is disabled; CONNECT does not bypass HTTP path, credential, or action checks.
+The proxy must have a network route and network-policy access to these servers.
+Standard NAT64 addresses with embedded private IPv4 destinations are also blocked.
+
+Configure these settings through Helm. The chart supplies `SANDBOX_PROXY_LISTEN_HOST`,
+`SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS`, and `SANDBOX_LISTEN_HOST` to the relevant containers.
+`SANDBOX_LISTEN_HOST` controls OpenCode, the sidecar, and generated app previews together.
+All listen hosts default to `0.0.0.0`. Generated Next.js apps use the matching address family for their readiness checks.
+Global clients remain blocked by default. `egressAllowIPv6` controls the proxy's NetworkPolicy; it does not change its listener.
+`SANDBOX_PROXY_INTERNAL_CIDRS` supplies comma-separated internal ranges.
+
+The firewall resolves the proxy before lockdown. It prefers IPv4 and accepts IPv6 when no IPv4 address exists.
+Both OUTPUT chains keep a DROP policy and permit loopback and established connections.
+Only the proxy address family permits new TCP connections to its port.
+IPv6 also permits neighbor solicitations and advertisements with hop limit 255. This lets pods reach the proxy with an empty neighbor cache.
+
+## Sandbox Image Design Notes
+
+These notes explain choices in `image/Dockerfile` that the diff alone does not show.
+
+### Image and tag coupling
+
+- Craft uses the standard Onyx application images. `ENABLE_CRAFT=true` turns Craft
+  on at runtime. The API server is only an HTTP client of `opencode serve`; the
+  agent runs in the sandbox. `onyxdotapp/sandbox` is the only Craft-specific image.
+- The sandbox image uses the application tag: `onyxdotapp/sandbox:${global.version}`
+  in Helm and `onyxdotapp/sandbox:${IMAGE_TAG}` in Compose. For an application tag
+  `X`, `onyxdotapp/sandbox:X` must exist before Craft deploys `X`. Mismatched
+  application and sandbox versions can stop `opencode serve` from becoming ready.
+- The sidecar daemon ships in the sandbox image, and the API server calls it.
+  Change both sides of the sidecar contract in the same release.
+- Moving tags (`latest`, `beta`, `edge`) are for internal environments only.
+  Kubernetes clusters that use them must set `SANDBOX_IMAGE_PULL_POLICY=Always`.
+  The Docker manager pulls immutable tags only when they are missing, and pulls
+  moving tags once per API process (`_MUTABLE_SANDBOX_IMAGE_TAGS`).
+
+### Build choices
+
+- Base and helper images are pinned by tag and SHA digest. Update the tag and
+  the digest in the same commit.
+- `bun` is copied from the `oven/bun` stage, not installed from bun.sh.
+- `opencode` has no official image. The build runs its install script with a
+  pinned `OPENCODE_VERSION`.
+- The image has no object-store client. The sidecar only tars and untars local
+  files; the API server stores snapshots through the Onyx FileStore. Do not add
+  AWS CLI or other storage CLIs: they would give the sandbox storage credentials.
+- The OpenCode plugin SDK is preinstalled in `/workspace/templates/opencode`.
+  Without it, OpenCode installs the SDK in each new configuration directory during
+  session initialization. That install can exceed the session setup timeout.
+  `seed-opencode-dependencies.sh` copies the SDK into each session and publishes
+  it by rename, so a failed copy can be tried again.
+
+### Python packages (`initial-requirements.in`)
+
+The venv holds only the libraries most sessions need: numeric and plotting
+libraries, Office format libraries, the sidecar daemon dependencies, and the
+runtime dependencies of built-in skills. Heavy ML and CV packages are excluded.
+The agent can `pip install` them during a session. If a built-in skill starts to
+import one, add it to `initial-requirements.in`.
+
+### Build arguments
+
+- `ENABLE_SKILLS` (default `true`) installs LibreOffice, poppler, fonts, and
+  pptxgenjs for skill scripts (about 700 MB). Skills are pushed at session setup,
+  but their runtime tools must be in the image. CI builds use `false`. Put a new
+  heavy system dependency for a skill inside the `ENABLE_SKILLS` block.
+- `ENABLE_BROWSER` (default `true`) installs Chromium, `certutil`, and
+  `agent-browser` (about 400 MB). The runtime `ENABLE_BROWSER` setting in
+  `configs.py` gates the built-in `browser` skill and must match the build
+  argument. Otherwise the skill is advertised without its runtime.
+
+### Browser runtime
+
+`image/browser-cli.sh` installs as `/usr/local/bin/browser`, a PATH executable,
+because the agent's `bash` tool does not read aliases. It pins the browser
+session to the session directory and passes the egress proxy to Chromium as a flag.
+`entrypoint.sh` imports the proxy CA bundle into Chromium's NSS database.
+Browser state lives in `/home/sandbox/.agent-browser/`, outside the session
+workspace, so snapshots do not capture cookies or logins. This is intentional.
+
+### Image prepull and private registries
+
+Both backends prepull the sandbox image when Craft is enabled. A cold pull of
+the image can take about 30 seconds and runs inside the provisioning timeout.
+
+- Kubernetes: the `sandbox-image-prepuller.yaml` DaemonSet. Its comment block
+  explains the design constraints. Set `sandboxImagePrepull.enabled: false` on
+  single-node clusters or nodes without disk space for the image.
+- Compose: the `sandbox-image-prepull` service in `docker-compose.craft.yml`
+  has `replicas: 0`, so `docker compose pull` fetches the image and no container
+  starts. Do not pull at API server startup: it would put Onyx readiness behind
+  the registry.
+
+To pull from a private registry in Kubernetes, attach the pull secret to the
+sandbox ServiceAccount in the sandbox namespace. Chart-level `imagePullSecrets`
+names secrets in the release namespace, which sandbox pods cannot use.
+
+```bash
+SANDBOX_NS=onyx-sandboxes   # configMap.SANDBOX_NAMESPACE
+SANDBOX_SA=sandbox          # configMap.SANDBOX_SERVICE_ACCOUNT_NAME
+kubectl -n "$SANDBOX_NS" create secret docker-registry regcred \
+  --docker-server=... --docker-username=... --docker-password=...
+kubectl -n "$SANDBOX_NS" patch serviceaccount "$SANDBOX_SA" \
+  -p '{"imagePullSecrets":[{"name":"regcred"}]}'
+```
+
+### Measure image changes
+
+After you change the Dockerfile or `initial-requirements.txt`, run
+`kubernetes/scripts/bench-sandbox-spinup.sh` against kind and put the result table
+in the PR. The script header lists its options and limits.
+
 ## References
 
 - [OpenCode Documentation](https://docs.opencode.ai)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [shadcn/ui Components](https://ui.shadcn.com)
+
+
+### IPv6-only Docker sandboxes
+
+IPv4 remains the default. Use Docker Engine 28 or later for an IPv6-only sandbox bridge.
+Before the first Craft install, create the external bridge:
+
+```sh
+docker network create --ipv4=false --ipv6 --subnet fd42:6f6e:7978::/64 onyx_craft_sandbox
+```
+
+Set these values in the Compose `.env` file:
+
+```dotenv
+ONYX_SERVER_URL=http://api_server:8080
+SANDBOX_PROXY_LISTEN_HOST=::
+SANDBOX_PROXY_INTERNAL_CIDRS=fd42:6f6e:7978::/64
+```
+
+Add all your internal VPC, host, and Docker ranges to `SANDBOX_PROXY_INTERNAL_CIDRS`.
+The example covers only the new sandbox bridge. The proxy requires a CIDR list for IPv6 listeners.
+Use the normal Craft Compose overlay and installer. They reuse the external bridge.
+Docker networks are immutable; migrate an existing deployment only after draining its sandboxes.
+
+The manager derives the sandbox listener from the bridge. IPv6-only bridges use `::`;
+IPv4 and dual-stack bridges retain `0.0.0.0`. Do not set a separate sandbox listener flag.
+The API and databases keep their existing Compose network. Set `ONYX_SERVER_URL` to `http://api_server:8080`, or your public reverse proxy API base.
+The proxy reaches that endpoint through the same exact host and port exception. Sandboxes remain attached only to their dedicated bridge.
+
+ULA clients work with the default global-client restriction. For globally routable sandbox addresses,
+set `SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS=true` only when host firewall rules restrict proxy ingress.
+Known sandbox identity, destination validation, and both firewall chains remain required.
+IPv6 internet access also requires working routing on the Docker host.

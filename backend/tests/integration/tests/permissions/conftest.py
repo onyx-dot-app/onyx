@@ -83,7 +83,7 @@ def permission_admin_user(module_reset: None) -> DATestUser:  # noqa: ARG001
 def permission_basic_user(
     permission_admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
-    """Second registered user — joins the default Basic user group with only basic permissions."""
+    """Second registered user. Joins the default Basic group and holds only its grants."""
     return UserManager.create(name="perm_basic")
 
 
@@ -154,7 +154,7 @@ def permission_holder_user_factory(
 
     Module-scoped and memoized by permission string. Requires the
     user-group permission API (Enterprise-only) — callers must guard their
-    module with the ``ENABLE_PAID_ENTERPRISE_EDITION_FEATURES`` skipif.
+    module with the ``RUN_EE_TESTS`` skipif.
     """
 
     cache: dict[str, DATestUser] = {}

@@ -25,47 +25,39 @@ _THREAD_1_BY_ID: dict[str, dict[str, Any]] = {
     "192edefb315737c3": {
         "email": "admin@onyx-test.com",
         "sections_count": 4,
-        "primary_owners": set(
-            [
-                "admin@onyx-test.com",
-                "test_user_1@onyx-test.com",
-                "test_user_3@onyx-test.com",
-            ]
-        ),
-        "secondary_owners": set(
-            [
-                "test-group-1@onyx-test.com",
-                "admin@onyx-test.com",
-                "test_user_2@onyx-test.com",
-                "test_user_3@onyx-test.com",
-            ]
-        ),
+        "primary_owners": {
+            "admin@onyx-test.com",
+            "test_user_1@onyx-test.com",
+            "test_user_3@onyx-test.com",
+        },
+        "secondary_owners": {
+            "test-group-1@onyx-test.com",
+            "admin@onyx-test.com",
+            "test_user_2@onyx-test.com",
+            "test_user_3@onyx-test.com",
+        },
     },
     "192edf020d2f5def": {
         "email": "test_user_1@onyx-test.com",
         "sections_count": 2,
-        "primary_owners": set(["admin@onyx-test.com", "test_user_1@onyx-test.com"]),
-        "secondary_owners": set(["test-group-1@onyx-test.com", "admin@onyx-test.com"]),
+        "primary_owners": {"admin@onyx-test.com", "test_user_1@onyx-test.com"},
+        "secondary_owners": {"test-group-1@onyx-test.com", "admin@onyx-test.com"},
     },
     "192edf020ae90aab": {
         "email": "test_user_2@onyx-test.com",
         "sections_count": 2,
-        "primary_owners": set(["admin@onyx-test.com"]),
-        "secondary_owners": set(
-            ["test-group-1@onyx-test.com", "test_user_2@onyx-test.com"]
-        ),
+        "primary_owners": {"admin@onyx-test.com"},
+        "secondary_owners": {"test-group-1@onyx-test.com", "test_user_2@onyx-test.com"},
     },
     "192edf18316015fa": {
         "email": "test_user_3@onyx-test.com",
         "sections_count": 2,
-        "primary_owners": set(["admin@onyx-test.com", "test_user_3@onyx-test.com"]),
-        "secondary_owners": set(
-            [
-                "admin@onyx-test.com",
-                "test_user_2@onyx-test.com",
-                "test_user_3@onyx-test.com",
-            ]
-        ),
+        "primary_owners": {"admin@onyx-test.com", "test_user_3@onyx-test.com"},
+        "secondary_owners": {
+            "admin@onyx-test.com",
+            "test_user_2@onyx-test.com",
+            "test_user_3@onyx-test.com",
+        },
     },
 }
 
@@ -121,13 +113,13 @@ def test_docs_retrieval(
         retrieved_primary_owner_emails: set[str | None] = set()
         retrieved_secondary_owner_emails: set[str | None] = set()
         if doc.primary_owners:
-            retrieved_primary_owner_emails = set(
-                [owner.email for owner in doc.primary_owners]
-            )
+            retrieved_primary_owner_emails = {
+                owner.email for owner in doc.primary_owners
+            }
         if doc.secondary_owners:
-            retrieved_secondary_owner_emails = set(
-                [owner.email for owner in doc.secondary_owners]
-            )
+            retrieved_secondary_owner_emails = {
+                owner.email for owner in doc.secondary_owners
+            }
         assert _THREAD_1_BY_ID[id]["sections_count"] == len(doc.sections)
         assert _THREAD_1_BY_ID[id]["primary_owners"] == retrieved_primary_owner_emails
         assert (

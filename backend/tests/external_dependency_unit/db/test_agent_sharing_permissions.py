@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import (
     Permission,
     PersonaAccessLevel,
@@ -27,6 +28,7 @@ from onyx.db.persona_sharing import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.persona.api import delete_persona
+from onyx.utils.variable_functionality import global_version
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
     create_test_persona,
@@ -297,6 +299,61 @@ def test_delete_persona_unowned_raises_403_not_400(db_session: Session) -> None:
         delete_persona(persona_id=persona.id, user=stranger, db_session=db_session)
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert exc_info.value.status_code == 403
+
+
+def test_builtin_persona_cannot_be_deleted(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Built-in agents are ownerless, so get_persona_by_id's ownership check admits
+    every caller — any user who passes the delete route's ADD_AGENTS gate (auto-granted
+    to all in CE, the "Create Agents" grant in EE) could tombstone the default
+    assistant workspace-wide. mark_persona_as_deleted refuses built-ins for every
+    caller, admins included."""
+    ce_user = create_test_user(db_session, "builtin-del-ce")
+    ee_user = create_test_user(db_session, "builtin-del-ee")
+    # In EE "Create Agents" is a grant, not an auto-grant — model the EE caller by
+    # holding only that permission.
+    ee_user.effective_permissions = [Permission.ADD_AGENTS.value]
+    db_session.commit()
+
+    admin = create_test_user(db_session, "builtin-del-admin", is_admin=True)
+
+    builtin = create_test_persona(db_session, owner=None, builtin_persona=True)
+    try:
+        # Pin each edition — CI runs EE-loaded, so neither auto-grant nor grant
+        # applies on its own. In CE every non-anonymous user holds ADD_AGENTS via
+        # CE_UNGATED_PERMISSIONS — the reported repro's caller.
+        with monkeypatch.context() as m:
+            m.setattr(global_version, "is_ee_version", lambda: False)
+            assert has_global_permission(ce_user, Permission.ADD_AGENTS)
+            assert not has_global_permission(ce_user, Permission.MANAGE_AGENTS)
+            with pytest.raises(OnyxError) as exc_info:
+                delete_persona(
+                    persona_id=builtin.id, user=ce_user, db_session=db_session
+                )
+            assert exc_info.value.error_code == OnyxErrorCode.BAD_REQUEST
+
+        with monkeypatch.context() as m:
+            m.setattr(global_version, "is_ee_version", lambda: True)
+            assert has_global_permission(ee_user, Permission.ADD_AGENTS)
+            assert not has_global_permission(ee_user, Permission.MANAGE_AGENTS)
+            with pytest.raises(OnyxError) as exc_info:
+                delete_persona(
+                    persona_id=builtin.id, user=ee_user, db_session=db_session
+                )
+            assert exc_info.value.error_code == OnyxErrorCode.BAD_REQUEST
+
+        with pytest.raises(OnyxError) as exc_info:
+            delete_persona(persona_id=builtin.id, user=admin, db_session=db_session)
+        assert exc_info.value.error_code == OnyxErrorCode.BAD_REQUEST
+
+        db_session.refresh(builtin)
+        assert not builtin.deleted
+    finally:
+        # get_default_assistant() reads the builtin persona with one_or_none(), so a
+        # stray one breaks every later test in this directory that touches it.
+        db_session.delete(builtin)
+        db_session.commit()
 
 
 def test_add_agents_user_does_not_see_others_private_agents(

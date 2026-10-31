@@ -25,16 +25,7 @@ from onyx.utils.audit import (
     actor_from_user,
     emit_audit_event,
 )
-
-
-def _capture(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
-    """Parse every captured ``onyx.audit`` JSON message into a dict."""
-    events: list[dict[str, Any]] = [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name.startswith("onyx.audit")
-    ]
-    return events
+from tests.utils.audit import audit_events
 
 
 def test_every_action_has_an_ocsf_class() -> None:
@@ -43,6 +34,39 @@ def test_every_action_has_an_ocsf_class() -> None:
     for action in AuditAction:
         assert action in _OCSF_CLASS_BY_ACTION
         assert isinstance(_OCSF_CLASS_BY_ACTION[action], OCSFEventClass)
+
+
+def test_reclassified_actions_keep_their_new_class() -> None:
+    """These three moved off ``account_change``, which changed the child logger
+    they land on. Moving them back would silently break a consumer's routing."""
+    assert (
+        _OCSF_CLASS_BY_ACTION[AuditAction.USER_GROUP_CHANGE]
+        is OCSFEventClass.GROUP_MANAGEMENT
+    )
+    assert (
+        _OCSF_CLASS_BY_ACTION[AuditAction.USER_ROLE_CHANGE]
+        is OCSFEventClass.USER_ACCESS_MANAGEMENT
+    )
+    assert (
+        _OCSF_CLASS_BY_ACTION[AuditAction.USER_CRAFT_ACCESS_CHANGE]
+        is OCSFEventClass.USER_ACCESS_MANAGEMENT
+    )
+
+
+def test_class_selects_the_child_logger(caplog: pytest.LogCaptureFixture) -> None:
+    """``ocsf_class`` drives the logger name, which is what makes a class routable
+    without parsing the JSON body."""
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(
+            AuditAction.USER_GROUP_PERMISSION_CHANGE,
+            AuditOutcome.SUCCESS,
+            resource_type="user_group",
+            resource_id=7,
+        )
+
+    records = [r for r in caplog.records if r.name.startswith("onyx.audit")]
+    assert len(records) == 1
+    assert records[0].name == "onyx.audit.group_management"
 
 
 def test_emits_stable_ocsf_shaped_schema(caplog: pytest.LogCaptureFixture) -> None:
@@ -55,7 +79,7 @@ def test_emits_stable_ocsf_shaped_schema(caplog: pytest.LogCaptureFixture) -> No
             resource_id=42,
         )
 
-    events = _capture(caplog)
+    events = audit_events(caplog)
     assert len(events) == 1
     event = events[0]
 
@@ -155,7 +179,7 @@ def test_dedup_suppresses_within_window(
             AuditAction.CREDENTIAL_ACCESS, AuditOutcome.SUCCESS, dedup_key="k1"
         )
 
-    assert len(_capture(caplog)) == 1
+    assert len(audit_events(caplog)) == 1
 
 
 def test_dedup_degrades_to_emit_when_redis_down(
@@ -177,7 +201,7 @@ def test_no_dedup_key_always_emits(caplog: pytest.LogCaptureFixture) -> None:
         emit_audit_event(AuditAction.USER_ROLE_CHANGE, AuditOutcome.SUCCESS)
         emit_audit_event(AuditAction.USER_ROLE_CHANGE, AuditOutcome.SUCCESS)
 
-    assert len(_capture(caplog)) == 2
+    assert len(audit_events(caplog)) == 2
 
 
 def test_audit_logger_self_contained_without_root_handler() -> None:

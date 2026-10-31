@@ -16,9 +16,10 @@
   --app-container-sm-md: 47rem;
   --app-container-md: 54.5rem;
   --app-container-lg: 62rem;
+  --app-container-xl: 70rem;
   --app-container-full: 100%;
 
-  --toast-width: 25rem;
+  --toast-width: 50rem;
 
   --sidebar-width-expanded: 15rem;
   --sidebar-width-folded: 3.25rem;
@@ -42,6 +43,8 @@
   --block-width-contextual-menu-medium-large: 17.5rem;
   --block-width-contextual-menu-large: 20rem;
   --block-width-contextual-menu-extra-large: 22.5rem;
+  --block-width-contextual-menu-2x-large: 30rem;
+  --block-width-contextual-menu-3x-large: 40rem;
 
   --block-width-flash-message-small: 20rem;
   --block-width-flash-message-medium: 30rem;
@@ -78,6 +81,7 @@
   --block-width-form-label-column-max: 30rem;
   --block-width-form-input-column-max: 15rem;
   --block-width-form-input-min: 10rem;
+  --block-width-dropdown-min: 17.5rem;
   --block-width-form-value-min: 5rem;
 
   --block-width-tag-label-max: 10rem;

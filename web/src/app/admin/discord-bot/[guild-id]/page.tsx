@@ -1,19 +1,18 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { use, useState, useEffect, useCallback, useMemo } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction, toast } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
-import { Button, MessageCard } from "@opal/components";
+import { Button, MessageCard, Card, Text } from "@opal/components";
 import { SvgServer } from "@opal/icons";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import {
   useDiscordGuild,
   useDiscordChannels,
@@ -56,6 +55,7 @@ function GuildDetailContent({
   handleDisableAll: () => void;
   disabled: boolean;
 }) {
+  const t = useTranslations("admin.discordBot");
   const {
     data: guild,
     isLoading: guildLoading,
@@ -71,8 +71,8 @@ function GuildDetailContent({
   if (guildError || !guild) {
     return (
       <ErrorCallout
-        errorTitle="Failed to load server"
-        errorMsg={guildError?.info?.detail || "Server not found"}
+        errorTitle={t("error.loadServer.title")}
+        errorMsg={guildError?.info?.detail || t("error.serverNotFound.message")}
       />
     );
   }
@@ -82,74 +82,78 @@ function GuildDetailContent({
   return (
     <>
       {!isRegistered && (
-        <Callout type="notice" title="Waiting for Registration">
-          Use the !register command in your Discord server with the registration
-          key to complete setup.
+        <Callout type="notice" title={t("guildDetail.awaiting.title")}>
+          {t("guildDetail.awaiting.text")}
         </Callout>
       )}
 
-      <Card variant={disabled ? "disabled" : "primary"}>
-        <ContentAction
-          title="Channel Configuration"
-          description="Run !sync-channels in Discord to update the channel list."
-          sizePreset="main-content"
-          variant="section"
-          rightChildren={
-            isRegistered && !channelsLoading && !channelsError ? (
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                alignItems="center"
-                width="fit"
-                gap={2}
-              >
-                <Button
-                  disabled={disabled}
-                  prominence="secondary"
-                  onClick={handleEnableAll}
+      <Card border="solid" rounding={4} disabled={disabled}>
+        <Section alignItems="start" height="fit">
+          <ContentAction
+            title={t("channels.section.title")}
+            description={t("channels.section.description")}
+            sizePreset="main-content"
+            variant="section"
+            rightChildren={
+              isRegistered && !channelsLoading && !channelsError ? (
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  alignItems="center"
+                  width="fit"
+                  gap={2}
                 >
-                  Enable All
-                </Button>
-                <Button
-                  disabled={disabled}
-                  prominence="secondary"
-                  onClick={handleDisableAll}
-                >
-                  Disable All
-                </Button>
-              </Section>
-            ) : undefined
-          }
-        />
+                  <Button
+                    disabled={disabled}
+                    prominence="secondary"
+                    onClick={handleEnableAll}
+                  >
+                    {t("channels.enableAllButton.label")}
+                  </Button>
+                  <Button
+                    disabled={disabled}
+                    prominence="secondary"
+                    onClick={handleDisableAll}
+                  >
+                    {t("channels.disableAllButton.label")}
+                  </Button>
+                </Section>
+              ) : undefined
+            }
+          />
 
-        {!isRegistered ? (
-          <Text text03 secondaryBody>
-            Channel configuration will be available after the server is
-            registered.
-          </Text>
-        ) : channelsLoading ? (
-          <div className="flex justify-center py-12">
-            <SvgSimpleLoader className="h-6 w-6" />
-          </div>
-        ) : channelsError ? (
-          <ErrorCallout
-            errorTitle="Failed to load channels"
-            errorMsg={channelsError?.info?.detail || "Could not load channels"}
-          />
-        ) : (
-          <DiscordChannelsTable
-            channels={localChannels}
-            personas={personas}
-            onChannelUpdate={onChannelUpdate}
-            disabled={disabled}
-          />
-        )}
+          {!isRegistered ? (
+            <Text font="secondary-body" color="text-03">
+              {t("channels.awaitingRegistration.text")}
+            </Text>
+          ) : channelsLoading ? (
+            <div className="flex justify-center py-12">
+              <IconLoader className="h-6 w-6" />
+            </div>
+          ) : channelsError ? (
+            <ErrorCallout
+              errorTitle={t("error.loadChannels.title")}
+              errorMsg={
+                channelsError?.info?.detail || t("error.loadChannels.message")
+              }
+            />
+          ) : (
+            <DiscordChannelsTable
+              channels={localChannels}
+              personas={personas}
+              onChannelUpdate={onChannelUpdate}
+              disabled={disabled}
+            />
+          )}
+        </Section>
       </Card>
     </>
   );
 }
 
 export default function Page({ params }: Props) {
+  const t = useTranslations("admin.discordBot");
+  const locale = useLocale();
   const unwrappedParams = use(params);
   const guildId = Number(unwrappedParams["guild-id"]);
   const { data: guild, refreshGuild } = useDiscordGuild(guildId);
@@ -280,19 +284,17 @@ export default function Page({ params }: Props) {
       );
 
       if (failed > 0) {
-        toast.error(`Updated ${succeeded} channels, but ${failed} failed`);
+        toast.error(t("channels.partialUpdate.toast", { succeeded, failed }));
         // Refresh to get actual server state when some updates failed
         refreshChannels();
       } else {
-        toast.success(
-          `Updated ${succeeded} channel${succeeded !== 1 ? "s" : ""}`
-        );
+        toast.success(t("channels.updated.toast", { count: succeeded }));
         // Update original to match local (avoids flash from refresh)
         setOriginalChannels(localChannels);
       }
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update channels"
+        err instanceof Error ? err.message : t("channels.updateError.toast")
       );
     } finally {
       setIsUpdating(false);
@@ -308,12 +310,9 @@ export default function Page({ params }: Props) {
         default_persona_id: personaId,
       });
       refreshGuild();
-      toast.success(
-        personaId ? "Default agent updated" : "Default agent cleared"
-      );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update agent"
+        err instanceof Error ? err.message : t("defaultAgent.updateError.toast")
       );
     } finally {
       setIsUpdating(false);
@@ -321,8 +320,10 @@ export default function Page({ params }: Props) {
   };
 
   const registeredText = guild?.registered_at
-    ? `Registered: ${new Date(guild.registered_at).toLocaleString()}`
-    : "Pending registration";
+    ? t("guildDetail.registered.text", {
+        date: new Date(guild.registered_at).toLocaleString(locale),
+      })
+    : t("guildDetail.pending.text");
 
   const isRegistered = !!guild?.guild_id;
   const isUpdateDisabled =
@@ -337,50 +338,53 @@ export default function Page({ params }: Props) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgServer}
-        title={guild?.guild_name || `Server #${guildId}`}
+        title={guild?.guild_name || t("guilds.fallbackName", { id: guildId })}
         description={registeredText}
-        backButton
-        rightChildren={
-          <Button disabled={isUpdateDisabled} onClick={handleSaveChanges}>
-            Update Configuration
-          </Button>
-        }
+        cancel
+        actions={[
+          <Button
+            key="primary"
+            disabled={isUpdateDisabled}
+            onClick={handleSaveChanges}
+          >
+            {t("guildDetail.updateButton.label")}
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>
         {/* Default Agent Selector */}
-        <Card variant={!guild?.enabled ? "disabled" : "primary"}>
-          <ContentAction
-            title="Default Agent"
-            description="The agent used by the bot in all channels unless overridden."
-            sizePreset="main-content"
-            variant="section"
-            rightChildren={
-              <InputSelect
-                value={guild?.default_persona_id?.toString() ?? "default"}
-                onValueChange={(value: string) =>
-                  handleDefaultPersonaChange(
-                    value === "default" ? null : parseInt(value)
-                  )
-                }
-                disabled={isUpdating || !guild?.enabled || personasLoading}
-              >
-                <InputSelect.Trigger placeholder="Select agent" />
-                <InputSelect.Content>
-                  <InputSelect.Item value="default">
-                    Default Agent
-                  </InputSelect.Item>
-                  {agents.map((persona) => (
-                    <InputSelect.Item
-                      key={persona.id}
-                      value={persona.id.toString()}
-                    >
-                      {persona.name}
-                    </InputSelect.Item>
-                  ))}
-                </InputSelect.Content>
-              </InputSelect>
-            }
-          />
+        <Card border="solid" rounding={4} disabled={!guild?.enabled}>
+          <Section alignItems="start" height="fit">
+            <ContentAction
+              title={t("defaultAgent.section.title")}
+              description={t("defaultAgent.section.description")}
+              sizePreset="main-content"
+              variant="section"
+              rightChildren={
+                <InputSingleSelect
+                  value={guild?.default_persona_id?.toString() ?? "default"}
+                  onValueChange={(value: string) =>
+                    handleDefaultPersonaChange(
+                      value === "default" ? null : parseInt(value)
+                    )
+                  }
+                  disabled={isUpdating || !guild?.enabled || personasLoading}
+                  defaultOption="default"
+                  placeholder={t("defaultAgent.select.placeholder")}
+                  options={[
+                    {
+                      value: "default",
+                      title: t("defaultAgent.select.default.label"),
+                    },
+                    ...agents.map((persona) => ({
+                      value: persona.id.toString(),
+                      title: persona.name,
+                    })),
+                  ]}
+                />
+              }
+            />
+          </Section>
         </Card>
 
         <GuildDetailContent
@@ -406,9 +410,11 @@ export default function Page({ params }: Props) {
           )}
         >
           <MessageCard
+            outerPadding={1}
+            innerPadding={1}
             variant="warning"
-            title="You have unsaved changes"
-            description="Click Update to save them."
+            title={t("unsavedChanges.title")}
+            description={t("unsavedChanges.description")}
           />
         </div>
       </SettingsLayouts.Body>

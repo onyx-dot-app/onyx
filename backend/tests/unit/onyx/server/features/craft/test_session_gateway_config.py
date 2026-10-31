@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import BuildSession, Sandbox, User
 from onyx.llm.well_known_providers.auto_update_models import (
     LLMProviderRecommendation,
@@ -78,7 +79,7 @@ _TEST_RECOMMENDATIONS = LLMRecommendations(
             default_model=SimpleKnownModel(name="bedrock-pro")
         ),
         "openai": LLMProviderRecommendation(
-            default_model=SimpleKnownModel(name="gpt-5.6-sol")
+            default_model=SimpleKnownModel(name="gpt-6.1-sol")
         ),
     },
 )
@@ -92,6 +93,36 @@ def _mock_recommendations() -> Iterator[None]:
         llm_config, "get_recommendations", return_value=_TEST_RECOMMENDATIONS
     ):
         yield
+
+
+@pytest.mark.parametrize("supports_chat", [False, True])
+def test_decision_models_require_chat_capability_for_craft(supports_chat: bool) -> None:
+    provider = _provider(
+        3,
+        "openai",
+        [
+            ModelConfigurationView(
+                name="gpt-6-luna",
+                is_visible=True,
+                supports_image_input=False,
+                supports_chat=supports_chat,
+                supports_decisions=True,
+            )
+        ],
+    )
+    selection = llm_config.GatewaySelection(3, "gpt-6-luna")
+    expected = (3, "gpt-6-luna") if supports_chat else None
+
+    assert llm_config._select_gateway_default([provider], selection) == expected
+    assert llm_config._select_gateway_default([provider], None, [selection]) == expected
+    assert llm_config._select_gateway_default([provider], None) == expected
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
+        config = llm_config.build_onyx_gateway_config([provider], selection)
+    if supports_chat:
+        assert config is not None
+        assert config.model_name == "3/gpt-6-luna"
+    else:
+        assert config is None
 
 
 def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None:
@@ -207,16 +238,16 @@ def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
         "azure",
         [
             _model(
-                "GPT-5.6-SOL",
+                "GPT-6.1-SOL",
                 # This is the misleading fallback produced when the alias itself
                 # is absent from LiteLLM, matching the production regression.
                 max_input_tokens=30_976,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -230,7 +261,7 @@ def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
 
     assert gateway_config is not None
     opencode_config = build_provider_opencode_config(gateway_config)
-    assert opencode_config["provider"]["onyx"]["models"]["300/GPT-5.6-SOL"][
+    assert opencode_config["provider"]["onyx"]["models"]["300/GPT-6.1-SOL"][
         "limit"
     ] == {
         "context": 272_000,
@@ -250,10 +281,10 @@ def test_gateway_config_preserves_explicit_context_override() -> None:
                 configured_max_input_tokens=200_000,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -305,10 +336,10 @@ def test_small_input_override_does_not_reduce_provider_output() -> None:
                 configured_max_input_tokens=25_000,
             )
         ],
-        deployment_name="gpt-5",
+        deployment_name="gpt-6-sol",
     )
     model_map = {
-        "azure/gpt-5": {
+        "azure/gpt-6-sol": {
             "max_input_tokens": 272_000,
             "max_output_tokens": 128_000,
         }
@@ -360,6 +391,11 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ) as fetch_providers,
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            return_value=None,
+        ),
     ):
         config = manager.build_llm_configs(user)
 
@@ -370,16 +406,238 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
     fetch_providers.assert_called_once_with(manager._db_session, user)
 
 
+def test_manager_prefers_configured_default_over_recommendation() -> None:
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5"), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite"), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    configured_default = MagicMock()
+    configured_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "3/claude-sonnet-5"
+
+
+def test_manager_falls_back_to_recommendation_when_configured_default_not_visible() -> (
+    None
+):
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5", is_visible=False), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite"), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    configured_default = MagicMock()
+    configured_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_manager_prefers_craft_default_over_chat_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    chat_default = MagicMock()
+    chat_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    craft_default = MagicMock()
+    craft_default.configure_mock(llm_provider_id=7, name="bedrock-pro")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_manager_stored_selection_outranks_craft_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    craft_default = MagicMock()
+    craft_default.configure_mock(llm_provider_id=7, name="bedrock-pro")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: None,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
+        ),
+    ):
+        config = manager.build_llm_configs(
+            user, llm_config.GatewaySelection(3, "claude-sonnet-5")
+        )
+
+    assert config.model_name == "3/claude-sonnet-5"
+
+
+def test_manager_craft_default_not_visible_falls_through_to_chat_default() -> None:
+    """A craft default that is no longer visible/accessible must fall through
+    to the chat default, not straight to the recommendation."""
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5"), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite", is_visible=False), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    chat_default = MagicMock()
+    chat_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    craft_default = MagicMock()
+    craft_default.configure_mock(llm_provider_id=7, name="bedrock-lite")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "3/claude-sonnet-5"
+
+
+def test_selection_outranks_configured_default() -> None:
+    """A session's own pick must survive an org default pointing elsewhere —
+    reversing these two would silently move every existing session's model."""
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "bedrock-pro"),
+            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+        )
+
+    assert config is not None
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_stale_selection_falls_through_to_configured_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "retired-model"),
+            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+        )
+
+    assert config is not None
+    assert config.model_name == "3/claude-sonnet-5"
+
+
 def _gateway_config() -> CraftLLMProviderConfig:
     return CraftLLMProviderConfig(
         provider="onyx",
-        model_name="13/gpt-5-mini",
+        model_name="13/gpt-6-astra",
         api_key="proxy-placeholder",
         api_base="https://onyx.test/gateway/v1",
         models=[
             GatewayModelDescriptor(
-                id="13/gpt-5-mini",
-                display_name="GPT-5 Mini",
+                id="13/gpt-6-astra",
+                display_name="GPT-6 Astra",
                 provider="openai",
             )
         ],
@@ -425,7 +683,9 @@ def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -450,7 +710,9 @@ def test_unchanged_catalog_retries_pending_dispose() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -606,7 +868,9 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
     config = _gateway_config()
     manager, sandbox_manager, _ = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     # Exactly the post-rebuild state: file already correct on disk.
     sandbox_manager.read_file.return_value = expected.encode()

@@ -42,7 +42,10 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
 )
-from onyx.db.users import reconcile_user_email__no_commit
+from onyx.db.users import (
+    reconcile_user_email__no_commit,
+    release_personas_owned_by_user__no_commit,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -263,26 +266,35 @@ class ScimDAL(DAL):
         email: str | None = None,
         is_active: bool | None = None,
         personal_name: str | None = None,
-        account_type: AccountType | None = None,
+        promote_to_standard: bool = False,
     ) -> None:
         """Update user attributes. Only sets fields that are provided.
 
         A rename runs the same reconciliation a login-driven one does, so the
         replaced address keeps reaching documents whose indexed ACLs still name
         it and every other row keyed by the address moves with it.
+
+        Promotion turns a shadow EXT_PERM_USER into a STANDARD account and sets
+        ``is_verified``: the IdP vouches for the address, and SSO login never
+        touches the flag on a row that is already web-login, so the row would
+        otherwise sit behind REQUIRE_EMAIL_VERIFICATION.
         """
         if email is not None:
             reconcile_user_email__no_commit(user.id, email, self._session)
-        if is_active is not None:
-            user.is_active = is_active
+        if is_active is False:
+            self.deactivate_user(user)
+        elif is_active:
+            user.is_active = True
         if personal_name is not None:
             user.personal_name = personal_name
-        if account_type is not None:
-            user.account_type = account_type
+        if promote_to_standard:
+            user.account_type = AccountType.STANDARD
+            user.is_verified = True
 
     def deactivate_user(self, user: User) -> None:
-        """Mark a user as inactive."""
+        """Mark a user as inactive and hand their agents to the admins."""
         user.is_active = False
+        release_personas_owned_by_user__no_commit(self._session, user.id)
 
     def list_users(
         self,

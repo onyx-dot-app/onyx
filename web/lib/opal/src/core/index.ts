@@ -37,14 +37,12 @@ export type {
 export type {
   InteractiveStatefulProps,
   InteractiveStatefulVariant,
+  InteractiveStatefulProminence,
   InteractiveStatefulState,
   InteractiveStatefulInteraction,
 } from "@opal/core/interactive/stateful/components";
 
-export type {
-  InteractiveContainerProps,
-  InteractiveContainerRoundingVariant,
-} from "@opal/core/interactive/container/components";
+export type { InteractiveContainerProps } from "@opal/core/interactive/container/components";
 
 export type { FoldableProps } from "@opal/core/interactive/foldable/components";
 

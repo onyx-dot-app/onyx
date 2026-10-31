@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useId, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useFocusOnMount } from "@opal/hooks";
 import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
 import {
@@ -13,11 +14,16 @@ import {
   Text,
   Tooltip,
 } from "@opal/components";
-import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
-import InputKeyValue, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
-import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
+import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
+import { InputVertical } from "@opal/layouts";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import { UserManagementSwitch } from "@/sections/actions/PolicyEditor";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
+import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
+import {
+  getAppTypeLogo,
+  type ExternalAppAdminResponse,
+} from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,
   updateExternalApp,
@@ -70,7 +76,22 @@ export default function CreateCustomAppModal({
   onSaved,
   existingApp,
 }: CreateCustomAppModalProps) {
+  const t = useTranslations("craft.apps.customApp");
+  const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
+  const policyText = useTranslations("craft.actionPolicies");
+  const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
+    existingApp?.users_can_manage_policies ?? true
+  );
+  const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
+  const savedEnabled = existingApp?.enabled ?? true;
+  const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
+  const enabled = enabledDraft ?? savedEnabled;
+  const availabilityChanged = enabled !== savedEnabled;
+  function setEnabled(value: boolean) {
+    setEnabledDraft(value === savedEnabled ? null : value);
+  }
+  const nameId = useId();
   const router = useRouter();
   // Focus the name field for new apps only; edits keep the natural tab order.
   const focusNameOnMount = useFocusOnMount<HTMLInputElement>(!isEdit);
@@ -93,6 +114,7 @@ export default function CreateCustomAppModal({
       : [{ key: "", value: "" }]
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [tab, setTab] = useState("configuration");
   const [error, setError] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(existingApp);
@@ -105,7 +127,9 @@ export default function CreateCustomAppModal({
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
   const configDirty = existingApp
-    ? name !== existingApp.name ||
+    ? availabilityChanged ||
+      usersCanManagePolicies !== existingApp.users_can_manage_policies ||
+      name !== existingApp.name ||
       associationDirty ||
       !isEqual(upstreamPatterns, existingApp.upstream_url_patterns) ||
       !isEqual(toRecord(headers), existingApp.auth_template) ||
@@ -117,19 +141,19 @@ export default function CreateCustomAppModal({
         Object.keys(toRecord(orgCredentials)).length
       );
   const unsavedChanges = useUnsavedChangesGuard({
-    isDirty: createdApp === null && configDirty,
+    isDirty: isEdit && createdApp === null && configDirty,
   });
 
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required.
   const disabledCreateReason = (() => {
-    if (isSaving) return "Save is already in progress.";
-    if (isEdit && !configDirty) return "Make a change before saving.";
+    if (isSaving) return t("disabled.saving");
+    if (isEdit && !configDirty) return t("disabled.pristine");
     if (name.trim().length === 0) {
-      return "Enter a name before creating this custom app.";
+      return t("disabled.nameMissing");
     }
     if (upstreamPatterns.length === 0) {
-      return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
+      return t("disabled.patternMissing");
     }
     return null;
   })();
@@ -137,11 +161,11 @@ export default function CreateCustomAppModal({
     <Button onClick={saveConfig} disabled={disabledCreateReason !== null}>
       {isSaving
         ? isEdit
-          ? "Saving…"
-          : "Creating…"
+          ? t("savingButton")
+          : t("creatingButton")
         : isEdit
-          ? "Save"
-          : "Create"}
+          ? t("saveButton")
+          : t("createButton")}
     </Button>
   );
 
@@ -150,19 +174,22 @@ export default function CreateCustomAppModal({
     setError(null);
     try {
       if (existingApp) {
-        await updateExternalApp(existingApp.id, {
+        const payload: Parameters<typeof updateExternalApp>[1] = {
+          users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          ...(associationDirty
-            ? { associated_skill_ids: selectedSkillIds }
-            : {}),
-        });
+          associated_skill_ids: associationDirty ? selectedSkillIds : undefined,
+        };
+        if (availabilityChanged) payload.enabled = enabled;
+        await updateExternalApp(existingApp.id, payload);
         onSaved();
         onClose();
       } else {
         const created = await createCustomExternalApp({
+          enabled,
+          users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
@@ -213,6 +240,10 @@ export default function CreateCustomAppModal({
     }
   }
 
+  function requestClose() {
+    if (!isSaving) unsavedChanges.requestLeave(onClose);
+  }
+
   const confirmationOpen =
     upload.confirmationOpen || unsavedChanges.confirmationOpen;
   const confirmationContent = upload.confirmationOpen ? (
@@ -239,13 +270,10 @@ export default function CreateCustomAppModal({
 
   return (
     <Modal open>
-      <Modal.Content
-        width={confirmationOpen || upload.isOpen ? "sm" : "lg"}
-        height={confirmationOpen || upload.isOpen ? "fit" : "lg"}
+      <PluginModalContent
         onOpenAutoFocus={(event) => {
           if (isEdit) event.preventDefault();
         }}
-        preventAccidentalClose={!confirmationOpen}
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
@@ -261,7 +289,10 @@ export default function CreateCustomAppModal({
                 existingApp.associated_skills.some(
                   (skill) => skill.name === draft.contents.name
                 )
-                  ? `App “${existingApp.name}” already has an associated skill named “${draft.contents.name}”. Upload a skill with a different name.`
+                  ? tApps("errors.duplicateSkillName", {
+                      appName: existingApp.name,
+                      skillName: draft.contents.name,
+                    })
                   : null
               }
               onContinue={openSkillEditor}
@@ -273,80 +304,106 @@ export default function CreateCustomAppModal({
         ) : (
           <>
             <Modal.Header
-              title={
-                existingApp ? `Edit ${existingApp.name}` : "Create custom app"
-              }
-              description={
-                isEdit
-                  ? "Update gateway settings and manage associated skills."
-                  : "Configure how the egress proxy reaches and authenticates this app. A skill is not required."
-              }
+              icon={getAppTypeLogo("CUSTOM")}
+              title={existingApp?.name ?? t("createTitle")}
+              description={pluginCopy(
+                enabled ? "craftOnlyDescription" : "craftDisabledDescription"
+              )}
+              onClose={requestClose}
             />
-            <Modal.Body>
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Name</Text>
-                  <InputTypeIn
-                    ref={focusNameOnMount}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="My Custom App"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Upstream URL patterns</Text>
-                  <Text font="secondary-body" color="text-03">
-                    {
-                      "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal — no wildcards before the first slash. Type a pattern and press Enter."
-                    }
-                  </Text>
-                  <ListFieldInput
-                    values={upstreamPatterns}
-                    onChange={setUpstreamPatterns}
-                    placeholder="https://api.example.com/*"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Header credential pattern</Text>
-                  <Text font="secondary-body" color="text-03">
-                    {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
-                  </Text>
-                  <InputKeyValue
-                    keyTitle="Header"
-                    valueTitle="Value"
-                    keyPlaceholder="Authorization"
-                    valuePlaceholder="Bearer {api_key}"
-                    items={headers}
-                    onChange={setHeaders}
-                    mode="line"
-                    addButtonLabel="Add header"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Organization credentials</Text>
-                  <Text font="secondary-body" color="text-03">
-                    Optional — values your org pre-fills for every user. Leave
-                    empty for apps where each user supplies their own
-                    credentials.
-                  </Text>
-                  <InputKeyValue
-                    keyTitle="Credential key"
-                    valueTitle="Value"
-                    keyPlaceholder="api_key"
-                    valuePlaceholder="sk-…"
-                    items={orgCredentials}
-                    onChange={setOrgCredentials}
-                    mode="line"
-                    addButtonLabel="Add credential"
-                  />
-                </div>
-
-                {existingApp && (
+            <Modal.Body twoTone={false} alignItems="stretch">
+              <CraftAppEditorTabs
+                value={tab}
+                onValueChange={setTab}
+                busy={isSaving}
+                tools={
                   <>
-                    <Divider />
+                    <Text font="secondary-body" color="text-03">
+                      {policyText("emptyActions")}
+                    </Text>
+                  </>
+                }
+                configuration={
+                  <div className="flex flex-col gap-6">
+                    <InputVertical
+                      title={t("fields.name.label")}
+                      withLabel={nameId}
+                    >
+                      <InputTypeIn
+                        id={nameId}
+                        ref={focusNameOnMount}
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={t("fields.name.placeholder")}
+                      />
+                    </InputVertical>
+
+                    <div className="flex flex-col gap-1">
+                      <Text font="main-ui-action">
+                        {t("fields.upstreamPatterns.label")}
+                      </Text>
+                      <Text font="secondary-body" color="text-03">
+                        {t("fields.upstreamPatterns.description")}
+                      </Text>
+                      <InputList
+                        values={upstreamPatterns}
+                        onChange={setUpstreamPatterns}
+                        placeholder={t("placeholders.allowedUrl")}
+                      />
+                    </div>
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    <PluginAvailabilitySwitch
+                      enabled={enabled}
+                      onChange={setEnabled}
+                      disabled={isSaving}
+                    />
+                    <UserManagementSwitch
+                      value={usersCanManagePolicies}
+                      onChange={setUsersCanManagePolicies}
+                      disabled={isSaving}
+                    />
+                  </div>
+                }
+                authentication={
+                  <div className="flex flex-col gap-6">
+                    <InputVertical
+                      title={t("fields.headers.label")}
+                      description={t("fields.headers.description")}
+                      suffix="optional"
+                    >
+                      <InputKeyValue
+                        keyTitle={t("fields.headers.keyTitle")}
+                        valueTitle={t("fields.headers.valueTitle")}
+                        keyPlaceholder="Authorization"
+                        valuePlaceholder="Bearer {api_key}"
+                        items={headers}
+                        onChange={setHeaders}
+                        mode="line"
+                        addButtonLabel={t("fields.headers.addButton")}
+                      />
+                    </InputVertical>
+
+                    <InputVertical
+                      title={t("fields.orgCredentials.label")}
+                      description={t("fields.orgCredentials.description")}
+                      suffix="optional"
+                    >
+                      <InputKeyValue
+                        keyTitle={t("fields.orgCredentials.keyTitle")}
+                        valueTitle={t("fields.orgCredentials.valueTitle")}
+                        keyPlaceholder="api_key"
+                        valuePlaceholder="sk-…"
+                        valueType="password"
+                        items={orgCredentials}
+                        onChange={setOrgCredentials}
+                        mode="line"
+                        addButtonLabel={t("fields.orgCredentials.addButton")}
+                      />
+                    </InputVertical>
+                  </div>
+                }
+                skills={
+                  existingApp ? (
                     <AssociatedSkillsEditor
                       app={existingApp}
                       selectedSkillIds={selectedSkillIds}
@@ -355,17 +412,18 @@ export default function CreateCustomAppModal({
                       onCreateSkill={openSkillEditor}
                       onUploadSkill={upload.open}
                     />
-                  </>
-                )}
-
-                {error && (
-                  <MessageCard
-                    variant="error"
-                    title="Couldn't save"
-                    description={error}
-                  />
-                )}
-              </div>
+                  ) : undefined
+                }
+              />
+              {error && (
+                <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
+                  variant="error"
+                  title={t("errors.saveFailedTitle")}
+                  description={error}
+                />
+              )}
             </Modal.Body>
             <Modal.Footer>
               <div className="flex justify-end gap-2 w-full">
@@ -374,7 +432,7 @@ export default function CreateCustomAppModal({
                   onClick={() => unsavedChanges.requestLeave(onClose)}
                   disabled={isSaving}
                 >
-                  Cancel
+                  {t("cancelButton")}
                 </Button>
                 {disabledCreateReason ? (
                   <Tooltip tooltip={disabledCreateReason}>
@@ -387,7 +445,7 @@ export default function CreateCustomAppModal({
             </Modal.Footer>
           </>
         )}
-      </Modal.Content>
+      </PluginModalContent>
     </Modal>
   );
 }

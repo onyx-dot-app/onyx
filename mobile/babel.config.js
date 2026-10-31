@@ -9,10 +9,12 @@ module.exports = function (api) {
       "nativewind/babel",
     ],
     plugins: [
-      // must stay last; workletizableModules pre-bundles remend for the worklet runtime
+      // must stay last; importForwarding.moduleNames compiles remend's import into the worklet
+      // bundle itself — without it, remend stays an external reference and calling it from inside
+      // the worklet throws "Tried to synchronously call a Remote Function" at runtime.
       [
         "react-native-worklets/plugin",
-        { bundleMode: true, workletizableModules: ["remend"] },
+        { bundleMode: true, importForwarding: { moduleNames: ["remend"] } },
       ],
     ],
   };

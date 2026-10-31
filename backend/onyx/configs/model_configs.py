@@ -1,7 +1,9 @@
 import json
 import os
+from collections.abc import Mapping
 
 from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+from shared_configs.embedding_models import find_embedding_model_spec
 
 #####
 # Embedding/Reranking Model Configs
@@ -17,11 +19,37 @@ from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 DOCUMENT_ENCODER_MODEL = (
     os.environ.get("DOCUMENT_ENCODER_MODEL") or DEFAULT_DOCUMENT_ENCODER_MODEL
 )
-# If the below is changed, Vespa deployment must also be changed
-DOC_EMBEDDING_DIM = int(os.environ.get("DOC_EMBEDDING_DIM") or 768)
+# The settings below only seed the first search settings row of a fresh DB
+# (alembic dbaa756c2ccf). Defaults come from the registry spec of
+# DOCUMENT_ENCODER_MODEL (the old literals for other models). Their env vars
+# count only with DOCUMENT_ENCODER_MODEL set, so an env file written for nomic
+# cannot give the default model nomic's dimension or prefixes.
+_MODEL_ENV: Mapping[str, str] = (
+    os.environ if os.environ.get("DOCUMENT_ENCODER_MODEL") else {}
+)
+_DOCUMENT_ENCODER_SPEC = find_embedding_model_spec(None, DOCUMENT_ENCODER_MODEL)
+
+DOC_EMBEDDING_DIM = int(
+    _MODEL_ENV.get("DOC_EMBEDDING_DIM")
+    or (_DOCUMENT_ENCODER_SPEC.model_dim if _DOCUMENT_ENCODER_SPEC else 768)
+)
+_NORMALIZE_EMBEDDINGS_DEFAULT = (
+    _DOCUMENT_ENCODER_SPEC.normalize if _DOCUMENT_ENCODER_SPEC else True
+)
 NORMALIZE_EMBEDDINGS = (
-    os.environ.get("NORMALIZE_EMBEDDINGS") or "true"
+    _MODEL_ENV.get("NORMALIZE_EMBEDDINGS")
+    or ("true" if _NORMALIZE_EMBEDDINGS_DEFAULT else "false")
 ).lower() == "true"
+
+# The default self-hosted model before granite.
+PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
+
+# Tokenizer for chat token counting and for the fallback when a model's own
+# tokenizer can't load: env DOCUMENT_ENCODER_MODEL, else nomic (baked into the
+# API image), so token counts do not depend on the default embedding model.
+DEFAULT_TOKENIZER_MODEL = (
+    os.environ.get("DOCUMENT_ENCODER_MODEL") or PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL
+)
 
 # Old default model settings, which are needed for an automatic easy upgrade
 OLD_DEFAULT_DOCUMENT_ENCODER_MODEL = "thenlper/gte-small"
@@ -33,8 +61,19 @@ OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS = False
 SIM_SCORE_RANGE_LOW = float(os.environ.get("SIM_SCORE_RANGE_LOW") or 0.0)
 SIM_SCORE_RANGE_HIGH = float(os.environ.get("SIM_SCORE_RANGE_HIGH") or 1.0)
 # Certain models like e5, BGE, etc use a prefix for asymmetric retrievals (query generally shorter than docs)
-ASYM_QUERY_PREFIX = os.environ.get("ASYM_QUERY_PREFIX", "search_query: ")
-ASYM_PASSAGE_PREFIX = os.environ.get("ASYM_PASSAGE_PREFIX", "search_document: ")
+# An env var set to "" stays "" (no fallback to the default).
+ASYM_QUERY_PREFIX = _MODEL_ENV.get(
+    "ASYM_QUERY_PREFIX",
+    _DOCUMENT_ENCODER_SPEC.query_prefix if _DOCUMENT_ENCODER_SPEC else "search_query: ",
+)
+ASYM_PASSAGE_PREFIX = _MODEL_ENV.get(
+    "ASYM_PASSAGE_PREFIX",
+    (
+        _DOCUMENT_ENCODER_SPEC.passage_prefix
+        if _DOCUMENT_ENCODER_SPEC
+        else "search_document: "
+    ),
+)
 # Purely an optimization, memory limitation consideration
 
 # User's set embedding batch size overrides the default encoding batch sizes
@@ -52,6 +91,9 @@ BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES = EMBEDDING_BATCH_SIZE or 51
 # NOTE: the 2 below should only be used for dev.
 GEN_AI_API_KEY = os.environ.get("GEN_AI_API_KEY")
 GEN_AI_MODEL_VERSION = os.environ.get("GEN_AI_MODEL_VERSION")
+
+# Fallback OpenAI model when no recommended or configured default exists.
+DEFAULT_OPENAI_MODEL = "gpt-6-luna"
 
 # Override the auto-detection of LLM max context length
 GEN_AI_MAX_TOKENS = int(os.environ.get("GEN_AI_MAX_TOKENS") or 0) or None

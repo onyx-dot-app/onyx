@@ -22,6 +22,14 @@ func Git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// IsolateConfig hides the global and system git config for the rest of the
+// test, so only each repository's own config applies.
+func IsolateConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
 // Commit creates a file and commits it in dir, returning the commit SHA.
 func Commit(t *testing.T, dir, filename string) string {
 	t.Helper()
@@ -40,6 +48,18 @@ func TagExists(dir, tag string) bool {
 	return cmd.Run() == nil
 }
 
+// RejectPushes configures the repository at dir to reject every push via a
+// pre-receive hook. The hook directory is pinned in local config so a global
+// core.hooksPath (as some dev setups carry) cannot bypass it.
+func RejectPushes(t *testing.T, dir string) {
+	t.Helper()
+	hookDir := filepath.Join(dir, "hooks")
+	if err := os.WriteFile(filepath.Join(hookDir, "pre-receive"), []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	Git(t, dir, "config", "core.hooksPath", hookDir)
+}
+
 // InitOriginAndWork creates a bare origin and a work clone wired to it, and
 // returns both paths. The work clone is configured like a single-branch
 // checkout of main so tests also pin that detection fetches release branches
@@ -47,6 +67,7 @@ func TagExists(dir, tag string) bool {
 // write FETCH_HEAD here and never create origin/release/vX.Y).
 func InitOriginAndWork(t *testing.T) (origin, work string) {
 	t.Helper()
+	IsolateConfig(t)
 
 	origin = t.TempDir()
 	Git(t, origin, "init", "--bare", "-b", "main")
@@ -56,6 +77,7 @@ func InitOriginAndWork(t *testing.T) (origin, work string) {
 	Git(t, work, "config", "user.email", "test@test.com")
 	Git(t, work, "config", "user.name", "Test")
 	Git(t, work, "config", "commit.gpgsign", "false")
+	Git(t, work, "config", "tag.gpgSign", "false")
 	Git(t, work, "remote", "add", "origin", origin)
 	Git(t, work, "config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main")
 

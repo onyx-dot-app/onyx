@@ -1,4 +1,4 @@
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
@@ -165,4 +165,10 @@ export interface AgentUpsertRequest {
 export interface PaginatedAgentsResponse {
   items: Agent[];
   total_items: number;
+}
+
+export interface DefaultAssistantConfiguration {
+  tool_ids: number[];
+  system_prompt: string | null;
+  default_system_prompt: string;
 }

@@ -1,0 +1,315 @@
+---
+title: "Terraform Provider"
+description: "Manage Onyx application configuration as code with the official Onyx Terraform provider"
+icon: "cubes"
+---
+
+The **Onyx Terraform provider** manages the configuration *inside* a running Onyx deployment: LLM providers,
+connectors and their credentials, document sets, agents, actions, MCP servers, user groups, API keys,
+and workspace settings.
+
+<Card
+  title="onyx-dot-app/onyx on the Terraform Registry" icon="book"
+  href="https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs"
+>
+  The registry holds the full reference: every resource, every attribute, and the import syntax.
+</Card>
+
+## Two different Terraform surfaces
+
+Onyx has two separate Terraform offerings.
+
+| | [Terraform modules](/deployment/local/terraform) | Terraform provider (this page) |
+| --- | --- | --- |
+| Manages | The **infrastructure** Onyx runs on | The **configuration** inside Onyx |
+| Creates | VPC, EKS, RDS, ElastiCache, S3, OpenSearch, WAF | LLM providers, connectors, document sets, agents, groups |
+| Distributed as | Modules in the `onyx` repo you copy and adapt | A published provider you declare in `required_providers` |
+| Talks to | AWS | The Onyx admin API of a deployment that is already running |
+| Used | Before Onyx exists | After Onyx is reachable |
+
+<Note>
+  The two compose. Provision infrastructure with the modules,
+  install Onyx with the [Helm chart](/deployment/local/kubernetes), then configure the deployment with this provider.
+  You can run them from the same root module,
+  but they are independent — the provider works against any reachable Onyx deployment,
+  including [Onyx Cloud](https://cloud.onyx.app), regardless of how it was deployed.
+</Note>
+
+## Requirements
+
+- **Terraform 1.5 or later.** [Write-only secret arguments](#keeping-secrets-out-of-state) — the recommended way to
+  keep credentials out of state — need 1.11 or later, and an older CLI rejects a configuration that uses one.
+- **A reachable Onyx deployment.** The provider is an API client; it does not install or upgrade Onyx.
+- **An API key in the `Admin` group.** An API key's access comes from its group membership, so a key with no group
+  cannot reach the admin endpoints the provider uses.
+
+## Get an API key
+
+Create a key in the Admin Panel under **API Keys** — see [Service Accounts](/admins/user_management/api_keys)
+— and give it admin access. An unrestricted [Personal Access Token](/developers/overview#personal-access-tokens)
+created by an admin also works.
+
+API keys authenticate the same way whatever the deployment's human `AUTH_TYPE` is (basic, OIDC, SAML, or cloud),
+and on Onyx Cloud the tenant is embedded in the key itself.
+
+<Note>
+  This first key is a chicken-and-egg problem: it has to exist before Terraform can run. Either leave it unmanaged,
+  or `terraform import` it afterwards. On import its `api_key` attribute stays null,
+  because Onyx only ever returns the key material at creation.
+</Note>
+
+For a scripted setup,
+[`examples/bootstrap/mint_api_key.sh`](https://github.com/onyx-dot-app/onyx/blob/main/terraform-provider-onyx/examples/bootstrap/mint_api_key.sh)
+runs the whole sequence: register, log in, resolve the `Admin` group, mint the key.
+
+<Warning>
+  The script requires an admin email and password rather than defaulting them.
+  On a deployment with no users it *registers* that account,
+  and the first user to register becomes an admin — so a defaulted password would quietly create a known-password
+  administrator on any reachable deployment.
+</Warning>
+
+## Configure the provider
+
+```hcl main.tf
+terraform {
+  required_providers {
+    onyx = {
+      source  = "onyx-dot-app/onyx"
+      version = "~> 0.2"
+    }
+  }
+}
+
+provider "onyx" {
+  endpoint = "https://onyx.example.com" # or ONYX_SERVER_URL
+  api_key  = var.onyx_api_key           # or ONYX_API_KEY
+}
+```
+
+<ParamField path="endpoint" type="string">
+  Onyx server origin, for example `https://cloud.onyx.app` or `http://localhost:3000`. Also read from `ONYX_SERVER_URL`.
+</ParamField>
+
+<ParamField path="api_key" type="string">
+  An API key (`on_...`) in the seeded `Admin` group, or an unrestricted personal access token (`onyx_pat_...`).
+  Also read from `ONYX_API_KEY`.
+</ParamField>
+
+<ParamField path="api_prefix" type="string" default="/api">
+  Path prefix the API is served under. The default matches the web proxy.
+  Set it to `""` when you point the provider directly at the backend, for example `http://localhost:8080`.
+  Also read from `ONYX_API_PREFIX`.
+</ParamField>
+
+<Tip>
+  Supply `api_key` from the `ONYX_API_KEY` environment variable rather than a `.tf` file.
+  Provider configuration is the one place Terraform never writes to state,
+  so an environment variable keeps the key out of both your repository and your state file.
+</Tip>
+
+## What you can manage
+
+Each entry links to its full schema on the Terraform Registry.
+
+### Resources
+
+| Resource | Manages |
+| --- | --- |
+| [`onyx_llm_provider`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/llm_provider) | An LLM provider and the model list it exposes |
+| [`onyx_llm_provider_default`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/llm_provider_default) | The deployment default and vision models — a singleton |
+| [`onyx_embedding_provider`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/embedding_provider) | Cloud embedding provider credentials |
+| [`onyx_credential`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/credential) | Connector credentials |
+| [`onyx_connector`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/connector) | Connector definitions and their sync schedule |
+| [`onyx_cc_pair`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/cc_pair) | The connector-credential pair that starts indexing and carries access control |
+| [`onyx_document_set`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/document_set) | Document sets built from connector-credential pairs |
+| [`onyx_persona`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/persona) | Agents, including their prompts, document sets, and actions |
+| [`onyx_custom_tool`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/custom_tool) | Custom actions defined from an OpenAPI schema |
+| [`onyx_mcp_server`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/mcp_server) | MCP servers Onyx connects to |
+| [`onyx_user_group`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/user_group) | User groups: roster, managers, and permission grants |
+| [`onyx_api_key`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/api_key) | API keys |
+| [`onyx_settings`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/resources/settings) | Workspace settings — a singleton, partially managed |
+
+### Data sources
+
+| Data source | Reads |
+| --- | --- |
+| [`onyx_llm_providers`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/data-sources/llm_providers) | Configured LLM providers and the current defaults |
+| [`onyx_embedding_providers`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/data-sources/embedding_providers) | Configured embedding providers |
+| [`onyx_connectors`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/data-sources/connectors) | Configured connectors |
+| [`onyx_settings`](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest/docs/data-sources/settings) | Current workspace settings, including the license `tier` |
+
+Every resource supports `terraform import`,
+so you can bring a deployment configured by hand under Terraform without recreating anything.
+The import id is on each resource's registry page.
+
+## A worked example
+
+This wires a chat model to an indexed site and an agent that answers from it. It is the shape most configurations take:
+a provider, a credential, a connector, the pair that links them, a document set, and an agent.
+
+```hcl
+resource "onyx_llm_provider" "openai" {
+  name          = "openai"
+  provider_type = "openai"
+
+  # Write-only: the key never reaches the state file. See below.
+  api_key_wo         = var.openai_api_key
+  api_key_wo_version = 1
+
+  # The complete set of enabled models: anything omitted is removed on apply.
+  model_configurations = [
+    { name = "gpt-5" },
+    { name = "gpt-5-mini" },
+  ]
+}
+
+# Referencing the provider id also orders destroys correctly: the default is
+# released before the provider holding it is deleted.
+resource "onyx_llm_provider_default" "this" {
+  provider_id = onyx_llm_provider.openai.id
+  model_name  = "gpt-5"
+}
+
+# The web connector reads public pages, so its credential holds no secret.
+resource "onyx_credential" "web" {
+  source          = "web"
+  name            = "public-web"
+  credential_json = jsonencode({})
+}
+
+resource "onyx_connector" "docs" {
+  name       = "docs-site"
+  source     = "web"
+  input_type = "load_state"
+
+  # Re-index once a day.
+  refresh_freq = 24 * 60 * 60
+
+  connector_specific_config = jsonencode({
+    base_url           = var.docs_base_url
+    web_connector_type = "recursive"
+  })
+}
+
+# The pair is the object that indexes. It also carries the access control for
+# the documents it produces.
+resource "onyx_cc_pair" "docs" {
+  name          = "docs-site"
+  connector_id  = onyx_connector.docs.id
+  credential_id = onyx_credential.web.id
+  access_type   = "public"
+}
+
+resource "onyx_document_set" "docs" {
+  name        = "docs"
+  description = "Public product documentation"
+  cc_pair_ids = [onyx_cc_pair.docs.id]
+}
+
+resource "onyx_persona" "docs" {
+  name        = "Docs"
+  description = "Answers product questions from the documentation"
+
+  system_prompt = <<-EOT
+    You answer questions from the product documentation.
+    If the documentation does not cover the question, say so.
+  EOT
+
+  document_set_ids = [onyx_document_set.docs.id]
+}
+```
+
+A complete,
+runnable version of this configuration lives in
+[`examples/bootstrap/`](https://github.com/onyx-dot-app/onyx/tree/main/terraform-provider-onyx/examples/bootstrap).
+
+## Keeping secrets out of state
+
+Every secret the provider accepts comes in two forms. The plain attribute is stored in Terraform state,
+where anyone who can read the state file can read the secret.
+The `_wo` twin is a [write-only
+argument](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments):
+Terraform strips the value from both the plan and the state, so it exists only in your configuration.
+
+**Prefer the twin.** Set one or the other, never both.
+
+| Resource | Stored attribute | Write-only twin |
+| --- | --- | --- |
+| `onyx_llm_provider` | `api_key`, `custom_config` | `api_key_wo`, `custom_config_wo` |
+| `onyx_embedding_provider` | `api_key` | `api_key_wo` |
+| `onyx_credential` | `credential_json` | `credential_json_wo` |
+| `onyx_mcp_server` | `api_token`, `admin_credentials` | `api_token_wo`, `admin_credentials_wo` |
+| `onyx_custom_tool` | `custom_headers` | `custom_headers_wo` |
+
+### Rotating a write-only secret
+
+A value Terraform never stores is a value it cannot diff, so changing `api_key_wo` on its own plans nothing at all.
+Each twin has a `_wo_version` counter for exactly this: raise it,
+and the resulting diff makes the next apply send the current secret.
+
+```hcl
+resource "onyx_llm_provider" "openai" {
+  name          = "openai"
+  provider_type = "openai"
+
+  api_key_wo         = var.openai_api_key
+  api_key_wo_version = 2 # was 1 — bump after rotating the key
+
+  model_configurations = [{ name = "gpt-5-mini" }]
+}
+```
+
+<Warning>
+  Do not derive the counter from the secret — `md5(var.token)` and similar. Unlike the secret,
+  the counter *is* kept in state.
+</Warning>
+
+Two attributes cannot have a write-only twin. `onyx_api_key.api_key` is minted by Onyx rather than supplied by you,
+so Terraform can only hand it back through state — treat the state file as holding it.
+`onyx_mcp_server.auth_template_headers` is computed by Onyx,
+and Terraform does not allow an argument to be both computed and write-only.
+
+<Tip>
+  Regardless of which form you use, encrypt your Terraform state and restrict who can read it.
+  Several resources hold credentials for systems well outside Onyx.
+</Tip>
+
+## Business and Enterprise Plans
+
+Most of the provider works on Community Edition. These parts need a Business plan or higher:
+
+- `onyx_user_group` — user groups are not available on Community Edition, and the routes answer 404.
+- `users` and `groups` on `onyx_document_set` and `onyx_persona` — Community Edition rejects a private set or agent.
+
+<Info>
+  **Business Plan Feature**
+
+  These features require a Business plan or higher. [View plans](/admins/billing/overview)
+  or [contact sales](https://onyx.app/contact-sales) to learn more.
+</Info>
+
+## Things the API cannot express
+
+A few behaviours come from the Onyx API rather than the provider:
+
+- **Secret drift is invisible.** The API masks secrets on read, so rotating one in the Admin Panel does not show up
+  in `terraform plan`. The configured value is authoritative and is re-asserted on the next apply.
+- **`onyx_settings` and `onyx_llm_provider_default` do not really delete.** Onyx has no reset API for either, so
+  `destroy` removes them from state with a warning and leaves the live values alone.
+- **`model_configurations` is the list of record.** A model left out of it is removed from the provider server-side.
+- **Deleting an agent leaves a tombstone.** The name stays taken, and a later create under that name revives the
+  same agent id rather than making a new one.
+- **Deleting a custom action detaches it from every agent that uses it**, including agents Terraform does not
+  manage, with no error and no warning.
+
+The [provider
+README](https://github.com/onyx-dot-app/onyx/tree/main/terraform-provider-onyx#known-limitations-by-api-design)
+carries the full list, and each resource's registry page repeats the ones that apply to it.
+
+## Source and releases
+
+- **Registry:** [registry.terraform.io/providers/onyx-dot-app/onyx](https://registry.terraform.io/providers/onyx-dot-app/onyx/latest)
+- **Source:** [`terraform-provider-onyx/`](https://github.com/onyx-dot-app/onyx/tree/main/terraform-provider-onyx)
+  in the Onyx repo
+- **Release mirror:** [onyx-dot-app/terraform-provider-onyx](https://github.com/onyx-dot-app/terraform-provider-onyx)

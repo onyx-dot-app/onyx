@@ -16,32 +16,34 @@ from ee.onyx.server.gateway import stream_bridge
 from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.interfaces import LLM
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.model_request import (
+    AssistantMessage,
+    SystemMessage,
+    ToolMessage,
+    UserMessage,
+)
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     ChatCompletionMessageToolCall,
     Choice,
     Delta,
-    FunctionCall,
     Message,
     ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
-    Usage,
 )
 from onyx.llm.models import (
-    AssistantMessage,
     NamedToolChoice,
     ReasoningEffort,
     RedactedThinkingBlock,
-    SystemMessage,
     ThinkingBlock,
     ToolChoice,
     ToolChoiceOptions,
-    ToolMessage,
-    UserMessage,
+    Usage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessageResponse,
@@ -326,7 +328,7 @@ def _tool_call(
     arguments: str, *, name: str | None = "Bash"
 ) -> ChatCompletionMessageToolCall:
     return ChatCompletionMessageToolCall(
-        id="call_1", function=FunctionCall(name=name, arguments=arguments)
+        id="call_1", function=ResponseFunctionCall(name=name, arguments=arguments)
     )
 
 
@@ -391,9 +393,9 @@ class _RecordingInvokeLLM(_InvokeLLM):
         super().__init__(response)
         self.received_tool_choice: ToolChoice | None = None
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
         self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
-        return super().invoke(*args, **kwargs)
+        return super().invoke_raw(*args, **kwargs)
 
 
 def test_handle_anthropic_messages_forwards_named_tool_choice() -> None:
@@ -431,7 +433,9 @@ def test_handle_anthropic_messages_happy_path_serializes_response() -> None:
                 tool_calls=[
                     ChatCompletionMessageToolCall(
                         id="call_1",
-                        function=FunctionCall(name="Bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="Bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ],
             ),
@@ -479,7 +483,9 @@ def test_handle_anthropic_messages_rejects_invalid_upstream_tool_arguments() -> 
                 tool_calls=[
                     ChatCompletionMessageToolCall(
                         id="call_1",
-                        function=FunctionCall(name="Bash", arguments="{not json"),
+                        function=ResponseFunctionCall(
+                            name="Bash", arguments="{not json"
+                        ),
                     )
                 ]
             ),
@@ -488,7 +494,9 @@ def test_handle_anthropic_messages_rejects_invalid_upstream_tool_arguments() -> 
 
     with (
         patch.object(
-            gateway_api, "llm_from_provider", return_value=_InvokeLLM(response)
+            gateway_api,
+            "llm_from_provider",
+            return_value=_InvokeLLM(response),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -509,7 +517,9 @@ def test_handle_anthropic_messages_maps_provider_errors_to_onyx_codes(
 ) -> None:
     with (
         patch.object(
-            gateway_api, "llm_from_provider", return_value=_RaisingInvokeLLM(exc)
+            gateway_api,
+            "llm_from_provider",
+            return_value=_RaisingInvokeLLM(exc),
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
@@ -535,7 +545,7 @@ def test_handle_anthropic_messages_sanitizes_generic_invoke_failure() -> None:
 
 
 def _anthropic_stream_events(
-    llm: LLM,
+    llm: LitellmLLM,
     *,
     tools: list[dict[str, Any]] | None = None,
     model: str = "1/test",
@@ -587,7 +597,7 @@ _TEXT_AND_TOOL_CALL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=FunctionCall(name="Bash", arguments=""),
+                        function=ResponseFunctionCall(name="Bash", arguments=""),
                     )
                 ]
             )
@@ -601,7 +611,7 @@ _TEXT_AND_TOOL_CALL_CHUNKS = [
                 tool_calls=[
                     ChatCompletionDeltaToolCall(
                         index=0,
-                        function=FunctionCall(arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(arguments='{"cmd":"ls"}'),
                     )
                 ]
             )
@@ -1017,7 +1027,9 @@ _THINKING_TEXT_AND_TOOL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=FunctionCall(name="Bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="Bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ]
             )

@@ -120,6 +120,6 @@ def convert_inference_sections_to_llm_string(
         payload["note"] = note
 
     return (
-        json.dumps(payload, indent=2, ensure_ascii=False),
+        json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
         citation_mapping,
     )

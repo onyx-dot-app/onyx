@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.models import ReasoningEffort, UserMessage, resolve_reasoning_effort
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort, resolve_reasoning_effort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
@@ -102,7 +103,12 @@ class TestResolveReasoningEffort:
         maximum: ReasoningEffort | None,
         expected: ReasoningEffort,
     ) -> None:
-        assert resolve_reasoning_effort(requested, default, maximum) == expected
+        assert (
+            resolve_reasoning_effort(
+                requested, default=default, user_default=None, maximum=maximum
+            )
+            == expected
+        )
 
     @pytest.mark.parametrize(
         "maximum,expected",
@@ -121,12 +127,89 @@ class TestResolveReasoningEffort:
         Left as AUTO, a cap of LOW would be violated by the AUTO->medium
         mapping in OPENAI_REASONING_EFFORT.
         """
-        assert resolve_reasoning_effort(ReasoningEffort.AUTO, None, maximum) == expected
+        assert (
+            resolve_reasoning_effort(
+                ReasoningEffort.AUTO, default=None, user_default=None, maximum=maximum
+            )
+            == expected
+        )
+
+    @pytest.mark.parametrize(
+        "requested,default,user_default,maximum,expected",
+        [
+            # A user default fills in when the request is AUTO and the admin
+            # set no default.
+            (
+                ReasoningEffort.AUTO,
+                None,
+                ReasoningEffort.HIGH,
+                None,
+                ReasoningEffort.HIGH,
+            ),
+            # The admin default outranks the user's.
+            (
+                ReasoningEffort.AUTO,
+                ReasoningEffort.LOW,
+                ReasoningEffort.HIGH,
+                None,
+                ReasoningEffort.LOW,
+            ),
+            # A session override outranks both.
+            (
+                ReasoningEffort.XHIGH,
+                ReasoningEffort.LOW,
+                ReasoningEffort.HIGH,
+                None,
+                ReasoningEffort.XHIGH,
+            ),
+            # The cap clamps a user default like any other source.
+            (
+                ReasoningEffort.AUTO,
+                None,
+                ReasoningEffort.XHIGH,
+                ReasoningEffort.MEDIUM,
+                ReasoningEffort.MEDIUM,
+            ),
+            # A user default of OFF is a real choice.
+            (
+                ReasoningEffort.AUTO,
+                None,
+                ReasoningEffort.OFF,
+                None,
+                ReasoningEffort.OFF,
+            ),
+            # An AUTO user default is no choice at all: without a cap the
+            # request stays AUTO.
+            (
+                ReasoningEffort.AUTO,
+                None,
+                ReasoningEffort.AUTO,
+                None,
+                ReasoningEffort.AUTO,
+            ),
+        ],
+    )
+    def test_user_default_tier(
+        self,
+        requested: ReasoningEffort,
+        default: ReasoningEffort | None,
+        user_default: ReasoningEffort | None,
+        maximum: ReasoningEffort | None,
+        expected: ReasoningEffort,
+    ) -> None:
+        assert (
+            resolve_reasoning_effort(
+                requested, default=default, user_default=user_default, maximum=maximum
+            )
+            == expected
+        )
 
     def test_auto_stays_auto_without_a_cap(self) -> None:
         """No cap means no reason to force a choice the provider can make."""
         assert (
-            resolve_reasoning_effort(ReasoningEffort.AUTO, None, None)
+            resolve_reasoning_effort(
+                ReasoningEffort.AUTO, default=None, user_default=None, maximum=None
+            )
             is ReasoningEffort.AUTO
         )
 
@@ -155,11 +238,14 @@ class TestEffortReachesTheProvider:
         llm = _make_llm()
         assert _effort_sent(_sent_kwargs(llm, ReasoningEffort.HIGH)) == "high"
 
-    def test_off_cap_omits_reasoning_entirely(self) -> None:
-        """OFF is the one level that drops the parameter rather than lowering it."""
+    def test_off_cap_sends_explicit_none(self) -> None:
+        """OFF is the one level that turns reasoning off rather than lowering
+        it. gpt-5.1 supports the explicit "none", which beats omitting the
+        parameter for the models that default to medium."""
         llm = _make_llm(reasoning_effort_max=ReasoningEffort.OFF)
         kwargs = _sent_kwargs(llm, ReasoningEffort.XHIGH)
-        for key in ("reasoning", "thinking", "output_config", "reasoning_effort"):
+        assert kwargs["reasoning"] == {"effort": "none"}
+        for key in ("thinking", "output_config", "reasoning_effort"):
             assert key not in kwargs
 
 

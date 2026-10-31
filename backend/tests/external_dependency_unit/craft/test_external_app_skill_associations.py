@@ -6,15 +6,17 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType, SkillSharePermission
+from onyx.db.enums import ExternalAppType, SkillInstallationPolicy, SkillSharePermission
 from onyx.db.external_app import (
     associate_custom_skill_with_external_app__no_commit,
     create_external_app,
+    delete_external_app,
+    disconnect_external_app_for_user,
     get_external_app_by_skill_id,
     get_skills_for_external_app,
     replace_custom_skill_associations__no_commit,
 )
-from onyx.db.models import Skill, User, UserRole, UserSkillPreference
+from onyx.db.models import Skill, User, UserSkillPreference
 from onyx.db.skill import set_skill_public_permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -49,7 +51,7 @@ def test_associate_promotes_visibility_and_preserves_preferences(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
     skill = make_skill(
         db_session,
         is_public=False,
@@ -222,7 +224,7 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True, author_user_id=owner.id)
     original_bundle_file_id = skill.bundle_file_id
     db_session.add(
@@ -298,8 +300,8 @@ def test_app_update_batches_associations_into_one_sandbox_refresh(
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    other_user = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    other_user = make_user(db_session, standard_account=True)
     make_sandbox(db_session, owner)
     make_sandbox(db_session, other_user)
     skill = make_skill(
@@ -353,7 +355,7 @@ def test_editor_creation_with_app_context_is_atomic_and_not_auto_enabled(
     test_user: User,  # noqa: ARG001
     initialize_file_store: None,  # noqa: ARG001
 ) -> None:
-    admin = make_user(db_session, role=UserRole.ADMIN)
+    admin = make_user(db_session, is_admin=True)
     app_id = _make_app(db_session)
     response = create_custom_skill_from_editor(
         name=f"associated-{uuid4().hex[:8]}",
@@ -393,7 +395,7 @@ def test_editor_app_context_requires_an_admin_before_writing_skill_content(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session, role=UserRole.BASIC)
+    user = make_user(db_session, standard_account=True)
     app_id = _make_app(db_session)
     skill_ids_before = set(db_session.scalars(select(Skill.id)))
 
@@ -409,3 +411,30 @@ def test_editor_app_context_requires_an_admin_before_writing_skill_content(
 
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert set(db_session.scalars(select(Skill.id))) == skill_ids_before
+
+
+def test_disconnect_preserves_opt_out_and_app_deletion_resets_policy(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+    skill.installation_policy = SkillInstallationPolicy.DEFAULT
+    app_id = _make_app(db_session)
+    associate_custom_skill_with_external_app__no_commit(
+        db_session, external_app_id=app_id, skill_id=skill.id
+    )
+    preference = UserSkillPreference(
+        user_id=user.id, skill_id=skill.id, name=skill.name, enabled=False
+    )
+    db_session.add(preference)
+    db_session.flush()
+    disconnect_external_app_for_user(
+        db_session, external_app_id=app_id, user_id=user.id
+    )
+    db_session.expire_all()
+    saved = db_session.get(UserSkillPreference, (user.id, skill.id))
+    assert saved is not None and not saved.enabled
+    delete_external_app(db_session, app_id)
+    db_session.flush()
+    db_session.refresh(skill)
+    assert skill.installation_policy == SkillInstallationPolicy.AVAILABLE

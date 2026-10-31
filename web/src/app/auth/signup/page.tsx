@@ -7,12 +7,15 @@ import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
+import { getTranslations } from "next-intl/server";
+import { fetchAppName } from "@/lib/app/svcSS";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
+  const t = await getTranslations("auth");
   const searchParams = await props.searchParams;
   const nextUrl = Array.isArray(searchParams?.next)
     ? searchParams?.next[0]
@@ -59,6 +62,7 @@ const Page = async (props: {
   if (cloud && authTypeMetadata) {
     authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, null);
   }
+  const appName = await fetchAppName();
 
   return (
     <AuthFlowContainer authState="signup">
@@ -73,11 +77,13 @@ const Page = async (props: {
           )}
         >
           <div className="w-full">
-            <Text as="p" headingH2 text05>
-              {cloud ? "Complete your sign up" : "Create account"}
+            <Text as="p" font="heading-h2" color="text-05">
+              {cloud
+                ? t("signup.cloudSignupHeading.title")
+                : t("signup.createAccountHeading.title")}
             </Text>
-            <Text as="p" text03>
-              Get started with Onyx
+            <Text as="p" color="text-03">
+              {t("signup.subtitle.text", { appName })}
             </Text>
           </div>
           {cloud && authUrl && (
@@ -85,9 +91,11 @@ const Page = async (props: {
               <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-border-01" />
-                <Text as="p" mainUiMuted text03 className="mx-2">
-                  or
-                </Text>
+                <div className="mx-2">
+                  <Text as="p" font="main-ui-muted" color="text-03">
+                    {t("signup.orDivider.text")}
+                  </Text>
+                </div>
                 <div className="grow border-t border-border-01" />
               </div>
             </div>

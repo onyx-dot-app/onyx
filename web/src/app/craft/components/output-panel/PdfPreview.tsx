@@ -1,119 +1,120 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { cn } from "@opal/utils";
+import { useRef, useEffect } from "react";
+import { useFilePreview } from "@/lib/build/hooks";
+import { FetchError } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
-import { SvgFileText } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
-import { getArtifactUrl } from "@/lib/build/client";
+import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import dynamic from "next/dynamic";
+import {
+  buildArtifactUrl,
+  downloadArtifactFile,
+} from "@/app/craft/services/apiServices";
+
+const PdfDocumentViewer = dynamic(
+  () => import("@/app/craft/components/output-panel/PdfDocumentViewer"),
+  { ssr: false }
+);
 
 interface PdfPreviewProps {
+  initialPage?: number;
+  onPageChange?: (page: number) => void;
+  onRefreshingChange?: (isRefreshing: boolean) => void;
   sessionId: string;
   filePath: string;
+  revision?: string;
   refreshKey?: number;
+  isActive?: boolean;
 }
 
-/**
- * PdfPreview - Renders PDF files using the browser's built-in PDF viewer.
- * Fetches the PDF as a blob and creates an object URL so the iframe renders
- * it inline (the backend serves artifacts with Content-Disposition: attachment,
- * which would otherwise force a download).
- */
 export default function PdfPreview({
   sessionId,
   filePath,
+  revision,
   refreshKey,
+  isActive = true,
+  onRefreshingChange,
+  initialPage,
+  onPageChange,
 }: PdfPreviewProps) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const blobUrlRef = useRef<string | null>(null);
+  const t = useTranslations("craft.pdfPreview");
+  const displayedBlobRef = useRef<Blob | null>(null);
+  const { data: blob, error } = useFilePreview(
+    SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
+    async () => {
+      const response = await fetch(buildArtifactUrl(sessionId, filePath), {
+        cache: "no-store",
+      });
+      if (!response.ok)
+        throw new FetchError(
+          `Failed to fetch PDF: ${response.status}`,
+          response.status,
+          null
+        );
+      const nextBlob = await response.blob();
+      const displayedBlob = displayedBlobRef.current;
+      if (
+        revision === undefined &&
+        displayedBlob &&
+        displayedBlob.size === nextBlob.size &&
+        displayedBlob.type === nextBlob.type
+      ) {
+        const [displayedBytes, nextBytes] = await Promise.all([
+          displayedBlob.arrayBuffer(),
+          nextBlob.arrayBuffer(),
+        ]);
+        const next = new Uint8Array(nextBytes);
+        // Reuse the loaded document when an activation read returns identical bytes.
+        if (
+          new Uint8Array(displayedBytes).every(
+            (byte, index) => byte === next[index]
+          )
+        )
+          return displayedBlob;
+      }
+      return nextBlob;
+    },
+    { revision, refreshKey, isActive, onRefreshingChange }
+  );
 
   useEffect(() => {
-    const controller = new AbortController();
+    displayedBlobRef.current = blob ?? null;
+  }, [blob]);
 
-    // Revoke the previous blob URL before starting a new fetch
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = null;
-    }
-    setBlobUrl(null);
-    setLoading(true);
-    setError(false);
-
-    const encodedPath = filePath
-      .split("/")
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
-    const artifactUrl = getArtifactUrl(sessionId, encodedPath);
-
-    fetch(artifactUrl, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        blobUrlRef.current = url;
-        setBlobUrl(url);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(true);
-        setLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
-    };
-  }, [sessionId, filePath, refreshKey]);
-
-  if (error) {
+  if (!blob)
     return (
-      <Section
-        height="full"
-        alignItems="center"
-        justifyContent="center"
-        padding={8}
-      >
-        <SvgFileText size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
-          Cannot preview PDF
-        </Text>
-        <div className="text-center max-w-md">
-          <Text font="secondary-body" color="text-02">
-            The PDF file could not be loaded.
+      <WorkspaceHome title={t(error ? "error.title" : "loading.label")}>
+        {error && (
+          <Text font="secondary-body" color="text-03">
+            {t("error.description")}
           </Text>
-        </div>
-      </Section>
+        )}
+      </WorkspaceHome>
     );
-  }
-
-  if (loading || !blobUrl) {
-    return (
-      <Section
-        height="full"
-        alignItems="center"
-        justifyContent="center"
-        padding={8}
-      >
-        <Text font="secondary-body" color="text-03">
-          Loading PDF...
-        </Text>
-      </Section>
-    );
-  }
 
   return (
-    <iframe
-      src={blobUrl}
-      title={filePath.split("/").pop() || "PDF Preview"}
-      className={cn("w-full h-full border-none")}
-    />
+    <div className="flex h-full flex-col">
+      {error && (
+        <div
+          role="alert"
+          className="shrink-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("error.description")}
+          </Text>
+        </div>
+      )}
+      <div className="min-h-0 flex-1">
+        <PdfDocumentViewer
+          blob={blob}
+          isActive={isActive}
+          initialPage={initialPage}
+          onPageChange={onPageChange}
+          onDownload={() => downloadArtifactFile(sessionId, filePath)}
+        />
+      </div>
+    </div>
   );
 }

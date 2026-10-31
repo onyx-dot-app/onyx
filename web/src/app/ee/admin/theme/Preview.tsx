@@ -1,19 +1,21 @@
 "use client";
 
+import { OverflowText, Text } from "@opal/components";
 import React from "react";
+import { useTranslations } from "next-intl";
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { ensureHrefProtocol } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import { SvgOnyxLogo } from "@opal/logos";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const previewMarkdownComponents = {
   p: ({ children }) => (
-    <Text as="p" text03 figureSmallValue className="my-0! text-center">
-      {children}
-    </Text>
+    <div className="text-center">
+      <Text font="figure-small-value" color="text-03">
+        {richNodes(children)}
+      </Text>
+    </div>
   ),
   a: ({ node, href, className, children, ...rest }) => {
     const fullHref = ensureHrefProtocol(href);
@@ -25,8 +27,8 @@ const previewMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text text03 figureSmallValue>
-          {children}
+        <Text font="figure-small-value" color="text-03">
+          {richNodes(children)}
         </Text>
       </a>
     );
@@ -57,19 +59,18 @@ export type PreviewHighlightTarget =
 
 function PreviewLogo({
   logoSrc,
-  forceOnyxIcon,
   size,
   className,
 }: {
   logoSrc?: string;
-  forceOnyxIcon?: boolean;
   size: number;
   className?: string;
 }) {
-  return logoSrc && !forceOnyxIcon ? (
+  const t = useTranslations("admin.theme");
+  return logoSrc ? (
     <img
       src={logoSrc}
-      alt="Logo"
+      alt={t("preview.logo.alt")}
       style={{
         objectFit: "cover",
         height: `${size}px`,
@@ -84,7 +85,7 @@ function PreviewLogo({
 
 function InputPreview() {
   return (
-    <div className="bg-background-neutral-00 border border-border-01 flex flex-col gap-1.5 items-end pb-1 pl-2.5 pr-1 pt-2.5 rounded-08 w-full h-14">
+    <div className="bg-background-neutral-00 border border-border-01 flex flex-col gap-1.5 items-end pb-1 ps-2.5 pe-1 pt-2.5 rounded-08 w-full h-14">
       <div className="h-5 w-5 bg-theme-primary-05 mt-auto rounded-sm"></div>
     </div>
   );
@@ -110,13 +111,15 @@ function PreviewChat({
               highlightTarget === "chat_header" && "bg-highlight-match"
             )}
           >
-            <Text
-              figureSmallLabel
-              text03
-              className="max-w-full whitespace-normal wrap-break-word text-center"
-            >
-              {chat_header_content}
-            </Text>
+            <div className="max-w-full">
+              <Text
+                font="figure-small-label"
+                color="text-03"
+                wordWrap="wrap-break-word"
+              >
+                {chat_header_content}
+              </Text>
+            </div>
           </div>
         </div>
       </div>
@@ -125,13 +128,13 @@ function PreviewChat({
       <div className="flex flex-1 flex-col gap-2 items-center justify-end max-w-[300px] w-full px-3 py-0 mx-auto">
         {/* User message bubble (right side) */}
         <div className="flex flex-col items-end w-full">
-          <div className="bg-background-tint-02 flex flex-col items-start px-2.5 py-2 rounded-bl-[10px] rounded-tl-[10px] rounded-tr-[10px]">
+          <div className="bg-background-tint-02 flex flex-col items-start px-2.5 py-2 rounded-es-[10px] rounded-ss-[10px] rounded-se-[10px]">
             <div className="bg-background-neutral-03 h-1.5 rounded-04 w-20" />
           </div>
         </div>
 
         {/* AI response bubble (left side) */}
-        <div className="flex flex-col gap-1.5 items-start pl-2 pr-16 py-2 w-full">
+        <div className="flex flex-col gap-1.5 items-start ps-2 pe-16 py-2 w-full">
           <div className="bg-background-neutral-03 h-1.5 rounded-04 w-full" />
           <div className="bg-background-neutral-03 h-1.5 rounded-04 w-full" />
           <div className="bg-background-neutral-03 h-1.5 rounded-04 w-12" />
@@ -184,7 +187,7 @@ function PreviewStart({
   return (
     <div className="flex h-60 rounded-12 shadow-box-00 bg-background-tint-01 relative">
       {/* Sidebar */}
-      <div className="flex w-24 h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
+      <div className="flex w-24 h-full bg-background-tint-02 rounded-s-12 p-1 justify-start">
         <div className="flex flex-col h-fit w-full justify-start">
           <div
             className={cn(
@@ -193,20 +196,18 @@ function PreviewStart({
             )}
           >
             {logoDisplayStyle !== "name_only" && (
-              <PreviewLogo
-                logoSrc={logoSrc}
-                size={16}
-                forceOnyxIcon={
-                  logoDisplayStyle === "logo_and_name" &&
-                  !applicationDisplayName
-                }
-              />
+              <PreviewLogo logoSrc={logoSrc} size={16} />
             )}
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (
-              <Truncated mainUiAction text04 nowrap>
+              <OverflowText
+                as="p"
+                textPosition="text-start"
+                font="main-ui-action"
+                color="text-04"
+              >
                 {applicationDisplayName || "Onyx"}
-              </Truncated>
+              </OverflowText>
             )}
           </div>
         </div>
@@ -223,13 +224,15 @@ function PreviewStart({
               )}
             >
               <PreviewLogo logoSrc={logoSrc} size={18} />
-              <Text
-                text04
-                headingH3
-                className="max-w-[260px] whitespace-normal wrap-break-word text-center"
-              >
-                {greeting_message}
-              </Text>
+              <div className="max-w-[260px]">
+                <Text
+                  font="heading-h3"
+                  color="text-04"
+                  wordWrap="wrap-break-word"
+                >
+                  {greeting_message}
+                </Text>
+              </div>
             </div>
             <InputPreview />
           </div>

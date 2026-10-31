@@ -6,6 +6,10 @@ import {
   workerUserCredentials,
 } from "@tests/e2e/constants";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import {
+  putMockLlmDefaultScript,
+  waitForMockLlmServer,
+} from "@tests/e2e/utils/mockLlm";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
@@ -171,7 +175,7 @@ async function promoteToAdmin(
     if (!groupsRes.ok()) {
       const body = await groupsRes.text();
       throw new Error(
-        `[global-setup] Cannot fetch user groups — the primary admin account ` +
+        `[global-setup] Cannot fetch user groups. The primary admin account ` +
           `(${TEST_ADMIN_CREDENTIALS.email}) may not have admin privileges ` +
           `(status ${groupsRes.status()}).\n\n` +
           `This usually happens when running tests against a non-fresh database ` +
@@ -216,7 +220,7 @@ async function promoteToAdmin(
     );
     if (!target) {
       throw new Error(
-        `[global-setup] User ${email} not found — cannot add to Admin group`
+        `[global-setup] User ${email} not found. Cannot add to Admin group`
       );
     }
 
@@ -295,9 +299,11 @@ async function globalSetup(config: FullConfig) {
     await setDisplayName(baseURL, storageStatePath, "worker");
   }
 
-  // ── Ensure a public LLM provider exists ───────────────────────────
+  // ── Register the mock LLM script and make its provider the default ─
   // Many tests depend on a default LLM being configured (file uploads,
   // assistant creation, etc.).  Re-use the admin session we just saved.
+  await waitForMockLlmServer();
+  await putMockLlmDefaultScript();
   const adminCtx = await request.newContext({
     baseURL,
     storageState: "admin_auth.json",

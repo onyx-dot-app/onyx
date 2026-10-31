@@ -1,9 +1,10 @@
 "use client";
 
 import React, { RefObject, useState, useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
-import { FeedbackType, Message } from "@/app/app/interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { FeedbackType, Message } from "@/app/app/types";
+import { OnyxDocument } from "@/lib/search/types";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
   useChatSessionStore,
@@ -20,7 +21,7 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
-import { CopyButton, OpenButton, SelectButton } from "@opal/components";
+import { CopyButton, SelectButton } from "@opal/components";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
@@ -34,7 +35,7 @@ import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -56,6 +57,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   updateCurrentDocumentSidebarVisible,
   updateCurrentSelectedNodeForDocDisplay,
 }: SouurcesTagWrapperProps) {
+  const t = useTranslations("chat.messages");
   // Convert citations to SourceInfo array
   const sources = useMemo(
     () => citationsToSourceInfoArray(citations, documentMap),
@@ -84,7 +86,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   return (
     <SourceTag
       variant="button"
-      displayName="Sources"
+      displayName={t("toolbar.sourcesTag.label")}
       sources={sources}
       onSourceClick={handleSourceClick}
       toggleSource
@@ -146,6 +148,7 @@ export default function MessageToolbar({
   citations,
   documentMap,
 }: MessageToolbarProps) {
+  const t = useTranslations("chat.messages");
   // The message's own model. chatState carries the globally selected model,
   // so per-response attribution must come from the message node itself.
   const messageTree = useCurrentMessageTree();
@@ -255,7 +258,7 @@ export default function MessageToolbar({
 
       <div
         data-testid="AgentMessage/toolbar"
-        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
+        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 ps-1"
       >
         <TooltipGroup>
           <div className="flex items-center">
@@ -297,7 +300,9 @@ export default function MessageToolbar({
                   variant="select-light"
                   state={isFeedbackTransient("like") ? "selected" : "empty"}
                   tooltip={
-                    currentFeedback === "like" ? "Remove Like" : "Good Response"
+                    currentFeedback === "like"
+                      ? t("toolbar.likeButton.removeTooltip")
+                      : t("toolbar.likeButton.tooltip")
                   }
                   data-testid="AgentMessage/like-button"
                 />
@@ -308,8 +313,8 @@ export default function MessageToolbar({
                   state={isFeedbackTransient("dislike") ? "selected" : "empty"}
                   tooltip={
                     currentFeedback === "dislike"
-                      ? "Remove Dislike"
-                      : "Bad Response"
+                      ? t("toolbar.dislikeButton.removeTooltip")
+                      : t("toolbar.dislikeButton.tooltip")
                   }
                   data-testid="AgentMessage/dislike-button"
                 />
@@ -326,7 +331,8 @@ export default function MessageToolbar({
             {/* Read-only model label for the shared view: no llmManager to
                 power the interactive selector, so surface which model answered. */}
             {!llmManager && currentModelName && (
-              <OpenButton
+              <SelectButton
+                chevron
                 disabled
                 icon={getModelIcon(
                   currentModelProvider ?? "",
@@ -334,7 +340,7 @@ export default function MessageToolbar({
                 )}
               >
                 {currentModelName}
-              </OpenButton>
+              </SelectButton>
             )}
 
             {onRegenerate &&
@@ -344,6 +350,7 @@ export default function MessageToolbar({
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
                     providerOptions={llmManager.llmProviders}
+                    modelPaging={llmManager.modelPaging}
                     value={
                       // The response's model may live under a different
                       // provider than the global selection, so resolve it
@@ -376,13 +383,14 @@ export default function MessageToolbar({
                         );
                       const displayName = mc?.effectiveDisplayName ?? rawName;
                       return (
-                        <OpenButton
+                        <SelectButton
+                          chevron
                           icon={SvgRefreshCw}
-                          tooltip="Retry with"
+                          tooltip={t("toolbar.regenerateButton.tooltip")}
                           foldable={distinctModelsUsed <= 1}
                         >
                           {displayName}
-                        </OpenButton>
+                        </SelectButton>
                       );
                     }}
                     onChange={(opt) => {

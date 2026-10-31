@@ -7,7 +7,7 @@ import {
   RenderType,
   RendererResult,
   RendererOutput,
-} from "../interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { findRenderer } from "../renderMessageComponent";
 
 /** Extended result that includes collapse state */
@@ -120,7 +120,7 @@ export const TimelineRendererComponent = React.memo(
 
     return (
       <RendererFn
-        packets={packets as any}
+        packets={packets}
         state={chatState}
         onComplete={() => {}}
         animate={animate}

@@ -1,0 +1,168 @@
+"""Legacy OpenAPI disablement applies to default Chat, not custom agents."""
+
+from collections.abc import Generator
+from typing import Any
+from uuid import uuid4
+
+import pytest
+from sqlalchemy.orm import Session
+
+from onyx.db.models import Persona, Tool, User
+from onyx.db.tools import capture_persona_tool_configuration
+from onyx.llm.factory import get_default_llm
+from onyx.tools.tool_constructor import construct_tools
+from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+
+USER_EMAIL_PREFIX = "disabled_tool_check_user"
+
+OPENAPI_SCHEMA: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "Disabled Tool API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.example.com"}],
+    "paths": {
+        "/test": {
+            "get": {
+                "operationId": "test_operation",
+                "summary": "Test operation",
+                "description": "A test operation",
+                "responses": {"200": {"description": "Success"}},
+            }
+        }
+    },
+}
+
+
+@pytest.fixture(autouse=True)
+def _default_llm_provider(db_session: Session) -> None:
+    ensure_default_llm_provider(db_session)
+
+
+@pytest.fixture(autouse=True)
+def _cleanup(db_session: Session) -> Generator[None, None, None]:
+    """These rows are public and listed, so leaving them behind would widen what
+    other tests see in persona and action listings. Ordered by foreign key:
+    personas reference both, and tool.user_id references the user."""
+    yield
+    db_session.rollback()
+    for persona in (
+        db_session.query(Persona)
+        .filter(Persona.name.like("Disabled Tool Persona %"))
+        .all()
+    ):
+        persona.tools = []
+        persona.users = []
+        db_session.delete(persona)
+    db_session.commit()
+
+    db_session.query(Tool).filter(Tool.name.like("disabled-tool-check-%")).delete(
+        synchronize_session=False
+    )
+    db_session.commit()
+
+    delete_test_user(
+        db_session,
+        *db_session.query(User)
+        .filter(User.__table__.c.email.like(f"{USER_EMAIL_PREFIX}_%@example.com"))
+        .all(),
+    )
+    db_session.commit()
+
+
+def _create_tool(db_session: Session, user: User, *, enabled: bool) -> Tool:
+    tool = Tool(
+        name=f"disabled-tool-check-{uuid4().hex[:8]}",
+        description="disabled tool construction test action",
+        openapi_schema=OPENAPI_SCHEMA,
+        user_id=user.id,
+        passthrough_auth=False,
+        enabled=enabled,
+    )
+    db_session.add(tool)
+    db_session.commit()
+    db_session.refresh(tool)
+    return tool
+
+
+def _create_persona(db_session: Session, user: User, tools: list[Tool]) -> Persona:
+    persona = Persona(
+        name=f"Disabled Tool Persona {uuid4().hex[:8]}",
+        description="disabled tool construction test persona",
+        system_prompt="You are a helpful assistant",
+        task_prompt="Answer the user's question",
+        tools=tools,
+        document_sets=[],
+        users=[user],
+        groups=[],
+        is_listed=True,
+        is_public=True,
+        display_priority=None,
+        starter_messages=None,
+        deleted=False,
+    )
+    db_session.add(persona)
+    db_session.commit()
+    db_session.refresh(persona)
+    return persona
+
+
+@pytest.mark.parametrize("default_chat", [True, False])
+def test_legacy_openapi_availability(db_session: Session, default_chat: bool) -> None:
+    user = create_test_user(db_session, USER_EMAIL_PREFIX)
+    disabled_tool = _create_tool(db_session, user, enabled=False)
+    enabled_tool = _create_tool(db_session, user, enabled=True)
+    persona = _create_persona(db_session, user, [disabled_tool, enabled_tool])
+
+    tool_dict = construct_tools(
+        configuration=capture_persona_tool_configuration(persona).model_copy(
+            update={"persona_id": 0 if default_chat else persona.id}
+        ),
+        db_session=db_session,
+        user=user,
+        llm=get_default_llm(),
+    )
+
+    assert (disabled_tool.id in tool_dict) is not default_chat
+    assert enabled_tool.id in tool_dict
+
+
+@pytest.mark.parametrize("default_chat", [True, False])
+def test_legacy_openapi_availability_when_whitelisted(
+    db_session: Session, default_chat: bool
+) -> None:
+    user = create_test_user(db_session, USER_EMAIL_PREFIX)
+    disabled_tool = _create_tool(db_session, user, enabled=False)
+    persona = _create_persona(db_session, user, [disabled_tool])
+
+    tool_dict = construct_tools(
+        configuration=capture_persona_tool_configuration(persona).model_copy(
+            update={"persona_id": 0 if default_chat else persona.id}
+        ),
+        db_session=db_session,
+        user=user,
+        llm=get_default_llm(),
+        allowed_tool_ids=[disabled_tool.id],
+    )
+
+    assert (disabled_tool.id in tool_dict) is not default_chat
+
+
+def test_prepared_configuration_survives_persona_edits(db_session: Session) -> None:
+    user = create_test_user(db_session, USER_EMAIL_PREFIX)
+    tool = _create_tool(db_session, user, enabled=True)
+    persona = _create_persona(db_session, user, [tool])
+    configuration = capture_persona_tool_configuration(persona)
+    tool_id = tool.id
+    persona.tools = []
+    db_session.commit()
+    db_session.expunge(persona)
+
+    tools = construct_tools(
+        configuration=configuration,
+        db_session=db_session,
+        user=user,
+        llm=get_default_llm(),
+    )
+
+    assert tool_id in tools
+    assert tools[tool_id][0].name == "test_operation"

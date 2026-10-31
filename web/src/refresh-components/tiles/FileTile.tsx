@@ -1,13 +1,11 @@
 import type { FunctionComponent } from "react";
-
-import { noProp } from "@/lib/utils";
+import { useTranslations } from "next-intl";
+import { Button, OverflowText, Text } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
-import IconButton from "../buttons/IconButton";
-import Text from "../texts/Text";
-import Truncated from "../texts/Truncated";
+import { noProp } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,10 +31,11 @@ interface RemoveButtonProps {
 }
 
 function RemoveButton({ onRemove }: RemoveButtonProps) {
+  const t = useTranslations("common.fileTile");
   return (
     <div
       className={cn(
-        "absolute -left-1 -top-1 z-10",
+        "absolute -start-1 -top-1 z-10",
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
@@ -47,8 +46,8 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
             e.stopPropagation();
             onRemove();
           }}
-          title="Remove"
-          aria-label="Remove"
+          title={t("removeButton.label")}
+          aria-label={t("removeButton.label")}
           className={cn(
             "h-4 w-4",
             "flex items-center justify-center",
@@ -75,6 +74,7 @@ export default function FileTile({
   onOpen,
   state = "default",
 }: FileTileProps) {
+  const t = useTranslations("common.fileTile");
   const Icon = icon ?? SvgTextLines;
   const isMuted = state === "processing" || state === "disabled";
   const canOpen = !!onOpen && state !== "disabled";
@@ -113,43 +113,43 @@ export default function FileTile({
       </div>
 
       {(title || description || onOpen) && (
-        <div className="min-w-0 flex pl-1 w-full justify-between h-full">
+        <div className="min-w-0 flex ps-1 w-full justify-between h-full">
           {isMuted ? (
             <div className="flex flex-col min-w-0">
               {title && (
-                <Truncated
-                  secondaryAction
-                  text02
+                <div
                   className={cn(
-                    "truncate",
+                    "text-text-02",
                     state === "processing" && "hover:text-text-03"
                   )}
                 >
-                  {title}
-                </Truncated>
+                  <OverflowText as="p" font="secondary-action" color="inherit">
+                    {title}
+                  </OverflowText>
+                </div>
               )}
               {description && (
-                <Text
-                  secondaryBody
-                  text02
+                <div
                   className={cn(
-                    "line-clamp-2",
+                    "text-text-02",
                     state === "processing" && "hover:text-text-03"
                   )}
                 >
-                  {description}
-                </Text>
+                  <Text font="secondary-body" color="inherit" maxLines={2}>
+                    {description}
+                  </Text>
+                </div>
               )}
             </div>
           ) : (
             <div className="flex flex-col min-w-0">
               {title && (
-                <Truncated secondaryAction text04 className="truncate">
+                <OverflowText as="p" font="secondary-action" color="text-04">
                   {title}
-                </Truncated>
+                </OverflowText>
               )}
               {description && (
-                <Text secondaryBody text03 className="line-clamp-2">
+                <Text font="secondary-body" color="text-03" maxLines={2}>
                   {description}
                 </Text>
               )}
@@ -157,7 +157,12 @@ export default function FileTile({
           )}
           {onOpen && (
             <div className="h-full">
-              <IconButton small icon={SvgMaximize2} onClick={noProp(onOpen)} />
+              <Button
+                size="xs"
+                prominence="internal"
+                icon={SvgMaximize2}
+                onClick={noProp(onOpen)}
+              />
             </div>
           )}
         </div>
@@ -173,7 +178,9 @@ export default function FileTile({
         <div
           role="button"
           tabIndex={0}
-          aria-label={`Open ${title ?? "file"}`}
+          aria-label={t("open.ariaLabel", {
+            title: title ?? t("file.fallback"),
+          })}
           onKeyDown={clickOnKeyDown(onOpen)}
           onClick={() => onOpen()}
           className={tileClassName}

@@ -250,7 +250,7 @@ def test_prepuller_ships_no_cluster_scoped_objects() -> None:
     of everything else.
 
     The class was removed rather than worked around: it bought very little (see
-    docs/craft/sandbox/image-and-spinup.md), and an operator who wants one
+    the template's header comment), and an operator who wants one
     points `priorityClassName` at their own. Keep this template namespaced —
     cluster-scoped objects also collide between releases sharing a name in
     different namespaces, which is why the removed class needed a
@@ -372,3 +372,34 @@ def test_prepuller_can_be_disabled() -> None:
 
 def test_prepuller_absent_when_craft_disabled() -> None:
     assert _renders_nothing(["--set-string", "configMap.ENABLE_CRAFT=false"])
+
+
+@pytest.mark.parametrize("runtime_class", ["", "gvisor", "kata"])
+def test_prepuller_uses_sandbox_runtime_class(runtime_class: str) -> None:
+    args = ["--set-string", f"sandboxPod.runtimeClassName={runtime_class}"]
+    sandbox = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE, args))
+    assert (
+        _prepuller_pod_spec(args).get("runtimeClassName")
+        == (sandbox["template"]["spec"].get("runtimeClassName"))
+        == (runtime_class or None)
+    )
+
+
+@pytest.mark.parametrize("override", ["", "https://onyx.example/api"])
+def test_sandbox_callback_url_matches_api_configuration(override: str) -> None:
+    args = [
+        "--namespace",
+        "custom",
+        "--set-string",
+        f"configMap.ONYX_SERVER_URL={override}",
+    ]
+    pod = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE, args))
+    config = yaml.safe_load(_render("templates/configmap.yaml", args))
+    expected = override or "http://onyx-api-service.custom.svc.cluster.local:8080"
+    assert config["data"]["ONYX_SERVER_URL"] == expected
+    containers = pod["template"]["spec"]["containers"]
+    sandbox = next(c for c in containers if c["name"] == "sandbox")
+    assert (
+        next(v["value"] for v in sandbox["env"] if v["name"] == "ONYX_SERVER_URL")
+        == expected
+    )

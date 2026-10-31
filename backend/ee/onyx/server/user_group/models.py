@@ -1,8 +1,9 @@
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.auth.permissions import Permission
+from onyx.db.enums import ConnectorManageRole
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.server.documents.models import (
     ConnectorCredentialPairDescriptor,
@@ -14,12 +15,32 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.manage.models import UserInfo, UserPreferences
 
 
+class ManagedCCPairEntry(BaseModel):
+    cc_pair_id: int
+    role: ConnectorManageRole = ConnectorManageRole.EDITOR
+
+
+class GroupManagedCCPairsUpdateRequest(BaseModel):
+    cc_pairs: list[ManagedCCPairEntry]
+
+    @field_validator("cc_pairs")
+    @classmethod
+    def _unique_cc_pairs(
+        cls, cc_pairs: list[ManagedCCPairEntry]
+    ) -> list[ManagedCCPairEntry]:
+        if len({entry.cc_pair_id for entry in cc_pairs}) != len(cc_pairs):
+            raise ValueError("Each connector may appear only once in cc_pairs")
+        return cc_pairs
+
+
 class UserGroup(BaseModel):
     id: int
     name: str
     users: list[UserInfo]
     manager_ids: list[str]
     cc_pairs: list[ConnectorCredentialPairDescriptor]
+    # The group's role on each pair in cc_pairs.
+    managed_cc_pairs: list[ManagedCCPairEntry]
     document_sets: list[DocumentSet]
     personas: list[PersonaSnapshot]
     is_up_to_date: bool
@@ -81,6 +102,14 @@ class UserGroup(BaseModel):
                 for cc_pair_relationship in user_group_model.cc_pair_relationships
                 if cc_pair_relationship.is_current
             ],
+            managed_cc_pairs=[
+                ManagedCCPairEntry(
+                    cc_pair_id=cc_pair_relationship.cc_pair_id,
+                    role=cc_pair_relationship.role,
+                )
+                for cc_pair_relationship in user_group_model.cc_pair_relationships
+                if cc_pair_relationship.is_current
+            ],
             document_sets=[
                 DocumentSet.from_model(
                     ds, mask_credential_prefix=mask_credential_prefix
@@ -121,7 +150,12 @@ class UserGroupCreate(BaseModel):
 
 class UserGroupUpdate(BaseModel):
     user_ids: list[UUID]
-    cc_pair_ids: list[int]
+    # None leaves the connector links alone. Without it, changing a roster meant
+    # reading every linked cc-pair back and resending it, so a link added in
+    # between was reverted. add_users_to_user_group already preserves them.
+    # Legacy combined field: a newly attached pair gets an EDITOR manage row
+    # and, when PRIVATE, data access. /managed-cc-pairs sets roles only.
+    cc_pair_ids: list[int] | None = None
 
 
 class UserGroupIncognitoUpdate(BaseModel):
@@ -154,3 +188,7 @@ class SetGroupManagerRequest(BaseModel):
 
 class BulkSetPermissionsRequest(BaseModel):
     permissions: list[Permission]
+
+
+class UserGroupDataAccessCCPairs(BaseModel):
+    cc_pair_ids: list[int]

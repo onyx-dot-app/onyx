@@ -1,0 +1,959 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Onyx Documentation",
+  "colors": {
+    "primary": "#0069ED",
+    "light": "#4D9CFF",
+    "dark": "#0050B4"
+  },
+  "favicon": "assets/logo/onyx_favicon.svg",
+  "banner": {
+    "content": "**Permissions update:** Onyx now uses group-based permissions. [Understand permissions](/admins/permissions/understanding_permissions) or [review migration details](/admins/permissions/whats_changing)",
+    "dismissible": true
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Overview",
+        "icon": "house",
+        "pages": [
+          {
+            "group": "Getting Started",
+            "pages": ["welcome", "overview/getting_started/quickstart"]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "overview/core_features/internal_search",
+              "overview/core_features/connectors",
+              "overview/core_features/chat",
+              "overview/core_features/agents",
+              "overview/core_features/plugins",
+              "overview/core_features/web_search",
+              "overview/core_features/code_interpreter",
+              "overview/core_features/image_generation",
+              "overview/core_features/voice_mode",
+              {
+                "group": "Craft",
+                "icon": "hammer",
+                "pages": [
+                  "overview/core_features/craft",
+                  "overview/core_features/craft_skills",
+                  "overview/core_features/craft_apps",
+                  "overview/core_features/craft_scheduled_tasks"
+                ]
+              },
+              "overview/core_features/coding_agent"
+            ]
+          },
+          {
+            "group": "Onyx Anywhere",
+            "pages": [
+              "overview/onyx_anywhere/desktop_app",
+              "overview/onyx_anywhere/chrome_extension",
+              "overview/onyx_anywhere/website_widget",
+              "overview/onyx_anywhere/slack",
+              "overview/onyx_anywhere/discord_bot",
+              "overview/onyx_anywhere/mcp_server",
+              "developers/guides/llm_gateway",
+              "overview/onyx_anywhere/cli"
+            ]
+          },
+          {
+            "group": "Miscellaneous",
+            "pages": [
+              "overview/miscellaneous/open_source_statement",
+              "overview/getting_started/use_cases",
+              "overview/getting_started/faq",
+              "overview/miscellaneous/contact_us"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment",
+        "icon": "server",
+        "pages": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "deployment/overview",
+              "deployment/getting_started/quickstart",
+              "deployment/getting_started/resourcing",
+              "deployment/enterprise_edition"
+            ]
+          },
+          {
+            "group": "Deploy Locally",
+            "pages": [
+              "deployment/local/onyx_cli",
+              "deployment/local/docker",
+              "deployment/local/kubernetes",
+              "deployment/local/terraform",
+              "deployment/local/opensearch",
+              "deployment/local/object_store"
+            ]
+          },
+          {
+            "group": "Production",
+            "pages": [
+              "deployment/production/external_services",
+              "deployment/production/high_availability",
+              "deployment/production/monitoring",
+              "deployment/production/security",
+              "deployment/production/code_interpreter"
+            ]
+          },
+          {
+            "group": "Craft",
+            "icon": "hammer",
+            "pages": [
+              "deployment/local/craft",
+              "deployment/local/craft_kubernetes",
+              "deployment/local/craft_docker_compose"
+            ]
+          },
+          {
+            "group": "Onyx Anywhere",
+            "pages": [
+              "deployment/local/desktop_app",
+              "deployment/configuration/chrome_extension",
+              "deployment/configuration/website_widget",
+              "deployment/configuration/mcp_server"
+            ]
+          },
+          {
+            "group": "Deploy on Cloud",
+            "pages": [
+              {
+                "group": "AWS",
+                "icon": "aws",
+                "pages": [
+                  "deployment/cloud/aws/ec2",
+                  "deployment/cloud/aws/eks",
+                  "deployment/cloud/aws/rds"
+                ]
+              },
+              "deployment/cloud/gcp",
+              "deployment/cloud/azure",
+              "deployment/cloud/digital_ocean"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "deployment/authentication/basic",
+              "deployment/authentication/oauth",
+              "deployment/authentication/oidc",
+              "deployment/authentication/saml",
+              "deployment/authentication/sso_providers",
+              "deployment/authentication/jwt"
+            ]
+          },
+          {
+            "group": "Miscellaneous",
+            "pages": [
+              "deployment/configuration/configuration",
+              "deployment/miscellaneous/release_process",
+              "deployment/miscellaneous/contact_us"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Admins",
+        "icon": "user-shield",
+        "pages": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "admins/overview",
+              "admins/getting_started/enterprise_edition"
+            ]
+          },
+          {
+            "group": "Language Models",
+            "pages": [
+              "admins/ai_models/overview",
+              {
+                "group": "Supported Providers",
+                "icon": "microchip",
+                "pages": [
+                  "admins/ai_models/openai",
+                  "admins/ai_models/anthropic",
+                  "admins/ai_models/ollama",
+                  "admins/ai_models/lm_studio",
+                  "admins/ai_models/azure_openai",
+                  "admins/ai_models/bedrock",
+                  "admins/ai_models/google_ai",
+                  "admins/ai_models/openrouter",
+                  "admins/ai_models/bifrost",
+                  "admins/ai_models/portkey",
+                  "admins/ai_models/vercel_ai_gateway",
+                  "admins/ai_models/nebius_tokenfactory",
+                  "admins/ai_models/litellm_proxy",
+                  "admins/ai_models/custom_inference_provider"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Connectors",
+            "pages": [
+              "admins/connectors/overview",
+              {
+                "group": "Supported Connectors",
+                "icon": "plug",
+                "pages": [
+                  "admins/connectors/official/airtable",
+                  "admins/connectors/official/asana",
+                  "admins/connectors/official/axero",
+                  "admins/connectors/official/azure_datalake",
+                  "admins/connectors/official/bitbucket",
+                  "admins/connectors/official/bookstack",
+                  "admins/connectors/official/braintrust",
+                  "admins/connectors/official/box",
+                  "admins/connectors/official/canvas",
+                  "admins/connectors/official/clickup",
+                  "admins/connectors/official/coda",
+                  {
+                    "group": "Confluence",
+                    "pages": [
+                      "admins/connectors/official/confluence",
+                      "admins/connectors/official/confluence-cloud",
+                      "admins/connectors/official/confluence-data-center"
+                    ]
+                  },
+                  "admins/connectors/official/discord",
+                  "admins/connectors/official/discourse",
+                  "admins/connectors/official/document360",
+                  "admins/connectors/official/dropbox",
+                  "admins/connectors/official/drupal_wiki",
+                  "admins/connectors/official/egnyte",
+                  "admins/connectors/official/file",
+                  "admins/connectors/official/fireflies",
+                  "admins/connectors/official/freshdesk",
+                  "admins/connectors/official/gitbook",
+                  "admins/connectors/official/github",
+                  "admins/connectors/official/gitlab",
+                  {
+                    "group": "Gmail",
+                    "pages": [
+                      "admins/connectors/official/gmail/overview",
+                      "admins/connectors/official/gmail/oauth",
+                      "admins/connectors/official/gmail/service_account"
+                    ]
+                  },
+                  {
+                    "group": "Google Drive",
+                    "pages": [
+                      "admins/connectors/official/google_drive/overview",
+                      "admins/connectors/official/google_drive/oauth",
+                      "admins/connectors/official/google_drive/service_account"
+                    ]
+                  },
+                  "admins/connectors/official/google_sites",
+                  "admins/connectors/official/google_storage",
+                  "admins/connectors/official/gong",
+                  "admins/connectors/official/guru",
+                  "admins/connectors/official/highspot",
+                  "admins/connectors/official/hubspot",
+                  "admins/connectors/official/imap",
+                  "admins/connectors/official/jira",
+                  "admins/connectors/official/linear",
+                  "admins/connectors/official/loopio",
+                  "admins/connectors/official/lumapps",
+                  "admins/connectors/official/mediawiki",
+                  {
+                    "group": "Microsoft 365",
+                    "pages": [
+                      "admins/connectors/official/microsoft-365/setup",
+                      "admins/connectors/official/microsoft-365/sharepoint",
+                      "admins/connectors/official/microsoft-365/onedrive",
+                      "admins/connectors/official/microsoft-365/teams",
+                      "admins/connectors/official/microsoft-365/outlook"
+                    ]
+                  },
+                  "admins/connectors/official/notion",
+                  "admins/connectors/official/oci_storage",
+                  "admins/connectors/official/outline",
+                  "admins/connectors/official/productboard",
+                  "admins/connectors/official/r2",
+                  "admins/connectors/official/salesforce",
+                  {
+                    "group": "S3",
+                    "pages": [
+                      "admins/connectors/official/s3/overview",
+                      "admins/connectors/official/s3/access-keys",
+                      "admins/connectors/official/s3/assume-role",
+                      "admins/connectors/official/s3/iam-role"
+                    ]
+                  },
+                  {
+                    "group": "Slack",
+                    "pages": [
+                      "admins/connectors/official/slack/slack_indexed",
+                      "admins/connectors/official/slack/slack_federated"
+                    ]
+                  },
+                  "admins/connectors/official/slab",
+                  "admins/connectors/official/testrail",
+                  "admins/connectors/official/web",
+                  "admins/connectors/official/wikipedia",
+                  "admins/connectors/official/xenforo",
+                  "admins/connectors/official/youtrack",
+                  "admins/connectors/official/zendesk",
+                  "admins/connectors/official/zoom",
+                  "admins/connectors/official/zulip"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Managing Features",
+            "pages": [
+              {
+                "group": "RAG and Search",
+                "icon": "magnifying-glass",
+                "pages": [
+                  "admins/managing_features/rag_and_search",
+                  "admins/managing_features/connectors_link",
+                  "admins/advanced_configs/search_configs",
+                  "admins/managing_features/document_sets",
+                  "admins/advanced_configs/opensearch_document_index_migration",
+                  "admins/advanced_configs/object_store_migration"
+                ]
+              },
+              "admins/managing_features/chat",
+              "admins/agents/overview",
+              {
+                "group": "Plugins",
+                "icon": "plug",
+                "pages": [
+                  "admins/plugins/overview",
+                  "admins/plugins/mcp",
+                  "admins/plugins/openapi",
+                  "admins/plugins/craft_apps"
+                ]
+              },
+              {
+                "group": "Built-in Actions",
+                "pages": [
+                  "admins/actions/web_search",
+                  "admins/actions/code_interpreter",
+                  "admins/actions/image_generation",
+                  "admins/actions/voice_mode",
+                  "admins/actions/coding_agent"
+                ]
+              },
+              {
+                "group": "Craft",
+                "icon": "hammer",
+                "pages": [
+                  "admins/managing_features/craft",
+                  "admins/managing_features/craft_skills"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Access Control",
+            "pages": [
+              "admins/user_management/users_and_groups",
+              "admins/permissions/understanding_permissions",
+              "admins/permissions/whats_changing",
+              "deployment/authentication/scim",
+              "admins/user_management/api_keys"
+            ]
+          },
+          {
+            "group": "Advanced Configs",
+            "pages": [
+              "admins/advanced_configs/spending_limits",
+              "admins/advanced_configs/white_labeling",
+              "admins/advanced_configs/llm_access_controls",
+              "admins/advanced_configs/security_hardening",
+              "admins/advanced_configs/hook_extensions",
+              "admins/advanced_configs/tracing",
+              "admins/advanced_configs/terraform_provider",
+              "admins/getting_started/slack_bot_setup",
+              "admins/miscellaneous/discord_bot"
+            ]
+          },
+          {
+            "group": "Usage & Analytics",
+            "pages": [
+              "admins/analytics/overview",
+              "admins/analytics/query_history",
+              "admins/analytics/custom_analytics"
+            ]
+          },
+          {
+            "group": "Auditing",
+            "pages": ["admins/auditing/audit_logs"]
+          },
+          {
+            "group": "Plans & Billing",
+            "pages": [
+              "admins/billing/overview",
+              "admins/billing/subscribing",
+              "admins/billing/manage",
+              "admins/billing/troubleshooting"
+            ]
+          },
+          {
+            "group": "Miscellaneous",
+            "pages": ["admins/miscellaneous/contact_us"]
+          }
+        ]
+      },
+      {
+        "tab": "Developers",
+        "icon": "square-terminal",
+        "pages": [
+          {
+            "group": "Getting Started",
+            "pages": ["developers/overview", "developers/core_concepts"]
+          },
+          {
+            "group": "Guides & Examples",
+            "icon": "book-open",
+            "pages": [
+              "developers/guides/chat_new_guide",
+              "developers/guides/search_api_guide",
+              "developers/guides/llm_gateway",
+              "developers/guides/index_files_ingestion_api",
+              "developers/guides/create_connector"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              {
+                "group": "Chat",
+                "icon": "comment",
+                "pages": [
+                  "developers/api_reference/chat/create_new_chat_session",
+                  "developers/api_reference/chat/handle_send_chat_message",
+                  "developers/api_reference/chat/stop_chat_session",
+                  "developers/api_reference/chat/search_chats",
+                  "developers/api_reference/chat/get_chat_session",
+                  "developers/api_reference/chat/get_user_chat_sessions",
+                  "developers/api_reference/chat/fetch_chat_file",
+                  "developers/api_reference/chat/delete_chat_session_by_id",
+                  "developers/api_reference/chat/delete_all_chat_sessions",
+                  "developers/api_reference/chat/end_incognito_session"
+                ]
+              },
+              {
+                "group": "Search",
+                "icon": "magnifying-glass",
+                "pages": [
+                  "developers/api_reference/search/search",
+                  "developers/api_reference/search/handle_send_search_message",
+                  "developers/api_reference/search/get_search_history",
+                  "developers/api_reference/search/search_flow_classification",
+                  "developers/api_reference/search/execute_web_search",
+                  "developers/api_reference/search/execute_web_search_lite",
+                  "developers/api_reference/search/execute_open_urls"
+                ]
+              },
+              {
+                "group": "Agents",
+                "icon": "robot",
+                "pages": [
+                  "developers/api_reference/agents/create_persona",
+                  "developers/api_reference/agents/get_persona",
+                  "developers/api_reference/agents/update_persona",
+                  "developers/api_reference/agents/delete_persona",
+                  "developers/api_reference/agents/get_agents_paginated",
+                  "developers/api_reference/agents/get_agents_admin_paginated",
+                  "developers/api_reference/agents/list_personas_admin",
+                  "developers/api_reference/agents/undelete_persona"
+                ]
+              },
+              {
+                "group": "Actions",
+                "icon": "play",
+                "pages": [
+                  "developers/api_reference/actions/create_custom_tool",
+                  "developers/api_reference/actions/update_custom_tool",
+                  "developers/api_reference/actions/delete_custom_tool",
+                  "developers/api_reference/actions/validate_tool",
+                  "developers/api_reference/actions/list_tools",
+                  "developers/api_reference/actions/list_openapi_tools",
+                  "developers/api_reference/actions/get_custom_tool",
+                  "developers/api_reference/actions/update_tool_user_preferences"
+                ]
+              },
+              {
+                "group": "Connectors & Credentials",
+                "icon": "plug",
+                "pages": [
+                  {
+                    "group": "Connectors",
+                    "pages": [
+                      "developers/api_reference/files_connectors/create_connector_from_model",
+                      "developers/api_reference/files_connectors/update_connector_from_model",
+                      "developers/api_reference/files_connectors/get_connectors_by_credential",
+                      "developers/api_reference/files_connectors/get_connectors",
+                      "developers/api_reference/files_connectors/get_connector_by_id",
+                      "developers/api_reference/files_connectors/get_basic_connector_indexing_status",
+                      "developers/api_reference/files_connectors/get_connector_status",
+                      "developers/api_reference/files_connectors/get_currently_failed_indexing_status",
+                      "developers/api_reference/files_connectors/get_connector_indexing_status",
+                      "developers/api_reference/files_connectors/connector_run_once",
+                      "developers/api_reference/files_connectors/upload_files_api",
+                      "developers/api_reference/files_connectors/list_connector_files",
+                      "developers/api_reference/files_connectors/update_connector_files",
+                      "developers/api_reference/files_connectors/delete_connector_by_id",
+                      "developers/api_reference/files_connectors/create_deletion_attempt_for_connector_id",
+                      "developers/api_reference/files_connectors/get_indexed_sources",
+                      "developers/api_reference/files_connectors/get_cc_pair_full_info",
+                      "developers/api_reference/files_connectors/get_cc_pair_index_attempts",
+                      "developers/api_reference/files_connectors/get_cc_pair_indexing_errors",
+                      "developers/api_reference/files_connectors/update_cc_pair_status",
+                      "developers/api_reference/files_connectors/prune_cc_pair",
+                      "developers/api_reference/files_connectors/get_cc_source_full_info",
+                      "developers/api_reference/files_connectors/get_docs_by_connector_credential_pair"
+                    ]
+                  },
+                  {
+                    "group": "Credentials",
+                    "pages": [
+                      "developers/api_reference/files_connectors/list_credentials_admin",
+                      "developers/api_reference/files_connectors/list_credentials",
+                      "developers/api_reference/files_connectors/get_credential_by_id",
+                      "developers/api_reference/files_connectors/create_credential_from_model",
+                      "developers/api_reference/files_connectors/create_credential_with_private_key",
+                      "developers/api_reference/files_connectors/update_credential_from_model",
+                      "developers/api_reference/files_connectors/update_credential_data",
+                      "developers/api_reference/files_connectors/update_credential_private_key",
+                      "developers/api_reference/files_connectors/delete_credential_by_id",
+                      "developers/api_reference/files_connectors/delete_credential_by_id_admin",
+                      "developers/api_reference/files_connectors/force_delete_credential_by_id",
+                      "developers/api_reference/files_connectors/swap_credentials_for_connector",
+                      "developers/api_reference/files_connectors/associate_credential_to_connector",
+                      "developers/api_reference/files_connectors/dissociate_credential_from_connector"
+                    ]
+                  },
+                  "developers/api_reference/files_connectors/update_credential_sharing"
+                ]
+              },
+              {
+                "group": "Projects & Files",
+                "icon": "folder",
+                "pages": [
+                  "developers/api_reference/projects/get_projects",
+                  "developers/api_reference/projects/create_project",
+                  "developers/api_reference/projects/get_project",
+                  "developers/api_reference/projects/update_project",
+                  "developers/api_reference/projects/delete_project",
+                  "developers/api_reference/projects/get_project_details",
+                  "developers/api_reference/projects/get_project_instructions",
+                  "developers/api_reference/projects/upsert_project_instructions",
+                  "developers/api_reference/projects/get_files_in_project",
+                  "developers/api_reference/projects/get_chat_session_project_files",
+                  "developers/api_reference/projects/upload_user_files",
+                  "developers/api_reference/projects/get_user_file_statuses",
+                  "developers/api_reference/projects/get_user_file",
+                  "developers/api_reference/projects/delete_user_file",
+                  "developers/api_reference/projects/link_user_file_to_project",
+                  "developers/api_reference/projects/unlink_user_file_from_project"
+                ]
+              },
+              {
+                "group": "Ingestion API",
+                "icon": "file-arrow-up",
+                "pages": [
+                  "developers/api_reference/ingestion/get_ingestion_docs",
+                  "developers/api_reference/ingestion/upsert_ingestion_doc",
+                  "developers/api_reference/ingestion/delete_ingestion_doc"
+                ]
+              },
+              {
+                "group": "User Management",
+                "icon": "user",
+                "pages": [
+                  "developers/api_reference/user_management/get_auth_type",
+                  "developers/api_reference/user_management/verify_user_logged_in",
+                  "developers/api_reference/user_management/get_current_user_permissions",
+                  "developers/api_reference/user_management/set_user_admin_access",
+                  "developers/api_reference/user_management/list_all_users_basic_info",
+                  "developers/api_reference/user_management/list_all_users",
+                  "developers/api_reference/user_management/list_invited_users",
+                  "developers/api_reference/user_management/list_accepted_users",
+                  "developers/api_reference/user_management/bulk_invite_users",
+                  "developers/api_reference/user_management/remove_invited_user",
+                  "developers/api_reference/user_management/activate_user_api",
+                  "developers/api_reference/user_management/deactivate_user_api",
+                  "developers/api_reference/user_management/delete_user",
+                  "developers/api_reference/user_management/list_all_accepted_users",
+                  "developers/api_reference/user_management/list_minimal_user_groups",
+                  "developers/api_reference/user_management/get_permission_registry"
+                ]
+              },
+              {
+                "group": "User Groups",
+                "icon": "users",
+                "pages": [
+                  "developers/api_reference/user_groups/list_user_groups",
+                  "developers/api_reference/user_groups/create_user_group",
+                  "developers/api_reference/user_groups/get_user_group",
+                  "developers/api_reference/user_groups/patch_user_group",
+                  "developers/api_reference/user_groups/delete_user_group",
+                  "developers/api_reference/user_groups/get_user_group_permissions",
+                  "developers/api_reference/user_groups/set_user_group_permissions",
+                  "developers/api_reference/user_groups/rename_user_group",
+                  "developers/api_reference/user_groups/patch_user_group_incognito",
+                  "developers/api_reference/user_groups/set_user_group_data_access_cc_pairs",
+                  "developers/api_reference/user_groups/set_group_managed_cc_pairs",
+                  "developers/api_reference/user_groups/add_users",
+                  "developers/api_reference/user_groups/update_group_agents",
+                  "developers/api_reference/user_groups/update_group_document_sets",
+                  "developers/api_reference/user_groups/set_group_manager"
+                ]
+              },
+              {
+                "group": "Token Limits",
+                "icon": "gauge",
+                "pages": [
+                  "developers/api_reference/miscellaneous/get_global_token_limit_settings",
+                  "developers/api_reference/miscellaneous/create_global_token_limit_settings",
+                  "developers/api_reference/miscellaneous/update_token_limit_settings",
+                  "developers/api_reference/miscellaneous/delete_token_limit_settings",
+                  "developers/api_reference/miscellaneous/get_all_group_token_limit_settings",
+                  "developers/api_reference/miscellaneous/get_group_token_limit_settings",
+                  "developers/api_reference/miscellaneous/create_group_token_limit_settings",
+                  "developers/api_reference/miscellaneous/update_group_token_limit_settings",
+                  "developers/api_reference/miscellaneous/delete_group_token_limit_settings",
+                  "developers/api_reference/miscellaneous/get_user_token_limit_settings",
+                  "developers/api_reference/miscellaneous/create_user_token_limit_settings"
+                ]
+              },
+              {
+                "group": "Usage & Cost",
+                "icon": "chart-line",
+                "pages": [
+                  "developers/api_reference/usage/list_cost_overrides",
+                  "developers/api_reference/usage/create_cost_override",
+                  "developers/api_reference/usage/update_cost_override",
+                  "developers/api_reference/usage/delete_cost_override",
+                  "developers/api_reference/usage/get_my_usage",
+                  "developers/api_reference/usage/export_usage",
+                  "developers/api_reference/usage/get_system_usage",
+                  "developers/api_reference/usage/reset_usage"
+                ]
+              },
+              {
+                "group": "Analytics",
+                "icon": "chart-bar",
+                "pages": [
+                  "developers/api_reference/analytics/get_query_analytics",
+                  "developers/api_reference/analytics/get_user_analytics",
+                  "developers/api_reference/analytics/get_onyxbot_analytics",
+                  "developers/api_reference/analytics/get_persona_messages",
+                  "developers/api_reference/analytics/get_persona_unique_users",
+                  "developers/api_reference/analytics/get_assistant_stats"
+                ]
+              },
+              {
+                "group": "Query History",
+                "icon": "clock-rotate-left",
+                "pages": [
+                  "developers/api_reference/query_history/start_query_history_export",
+                  "developers/api_reference/query_history/get_query_history_export_status",
+                  "developers/api_reference/query_history/download_query_history_csv"
+                ]
+              },
+              {
+                "group": "Miscellaneous",
+                "icon": "list",
+                "pages": [
+                  "developers/api_reference/miscellaneous/healthcheck",
+                  "developers/api_reference/miscellaneous/get_version",
+                  "developers/api_reference/miscellaneous/get_versions",
+                  "developers/api_reference/miscellaneous/readiness"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Miscellaneous",
+            "pages": ["developers/contact_us"]
+          }
+        ]
+      },
+      {
+        "tab": "Security",
+        "icon": "shield",
+        "pages": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "security/architecture/system_description",
+              "security/architecture/craft",
+              "security/architecture/data_flows",
+              "security/architecture/data_storage",
+              "security/architecture/access_controls",
+              "security/architecture/faq"
+            ]
+          },
+          {
+            "group": "Self-hosted",
+            "pages": [
+              "security/self_hosted/data_processing",
+              "security/self_hosted/faq"
+            ]
+          },
+          {
+            "group": "Onyx Cloud",
+            "pages": [
+              "security/onyx_cloud/multi_tenant",
+              "security/onyx_cloud/single_tenant",
+              "security/onyx_cloud/compliance"
+            ]
+          },
+          {
+            "group": "Miscellaneous",
+            "pages": ["security/contact_us"]
+          }
+        ]
+      },
+      {
+        "tab": "Changelog",
+        "icon": "clock-rotate-left",
+        "pages": ["changelog"]
+      },
+      {
+        "tab": "Agent Wiki",
+        "icon": "book",
+        "hidden": true,
+        "pages": [
+          {
+            "group": "Getting Started",
+            "pages": ["agent-wiki/welcome", "agent-wiki/quickstart"]
+          },
+          {
+            "group": "Using Agent Wiki",
+            "pages": [
+              "agent-wiki/using/wiki",
+              "agent-wiki/using/editor",
+              "agent-wiki/using/update_policies",
+              "agent-wiki/using/trash",
+              "agent-wiki/using/account_settings"
+            ]
+          },
+          {
+            "group": "Automate",
+            "pages": [
+              "agent-wiki/automate/mcp",
+              "agent-wiki/automate/agents_and_actions",
+              "agent-wiki/automate/triggers",
+              "agent-wiki/automate/chats",
+              "agent-wiki/automate/auto_organize"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "agent-wiki/deployment/docker_compose",
+              "agent-wiki/deployment/kubernetes",
+              "agent-wiki/deployment/configuration"
+            ]
+          },
+          {
+            "group": "Admin",
+            "pages": [
+              "agent-wiki/admin/overview",
+              "agent-wiki/admin/language_models",
+              "agent-wiki/admin/web_search",
+              "agent-wiki/admin/templates",
+              "agent-wiki/admin/users_and_groups",
+              "agent-wiki/admin/onyx_integration",
+              "agent-wiki/admin/notifications",
+              "agent-wiki/admin/status"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Website",
+          "href": "https://onyx.app/",
+          "icon": "globe"
+        },
+        {
+          "anchor": "Discord",
+          "href": "https://discord.gg/TDJ59cGV2X",
+          "icon": "discord"
+        }
+      ]
+    }
+  },
+  "redirects": [
+    {
+      "source": "/admins/advanced_configs/doc_processing",
+      "destination": "/admins/managing_features/rag_and_search"
+    },
+    {
+      "source": "/admins/actions/overview",
+      "destination": "/admins/plugins/overview"
+    },
+    {
+      "source": "/admins/actions/mcp",
+      "destination": "/admins/plugins/mcp"
+    },
+    {
+      "source": "/admins/actions/openapi",
+      "destination": "/admins/plugins/openapi"
+    },
+    {
+      "source": "/admins/managing_features/actions",
+      "destination": "/admins/plugins/overview"
+    },
+    {
+      "source": "/admins/managing_features/craft_apps",
+      "destination": "/admins/plugins/craft_apps"
+    },
+    {
+      "source": "/overview/core_features/actions",
+      "destination": "/overview/core_features/plugins"
+    },
+    {
+      "source": "/admins/connectors/official/sharepoint/client-secret",
+      "destination": "/admins/connectors/official/microsoft-365/setup"
+    },
+    {
+      "source": "/developers/api_reference/chat/seed_chat",
+      "destination": "/developers/api_reference/chat/handle_send_chat_message"
+    },
+    {
+      "source": "/developers/api_reference/chat/handle_new_chat_message",
+      "destination": "/developers/api_reference/chat/handle_send_chat_message"
+    },
+    {
+      "source": "/developers/api_reference/search/handle_search_request",
+      "destination": "/developers/api_reference/search/execute_web_search"
+    },
+    {
+      "source": "/developers/api_reference/search/document_search",
+      "destination": "/developers/api_reference/search/execute_web_search"
+    },
+    {
+      "source": "/admins/connectors/official/teams",
+      "destination": "/admins/connectors/official/microsoft-365/teams"
+    },
+    {
+      "source": "/admins/connectors/official/outlook",
+      "destination": "/admins/connectors/official/microsoft-365/outlook"
+    },
+    {
+      "source": "/admins/connectors/official/sharepoint",
+      "destination": "/admins/connectors/official/microsoft-365/sharepoint"
+    },
+    {
+      "source": "/admins/connectors/official/onedrive",
+      "destination": "/admins/connectors/official/microsoft-365/onedrive"
+    },
+    {
+      "source": "/admins/connectors/official/sharepoint/sharepoint",
+      "destination": "/admins/connectors/official/microsoft-365/sharepoint"
+    },
+    {
+      "source": "/admins/connectors/official/sharepoint/certificate",
+      "destination": "/admins/connectors/official/microsoft-365/setup"
+    },
+    {
+      "source": "/admins/connectors/official/sharepoint/client-app-auth",
+      "destination": "/admins/connectors/official/microsoft-365/setup"
+    },
+    {
+      "source": "/developers/api_reference/user_management/get_user_role",
+      "destination": "/developers/api_reference/user_management/get_current_user_permissions"
+    },
+    {
+      "source": "/developers/api_reference/user_management/set_user_role",
+      "destination": "/developers/api_reference/user_management/set_user_admin_access"
+    },
+    {
+      "source": "/admins/advanced_configs/workspace_settings",
+      "destination": "/admins/managing_features/chat"
+    },
+    {
+      "source": "/overview/core_features/workflows",
+      "destination": "/overview/core_features/craft_scheduled_tasks"
+    },
+    {
+      "source": "/overview/onyx_anywhere/web_interface",
+      "destination": "/overview/core_features/chat"
+    },
+    {
+      "source": "/admins/managing_features/connectors",
+      "destination": "/admins/connectors/overview"
+    },
+    {
+      "source": "/overview/getting_started/first_look",
+      "destination": "/overview/getting_started/quickstart"
+    },
+    {
+      "source": "/deployment/miscellaneous/enterprise_edition",
+      "destination": "/deployment/enterprise_edition"
+    },
+    {
+      "source": "/overview/onyx_anywhere/mobile_app",
+      "destination": "/overview/onyx_anywhere/desktop_app"
+    }
+  ],
+  "logo": {
+    "light": "/assets/logo/onyx_logo.svg",
+    "dark": "/assets/logo/onyx_logo_inverted.svg",
+    "href": "https://onyx.app/"
+  },
+  "customization": {
+    "css": "/style.css"
+  },
+  "api": {
+    "openapi": ["developers/api_reference/openapi.json"]
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "label": "Onyx Cloud",
+      "href": "https://cloud.onyx.app/?utm_source=docs"
+    },
+    "links": [
+      {
+        "label": "onyx-dot-app/onyx",
+        "href": "https://github.com/onyx-dot-app/onyx",
+        "icon": "github"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/onyx-dot-app/onyx",
+      "twitter": "https://x.com/onyx_dot_app",
+      "linkedin": "https://linkedin.com/company/onyx-dot-app"
+    }
+  },
+  "integrations": {
+    "posthog": {
+      "apiKey": "phc_ghlrcfXpgWq9XxZeVMfoJpfaISgFGoXhHYOEcBwdulK",
+      "apiHost": "https://us.i.posthog.com"
+    }
+  },
+  "seo": {
+    "title": "Onyx AI - Open Source Enterprise Search and AI Platform",
+    "description": "Onyx AI is the open source AI platform for enterprise search, generation, and automation — powered by your team's data.",
+    "metatags": {
+      "keywords": "enterprise search, onyx ai, onyx, open source ai, enterprise ai, generative ai platform, ai assistant, knowledge management, danswer"
+    }
+  },
+  "contextual": {
+    "options": []
+  }
+}

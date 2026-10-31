@@ -79,7 +79,7 @@ def test_partial_overrides_only_overrides_specified_fields() -> None:
 def test_every_override_field_has_a_column_or_kv_backing() -> None:
     """upsert_overrides only writes fields with a matching row column, so an
     override without one echoes from PUT but vanishes on the next read."""
-    kv_backed = {"password_auth_enabled"}
+    kv_backed = set(security_store.KV_BACKED_OVERRIDE_KEYS)
     missing = [
         name
         for name in SecuritySettingsOverrides.model_fields

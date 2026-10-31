@@ -1,29 +1,30 @@
 "use client";
 
 import useSWR, { useSWRConfig } from "swr";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  DefaultAssistantConfiguration,
   AgentLabel,
   FullAgent,
   MinimalAgent,
   Agent,
   PaginatedAgentsResponse,
 } from "@/lib/agents/types";
-import {
-  UserSpecificAgentPreference,
-  UserSpecificAgentPreferences,
-} from "@/lib/types";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { toast } from "@opal/layouts";
+import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
+import type { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
-import { buildUpdateAgentPreferenceUrl } from "./utils";
+
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ export function useAdminAgents(
  * disagree about what is pinned.
  */
 export function usePinnedAgents() {
-  const { user, refreshUser } = useUser();
+  const { user, userResolution, refreshUser } = useUser();
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
   const [localPinnedAgents, setLocalPinnedAgents] = useState<MinimalAgent[]>(
@@ -147,39 +148,101 @@ export function usePinnedAgents() {
       .filter((agent): agent is MinimalAgent => !!agent);
   }, [agents, user?.preferences.pinned_assistants]);
 
+  // Set once the pins have been copied from a resolved user. Until then the
+  // local list can be empty although the user has pins.
+  const [hasSyncedPins, setHasSyncedPins] = useState(false);
+
   useEffect(() => {
     if (agents.length > 0) {
       setLocalPinnedAgents(serverPinnedAgents);
+      if (userResolution !== "loading") setHasSyncedPins(true);
     }
-  }, [serverPinnedAgents, agents.length]);
+  }, [serverPinnedAgents, agents.length, userResolution]);
 
   const togglePinnedAgent = useCallback(
     async (agent: MinimalAgent, shouldPin: boolean) => {
+      // Shown before the server agrees, so a failed write has to put it back —
+      // otherwise callers keep reading a pin that never happened, and the ones
+      // that check before pinning refuse to try again.
+      const previous = localPinnedAgents;
       const newPinned = shouldPin
         ? [...localPinnedAgents, agent]
         : localPinnedAgents.filter((a) => a.id !== agent.id);
       setLocalPinnedAgents(newPinned);
-      await pinAgents(newPinned.map((a) => a.id));
-      refreshUser();
+
+      try {
+        await pinAgents(newPinned.map((a) => a.id));
+        refreshUser();
+      } catch (error) {
+        setLocalPinnedAgents(previous);
+        throw error;
+      }
     },
     [localPinnedAgents, refreshUser]
   );
 
   const updatePinnedAgents = useCallback(
     async (newPinnedAgents: MinimalAgent[]) => {
+      const previous = localPinnedAgents;
       setLocalPinnedAgents(newPinnedAgents);
-      await pinAgents(newPinnedAgents.map((a) => a.id));
-      refreshUser();
+
+      try {
+        await pinAgents(newPinnedAgents.map((a) => a.id));
+        refreshUser();
+      } catch (error) {
+        setLocalPinnedAgents(previous);
+        throw error;
+      }
     },
-    [refreshUser]
+    [localPinnedAgents, refreshUser]
   );
 
   return {
     pinnedAgents: localPinnedAgents,
     togglePinnedAgent,
     updatePinnedAgents,
-    isLoading: isLoadingAgents,
+    // Loading until the agents and the user's pins are both in the list.
+    isLoading:
+      isLoadingAgents ||
+      userResolution === "loading" ||
+      (agents.length > 0 && !hasSyncedPins),
   };
+}
+
+/**
+ * Pins the agent behind a chat, unless it is pinned already.
+ *
+ * Opening a chat is how its agent earns a place in the sidebar, so every way of
+ * opening one owes this — the sidebar's own rows and the folded projects
+ * popover both. It lives here so the two cannot drift.
+ *
+ * Three chats pin nothing: one whose agent is gone or invisible to this user,
+ * which is how a deleted or inaccessible agent degrades; one already pinned;
+ * and a plain chat, because the sidebar filters the Assistant out of the
+ * pinned list, so pinning it would write a row that is never drawn.
+ *
+ * A failed pin is reported and dropped. Opening the chat is what the user asked
+ * for and has already happened by now, so the pin does not block anything — but
+ * the sidebar will be missing an agent they expected, so they are told.
+ */
+export function usePinChatAgent() {
+  const { agents } = useAgents();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
+
+  return useCallback(
+    async (chatSession: ChatSession) => {
+      const agent = agents.find((a) => a.id === chatSession.persona_id);
+      if (!agent || agent.id === DEFAULT_AGENT_ID) return;
+      if (pinnedAgents.some((a) => a.id === agent.id)) return;
+
+      try {
+        await togglePinnedAgent(agent, true);
+      } catch {
+        toast.error("Failed to pin the chat's agent");
+      }
+    },
+    [agents, pinnedAgents, togglePinnedAgent]
+  );
 }
 
 // ── Agent resolution ──────────────────────────────────────────────────────────
@@ -206,7 +269,7 @@ export function usePinnedAgents() {
  *    A user who has unpinned everything has nothing here and falls to step 4.
  * 4. anything eligible
  *
- * "Disable Default Chat" (`disable_default_assistant`) is a constraint,
+ * "Always Start with an Agent" (`disable_default_assistant`) is a constraint,
  * not a preference: with it on the Assistant is never a valid answer, so it
  * leaves the candidate set up front rather than being skipped at step 2. That
  * is what stops a stale `?agentId=0`, or a session created before the setting
@@ -252,55 +315,6 @@ export function useActiveAgent(): MinimalAgent | undefined {
     );
     return pinned ?? eligible[0];
   }, [agents, assistantDisabled, pinnedAgents, sessionAgentId, urlAgentIdRaw]);
-}
-
-// ── Agent preferences ─────────────────────────────────────────────────────────
-
-/**
- * Fetches and updates per-user preferences for each agent (e.g. temperature
- * overrides, custom instructions). Applies an optimistic local update before
- * the server confirms to keep the UI responsive.
- */
-export function useAgentPreferences() {
-  const { data, mutate } = useSWR<UserSpecificAgentPreferences>(
-    SWR_KEYS.agentPreferences,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateIfStale: false,
-      dedupingInterval: 60000,
-    }
-  );
-
-  const setSpecificAgentPreferences = useCallback(
-    async (
-      agentId: number,
-      newAgentPreference: UserSpecificAgentPreference
-    ) => {
-      mutate({ ...data, [agentId]: newAgentPreference }, false);
-      try {
-        const response = await fetch(buildUpdateAgentPreferenceUrl(agentId), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newAgentPreference),
-        });
-        if (!response.ok) {
-          console.error(
-            `Failed to update agent preferences: ${response.status}`
-          );
-        }
-      } catch (error) {
-        console.error("Error updating agent preferences:", error);
-      }
-      mutate();
-    },
-    [data, mutate]
-  );
-
-  return {
-    agentPreferences: data ?? null,
-    setSpecificAgentPreferences,
-  };
 }
 
 // ── Agent Labels ──────────────────────────────────────────────────────────────
@@ -382,4 +396,95 @@ export function useAgentLabels() {
     updateLabel,
     deleteLabel,
   };
+}
+
+const DEFAULT_ASSISTANT_TOOLS_URL = "/api/admin/default-assistant/tools";
+
+type DefaultAssistantCache = ReturnType<typeof useSWRConfig>["cache"];
+
+const defaultAssistantSaveTails = new WeakMap<
+  DefaultAssistantCache,
+  Promise<void>
+>();
+
+function enqueueDefaultAssistantSave(
+  cache: DefaultAssistantCache,
+  write: () => Promise<void>
+): Promise<void> {
+  const save = (defaultAssistantSaveTails.get(cache) ?? Promise.resolve()).then(
+    write
+  );
+  const tail = save.catch(() => undefined);
+  defaultAssistantSaveTails.set(cache, tail);
+  void tail.then(() => {
+    if (defaultAssistantSaveTails.get(cache) === tail)
+      defaultAssistantSaveTails.delete(cache);
+  });
+  return save;
+}
+
+export function useDefaultAssistantConfiguration() {
+  const { cache } = useSWRConfig();
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.FULL_ADMIN_PANEL_ACCESS
+  );
+  const result = useSWR<DefaultAssistantConfiguration, Error>(
+    isGlobalHolder ? SWR_KEYS.defaultAssistantConfig : null,
+    errorHandlingFetcher
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const pendingSaves = useRef(0);
+  const isMounted = useRef(false);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+  const updateTools = async (toolIds: number[], enabled: boolean) => {
+    const loaded = result.data;
+    if (!isGlobalHolder || !loaded) return;
+    pendingSaves.current += 1;
+    setIsSaving(true);
+    const affected = new Set(toolIds);
+    const applySelection = (current: DefaultAssistantConfiguration) => {
+      const remaining = current.tool_ids.filter((id) => !affected.has(id));
+      return {
+        ...current,
+        tool_ids: enabled ? [...remaining, ...affected] : remaining,
+      };
+    };
+    const save = enqueueDefaultAssistantSave(cache, async () => {
+      await result.mutate(
+        async (current) => {
+          if (!current) return current;
+          // Send only the change: a full list from this cache would overwrite
+          // concurrent edits to the shared default assistant.
+          const response = await fetch(DEFAULT_ASSISTANT_TOOLS_URL, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tool_ids: toolIds, enabled }),
+          });
+          if (!response.ok)
+            throw new Error(
+              await parseErrorDetail(response, response.statusText)
+            );
+          const saved: DefaultAssistantConfiguration = await response.json();
+          return saved;
+        },
+        {
+          revalidate: false,
+          optimisticData: (current) => applySelection(current ?? loaded),
+          rollbackOnError: true,
+        }
+      );
+    });
+    try {
+      await save;
+    } finally {
+      pendingSaves.current -= 1;
+      if (isMounted.current) setIsSaving(pendingSaves.current > 0);
+    }
+  };
+  return { ...result, isSaving, canEdit: isGlobalHolder, updateTools };
 }

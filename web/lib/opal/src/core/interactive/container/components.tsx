@@ -3,30 +3,19 @@ import type { Route } from "next";
 import "@opal/core/interactive/shared.css";
 import React from "react";
 import { cn } from "@opal/utils";
-import type { ButtonType, RoundingVariants, WithoutStyles } from "@opal/types";
+import type { ButtonType, Rounding, WithoutStyles } from "@opal/types";
 import {
   containerSizeVariants,
+  roundingToRem,
+  spacingToRem,
   type ContainerSizeVariants,
+  type OverridableExtremaSizeVariants,
   widthVariants,
-  type ExtremaSizeVariants,
 } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type InteractiveContainerRoundingVariant = Extract<
-  RoundingVariants,
-  "md" | "sm" | "xs"
->;
-const interactiveContainerRoundingVariants: Record<
-  InteractiveContainerRoundingVariant,
-  string
-> = {
-  md: "rounded-12",
-  sm: "rounded-08",
-  xs: "rounded-04",
-} as const;
 
 /**
  * Props for {@link InteractiveContainer}.
@@ -52,6 +41,8 @@ interface InteractiveContainerProps extends WithoutStyles<
    */
   type?: ButtonType;
 
+  form?: string;
+
   /**
    * When `true`, applies a 1px border using the theme's border color.
    *
@@ -60,11 +51,12 @@ interface InteractiveContainerProps extends WithoutStyles<
   border?: boolean;
 
   /**
-   * Border-radius preset controlling corner rounding.
+   * Corner radius, on the same scale as `Spacing`: `N` is `N / 4` rem, so
+   * `rounding={2}` is the same distance as `padding={2}`. `"full"` is a pill.
    *
-   * @default "default"
+   * @default 3
    */
-  rounding?: InteractiveContainerRoundingVariant;
+  rounding?: Rounding;
 
   /**
    * Size preset controlling the container's height, min-width, and padding.
@@ -74,11 +66,12 @@ interface InteractiveContainerProps extends WithoutStyles<
   size?: ContainerSizeVariants;
 
   /**
-   * Width preset controlling the container's horizontal size.
+   * The container's horizontal size: `"fit"`, `"full"`, or a fixed length as
+   * a spacing step (`N / 4` rem).
    *
    * @default "fit"
    */
-  width?: ExtremaSizeVariants;
+  width?: OverridableExtremaSizeVariants;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,8 +89,9 @@ interface InteractiveContainerProps extends WithoutStyles<
 function InteractiveContainer({
   ref,
   type,
+  form,
   border,
-  rounding = "md",
+  rounding = 3,
   size = "lg",
   width = "fit",
   ...props
@@ -121,15 +115,20 @@ function InteractiveContainer({
     ...rest,
     className: cn(
       "interactive-container",
-      interactiveContainerRoundingVariants[rounding],
       height,
       minWidth,
       padding,
-      widthVariants[width],
+      typeof width === "number" ? "shrink-0" : widthVariants[width],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
-    style: slotStyle,
+    // Radius is written straight in rather than looked up as a class, so the
+    // step can come from a runtime value. A Slot-injected radius still wins.
+    style: {
+      borderRadius: roundingToRem(rounding),
+      ...(typeof width === "number" && { width: spacingToRem(width) }),
+      ...slotStyle,
+    },
   };
 
   if (href) {
@@ -152,6 +151,7 @@ function InteractiveContainer({
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type={type}
+        form={form}
         disabled={nativeDisabled}
         {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
       />
@@ -160,8 +160,4 @@ function InteractiveContainer({
   return <div ref={ref as React.Ref<HTMLDivElement>} {...sharedProps} />;
 }
 
-export {
-  InteractiveContainer,
-  type InteractiveContainerProps,
-  type InteractiveContainerRoundingVariant,
-};
+export { InteractiveContainer, type InteractiveContainerProps };

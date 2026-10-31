@@ -7,7 +7,7 @@ import {
   BackendChatSession,
   FeedbackType,
   QueuedMessage,
-} from "../interfaces";
+} from "@/app/app/types";
 import {
   getLatestMessageChain,
   getMessageByMessageId,
@@ -26,12 +26,18 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
+  sendAcknowledged?: Promise<number | null>;
+  // Resolves after the reader applies its final packets and message state.
+  readerFinished?: Promise<void>;
   hasPerformedInitialScroll: boolean;
   documentSidebarVisible: boolean;
   hasSentLocalUserMessage: boolean;
 
   // Session-specific state (previously global)
   isFetchingChatMessages: boolean;
+  // Paged loading: the current branch has messages above the loaded ones.
+  hasOlderMessages: boolean;
+  isLoadingOlderMessages: boolean;
   uncaughtError: string | null;
   loadingError: string | null;
   isReady: boolean;
@@ -49,6 +55,7 @@ interface ChatSessionData {
 
   // Queued messages
   queuedMessages: QueuedMessage[];
+  queuedMessagesPaused: boolean;
 
   // True once the latest assistant message has fully rendered to the
   // user (backend stream done AND smooth-streaming typewriter caught up).
@@ -183,7 +190,7 @@ const createInitialSessionData = (
 ): ChatSessionData => ({
   sessionId,
   messageTree: new Map<number, Message>(),
-  chatState: "input" as ChatState,
+  chatState: "input",
   regenerationState: null,
   canContinue: false,
   submittedMessage: "",
@@ -197,6 +204,8 @@ const createInitialSessionData = (
 
   // Session-specific state defaults
   isFetchingChatMessages: false,
+  hasOlderMessages: false,
+  isLoadingOlderMessages: false,
   uncaughtError: null,
   loadingError: null,
   isReady: true,
@@ -204,12 +213,17 @@ const createInitialSessionData = (
   lastAccessed: new Date(),
   isLoaded: false,
   queuedMessages: [],
+  queuedMessagesPaused: false,
   latestMessageRenderComplete: true,
   isStreamDraining: false,
   ...initialData,
 });
 
 let nextQueuedMessageId = 0;
+
+// Chats kept in memory per tab. Older idle ones are dropped; opening one
+// again fetches it from the server.
+const MAX_CACHED_SESSIONS = 10;
 
 export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   // Initial state
@@ -246,6 +260,8 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
 
       return { currentSessionId: sessionId };
     });
+    // A long-lived tab would otherwise keep every chat it ever opened.
+    get().cleanupOldSessions();
   },
 
   createSession: (
@@ -581,7 +597,11 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
 
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
-    get().updateSessionData(sessionId, { abortController: controller });
+    get().updateSessionData(sessionId, {
+      abortController: controller,
+      sendAcknowledged: undefined,
+      readerFinished: undefined,
+    });
   },
 
   abortSession: (sessionId: string) => {
@@ -626,31 +646,43 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     }
   },
 
-  cleanupOldSessions: (maxSessions: number = 10) => {
+  cleanupOldSessions: (maxSessions: number = MAX_CACHED_SESSIONS) => {
     set((state) => {
-      const sortedSessions = Array.from(state.sessions.entries()).sort(
-        ([, a], [, b]) => b.lastAccessed.getTime() - a.lastAccessed.getTime()
-      );
-
-      if (sortedSessions.length <= maxSessions) {
+      if (state.sessions.size <= maxSessions) {
         return state;
       }
 
-      const sessionsToKeep = sortedSessions.slice(0, maxSessions);
-      const sessionsToRemove = sortedSessions.slice(maxSessions);
+      // Only idle sessions are evicted: the open one, one that is streaming or
+      // otherwise busy, one with queued messages, and one that may be
+      // incognito stay. An incognito chat cannot be rebuilt from the server,
+      // so this tab holds its only copy; a session whose incognito state is
+      // not known yet (a send can run before its load sets the flag) counts as
+      // incognito, unless it holds no messages: a chat left before it loaded
+      // is an empty placeholder with nothing to lose. A session still
+      // fetching can go: its fetch no longer owns the session and discards
+      // the result.
+      const isEvictable = (sessionId: string, session: ChatSessionData) =>
+        sessionId !== state.currentSessionId &&
+        session.chatState === "input" &&
+        session.queuedMessages.length === 0 &&
+        (session.incognito === false ||
+          (session.incognito === undefined && session.messageTree.size === 0));
 
-      // Abort controllers for sessions being removed
-      sessionsToRemove.forEach(([, session]) => {
-        if (session.abortController) {
-          session.abortController.abort();
-        }
-      });
+      const evictable = Array.from(state.sessions.entries())
+        .filter(([sessionId, session]) => isEvictable(sessionId, session))
+        .sort(
+          ([, a], [, b]) => b.lastAccessed.getTime() - a.lastAccessed.getTime()
+        );
+      const keptBusy = state.sessions.size - evictable.length;
+      // The most recently used idle sessions fill the room the busy ones leave.
+      const toRemove = evictable.slice(Math.max(maxSessions - keptBusy, 0));
+      if (toRemove.length === 0) {
+        return state;
+      }
 
-      const newSessions = new Map(sessionsToKeep);
-
-      return {
-        sessions: newSessions,
-      };
+      const newSessions = new Map(state.sessions);
+      toRemove.forEach(([sessionId]) => newSessions.delete(sessionId));
+      return { sessions: newSessions };
     });
   },
 }));
@@ -708,6 +740,35 @@ export const useIsReady = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.isReady ?? true;
+  });
+
+/** The open chat has older messages to load above the loaded ones. */
+export const useHasOlderMessages = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.hasOlderMessages ?? false;
+  });
+
+/** The open chat is loading a page of older messages. */
+export const useIsLoadingOlderMessages = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isLoadingOlderMessages ?? false;
+  });
+
+export const useIsFetchingChatMessages = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isFetchingChatMessages ?? false;
   });
 
 export const useDocumentSidebarVisible = () =>

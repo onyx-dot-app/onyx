@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -16,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
 )
@@ -36,30 +39,38 @@ type llmProviderResource struct {
 }
 
 type llmProviderResourceModel struct {
-	ID                  types.String `tfsdk:"id"`
-	Name                types.String `tfsdk:"name"`
-	ProviderType        types.String `tfsdk:"provider_type"`
-	APIKey              types.String `tfsdk:"api_key"`
-	APIBase             types.String `tfsdk:"api_base"`
-	APIVersion          types.String `tfsdk:"api_version"`
-	DeploymentName      types.String `tfsdk:"deployment_name"`
-	CustomConfig        types.Map    `tfsdk:"custom_config"`
-	IsPublic            types.Bool   `tfsdk:"is_public"`
-	IsAutoMode          types.Bool   `tfsdk:"is_auto_mode"`
-	Groups              types.Set    `tfsdk:"groups"`
-	Personas            types.Set    `tfsdk:"personas"`
-	ForceDelete         types.Bool   `tfsdk:"force_delete"`
-	ModelConfigurations types.Set    `tfsdk:"model_configurations"`
+	Groups                types.Set    `tfsdk:"groups"`
+	Agents                types.Set    `tfsdk:"agents"`
+	ModelConfigurations   types.Set    `tfsdk:"model_configurations"`
+	CustomConfig          types.Map    `tfsdk:"custom_config"`
+	CustomConfigWO        types.Map    `tfsdk:"custom_config_wo"`
+	ID                    types.String `tfsdk:"id"`
+	Name                  types.String `tfsdk:"name"`
+	ProviderType          types.String `tfsdk:"provider_type"`
+	APIKey                types.String `tfsdk:"api_key"`
+	APIKeyWO              types.String `tfsdk:"api_key_wo"`
+	APIBase               types.String `tfsdk:"api_base"`
+	APIVersion            types.String `tfsdk:"api_version"`
+	DeploymentName        types.String `tfsdk:"deployment_name"`
+	APIKeyWOVersion       types.Int64  `tfsdk:"api_key_wo_version"`
+	CustomConfigWOVersion types.Int64  `tfsdk:"custom_config_wo_version"`
+	IsPublic              types.Bool   `tfsdk:"is_public"`
+	IsAutoMode            types.Bool   `tfsdk:"is_auto_mode"`
+	ForceDelete           types.Bool   `tfsdk:"force_delete"`
 }
 
 type modelConfigurationModel struct {
 	Name               types.String `tfsdk:"name"`
-	IsVisible          types.Bool   `tfsdk:"is_visible"`
-	MaxInputTokens     types.Int64  `tfsdk:"max_input_tokens"`
-	SupportsImageInput types.Bool   `tfsdk:"supports_image_input"`
-	SupportsReasoning  types.Bool   `tfsdk:"supports_reasoning"`
 	DisplayName        types.String `tfsdk:"display_name"`
 	CustomDisplayName  types.String `tfsdk:"custom_display_name"`
+	MaxInputTokens     types.Int64  `tfsdk:"max_input_tokens"`
+	IsVisible          types.Bool   `tfsdk:"is_visible"`
+	SupportsImageInput types.Bool   `tfsdk:"supports_image_input"`
+	SupportsReasoning  types.Bool   `tfsdk:"supports_reasoning"`
+
+	ReasoningEffortMax     types.String  `tfsdk:"reasoning_effort_max"`
+	ReasoningEffortDefault types.String  `tfsdk:"reasoning_effort_default"`
+	TemperatureDefault     types.Float64 `tfsdk:"temperature_default"`
 }
 
 var modelConfigurationAttrTypes = map[string]attr.Type{
@@ -70,7 +81,15 @@ var modelConfigurationAttrTypes = map[string]attr.Type{
 	"supports_reasoning":   types.BoolType,
 	"display_name":         types.StringType,
 	"custom_display_name":  types.StringType,
+
+	"reasoning_effort_max":     types.StringType,
+	"reasoning_effort_default": types.StringType,
+	"temperature_default":      types.Float64Type,
 }
+
+// reasoningEfforts mirrors USER_SELECTABLE_REASONING_EFFORTS
+// (backend/onyx/llm/models.py).
+var reasoningEfforts = []string{"off", "low", "medium", "high", "xhigh"}
 
 func (r *llmProviderResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_llm_provider"
@@ -112,8 +131,21 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:  true,
 				Sensitive: true,
 				MarkdownDescription: "Provider API key. The Onyx API masks this on read, so Terraform " +
-					"cannot detect out-of-band changes; the configured value is authoritative.",
+					"cannot detect out-of-band changes; the configured value is authoritative." +
+					writeOnlyDescription("api_key"),
 			},
+			"api_key_wo": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				MarkdownDescription: "Provider API key, held only in configuration. Terraform sends it on " +
+					"every apply and stores nothing, so the key never reaches state. Pair it with " +
+					"`api_key_wo_version` to rotate it. Needs Terraform 1.11 or later.",
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(path.MatchRoot("api_key")),
+				},
+			},
+			"api_key_wo_version": writeOnlyVersionAttribute("api_key_wo"),
 			"api_base": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "Custom API base URL (e.g. for Azure or self-hosted gateways).",
@@ -131,8 +163,22 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:    true,
 				Sensitive:   true,
 				MarkdownDescription: "Provider-specific config key/values (e.g. Vertex service-account " +
-					"JSON, Bedrock credentials). Masked on read like `api_key`.",
+					"JSON, Bedrock credentials). Masked on read like `api_key`." +
+					writeOnlyDescription("custom_config"),
 			},
+			"custom_config_wo": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Sensitive:   true,
+				WriteOnly:   true,
+				MarkdownDescription: "Provider-specific config key/values, held only in configuration. " +
+					"Terraform sends them on every apply and stores nothing, so they never reach state. " +
+					"Pair with `custom_config_wo_version` to rotate them. Needs Terraform 1.11 or later.",
+				Validators: []validator.Map{
+					mapvalidator.ConflictsWith(path.MatchRoot("custom_config")),
+				},
+			},
+			"custom_config_wo_version": writeOnlyVersionAttribute("custom_config_wo"),
 			"is_public": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -155,17 +201,19 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Default:             setdefault.StaticValue(emptyInt64Set),
 				MarkdownDescription: "User group ids the provider is restricted to (EE).",
 			},
-			"personas": schema.SetAttribute{
+			"agents": schema.SetAttribute{
 				ElementType:         types.Int64Type,
 				Optional:            true,
 				Computed:            true,
 				Default:             setdefault.StaticValue(emptyInt64Set),
-				MarkdownDescription: "Persona ids the provider is restricted to.",
+				MarkdownDescription: "Agent ids the provider is restricted to.",
 			},
 			"force_delete": schema.BoolAttribute{
 				Optional: true,
 				MarkdownDescription: "Allow destroying this provider even while it holds the deployment " +
-					"default model. Defaults to false, where such a destroy fails.",
+					"default model. Defaults to false, where such a destroy fails. It does not override " +
+					"the decision model: a provider that holds it cannot be destroyed until the decision " +
+					"model is cleared.",
 			},
 			"model_configurations": schema.SetNestedAttribute{
 				Required: true,
@@ -175,7 +223,7 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
 							Required:            true,
-							MarkdownDescription: "Model name as known to the provider, e.g. `gpt-5-mini`.",
+							MarkdownDescription: "Model name as known to the provider, e.g. `gpt-6-luna`.",
 						},
 						"is_visible": schema.BoolAttribute{
 							Optional:            true,
@@ -203,6 +251,30 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 							Optional:            true,
 							MarkdownDescription: "Admin-specified display-name override.",
 						},
+						"reasoning_effort_max": schema.StringAttribute{
+							Optional: true,
+							MarkdownDescription: "Highest reasoning effort users can select for this model: " +
+								"`off`, `low`, `medium`, `high`, or `xhigh`. Unset, Onyx keeps the stored value.",
+							Validators: []validator.String{
+								stringvalidator.OneOf(reasoningEfforts...),
+							},
+						},
+						"reasoning_effort_default": schema.StringAttribute{
+							Optional: true,
+							MarkdownDescription: "Reasoning effort for this model when the user does not select one. " +
+								"Must not be higher than `reasoning_effort_max`. Same values. Unset, Onyx keeps the stored value.",
+							Validators: []validator.String{
+								stringvalidator.OneOf(reasoningEfforts...),
+							},
+						},
+						"temperature_default": schema.Float64Attribute{
+							Optional: true,
+							MarkdownDescription: "Temperature for this model when the user does not set one, " +
+								"0 to 2. Unset, Onyx keeps the stored value.",
+							Validators: []validator.Float64{
+								float64validator.Between(0, 2),
+							},
+						},
 					},
 				},
 			},
@@ -214,13 +286,29 @@ func (r *llmProviderResource) Configure(_ context.Context, req resource.Configur
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
+// llmProviderSecrets carries the secret values in force for one apply, each
+// resolved from either the stored attribute or its write-only twin.
+type llmProviderSecrets struct {
+	apiKey       types.String
+	customConfig types.Map
+}
+
+// resolveLLMProviderSecrets reads the write-only twins, which live in
+// configuration only.
+func resolveLLMProviderSecrets(ctx context.Context, config tfsdk.Config, plan llmProviderResourceModel, diags *diag.Diagnostics) llmProviderSecrets {
+	return llmProviderSecrets{
+		apiKey:       resolveWriteOnly(ctx, config, path.Root("api_key_wo"), plan.APIKey, diags),
+		customConfig: resolveWriteOnly(ctx, config, path.Root("custom_config_wo"), plan.CustomConfig, diags),
+	}
+}
+
 // buildUpsertRequest converts a plan into the API's full-replace upsert body.
-func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmProviderResourceModel, id *int64, apiKeyChanged bool, customConfigChanged bool, diags *diag.Diagnostics) client.LLMProviderUpsertRequest {
+func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmProviderResourceModel, id *int64, secrets llmProviderSecrets, apiKeyChanged bool, customConfigChanged bool, diags *diag.Diagnostics) client.LLMProviderUpsertRequest {
 	upsert := client.LLMProviderUpsertRequest{
 		ID:                  id,
 		Name:                plan.Name.ValueStringPointer(),
 		Provider:            plan.ProviderType.ValueString(),
-		APIKey:              plan.APIKey.ValueStringPointer(),
+		APIKey:              secrets.apiKey.ValueStringPointer(),
 		APIBase:             plan.APIBase.ValueStringPointer(),
 		APIVersion:          plan.APIVersion.ValueStringPointer(),
 		DeploymentName:      plan.DeploymentName.ValueStringPointer(),
@@ -230,13 +318,13 @@ func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmPr
 		CustomConfigChanged: customConfigChanged,
 	}
 
-	if !plan.CustomConfig.IsNull() {
+	if !secrets.customConfig.IsNull() {
 		customConfig := map[string]string{}
-		diags.Append(plan.CustomConfig.ElementsAs(ctx, &customConfig, false)...)
+		diags.Append(secrets.customConfig.ElementsAs(ctx, &customConfig, false)...)
 		upsert.CustomConfig = customConfig
 	}
 	diags.Append(plan.Groups.ElementsAs(ctx, &upsert.Groups, false)...)
-	diags.Append(plan.Personas.ElementsAs(ctx, &upsert.Personas, false)...)
+	diags.Append(plan.Agents.ElementsAs(ctx, &upsert.Agents, false)...)
 
 	var modelConfigs []modelConfigurationModel
 	diags.Append(plan.ModelConfigurations.ElementsAs(ctx, &modelConfigs, false)...)
@@ -249,6 +337,10 @@ func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmPr
 			SupportsReasoning:  mc.SupportsReasoning.ValueBoolPointer(),
 			DisplayName:        mc.DisplayName.ValueStringPointer(),
 			CustomDisplayName:  mc.CustomDisplayName.ValueStringPointer(),
+
+			ReasoningEffortMax:     mc.ReasoningEffortMax.ValueStringPointer(),
+			ReasoningEffortDefault: mc.ReasoningEffortDefault.ValueStringPointer(),
+			TemperatureDefault:     mc.TemperatureDefault.ValueFloat64Pointer(),
 		})
 	}
 	return upsert
@@ -261,8 +353,13 @@ func (r *llmProviderResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	upsert := r.buildUpsertRequest(ctx, plan, nil,
-		!plan.APIKey.IsNull(), !plan.CustomConfig.IsNull(), &resp.Diagnostics)
+	secrets := resolveLLMProviderSecrets(ctx, req.Config, plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	upsert := r.buildUpsertRequest(ctx, plan, nil, secrets,
+		!secrets.apiKey.IsNull(), !secrets.customConfig.IsNull(), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -312,9 +409,9 @@ func (r *llmProviderResource) Read(ctx context.Context, req resource.ReadRequest
 	groups, diags := types.SetValueFrom(ctx, types.Int64Type, view.Groups)
 	resp.Diagnostics.Append(diags...)
 	state.Groups = groups
-	personas, diags := types.SetValueFrom(ctx, types.Int64Type, view.Personas)
+	agents, diags := types.SetValueFrom(ctx, types.Int64Type, view.Agents)
 	resp.Diagnostics.Append(diags...)
-	state.Personas = personas
+	state.Agents = agents
 
 	// api_key/custom_config are masked in responses; carry the real values
 	// forward from prior state and never let a masked placeholder in.
@@ -353,6 +450,16 @@ func (r *llmProviderResource) reconcileModelConfigurations(ctx context.Context, 
 		if remoteMC, exists := remoteNames[mc.Name.ValueString()]; exists {
 			mc.IsVisible = types.BoolValue(remoteMC.IsVisible)
 			mc.CustomDisplayName = types.StringPointerValue(remoteMC.CustomDisplayName)
+			// Null means unmanaged, so only refresh the values in configuration.
+			if !mc.ReasoningEffortMax.IsNull() {
+				mc.ReasoningEffortMax = types.StringPointerValue(remoteMC.ReasoningEffortMax)
+			}
+			if !mc.ReasoningEffortDefault.IsNull() {
+				mc.ReasoningEffortDefault = types.StringPointerValue(remoteMC.ReasoningEffortDefault)
+			}
+			if !mc.TemperatureDefault.IsNull() {
+				mc.TemperatureDefault = types.Float64PointerValue(remoteMC.TemperatureDefault)
+			}
 			result = append(result, mc)
 			seen[mc.Name.ValueString()] = true
 		}
@@ -369,6 +476,10 @@ func (r *llmProviderResource) reconcileModelConfigurations(ctx context.Context, 
 			SupportsReasoning:  types.BoolValue(mc.SupportsReasoning),
 			DisplayName:        types.StringPointerValue(mc.DisplayName),
 			CustomDisplayName:  types.StringPointerValue(mc.CustomDisplayName),
+
+			ReasoningEffortMax:     types.StringPointerValue(mc.ReasoningEffortMax),
+			ReasoningEffortDefault: types.StringPointerValue(mc.ReasoningEffortDefault),
+			TemperatureDefault:     types.Float64PointerValue(mc.TemperatureDefault),
 		})
 	}
 
@@ -390,12 +501,18 @@ func (r *llmProviderResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	// State holds real (never masked) secrets, so resend them with the
-	// changed flags on whenever either side has a value.
-	apiKeyChanged := !plan.APIKey.IsNull() || !state.APIKey.IsNull()
-	customConfigChanged := !plan.CustomConfig.IsNull() || !state.CustomConfig.IsNull()
+	secrets := resolveLLMProviderSecrets(ctx, req.Config, plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	upsert := r.buildUpsertRequest(ctx, plan, &id, apiKeyChanged, customConfigChanged, &resp.Diagnostics)
+	// State holds real (never masked) secrets, so resend them with the changed
+	// flags on whenever either side has a value. A write-only secret sits in
+	// configuration on every apply, so it rides along the same way.
+	apiKeyChanged := !secrets.apiKey.IsNull() || !state.APIKey.IsNull()
+	customConfigChanged := !secrets.customConfig.IsNull() || !state.CustomConfig.IsNull()
+
+	upsert := r.buildUpsertRequest(ctx, plan, &id, secrets, apiKeyChanged, customConfigChanged, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -461,7 +578,8 @@ func (r *llmProviderResource) Delete(ctx context.Context, req resource.DeleteReq
 		resp.Diagnostics.AddError(
 			"Failed to delete Onyx LLM provider",
 			err.Error()+"\n\nIf this provider holds the deployment default model, either repoint "+
-				"the default first or set force_delete = true.",
+				"the default first or set force_delete = true. If it holds the decision model, clear "+
+				"the decision model first: force_delete does not override it.",
 		)
 	}
 }

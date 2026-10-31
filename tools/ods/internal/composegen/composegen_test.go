@@ -224,6 +224,28 @@ func TestMalformedValue(t *testing.T) {
 	assertTemplateError(t, []string{"#!value prod x", "a"}, "malformed #!value")
 }
 
+func TestValueWithUnknownVariant(t *testing.T) {
+	assertTemplateError(t, []string{"#!value staging: x", "a"}, `unknown variant "staging"`)
+}
+
+func TestRenderRejectsUnknownVariantName(t *testing.T) {
+	_, err := Render([]string{"a"}, "staging")
+	if err == nil || err.Error() != "unknown variant: staging" {
+		t.Fatalf("expected %q, got %v", "unknown variant: staging", err)
+	}
+}
+
+func TestGenerateAllPropagatesTemplateErrors(t *testing.T) {
+	_, err := GenerateAll([]string{"#!for prod", "a"})
+	var templateErr *TemplateError
+	if !errors.As(err, &templateErr) {
+		t.Fatalf("expected *TemplateError, got %T: %v", err, err)
+	}
+	if templateErr.Line != 1 {
+		t.Fatalf("expected error on line 1, got %d", templateErr.Line)
+	}
+}
+
 func TestGenerateAllAddsBannerAndValidatesYaml(t *testing.T) {
 	lines := []string{"name: onyx", "services:", "  api_server:", "    image: x"}
 	results, err := GenerateAll(lines)

@@ -32,6 +32,8 @@ from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from shared_configs.contextvars import get_current_tenant_id
@@ -45,6 +47,7 @@ class GoogleDriveOAuth:
         """Stored in redis to be looked up on callback"""
 
         email: str
+        user_id: uuid.UUID | None = None
         redirect_on_success: str | None  # Where to send the user if OAuth flow succeeds
 
     CLIENT_ID = OAUTH_GOOGLE_DRIVE_CLIENT_ID
@@ -92,12 +95,14 @@ class GoogleDriveOAuth:
         return url
 
     @classmethod
-    def session_dump_json(cls, email: str, redirect_on_success: str | None) -> str:
+    def session_dump_json(
+        cls, email: str, redirect_on_success: str | None, user_id: uuid.UUID
+    ) -> str:
         """Temporary state to store in redis. to be looked up on auth response.
         Returns a json string.
         """
         session = GoogleDriveOAuth.OAuthSession(
-            email=email, redirect_on_success=redirect_on_success
+            email=email, redirect_on_success=redirect_on_success, user_id=user_id
         )
         return session.model_dump_json()
 
@@ -145,9 +150,15 @@ def handle_google_drive_oauth_callback(
         )
 
     session_json = session_json_bytes.decode("utf-8")
-    try:
-        session = GoogleDriveOAuth.parse_session(session_json)
+    session = GoogleDriveOAuth.parse_session(session_json)
 
+    if session.user_id is None or session.user_id != user.id:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Google Drive OAuth failed - the OAuth state was started by another user.",
+        )
+
+    try:
         if not DEV_MODE:
             redirect_uri = GoogleDriveOAuth.REDIRECT_URI
         else:

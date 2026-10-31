@@ -1,57 +1,56 @@
 package cmd
 
 import (
-	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
+
+// devLicenseEnv names the variable that holds the license internal developers
+// seed to unlock paid features. With no license in the database the backend
+// runs as Community.
+const devLicenseEnv = "ONYX_DEV_LICENSE"
 
 // NewBackendCommand creates the parent "backend" command with subcommands for
 // running backend services.
-// BackendOptions holds options shared across backend subcommands.
-type BackendOptions struct {
-	NoEE bool
-}
-
 func NewBackendCommand() *cobra.Command {
-	opts := &BackendOptions{}
-
 	cmd := &cobra.Command{
 		Use:   "backend",
-		Short: "Run backend services (api, model_server)",
+		Short: "Run backend services (api, model-server)",
 		Long: `Run backend services with environment from .vscode/.env.
 
 On first run, copies .vscode/env_template.txt to .vscode/.env if the
 .env file does not already exist.
 
-Enterprise Edition features are enabled by default for development,
-with license enforcement disabled.
+Paid features need a license in the database. When ONYX_DEV_LICENSE is set, in
+the shell or in .vscode/.env, "backend api" seeds it before the server starts.
+With no license in the database the backend runs as Community Edition.
 
 Available subcommands:
   api            Start the FastAPI backend server
-  model_server   Start the model server`,
+  model-server   Start the model server`,
 	}
 
-	cmd.PersistentFlags().BoolVar(&opts.NoEE, "no-ee", false, "Disable Enterprise Edition features (enabled by default)")
-
-	cmd.AddCommand(newBackendAPICommand(opts))
-	cmd.AddCommand(newBackendModelServerCommand(opts))
+	cmd.AddCommand(newBackendAPICommand())
+	cmd.AddCommand(newBackendModelServerCommand())
 
 	return cmd
 }
 
-func newBackendAPICommand(opts *BackendOptions) *cobra.Command {
+func newBackendAPICommand() *cobra.Command {
 	var port string
 
 	cmd := &cobra.Command{
@@ -61,198 +60,135 @@ func newBackendAPICommand(opts *BackendOptions) *cobra.Command {
 
 Examples:
   ods backend api
-  ods backend api --port 9090
-  ods backend api --no-ee`,
+  ods backend api --port 9090`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runBackendService("api", "onyx.main:app", port, opts)
+			if err := runBackendService("api", port, args...); err != nil {
+				exitBackendService(err)
+			}
 		},
 	}
 
-	cmd.Flags().StringVar(&port, "port", "8080", "Port to listen on")
+	cmd.Flags().StringVar(&port, "port", "", "Port to listen on (default: saved project port, otherwise 8080)")
 
 	return cmd
 }
 
-func newBackendModelServerCommand(opts *BackendOptions) *cobra.Command {
+func newBackendModelServerCommand() *cobra.Command {
 	var port string
 
 	cmd := &cobra.Command{
-		Use:   "model_server",
-		Short: "Start the model server (uvicorn with hot-reload)",
+		Use:     "model-server",
+		Aliases: []string{"model_server"},
+		Short:   "Start the model server (uvicorn with hot-reload)",
 		Long: `Start the model server using uvicorn with hot-reload.
 
 Examples:
-  ods backend model_server
-  ods backend model_server --port 9001`,
+  ods backend model-server
+  ods backend model-server --port 9001`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runBackendService("model_server", "model_server.main:app", port, opts)
+			if err := runBackendService("model", port, args...); err != nil {
+				exitBackendService(err)
+			}
 		},
 	}
 
-	cmd.Flags().StringVar(&port, "port", "9000", "Port to listen on")
+	cmd.Flags().StringVar(&port, "port", "", "Port to listen on (default: saved project port, otherwise 9000)")
 
 	return cmd
 }
 
-func resolvePort(port string) string {
-	portNum, err := strconv.Atoi(port)
-	if err != nil {
-		log.Fatalf("Invalid port %q: %v", port, err)
+// exitBackendService ends the process after a command's child process fails. A
+// child that ran and exited passes its exit code through, so the stderr it
+// already printed is not repeated.
+func exitBackendService(err error) {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if code := exitErr.ExitCode(); code != -1 {
+			os.Exit(code)
+		}
 	}
-	resolved, err := portutil.FindAvailable(portNum, 65535-portNum, nil)
-	if err != nil {
-		log.Fatalf("No available ports found starting from %d", portNum)
-	}
-	return strconv.Itoa(resolved)
+	log.Fatal(err)
 }
 
-func runBackendService(name, module, port string, opts *BackendOptions) {
+func runBackendService(name, port string, args ...string) error {
+	for _, arg := range args {
+		if arg == "--port" || strings.HasPrefix(arg, "--port=") || arg == "-p" {
+			return fatalErrorf("Set the backend port with --port before the -- separator")
+		}
+	}
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return fatalErrorf("Failed to find git root: %v", err)
 	}
 
-	port = resolvePort(port)
-
-	envFile := ensureBackendEnvFile(root)
-	fileVars := loadBackendEnvFile(envFile)
-
-	eeDefaults := eeEnvDefaults(opts.NoEE)
-	fileVars = append(fileVars, eeDefaults...)
-
-	backendDir := filepath.Join(root, "backend")
-
-	uvicornArgs := []string{
-		"run", "uvicorn", module,
-		"--reload",
-		"--port", port,
-	}
-	log.Infof("Starting %s on port %s...", name, port)
-	if !opts.NoEE {
-		log.Info("Enterprise Edition enabled (use --no-ee to disable)")
-	}
-	log.Debugf("Running in %s: uv %v", backendDir, uvicornArgs)
-
-	mergedEnv := mergeEnv(os.Environ(), fileVars)
-	log.Debugf("Applied %d env vars from %s (shell takes precedence)", len(fileVars), envFile)
-
-	svcCmd := exec.Command("uv", uvicornArgs...)
-	svcCmd.Dir = backendDir
-	svcCmd.Stdout = os.Stdout
-	svcCmd.Stderr = os.Stderr
-	svcCmd.Stdin = os.Stdin
-	svcCmd.Env = mergedEnv
-
-	if err := svcCmd.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if code := exitErr.ExitCode(); code != -1 {
-				os.Exit(code)
-			}
-		}
-		log.Fatalf("Failed to run %s: %v", name, err)
-	}
-}
-
-// eeEnvDefaults returns env entries for EE and license enforcement settings.
-// These are appended to the file vars so they act as defaults — shell env
-// and .env file values still take precedence via mergeEnv.
-func eeEnvDefaults(noEE bool) []string {
-	if noEE {
-		return []string{
-			"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false",
+	preferred := 0
+	if port != "" {
+		preferred, err = strconv.Atoi(port)
+		if err != nil || preferred < 1 || preferred > 65535 {
+			return fatalErrorf("Invalid port %q", port)
 		}
 	}
-	return []string{
-		"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true",
-		"LICENSE_ENFORCEMENT_ENABLED=false",
+	if _, _, err := devstack.PrepareEnvFiles(root); err != nil {
+		return err
 	}
-}
-
-// ensureBackendEnvFile copies env_template.txt to .env if .env doesn't exist.
-func ensureBackendEnvFile(root string) string {
-	vscodeDir := filepath.Join(root, ".vscode")
-	envFile := filepath.Join(vscodeDir, ".env")
-	templateFile := filepath.Join(vscodeDir, "env_template.txt")
-
-	if _, err := os.Stat(envFile); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			log.Fatalf("Failed to stat env file %s: %v", envFile, err)
-		}
-	} else {
-		log.Debugf("Using existing env file: %s", envFile)
-		return envFile
-	}
-
-	templateData, err := os.ReadFile(templateFile)
+	target, err := resolveRuntimeTarget()
 	if err != nil {
-		log.Fatalf("Failed to read env template %s: %v", templateFile, err)
+		return fmt.Errorf("resolve backend target: %v", err)
 	}
-
-	if err := os.MkdirAll(vscodeDir, 0755); err != nil {
-		log.Fatalf("Failed to create .vscode directory: %v", err)
-	}
-
-	if err := os.WriteFile(envFile, templateData, 0644); err != nil {
-		log.Fatalf("Failed to write env file %s: %v", envFile, err)
-	}
-
-	log.Infof("Created %s from template (review and fill in <REPLACE THIS> values)", envFile)
-	return envFile
-}
-
-// mergeEnv combines shell environment with file-based defaults. Shell values
-// take precedence — file entries are only added for keys not already present.
-func mergeEnv(shellEnv, fileVars []string) []string {
-	existing := make(map[string]bool, len(shellEnv))
-	for _, entry := range shellEnv {
-		if idx := strings.Index(entry, "="); idx > 0 {
-			existing[entry[:idx]] = true
-		}
-	}
-
-	merged := make([]string, len(shellEnv))
-	copy(merged, shellEnv)
-	for _, entry := range fileVars {
-		if idx := strings.Index(entry, "="); idx > 0 {
-			key := entry[:idx]
-			if !existing[key] {
-				merged = append(merged, entry)
-			} else {
-				log.Debugf("Env var %s already set in shell, skipping .env value", key)
-			}
-		}
-	}
-	return merged
-}
-
-// loadBackendEnvFile parses a .env file into KEY=VALUE entries suitable for
-// appending to os.Environ(). Blank lines and comments are skipped.
-func loadBackendEnvFile(path string) []string {
-	f, err := os.Open(path)
+	launch, err := devstack.LoadLaunch(filepath.Join(root, ".vscode", "launch.json"))
 	if err != nil {
-		log.Fatalf("Failed to open env file %s: %v", path, err)
+		return fmt.Errorf("load backend launch configuration: %v", err)
 	}
-	defer func() { _ = f.Close() }()
+	options := devstack.ServiceOptions{
+		PreferredPort: preferred, Args: args,
+		BeforeStart: func(ctx context.Context, sp devstack.Spec) error {
+			if err := runInDir(ctx, root, "uv", "sync", "--frozen"); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return fatalErrorf("Failed to sync Python dependencies: %v", err)
+			}
+			return prepareAPIService(ctx, sp)
+		},
+		IO:       devstack.ServiceIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr},
+		LockWait: 30 * time.Second, StopTimeout: 20 * time.Second,
+	}
+	if runtime.GOOS == "windows" {
+		return devstack.RunForegroundService(context.Background(), target, launch, name, options)
+	}
+	if err := stackForTarget(target).RunService(context.Background(), target, launch, name, options); err != nil {
+		return fatalErrorf("Failed to run %s: %w", name, err)
+	}
+	return nil
+}
 
-	var envVars []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if idx := strings.Index(line, "="); idx > 0 {
-			key := strings.TrimSpace(line[:idx])
-			value := strings.TrimSpace(line[idx+1:])
-			value = strings.Trim(value, `"'`)
-			envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
-		}
+func prepareAPIService(ctx context.Context, sp devstack.Spec) error {
+	if sp.Slug != "api" {
+		return nil
+	}
+	return seedDevLicense(ctx, sp.Dir, sp.Env)
+}
+
+// seedDevLicense installs the dev license so paid features unlock. It does
+// nothing when the variable is unset or empty. Multi-tenant mode takes its
+// tier from the control plane, and the seed has no tenant to write to.
+func seedDevLicense(ctx context.Context, backendDir string, env []string) error {
+	if devstack.EnvValue(env, devLicenseEnv) == "" {
+		return nil
+	}
+	if strings.EqualFold(devstack.EnvValue(env, "MULTI_TENANT"), "true") {
+		log.Infof("Not seeding the dev license from %s in multi-tenant mode", devLicenseEnv)
+		return nil
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("Failed to read env file %s: %v", path, err)
+	log.Infof("Seeding the dev license from %s...", devLicenseEnv)
+	seedCmd := exec.CommandContext(ctx, "uv", "run", "python", "-m", "scripts.seed_dev_license")
+	seedCmd.Dir = backendDir
+	seedCmd.Stdout = os.Stdout
+	seedCmd.Stderr = os.Stderr
+	seedCmd.Env = env
+	if err := seedCmd.Run(); err != nil {
+		return fatalErrorf("Failed to seed the dev license: %v", err)
 	}
-
-	return envVars
+	return nil
 }

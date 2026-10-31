@@ -1,0 +1,432 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  getSourceDisplayName,
+  getSourceMetadata,
+} from "@/lib/connectors/utils";
+import { useTranslations } from "next-intl";
+import useSWR, { mutate, useSWRConfig } from "swr";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
+import {
+  deleteCredential,
+  startCredentialCheckRun,
+  updateCredentialSharing,
+} from "@/lib/credentials/svc";
+import {
+  getCredentialCreationMethods,
+  getCredentialSpec,
+  shouldRedirectToOAuth,
+} from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
+import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
+import {
+  EE_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+  NEXT_PUBLIC_TEST_ENV,
+} from "@/lib/constants";
+import {
+  oauthSupportedSources,
+  ValidSources,
+} from "@/lib/connectors/types/source";
+import type {
+  AnyCredential,
+  CredentialCheckReport,
+  CredentialSharing,
+  CredentialSpecField,
+  SimilarCredential,
+  CredentialSetup,
+  OAuthDetails,
+  SavedDraftCredential,
+  SourceCredentialsResult,
+} from "@/lib/credentials/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { toTitleCase } from "@opal/utils";
+
+/** A credential field's title, and its hint when it has one. */
+export interface CredentialFieldCopy {
+  title: string;
+  description?: string;
+}
+
+/**
+ * Looks up a credential field's title and hint from the source's spec, or
+ * from `field` when given (a form variant's field). A key the spec does not
+ * list (a stored key of an older credential) falls back to a title read from
+ * the key itself, so no field renders blank.
+ */
+export function useCredentialFieldCopy(
+  source: ValidSources
+): (key: string, field?: CredentialSpecField) => CredentialFieldCopy {
+  const t = useTranslations("admin.credentials");
+  const spec = getCredentialSpec(source);
+  return (key, fieldOverride) => {
+    const field = fieldOverride ?? spec?.fields[key];
+    if (!spec || !field) {
+      return {
+        title:
+          key === "authentication_method"
+            ? t("displayNames.authenticationMethod")
+            : toTitleCase(key),
+      };
+    }
+    return {
+      title: t(`displayNames.${field.displayName}`, {
+        source: spec.brandName,
+      }),
+      description: field.hint
+        ? t(`hints.${field.hint.key}`, field.hint.values)
+        : undefined,
+    };
+  };
+}
+
+/** How often the credential lists re-poll, in milliseconds. */
+const CREDENTIALS_REFRESH_INTERVAL_MS = 5000;
+
+interface CredentialFetchOptions {
+  /** Fetch only when true. A source with no credentials skips both requests. @default true */
+  enabled?: boolean;
+}
+
+/** The OAuth capabilities of a source: whether it supports OAuth, manual credentials, and any extra fields. */
+export function useOAuthDetails(
+  sourceType: ValidSources,
+  { enabled = true }: CredentialFetchOptions = {}
+) {
+  return useSWR<OAuthDetails>(
+    enabled ? SWR_KEYS.connectorOAuthDetails(sourceType) : null,
+    errorHandlingFetcher,
+    {
+      shouldRetryOnError: false,
+    }
+  );
+}
+
+/**
+ * Every credential this admin can see for one source, refreshed on a timer
+ * so a credential created elsewhere appears without a reload.
+ *
+ * The endpoint already filters by permission, so everything it returns is
+ * the caller's to edit or delete; there is no narrower "editable" list.
+ */
+export function useSourceCredentials(
+  sourceType: ValidSources,
+  { enabled = true }: CredentialFetchOptions = {}
+): SourceCredentialsResult {
+  return useSWR<SimilarCredential[], Error>(
+    enabled ? SWR_KEYS.similarCredentials(sourceType) : null,
+    errorHandlingFetcher,
+    { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }
+  );
+}
+
+/**
+ * Whether a source's saved credentials and OAuth details have loaded: one
+ * verdict for both fetches. Only the credentials can fail it, and only if
+ * they never loaded; a later refresh that fails keeps what is shown. OAuth
+ * details that fail to load count as loaded without OAuth, so the source
+ * still offers manual setup. Disabled, it fetches nothing and reports
+ * neither loading nor failed.
+ */
+export function useCredentialLoad(
+  sourceType: ValidSources,
+  options: CredentialFetchOptions = {}
+) {
+  const { data: credentials, error: credentialsError } = useSourceCredentials(
+    sourceType,
+    options
+  );
+  const { data: oauthDetails, error: oauthDetailsError } = useOAuthDetails(
+    sourceType,
+    options
+  );
+  const enabled = options.enabled ?? true;
+
+  const error: Error | undefined =
+    credentials === undefined ? credentialsError : undefined;
+  const oauthDetailsSettled =
+    oauthDetails !== undefined || oauthDetailsError !== undefined;
+  const isLoading =
+    enabled &&
+    error === undefined &&
+    (credentials === undefined || !oauthDetailsSettled);
+
+  return { credentials, oauthDetails, isLoading, error };
+}
+
+/**
+ * Everything one source needs in order to be authenticated against: its
+ * saved credentials, the ways it accepts a new one, the fields each way
+ * asks for, and the actions that open, create, delete or authorize.
+ *
+ * It replaces the set of fetches, lookups and half-duplicated handlers that
+ * every screen touching credentials used to assemble for itself.
+ *
+ * It renders nothing and says nothing. Actions resolve to an error message
+ * or `null`, so each screen keeps its own copy and decides whether a failure
+ * is a toast, a banner or inline text.
+ */
+export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
+  const { credentials, oauthDetails, isLoading, error } =
+    useCredentialLoad(sourceType);
+  const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
+    null
+  );
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
+
+  const displayName = getSourceDisplayName(sourceType) || sourceType;
+  const methods = getCredentialCreationMethods(oauthDetails);
+  const spec = getCredentialSpec(sourceType);
+
+  // Two gates used to be kept apart and could disagree: the source list and
+  // the source's own metadata flag. A source has to pass both.
+  const canAuthorize =
+    EE_ENABLED &&
+    (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) &&
+    oauthSupportedSources.some((source) => source === sourceType) &&
+    getSourceMetadata(sourceType).oauthSupported === true;
+
+  function close() {
+    setOpenMethod(null);
+  }
+
+  function selectMethod(method: CredentialCreationMethod) {
+    setOpenMethod(method);
+  }
+
+  function refresh() {
+    refreshSourceCredentials(sourceType);
+    // The Gmail and Drive setups read the all-source list; keep it in step.
+    mutate(SWR_KEYS.adminCredentials);
+  }
+
+  async function open(
+    method: CredentialCreationMethod
+  ): Promise<string | null> {
+    // A source that asks for nothing extra has no form to show: the whole
+    // flow is the trip to the provider.
+    if (method === CredentialCreationMethod.OAuth && oauthDetails) {
+      if (shouldRedirectToOAuth(oauthDetails)) {
+        try {
+          window.location.href = await getConnectorOauthRedirectUrl(
+            sourceType,
+            {}
+          );
+        } catch (error) {
+          return errorMessage(error);
+        }
+        return null;
+      }
+    } else if (method === CredentialCreationMethod.OAuth) {
+      // The details have not landed, so there is nothing to build a form from.
+      return null;
+    }
+    setOpenMethod(method);
+    return null;
+  }
+
+  async function remove(
+    credential: AnyCredential,
+    failureMessage: string
+  ): Promise<string | null> {
+    let response: Response;
+    try {
+      // Only the owner may delete a credential.
+      response = await deleteCredential(credential.id);
+    } catch (error) {
+      // The request never landed, so nothing changed and nothing refreshes.
+      return errorMessage(error) || failureMessage;
+    }
+    refresh();
+    if (response.ok) return null;
+    // A failure always answers with something the caller can show: an empty
+    // or unreadable body must not read as success.
+    try {
+      const body = await response.json();
+      return body.detail || body.message || failureMessage;
+    } catch {
+      return failureMessage;
+    }
+  }
+
+  async function saveSharing(
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ): Promise<SimilarCredential> {
+    // The sharing route also renames: it allows group managers, and checks
+    // that the user may edit the account.
+    const response = await updateCredentialSharing(credentialId, update);
+    if (!response.ok) throw new Error(await response.text());
+    const saved: SimilarCredential = await response.json();
+    refresh();
+    return saved;
+  }
+
+  async function authorize(invalidUrlMessage: string): Promise<string | null> {
+    setIsAuthorizing(true);
+    // Open the tab inside the click: popup blockers, and the desktop app,
+    // only allow windows that the user gesture opens.
+    const popup = window.open("about:blank", "_blank");
+    if (popup) popup.opener = null;
+    try {
+      // Read at call time: the page can change its own query string, and a
+      // click only ever happens in the browser.
+      const response = await prepareOAuthAuthorizationRequest(
+        sourceType,
+        window.location.href,
+        invalidUrlMessage
+      );
+      if (!response.url) {
+        popup?.close();
+        return invalidUrlMessage;
+      }
+      if (popup) {
+        popup.location.href = response.url;
+      } else {
+        window.open(response.url, "_blank", "noopener,noreferrer");
+      }
+      return null;
+    } catch (error) {
+      popup?.close();
+      return errorMessage(error);
+    } finally {
+      setIsAuthorizing(false);
+    }
+  }
+
+  return {
+    displayName,
+    credentials,
+    error,
+    oauthDetails,
+    isLoading,
+    methods,
+    namesMethods: methods.length > 1,
+    spec,
+    canAuthorize,
+    openMethod,
+    open,
+    selectMethod,
+    close,
+    remove,
+    saveSharing,
+    refresh,
+    authorize,
+    isAuthorizing,
+  };
+}
+
+/** The message on a thrown error, or `""` when it carried none. */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "";
+}
+
+/** Re-fetches what {@link useSourceCredentials} holds for one source. */
+export function refreshSourceCredentials(
+  sourceType: ValidSources
+): Promise<AnyCredential[] | undefined> {
+  return mutate(SWR_KEYS.similarCredentials(sourceType));
+}
+
+/** How often the check reports refresh while a run is going. */
+const CREDENTIAL_CHECK_POLL_MS = 2000;
+
+/** What `useCredentialCheckReports` returns. */
+export interface CredentialCheckReports {
+  /** The credential's report for `connectorId`, or its own for null. */
+  reportFor: (
+    credentialId: number,
+    connectorId?: number | null
+  ) => CredentialCheckReport | null;
+  /** Starts the credential's checks, or its pairing's with `connectorId`. Resolves once queued. */
+  rerun: (credentialId: number, connectorId?: number | null) => Promise<void>;
+}
+
+/**
+ * The stored capability reports of one source's credentials, polled while
+ * any run is going. Deployments without the checks report nothing, so a
+ * failed load shows as no reports.
+ */
+export function useCredentialCheckReports(
+  source: ValidSources
+): CredentialCheckReports {
+  const { data, mutate: refresh } = useSWR<CredentialCheckReport[]>(
+    SWR_KEYS.credentialCheckReports(source),
+    errorHandlingFetcher,
+    {
+      refreshInterval: (reports) =>
+        reports?.some((report) => report.run_status === "running")
+          ? CREDENTIAL_CHECK_POLL_MS
+          : 0,
+    }
+  );
+
+  // Stable per load, so a consumer can memoize on it.
+  const reportFor = useCallback(
+    (credentialId: number, connectorId: number | null = null) =>
+      data?.find(
+        (report) =>
+          report.credential_id === credentialId &&
+          report.connector_id === connectorId
+      ) ?? null,
+    [data]
+  );
+  return {
+    reportFor,
+    rerun: async (credentialId, connectorId = null) => {
+      await startCredentialCheckRun(credentialId, connectorId);
+      await refresh();
+    },
+  };
+}
+
+export interface SavedDraftCredentialState {
+  /** The draft a check run saved the typed account as; `null` before one. */
+  savedDraft: SavedDraftCredential | null;
+  /** Records the draft a check run saved `values` in. */
+  rememberDraft: (
+    credentialId: number,
+    values: Record<string, unknown>
+  ) => Promise<void>;
+}
+
+/**
+ * The draft credential that the add-connector form of `source` saved its
+ * typed account as. The checks card, the binding check and Create share it
+ * through the SWR cache.
+ */
+export function useSavedDraftCredential(
+  source: ValidSources
+): SavedDraftCredentialState {
+  const { mutate: mutateKey } = useSWRConfig();
+  const { data } = useSWR<SavedDraftCredential | null>(
+    SWR_KEYS.connectorDraftCredential(source),
+    null
+  );
+  const rememberDraft = useCallback(
+    async (credentialId: number, values: Record<string, unknown>) => {
+      await mutateKey<SavedDraftCredential>(
+        SWR_KEYS.connectorDraftCredential(source),
+        { credential_id: credentialId, sent_values: JSON.stringify(values) },
+        { revalidate: false }
+      );
+    },
+    [source, mutateKey]
+  );
+  return { savedDraft: data ?? null, rememberDraft };
+}
+
+/**
+ * Forgets the saved draft of `source` when the add-connector page mounts, so
+ * each visit saves its own. A draft left behind is deleted by the server.
+ */
+export function useResetSavedDraftCredential(source: ValidSources): void {
+  const { mutate: mutateKey } = useSWRConfig();
+  useEffect(() => {
+    void mutateKey(SWR_KEYS.connectorDraftCredential(source), undefined, {
+      revalidate: false,
+    });
+  }, [source, mutateKey]);
+}

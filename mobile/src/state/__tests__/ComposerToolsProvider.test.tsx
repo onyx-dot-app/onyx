@@ -285,6 +285,7 @@ describe("useComposerToolsState", () => {
       allowedToolIds: null,
       forcedToolId: null,
       internalSearchFilters: null,
+      llmOverride: null,
     });
 
     act(() => result.current.toggleDeepResearch());
@@ -504,6 +505,7 @@ describe("useComposerToolsState", () => {
       allowedToolIds: null,
       forcedToolId: null,
       internalSearchFilters: null,
+      llmOverride: null,
     });
   });
 

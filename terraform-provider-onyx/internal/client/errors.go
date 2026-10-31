@@ -9,8 +9,9 @@ import (
 	"strings"
 )
 
-// APIError is a non-2xx response, parsed from the OnyxError shape
-// {"error_code", "detail"} when present.
+// APIError is a non-2xx response. The backend has four error shapes:
+// OnyxError {"error_code", "detail"}, HTTPException {"detail"}, the ValueError
+// handler {"message"}, and 422 validation {"status_code", "message", "data"}.
 type APIError struct {
 	StatusCode int
 	ErrorCode  string
@@ -28,6 +29,20 @@ func (e *APIError) Error() string {
 func IsNotFound(err error) bool {
 	var apiErr *APIError
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
+}
+
+// IsForbidden reports whether err is an APIError with HTTP 403.
+func IsForbidden(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusForbidden
+}
+
+// IsSyncing reports whether err is Onyx's RESOURCE_SYNCING conflict: the
+// resource is busy with a background sync and accepts the write later.
+func IsSyncing(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict &&
+		apiErr.ErrorCode == "RESOURCE_SYNCING"
 }
 
 func checkResponse(resp *http.Response) error {
@@ -50,6 +65,7 @@ func checkResponse(resp *http.Response) error {
 	var parsed struct {
 		ErrorCode string          `json:"error_code"`
 		Detail    json.RawMessage `json:"detail"`
+		Message   string          `json:"message"`
 	}
 	if err := json.Unmarshal(body, &parsed); err == nil {
 		apiErr.ErrorCode = parsed.ErrorCode
@@ -59,6 +75,9 @@ func checkResponse(resp *http.Response) error {
 			apiErr.Detail = detailStr
 		} else if len(parsed.Detail) > 0 {
 			apiErr.Detail = string(parsed.Detail)
+		}
+		if apiErr.Detail == "" {
+			apiErr.Detail = parsed.Message
 		}
 	}
 	if apiErr.Detail == "" {

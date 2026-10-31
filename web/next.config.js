@@ -1,6 +1,10 @@
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
+const createNextIntlPlugin = require("next-intl/plugin");
+
+// Points next-intl at the request-scoped locale/message resolution.
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -9,6 +13,11 @@ const nextConfig = {
   output: "standalone",
   typescript: {
     ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
+  },
+  experimental: {
+    // TypeScript 7 has no classic JS API, so `next build` must type-check
+    // through the `tsc` CLI.
+    useTypeScriptCli: true,
   },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
@@ -64,10 +73,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
+        source:
+          "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
-        }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
+        }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
       },
       {
         source: "/ph_ingest/static/:path*",
@@ -133,6 +143,11 @@ const nextConfig = {
         permanent: true,
       },
       {
+        source: "/admin/craft/instructions",
+        destination: "/admin/craft/preferences",
+        permanent: true,
+      },
+      {
         source: "/admin/assistants/:path*",
         destination: "/admin/agents/:path*",
         permanent: true,
@@ -193,6 +208,20 @@ const nextConfig = {
       {
         source: "/admin/configuration/web-search",
         destination: "/admin/web-search",
+        permanent: true,
+      },
+      // The connector catalog moved from /admin/add-connector to
+      // /admin/connectors, beside the per-source wizard at /admin/connectors/:source.
+      {
+        source: "/admin/add-connector",
+        destination: "/admin/connectors",
+        permanent: true,
+      },
+      // The indexing status page moved from /admin/indexing/status to
+      // /admin/indexing-status; the /indexing/ segment held nothing else.
+      {
+        source: "/admin/indexing/status",
+        destination: "/admin/indexing-status",
         permanent: true,
       },
       // Replaces the redirect page that used to live at
@@ -281,11 +310,33 @@ const sentryWebpackPluginOptions = {
 // validate React Compiler behavior in dev.
 module.exports = (phase) => {
   const isDevServer = phase === PHASE_DEVELOPMENT_SERVER;
-  return withSentryConfig(
-    {
-      ...nextConfig,
-      reactCompiler: !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
-    },
-    sentryWebpackPluginOptions
+  return withNextIntl(
+    withSentryConfig(
+      {
+        ...nextConfig,
+        ...(isDevServer && {
+          async rewrites() {
+            return [
+              {
+                source: "/.well-known/oauth-authorization-server/:path*",
+                destination: `${
+                  process.env.INTERNAL_URL || "http://localhost:8080"
+                }/oauth-provider/metadata`,
+              },
+              {
+                source: "/.well-known/oauth-protected-resource/:path*",
+                destination: `${
+                  process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"
+                }/.well-known/oauth-protected-resource/:path*`,
+              },
+              ...(await nextConfig.rewrites()),
+            ];
+          },
+        }),
+        reactCompiler:
+          !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
+      },
+      sentryWebpackPluginOptions
+    )
   );
 };

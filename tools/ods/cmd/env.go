@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
@@ -25,7 +26,9 @@ locally-launched services (API server, Celery workers, etc.) connect to the
 correct Docker Compose infrastructure for the current project/worktree.
 
 Queries running containers for their actual host port mappings, then upserts
-the corresponding keys in .vscode/.env. All other entries are left untouched.
+the corresponding keys in .vscode/.env. S3_LEGACY_ENDPOINT_URL is dropped,
+since the dev stack runs the object store only. All other entries are left
+untouched.
 
 Examples:
   # Write env vars for the current project (auto-detected from directory)
@@ -39,7 +42,9 @@ Examples:
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
-			runEnv(dryRun)
+			if err := runEnv(dryRun); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -48,11 +53,23 @@ Examples:
 	return cmd
 }
 
-func runEnv(dryRun bool) {
-	projName := docker.ProjectName()
+func runEnv(dryRun bool) error {
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockRuntimeTarget(target, false)
+	if err != nil {
+		return err
+	}
+	defer release()
+	projName := target.Project
 
 	resolved := queryContainerPorts(projName)
 	appEnv := resolved.AppEnv()
+	if _, ok := appEnv["POSTGRES_PORT"]; !ok {
+		return fmt.Errorf("no running PostgreSQL container with a published port for project %s", projName)
+	}
 
 	log.Infof("Project: %s", projName)
 
@@ -60,12 +77,12 @@ func runEnv(dryRun bool) {
 		for k, v := range appEnv {
 			fmt.Printf("%s=%s\n", k, v)
 		}
-		return
+		return nil
 	}
 
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	envPath := filepath.Join(gitRoot, ".vscode", ".env")
@@ -76,29 +93,35 @@ func runEnv(dryRun bool) {
 		log.Warnf("You may want to copy the template from the repo wiki or another developer's setup.")
 		if !prompt.Confirm("Continue creating a minimal .vscode/.env? (yes/no): ") {
 			log.Info("Aborted.")
-			return
+			return nil
 		}
 	}
 
-	if err := setEnvValues(envPath, appEnv); err != nil {
-		log.Fatalf("Failed to update %s: %v", envPath, err)
+	if err := devstack.UpsertEnvFile(envPath, appEnv); err != nil {
+		return fatalErrorf("Failed to update %s: %w", envPath, err)
+	}
+	// Dev runs the object store only, so a legacy endpoint left by an earlier
+	// ods would only make the app fail over to a MinIO that never starts.
+	if err := removeEnvKey(envPath, legacyEndpointVar); err != nil {
+		return fatalErrorf("Failed to update %s: %w", envPath, err)
 	}
 
 	log.Infof("Updated %s", envPath)
 	for k, v := range appEnv {
 		log.Debugf("  %s=%s", k, v)
 	}
+	return nil
 }
 
 // queryContainerPorts discovers the actual host ports of running containers by
 // calling "docker port" for each port spec in InfraServices. Container names
-// follow the Docker Compose convention "<project>-<service>-1". If a container
-// is not running, the default host port from the spec is used instead.
+// follow the Docker Compose convention "<project>-<service>-1". Missing
+// containers are excluded.
 func queryContainerPorts(projName string) *docker.ResolvedPorts {
 	resolved := docker.NewResolvedPorts()
 
 	for _, svc := range docker.InfraServices {
-		container := fmt.Sprintf("%s-%s-1", projName, svc.Name)
+		container := docker.ContainerName(projName, svc.Name)
 		for _, spec := range svc.Ports {
 			port, err := docker.GetHostPort(container, spec.ContainerPort)
 			if err != nil {
@@ -112,45 +135,19 @@ func queryContainerPorts(projName string) *docker.ResolvedPorts {
 	return resolved
 }
 
-// setEnvValues upserts multiple key=value pairs in a dotenv file. For each key,
-// it scans existing lines for a matching "KEY=" prefix and replaces the line in
-// place. Keys not already present are appended at the end. The file is created
-// if it does not exist.
-func setEnvValues(envPath string, values map[string]string) error {
+// removeEnvKey drops every "KEY=" line from a dotenv file.
+func removeEnvKey(envPath, key string) error {
 	data, err := os.ReadFile(envPath)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil {
 		return fmt.Errorf("read %s: %w", envPath, err)
 	}
 
-	lines := []string{""}
-	if len(data) > 0 {
-		lines = strings.Split(string(data), "\n")
-	}
-
-	remaining := make(map[string]string, len(values))
-	for k, v := range values {
-		remaining[k] = v
-	}
-
-	for i, line := range lines {
-		for key, val := range remaining {
-			prefix := key + "="
-			if strings.HasPrefix(line, prefix) {
-				lines[i] = prefix + val
-				delete(remaining, key)
-				break
-			}
+	prefix := key + "="
+	var kept []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, prefix) {
+			kept = append(kept, line)
 		}
 	}
-
-	for key, val := range remaining {
-		entry := key + "=" + val
-		if lines[len(lines)-1] == "" {
-			lines = append(lines[:len(lines)-1], entry, "")
-		} else {
-			lines = append(lines, entry)
-		}
-	}
-
-	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644)
+	return os.WriteFile(envPath, []byte(strings.Join(kept, "\n")), 0644)
 }

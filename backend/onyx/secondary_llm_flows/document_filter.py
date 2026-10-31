@@ -7,16 +7,24 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceSection,
 )
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.prompts.search_prompts import (
     DOCUMENT_CONTEXT_SELECTION_PROMPT,
     DOCUMENT_SELECTION_PROMPT,
     TRY_TO_FILL_TO_MAX_INSTRUCTIONS,
 )
-from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
+from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
+from onyx.tools.tool_implementations.search.constants import (
+    MAX_CHUNKS_FOR_RELEVANCE,
+    MAX_SELECTED_SECTIONS,
+)
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -94,7 +102,7 @@ def select_chunks_for_relevance(
     return all_chunks[start_index:end_index]
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def classify_section_relevance(
     document_title: str,
     section_text: str,
@@ -102,6 +110,7 @@ def classify_section_relevance(
     llm: LLM,
     section_above_text: str | None,
     section_below_text: str | None,
+    enforce_llm_input_budget: bool = False,
 ) -> ContextExpansionType:
     """Use LLM to classify section relevance and determine context expansion type.
 
@@ -115,33 +124,53 @@ def classify_section_relevance(
     Returns:
         ContextExpansionType indicating how the section should be expanded
     """
-    # Build the prompt
-    prompt_text = DOCUMENT_CONTEXT_SELECTION_PROMPT.format(
-        document_title=document_title,
-        main_section=section_text,
-        section_above=section_above_text if section_above_text else "N/A",
-        section_below=section_below_text if section_below_text else "N/A",
-        user_query=user_query,
-    )
-
     # Default to MAIN_SECTION_ONLY
     default_classification = ContextExpansionType.MAIN_SECTION_ONLY
 
-    # Call LLM for classification with Braintrust tracing
+    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+    options = (
+        budget.options()
+        if budget
+        else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
+    )
+
+    def build_request(
+        main_section: str,
+        above: str | None = None,
+        below: str | None = None,
+    ) -> GenerationRequest:
+        return GenerationRequest(
+            messages=[
+                UserMessage(
+                    content=DOCUMENT_CONTEXT_SELECTION_PROMPT.format(
+                        document_title=document_title,
+                        main_section=main_section,
+                        section_above=above or "N/A",
+                        section_below=below or "N/A",
+                        user_query=user_query,
+                    )
+                )
+            ],
+            options=options,
+        )
+
+    request = build_request(section_text, section_above_text, section_below_text)
+    if budget and not budget.fits(request):
+        fitted_text = budget.fit_text(section_text, build_request)
+        if fitted_text is None:
+            logger.warning("Search classification prompt exceeds its input budget")
+            return default_classification
+        request = build_request(fitted_text)
+
     try:
-        prompt_msg = UserMessage(content=prompt_text)
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.CLASSIFY_SECTION_RELEVANCE,
-            input_messages=[prompt_msg],
-        ) as span_generation:
-            response = llm.invoke(
-                prompt=prompt_msg,
-                reasoning_effort=ReasoningEffort.OFF,
-                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
-            )
-            record_llm_response(span_generation, response)
-            llm_response = response.choice.message.content
+        response = llm.invoke(
+            request,
+            context=GenerationContext(
+                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                flow=LLMFlow.CLASSIFY_SECTION_RELEVANCE,
+            ),
+        )
+        llm_response = response.text
 
         if not llm_response:
             logger.warning(
@@ -185,14 +214,41 @@ def classify_section_relevance(
     return classification
 
 
-@log_function_time(print_only=True)
+@log_function_time()
+def _parse_section_ids(llm_response: str) -> tuple[list[str], set[str]]:
+    """Read section IDs from a response like "[1, 2!, 3]" or "1, 2!, 3".
+
+    Only tokens made of digits, with an optional trailing "!", count as IDs.
+    Returns the IDs in response order and the set of IDs marked with "!".
+    """
+    text = llm_response
+    if "[" in text and "]" in text[text.index("[") :]:
+        open_idx = text.index("[")
+        text = text[open_idx + 1 : text.index("]", open_idx)]
+
+    section_ids: list[str] = []
+    sections_with_exclamation: set[str] = set()
+    for token in text.replace(",", " ").split():
+        token = token.rstrip(".")
+        has_exclamation = token.endswith("!")
+        if has_exclamation:
+            token = token[:-1]
+        if not token.isdigit():
+            continue
+        section_ids.append(token)
+        if has_exclamation:
+            sections_with_exclamation.add(token)
+    return section_ids, sections_with_exclamation
+
+
 def select_sections_for_expansion(
     sections: list[InferenceSection],
     user_query: str,
     llm: LLM,
-    max_sections: int = 10,
+    max_sections: int = MAX_SELECTED_SECTIONS,
     max_chunks_per_section: int | None = MAX_CHUNKS_FOR_RELEVANCE,
     try_to_fill_to_max: bool = False,
+    enforce_llm_input_budget: bool = False,
 ) -> tuple[list[InferenceSection], list[str] | None]:
     """Use LLM to select the most relevant document sections for expansion.
 
@@ -273,29 +329,69 @@ def select_sections_for_expansion(
 
     # Build the prompt
     extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
-    prompt_text = UserMessage(
-        content=DOCUMENT_SELECTION_PROMPT.format(
-            max_sections=max_sections,
-            extra_instructions=extra_instructions,
-            formatted_doc_sections=json.dumps(sections_dict, indent=2),
-            user_query=user_query,
-        )
+    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
+    options = (
+        budget.options()
+        if budget
+        else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
     )
 
-    # Call LLM for selection with Braintrust tracing
+    def build_request(
+        candidates: list[dict[str, str | int | list[str]]],
+    ) -> GenerationRequest:
+        return GenerationRequest(
+            messages=[
+                UserMessage(
+                    content=DOCUMENT_SELECTION_PROMPT.format(
+                        max_sections=max_sections,
+                        extra_instructions=extra_instructions,
+                        formatted_doc_sections=json.dumps(
+                            candidates, separators=(",", ":")
+                        ),
+                        user_query=user_query,
+                    )
+                )
+            ],
+            options=options,
+        )
+
+    request = build_request(sections_dict)
+    if budget:
+        while len(sections_dict) > 1 and not budget.fits(request):
+            sections_dict.pop()
+            request = build_request(sections_dict)
+        if not budget.fits(request):
+            first_section = sections_dict[0]
+            sections_dict[0] = {
+                key: first_section[key]
+                for key in ("section_id", "title", "source_type", "content")
+            }
+            first_section = sections_dict[0]
+
+            def build_content_request(content: str) -> GenerationRequest:
+                return build_request([{**first_section, "content": content}])
+
+            original_content = str(first_section["content"])
+            fitted_content = budget.fit_text(original_content, build_content_request)
+            if fitted_content is None:
+                first_section["title"] = ""
+                fitted_content = budget.fit_text(
+                    original_content, build_content_request
+                )
+            if fitted_content is None:
+                logger.warning("Search selection prompt exceeds its input budget")
+                return sections[:max_sections], None
+            request = build_content_request(fitted_content)
+
     try:
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.SELECT_SECTIONS_FOR_EXPANSION,
-            input_messages=[prompt_text],
-        ) as span_generation:
-            response = llm.invoke(
-                prompt=[prompt_text],
-                reasoning_effort=ReasoningEffort.OFF,
-                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
-            )
-            record_llm_response(span_generation, response)
-            llm_response = response.choice.message.content
+        response = llm.invoke(
+            request,
+            context=GenerationContext(
+                total_timeout_s=SECONDARY_LLM_FLOW_TIMEOUT_S,
+                flow=LLMFlow.SELECT_SECTIONS_FOR_EXPANSION,
+            ),
+        )
+        llm_response = response.text
 
         if not llm_response:
             logger.warning(
@@ -303,64 +399,7 @@ def select_sections_for_expansion(
             )
             return sections[:max_sections], None
 
-        # Parse the response to extract section IDs
-        # Look for patterns like [1, 2, 3] or [1,2,3] with flexible whitespace/newlines
-        # Also handle unbracketed comma-separated lists like "1, 2, 3"
-        # Track which sections have "!" marker (e.g., "1, 2!, 3" or "[1, 2!, 3]")
-        section_ids = []
-        sections_with_exclamation = set()  # Track section IDs that have "!" marker
-
-        # First try to find a bracketed list
-        bracket_pattern = r"\[([^\]]+)\]"
-        bracket_match = re.search(bracket_pattern, llm_response)
-
-        if bracket_match:
-            # Extract the content between brackets
-            list_content = bracket_match.group(1)
-            # Split by comma, preserving the parts
-            parts = [part.strip() for part in list_content.split(",")]
-            for part in parts:
-                # Check if this part has an exclamation mark
-                has_exclamation = "!" in part
-                # Extract the number (digits only)
-                numbers = re.findall(r"\d+", part)
-                if numbers:
-                    section_id = numbers[0]
-                    section_ids.append(section_id)
-                    if has_exclamation:
-                        sections_with_exclamation.add(section_id)
-        else:
-            # Try to find an unbracketed comma-separated list
-            # Look for patterns like "1, 2, 3" or "1, 2!, 3"
-            # This regex finds sequences of digits optionally followed by "!" and separated by commas
-            comma_list_pattern = r"\b\d+!?\b(?:\s*,\s*\b\d+!?\b)*"
-            comma_match = re.search(comma_list_pattern, llm_response)
-
-            if comma_match:
-                # Extract the matched comma-separated list
-                list_content = comma_match.group(0)
-                parts = [part.strip() for part in list_content.split(",")]
-                for part in parts:
-                    # Check if this part has an exclamation mark
-                    has_exclamation = "!" in part
-                    # Extract the number (digits only)
-                    numbers = re.findall(r"\d+", part)
-                    if numbers:
-                        section_id = numbers[0]
-                        section_ids.append(section_id)
-                        if has_exclamation:
-                            sections_with_exclamation.add(section_id)
-            else:
-                # Fallback: try to extract all numbers from the response
-                # Also check for "!" after numbers
-                number_pattern = r"\b(\d+)(!)?\b"
-                matches = re.finditer(number_pattern, llm_response)
-                for match in matches:
-                    section_id = match.group(1)
-                    has_exclamation = match.group(2) == "!"
-                    section_ids.append(section_id)
-                    if has_exclamation:
-                        sections_with_exclamation.add(section_id)
+        section_ids, sections_with_exclamation = _parse_section_ids(llm_response)
 
         if not section_ids:
             logger.warning(
@@ -372,7 +411,7 @@ def select_sections_for_expansion(
         # Skip out-of-range IDs and don't count them toward max_sections
         selected_sections = []
         document_ids_with_exclamation = []  # Collect document_ids for sections with "!"
-        num_sections = len(sections)
+        num_sections = len(sections_dict)
 
         for section_id_str in section_ids:
             # Convert to int
@@ -425,13 +464,11 @@ def select_sections_for_expansion(
             len(selected_sections),
             len(sections),
             selected_document_ids,
-            document_ids_with_exclamation if document_ids_with_exclamation else [],
+            document_ids_with_exclamation or [],
         )
 
         # Return document_ids if any sections had exclamation marks, otherwise None
-        return selected_sections, (
-            document_ids_with_exclamation if document_ids_with_exclamation else None
-        )
+        return selected_sections, (document_ids_with_exclamation or None)
 
     except Exception as e:
         logger.error("Error calling LLM for document selection: %s", e)

@@ -23,7 +23,6 @@ from onyx.db.models import (
     LLMProvider__Persona,
     LLMProvider__UserGroup,
     User,
-    UserRole,
 )
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -73,7 +72,7 @@ def test_group_restricted_provider_scoped_by_membership(
     member = make_user(db_session)
     add_user_to_group(db_session, member, group)
     non_member = make_user(db_session)
-    admin = make_user(db_session, role=UserRole.ADMIN)
+    admin = make_user(db_session, is_admin=True)
     db_session.commit()
 
     provider_id = _make_group_restricted_anthropic_provider(db_session, group.id)
@@ -128,7 +127,7 @@ def test_focused_provider_fetch_is_ordered_and_access_scoped(
 ) -> None:
     member = make_user(db_session)
     non_member = make_user(db_session)
-    admin = make_user(db_session, role=UserRole.ADMIN)
+    admin = make_user(db_session, is_admin=True)
     group = make_group(db_session)
     add_user_to_group(db_session, member, group)
 

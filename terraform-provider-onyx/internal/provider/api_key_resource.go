@@ -50,15 +50,6 @@ func groupIDsFromDescriptor(desc *client.APIKeyDescriptor) (types.Set, diag.Diag
 }
 
 // groupIDsToArgs: a null or unknown set becomes `[]`, which clears the key's groups.
-func groupIDsToArgs(ctx context.Context, set types.Set) ([]int64, diag.Diagnostics) {
-	ids := []int64{}
-	if set.IsNull() || set.IsUnknown() {
-		return ids, nil
-	}
-	diags := set.ElementsAs(ctx, &ids, false)
-	return ids, diags
-}
-
 func (r *apiKeyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_api_key"
 }
@@ -126,7 +117,7 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	groupIDs, diags := groupIDsToArgs(ctx, plan.GroupIDs)
+	groupIDs, diags := int64SetValues(ctx, plan.GroupIDs)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -201,7 +192,7 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	groupIDs, diags := groupIDsToArgs(ctx, plan.GroupIDs)
+	groupIDs, diags := int64SetValues(ctx, plan.GroupIDs)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

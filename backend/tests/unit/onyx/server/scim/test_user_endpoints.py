@@ -329,7 +329,7 @@ class TestCreateUser:
         mock_dal.update_user.assert_called_once_with(
             existing,
             is_active=True,
-            account_type=None,
+            promote_to_standard=False,
             personal_name="Test User",
         )
         # Should create a SCIM mapping for the existing user
@@ -377,7 +377,7 @@ class TestCreateUser:
         mock_dal.update_user.assert_called_once_with(
             existing,
             is_active=True,
-            account_type=AccountType.STANDARD,
+            promote_to_standard=True,
             personal_name="Test User",
         )
         # Promoted shadow user must land in the Basic default group
@@ -680,7 +680,7 @@ class TestReplaceUser:
         # Promotion consumes a seat even though the user was already active
         mock_seats.assert_called_once()
         _, kwargs = mock_dal.update_user.call_args
-        assert kwargs["account_type"] == AccountType.STANDARD
+        assert kwargs["promote_to_standard"] is True
         mock_assign.assert_called_once()
 
     @patch("ee.onyx.server.scim.api._check_seat_availability")
@@ -809,7 +809,7 @@ class TestPatchUser:
         parse_scim_user(result)
         mock_seats.assert_called_once()
         _, kwargs = mock_dal.update_user.call_args
-        assert kwargs["account_type"] == AccountType.STANDARD
+        assert kwargs["promote_to_standard"] is True
         mock_assign.assert_called_once()
 
     def test_not_found_returns_404(

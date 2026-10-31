@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/parser"
@@ -13,7 +14,7 @@ import (
 
 // SendMessageStream starts streaming a chat message response.
 // It reads NDJSON lines, parses them, and sends events on the returned channel.
-// The goroutine stops when ctx is cancelled or the stream ends.
+// Cancellation waits up to ten seconds for acknowledgement before closing delivery.
 func (c *Client) SendMessageStream(
 	ctx context.Context,
 	message string,
@@ -21,14 +22,65 @@ func (c *Client) SendMessageStream(
 	agentID int,
 	parentMessageID *int,
 	fileDescriptors []models.FileDescriptorPayload,
+	llmOverride *models.LLMOverride,
 ) <-chan models.StreamEvent {
 	ch := make(chan models.StreamEvent, 64)
 
 	go func() {
 		defer close(ch)
+		// Keep delivery alive until acknowledgement when cancellation races admission.
+		streamCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		defer cancel()
+		done := make(chan struct{})
+		cancellationDone := make(chan struct{})
+		defer func() {
+			close(done)
+			// The one-shot CLI can exit as soon as its event channel closes.
+			<-cancellationDone
+		}()
+		type identity struct {
+			session string
+			stream  int
+		}
+		acknowledged := make(chan identity, 1)
+		stopAcknowledged := func(id identity) {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer stopCancel()
+			c.StopChatSession(stopCtx, id.session, id.stream)
+		}
+		go func() {
+			defer close(cancellationDone)
+			select {
+			case <-ctx.Done():
+			case <-done:
+				if ctx.Err() == nil {
+					return
+				}
+			}
+			timer := time.NewTimer(10 * time.Second)
+			defer timer.Stop()
+			select {
+			case id := <-acknowledged:
+				stopAcknowledged(id)
+			case <-done:
+				// Delivery may close with an acknowledged cancellation still queued.
+				select {
+				case id := <-acknowledged:
+					stopAcknowledged(id)
+				default:
+				}
+			case <-timer.C:
+			}
+			cancel()
+		}()
+		sessionID := ""
+		if chatSessionID != nil {
+			sessionID = *chatSessionID
+		}
 
 		payload := models.SendMessagePayload{
 			Message:          message,
+			LLMOverride:      llmOverride,
 			ParentMessageID:  parentMessageID,
 			FileDescriptors:  fileDescriptors,
 			Origin:           "api",
@@ -51,7 +103,7 @@ func (c *Client) SendMessageStream(
 			return
 		}
 
-		req, err := c.newRequest(ctx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
+		req, err := c.newRequest(streamCtx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
 		if err != nil {
 			ch <- models.ErrorEvent{Error: fmt.Sprintf("request error: %v", err), IsRetryable: false}
 			return
@@ -98,15 +150,37 @@ func (c *Client) SendMessageStream(
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 		for scanner.Scan() {
-			if ctx.Err() != nil {
-				return
-			}
 			event := parser.ParseStreamLine(scanner.Text())
+			switch e := event.(type) {
+			case models.SessionCreatedEvent:
+				sessionID = e.ChatSessionID
+			case models.MessageIDEvent:
+				if sessionID != "" {
+					select {
+					case acknowledged <- identity{sessionID, e.ReservedAgentMessageID}:
+					default:
+					}
+				}
+			}
 			if event != nil {
-				select {
-				case ch <- event:
-				case <-ctx.Done():
-					return
+				switch event.(type) {
+				case models.SessionCreatedEvent, models.MessageIDEvent:
+					// The caller needs these IDs to settle and continue a cancelled turn.
+					select {
+					case ch <- event:
+						continue
+					default:
+					}
+					select {
+					case ch <- event:
+					case <-streamCtx.Done():
+					}
+				default:
+					select {
+					case ch <- event:
+					case <-ctx.Done():
+						// Continue reading for acknowledgement; the cancellation worker is bounded.
+					}
 				}
 			}
 		}

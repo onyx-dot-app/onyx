@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -7,20 +7,21 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
-from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.context.search.models import BaseFilters, PersonaSearchInfo
+from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
+from onyx.db.image_generation import get_default_image_generation_config
 from onyx.db.mcp import (
-    get_all_mcp_tools_for_server,
     get_mcp_server_by_id,
+    get_mcp_server_user_preferences,
+    user_can_access_mcp_server,
 )
-from onyx.db.models import Persona, User
-from onyx.db.models import Tool as ToolDBModel
+from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.tools import get_builtin_tool
+from onyx.db.tools import get_builtin_tool, get_tool_user_preferences
 from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM, LLMConfig
@@ -29,9 +30,15 @@ from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
     resolve_mcp_credentials,
 )
+from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
-from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage
+from onyx.tools.models import (
+    DynamicSchemaInfo,
+    PersonaToolConfiguration,
+    SearchToolUsage,
+    ToolConfiguration,
+)
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
@@ -63,13 +70,12 @@ def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
 
 class SearchToolConfig(BaseModel):
     user_selected_filters: BaseFilters | None = None
-    # Vespa metadata filters for overflowing user files.  These are NOT the
+    # Document index metadata filters for overflowing user files.  These are NOT the
     # IDs of the current project/persona — they are only set when the
     # project's/persona's user files didn't fit in the LLM context window and
     # must be found via vector DB search instead.
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
-    bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
@@ -91,9 +97,7 @@ class CustomToolConfig(BaseModel):
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
-    """Get image generation LLM config from the default image generation configuration."""
-    from onyx.db.image_generation import get_default_image_generation_config
-
+    """Load the default image generation provider and credentials."""
     default_config = get_default_image_generation_config(db_session)
     if (
         not default_config
@@ -115,14 +119,30 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         ),
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
-        deployment_name=llm_provider.deployment_name,
+        # A linked provider's deployment serves its chat model, not this one.
+        deployment_name=(
+            llm_provider.deployment_name if default_config.llm_provider_owned else None
+        ),
         max_input_tokens=llm.config.max_input_tokens,
         custom_config=llm_provider.custom_config,
     )
 
 
+def _require_chat_session_id(
+    custom_tool_config: CustomToolConfig | None, tool_name: str
+) -> UUID:
+    """Generated files are scoped to the chat session that produced them, so
+    the tools that write them cannot be built without one."""
+    if custom_tool_config is None or custom_tool_config.chat_session_id is None:
+        raise ValueError(
+            f"{tool_name} requires CustomToolConfig.chat_session_id: generated "
+            "files are scoped to the chat session that produced them"
+        )
+    return custom_tool_config.chat_session_id
+
+
 def should_disable_open_url_web_fetch(
-    persona_tools: Sequence[ToolDBModel],
+    persona_tools: Sequence[ToolConfiguration],
     allowed_tool_ids: list[int] | None,
 ) -> bool:
     """OpenURLTool is hidden from the chat tool toggles (chat_selectable=False)
@@ -141,8 +161,7 @@ def should_disable_open_url_web_fetch(
 
 
 def construct_tools(
-    persona: Persona,
-    emitter: Emitter,
+    configuration: PersonaToolConfiguration,
     user: User,
     llm: LLM,
     db_session: Session | None = None,
@@ -151,22 +170,16 @@ def construct_tools(
     file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
+    selection_llm_factory: Callable[[], LLM] | None = None,
 ) -> dict[int, list[Tool]]:
-    """Constructs tools based on persona configuration and available APIs.
-
-    Will simply skip tools that are not allowed/available.
-
-    Callers must supply a persona with ``tools``, ``document_sets``,
-    ``attached_documents``, and ``hierarchy_nodes`` already eager-loaded
-    (e.g. via ``eager_load_persona=True`` or ``eager_load_for_tools=True``)
-    to avoid lazy SQL queries after the session may have been flushed."""
+    """Build tools from captured settings; resolve current service credentials."""
     with get_session_with_current_tenant_if_none(db_session) as db_session:
         return _construct_tools_impl(
-            persona=persona,
+            configuration=configuration,
             db_session=db_session,
-            emitter=emitter,
             user=user,
             llm=llm,
+            selection_llm_factory=selection_llm_factory,
             search_tool_config=search_tool_config,
             custom_tool_config=custom_tool_config,
             file_reader_tool_config=file_reader_tool_config,
@@ -176,9 +189,8 @@ def construct_tools(
 
 
 def _construct_tools_impl(
-    persona: Persona,
+    configuration: PersonaToolConfiguration,
     db_session: Session,
-    emitter: Emitter,
     user: User,
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
@@ -186,57 +198,78 @@ def _construct_tools_impl(
     file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
+    selection_llm_factory: Callable[[], LLM] | None = None,
 ) -> dict[int, list[Tool]]:
     tool_dict: dict[int, list[Tool]] = {}
 
-    # Log which tools are attached to the persona for debugging
-    persona_tool_names = [t.name for t in persona.tools]
+    persona_tool_names = [t.name for t in configuration.tools]
     logger.debug(
         "Constructing tools for persona '%s' (id=%s): %s",
-        persona.name,
-        persona.id,
+        configuration.persona_name,
+        configuration.persona_id,
         persona_tool_names,
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
-    # Get user's OAuth token if available
-    user_oauth_token = None
-    if user.oauth_accounts:
-        user_oauth_token = user.oauth_accounts[0].access_token
+    mcp_preferences = (
+        get_mcp_server_user_preferences(
+            list(
+                {
+                    tool.mcp_server_id
+                    for tool in configuration.tools
+                    if tool.mcp_server_id is not None
+                }
+            ),
+            user.id,
+            db_session,
+        )
+        if configuration.persona_id == DEFAULT_PERSONA_ID
+        else {}
+    )
+    user_oauth_token: str | None = user.live_oauth_token
+    openapi_preferences = (
+        get_tool_user_preferences(
+            [
+                tool.id
+                for tool in configuration.tools
+                if tool.openapi_schema is not None
+            ],
+            user.id,
+            db_session,
+        )
+        if configuration.persona_id == DEFAULT_PERSONA_ID
+        else {}
+    )
 
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
-        persona_search_info = PersonaSearchInfo(
-            document_set_names=[ds.name for ds in persona.document_sets],
-            search_start_date=persona.search_start_date,
-            attached_document_ids=[doc.id for doc in persona.attached_documents],
-            hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
-        )
         return SearchTool(
             tool_id=tool_id,
-            emitter=emitter,
             user=user,
-            persona_search_info=persona_search_info,
+            persona_search_info=configuration.search,
             llm=llm,
+            selection_llm_factory=selection_llm_factory,
             document_index=document_index,
             user_selected_filters=config.user_selected_filters,
             project_id_filter=config.project_id_filter,
             persona_id_filter=config.persona_id_filter,
-            bypass_acl=config.bypass_acl,
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
             auto_detect_filters=config.auto_detect_filters,
         )
 
     open_url_web_fetch_disabled = should_disable_open_url_web_fetch(
-        persona.tools, allowed_tool_ids
+        configuration.tools, allowed_tool_ids
     )
 
     added_search_tool = False
-    for db_tool_model in persona.tools:
+    for db_tool_model in configuration.tools:
+        # Legacy OpenAPI disablement now applies only to default Chat.
+        if not is_tool_available_for_persona(db_tool_model, configuration.persona_id):
+            continue
+
         # If allowed_tool_ids is specified, skip tools not in the allowed list
         if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
             continue
@@ -293,7 +326,9 @@ def _construct_tools_impl(
                         provider=img_generation_llm_config.model_provider,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, ImageGenerationTool.__name__
+                        ),
                     )
                 ]
 
@@ -301,13 +336,13 @@ def _construct_tools_impl(
             elif tool_cls.__name__ == WebSearchTool.__name__:
                 try:
                     tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
+                        WebSearchTool(tool_id=db_tool_model.id)
                     ]
                 except ValueError as e:
                     logger.error("Failed to initialize Internet Search Tool: %s", e)
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
-                    )
+                    ) from e
 
             # Handle Open URL Tool
             elif tool_cls.__name__ == OpenURLTool.__name__:
@@ -323,7 +358,6 @@ def _construct_tools_impl(
                     tool_dict[db_tool_model.id] = [
                         OpenURLTool(
                             tool_id=db_tool_model.id,
-                            emitter=emitter,
                             document_index=document_index,
                             user=user,
                             web_fetch_disabled=open_url_web_fetch_disabled,
@@ -333,12 +367,17 @@ def _construct_tools_impl(
                     logger.error("Failed to initialize Open URL Tool: %s", e)
                     raise ValueError(
                         "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
-                    )
+                    ) from e
 
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
-                    PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                    PythonTool(
+                        tool_id=db_tool_model.id,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, PythonTool.__name__
+                        ),
+                    )
                 ]
 
             # Handle Coding Agent Tool
@@ -346,7 +385,6 @@ def _construct_tools_impl(
                 tool_dict[db_tool_model.id] = [
                     CodingAgentTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         llm=llm,
                     )
                 ]
@@ -357,33 +395,16 @@ def _construct_tools_impl(
                 tool_dict[db_tool_model.id] = [
                     FileReaderTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         user_file_ids=cfg.user_file_ids,
                         chat_file_ids=cfg.chat_file_ids,
                     )
                 ]
 
-            # Handle KG Tool
-            # TODO: disabling for now because it's broken in the refactor
-            # elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
-
-            #     # skip the knowledge graph tool if KG is not enabled/exposed
-            #     kg_config = get_kg_config_settings()
-            #     if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
-            #         logger.debug("Knowledge Graph Tool is not enabled/exposed")
-            #         continue
-
-            #     if persona.name != TMP_DRALPHA_PERSONA_NAME:
-            #         # TODO: remove this after the beta period
-            #         raise ValueError(
-            #             f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
-            #         )
-            #     tool_dict[db_tool_model.id] = [
-            #         KnowledgeGraphTool(tool_id=db_tool_model.id)
-            #     ]
-
         # Handle custom tools
         elif db_tool_model.openapi_schema:
+            preference = openapi_preferences.get(db_tool_model.id)
+            if preference is not None and not preference.enabled_in_chat:
+                continue
             if not custom_tool_config:
                 custom_tool_config = CustomToolConfig()
 
@@ -425,7 +446,6 @@ def _construct_tools_impl(
                 build_custom_tools_from_openapi_schema_and_headers(
                     tool_id=db_tool_model.id,
                     openapi_schema=db_tool_model.openapi_schema,
-                    emitter=emitter,
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
@@ -444,6 +464,9 @@ def _construct_tools_impl(
 
         # Handle MCP tools
         elif db_tool_model.mcp_server_id:
+            preference = mcp_preferences.get(db_tool_model.mcp_server_id)
+            if preference is not None and not preference.enabled_in_chat:
+                continue
             if db_tool_model.mcp_server_id in mcp_tool_cache:
                 tool_dict[db_tool_model.id] = [
                     mcp_tool_cache[db_tool_model.mcp_server_id][db_tool_model.id]
@@ -452,14 +475,24 @@ def _construct_tools_impl(
 
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
 
+            if (
+                configuration.persona_id == DEFAULT_PERSONA_ID
+                and not user_can_access_mcp_server(user, mcp_server.id, db_session)
+            ):
+                continue
+
             try:
                 mcp_credentials = resolve_mcp_credentials(mcp_server, user, db_session)
             except MCPCredentialsError as e:
                 logger.warning(str(e))
                 continue
 
-            # Get all saved tools for this MCP server
-            saved_tools = get_all_mcp_tools_for_server(mcp_server.id, db_session)
+            # Reuse captured schemas across model responses.
+            saved_tools = [
+                tool
+                for tool in configuration.tools
+                if tool.mcp_server_id == mcp_server.id
+            ]
 
             # Find the specific tool that this database entry represents
             expected_tool_name = db_tool_model.display_name
@@ -475,12 +508,10 @@ def _construct_tools_impl(
                 # Create MCPTool instance for this specific tool
                 mcp_tool = MCPTool(
                     tool_id=saved_tool.id,
-                    emitter=emitter,
                     mcp_server=mcp_server,
                     tool_name=saved_tool.name,
-                    tool_description=saved_tool.description,
+                    tool_description=saved_tool.description or "",
                     tool_definition=saved_tool.mcp_input_schema or {},
-                    connection_config=mcp_credentials.connection_config,
                     user_email=user.email,
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,
@@ -490,7 +521,7 @@ def _construct_tools_impl(
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 
                 if saved_tool.id == db_tool_model.id:
-                    tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
+                    tool_dict[saved_tool.id] = [mcp_tool]
             if db_tool_model.id not in tool_dict:
                 logger.warning(
                     "Tool '%s' not found in MCP server '%s'",
@@ -520,7 +551,6 @@ def _construct_tools_impl(
             memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
             memory_tool = MemoryTool(
                 tool_id=memory_tool_db_model.id,
-                emitter=emitter,
                 llm=llm,
             )
             tool_dict[memory_tool_db_model.id] = [memory_tool]

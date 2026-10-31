@@ -2,16 +2,16 @@
 
 **Import:** `import { TagList, type TagListProps } from "@opal/layouts";`
 
-Wrap-flowing row of `Tag`s outside an input, for any labelled list. Use it instead of hand-mapping `Tag`s at call sites.
+Wrap-flowing row of `Chip`s outside an input, for any labelled list. Use it instead of hand-mapping `Chip`s at call sites.
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `items` | `TagItem[]` | **(required)** | `{ id, label, error? }`, the same item type `InputTags` uses |
-| `onRemove` | `(id: string) => void` | — | Renders a remove button on every item tag. Omit for passive tags |
-| `maxVisible` | `number` | — | Collapse items beyond this count into a "+N" tag whose tooltip names the hidden entries |
-| `overflowIcon` | `IconFunctionComponent` | — | Icon on the "+N" overflow tag |
+| Prop           | Type                    | Default        | Description                                                                             |
+| -------------- | ----------------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `items`        | `TagItem[]`             | **(required)** | `{ id, label, error? }`, the same item type `InputTypeInTag` uses                            |
+| `onRemove`     | `(id: string) => void`  | —              | Renders a remove button on every item tag. Omit for passive tags                        |
+| `maxVisible`   | `number`                | —              | Collapse items beyond this count into a "+N" tag whose tooltip names the hidden entries |
+| `overflowIcon` | `IconFunctionComponent` | —              | Icon on the "+N" overflow tag                                                           |
 
 ## Usage
 
@@ -23,4 +23,4 @@ Wrap-flowing row of `Tag`s outside an input, for any labelled list. Use it inste
 />
 ```
 
-Tags render truncated (`truncate`) so long labels ellipsize with the default title tooltip. There is no Figma component for a standalone tag row. Sizing and spacing follow the `Input/Tags` tag row.
+Chips render truncated (`truncate`), so a long label ends in an ellipsis and shows in full on hover. There is no Figma component for a standalone tag row. Sizing and spacing follow the `Input/Tags` tag row.

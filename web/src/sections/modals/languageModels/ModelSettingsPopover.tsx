@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Popover, Text, Tooltip } from "@opal/components";
 import { SvgBarChart, SvgCode, SvgSliders, SvgThermometer } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
@@ -12,22 +13,19 @@ import { modelDisplayName } from "@/lib/languageModels/utils";
 import {
   ALL_REASONING_STOPS,
   PaneSlider,
-  REASONING_STOP_LABELS,
-  UNKNOWN_CONTEXT_TOOLTIP,
+  REASONING_STOP_LABEL_KEYS,
   formatContextWindow,
   maxReasoningStop,
+  minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-
-const PINNED_TEMPERATURE_TOOLTIP =
-  "Reasoning models always run at temperature 1.";
 
 /** Where an unset slider parks: the backend default (medium reasoning,
  *  GEN_AI_TEMPERATURE for temperature). */
 const UNSET_REASONING_STOP = ALL_REASONING_STOPS.indexOf("medium");
 const UNSET_TEMPERATURE = 0;
 
-const TEMPERATURE_MARKS = ["Deterministic", "Balanced", "Creative"];
+const TEMPERATURE_MARK_COUNT = 3;
 
 export type ModelSettingsPatch = Partial<
   Pick<
@@ -94,7 +92,11 @@ function SectionHeader({
         rightChildren={
           rightValue !== undefined ? (
             <Tooltip tooltip={rightValueTooltip} side="top">
-              <Text font="secondary-mono" color="text-04" nowrap>
+              <Text
+                font="secondary-mono"
+                color="text-04"
+                wordWrap="whitespace-nowrap"
+              >
                 {rightValue}
               </Text>
             </Tooltip>
@@ -108,6 +110,8 @@ function SectionHeader({
 interface PolicySliderProps {
   label: string;
   value: number;
+  /** Lowest selectable stop. marks[0] labels this one, not zero. */
+  min?: number;
   max: number;
   step: number;
   marks: string[];
@@ -120,6 +124,7 @@ interface PolicySliderProps {
 function PolicySlider({
   label,
   value,
+  min = 0,
   max,
   step,
   marks,
@@ -132,10 +137,14 @@ function PolicySlider({
       width="auto"
       height="auto"
       gap={0}
-      className="ml-8 mr-2"
+      className="ms-8 me-2"
     >
       <Section alignItems="start" width="auto" height="auto" className="mx-0.5">
-        <Text font="secondary-action" color="text-03" nowrap>
+        <Text
+          font="secondary-action"
+          color="text-03"
+          wordWrap="whitespace-nowrap"
+        >
           {label}
         </Text>
       </Section>
@@ -143,7 +152,7 @@ function PolicySlider({
         <PaneSlider
           compact
           value={value}
-          min={0}
+          min={min}
           max={max}
           step={step}
           onValueChange={onChange}
@@ -154,8 +163,8 @@ function PolicySlider({
             <Text
               key={mark}
               font="figure-small-value"
-              color={index === activeMark ? "text-04" : "text-02"}
-              nowrap
+              color={index + min === activeMark ? "text-04" : "text-02"}
+              wordWrap="whitespace-nowrap"
             >
               {mark}
             </Text>
@@ -171,6 +180,10 @@ export function ModelSettingsPopover({
   onChange,
   onOpenChange,
 }: ModelSettingsPopoverProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  // The reasoning, context and temperature vocabulary is shared with the chat
+  // model selector, so both surfaces read the same messages.
+  const tModelSelector = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -178,6 +191,9 @@ export function ModelSettingsPopover({
   }
 
   const supportedStop = maxReasoningStop(model.supported_reasoning_efforts);
+  // Models that always reason omit "off", so neither the cap nor the default
+  // may park below the floor.
+  const minStop = minReasoningStop(model.supported_reasoning_efforts);
   // No supported levels means the model takes no effort parameter at all.
   const showReasoning = model.supports_reasoning && supportedStop >= 0;
   // The backend pins reasoning models to 1, so the control renders disabled.
@@ -187,33 +203,44 @@ export function ModelSettingsPopover({
   const maxStop = reasoningStopIndex(model.reasoning_effort_max);
   const rawDefaultStop = reasoningStopIndex(model.reasoning_effort_default);
   // Capability bounds the stored cap too, in case it shrank after the save.
-  const effectiveMaxStop =
-    maxStop >= 0 ? Math.min(maxStop, supportedStop) : supportedStop;
+  const effectiveMaxStop = Math.max(
+    minStop,
+    maxStop >= 0 ? Math.min(maxStop, supportedStop) : supportedStop
+  );
   const defaultStop =
-    rawDefaultStop >= 0 ? Math.min(rawDefaultStop, effectiveMaxStop) : -1;
+    rawDefaultStop >= 0
+      ? Math.min(Math.max(rawDefaultStop, minStop), effectiveMaxStop)
+      : -1;
   // An unset default parks where the backend resolves AUTO: medium, bounded
-  // by the cap.
+  // by the cap and the floor.
   const defaultSliderStop =
     defaultStop >= 0
       ? defaultStop
-      : Math.min(UNSET_REASONING_STOP, effectiveMaxStop);
+      : Math.min(Math.max(UNSET_REASONING_STOP, minStop), effectiveMaxStop);
 
-  const reasoningMarks = ALL_REASONING_STOPS.slice(0, supportedStop + 1).map(
-    (stop) => REASONING_STOP_LABELS[stop]
-  );
+  const reasoningMarks = ALL_REASONING_STOPS.slice(
+    minStop,
+    supportedStop + 1
+  ).map((stop) => tModelSelector(REASONING_STOP_LABEL_KEYS[stop]));
+  const temperatureMarks = [
+    tModelSelector("temperature.deterministic.label"),
+    tModelSelector("temperature.balanced.label"),
+    tModelSelector("temperature.creative.label"),
+  ];
   const temperature = model.temperature_default ?? UNSET_TEMPERATURE;
   const temperatureMark = Math.min(
-    Math.floor((temperature / maxTemperature) * TEMPERATURE_MARKS.length),
-    TEMPERATURE_MARKS.length - 1
+    Math.floor((temperature / maxTemperature) * TEMPERATURE_MARK_COUNT),
+    TEMPERATURE_MARK_COUNT - 1
   );
 
   const capabilities = [
-    model.supports_reasoning && "reasoning",
-    model.supports_image_input && "multi-modal",
+    model.supports_reasoning && t("modelSettings.capabilities.reasoning.label"),
+    model.supports_image_input &&
+      t("modelSettings.capabilities.multiModal.label"),
   ].filter((c): c is string => Boolean(c));
 
   function setMax(stop: number) {
-    const newMaxStop = Math.min(stop, supportedStop);
+    const newMaxStop = Math.min(Math.max(stop, minStop), supportedStop);
     const effort = ALL_REASONING_STOPS[newMaxStop];
     if (!effort) return;
     const patch: ModelSettingsPatch = { reasoning_effort_max: effort };
@@ -226,7 +253,8 @@ export function ModelSettingsPopover({
   }
 
   function setDefault(stop: number) {
-    const effort = ALL_REASONING_STOPS[Math.min(stop, effectiveMaxStop)];
+    const bounded = Math.min(Math.max(stop, minStop), effectiveMaxStop);
+    const effort = ALL_REASONING_STOPS[bounded];
     if (effort) onChange({ reasoning_effort_default: effort });
   }
 
@@ -240,7 +268,7 @@ export function ModelSettingsPopover({
           icon={SvgSliders}
           prominence="internal"
           size="sm"
-          tooltip="Model Settings"
+          tooltip={t("modelSettings.trigger.tooltip")}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
         />
       </Popover.Trigger>
@@ -253,25 +281,33 @@ export function ModelSettingsPopover({
             gap={0}
             className="mx-2.5 my-2"
           >
-            <Text font="main-ui-body" color="text-02" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-02"
+              wordWrap="whitespace-nowrap"
+            >
               {modelDisplayName(model)}
             </Text>
             <Text font="secondary-body" color="text-02">
-              {capabilities.length ? capabilities.join(", ") : "chat"}
+              {capabilities.length
+                ? capabilities.join(", ")
+                : t("modelSettings.capabilities.chat.label")}
             </Text>
           </Section>
 
           <SectionHeader
             icon={SvgCode}
-            title="Context Window"
-            caption="Tokens limit for each session"
+            title={tModelSelector("contextWindow.row.title")}
+            caption={tModelSelector("contextWindow.row.caption")}
             rightValue={
               model.max_input_tokens
                 ? formatContextWindow(model.max_input_tokens)
                 : "\u2014"
             }
             rightValueTooltip={
-              model.max_input_tokens ? undefined : UNKNOWN_CONTEXT_TOOLTIP
+              model.max_input_tokens
+                ? undefined
+                : tModelSelector("contextWindow.unknown.tooltip")
             }
           />
 
@@ -284,12 +320,13 @@ export function ModelSettingsPopover({
             >
               <SectionHeader
                 icon={SvgBarChart}
-                title="Reasoning Level"
-                caption="How much thinking the model should perform before answering"
+                title={tModelSelector("reasoningLevel.row.title")}
+                caption={tModelSelector("reasoningLevel.row.caption")}
               />
               <PolicySlider
-                label="Max Level"
+                label={t("modelSettings.reasoningLevel.maxSlider.label")}
                 value={effectiveMaxStop}
+                min={minStop}
                 max={supportedStop}
                 step={1}
                 marks={reasoningMarks}
@@ -297,8 +334,9 @@ export function ModelSettingsPopover({
                 onChange={setMax}
               />
               <PolicySlider
-                label="Default"
+                label={t("modelSettings.reasoningLevel.defaultSlider.label")}
                 value={defaultSliderStop}
+                min={minStop}
                 max={supportedStop}
                 step={1}
                 marks={reasoningMarks}
@@ -310,7 +348,7 @@ export function ModelSettingsPopover({
 
           <Disabled
             disabled={temperatureDisabled}
-            tooltip={PINNED_TEMPERATURE_TOOLTIP}
+            tooltip={t("modelSettings.temperature.pinned.tooltip")}
             tooltipSide="top"
           >
             <Section
@@ -321,15 +359,15 @@ export function ModelSettingsPopover({
             >
               <SectionHeader
                 icon={SvgThermometer}
-                title="Temperature"
-                caption="How predictable or creative the model should respond"
+                title={tModelSelector("temperature.row.title")}
+                caption={tModelSelector("temperature.row.caption")}
               />
               <PolicySlider
-                label="Default"
+                label={t("modelSettings.temperature.defaultSlider.label")}
                 value={temperatureDisabled ? 1 : temperature}
                 max={maxTemperature}
                 step={0.1}
-                marks={TEMPERATURE_MARKS}
+                marks={temperatureMarks}
                 activeMark={temperatureMark}
                 onChange={(v) => onChange({ temperature_default: v })}
               />

@@ -21,7 +21,10 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import Permission, has_permission, require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
-from onyx.db.connector_credential_pair import verify_user_can_edit_all_cc_pairs
+from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
+    verify_user_can_manage_all_cc_pairs,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import IndexingStatus, PermissionAuthority
 from onyx.db.models import User
@@ -116,8 +119,11 @@ def submit_targeted_reindex(
         )
 
     # GATE 2 after resolution — error_ids expand into cc_pairs the caller never named
-    if not verify_user_can_edit_all_cc_pairs(
-        {spec.cc_pair_id for spec in target_specs_in}, db_session, user
+    if not verify_user_can_manage_all_cc_pairs(
+        {spec.cc_pair_id for spec in target_specs_in},
+        db_session,
+        user,
+        CCPairAccessLevel.OPERATE,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

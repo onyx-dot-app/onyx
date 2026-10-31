@@ -91,12 +91,42 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   }
 }
 
-locals {
-  needs_bucket_policy = (var.allow_anonymous_read && (length(var.allowed_vpc_ids) > 0 || length(var.allowed_source_ips) > 0)) || length(var.s3_vpc_endpoint_id) > 0
-}
-
 data "aws_iam_policy_document" "anonymous_read" {
-  count = local.needs_bucket_policy ? 1 : 0
+  # Always rendered. Every bucket now carries the DenyInsecureTransport
+  # statement below, so the policy is never absent. The `anonymous_read` name
+  # is historical — this address has already been renamed once (see the moved
+  # blocks at the top of this file), so it is left alone.
+
+  # Caller-supplied statements. On a SID collision the inline statements below
+  # win, so these cannot weaken DenyInsecureTransport.
+  source_policy_documents = var.additional_policy_documents
+
+  # Reject any request that did not arrive over TLS. Additive and safe: it
+  # denies only traffic that is already plaintext. Required by SOC 2 (Vanta
+  # test `aws-storage-buckets-enforce-https`).
+  #
+  # Never apply this to a bucket served through an S3 *static website*
+  # endpoint. Those endpoints are HTTP-only, so the deny takes the site
+  # offline. This module never configures website hosting, so the case cannot
+  # arise here.
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.this.arn,
+      "${aws_s3_bucket.this.arn}/*"
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
 
   # Allow anonymous GetObject from allowed IPs
   dynamic "statement" {
@@ -167,7 +197,10 @@ data "aws_iam_policy_document" "anonymous_read" {
 }
 
 resource "aws_s3_bucket_policy" "anonymous_read" {
-  count  = local.needs_bucket_policy ? 1 : 0
+  # count is pinned to 1 rather than removed: the index keeps the resource
+  # address at `anonymous_read[0]`, which the moved block at the top of this
+  # file targets. Dropping count would break that upgrade path.
+  count  = 1
   bucket = aws_s3_bucket.this.id
-  policy = data.aws_iam_policy_document.anonymous_read[0].json
+  policy = data.aws_iam_policy_document.anonymous_read.json
 }

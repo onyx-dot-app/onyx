@@ -12,7 +12,7 @@ from tests.integration.common_utils.test_models import DATestUser, DATestUserGro
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_add_users_to_group(admin_user: DATestUser) -> None:
@@ -46,7 +46,7 @@ def test_add_users_to_group(admin_user: DATestUser) -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_add_users_to_group_invalid_user(admin_user: DATestUser) -> None:
@@ -68,7 +68,7 @@ def test_add_users_to_group_invalid_user(admin_user: DATestUser) -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_add_users_to_group_rejects_non_group_account(admin_user: DATestUser) -> None:

@@ -1,21 +1,23 @@
-import Text from "@/refresh-components/texts/Text";
+import { useTranslations } from "next-intl";
+import { Text } from "@opal/components";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function CloudError() {
+  const t = useTranslations("common.errorPages.maintenance");
+  const { appName } = useSettings();
   return (
     <ErrorPageLayout>
-      <Text as="p" headingH2>
-        Maintenance in Progress
+      <Text as="p" font="heading-h2" color="text-05">
+        {t("heading.title")}
       </Text>
 
-      <Text as="p" text03>
-        Onyx is currently in a maintenance window. Please check back in a couple
-        of minutes.
+      <Text as="p" color="text-03">
+        {t("checkBack.description", { appName })}
       </Text>
 
-      <Text as="p" text03>
-        We apologize for any inconvenience this may cause and appreciate your
-        patience.
+      <Text as="p" color="text-03">
+        {t("apology.description")}
       </Text>
     </ErrorPageLayout>
   );

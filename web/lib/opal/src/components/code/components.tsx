@@ -8,6 +8,7 @@ import { copyText } from "@opal/utils";
 import SvgCheck from "@opal/icons/check";
 import SvgCopy from "@opal/icons/copy";
 import "@opal/components/code/styles.css";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,14 +18,22 @@ interface CodeProps extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   children: string;
   /** Show copy-to-clipboard button on hover. @default true */
   showCopyButton?: boolean;
+  /** Tinted fill (`background-tint-01`) with no border. @default false */
+  tint?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
+export function Code({
+  children,
+  showCopyButton = true,
+  tint = false,
+  ...props
+}: CodeProps) {
   const [copied, setCopied] = useState(false);
+  const strings = useOpalStrings();
 
   function handleCopy() {
     copyText(children)
@@ -38,7 +47,7 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
   return (
     <div className="opal-code-root">
       <Hoverable.Root group="code">
-        <code className="opal-code" {...props}>
+        <code className="opal-code" data-tint={tint || undefined} {...props}>
           {children}
         </code>
         {showCopyButton && (
@@ -49,8 +58,8 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
                 prominence="tertiary"
                 icon={copied ? SvgCheck : SvgCopy}
                 onClick={handleCopy}
-                tooltip={copied ? "Copied!" : "Copy"}
-                aria-label="Copy code"
+                tooltip={copied ? strings.copied : strings.copy}
+                aria-label={strings.copyCode}
               />
             </div>
           </Hoverable.Item>

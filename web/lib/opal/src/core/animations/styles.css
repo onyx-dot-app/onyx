@@ -19,6 +19,15 @@
     opacity: 0;
   }
 
+  /* An invisible item must not intercept clicks aimed at what sits under it.
+     Local mode is excluded: it reveals on its own hover, so taking its pointer
+     events away would leave it permanently hidden. */
+  .hoverable-item[data-hoverable-variant="appear-on-hover"]:not(
+    [data-hoverable-local]
+  ) {
+    pointer-events: none;
+  }
+
   /* Group mode — Root :hover controls descendant item visibility via CSS.
      Exclude local-mode items so they aren't revealed by an ancestor root. */
   [data-hover-group]:hover
@@ -26,6 +35,7 @@
       [data-hoverable-local]
     ) {
     opacity: 1;
+    pointer-events: auto;
   }
 
   /* Local mode — item handles its own :hover */
@@ -40,6 +50,7 @@
     [data-hoverable-local]
   ) {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* Group focus — any focusable descendant of the Root receives keyboard focus,
@@ -49,11 +60,13 @@
     [data-hoverable-local]
   ) {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* Local focus — item (or a focusable descendant) receives keyboard focus */
 .hoverable-item[data-hoverable-variant="appear-on-hover"]:has(:focus-visible) {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* ---------------------------------------------------------------------------
@@ -71,6 +84,7 @@
       [data-hoverable-local]
     ) {
     opacity: 0;
+    pointer-events: none;
   }
 
   /* Local mode */
@@ -85,6 +99,7 @@
     [data-hoverable-local]
   ) {
   opacity: 0;
+  pointer-events: none;
 }
 
 /* Group focus */
@@ -93,6 +108,7 @@
     [data-hoverable-local]
   ) {
   opacity: 0;
+  pointer-events: none;
 }
 
 /* Local focus */

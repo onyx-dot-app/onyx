@@ -1,12 +1,12 @@
 "use client";
 
 import { memo } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
+import { useFormatter, useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
-import { getSourceMetadata } from "@/lib/sources";
-import type { ConnectedSource } from "@/lib/hierarchy/interfaces";
-import type { ValidSources } from "@/lib/types";
+import type { ConnectedSource } from "@/lib/hierarchy/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
+import { Text, LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";
 
 interface KnowledgeAddViewProps {
@@ -32,6 +32,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
   sourceSelectionCounts,
   vectorDbEnabled,
 }: KnowledgeAddViewProps) {
+  const t = useTranslations("knowledge");
+  const format = useFormatter();
   return (
     <GeneralLayouts.Section
       gap={2}
@@ -47,45 +49,53 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
         wrap
       >
         {vectorDbEnabled && (
-          <LineItem
+          <LineItemButton
+            sizePreset="main-ui"
+            variant="section"
             icon={SvgFolder}
+            title={t("addView.documentSets.label")}
             onClick={onNavigateToDocumentSets}
-            emphasized={selectedDocumentSetIds.length > 0}
+            selectVariant={
+              selectedDocumentSetIds.length > 0
+                ? "select-heavy"
+                : "select-light"
+            }
             aria-label="knowledge-add-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
-                <Text mainUiAction className="text-action-selection-05">
-                  {selectedDocumentSetIds.length}
+                <Text font="main-ui-action" color="action-selection-05">
+                  {format.number(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
-          >
-            Document Sets
-          </LineItem>
+          />
         )}
 
-        <LineItem
+        <LineItemButton
+          sizePreset="main-ui"
+          variant="section"
           icon={SvgFiles}
-          description="Recent or new uploads"
+          title={t("addView.yourFiles.label")}
+          description={t("addView.yourFiles.description")}
           onClick={onNavigateToRecent}
-          emphasized={selectedFileIds.length > 0}
+          selectVariant={
+            selectedFileIds.length > 0 ? "select-heavy" : "select-light"
+          }
           aria-label="knowledge-add-files"
           rightChildren={
             selectedFileIds.length > 0 ? (
-              <Text mainUiAction className="text-action-selection-05">
-                {selectedFileIds.length}
+              <Text font="main-ui-action" color="action-selection-05">
+                {format.number(selectedFileIds.length)}
               </Text>
             ) : undefined
           }
-        >
-          Your Files
-        </LineItem>
+        />
       </GeneralLayouts.Section>
 
       {vectorDbEnabled && connectedSources.length > 0 && (
         <>
-          <Text as="p" text03 secondaryBody>
-            Connected Sources
+          <Text as="p" color="text-03" font="secondary-body">
+            {t("addView.connectedSources.label")}
           </Text>
           {connectedSources.map((connectedSource) => {
             const sourceMetadata = getSourceMetadata(connectedSource.source);
@@ -93,23 +103,27 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
             const selectionCount =
               sourceSelectionCounts.get(connectedSource.source) ?? 0;
             return (
-              <LineItem
+              <LineItemButton
                 key={connectedSource.source}
+                sizePreset="main-ui"
+                variant="section"
                 icon={sourceMetadata.icon}
-                strokeIcon={false}
+                title={sourceMetadata.displayName}
                 onClick={() => onNavigateToSource(connectedSource.source)}
-                emphasized={isSelected || selectionCount > 0}
+                selectVariant={
+                  isSelected || selectionCount > 0
+                    ? "select-heavy"
+                    : "select-light"
+                }
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
-                    <Text mainUiAction className="text-action-selection-05">
-                      {selectionCount}
+                    <Text font="main-ui-action" color="action-selection-05">
+                      {format.number(selectionCount)}
                     </Text>
                   ) : undefined
                 }
-              >
-                {sourceMetadata.displayName}
-              </LineItem>
+              />
             );
           })}
         </>

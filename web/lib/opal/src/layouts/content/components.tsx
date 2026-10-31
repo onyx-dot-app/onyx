@@ -17,8 +17,9 @@ import {
   ContentMd,
   type ContentMdEditHandle,
   type ContentMdProps,
+  type ContentMdTag,
 } from "@opal/layouts/content/ContentMd";
-import type { TagProps } from "@opal/components";
+import type { TagProps, TextColor } from "@opal/components";
 import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";
@@ -49,6 +50,12 @@ interface ContentBaseProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /**
+   * Strike the title through — a presentational state (e.g. an option that is
+   * switched off), not content, so callers keep passing a plain string.
+   */
+  strikethrough?: boolean;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -61,6 +68,12 @@ interface ContentBaseProps {
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
+
+  /**
+   * Tooltip and accessible name of the edit button. Pass translated text;
+   * unset, it is the generic "Edit".
+   */
+  editTooltip?: string;
 
   /**
    * Width preset controlling the component's horizontal size.
@@ -78,13 +91,33 @@ interface ContentBaseProps {
    *
    * - `"default"` — `text-04` for both icon and title
    * - `"muted"` — `text-03` for both
-   * - `"danger"` — `status-error-05` for both
+   * - `"success"` / `"warning"` / `"danger"` — the status colour on the icon,
+   *   `text-03` on the title: the icon carries the state
    * - `"interactive"` — inherits from the parent `.interactive` element's
    *   `--interactive-foreground` / `--interactive-foreground-icon` variables
    *
    * @default "default"
    */
   color?: ColorTypes;
+
+  /**
+   * Overrides the title's colour only. `color` still picks the icon and the
+   * description; this replaces the title tone the preset would give. Inside
+   * an interactive surface the override holds at rest and yields to hover,
+   * pressed, selected and disabled, so the row's states still reach the
+   * title. `"inherit"` is not offered: the default already inherits where
+   * that is meant. Covers the title as displayed; an editable title being
+   * edited keeps the input's standard colour.
+   *
+   * Unset, the title takes the tone its `color` mode sets in `styles.css`:
+   *
+   * - `"default"` — `text-04`
+   * - `"muted"` — `text-03`
+   * - `"success"` / `"warning"` / `"danger"` — `text-03`
+   * - `"interactive"` — `text-04` on its own; inside an interactive surface,
+   *   the surface's foreground
+   */
+  titleColor?: Exclude<TextColor, "inherit">;
 
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
@@ -103,6 +136,10 @@ type XlContentProps = ContentBaseProps & {
   moreIcon1?: IconFunctionComponent;
   /** Optional tertiary icon rendered in the icon row (ContentXl only). */
   moreIcon2?: IconFunctionComponent;
+  /** Tag rendered inline after the description (ContentXl only). */
+  descriptionTag?: TagProps;
+  /** When an editable title shows its pencil: on hover, or at rest too (ContentXl only). Default: `"hover"`. */
+  editButton?: "hover" | "rest";
 };
 
 type LgContentProps = ContentBaseProps & {
@@ -115,12 +152,12 @@ type LgContentProps = ContentBaseProps & {
 type MdContentProps = ContentBaseProps & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
-  /** Muted suffix rendered beside the title. Use `"optional"` for "(Optional)". */
+  /** Muted suffix rendered beside the title. Use `"optional"` for the translated "(Optional)" (`OpalStrings.contentOptional`). */
   suffix?: "optional" | (string & {});
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
-  /** Tag rendered beside the title. */
-  tag?: TagProps;
+  /** Tag rendered beside the title, with an optional hover tooltip. */
+  tag?: ContentMdTag;
   /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
   rightChildren?: React.ReactNode;
 };
@@ -128,7 +165,7 @@ type MdContentProps = ContentBaseProps & {
 /** ContentSm does not support descriptions or inline editing. */
 type SmContentProps = Omit<
   ContentBaseProps,
-  "description" | "editable" | "onTitleChange"
+  "description" | "editable" | "onTitleChange" | "editTooltip"
 > & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant: "body";
@@ -154,6 +191,7 @@ function Content(props: ContentProps) {
     variant = "heading",
     width = "full",
     color = "default",
+    titleColor,
     ref,
     ...rest
   } = props;
@@ -213,8 +251,22 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
+  // The override rides an unregistered variable that the colour modes read
+  // with the preset tone as fallback, so the disabled rule still wins.
+  // SAFETY: CSSProperties has no index for custom properties; the object
+  // holds only the one custom property the stylesheet reads.
+  const titleColorStyle: React.CSSProperties | undefined = titleColor
+    ? ({
+        "--content-title-color": `var(--${titleColor})`,
+      } as React.CSSProperties)
+    : undefined;
+
   return (
-    <div className={widthVariants[width]} data-content-color={color}>
+    <div
+      className={widthVariants[width]}
+      data-content-color={color}
+      style={titleColorStyle}
+    >
       {layout}
     </div>
   );

@@ -1,11 +1,19 @@
 import datetime
+from collections.abc import Sequence
+from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import column, exists, func, or_, select, true, update, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from onyx.configs.constants import USER_FILE_PROCESSING_MAX_ATTEMPTS
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
+from onyx.file_store.models import ChatFileInput, FileDescriptor, UserFileMetadata
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def fetch_chunk_counts_for_user_files(
@@ -112,6 +120,21 @@ def get_user_file_by_id(
     return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
 
 
+def capture_user_file_metadata(
+    user_files: Sequence[UserFile],
+) -> list[UserFileMetadata]:
+    """Copy loaded fields while the caller owns the database session."""
+    return [UserFileMetadata.model_validate(user_file) for user_file in user_files]
+
+
+def get_user_file_metadata(user_file_id: UUID, db_session: Session) -> UserFileMetadata:
+    """Capture one file for content loading after the session closes."""
+    user_file: UserFile | None = get_user_file_by_id(user_file_id, db_session)
+    if user_file is None:
+        raise ValueError(f"User file with id {user_file_id} not found")
+    return UserFileMetadata.model_validate(user_file)
+
+
 def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:
     """Resolve a `UserFile.id` to its underlying `FileRecord.file_id`.
 
@@ -123,6 +146,18 @@ def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str |
     if user_file:
         return user_file.file_id
     return None
+
+
+def get_owned_file_ids(
+    file_ids: set[str], user_id: UUID, db_session: Session
+) -> set[str]:
+    return set(
+        db_session.scalars(
+            select(UserFile.file_id).where(
+                UserFile.file_id.in_(file_ids), UserFile.user_id == user_id
+            )
+        ).all()
+    )
 
 
 def get_file_ids_by_user_file_ids(
@@ -177,6 +212,57 @@ def fetch_port_scope_user_ids(db_session: Session) -> list[UUID]:
         )
         if user_id is not None
     ]
+
+
+class PortedUserScope(NamedTuple):
+    user_id: UUID
+    up_to_doc_id: str | None
+
+
+def sample_ported_user_file_ids(
+    db_session: Session,
+    user_scopes: Sequence[PortedUserScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """Gets up to `per_scope_limit` user file IDs per user that its port copied.
+
+    Only COMPLETED, non-incognito files inside the port's snapshot bound count, which
+    is the scope the port itself copies. A user with a None `up_to_doc_id` is skipped:
+    that port found no files when it started, and files completed since belong to the
+    dual-write. Files with a NULL chunk_count are included; the column was added
+    without a backfill.
+
+    One LATERAL query serves every user. This runs on each 15-second swap-gate tick,
+    and a tenant can have thousands of users with files.
+    """
+    scope_rows = [
+        (scope.user_id, UUID(scope.up_to_doc_id))
+        for scope in user_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
+    scopes = values(
+        column("user_id", PGUUID(as_uuid=True)),
+        column("up_to_id", PGUUID(as_uuid=True)),
+        name="user_scope",
+    ).data(scope_rows)
+
+    per_user = (
+        select(UserFile.id)
+        .where(
+            UserFile.user_id == scopes.c.user_id,
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.incognito.is_(False),
+            or_(UserFile.chunk_count.is_(None), UserFile.chunk_count > 0),
+            UserFile.id <= scopes.c.up_to_id,
+        )
+        .order_by(UserFile.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_user_file")
+    )
+    stmt = select(per_user.c.id).select_from(scopes.join(per_user, true()))
+    return [str(file_id) for file_id in db_session.scalars(stmt)]
 
 
 def get_user_file_ids_for_user_batch(
@@ -236,6 +322,32 @@ def filter_existing_user_file_ids(
     return {str(uf_id) for uf_id in rows}
 
 
+def filter_existing_user_file_ids_any_owner(
+    db_session: Session, ids: list[str]
+) -> set[str]:
+    """Returns the subset of `ids` that are COMPLETED user files, regardless of owner.
+
+    IDs that are not UUIDs are ignored, so connector document IDs can be mixed in.
+    """
+    if not ids:
+        return set()
+    parsed: list[UUID] = []
+    for raw_id in ids:
+        try:
+            parsed.append(UUID(raw_id))
+        except ValueError:
+            continue
+    if not parsed:
+        return set()
+    rows = db_session.scalars(
+        select(UserFile.id).where(
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.id.in_(parsed),
+        )
+    )
+    return {str(uf_id) for uf_id in rows}
+
+
 def user_file_port_scope_active(db_session: Session, user_id: UUID) -> bool:
     """True while the user still exists — the user-scope analog of the cc_pair
     DELETING liveness guard. A hard-deleted user CASCADE-drops its port attempts, so
@@ -290,3 +402,68 @@ def any_user_file_reconcile_pending_for_users(
             )
         )
     )
+
+
+def consume_user_file_processing_attempt(
+    db_session: Session, user_file: UserFile
+) -> bool:
+    """Count one pickup and commit it before the slow work. Past the cap the
+    file is marked FAILED and False comes back."""
+    user_file.processing_attempts += 1
+    exhausted = user_file.processing_attempts > USER_FILE_PROCESSING_MAX_ATTEMPTS
+    if exhausted:
+        # A delete may have landed since the caller's status check. The row
+        # must stay DELETING or the delete sweep never finds it again.
+        db_session.execute(
+            update(UserFile)
+            .where(
+                UserFile.id == user_file.id,
+                UserFile.status != UserFileStatus.DELETING,
+            )
+            .values(status=UserFileStatus.FAILED)
+        )
+    db_session.commit()
+    return not exhausted
+
+
+def get_user_file_processing_info(
+    file_ids: list[UUID], db_session: Session
+) -> dict[str, tuple[int, UserFileStatus]]:
+    """Read token counts and processing status without loading ORM relationships."""
+    if not file_ids:
+        return {}
+    rows = db_session.execute(
+        select(UserFile.id, UserFile.token_count, UserFile.status).where(
+            UserFile.id.in_(file_ids)
+        )
+    )
+    return {str(file_id): (tokens or 0, status) for file_id, tokens, status in rows}
+
+
+def prepare_chat_file_inputs(
+    descriptors: list[FileDescriptor], db_session: Session
+) -> list[ChatFileInput]:
+    """Capture processing status before reading attachment content."""
+    user_file_ids: list[UUID] = []
+    for descriptor in descriptors:
+        raw_id = descriptor.get("user_file_id")
+        if raw_id:
+            try:
+                user_file_ids.append(UUID(raw_id))
+            except ValueError:
+                logger.warning("Invalid user-file ID: %s", raw_id)
+    metadata = get_user_file_processing_info(user_file_ids, db_session)
+    inputs: list[ChatFileInput] = []
+    for descriptor in descriptors:
+        tokens, status = metadata.get(
+            descriptor.get("user_file_id") or "", (0, UserFileStatus.COMPLETED)
+        )
+        inputs.append(
+            ChatFileInput(
+                descriptor=descriptor,
+                token_count=tokens,
+                content_pending=status
+                in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING),
+            )
+        )
+    return inputs

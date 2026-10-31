@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useMemo, JSX } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, {
+  type Components,
+  type ExtraProps,
+} from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
@@ -8,7 +11,7 @@ import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/app/app/message/custom-code-styles.css";
-import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
   MemoizedAnchor,
   MemoizedParagraph,
@@ -18,10 +21,13 @@ import {
   preprocessLaTeX,
   escapeIncompleteBlockMath,
   escapeIncompleteInlineMath,
+  labelBareCodeFences,
 } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
+import type { TextColor, TextFont } from "@opal/components";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 
@@ -33,6 +39,7 @@ interface ScrollableTableProps extends React.TableHTMLAttributes<HTMLTableElemen
 export function ScrollableTable({
   className,
   children,
+  dir,
   ...props
 }: ScrollableTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -47,9 +54,15 @@ export function ScrollableTable({
 
     const check = () => {
       const overflows = el.scrollWidth > el.clientWidth;
-      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+      // Logical distance from the scroll start. RTL scrollLeft runs from
+      // 0 down to negative, and the CSS paints on inline edges to match.
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      const fromStart =
+        getComputedStyle(el).direction === "rtl"
+          ? -el.scrollLeft
+          : el.scrollLeft;
+      const atEnd = fromStart >= maxScroll - 2;
       wrap.dataset.overflows = overflows && !atEnd ? "true" : "false";
-      el.dataset.scrolled = el.scrollLeft > 0 ? "true" : "false";
     };
 
     check();
@@ -67,7 +80,9 @@ export function ScrollableTable({
   }, []);
 
   return (
-    <div ref={wrapRef} className="markdown-table-card">
+    // The stamped table dir lifts onto the scroller so scrollLeft semantics
+    // and the initial scroll edge follow the table's own direction.
+    <div ref={wrapRef} dir={dir} className="markdown-table-card">
       <div ref={scrollRef} className="markdown-table-breakout">
         <table
           ref={tableRef}
@@ -102,22 +117,7 @@ export const processContent = (content: string): string => {
   // to a rendered formula the moment the closing `$$` arrives.
   content = escapeIncompleteBlockMath(content);
 
-  const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
-  const matches = content.match(codeBlockRegex);
-
-  if (matches) {
-    content = matches.reduce((acc, match) => {
-      if (!match.match(/```\w+/)) {
-        return acc.replace(match, match.replace("```", "```plaintext"));
-      }
-      return acc;
-    }, content);
-
-    const lastMatch = matches[matches.length - 1];
-    if (lastMatch && !lastMatch.endsWith("```")) {
-      return escapeIncompleteInlineMath(preprocessLaTeX(content));
-    }
-  }
+  content = labelBareCodeFences(content);
 
   const processed = preprocessLaTeX(content);
   return escapeIncompleteInlineMath(processed);
@@ -129,19 +129,24 @@ export const processContent = (content: string): string => {
 export const useMarkdownComponents = (
   state: FullChatState | undefined,
   processedContent: string,
-  className?: string
+  paragraphFont?: TextFont,
+  paragraphColor?: TextColor
 ) => {
   const paragraphCallback = useCallback(
-    (props: any) => (
-      <MemoizedParagraph className={className}>
+    (props: React.ComponentProps<"p"> & ExtraProps) => (
+      <MemoizedParagraph
+        dir={props.dir}
+        font={paragraphFont}
+        color={paragraphColor}
+      >
         {props.children}
       </MemoizedParagraph>
     ),
-    [className]
+    [paragraphFont, paragraphColor]
   );
 
   const anchorCallback = useCallback(
-    (props: any) => {
+    (props: React.ComponentProps<"a"> & ExtraProps) => {
       const imageFileId = extractChatImageFileId(
         props.href,
         String(props.children ?? "")
@@ -174,46 +179,46 @@ export const useMarkdownComponents = (
     ]
   );
 
-  const markdownComponents = useMemo(
+  const markdownComponents = useMemo<Components>(
     () => ({
       a: anchorCallback,
       p: paragraphCallback,
-      pre: ({ node, className, children }: any) => {
+      pre: ({ node, className, children }) => {
         // Don't render the pre wrapper - CodeBlock handles its own wrapper
         return <>{children}</>;
       },
-      b: ({ node, className, children }: any) => {
+      b: ({ node, className, children }) => {
         return <span className={className}>{children}</span>;
       },
-      ul: ({ node, className, children, ...props }: any) => {
+      ul: ({ node, className, children, ...props }) => {
         return (
           <ul className={className} {...props}>
             {children}
           </ul>
         );
       },
-      ol: ({ node, className, children, ...props }: any) => {
+      ol: ({ node, className, children, ...props }) => {
         return (
           <ol className={className} {...props}>
             {children}
           </ol>
         );
       },
-      li: ({ node, className, children, ...props }: any) => {
+      li: ({ node, className, children, ...props }) => {
         return (
           <li className={className} {...props}>
             {children}
           </li>
         );
       },
-      table: ({ node, className, children, ...props }: any) => {
+      table: ({ node, className, children, ...props }) => {
         return (
           <ScrollableTable className={className} {...props}>
             {children}
           </ScrollableTable>
         );
       },
-      code: ({ node, className, children }: any) => {
+      code: ({ node, className, children }) => {
         const codeText = extractCodeText(node, processedContent, children);
 
         return (
@@ -234,7 +239,7 @@ export const useMarkdownComponents = (
  */
 export const renderMarkdown = (
   content: string,
-  markdownComponents: any,
+  markdownComponents: Components,
   textSize: string = "text-base",
   languages: Record<string, LanguageFn> | null = null
 ): JSX.Element => {
@@ -249,8 +254,8 @@ export const renderMarkdown = (
         ]}
         rehypePlugins={
           languages
-            ? [[rehypeHighlight, { languages }], rehypeKatex]
-            : [rehypeKatex]
+            ? [[rehypeHighlight, { languages }], rehypeKatex, rehypeDirection]
+            : [rehypeKatex, rehypeDirection]
         }
         urlTransform={transformLinkUri}
       >
@@ -269,11 +274,7 @@ export const useMarkdownRenderer = (
   textSize: string
 ) => {
   const processedContent = useMemo(() => processContent(content), [content]);
-  const markdownComponents = useMarkdownComponents(
-    state,
-    processedContent,
-    textSize
-  );
+  const markdownComponents = useMarkdownComponents(state, processedContent);
   const highlightLanguages = useHighlightLanguages();
 
   const renderedContent = useMemo(

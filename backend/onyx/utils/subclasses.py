@@ -46,7 +46,7 @@ def import_all_submodules_from_package(package_name: str) -> List[ModuleType]:
         print(f"Could not import package {package_name}: {e}")
         return imported_modules
 
-    pkg_paths = getattr(pkg, "__path__", None)
+    pkg_paths = getattr(pkg, "__path__", None)  # ods: ignore[getattr]
     if not pkg_paths:
         return imported_modules
 

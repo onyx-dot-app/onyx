@@ -6,7 +6,7 @@ import { Project, ProjectSearchMatch } from "@/lib/projects/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 
 export function useProjects() {
   const { data, error, mutate } = useSWR<Project[]>(
@@ -37,25 +37,26 @@ export function useProjects() {
  * project context.
  */
 export function useActiveProject(): Project | null {
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const { projects } = useProjects();
 
   return useMemo(() => {
-    const id = appFocus.getId();
-    if (!id) return null;
-
-    if (appFocus.isProject()) {
-      return projects.find((project) => String(project.id) === id) ?? null;
+    const projectId = appPosition.project();
+    if (projectId !== null) {
+      return projects.find((project) => project.id === projectId) ?? null;
     }
-    if (appFocus.isChat()) {
+
+    const chatId = appPosition.chat();
+    if (chatId !== null) {
       return (
         projects.find((project) =>
-          project.chat_sessions.some((session) => session.id === id)
+          project.chat_sessions.some((session) => session.id === chatId)
         ) ?? null
       );
     }
+
     return null;
-  }, [appFocus, projects]);
+  }, [appPosition, projects]);
 }
 
 /**

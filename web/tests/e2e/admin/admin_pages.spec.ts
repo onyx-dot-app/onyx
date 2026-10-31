@@ -82,6 +82,8 @@ for (const theme of THEMES) {
             mask: [
               '[data-testid="admin-date-range-selector-button"]',
               '[data-column-id="updated_at"]',
+              // Shows the selected date range, which moves every day.
+              '[data-testid="usage-overview-period"]',
             ],
           });
         },
