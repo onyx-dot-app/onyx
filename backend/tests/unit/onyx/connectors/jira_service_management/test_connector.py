@@ -16,6 +16,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.jira.models import JiraIssueIdPage
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -67,7 +68,7 @@ def _issue(
     key: str,
     project_key: str = "TEST",
     summary: str = "Printer is down",
-    description: str = "The printer on floor 2 is offline.",
+    description: Any = "The printer on floor 2 is offline.",
     labels: list[str] | None = None,
     updated: str = "2023-01-01T12:00:00.000+0000",
 ) -> dict[str, Any]:
@@ -514,6 +515,26 @@ def test_slim_omits_the_tickets_that_indexing_skips(
     assert loaded == slimmed == [f"{BASE}/browse/TEST-100"]
 
 
+def test_slim_skips_a_label_before_parsing_malformed_content() -> None:
+    """An excluded ticket must not abort the slim listing while parsing."""
+    issues = {
+        "100": _issue(
+            "100",
+            "TEST-100",
+            labels=["skip-me"],
+            description={"type": "doc", "content": None},
+        )
+    }
+    connector = _connector(
+        [_desk_page()],
+        issues=issues,
+        search_pages=[JiraIssueIdPage(issue_ids=["100"], next_page_token=None)],
+        labels_to_skip=["skip-me"],
+    )
+
+    assert _slim_ids(connector.retrieve_all_slim_docs()) == []
+
+
 def test_every_configured_desk_must_resolve() -> None:
     connector = _connector([_desk_page()], service_desk_ids=["1", "9"])
 
@@ -635,6 +656,43 @@ def test_desk_discovery_maps_http_errors(status: int, error: type[Exception]) ->
 
     with pytest.raises(error):
         list(connector.load_from_state())
+
+
+VALIDATION_STATUS_ERRORS = [
+    (401, CredentialExpiredError),
+    (403, InsufficientPermissionsError),
+    (404, ConnectorValidationError),
+    (429, RateLimitedValidationError),
+]
+
+
+@pytest.mark.parametrize(("status", "error_type"), VALIDATION_STATUS_ERRORS)
+def test_validation_maps_search_errors(
+    status: int, error_type: type[Exception]
+) -> None:
+    connector = _connector([_desk_page()])
+    _operations(connector).search_issue_ids.side_effect = JiraApiError(
+        "search failed", status_code=status, method="GET"
+    )
+
+    with pytest.raises(error_type):
+        connector.validate_connector_settings()
+
+
+@pytest.mark.parametrize(("status", "error_type"), VALIDATION_STATUS_ERRORS)
+def test_validation_maps_bulk_fetch_errors(
+    status: int, error_type: type[Exception]
+) -> None:
+    connector = _connector(
+        [_desk_page()],
+        search_pages=[JiraIssueIdPage(issue_ids=["100"], next_page_token=None)],
+    )
+    _operations(connector).bulk_fetch_issues.side_effect = JiraApiError(
+        "bulk fetch failed", status_code=status, method="POST"
+    )
+
+    with pytest.raises(error_type):
+        connector.validate_connector_settings()
 
 
 def test_validation_checks_bulk_fetch_when_the_scope_is_empty() -> None:

@@ -258,6 +258,27 @@ class _StoppingSlimConnector(SlimConnector):
         yield [SlimDocument(id="doc")]
 
 
+class _LateStoppingSlimConnector(SlimConnector):
+    """Yields one batch, then returns normally while the stop is set."""
+
+    def __init__(self) -> None:
+        self.callbacks: list[IndexingHeartbeatInterface | None] = []
+
+    def load_credentials(self, credentials: dict[str, Any]) -> None:  # noqa: ARG002
+        return None
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        self.callbacks.append(callback)
+        yield [SlimDocument(id="first")]
+        if callback and callback.should_stop():
+            return
+
+
 class _StoppingPermSyncConnector(SlimConnectorWithPermSync):
     """Permission-sync variant that returns normally on a stop."""
 
@@ -288,6 +309,20 @@ def test_a_stopped_listing_that_returns_normally_is_an_error(
     connector = connector_class()
     callback = MagicMock(spec=IndexingHeartbeatInterface)
     callback.should_stop.return_value = True
+
+    with pytest.raises(RuntimeError, match="after enumeration"):
+        extract_ids_from_runnable_connector(connector, callback=callback)
+
+    assert connector.callbacks == [callback]
+
+
+def test_a_batch_followed_by_a_normal_stop_is_an_error() -> None:
+    """A yielded batch must not turn a stopped partial listing into a success."""
+    connector = _LateStoppingSlimConnector()
+    callback = MagicMock(spec=IndexingHeartbeatInterface)
+    # Pre-batch check: continue. Connector after its first batch: stop.
+    # Post-enumeration check: still stopped, so the listing is incomplete.
+    callback.should_stop.side_effect = [False, True, True]
 
     with pytest.raises(RuntimeError, match="after enumeration"):
         extract_ids_from_runnable_connector(connector, callback=callback)

@@ -14,7 +14,7 @@ a clear validation error instead of indexing incomplete data.
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable, Iterator
-from typing import Any
+from typing import Any, NoReturn
 
 import requests
 from more_itertools import chunked
@@ -44,10 +44,11 @@ from onyx.connectors.interfaces import (
 )
 from onyx.connectors.jira.connector import (
     build_jira_ticket_content,
-    jira_issue_skip_reason,
+    jira_label_skip_reason,
+    jira_ticket_size_skip_reason,
     process_jira_issue,
 )
-from onyx.connectors.jira.source_operations import JiraSourceOperations
+from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
 from onyx.connectors.jira.utils import build_jira_url
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
@@ -397,6 +398,35 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             f"{self._project_jql(desk_by_project)} AND {window}", desk_by_project
         )
 
+    def _raise_validation_error(self, error: JiraApiError) -> NoReturn:
+        """Translate a source error into the typed validation error.
+
+        A raw ``JiraApiError`` escaping validation pauses the connector pair;
+        ``UnexpectedValidationError`` (notably ``RateLimitedValidationError``)
+        keeps the attempt retryable. Search and bulk fetch share this mapping
+        with the desk endpoint.
+        """
+        status = error.status_code
+        if status == 401:
+            raise CredentialExpiredError(
+                "Invalid or expired Jira Service Management credentials (HTTP 401)."
+            ) from error
+        if status == 403:
+            raise InsufficientPermissionsError(
+                "The Jira credential cannot read this scope (HTTP 403)."
+            ) from error
+        if status == 404:
+            raise ConnectorValidationError(
+                "Jira Service Management resource not found (HTTP 404)."
+            ) from error
+        if status == 429:
+            raise RateLimitedValidationError(
+                "Jira Service Management rate limit exceeded (HTTP 429)."
+            ) from error
+        raise UnexpectedValidationError(
+            f"Jira Service Management returned HTTP {status}."
+        ) from error
+
     def validate_connector_settings(self) -> None:
         if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
@@ -405,22 +435,31 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         # Desk access, Jira search and issue fetch use different permissions
         # and scopes, so all are checked. One result bounds the check; 0 is a
         # valid answer for an empty project.
-        page = self._source_operations.search_issue_ids(
-            jql=self._project_jql(desk_by_project), max_results=1, fast=True
-        )
+        try:
+            page = self._source_operations.search_issue_ids(
+                jql=self._project_jql(desk_by_project), max_results=1, fast=True
+            )
+        except JiraApiError as error:
+            self._raise_validation_error(error)
         issue_ids = page.issue_ids
         if not issue_ids:
             # An empty scope would otherwise leave issue-fetch permission
             # untested. Any readable ticket proves the endpoint works; it is
             # fetched for the check only and never indexed.
-            accessible = self._source_operations.search_issue_ids(
-                jql="created >= 1970-01-01", max_results=1, fast=True
-            )
+            try:
+                accessible = self._source_operations.search_issue_ids(
+                    jql="created >= 1970-01-01", max_results=1, fast=True
+                )
+            except JiraApiError as error:
+                self._raise_validation_error(error)
             issue_ids = accessible.issue_ids
         if issue_ids:
-            self._source_operations.bulk_fetch_issues(
-                issue_ids=issue_ids, raise_on_missing=True, fast=True
-            )
+            try:
+                self._source_operations.bulk_fetch_issues(
+                    issue_ids=issue_ids, raise_on_missing=True, fast=True
+                )
+            except JiraApiError as error:
+                self._raise_validation_error(error)
 
     def retrieve_all_slim_docs(
         self,
@@ -454,14 +493,19 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                     raise UnexpectedValidationError(
                         "Jira returned a ticket without a key."
                     )
+                # Labels are checked before parsing, matching load and poll:
+                # an excluded ticket must not abort the listing on malformed
+                # rich text, because that would abort the prune.
+                label_reason = jira_label_skip_reason(issue, self.labels_to_skip)
+                if label_reason is not None:
+                    logger.info("Skipping %s because %s.", issue_key, label_reason)
+                    continue
                 ticket_content = build_jira_ticket_content(
                     issue, comment_email_blacklist=self.comment_email_blacklist
                 )
-                skip_reason = jira_issue_skip_reason(
-                    issue, ticket_content, labels_to_skip=self.labels_to_skip
-                )
-                if skip_reason is not None:
-                    logger.info("Skipping %s because %s.", issue_key, skip_reason)
+                size_reason = jira_ticket_size_skip_reason(ticket_content)
+                if size_reason is not None:
+                    logger.info("Skipping %s because %s.", issue_key, size_reason)
                     continue
                 batch.append(SlimDocument(id=build_jira_url(self.jira_base, issue_key)))
             if len(batch) >= self.batch_size:

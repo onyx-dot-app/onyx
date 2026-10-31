@@ -360,25 +360,39 @@ def build_jira_ticket_content(
     )
 
 
-def jira_issue_skip_reason(
+def jira_label_skip_reason(
     issue: JiraIssue,
-    ticket_content: str,
     labels_to_skip: set[str] | None = None,
 ) -> str | None:
-    """Why indexing skips this ticket, or None when it is indexed.
-
-    Load, poll and slim all use this predicate, so pruning keeps exactly the
-    tickets that indexing emits.
-    """
+    """Why indexing skips this ticket because of its labels, or None."""
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
     if labels_to_skip and any(label in issue_labels for label in labels_to_skip):
         return (
             "it has a label to skip. Found labels: "
             f"{issue_labels}. Labels to skip: {labels_to_skip}"
         )
+    return None
+
+
+def jira_ticket_size_skip_reason(ticket_content: str) -> str | None:
+    """Why indexing skips this ticket because of its size, or None."""
     if len(ticket_content.encode("utf-8")) > JIRA_CONNECTOR_MAX_TICKET_SIZE:
         return f"it exceeds the maximum size of {JIRA_CONNECTOR_MAX_TICKET_SIZE} bytes"
     return None
+
+
+def jira_issue_skip_reason(
+    issue: JiraIssue,
+    ticket_content: str,
+    labels_to_skip: set[str] | None = None,
+) -> str | None:
+    """Combined label and size predicate for callers that already built the
+    ticket content (JSM slim). Load and poll check labels before parsing, so an
+    excluded ticket with a malformed description is skipped without raising.
+    """
+    return jira_label_skip_reason(
+        issue, labels_to_skip
+    ) or jira_ticket_size_skip_reason(ticket_content)
 
 
 def process_jira_issue(
@@ -389,14 +403,18 @@ def process_jira_issue(
     parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
+    # Labels are checked before the rich-text body is parsed: an excluded
+    # ticket must not fail indexing because its description is malformed.
+    label_reason = jira_label_skip_reason(issue, labels_to_skip)
+    if label_reason is not None:
+        logger.info("Skipping %s because %s.", issue_key, label_reason)
+        return None
     ticket_content = build_jira_ticket_content(
         issue, comment_email_blacklist=comment_email_blacklist
     )
-    skip_reason = jira_issue_skip_reason(
-        issue, ticket_content, labels_to_skip=labels_to_skip
-    )
-    if skip_reason is not None:
-        logger.info("Skipping %s because %s.", issue_key, skip_reason)
+    size_reason = jira_ticket_size_skip_reason(ticket_content)
+    if size_reason is not None:
+        logger.info("Skipping %s because %s.", issue_key, size_reason)
         return None
 
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
