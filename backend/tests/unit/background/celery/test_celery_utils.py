@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.background.celery.tasks.pruning.tasks import PruneCallback
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import source_prune_honors_indexing_start
 from onyx.connectors.interfaces import (
@@ -414,3 +415,22 @@ def test_source_prune_honors_indexing_start(
     source: DocumentSource, expected: bool
 ) -> None:
     assert source_prune_honors_indexing_start(source) is expected
+
+
+class TestPruneCallback:
+    def test_observed_stop_survives_a_resume_clearing_the_fence(self) -> None:
+        redis_connector = MagicMock()
+        redis_connector.stop.fenced = True
+        callback = PruneCallback(
+            parent_pid=0,
+            redis_connector=redis_connector,
+            redis_lock=MagicMock(),
+            redis_client=MagicMock(),
+        )
+
+        assert callback.should_stop()
+
+        # A resume clears the fence; the connector already saw the stop and
+        # returned a partial listing, so the callback must keep reporting it.
+        redis_connector.stop.fenced = False
+        assert callback.should_stop()
