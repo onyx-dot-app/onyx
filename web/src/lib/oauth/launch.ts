@@ -118,15 +118,18 @@ export function notifyOAuthComplete(
 
 /**
  * Closes a callback tab that a waiting Onyx page opened. Returns false when
- * nothing is waiting, so the caller keeps its redirect fallback.
+ * nothing is waiting, so the caller keeps its redirect fallback. A desktop
+ * callback window stays open on failure, since the waiting page may be gone.
  */
-export function closeOAuthCallbackWindow(state: string): boolean {
+export function closeOAuthCallbackWindow(state: string, ok = true): boolean {
   let launched = false;
   try {
     launched = window.sessionStorage.getItem(LAUNCHED_TAB_KEY) === state;
     if (launched) window.sessionStorage.removeItem(LAUNCHED_TAB_KEY);
   } catch {}
-  if (!launched && !window.__ONYX_DESKTOP__?.oauthCallbackWindow) return false;
+  if (!launched && !(ok && window.__ONYX_DESKTOP__?.oauthCallbackWindow)) {
+    return false;
+  }
   window.close();
   return true;
 }
@@ -265,7 +268,7 @@ export function reportOAuthCallback(
 ): boolean {
   const attemptState = stripDesktopOAuthState(state);
   notifyOAuthComplete(attemptState, ok, redirectPath);
-  return closeOAuthCallbackWindow(attemptState);
+  return closeOAuthCallbackWindow(attemptState, ok);
 }
 
 /**
