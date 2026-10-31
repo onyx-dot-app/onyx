@@ -45,6 +45,11 @@ export function ScrollContainerProvider({
   );
 }
 
+/** Like `useScrollContainer`, but `undefined` outside a ScrollContainerProvider. */
+export function useOptionalScrollContainer() {
+  return useContext(ScrollContainerContext);
+}
+
 /**
  * Hook to access the scroll container and content wrapper refs.
  * Must be used within a ScrollContainerProvider (inside ChatScrollContainer).

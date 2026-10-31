@@ -21,6 +21,7 @@ import {
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
+import WindowedRow from "@/sections/chat/WindowedRow";
 import { cn } from "@opal/utils";
 
 /** Width constraint for normal (non-multi-model) messages. */
@@ -31,6 +32,15 @@ import { cn } from "@opal/utils";
 // (and the top-bar toggle is hidden).
 const MSG_W =
   "md:max-w-[var(--app-chat-column-width,var(--width-chat-message-max))]";
+
+/**
+ * Rows at the end of the chat mount on the first render. Rows above them
+ * mount once they near the viewport.
+ */
+const INITIALLY_MOUNTED_ROWS = 6;
+
+/** Rows at the end of the chat that never unmount: the latest turn. */
+const PINNED_ROWS = 2;
 
 /** Animates the full-width toggle; every surface it widens uses this. */
 export const FULL_WIDTH_TRANSITION =
@@ -104,6 +114,7 @@ const ChatUI = React.memo(
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
+    const rowHeightCache = useRef(new Map<string, number>()).current;
 
     // Reading-width cap on messages, from the page's chat column width.
     const msgWidth = cn(MSG_W, FULL_WIDTH_TRANSITION);
@@ -190,6 +201,12 @@ const ChatUI = React.memo(
         >
           {messages.map((message, i) => {
             const messageReactComponentKey = `message-${message.nodeId}`;
+            const rowsFromEnd = messages.length - i;
+            const pinned =
+              rowsFromEnd <= PINNED_ROWS ||
+              message.is_generating ||
+              message.nodeId === anchorNodeId;
+            const initiallyMounted = rowsFromEnd <= INITIALLY_MOUNTED_ROWS;
             const parentMessage = message.parentNodeId
               ? messageTree?.get(message.parentNodeId)
               : null;
@@ -200,10 +217,13 @@ const ChatUI = React.memo(
                 getMultiModelResponsesForMessage(message);
 
               return (
-                <div
+                <WindowedRow
                   id={messageReactComponentKey}
                   key={messageReactComponentKey}
                   className="flex flex-col gap-12 w-full"
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
                 >
                   <div className={cn("w-full self-center", msgWidth)}>
                     <HumanMessage
@@ -244,7 +264,7 @@ const ChatUI = React.memo(
                       selectionDisabled={chatState !== "input"}
                     />
                   )}
-                </div>
+                </WindowedRow>
               );
             } else if (
               message.type === "assistant" ||
@@ -270,10 +290,13 @@ const ChatUI = React.memo(
               };
 
               return (
-                <div
-                  id={`message-${message.nodeId}`}
+                <WindowedRow
+                  id={messageReactComponentKey}
                   key={messageReactComponentKey}
                   className={cn("w-full self-center", msgWidth)}
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
                 >
                   {(message.type !== "error" || message.packets.length > 0) && (
                     <AgentMessage
@@ -313,7 +336,7 @@ const ChatUI = React.memo(
                       stackTrace={message.stackTrace}
                     />
                   )}
-                </div>
+                </WindowedRow>
               );
             }
             return null;

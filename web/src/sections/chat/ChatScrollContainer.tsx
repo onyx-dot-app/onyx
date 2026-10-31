@@ -9,13 +9,16 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ScrollContainerProvider } from "@/components/chat/ScrollContainerContext";
+import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
 import { cn } from "@opal/utils";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
 const DEFAULT_FADE_THRESHOLD_PX = 80; // 5rem
 const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
+// After opening a chat, how long to follow content that settles below the end
+// (late layout, a reply's footer), whatever the auto-scroll setting.
+const OPENING_FOLLOW_MS = 1000;
 
 // Fade configuration
 const TOP_FADE_HEIGHT = "1rem";
@@ -97,6 +100,7 @@ const ChatScrollContainer = React.memo(
       const [isAtBottom, setIsAtBottom] = useState(true);
       const isAtBottomRef = useRef(true); // Ref for use in callbacks
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
+      const followOpeningUntilRef = useRef(0);
       const prevScrollTopRef = useRef(0); // Track scroll position to detect scroll direction
       const [isScrollReady, setIsScrollReady] = useState(false);
 
@@ -163,6 +167,16 @@ const ChatScrollContainer = React.memo(
           // Use scrollTo instead of scrollIntoView for better cross-browser support
           const targetScrollTop =
             container.scrollHeight - container.clientHeight;
+
+          // A long smooth scroll would mount every windowed row on the way.
+          // Jump to one viewport above the end, then glide the rest.
+          if (behavior === "smooth") {
+            const glideStart = targetScrollTop - container.clientHeight;
+            if (container.scrollTop < glideStart) {
+              container.scrollTop = glideStart;
+            }
+          }
+
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Update tracking refs
@@ -175,6 +189,14 @@ const ChatScrollContainer = React.memo(
             setTimeout(() => {
               isAutoScrollingRef.current = false;
               if (container) {
+                // Rows that mounted on the way can move the end; settle on
+                // it, unless the user scrolled away during the glide.
+                if (container.scrollTop >= targetScrollTop - 1) {
+                  container.scrollTo({
+                    top: container.scrollHeight - container.clientHeight,
+                    behavior: "instant",
+                  });
+                }
                 prevScrollTopRef.current = container.scrollTop;
               }
               // Refresh scroll state so the scroll-to-bottom button hides
@@ -210,6 +232,7 @@ const ChatScrollContainer = React.memo(
         // Only update isAtBottomRef when user explicitly scrolls UP
         // This prevents content growth or programmatic scrolls from disabling auto-scroll
         if (scrolledUp) {
+          followOpeningUntilRef.current = 0;
           updateScrollState();
         } else {
           // Still update fade overlays, but preserve isAtBottomRef
@@ -222,6 +245,8 @@ const ChatScrollContainer = React.memo(
       }, [updateScrollState, getScrollState]);
 
       // MutationObserver (structural) + ResizeObserver (height growth).
+      // Re-attached per session: the scroll element remounts on a session
+      // change (it is keyed by `sessionId`).
       // NOT characterData — typewriter reveals don't change scrollHeight
       // and firing per-char thrashed auto-scroll.
       useEffect(() => {
@@ -242,9 +267,15 @@ const ChatScrollContainer = React.memo(
             // Auto-scroll: follow content if we were at bottom.
             // Skip instant auto-scroll during DynamicBottomSpacer's smooth
             // scroll to avoid competing scroll commands.
+            // Skip it during a smooth scroll to the bottom too: an instant
+            // scroll would cut it short.
+            const following =
+              autoScrollRef.current ||
+              performance.now() < followOpeningUntilRef.current;
             if (
-              autoScrollRef.current &&
+              following &&
               wasAtBottom &&
+              !isAutoScrollingRef.current &&
               container.dataset.smoothScrollActive !== "true"
             ) {
               // scrollToBottom handles isAutoScrollingRef and ref updates
@@ -272,7 +303,7 @@ const ChatScrollContainer = React.memo(
           resizeObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
-      }, [updateScrollState, scrollToBottom]);
+      }, [updateScrollState, scrollToBottom, sessionId]);
 
       // Handle session changes and anchor changes. A layout effect: opening a
       // chat whose messages are already rendered scrolls it into place before
@@ -355,6 +386,7 @@ const ChatScrollContainer = React.memo(
         // Opening a chat: its messages are laid out already, so scroll now,
         // before paint. The content is never painted hidden or out of place.
         if (isLoadingExistingContent) {
+          followOpeningUntilRef.current = performance.now() + OPENING_FOLLOW_MS;
           scrollIntoPlace();
           return;
         }

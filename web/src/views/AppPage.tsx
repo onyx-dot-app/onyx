@@ -940,9 +940,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     height="full"
                   >
                     <Section justifyContent="start" gap={0}>
+                      {/* The store's session, not the URL's: the store takes
+                          the URL's chat one effect late, and the scroll reset
+                          must see the messages of the chat it opens. */}
                       <ChatScrollContainer
                         ref={scrollContainerRef}
-                        sessionId={currentChatSessionId!}
+                        sessionId={storeSessionId ?? undefined}
                         anchorSelector={anchorSelector}
                         autoScroll={autoScrollEnabled}
                         isStreaming={isStreaming}
