@@ -255,18 +255,6 @@ const ChatScrollContainer = React.memo(
 
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
-            console.debug(
-              "[scrolldbg] change",
-              JSON.stringify({
-                wasAtBottom,
-                auto: autoScrollRef.current,
-                autoScrolling: isAutoScrollingRef.current,
-                smooth: container.dataset.smoothScrollActive,
-                h: container.scrollHeight,
-                top: container.scrollTop,
-                connected: container.isConnected,
-              })
-            );
 
             // Auto-scroll: follow content if we were at bottom.
             // Skip instant auto-scroll during DynamicBottomSpacer's smooth
