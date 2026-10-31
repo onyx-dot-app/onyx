@@ -7,7 +7,7 @@ characters. Upgraded databases therefore reject JSM capability report writes
 until the column is widened. Fresh installs already get VARCHAR(23).
 
 Revision ID: 93a9c9f51142
-Revises: 3e30a81ec3bd
+Revises: b7d2e4f1a9c3
 Create Date: 2026-10-30 07:22:24.902541
 
 """
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "93a9c9f51142"
-down_revision = "3e30a81ec3bd"
+down_revision = "b7d2e4f1a9c3"
 branch_labels = None
 depends_on = None
 
