@@ -99,6 +99,7 @@ covers new files that match it.
 |---|---|
 | `backend/onyx/connectors/` | connectors |
 | `backend/onyx/webhook_server/`, `backend/onyx/webhook_server_main.py`, `deployment/helm/charts/onyx/templates/webhook-server-deployment.yaml`, `deployment/helm/charts/onyx/templates/webhook-server-service.yaml`, `deployment/helm/charts/onyx/templates/webhook-server-servicemonitor.yaml`, `deployment/helm/charts/onyx/templates/ingress-webhook.yaml` | connectors |
+| `backend/onyx/db/connector_event_inbox.py` | connectors |
 | `backend/onyx/connectors/capability_checks/`, `backend/ee/onyx/connectors/`, `backend/onyx/background/celery/tasks/capability_checks/`, `backend/onyx/server/documents/capability_check_runs.py`, `backend/onyx/server/documents/credential_capabilities.py` | connector-capability-checks |
 | `backend/onyx/connectors/*/capability_checks.py`, `backend/ee/onyx/external_permissions/*/capability_checks.py` | connector-capability-checks |
 | `backend/onyx/connectors/pairing_access.py` | access-control, cc-pairs-and-creds |
