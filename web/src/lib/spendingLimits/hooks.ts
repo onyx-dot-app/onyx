@@ -1,6 +1,7 @@
 import useSWR from "swr";
 import type { SelectOption } from "@opal/components";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
@@ -41,6 +42,7 @@ export function useModelOptions(): SelectOption[] {
         value: String(model.id),
         title: model.effectiveDisplayName,
         description: provider.name ?? provider.provider,
+        icon: getModelIcon(provider.provider, model.name),
       }))
   );
 }

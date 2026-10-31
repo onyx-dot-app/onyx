@@ -11003,11 +11003,17 @@
         "description": "适用于此组织中的所有人。",
         "pool": {
           "title": "共享预算",
-          "description": "每个周期由所有人共享的预算。可设置成本上限、令牌上限或两者。"
+          "description": "每个周期由所有人共享的预算。可设置成本上限、令牌上限或两者。",
+          "empty": "无全局工作区限额",
+          "target": "全局工作区限额",
+          "emptyDescription": "每个重置周期内所有人共享的限额。"
         },
         "perUser": {
           "title": "每用户上限",
-          "description": "每个用户各自的预算。同一周期内，组的每成员上限会替代它。"
+          "description": "每个用户各自的预算。同一周期内，组的每成员上限会替代它。",
+          "empty": "无每用户限额",
+          "target": "全局每用户限额",
+          "emptyDescription": "组织中每位用户各自的限额。"
         }
       },
       "groups": {
@@ -11017,32 +11023,38 @@
           "label": "添加组上限"
         },
         "picker": {
-          "placeholder": "选择组"
+          "placeholder": "选择组",
+          "limitSet": "（已设置限额）"
         },
         "members": "{count, plural, other {# 名成员}}",
         "empty": "还没有组设置支出上限。",
         "pool": {
           "title": "组共享预算",
-          "description": "此组所有人共享的预算。"
+          "description": "此组所有人共享的预算。",
+          "empty": "无群组共享预算",
+          "target": "群组：{group}",
+          "emptyDescription": "该群组所有人共享的限额。"
         },
         "perMember": {
           "title": "每成员上限",
           "description": "此组每个成员各自的预算。每个周期采用用户所在各组中最大的上限。",
-          "adminOnly": "每成员上限可以让成员高于工作区上限，因此只有管理员可以更改。"
+          "adminOnly": "每成员上限可以让成员高于工作区上限，因此只有管理员可以更改。",
+          "empty": "无每成员限额",
+          "target": "群组：{group}，每成员",
+          "emptyDescription": "该群组每位成员各自的限额。"
         },
-        "remove": {
-          "tooltip": "移除此组的上限"
+        "kind": {
+          "placeholder": "选择限额类型"
         },
-        "removed": "已移除 {group} 的支出上限"
+        "field": {
+          "members": "（{count, plural, other {# 名成员}}）"
+        }
       },
       "groupPage": {
         "title": "支出上限",
         "description": "限制此组在 LLM 使用上的支出。"
       },
       "card": {
-        "enabled": {
-          "ariaLabel": "开启或关闭 {title}"
-        },
         "addLimit": "添加上限",
         "addModelBudget": "添加模型预算",
         "modelBudget": {
@@ -11052,7 +11064,33 @@
         "cancel": "取消",
         "save": "保存更改",
         "saved": "支出上限已保存",
-        "saveFailed": "无法保存支出上限：{error}"
+        "saveFailed": "无法保存支出上限：{error}",
+        "create": "创建限额",
+        "reenable": "重新启用",
+        "disable": {
+          "tooltip": "关闭所有限额"
+        },
+        "expand": {
+          "tooltip": "管理"
+        },
+        "collapse": {
+          "tooltip": "收起"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> 或 <b>{tokens}</b> 个令牌 / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> 个令牌 / {period}",
+          "period": {
+            "DAILY": "天",
+            "WEEKLY": "周",
+            "MONTHLY": "月"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, other {# 个模型预算}}",
+          "nextReset": "下次重置：{at}",
+          "inactive": "已停用的限额",
+          "used": "已使用 <b>{percent}%</b>"
+        }
       },
       "alerts": {
         "title": "提醒",
@@ -11084,7 +11122,7 @@
             }
           }
         },
-        "nextReset": "下次重置：{at} UTC",
+        "nextReset": "下次重置",
         "remove": {
           "tooltip": "移除上限"
         },
@@ -11097,25 +11135,33 @@
           "suffix": "K"
         },
         "usage": {
-          "spent": "已花费 {amount}",
-          "tokens": "已使用 {tokens} 个令牌",
-          "percent": "{percent}%"
+          "spent": "已花费 <mono>{amount}</mono>",
+          "tokens": "已使用 <mono>{tokens}</mono> 个令牌",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "在下次重置前，使用将被阻止。",
+            "model": "在下次重置前，该模型的使用将被阻止。"
+          }
         },
         "whenReached": {
           "title": "达到此上限时",
           "blockAll": {
-            "title": "达到上限时阻止所有使用",
+            "title": "达到限额时阻止所有使用",
             "description": "所有模型的使用（包括聊天、搜索、机器人和 API 调用）将停止，直到下次重置。"
           },
           "blockModel": {
-            "title": "达到上限时阻止此模型",
-            "description": "此模型的使用将停止，直到下次重置。其他模型仍可使用。"
+            "title": "达到限额时阻止模型使用",
+            "description": "此模型的使用将停止，直到下次重置。其他模型仍可使用。",
+            "summary": "达到限额时阻止模型使用"
           }
         },
         "errors": {
           "budgetRequired": "请设置成本上限、令牌上限或两者。",
           "duplicate": "另一个上限已使用此周期。",
           "modelRequired": "请选择一个模型。"
+        },
+        "edit": {
+          "tooltip": "编辑"
         }
       }
     }

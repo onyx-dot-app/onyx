@@ -4,7 +4,6 @@ import { useTranslations } from "next-intl";
 import { Collapsible, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { Section } from "@opal/layouts";
-import { SvgUser, SvgUsers } from "@opal/icons";
 import type { RichStr } from "@opal/types";
 import { PageLoader } from "@opal/loaders";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -15,7 +14,10 @@ import {
 import { Permission } from "@/lib/types";
 import { usePlans } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
-import LimitCardEditor from "@/views/admin/SpendingLimitsPage/LimitCardEditor";
+import {
+  GroupCardKind,
+  GroupLimitCard,
+} from "@/views/admin/SpendingLimitsPage/GroupLimitCards";
 import { withCardModels } from "@/views/admin/SpendingLimitsPage/modelOptions";
 
 interface GroupSpendingLimitsSectionProps {
@@ -53,28 +55,23 @@ export default function GroupSpendingLimitsSection({
       data.per_member,
     ]);
     return (
-      <Section gap={3} alignItems="stretch" height="auto">
-        <LimitCardEditor
-          title={t("groups.pool.title")}
-          description={t("groups.pool.description")}
-          icon={SvgUsers}
+      <Section gap={2} alignItems="stretch" height="auto">
+        <GroupLimitCard
+          kind={GroupCardKind.POOL}
+          groupId={groupId}
+          group={null}
           card={data.pool}
-          path={`groups/${groupId}/pool`}
-          showUsage
           modelOptions={modelOptions}
           canEdit
           onSaved={() => void mutate()}
         />
-        <LimitCardEditor
-          title={t("groups.perMember.title")}
-          description={t("groups.perMember.description")}
-          icon={SvgUser}
+        <GroupLimitCard
+          kind={GroupCardKind.PER_MEMBER}
+          groupId={groupId}
+          group={null}
           card={data.per_member}
-          path={`groups/${groupId}/per-member`}
-          showUsage={false}
           modelOptions={modelOptions}
           canEdit={isAdmin}
-          readOnlyNote={t("groups.perMember.adminOnly")}
           onSaved={() => void mutate()}
         />
       </Section>

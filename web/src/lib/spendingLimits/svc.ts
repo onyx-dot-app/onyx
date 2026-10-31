@@ -29,14 +29,3 @@ export async function saveSpendingLimitCard(
   }
   return response.json();
 }
-
-export async function deleteGroupSpendingLimits(
-  groupId: number
-): Promise<void> {
-  const response = await fetch(`${SWR_KEYS.spendingLimits}/groups/${groupId}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error(await errorDetail(response));
-  }
-}

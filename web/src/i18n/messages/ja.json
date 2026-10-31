@@ -11003,11 +11003,17 @@
         "description": "この組織の全員に適用されます。",
         "pool": {
           "title": "共有予算",
-          "description": "期間ごとに全員で共有する予算です。コスト上限、トークン上限、またはその両方を設定します。"
+          "description": "期間ごとに全員で共有する予算です。コスト上限、トークン上限、またはその両方を設定します。",
+          "empty": "ワークスペース全体の上限なし",
+          "target": "ワークスペース全体の上限",
+          "emptyDescription": "リセット期間ごとに全員で共有する上限です。"
         },
         "perUser": {
           "title": "ユーザーごとの上限",
-          "description": "ユーザーごとの個別の予算です。同じ期間についてはグループのメンバーごとの上限が優先されます。"
+          "description": "ユーザーごとの個別の予算です。同じ期間についてはグループのメンバーごとの上限が優先されます。",
+          "empty": "ユーザーごとの上限なし",
+          "target": "ユーザーごとの上限",
+          "emptyDescription": "組織内の各ユーザーに個別に適用される上限です。"
         }
       },
       "groups": {
@@ -11017,32 +11023,38 @@
           "label": "グループの上限を追加"
         },
         "picker": {
-          "placeholder": "グループを選択"
+          "placeholder": "グループを選択",
+          "limitSet": "（上限設定済み）"
         },
         "members": "{count, plural, other {# 人のメンバー}}",
         "empty": "支出上限が設定されたグループはまだありません。",
         "pool": {
           "title": "グループの共有予算",
-          "description": "このグループの全員で共有する予算です。"
+          "description": "このグループの全員で共有する予算です。",
+          "empty": "グループ共有予算なし",
+          "target": "グループ: {group}",
+          "emptyDescription": "このグループの全員で共有する上限です。"
         },
         "perMember": {
           "title": "メンバーごとの上限",
           "description": "このグループの各メンバーの個別の予算です。各期間には、ユーザーが属するグループの上限のうち最大のものが適用されます。",
-          "adminOnly": "メンバーごとの上限はメンバーをワークスペースの上限より引き上げられるため、管理者のみが変更できます。"
+          "adminOnly": "メンバーごとの上限はメンバーをワークスペースの上限より引き上げられるため、管理者のみが変更できます。",
+          "empty": "メンバーごとの上限なし",
+          "target": "グループ: {group}（メンバーごと）",
+          "emptyDescription": "このグループの各メンバーに個別に適用される上限です。"
         },
-        "remove": {
-          "tooltip": "このグループの上限を削除"
+        "kind": {
+          "placeholder": "上限の種類を選択"
         },
-        "removed": "{group} の支出上限を削除しました"
+        "field": {
+          "members": "（{count, plural, other {# 人のメンバー}}）"
+        }
       },
       "groupPage": {
         "title": "支出上限",
         "description": "このグループが LLM の利用に使える額を制限します。"
       },
       "card": {
-        "enabled": {
-          "ariaLabel": "{title} のオン/オフを切り替え"
-        },
         "addLimit": "上限を追加",
         "addModelBudget": "モデル予算を追加",
         "modelBudget": {
@@ -11052,7 +11064,33 @@
         "cancel": "キャンセル",
         "save": "変更を保存",
         "saved": "支出上限を保存しました",
-        "saveFailed": "支出上限を保存できませんでした: {error}"
+        "saveFailed": "支出上限を保存できませんでした: {error}",
+        "create": "上限を作成",
+        "reenable": "再度有効にする",
+        "disable": {
+          "tooltip": "すべての上限をオフにする"
+        },
+        "expand": {
+          "tooltip": "管理"
+        },
+        "collapse": {
+          "tooltip": "折りたたむ"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> または <b>{tokens}</b> トークン / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> トークン / {period}",
+          "period": {
+            "DAILY": "日",
+            "WEEKLY": "週",
+            "MONTHLY": "月"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, other {# 件のモデル予算}}",
+          "nextReset": "次回リセット: {at}",
+          "inactive": "無効な上限",
+          "used": "<b>{percent}%</b> 使用済み"
+        }
       },
       "alerts": {
         "title": "アラート",
@@ -11084,7 +11122,7 @@
             }
           }
         },
-        "nextReset": "次回のリセット: {at} UTC",
+        "nextReset": "次回リセット",
         "remove": {
           "tooltip": "上限を削除"
         },
@@ -11097,25 +11135,33 @@
           "suffix": "K"
         },
         "usage": {
-          "spent": "{amount} を使用",
-          "tokens": "{tokens} トークンを使用",
-          "percent": "{percent}%"
+          "spent": "<mono>{amount}</mono> 使用済み",
+          "tokens": "<mono>{tokens}</mono> トークン使用済み",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "次回リセットまで使用がブロックされます。",
+            "model": "次回リセットまでモデルの使用がブロックされます。"
+          }
         },
         "whenReached": {
           "title": "この上限に達したとき",
           "blockAll": {
-            "title": "上限に達したらすべての利用をブロック",
+            "title": "上限に達したらすべての使用をブロック",
             "description": "チャット、検索、ボット、API 呼び出しを含むすべてのモデルの利用が、次回のリセットまで停止します。"
           },
           "blockModel": {
-            "title": "上限に達したらこのモデルをブロック",
-            "description": "このモデルの利用が次回のリセットまで停止します。他のモデルは引き続き利用できます。"
+            "title": "上限に達したらモデルの使用をブロック",
+            "description": "このモデルの利用が次回のリセットまで停止します。他のモデルは引き続き利用できます。",
+            "summary": "上限に達したらモデルの使用をブロック"
           }
         },
         "errors": {
           "budgetRequired": "コスト上限、トークン上限、またはその両方を設定してください。",
           "duplicate": "この期間は別の上限ですでに使用されています。",
           "modelRequired": "モデルを選択してください。"
+        },
+        "edit": {
+          "tooltip": "編集"
         }
       }
     }

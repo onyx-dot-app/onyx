@@ -2,26 +2,23 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  InputSingleComboBox,
-  Text,
-  type SelectOption,
-} from "@opal/components";
-import { ContentAction, Section, SettingsLayouts } from "@opal/layouts";
+import { Button, Card, Text } from "@opal/components";
+import { Content, Section, SettingsLayouts } from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
 import { SvgOrganization, SvgPlusCircle, SvgUser } from "@opal/icons";
 import useGroups from "@/hooks/useGroups";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useModelOptions, useSpendingLimits } from "@/lib/spendingLimits/hooks";
-import type { SpendingLimitCard } from "@/lib/spendingLimits/types";
-import GroupLimitsCard from "@/views/admin/SpendingLimitsPage/GroupLimitsCard";
-import LimitCardEditor from "@/views/admin/SpendingLimitsPage/LimitCardEditor";
+import {
+  GroupCardKind,
+  GroupLimitCard,
+  NewGroupLimitCard,
+} from "@/views/admin/SpendingLimitsPage/GroupLimitCards";
+import LimitCard from "@/views/admin/SpendingLimitsPage/LimitCard";
 import { withCardModels } from "@/views/admin/SpendingLimitsPage/modelOptions";
 
 const route = ADMIN_ROUTES.SPENDING_LIMITS;
-const EMPTY_CARD: SpendingLimitCard = { enabled: true, limits: [] };
 
 export default function SpendingLimitsPage() {
   const t = useTranslations("admin.spendingLimits");
@@ -29,9 +26,9 @@ export default function SpendingLimitsPage() {
   const { data, error, mutate } = useSpendingLimits();
   const { data: groups } = useGroups();
   const baseModelOptions = useModelOptions();
-  // Groups picked through "Add Group Limit" that have no saved limit yet.
-  const [newGroupIds, setNewGroupIds] = useState<number[]>([]);
-  const [pickingGroup, setPickingGroup] = useState(false);
+  // Cards opened through "Add Group Limit" that are not saved yet.
+  const [newCardKeys, setNewCardKeys] = useState<number[]>([]);
+  const [nextNewCardKey, setNextNewCardKey] = useState(0);
 
   const header = (
     <SettingsLayouts.Header
@@ -44,7 +41,7 @@ export default function SpendingLimitsPage() {
 
   if (error) {
     return (
-      <SettingsLayouts.Root width="lg">
+      <SettingsLayouts.Root width="sm">
         {header}
         <SettingsLayouts.Body>
           <Text color="status-error-05">{t("page.loadFailed")}</Text>
@@ -54,7 +51,7 @@ export default function SpendingLimitsPage() {
   }
   if (!data) {
     return (
-      <SettingsLayouts.Root width="lg">
+      <SettingsLayouts.Root width="sm">
         {header}
         <SettingsLayouts.Body>
           <PageLoader />
@@ -68,121 +65,143 @@ export default function SpendingLimitsPage() {
     data.workspace_per_user,
     ...data.groups.flatMap((group) => [group.pool, group.per_member]),
   ]);
-  const limitedGroupIds = new Set(
-    data.groups.map((group) => group.user_group_id)
-  );
-  const pendingGroups = (groups ?? []).filter(
-    (group) => newGroupIds.includes(group.id) && !limitedGroupIds.has(group.id)
-  );
-  const pickableGroups: SelectOption[] = (groups ?? [])
-    .filter(
-      (group) =>
-        !limitedGroupIds.has(group.id) && !newGroupIds.includes(group.id)
-    )
-    .map((group) => ({
-      value: String(group.id),
-      title: group.name,
-      description: t("groups.members", { count: group.users.length }),
-    }));
+  const pickableGroups = (groups ?? []).map((group) => ({
+    id: group.id,
+    name: group.name,
+    memberCount: group.users.length,
+  }));
 
   function refresh() {
     void mutate();
   }
 
+  function addGroupCard() {
+    setNewCardKeys((prev) => [...prev, nextNewCardKey]);
+    setNextNewCardKey((prev) => prev + 1);
+  }
+
+  function dropGroupCard(key: number) {
+    setNewCardKeys((prev) => prev.filter((k) => k !== key));
+  }
+
+  const addGroupButton = (
+    <Button
+      icon={SvgPlusCircle}
+      disabled={pickableGroups.length === 0}
+      onClick={addGroupCard}
+    >
+      {t("groups.add.label")}
+    </Button>
+  );
+  const groupCards = data.groups.flatMap((group) =>
+    [
+      { kind: GroupCardKind.POOL, card: group.pool },
+      { kind: GroupCardKind.PER_MEMBER, card: group.per_member },
+    ]
+      .filter(({ card }) => card.limits.length > 0)
+      .map(({ kind, card }) => (
+        <GroupLimitCard
+          key={`${group.user_group_id}-${kind}`}
+          kind={kind}
+          groupId={group.user_group_id}
+          group={{ name: group.group_name, memberCount: group.member_count }}
+          card={card}
+          modelOptions={modelOptions}
+          canEdit
+          onSaved={refresh}
+        />
+      ))
+  );
+  const noGroupCards = groupCards.length === 0 && newCardKeys.length === 0;
+
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root width="sm">
       {header}
       <SettingsLayouts.Body>
         <Section gap={3} alignItems="stretch" height="auto">
-          <ContentAction
+          <Content
             sizePreset="main-content"
             variant="section"
             title={t("workspace.title")}
             description={t("workspace.description")}
           />
-          <LimitCardEditor
-            title={t("workspace.pool.title")}
-            description={t("workspace.pool.description")}
-            icon={SvgOrganization}
-            card={data.workspace_pool}
-            path="workspace/pool"
-            showUsage
-            modelOptions={modelOptions}
-            canEdit
-            onSaved={refresh}
-          />
-          <LimitCardEditor
-            title={t("workspace.perUser.title")}
-            description={t("workspace.perUser.description")}
-            icon={SvgUser}
-            card={data.workspace_per_user}
-            path="workspace/per-user"
-            showUsage={false}
-            modelOptions={modelOptions}
-            canEdit
-            onSaved={refresh}
-          />
+          <Section gap={2} alignItems="stretch" height="auto">
+            <LimitCard
+              title={t("workspace.pool.title")}
+              description={t("workspace.pool.description")}
+              icon={SvgOrganization}
+              emptyTitle={t("workspace.pool.empty")}
+              emptyDescription={t("workspace.pool.emptyDescription")}
+              targetLabel={t("workspace.pool.target")}
+              card={data.workspace_pool}
+              path="workspace/pool"
+              showUsage
+              modelOptions={modelOptions}
+              canEdit
+              onSaved={refresh}
+            />
+            <LimitCard
+              title={t("workspace.perUser.title")}
+              description={t("workspace.perUser.description")}
+              icon={SvgUser}
+              emptyTitle={t("workspace.perUser.empty")}
+              emptyDescription={t("workspace.perUser.emptyDescription")}
+              targetLabel={t("workspace.perUser.target")}
+              card={data.workspace_per_user}
+              path="workspace/per-user"
+              showUsage={false}
+              modelOptions={modelOptions}
+              canEdit
+              onSaved={refresh}
+            />
+          </Section>
         </Section>
 
         <Section gap={3} alignItems="stretch" height="auto">
-          <ContentAction
-            sizePreset="main-content"
-            variant="section"
-            title={t("groups.title")}
-            description={t("groups.description")}
-            rightChildren={
-              <Button
-                icon={SvgPlusCircle}
-                disabled={pickableGroups.length === 0}
-                onClick={() => setPickingGroup(true)}
-              >
-                {t("groups.add.label")}
-              </Button>
-            }
-          />
-          {pickingGroup && (
-            <InputSingleComboBox
-              value=""
-              onValueChange={(value) => {
-                if (value === "") return;
-                setNewGroupIds((prev) => [...prev, Number(value)]);
-                setPickingGroup(false);
-              }}
-              placeholder={t("groups.picker.placeholder")}
-              options={pickableGroups}
+          <Section flexDirection="row" gap={2} height="auto">
+            <Content
+              sizePreset="main-content"
+              variant="section"
+              title={t("groups.title")}
+              description={t("groups.description")}
             />
+            {!noGroupCards && (
+              <Section width="fit" height="auto" gap={0}>
+                {addGroupButton}
+              </Section>
+            )}
+          </Section>
+          {noGroupCards ? (
+            <Card padding={4} rounding={4} border="solid">
+              <Section flexDirection="row" gap={3} height="auto">
+                <Section gap={0} alignItems="start" height="auto">
+                  <Text font="main-ui-muted" color="text-03">
+                    {t("groups.empty")}
+                  </Text>
+                </Section>
+                <Section gap={0} width="fit" height="auto">
+                  {addGroupButton}
+                </Section>
+              </Section>
+            </Card>
+          ) : (
+            <Section gap={2} alignItems="stretch" height="auto">
+              {groupCards}
+              {newCardKeys.map((key) => (
+                <NewGroupLimitCard
+                  key={key}
+                  groups={pickableGroups}
+                  limited={data.groups}
+                  modelOptions={modelOptions}
+                  onCancel={() => dropGroupCard(key)}
+                  onSaved={() => {
+                    dropGroupCard(key);
+                    refresh();
+                  }}
+                />
+              ))}
+            </Section>
           )}
-          {data.groups.length === 0 && pendingGroups.length === 0 && (
-            <Text font="secondary-body" color="text-03">
-              {t("groups.empty")}
-            </Text>
-          )}
-          {data.groups.map((group) => (
-            <GroupLimitsCard
-              key={group.user_group_id}
-              groupId={group.user_group_id}
-              groupName={group.group_name}
-              memberCount={group.member_count}
-              cards={group}
-              modelOptions={modelOptions}
-              canEditPool
-              canEditPerMember
-              onChanged={refresh}
-            />
-          ))}
-          {pendingGroups.map((group) => (
-            <GroupLimitsCard
-              key={group.id}
-              groupId={group.id}
-              groupName={group.name}
-              memberCount={group.users.length}
-              cards={{ pool: EMPTY_CARD, per_member: EMPTY_CARD }}
-              modelOptions={modelOptions}
-              canEditPool
-              canEditPerMember
-              onChanged={refresh}
-            />
-          ))}
         </Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

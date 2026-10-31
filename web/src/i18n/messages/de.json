@@ -11003,11 +11003,17 @@
         "description": "Gelten für alle in dieser Organisation.",
         "pool": {
           "title": "Gemeinsames Budget",
-          "description": "Ein Budget pro Zeitraum, das sich alle teilen. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides."
+          "description": "Ein Budget pro Zeitraum, das sich alle teilen. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides.",
+          "empty": "Kein globales Workspace-Limit",
+          "target": "Globales Workspace-Limit",
+          "emptyDescription": "Gemeinsames Limit für alle pro Zurücksetzungszeitraum."
         },
         "perUser": {
           "title": "Limit pro Benutzer",
-          "description": "Ein eigenes Budget für jeden Benutzer. Das Limit pro Mitglied einer Gruppe ersetzt es für denselben Zeitraum."
+          "description": "Ein eigenes Budget für jeden Benutzer. Das Limit pro Mitglied einer Gruppe ersetzt es für denselben Zeitraum.",
+          "empty": "Kein Limit pro Benutzer",
+          "target": "Globales Limit pro Benutzer",
+          "emptyDescription": "Eigenes Limit für jeden Benutzer der Organisation."
         }
       },
       "groups": {
@@ -11017,32 +11023,38 @@
           "label": "Gruppenlimit hinzufügen"
         },
         "picker": {
-          "placeholder": "Gruppe auswählen"
+          "placeholder": "Gruppe auswählen",
+          "limitSet": "(Limit festgelegt)"
         },
         "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
         "empty": "Noch keine Gruppe hat Ausgabenlimits.",
         "pool": {
           "title": "Gemeinsames Gruppenbudget",
-          "description": "Ein Budget, das sich alle in dieser Gruppe teilen."
+          "description": "Ein Budget, das sich alle in dieser Gruppe teilen.",
+          "empty": "Kein gemeinsames Gruppenbudget",
+          "target": "Gruppe: {group}",
+          "emptyDescription": "Gemeinsames Limit für alle in dieser Gruppe."
         },
         "perMember": {
           "title": "Limit pro Mitglied",
           "description": "Ein eigenes Budget für jedes Mitglied dieser Gruppe. Pro Zeitraum gilt das größte Limit unter den Gruppen eines Benutzers.",
-          "adminOnly": "Nur ein Administrator kann Limits pro Mitglied ändern, da sie ein Mitglied über das Arbeitsbereichslimit heben können."
+          "adminOnly": "Nur ein Administrator kann Limits pro Mitglied ändern, da sie ein Mitglied über das Arbeitsbereichslimit heben können.",
+          "empty": "Kein Limit pro Mitglied",
+          "target": "Gruppe: {group}, pro Mitglied",
+          "emptyDescription": "Eigenes Limit für jedes Mitglied dieser Gruppe."
         },
-        "remove": {
-          "tooltip": "Limits dieser Gruppe entfernen"
+        "kind": {
+          "placeholder": "Limittyp auswählen"
         },
-        "removed": "Ausgabenlimits für {group} entfernt"
+        "field": {
+          "members": "({count, plural, one {# Mitglied} other {# Mitglieder}})"
+        }
       },
       "groupPage": {
         "title": "Ausgabenlimits",
         "description": "Begrenzen Sie, was diese Gruppe für LLM-Nutzung ausgeben kann."
       },
       "card": {
-        "enabled": {
-          "ariaLabel": "{title} ein- oder ausschalten"
-        },
         "addLimit": "Limit hinzufügen",
         "addModelBudget": "Modellbudget hinzufügen",
         "modelBudget": {
@@ -11052,7 +11064,33 @@
         "cancel": "Abbrechen",
         "save": "Änderungen speichern",
         "saved": "Ausgabenlimits gespeichert",
-        "saveFailed": "Ausgabenlimits konnten nicht gespeichert werden: {error}"
+        "saveFailed": "Ausgabenlimits konnten nicht gespeichert werden: {error}",
+        "create": "Limit erstellen",
+        "reenable": "Wieder aktivieren",
+        "disable": {
+          "tooltip": "Alle Limits deaktivieren"
+        },
+        "expand": {
+          "tooltip": "Verwalten"
+        },
+        "collapse": {
+          "tooltip": "Einklappen"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> oder <b>{tokens}</b> Tokens / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> Tokens / {period}",
+          "period": {
+            "DAILY": "Tag",
+            "WEEKLY": "Woche",
+            "MONTHLY": "Monat"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, one {# Modellbudget} other {# Modellbudgets}}",
+          "nextReset": "Nächste Zurücksetzung: {at}",
+          "inactive": "Inaktives Limit",
+          "used": "<b>{percent} %</b> verbraucht"
+        }
       },
       "alerts": {
         "title": "Warnungen",
@@ -11084,7 +11122,7 @@
             }
           }
         },
-        "nextReset": "Nächste Zurücksetzung: {at} UTC",
+        "nextReset": "Nächste Zurücksetzung",
         "remove": {
           "tooltip": "Limit entfernen"
         },
@@ -11097,25 +11135,33 @@
           "suffix": "Tsd."
         },
         "usage": {
-          "spent": "{amount} ausgegeben",
-          "tokens": "{tokens} Token verbraucht",
-          "percent": "{percent} %"
+          "spent": "<mono>{amount}</mono> ausgegeben",
+          "tokens": "<mono>{tokens}</mono> Tokens verbraucht",
+          "percent": "{percent} %",
+          "blocked": {
+            "all": "Die Nutzung wird bis zur nächsten Zurücksetzung blockiert.",
+            "model": "Die Modellnutzung wird bis zur nächsten Zurücksetzung blockiert."
+          }
         },
         "whenReached": {
           "title": "Wenn dieses Limit erreicht ist",
           "blockAll": {
-            "title": "Gesamte Nutzung beim Limit blockieren",
+            "title": "Alle Nutzung beim Limit blockieren",
             "description": "Die Nutzung aller Modelle, einschließlich Chat, Suche, Bots und API-Aufrufen, stoppt bis zur nächsten Zurücksetzung."
           },
           "blockModel": {
-            "title": "Dieses Modell beim Limit blockieren",
-            "description": "Die Nutzung dieses Modells stoppt bis zur nächsten Zurücksetzung. Andere Modelle bleiben verfügbar."
+            "title": "Modellnutzung beim Limit blockieren",
+            "description": "Die Nutzung dieses Modells stoppt bis zur nächsten Zurücksetzung. Andere Modelle bleiben verfügbar.",
+            "summary": "Modellnutzung beim Limit blockieren"
           }
         },
         "errors": {
           "budgetRequired": "Legen Sie ein Kosten- oder Tokenlimit fest, oder beides.",
           "duplicate": "Ein anderes Limit verwendet diesen Zeitraum bereits.",
           "modelRequired": "Wählen Sie ein Modell."
+        },
+        "edit": {
+          "tooltip": "Bearbeiten"
         }
       }
     }

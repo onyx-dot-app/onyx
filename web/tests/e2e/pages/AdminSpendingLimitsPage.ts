@@ -27,8 +27,13 @@ export class AdminSpendingLimitsPage {
     return this.page.getByTestId(`spending-limit-card-${path}`);
   }
 
-  /** Adds an all-models limit to the card and fills its token budget, in
-   *  thousands of tokens. */
+  /** Opens a folded card that has limits. */
+  async expand(path: string): Promise<void> {
+    await this.card(path).getByRole("button", { name: "Manage" }).click();
+  }
+
+  /** Starts an empty card with one all-models limit and fills its token
+   *  budget, in thousands of tokens. */
   async addTokenLimit(path: string, thousands: number): Promise<void> {
     const card = this.card(path);
     await card.getByRole("button", { name: "Add Limit" }).click();
@@ -44,6 +49,7 @@ export class AdminSpendingLimitsPage {
   }
 
   async expectTokenLimit(path: string, thousands: number): Promise<void> {
+    await this.expand(path);
     await expect(
       this.card(path).getByPlaceholder("No token limit")
     ).toHaveValue(String(thousands));

@@ -11003,11 +11003,17 @@
         "description": "Apply to everyone in this organization.",
         "pool": {
           "title": "Shared Budget",
-          "description": "One budget shared by everyone for each period. Set a cost limit, a token limit, or both."
+          "description": "One budget shared by everyone for each period. Set a cost limit, a token limit, or both.",
+          "empty": "No global workspace limit",
+          "target": "Global workspace limit",
+          "emptyDescription": "Shared limit across everyone per reset period."
         },
         "perUser": {
           "title": "Per-User Limit",
-          "description": "A budget for each user on their own. A group's per-member limit replaces it for the same period."
+          "description": "A budget for each user on their own. A group's per-member limit replaces it for the same period.",
+          "empty": "No per-user limit",
+          "target": "Global per-user limit",
+          "emptyDescription": "Individual limit for each user in the organization."
         }
       },
       "groups": {
@@ -11017,32 +11023,38 @@
           "label": "Add Group Limit"
         },
         "picker": {
-          "placeholder": "Select a group"
+          "placeholder": "Select a group",
+          "limitSet": "(limit set)"
         },
         "members": "{count, plural, one {# member} other {# members}}",
         "empty": "No group has spending limits yet.",
         "pool": {
           "title": "Shared Group Budget",
-          "description": "One budget shared by everyone in this group."
+          "description": "One budget shared by everyone in this group.",
+          "empty": "No shared group budget",
+          "target": "Group: {group}",
+          "emptyDescription": "Shared limit for everyone in this group."
         },
         "perMember": {
           "title": "Per-Member Limit",
           "description": "A budget for each member of this group on their own. For each period, the largest limit among a user's groups applies.",
-          "adminOnly": "Only an admin can change per-member limits, because they can raise a member above the workspace limit."
+          "adminOnly": "Only an admin can change per-member limits, because they can raise a member above the workspace limit.",
+          "empty": "No per-member limit",
+          "target": "Group: {group}, per member",
+          "emptyDescription": "Individual limit for each member of this group."
         },
-        "remove": {
-          "tooltip": "Remove this group's limits"
+        "kind": {
+          "placeholder": "Select a limit type"
         },
-        "removed": "Removed the spending limits for {group}"
+        "field": {
+          "members": "({count, plural, one {# member} other {# members}})"
+        }
       },
       "groupPage": {
         "title": "Spending Limits",
         "description": "Limit what this group can spend on LLM usage."
       },
       "card": {
-        "enabled": {
-          "ariaLabel": "Turn {title} on or off"
-        },
         "addLimit": "Add Limit",
         "addModelBudget": "Add Model Budget",
         "modelBudget": {
@@ -11052,7 +11064,33 @@
         "cancel": "Cancel",
         "save": "Save Updates",
         "saved": "Spending limits saved",
-        "saveFailed": "Couldn't save spending limits: {error}"
+        "saveFailed": "Couldn't save spending limits: {error}",
+        "create": "Create Limit",
+        "reenable": "Re-enable",
+        "disable": {
+          "tooltip": "Turn off all limits"
+        },
+        "expand": {
+          "tooltip": "Manage"
+        },
+        "collapse": {
+          "tooltip": "Collapse"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> or <b>{tokens}</b> tokens / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> tokens / {period}",
+          "period": {
+            "DAILY": "day",
+            "WEEKLY": "week",
+            "MONTHLY": "month"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, one {# model budget} other {# model budgets}}",
+          "nextReset": "Next reset: {at}",
+          "inactive": "Inactive limit",
+          "used": "<b>{percent}%</b> used"
+        }
       },
       "alerts": {
         "title": "Alerts",
@@ -11084,7 +11122,7 @@
             }
           }
         },
-        "nextReset": "Next reset: {at} UTC",
+        "nextReset": "Next reset",
         "remove": {
           "tooltip": "Remove limit"
         },
@@ -11097,25 +11135,33 @@
           "suffix": "K"
         },
         "usage": {
-          "spent": "{amount} spent",
-          "tokens": "{tokens} tokens used",
-          "percent": "{percent}%"
+          "spent": "<mono>{amount}</mono> spent",
+          "tokens": "<mono>{tokens}</mono> tokens used",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "Usage will be blocked until the next reset.",
+            "model": "Model usage will be blocked until the next reset."
+          }
         },
         "whenReached": {
           "title": "When This Limit Is Reached",
           "blockAll": {
-            "title": "Block all usage at the limit",
+            "title": "Block All Usage at Limit",
             "description": "Usage from all models, including chat, search, bots and API calls, stops until the next reset."
           },
           "blockModel": {
-            "title": "Block this model at the limit",
-            "description": "Usage of this model stops until the next reset. Other models stay available."
+            "title": "Block Model Usage at Limit",
+            "description": "Usage of this model stops until the next reset. Other models stay available.",
+            "summary": "Block model usage at limit"
           }
         },
         "errors": {
           "budgetRequired": "Set a cost limit, a token limit, or both.",
           "duplicate": "Another limit already uses this period.",
           "modelRequired": "Choose a model."
+        },
+        "edit": {
+          "tooltip": "Edit"
         }
       }
     }
