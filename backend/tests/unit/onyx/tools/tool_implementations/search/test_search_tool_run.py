@@ -1,8 +1,9 @@
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from threading import Barrier
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,6 +44,9 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.utils import (
+    convert_inference_sections_to_llm_string,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -57,6 +61,7 @@ def _make_tool(
     auto_detect_filters: bool = True,
     selection_llm_factory: MagicMock | None = None,
     primary_llm_cost_checked: bool = True,
+    retrieval_only: bool = False,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
@@ -71,6 +76,7 @@ def _make_tool(
         auto_detect_filters=auto_detect_filters,
         selection_llm_factory=selection_llm_factory,
         primary_llm_cost_checked=primary_llm_cost_checked,
+        retrieval_only=retrieval_only,
     )
 
 
@@ -244,6 +250,80 @@ def test_search_uses_one_selection_model_per_invocation(
         selection_mode == "configured"
     )
     assert cost.call_count == (2 if with_slack or selection_mode != "configured" else 0)
+
+
+def test_retrieval_only_makes_no_model_calls() -> None:
+    resolver = MagicMock()
+    decide = MagicMock(return_value=None)
+    tool = _make_tool(
+        selection_llm_factory=resolver,
+        primary_llm_cost_checked=False,
+        retrieval_only=True,
+    )
+    tool.enable_slack_search = True
+    section = _section("doc-1")
+    context = ToolContext()
+    with (
+        patch(f"{MODULE}.check_llm_cost_limit_for_provider") as cost,
+        patch.object(tool, "_prefetch_slack_data") as slack_prefetch,
+        patch.object(tool, "_resolve_decision_client") as decision_client,
+        patch(f"{MODULE}.populate_file_ids_on_sections") as populate_file_ids,
+        patch(f"{MODULE}.select_sections_for_expansion") as select,
+        patch(f"{MODULE}.expand_section_with_context") as expand,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            wraps=convert_inference_sections_to_llm_string,
+        ) as to_llm_string,
+    ):
+        searched = _run(
+            tool,
+            context=context,
+            connected_sources=[DocumentSource.GITHUB],
+            decide_mock=decide,
+            sections=[section],
+        )
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert to_llm_string.call_args.kwargs["top_sections"] == [section]
+    # One completed search and no expansion or time decision to carry forward.
+    assert len(context.search_context.search_cycles) == 1
+    assert context.search_context.cached_expansion is None
+    assert context.search_context.time_filter_computed is False
+    assert cast(MagicMock, tool.llm).mock_calls == []
+    for step in (
+        decide,
+        slack_prefetch,
+        decision_client,
+        resolver,
+        select,
+        expand,
+        cost,
+        populate_file_ids,
+    ):
+        step.assert_not_called()
+
+
+def test_retrieval_only_ignores_planning_from_earlier_steps() -> None:
+    context = ToolContext()
+    context.search_context = SearchContext(
+        cached_expansion=("rephrased query", ("cached keyword",)),
+        time_filter=TimeFilter(
+            field=DocumentTimeField.UPDATED_AT, start=datetime(2026, 1, 1, tzinfo=UTC)
+        ),
+        time_filter_computed=True,
+    )
+    tool = _make_tool(
+        user_selected_filters=BaseFilters(source_type=[DocumentSource.ASANA]),
+        retrieval_only=True,
+    )
+
+    searched = _run(tool, context=context, connected_sources=[DocumentSource.ASANA])
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert all(
+        applied.updated_at_range is None
+        for applied in _filters_passed_to_search(searched)
+    )
 
 
 def _filters_passed_to_search(mock_search_pipeline: MagicMock) -> list[Any]:

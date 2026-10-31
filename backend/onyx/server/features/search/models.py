@@ -23,6 +23,8 @@ class SearchRequest(BaseModel):
     model: str | None = None
 
     skip_query_expansion: bool = False
+    # Make no LLM calls. Results keep their retrieval order.
+    retrieval_only: bool = False
 
     message_history: list[ChatMinimalTextMessage] | None = None
 
@@ -32,6 +34,10 @@ class SearchRequest(BaseModel):
             raise ValueError("provider is required when model is specified")
         if self.provider and not self.model:
             raise ValueError("model is required when provider is specified")
+        if self.retrieval_only and self.provider:
+            raise ValueError(
+                "retrieval_only makes no LLM calls; omit provider and model"
+            )
         return self
 
 

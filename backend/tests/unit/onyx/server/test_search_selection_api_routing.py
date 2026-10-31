@@ -118,6 +118,33 @@ def test_public_search_defers_unused_primary_provider_check_to_tool() -> None:
         cost.assert_not_called()
 
 
+def test_public_search_retrieval_only_checks_no_llm_budget() -> None:
+    with (
+        public_search_dependencies(MagicMock()) as constructor,
+        patch.object(
+            api,
+            "load_settings",
+            return_value=MagicMock(auto_detect_search_filters=True),
+        ),
+        patch.object(api, "check_llm_cost_limit_for_provider") as cost,
+    ):
+        api.search(
+            SearchRequest(query="runbook", retrieval_only=True),
+            MagicMock(),
+            MagicMock(),
+        )
+        assert constructor.call_args.kwargs["retrieval_only"] is True
+        assert constructor.call_args.kwargs["primary_llm_cost_checked"] is False
+        cost.assert_not_called()
+
+
+def test_public_search_rejects_a_model_with_retrieval_only() -> None:
+    with pytest.raises(ValueError, match="retrieval_only"):
+        SearchRequest(
+            query="runbook", retrieval_only=True, provider="custom", model="chosen"
+        )
+
+
 @pytest.mark.parametrize("configured", [False, True])
 def test_ee_search_expansion_uses_primary_and_selection_uses_its_own_default(
     configured: bool,

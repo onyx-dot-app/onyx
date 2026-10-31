@@ -61,6 +61,7 @@ from onyx.context.search.models import (
     InferenceSection,
     PersonaSearchInfo,
     SearchCycle,
+    SearchDoc,
     SearchDocsResponse,
     UserAccessFilters,
 )
@@ -367,6 +368,9 @@ class SearchTool(Tool):
         selection_llm_factory: Callable[[], LLM] | None = None,
         primary_llm_cost_checked: bool = True,
         include_link: bool = False,
+        # Make no LLM or decision-model calls and search the query as written.
+        # Sections keep their retrieval order.
+        retrieval_only: bool = False,
     ) -> None:
 
         self.user = user
@@ -380,8 +384,10 @@ class SearchTool(Tool):
         self.persona_id_filter = persona_id_filter
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
-        self.auto_detect_filters = auto_detect_filters
+        # Source and time detection are LLM calls, so retrieval-only turns them off.
+        self.auto_detect_filters = auto_detect_filters and not retrieval_only
         self.include_link = include_link
+        self.retrieval_only = retrieval_only
 
         self._id = tool_id
 
@@ -843,6 +849,40 @@ class SearchTool(Tool):
             tool_call_id=invocation.call_id,
         )
 
+    def _build_search_result(
+        self,
+        *,
+        sections_for_model: list[InferenceSection],
+        search_docs: list[SearchDoc],
+        displayed_docs: list[SearchDoc] | None,
+        search_output: SearchDocsResponse,
+        planning_result: SearchPlanningResult,
+        citation_start: int,
+        scope_note: str,
+    ) -> ToolResult:
+        docs_str, citation_mapping = convert_inference_sections_to_llm_string(
+            top_sections=sections_for_model,
+            citation_start=citation_start,
+            limit=MAX_CHUNKS_FED_TO_CHAT,
+            include_document_id=False,
+            include_link=self.include_link,
+            note=scope_note or None,
+        )
+        return ToolResult(
+            # Displayed documents can exceed the subset sent to the model.
+            details=SearchDocsResponse(
+                queries=search_output.queries,
+                sources=search_output.sources,
+                time_filter_start=search_output.time_filter_start,
+                time_filter_end=search_output.time_filter_end,
+                search_docs=search_docs,
+                citation_mapping=citation_mapping,
+                displayed_docs=displayed_docs,
+            ),
+            content=docs_str,
+            metadata=planning_result,
+        )
+
     @log_function_time()
     def search(
         self,
@@ -956,8 +996,11 @@ class SearchTool(Tool):
                 connected_sources = fetch_unique_document_sources(db_session)
 
             # Slack tokens and entity config — only prefetch when Slack
-            # search is enabled or we're in a Slack bot context.
-            if self.enable_slack_search or self.slack_context:
+            # search is enabled or we're in a Slack bot context. Slack search
+            # builds its queries with the LLM, so retrieval-only skips it.
+            if (
+                self.enable_slack_search or self.slack_context
+            ) and not self.retrieval_only:
                 slack_access_token, slack_bot_token, slack_entities = (
                     self._prefetch_slack_data(db_session)
                 )
@@ -985,9 +1028,17 @@ class SearchTool(Tool):
         else:
             candidate_sources = connected_sources
 
+        skip_query_expansion = (
+            context.skip_search_query_expansion or self.retrieval_only
+        )
+        # Retrieval-only searches the query as written, so it ignores the
+        # expansion and time window that earlier steps inferred.
+        search_context = (
+            SearchContext() if self.retrieval_only else context.search_context
+        )
         expansion = self._expand_queries_and_decide_scope(
-            skip_query_expansion=context.skip_search_query_expansion,
-            search_context=context.search_context,
+            skip_query_expansion=skip_query_expansion,
+            search_context=search_context,
             message_history=message_history,
             user_info=user_info,
             memories=memories,
@@ -1025,18 +1076,18 @@ class SearchTool(Tool):
         # cached expansion (it is source-agnostic) rather than searching raw queries.
         searched_sources = {
             value
-            for cycle in context.search_context.search_cycles
+            for cycle in search_context.search_cycles
             for value in cycle.searched_sources
         }
         is_new_filter = bool(resolved_scope) and any(
             source.value not in searched_sources for source in resolved_scope
         )
         if (
-            context.skip_search_query_expansion
+            skip_query_expansion
             and is_new_filter
-            and context.search_context.cached_expansion is not None
+            and search_context.cached_expansion is not None
         ):
-            semantic_query, cached_keywords = context.search_context.cached_expansion
+            semantic_query, cached_keywords = search_context.cached_expansion
             keyword_queries = list(cached_keywords)
 
         planning_result = SearchPlanningResult(
@@ -1045,7 +1096,7 @@ class SearchTool(Tool):
             searched_sources=tuple(source.value for source in resolved_scope or ()),
             cached_expansion=(
                 (expansion.semantic_query, tuple(expansion.keyword_queries))
-                if not context.skip_search_query_expansion
+                if not skip_query_expansion
                 else None
             ),
             scope_decision_settled=expansion.scope_decision_settled,
@@ -1264,22 +1315,29 @@ class SearchTool(Tool):
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
-            empty_response, _ = convert_inference_sections_to_llm_string(
-                top_sections=[],
-                note=scope_note or None,
+            return self._build_search_result(
+                sections_for_model=[],
+                search_docs=[],
+                displayed_docs=None,
+                search_output=search_output,
+                planning_result=planning_result,
+                citation_start=citation_start,
+                scope_note=scope_note,
             )
-            return ToolResult(
-                details=SearchDocsResponse(
-                    queries=search_output.queries,
-                    sources=search_output.sources,
-                    time_filter_start=search_output.time_filter_start,
-                    time_filter_end=search_output.time_filter_end,
-                    search_docs=[],
-                    citation_mapping={},
-                    displayed_docs=None,
+
+        if self.retrieval_only:
+            # No file ids: a file id replaces a section's text with a hint to
+            # a sandbox file, and only chat stages those files.
+            return self._build_search_result(
+                sections_for_model=top_sections,
+                search_docs=convert_inference_sections_to_search_docs(
+                    top_sections, is_internet=False
                 ),
-                content=empty_response,
-                metadata=planning_result,
+                displayed_docs=None,
+                search_output=search_output,
+                planning_result=planning_result,
+                citation_start=citation_start,
+                scope_note=scope_note,
             )
 
         selection_llm = self.llm
@@ -1508,13 +1566,14 @@ class SearchTool(Tool):
         # This prevents duplicate content and reduces token usage
         merged_sections = merge_overlapping_sections(expanded_sections)
 
-        docs_str, citation_mapping = convert_inference_sections_to_llm_string(
-            top_sections=merged_sections,
+        result = self._build_search_result(
+            sections_for_model=merged_sections,
+            search_docs=search_docs,
+            displayed_docs=final_ui_docs,
+            search_output=search_output,
+            planning_result=planning_result,
             citation_start=citation_start,
-            limit=MAX_CHUNKS_FED_TO_CHAT,
-            include_document_id=False,
-            include_link=self.include_link,
-            note=scope_note or None,
+            scope_note=scope_note,
         )
 
         # End overall timing
@@ -1526,17 +1585,4 @@ class SearchTool(Tool):
             format(document_expansion_elapsed, ".3f"),
         )
 
-        return ToolResult(
-            # Displayed documents can exceed the subset sent to the model.
-            details=SearchDocsResponse(
-                queries=search_output.queries,
-                sources=search_output.sources,
-                time_filter_start=search_output.time_filter_start,
-                time_filter_end=search_output.time_filter_end,
-                search_docs=search_docs,
-                citation_mapping=citation_mapping,
-                displayed_docs=final_ui_docs,
-            ),
-            content=docs_str,
-            metadata=planning_result,
-        )
+        return result
