@@ -1331,6 +1331,9 @@
         "gmail": {
           "description": "Google email"
         },
+        "googleChat": {
+          "description": "Space conversations"
+        },
         "bookstack": {
           "description": "Self-hosted wiki"
         },
@@ -4058,6 +4061,15 @@
         "gmail": {
           "description": "Configure Gmail connector"
         },
+        "google_chat": {
+          "description": "Configure Google Chat connector",
+          "fields": {
+            "spaces": {
+              "label": "Spaces",
+              "description": "Space names or ids (from the space URL) to index. Leave empty to index every named space in your organization. Direct messages and group chats are not indexed."
+            }
+          }
+        },
         "bookstack": {
           "description": "Configure Bookstack connector",
           "fields": {
@@ -5234,6 +5246,8 @@
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation.",
+        "googleChatPrimaryAdmin": "A Google Workspace admin with the Chat and spaces conversations privilege. Onyx lists spaces and their members as this admin.",
+        "googleChatServiceAccountKey": "Upload or paste the `.json` key of a service account with domain-wide delegation for the Google Chat and Admin Directory scopes in the setup guide.",
         "confluencePersonalAccessToken": "Paste the [Personal Access Token](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) from your Confluence admin account."
       },
       "methods": {

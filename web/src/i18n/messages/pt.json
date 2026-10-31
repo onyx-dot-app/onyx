@@ -1331,6 +1331,9 @@
         "gmail": {
           "description": "E-mail do Google"
         },
+        "googleChat": {
+          "description": "Conversas de espaços"
+        },
         "bookstack": {
           "description": "Wiki auto-hospedada"
         },
@@ -4058,6 +4061,15 @@
         "gmail": {
           "description": "Configurar conector do Gmail"
         },
+        "google_chat": {
+          "description": "Configurar o conector do Google Chat",
+          "fields": {
+            "spaces": {
+              "label": "Espaços",
+              "description": "Nomes ou IDs (da URL do espaço) dos espaços a indexar. Deixe em branco para indexar todos os espaços nomeados da sua organização. Mensagens diretas e chats em grupo não são indexados."
+            }
+          }
+        },
         "bookstack": {
           "description": "Configurar conector do Bookstack",
           "fields": {
@@ -5234,6 +5246,8 @@
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio.",
+        "googleChatPrimaryAdmin": "Um administrador do Google Workspace com o privilégio de Chat e conversas em espaços. O Onyx lista os espaços e seus membros como esse administrador.",
+        "googleChatServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço com delegação em todo o domínio para os escopos do Google Chat e do Admin Directory do guia de configuração.",
         "confluencePersonalAccessToken": "Cole o [token de acesso pessoal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) da sua conta de administrador do Confluence."
       },
       "methods": {

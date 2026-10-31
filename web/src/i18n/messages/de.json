@@ -1331,6 +1331,9 @@
         "gmail": {
           "description": "Google-E-Mail"
         },
+        "googleChat": {
+          "description": "Unterhaltungen in Gruppenbereichen"
+        },
         "bookstack": {
           "description": "Selbst gehostetes Wiki"
         },
@@ -4058,6 +4061,15 @@
         "gmail": {
           "description": "Gmail-Konnektor konfigurieren"
         },
+        "google_chat": {
+          "description": "Google Chat-Connector konfigurieren",
+          "fields": {
+            "spaces": {
+              "label": "Gruppenbereiche",
+              "description": "Namen oder IDs (aus der URL des Gruppenbereichs) der zu indexierenden Gruppenbereiche. Leer lassen, um alle benannten Gruppenbereiche Ihrer Organisation zu indexieren. Direktnachrichten und Gruppenchats werden nicht indexiert."
+            }
+          }
+        },
         "bookstack": {
           "description": "BookStack-Konnektor konfigurieren",
           "fields": {
@@ -5234,6 +5246,8 @@
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Google-Dienstkontos mit domainweiter Delegierung hoch oder fügen Sie ihn ein.",
+        "googleChatPrimaryAdmin": "Ein Google Workspace-Administrator mit der Berechtigung für Chat und Unterhaltungen in Gruppenbereichen. Onyx listet Gruppenbereiche und ihre Mitglieder als dieser Administrator auf.",
+        "googleChatServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Dienstkontos mit domainweiter Delegierung für die Google Chat- und Admin Directory-Bereiche aus der Einrichtungsanleitung hoch oder fügen Sie ihn ein.",
         "confluencePersonalAccessToken": "Fügen Sie das [persönliche Zugriffstoken](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) Ihres Confluence-Administratorkontos ein."
       },
       "methods": {

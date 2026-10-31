@@ -1,0 +1,102 @@
+---
+title: "Google Chat"
+description: "Access conversations from Google Chat spaces"
+---
+
+## How it works
+
+The Google Chat connector indexes the messages of the named spaces in your Google Workspace.
+The messages of one space on one day (UTC) make one document, titled with the space name and the date.
+A document holds at most the first 10,000 messages of its day; later messages of that day are not indexed.
+In each document, a thread's replies are indented under the thread's first message of that day.
+Attachment names are indexed. Attachment content is not.
+
+| Content     | Notes                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| Spaces      | Every named space in the organization, also spaces that no Onyx user is a member of.                   |
+| Scope       | Optional. Limit the index to specific spaces by name or by id.                                          |
+| Not indexed | Direct messages, group chats, and messages with neither text nor an attachment (for example, card-only messages from Chat apps). |
+
+When a new message arrives, Onyx indexes the whole day of that message again.
+An edit or a deletion of an older message shows in the index only after a new message arrives on the same day.
+
+## Setting up
+
+The connector uses a Google service account with domain-wide delegation. A Google Workspace is required.
+Onyx lists the spaces and their members as a Google Workspace admin.
+It then reads the messages of each space as one of the space's members.
+
+### Authorization
+
+<Steps>
+  <Step title="Create a Google Cloud project">
+    Go to [https://console.cloud.google.com/projectcreate](https://console.cloud.google.com/projectcreate)
+    and create a project. You can also use the project of your Gmail or Google Drive service account.
+  </Step>
+
+  <Step title="Enable the Google Chat API and the Admin SDK API">
+    - In the left panel, open **APIs & services** and go to **Enabled APIs and services**.
+    - Click **+ ENABLE APIS AND SERVICES**.
+    - Search for **Google Chat API** and click **ENABLE**.
+    - Search for **Admin SDK API** and click **ENABLE**.
+  </Step>
+
+  <Step title="Create a service account">
+    - Open the [service accounts page](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud.
+    - Click **Create Service Account** and complete step 1. Skip steps 2 and 3.
+    - Open the **Keys** section and click **Add Key**. Download the JSON key.
+
+    For Google organizations created after April 2024, allow key creation first:
+    - Open this [policy page](https://console.cloud.google.com/iam-admin/orgpolicies/iam-disableServiceAccountKeyCreation).
+    - Select **Manage**, then **Override parent's policy**, then **Not enforced** under **Rules**.
+    - Select **SET POLICY**.
+  </Step>
+
+  <Step title="Grant domain-wide delegation">
+    Give the service account read-only access to Google Chat:
+    - Copy the **Unique ID** of the service account.
+    - Open the [Domain-wide Delegation page](https://admin.google.com/ac/owl/domainwidedelegation) in the Google Admin
+    console.
+    - Click **Add new** and enter the **Unique ID** as the client ID.
+    - Paste this list into **OAuth scopes**:
+    `https://www.googleapis.com/auth/chat.admin.spaces.readonly,https://www.googleapis.com/auth/chat.admin.memberships.readonly,https://www.googleapis.com/auth/chat.messages.readonly,https://www.googleapis.com/auth/admin.directory.user.readonly`
+  </Step>
+
+  <Step title="Choose the primary admin">
+    The primary admin is the Google Workspace user that Onyx lists spaces and members as.
+    It needs an admin role with the **Users > Read** privilege and the Google Chat privileges to manage Chat and spaces
+    conversations. Set the role in the Google Admin console under **Account > Admin roles**.
+    A super admin has these privileges.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Admin Panel, go to **Connectors** and select **Google Chat**. Select **New Google Chat Account**:
+
+    - **Primary Admin Email**: the email of the primary admin. Do not enter the service account email.
+    - **Service Account Key**: upload or paste the JSON key you downloaded.
+  </Step>
+
+  <Step title="Choose what to index">
+    Leave **Spaces** empty to index every named space. To narrow the index, enter space names,
+    or space ids from the space URL. In the URL `https://mail.google.com/chat/u/0/#chat/space/AAAAbCdEfGh`,
+    the space id is `AAAAbCdEfGh`.
+  </Step>
+
+  <Step title="Choose who can see the messages">
+    Under **Document Access**, select who can see the indexed messages, then click **Create Connector**.
+    Google Chat has no permission sync. With **Public**, every Onyx user can find the messages of every space.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+| Problem                                                     | Fix                                                                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| The service account is not authorized for the scopes        | Delegate all four scopes to the service account's **Unique ID**. A change to domain-wide delegation can take some minutes to apply.   |
+| The primary admin cannot list Google Chat spaces            | Give the primary admin the Google Chat privileges to manage Chat and spaces conversations, or use a super admin.                     |
+| No spaces match the **Spaces** entries                      | Use the exact space name or the space id from the space URL.                                                                          |
+| A space shows as an indexing error | Onyx reads a space as a member who has joined it and is not suspended. Make sure the space has such a member and that Google Chat is on for its members. |
