@@ -6,7 +6,7 @@ they run in CI without a live Jira instance or credentials.
 """
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,7 +20,11 @@ from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    DocumentFailure,
+)
 
 BASE_URL = "https://danswerai.atlassian.net"
 
@@ -181,3 +185,92 @@ def test_validate_without_credentials_raises_missing_credential() -> None:
 
     with pytest.raises(ConnectorMissingCredentialError):
         connector.validate_connector_settings()
+
+
+@pytest.mark.parametrize(
+    "status_code, expected_error",
+    [
+        (401, CredentialExpiredError),
+        (403, InsufficientPermissionsError),
+    ],
+)
+def test_jql_maps_dead_credentials_when_auto_scoping(
+    status_code: int, expected_error: type[Exception]
+) -> None:
+    # Discovery runs before the first search, so without this mapping a revoked
+    # credential would never mark an auto-scoped connector invalid.
+    connector = _connector()
+    mock_ops = MagicMock()
+    mock_ops.list_projects.side_effect = JiraApiError(
+        "err", status_code=status_code, body="err"
+    )
+    connector._source_operations = mock_ops
+
+    with pytest.raises(expected_error):
+        connector._get_jql_query(START, END)
+
+
+@pytest.mark.parametrize("status_code", [429, 500])
+def test_jql_keeps_transient_errors_out_of_validation_errors(status_code: int) -> None:
+    # Validation errors count towards marking the connector invalid, which a
+    # passing rate limit or server error must not do.
+    connector = _connector()
+    mock_ops = MagicMock()
+    mock_ops.list_projects.side_effect = JiraApiError(
+        "err", status_code=status_code, body="err"
+    )
+    connector._source_operations = mock_ops
+
+    with pytest.raises(JiraApiError):
+        connector._get_jql_query(START, END)
+
+
+def _failed_issue(issue_key: str) -> ConnectorFailure:
+    doc_id = f"{BASE_URL}/browse/{issue_key}"
+    return ConnectorFailure(
+        failed_document=DocumentFailure(document_id=doc_id, document_link=doc_id),
+        failure_message="synthetic",
+    )
+
+
+def test_reindex_stays_in_service_desk_scope() -> None:
+    connector = _connector()
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [_project("HELP", "service_desk")]
+    connector._source_operations = mock_ops
+
+    with patch.object(
+        connector, "_search_all_issues", return_value=iter([])
+    ) as mock_search:
+        results = list(connector.reindex([_failed_issue("ENG-1")]))
+
+    mock_search.assert_called_once_with('project in ("HELP") AND key in ("ENG-1")')
+    assert len(results) == 1
+    assert isinstance(results[0], ConnectorFailure)
+    assert "ENG-1" in results[0].failure_message
+
+
+def test_reindex_with_explicit_project_skips_discovery() -> None:
+    connector = _connector(project_key="HELP")
+    mock_ops = MagicMock()
+    connector._source_operations = mock_ops
+
+    with patch.object(
+        connector, "_search_all_issues", return_value=iter([])
+    ) as mock_search:
+        list(connector.reindex([_failed_issue("HELP-1")]))
+
+    mock_search.assert_called_once_with('project = "HELP" AND key in ("HELP-1")')
+    mock_ops.list_projects.assert_not_called()
+
+
+def test_reindex_fails_the_run_on_dead_credentials() -> None:
+    connector = _connector()
+    mock_ops = MagicMock()
+    mock_ops.list_projects.side_effect = JiraApiError(
+        "err", status_code=401, body="err"
+    )
+    connector._source_operations = mock_ops
+
+    with pytest.raises(CredentialExpiredError):
+        list(connector.reindex([_failed_issue("HELP-1")]))

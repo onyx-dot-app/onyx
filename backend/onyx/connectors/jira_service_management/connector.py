@@ -21,7 +21,8 @@ from typing_extensions import override
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.jira.connector import JiraConnector, build_jql_query
+from onyx.connectors.jira.connector import JiraConnector, JiraIssue, build_jql_query
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.utils.logger import setup_logger
 
@@ -80,6 +81,23 @@ class JiraServiceManagementConnector(JiraConnector):
         )
         return service_desk_keys
 
+    def _service_desk_scope_jql(self) -> str:
+        """JQL limiting results to the discovered service desk projects."""
+        try:
+            service_desk_keys = self._get_service_desk_project_keys()
+        except JiraApiError as e:
+            # As in the crawl, a dead credential or lost access is a validation
+            # error, so repeated failures mark the connector invalid. Anything
+            # else (429, 5xx) may be transient and stays a plain failed attempt.
+            if e.status_code in (401, 403):
+                self._handle_jira_connector_settings_error(e)
+            raise
+        if not service_desk_keys:
+            raise ConnectorValidationError(_NO_SERVICE_DESK_PROJECTS_MESSAGE)
+
+        quoted_keys = ", ".join(f'"{key}"' for key in service_desk_keys)
+        return f"project in ({quoted_keys})"
+
     @override
     def validate_connector_settings(self) -> None:
         if self.jql_query or self.jira_project:
@@ -119,16 +137,23 @@ class JiraServiceManagementConnector(JiraConnector):
             return super()._get_jql_query(start, end)
 
         # Otherwise auto-scope to every service desk project we can see.
-        service_desk_keys = self._get_service_desk_project_keys()
-        if not service_desk_keys:
-            raise ConnectorValidationError(_NO_SERVICE_DESK_PROJECTS_MESSAGE)
-
         # With no project or query set, build_jql_query returns just the window.
         time_jql = build_jql_query(
             project_key=None, jql_query=None, start=start, end=end
         )
-        quoted_keys = ", ".join(f'"{key}"' for key in service_desk_keys)
-        return f"project in ({quoted_keys}) AND {time_jql}"
+        return f"{self._service_desk_scope_jql()} AND {time_jql}"
+
+    @override
+    def _search_issues_by_key(self, issue_keys: list[str]) -> list[JiraIssue]:
+        """Keeps reindex in the same auto-scope as the crawl, so an issue whose
+        project left service desk scope is not fetched and stamped as JSM."""
+        if self.jql_query or self.jira_project:
+            return super()._search_issues_by_key(issue_keys)
+
+        keys_jql = "key in (%s)" % ", ".join(f'"{key}"' for key in issue_keys)
+        return list(
+            self._search_all_issues(f"{self._service_desk_scope_jql()} AND {keys_jql}")
+        )
 
 
 if __name__ == "__main__":
