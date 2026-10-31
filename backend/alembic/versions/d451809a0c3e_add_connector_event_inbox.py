@@ -5,7 +5,7 @@ webhook server writes a row per event; a later drain claims rows inside an
 ordinary docfetching run.
 
 Revision ID: d451809a0c3e
-Revises: 3e30a81ec3bd
+Revises: b7d2e4f1a9c3
 Create Date: 2026-10-30 11:06:33.039774
 
 """
@@ -17,7 +17,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "d451809a0c3e"
-down_revision = "3e30a81ec3bd"
+down_revision = "b7d2e4f1a9c3"
 branch_labels = None
 depends_on = None
 
