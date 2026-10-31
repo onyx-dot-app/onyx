@@ -58,6 +58,18 @@ def _raising_connector(message: str) -> SlimConnector:
     return connector
 
 
+def _make_prune_callback(fenced: bool) -> tuple[PruneCallback, MagicMock]:
+    redis_connector = MagicMock()
+    redis_connector.stop.fenced = fenced
+    callback = PruneCallback(
+        parent_pid=0,
+        redis_connector=redis_connector,
+        redis_lock=MagicMock(),
+        redis_client=MagicMock(),
+    )
+    return callback, redis_connector
+
+
 class TestEnumerationDuration:
     def test_recorded_on_success(self) -> None:
         connector = _make_slim_connector(["doc1"])
@@ -419,14 +431,7 @@ def test_source_prune_honors_indexing_start(
 
 class TestPruneCallback:
     def test_observed_stop_survives_a_resume_clearing_the_fence(self) -> None:
-        redis_connector = MagicMock()
-        redis_connector.stop.fenced = True
-        callback = PruneCallback(
-            parent_pid=0,
-            redis_connector=redis_connector,
-            redis_lock=MagicMock(),
-            redis_client=MagicMock(),
-        )
+        callback, redis_connector = _make_prune_callback(fenced=True)
 
         assert callback.should_stop()
 
@@ -434,3 +439,50 @@ class TestPruneCallback:
         # returned a partial listing, so the callback must keep reporting it.
         redis_connector.stop.fenced = False
         assert callback.should_stop()
+
+    def test_connector_stop_then_resume_aborts_the_prune(self) -> None:
+        callback, redis_connector = _make_prune_callback(fenced=True)
+        connector = MagicMock(spec=SlimConnector)
+
+        def retrieve_all_slim_docs(
+            *,
+            start: SecondsSinceUnixEpoch | None = None,
+            callback: IndexingHeartbeatInterface | None = None,
+        ) -> Iterator[list[MagicMock]]:
+            # The OneDrive shape: observe the stop, return no documents. A
+            # resume clears the fence before the post-enumeration check.
+            del start
+            assert callback is not None
+            assert callback.should_stop()
+            redis_connector.stop.fenced = False
+            return
+            yield []
+
+        connector.retrieve_all_slim_docs.side_effect = retrieve_all_slim_docs
+
+        # The empty listing must not reach the diff; it would name every
+        # indexed document for deletion.
+        with pytest.raises(RuntimeError, match="after enumeration"):
+            extract_ids_from_runnable_connector(connector, callback)
+
+    def test_complete_listing_without_a_stop_is_returned(self) -> None:
+        callback, _ = _make_prune_callback(fenced=False)
+        connector = _make_slim_connector(["doc1"])
+
+        result = extract_ids_from_runnable_connector(connector, callback)
+
+        assert list(result.raw_id_to_parent) == ["doc1"]
+
+    def test_latch_does_not_leak_to_the_next_run(self) -> None:
+        first, redis_connector = _make_prune_callback(fenced=True)
+        assert first.should_stop()
+
+        redis_connector.stop.fenced = False
+        second = PruneCallback(
+            parent_pid=0,
+            redis_connector=redis_connector,
+            redis_lock=MagicMock(),
+            redis_client=MagicMock(),
+        )
+
+        assert second.should_stop() is False
