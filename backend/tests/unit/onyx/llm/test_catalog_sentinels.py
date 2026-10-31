@@ -145,6 +145,31 @@ def test_uncataloged_name_falls_back_to_chat(
     )
 
 
+def test_image_generation_models_skip_pruned_and_dated_snapshots() -> None:
+    models = model_catalog.iter_image_generation_models(LlmProviderNames.OPENAI)
+    assert "gpt-image-1.5" in models
+    assert "gpt-image-1" not in models
+    assert "dall-e-3" not in models
+    assert "gpt-image-1.5-2025-12-16" not in models
+    assert all("/" not in model for model in models)
+
+
+def test_is_recommended_image_model_follows_the_listing_provider() -> None:
+    gateway = "custom_image_gateway"
+    assert model_catalog.is_recommended_image_model(gateway, "gpt-image-1.5")
+    assert not model_catalog.is_recommended_image_model(gateway, "dall-e-3")
+    assert not model_catalog.is_recommended_image_model(
+        gateway, "gpt-image-1.5-2025-12-16"
+    )
+    assert not model_catalog.is_recommended_image_model(
+        LlmProviderNames.OPENAI, "dall-e-3"
+    )
+    assert model_catalog.is_recommended_image_model(gateway, "openai/gpt-image-1.5")
+    assert not model_catalog.is_recommended_image_model(
+        gateway, "openai/gpt-image-1.5-2025-12-16"
+    )
+
+
 def test_supplement_status_retires_listed_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
