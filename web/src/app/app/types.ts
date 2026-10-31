@@ -224,6 +224,8 @@ export interface BackendChatSession {
   is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
+  // Set on a paged load when the current branch has messages before the page.
+  has_older_messages?: boolean;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {

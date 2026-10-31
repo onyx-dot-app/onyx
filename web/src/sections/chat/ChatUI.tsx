@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Message } from "@/app/app/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
@@ -18,10 +24,13 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
   useCurrentMessageTree,
+  useHasOlderMessages,
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
 import WindowedRow from "@/sections/chat/WindowedRow";
+import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
+import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 import { cn } from "@opal/utils";
 
 /** Width constraint for normal (non-multi-model) messages. */
@@ -115,6 +124,49 @@ const ChatUI = React.memo(
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
     const rowHeightCache = useRef(new Map<string, number>()).current;
+    const hasOlderMessages = useHasOlderMessages();
+    const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
+
+    // A page of older messages goes in above the first row. Keep the view
+    // still: scroll by the distance the former first row moved. Native scroll
+    // anchoring cannot be relied on: Safari has none, and Chrome skips it at
+    // the very top, where a page most often arrives.
+    const lastScrollTopRef = useRef(0);
+    useEffect(() => {
+      const root = scrollContainerRef?.current;
+      if (!root) return;
+      const onScroll = () => {
+        lastScrollTopRef.current = root.scrollTop;
+      };
+      onScroll();
+      root.addEventListener("scroll", onScroll, { passive: true });
+      return () => root.removeEventListener("scroll", onScroll);
+    }, [scrollContainerRef]);
+
+    const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
+    const firstNodeId = messages[0]?.nodeId;
+    useLayoutEffect(() => {
+      const root = scrollContainerRef?.current;
+      if (!root || firstNodeId === undefined) return;
+
+      const previous = firstRowRef.current;
+      if (previous && previous.nodeId !== firstNodeId) {
+        const previousRow = document.getElementById(
+          `message-${previous.nodeId}`
+        );
+        if (previousRow) {
+          // A no-op where the browser's anchoring already moved it.
+          const target =
+            lastScrollTopRef.current + previousRow.offsetTop - previous.top;
+          if (Math.abs(root.scrollTop - target) > 1) root.scrollTop = target;
+        }
+      }
+
+      const firstRow = document.getElementById(`message-${firstNodeId}`);
+      firstRowRef.current = firstRow
+        ? { nodeId: firstNodeId, top: firstRow.offsetTop }
+        : null;
+    }, [scrollContainerRef, firstNodeId]);
 
     // Reading-width cap on messages, from the page's chat column width.
     const msgWidth = cn(MSG_W, FULL_WIDTH_TRANSITION);
@@ -199,6 +251,8 @@ const ChatUI = React.memo(
             !fullWidthChat && "md:pe-1"
           )}
         >
+          {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
+
           {messages.map((message, i) => {
             const messageReactComponentKey = `message-${message.nodeId}`;
             const rowsFromEnd = messages.length - i;

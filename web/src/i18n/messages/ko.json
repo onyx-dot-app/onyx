@@ -12158,6 +12158,9 @@
       "firstOpenLoader": {
         "ariaLabel": "채팅을 불러오는 중"
       },
+      "olderMessagesLoader": {
+        "ariaLabel": "이전 메시지를 불러오는 중"
+      },
       "newChatButton": {
         "label": "새 채팅 시작"
       },

@@ -12158,6 +12158,9 @@
       "firstOpenLoader": {
         "ariaLabel": "正在加载聊天"
       },
+      "olderMessagesLoader": {
+        "ariaLabel": "正在加载更早的消息"
+      },
       "newChatButton": {
         "label": "开始新聊天"
       },
