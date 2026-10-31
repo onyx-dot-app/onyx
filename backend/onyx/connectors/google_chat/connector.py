@@ -9,7 +9,6 @@ message of that day.
 
 from collections.abc import Iterator
 from datetime import date, datetime, time, timedelta, timezone
-from itertools import islice
 from typing import Any
 
 from google.auth.exceptions import RefreshError
@@ -80,8 +79,8 @@ _MESSAGE_FIELDS = (
 # The slim pass skips the messages the main pass skips, so it reads their text.
 _SLIM_MESSAGE_FIELDS = "nextPageToken,messages(createTime,text,attachment(contentName))"
 _USER_FIELDS = "primaryEmail,name(fullName),suspended"
-# Members tried as the reader of a space before the space counts as unreadable.
-_MAX_READER_CANDIDATES = 5
+# Refused readers named in the error of an unreadable space.
+_REFUSED_READERS_SHOWN = 3
 # Bounds the memory one day of a busy space holds.
 _MAX_MESSAGES_PER_DOCUMENT = 10_000
 _REPLY_INDENT = "    "
@@ -166,6 +165,9 @@ class GoogleChatConnector(
         # Directory users by Chat user resource name (users/{id}); None when
         # the directory does not hold the user.
         self._users: dict[str, ChatUser | None] = {}
+        # Emails of members Google refused to read a space as. Chat access is
+        # set per user, so later spaces skip them instead of asking again.
+        self._refused_readers: set[str] = set()
 
     @property
     def creds(self) -> ServiceAccountCredentials:
@@ -287,11 +289,16 @@ class GoogleChatConnector(
         fields: str,
     ) -> Iterator[dict[str, Any]]:
         """The space's messages created in the window, oldest first, read as
-        the first member Google lets read them. Raises SpaceUnreadableError
-        when the space has no active member or Google refuses every member
-        tried, so a prune never reads the space as empty."""
+        the first member Google lets read them. Every joined, unsuspended
+        member is tried, so the order of the members never decides whether a
+        space is read. Raises SpaceUnreadableError when the space has no such
+        member or Google refuses every one, so a prune never reads the space
+        as empty."""
         refused: list[str] = []
-        for reader in islice(self._reader_candidates(space), _MAX_READER_CANDIDATES):
+        for reader in self._reader_candidates(space):
+            if reader in self._refused_readers:
+                refused.append(reader)
+                continue
             chat: GoogleChatService = get_google_service(
                 GoogleService.CHAT, self.creds, reader
             )
@@ -315,6 +322,10 @@ class GoogleChatConnector(
                     space.name,
                     e,
                 )
+                # A 403 refuses the member, for example when Chat is off for
+                # them, in every space. A 404 is about this space only.
+                if e.resp.status == 403:
+                    self._refused_readers.add(reader)
                 refused.append(reader)
                 continue
             if first is not None:
@@ -322,9 +333,13 @@ class GoogleChatConnector(
                 yield from pages
             return
         if refused:
+            shown: str = ", ".join(refused[:_REFUSED_READERS_SHOWN])
+            if len(refused) > _REFUSED_READERS_SHOWN:
+                shown += f" and {len(refused) - _REFUSED_READERS_SHOWN} more"
             raise SpaceUnreadableError(
-                f"Google Chat refused every member tried as the reader of "
-                f"{space.display_name} ({space.name}): {', '.join(refused)}"
+                f"Google Chat refused all {len(refused)} joined, unsuspended "
+                f"members as the reader of {space.display_name} ({space.name}): "
+                f"{shown}"
             )
         raise SpaceUnreadableError(
             f"Google Chat found no joined, unsuspended member to read "

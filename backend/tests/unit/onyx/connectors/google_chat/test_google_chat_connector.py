@@ -321,6 +321,55 @@ def test_space_no_member_can_read_is_a_failure(world: _World) -> None:
     assert items[0].failed_entity.entity_id == "spaces/ENG"
 
 
+def test_member_after_five_refused_ones_reads(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_ids: list[str] = [str(user_id) for user_id in range(6, 12)]
+    emails: list[str] = [f"user{user_id}@acme.com" for user_id in user_ids]
+    for user_id in user_ids:
+        monkeypatch.setitem(
+            _USERS, user_id, {"primaryEmail": f"user{user_id}@acme.com"}
+        )
+    monkeypatch.setitem(
+        _MEMBERS,
+        "spaces/ENG",
+        [
+            {"state": "JOINED", "member": {"name": f"users/{user_id}"}}
+            for user_id in user_ids
+        ],
+    )
+    world.refused_readers = set(emails[:5])
+
+    items = _items(_connector(["Engineering"]), 0, _ts("2026-10-30T00:00:00Z"))
+
+    assert [type(item) for item in items] == [Document, Document]
+    assert world.readers == emails
+
+
+def test_refused_member_is_not_asked_again_in_later_spaces(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        _MEMBERS,
+        "spaces/ENG",
+        [
+            {"state": "JOINED", "member": {"name": "users/1"}},
+            {"state": "JOINED", "member": {"name": "users/2"}},
+        ],
+    )
+    world.refused_readers = {_ADMIN}
+
+    items = _items(_connector(), 0, _ts("2026-10-30T00:00:00Z"))
+
+    # Random's only member is the admin, whom Google refused in Engineering.
+    assert world.readers == [_ADMIN, "bob@acme.com"]
+    failure = items[-1]
+    assert isinstance(failure, ConnectorFailure)
+    assert failure.failed_entity is not None
+    assert failure.failed_entity.entity_id == "spaces/RANDOM"
+    assert _ADMIN in failure.failure_message
+
+
 @pytest.mark.usefixtures("world")
 def test_space_without_active_member_is_a_failure(
     monkeypatch: pytest.MonkeyPatch,
