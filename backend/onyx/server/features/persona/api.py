@@ -22,8 +22,10 @@ from onyx.auth.permissions import (
     require_permission,
 )
 from onyx.auth.users import (
+    anonymous_user_enabled,
     current_chat_accessible_user,
     current_limited_user,
+    optional_user,
     scope_exempt,
 )
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -801,11 +803,11 @@ def get_persona(
     return snapshot
 
 
-@basic_router.get("/{persona_id}/avatar")
+@basic_router.get("/{persona_id}/avatar", dependencies=[Depends(scope_exempt)])
 def get_persona_avatar(
     persona_id: int,
     request: Request,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     # Mirror `fetch_chat_file`: return 404 (not 403) for any failure so
@@ -818,6 +820,13 @@ def get_persona_avatar(
             is_for_edit=False,
         )
     except ValueError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
+    # Anonymous callers get the same access as anonymous chat: public
+    # personas only, and only while anonymous access is enabled.
+    if user is None and not (
+        persona.is_public and anonymous_user_enabled(tenant_id=get_current_tenant_id())
+    ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
     file_id = persona.uploaded_image_id
@@ -848,7 +857,9 @@ def get_persona_avatar(
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
-        "Vary": "Cookie",
+        # Bearer-authenticated and anonymous requests must not share a
+        # cached avatar, so key the cache on both credential carriers.
+        "Vary": "Cookie, Authorization",
     }
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
