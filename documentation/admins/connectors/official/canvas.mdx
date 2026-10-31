@@ -171,7 +171,9 @@ assignment and announcement text through the Canvas API and does not download co
     Confirm the token's Canvas user can open the item. Onyx only lists courses in the `available` state,
     only published pages, only published assignments, and only active announcements.
     Pages and assignments without `updated_at`, and announcements without `posted_at`, are skipped on refresh.
-    A course that returns HTTP 404 is skipped for that indexing attempt.
+    If a tool such as Pages is disabled in a course, Canvas returns HTTP 404 for that tool.
+    Onyx skips only that tool and indexes the other content of the course.
+    A course that no longer exists is skipped for that indexing attempt.
   </Accordion>
 
   <Accordion title="Permission sync fails at connector creation">
