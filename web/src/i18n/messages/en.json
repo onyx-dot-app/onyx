@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Atlassian issue tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian service desk & requests"
+        },
         "productboard": {
           "description": "Product management"
         },
@@ -4171,6 +4174,45 @@
             "comment_email_blacklist": {
               "label": "Comment Email Blacklist",
               "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Configure which Jira Service Management content to index. You can index everything or specify a particular project or service desk.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "project": {
+                  "label": "Project"
+                },
+                "jql": {
+                  "label": "JQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexes every request the account can read",
+              "description": "Onyx indexes all customer requests and tickets in every service desk that the selected account can read."
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific service desk project to index (e.g., 'ITSM')."
+            },
+            "jql_query": {
+              "label": "JQL Query",
+              "description": "A custom JQL query to filter Jira Service Management requests.\n\nIMPORTANT: Do not include any time-based filters or ORDER BY clauses in the JQL query."
+            },
+            "comment_email_blacklist": {
+              "label": "Comment Email Blacklist",
+              "description": "This is generally useful to ignore certain bots. Add user emails whose comments should NOT be indexed."
             }
           }
         },

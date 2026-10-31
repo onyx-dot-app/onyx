@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian サービスデスクとリクエスト"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -4171,6 +4174,45 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクタの設定",
+          "subtext": "インデックスを作成する Jira Service Management コンテンツを設定します。すべてをインデックスするか、特定のプロジェクトまたはサービスデスクを指定できます。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "jql": {
+                  "label": "JQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "アカウントが読み取れるすべてのリクエストをインデックス",
+              "description": "Onyx は、選択したアカウントがアクセスできるすべてのサービスデスクの顧客リクエストとチケットをインデックスします。"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックスする特定のサービスデスクプロジェクトのキー (例: 'ITSM')。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "Jira Service Management リクエストをフィルタリングするカスタム JQL クエリ。\n\n重要: 時間ベースのフィルターや ORDER BY 句は含めないでください。"
+            },
+            "comment_email_blacklist": {
+              "label": "コメント除外メールアドレス一覧",
+              "description": "ボットを無視するのに役立ちます。コメントをインデックスしたくないメールアドレスを追加してください。"
             }
           }
         },

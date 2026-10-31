@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Service desk et demandes Atlassian"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },
@@ -4171,6 +4174,45 @@
             "comment_email_blacklist": {
               "label": "Liste noire d'e-mails des commentaires",
               "description": "Utile en général pour ignorer certains bots. Ajoutez les e-mails des utilisateurs dont les commentaires ne doivent PAS être indexés."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "subtext": "Configurez le contenu de Jira Service Management à indexer. Vous pouvez tout indexer ou spécifier un projet ou un centre de services particulier.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL du site",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tout"
+                },
+                "project": {
+                  "label": "Projet"
+                },
+                "jql": {
+                  "label": "Requête JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexe chaque demande que le compte peut lire",
+              "description": "Onyx indexe toutes les demandes clients et tickets dans chaque centre de services lisible par le compte sélectionné."
+            },
+            "project_key": {
+              "label": "Clé du projet",
+              "description": "La clé d'un projet de centre de services spécifique à indexer (ex. 'ITSM')."
+            },
+            "jql_query": {
+              "label": "Requête JQL",
+              "description": "Une requête JQL personnalisée pour filtrer les demandes Jira Service Management.\n\nIMPORTANT : Ne pas inclure de filtres temporels ni de clauses ORDER BY."
+            },
+            "comment_email_blacklist": {
+              "label": "Liste noire des e-mails pour les commentaires",
+              "description": "Utile pour ignorer certains bots. Ajoutez les adresses e-mail dont les commentaires ne doivent PAS être indexés."
             }
           }
         },

@@ -270,7 +270,22 @@ export function createValidationSchema(
       fieldMethods && ((method) => fieldMethods.includes(method))
     );
   }
-  return Yup.object().shape(schemaFields);
+  const schema = Yup.object().shape(schemaFields);
+  if (spec.brandName !== "Jira Service Management") return schema;
+  return schema.test(
+    "jsm-authentication",
+    function (values: CredentialFieldValues) {
+      const token = values["jira_api_token"];
+      const hasApiToken = typeof token === "string" && token.trim() !== "";
+      if (!hasApiToken) {
+        return this.createError({
+          path: "jira_api_token",
+          message: messages.required(messages.fieldTitle("jira_api_token")),
+        });
+      }
+      return true;
+    }
+  );
 }
 
 export function createEditingValidationSchema(

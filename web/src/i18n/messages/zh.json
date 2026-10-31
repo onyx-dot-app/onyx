@@ -1343,6 +1343,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian 服务台与请求"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -4171,6 +4174,45 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "配置要索引的 Jira Service Management 内容。您可以索引所有内容，也可以指定特定项目或服务台。",
+          "fields": {
+            "jira_base_url": {
+              "label": "站点 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "project": {
+                  "label": "项目"
+                },
+                "jql": {
+                  "label": "JQL 查询"
+                }
+              }
+            },
+            "everything": {
+              "label": "索引该账户有权读取的所有请求",
+              "description": "Onyx 将索引所选账户有权读取的所有服务台中的客户请求与工单。"
+            },
+            "project_key": {
+              "label": "项目键 (Project Key)",
+              "description": "要索引的特定服务台项目的键（例如 'ITSM'）。"
+            },
+            "jql_query": {
+              "label": "JQL 查询",
+              "description": "用于过滤 Jira Service Management 请求的自定义 JQL 查询。\n\n重要提示：请勿在 JQL 查询中包含任何基于时间的过滤器或 ORDER BY 子句。"
+            },
+            "comment_email_blacklist": {
+              "label": "评论黑名单邮箱",
+              "description": "通常用于忽略特定机器人。添加不应索引其评论的用户邮箱。"
             }
           }
         },
