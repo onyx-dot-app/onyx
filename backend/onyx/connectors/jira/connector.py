@@ -381,20 +381,6 @@ def jira_ticket_size_skip_reason(ticket_content: str) -> str | None:
     return None
 
 
-def jira_issue_skip_reason(
-    issue: JiraIssue,
-    ticket_content: str,
-    labels_to_skip: set[str] | None = None,
-) -> str | None:
-    """Combined label and size predicate for callers that already built the
-    ticket content (JSM slim). Load and poll check labels before parsing, so an
-    excluded ticket with a malformed description is skipped without raising.
-    """
-    return jira_label_skip_reason(
-        issue, labels_to_skip
-    ) or jira_ticket_size_skip_reason(ticket_content)
-
-
 def process_jira_issue(
     jira_base_url: str,
     issue: JiraIssue,
