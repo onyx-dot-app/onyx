@@ -54,7 +54,6 @@ export interface ImageGenFormChildProps<T extends FormValues> {
 // Payload for submitting image generation config
 export interface ImageGenSubmitPayload {
   modelName: string;
-  imageProviderId: string;
   isDefault?: boolean;
 
   provider?: string;
