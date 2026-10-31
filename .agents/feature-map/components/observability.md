@@ -120,7 +120,11 @@ the admin system view shows it under that flow. Otherwise it is `UNATTRIBUTED`
 (`tracing/processors/user_usage_processor.py:_system_attribution`). An admin
 price override applies per model configuration (`db/cost_override.py`). A call
 outside `LLM` gets it only when it passes `model_configuration_id` to
-`traced_llm_call`.
+`traced_llm_call`. Each row also stores that `model_configuration_id`, and the
+dedup indexes key on `COALESCE(model_configuration_id, 0)`. So two
+configurations that share a model name and provider type get separate rows.
+Image generation and voice calls don't pass the id yet, so their rows store
+NULL.
 
 **Metrics.** `backend/onyx/server/metrics/README.md` explains how each process
 serves metrics and how to add one. Workers start an unauthenticated server

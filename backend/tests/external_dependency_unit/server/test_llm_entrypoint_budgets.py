@@ -74,6 +74,7 @@ def over_budget_user(
             model="entrypoint-budget-test-model",
             flow=LLMFlow.CHAT_RESPONSE.value,
             provider=None,
+            model_configuration_id=None,
             input_tokens=1_500,
             output_tokens=500,
             cache_read_tokens=0,

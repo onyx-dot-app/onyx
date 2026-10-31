@@ -38,6 +38,7 @@ def _record_over_budget_usage(db_session: Session, user: User) -> None:
             model="service-account-budget-test-model",
             flow=LLMFlow.CHAT_RESPONSE.value,
             provider=None,
+            model_configuration_id=None,
             input_tokens=1_500,
             output_tokens=500,
             cache_read_tokens=0,
