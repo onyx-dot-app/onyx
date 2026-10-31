@@ -4,6 +4,7 @@ monitor_process_memory.
 
 from onyx.background.celery.tasks.monitoring.tasks import (
     SUPERVISOR_PROCESS_TYPE_MAPPING,
+    _find_missing_process_types,
     _match_supervisor_processes,
 )
 
@@ -87,3 +88,29 @@ def test_genuine_duplicate_is_still_reported() -> None:
     assert supervisor_processes == {1: "primary"}
     assert len(duplicate_warnings) == 1
     assert "Duplicate process type for type primary" in duplicate_warnings[0]
+
+
+def test_stopped_slack_bot_is_not_reported_missing() -> None:
+    # supervisord stops the Slack bot after its failed starts when no Slack
+    # bot is configured, so only the required workers should be reported.
+    supervisor_processes = dict(
+        enumerate(set(SUPERVISOR_PROCESS_TYPE_MAPPING.values()) - {"slack"})
+    )
+
+    assert (
+        _find_missing_process_types(
+            supervisor_processes, SUPERVISOR_PROCESS_TYPE_MAPPING
+        )
+        == set()
+    )
+
+
+def test_missing_required_worker_is_still_reported() -> None:
+    supervisor_processes = {1: "primary", 2: "beat"}
+
+    missing = _find_missing_process_types(
+        supervisor_processes, SUPERVISOR_PROCESS_TYPE_MAPPING
+    )
+
+    assert "docprocessing" in missing
+    assert "slack" not in missing

@@ -386,6 +386,23 @@ SUPERVISOR_PROCESS_TYPE_MAPPING = {
     "slack/listener.py": "slack",
 }
 
+# Process types supervisord may legitimately stop. The Slack bot gives up
+# after `startretries` failed starts when no Slack bot is configured, so its
+# absence is not an error. It is still monitored when it is running.
+OPTIONAL_SUPERVISOR_PROCESS_TYPES = frozenset({"slack"})
+
+
+def _find_missing_process_types(
+    supervisor_processes: dict[int, str],
+    process_type_mapping: dict[str, str],
+) -> set[str]:
+    """Return the required process types with no matching running process."""
+    return (
+        set(process_type_mapping.values())
+        - OPTIONAL_SUPERVISOR_PROCESS_TYPES
+        - set(supervisor_processes.values())
+    )
+
 
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
@@ -434,8 +451,8 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
         for warning in duplicate_warnings:
             task_logger.error(warning)
 
-        missing_process_types = set(process_type_mapping.values()) - set(
-            supervisor_processes.values()
+        missing_process_types = _find_missing_process_types(
+            supervisor_processes, process_type_mapping
         )
         if missing_process_types:
             task_logger.error(f"Missing processes: {missing_process_types}")
