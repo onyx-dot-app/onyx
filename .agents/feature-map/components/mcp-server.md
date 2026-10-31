@@ -145,10 +145,15 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    unknown source, document set or agent, because a dropped filter widens the
    search with no sign. `agent` and `document_set_names` are mutually exclusive: explicit document sets
    replace an agent's knowledge scope instead of narrowing it.
-7. `search-is-metered` **Search spends LLM tokens and is metered.**
+7. `search-is-metered` **Search is metered, and it spends LLM tokens unless it
+   is retrieval-only.**
    `tools/tool_implementations/search/search_tool.py:SearchTool.run` makes LLM
    calls, and `/search` runs the token, API-call and cloud cost checks
-   ([[rate-and-usage-limits]]). Keep a new LLM-calling tool behind the same checks.
+   ([[rate-and-usage-limits]]). A `retrieval_only` search makes no LLM calls and
+   skips the cost check, but the token and API-call checks still run
+   ([[internal-search#retrieval-only-makes-no-model-calls]]).
+   `MCP_SERVER_SEARCH_RETRIEVAL_ONLY` forces it for every search from this server.
+   Keep a new LLM-calling tool behind the same checks.
 8. `oauth-callback-not-this-server` **`/mcp/oauth/callback` is a web page, not
    this server.** It is the MCP client OAuth callback of
    [[mcp-and-custom-tools]]. Nginx has an exact `location` for it, and Helm has

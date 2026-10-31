@@ -374,6 +374,7 @@ and context expansion.
 | `time_cutoff` | string | No | ISO 8601 timestamp. Keeps documents updated on or after this time. Include a timezone. |
 | `skip_query_expansion` | boolean | No | Defaults to `false`. Set `true` to bypass query expansion. |
 | `agent` | string | No | Name of an accessible Onyx agent whose knowledge scope and model the search should use. |
+| `retrieval_only` | boolean | No | Defaults to `false`. Set `true` to make no LLM calls. Results come back in retrieval order, with no query expansion, filter detection, federated Slack search, document selection or context expansion. An administrator can turn it on for every search with [`MCP_SERVER_SEARCH_RETRIEVAL_ONLY`](/deployment/configuration/mcp_server#service-settings). |
 
 ```json
 {
