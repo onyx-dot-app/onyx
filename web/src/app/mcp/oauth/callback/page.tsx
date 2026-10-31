@@ -167,13 +167,14 @@ function MCPOAuthCallbackPageContent() {
     const handleOAuthCallback = async () => {
       try {
         const response = await completeMCPUserOAuth(code, stateParam);
-        if (reportOAuthCallback(stateParam, true)) return;
+        const redirectPath = buildRedirectPath(
+          response.redirect_url || DEFAULT_REDIRECT_PATH
+        );
+        if (reportOAuthCallback(stateParam, true, redirectPath)) return;
         setState({
           phase: "success",
           serverName: response.server_name,
-          redirectPath: buildRedirectPath(
-            response.redirect_url || DEFAULT_REDIRECT_PATH
-          ),
+          redirectPath,
         });
       } catch (error) {
         if (reportOAuthCallback(stateParam, false)) return;

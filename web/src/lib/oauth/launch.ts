@@ -31,7 +31,13 @@ const completionSchema = yup.object({
   type: yup.mixed<typeof completionType>().oneOf([completionType]).defined(),
   state: yup.string().defined(),
   ok: yup.boolean().defined(),
+  redirectPath: yup.string().optional(),
 });
+
+/** What the callback page reported; `redirectPath` is where it would have redirected. */
+export interface OAuthCompletion {
+  redirectPath?: string;
+}
 
 interface DesktopBridge {
   oauthInBrowser?: boolean;
@@ -91,8 +97,12 @@ function openCompletionChannel(state: string): BroadcastChannel | null {
 }
 
 /** Tells the page that launched this OAuth attempt that it finished. */
-export function notifyOAuthComplete(state: string, ok = true): void {
-  const message = { type: completionType, state, ok };
+export function notifyOAuthComplete(
+  state: string,
+  ok = true,
+  redirectPath?: string
+): void {
+  const message = { type: completionType, state, ok, redirectPath };
   try {
     window.opener?.postMessage(message, window.location.origin);
   } catch {}
@@ -139,7 +149,7 @@ function parseAuthorizationUrl(raw: string): URL | null {
 export function launchOAuth(
   start: () => Promise<string | null>,
   { signal, onOpened }: OAuthLaunchOptions = {}
-): Promise<void> {
+): Promise<OAuthCompletion> {
   if (signal?.aborted) {
     return Promise.reject(new OAuthLaunchError("cancelled"));
   }
@@ -154,7 +164,7 @@ export function launchOAuth(
     let settled = false;
     let channel: BroadcastChannel | null = null;
     let state: string | null = null;
-    function finish(error?: Error) {
+    function finish(error?: Error, completion: OAuthCompletion = {}) {
       if (settled) return;
       settled = true;
       window.removeEventListener("message", receiveCompletion);
@@ -164,7 +174,7 @@ export function launchOAuth(
       window.clearTimeout(timeout);
       if (error || !inBrowser) popup?.close();
       if (error) reject(error);
-      else resolve();
+      else resolve(completion);
     }
     function cancel() {
       finish(new OAuthLaunchError("cancelled"));
@@ -175,7 +185,9 @@ export function launchOAuth(
           strict: true,
         });
         if (state === null || message.state !== state) return;
-        finish(message.ok ? undefined : new OAuthLaunchError("failed"));
+        if (message.ok)
+          finish(undefined, { redirectPath: message.redirectPath });
+        else finish(new OAuthLaunchError("failed"));
       } catch {}
     }
     function receiveCompletion(event: MessageEvent<unknown>) {
@@ -246,9 +258,13 @@ export function needsDesktopOAuthHandoff(state: string | null): boolean {
  * Reports a finished callback to the waiting page. Returns true when this tab
  * closed itself, so the caller skips its redirect.
  */
-export function reportOAuthCallback(state: string, ok: boolean): boolean {
+export function reportOAuthCallback(
+  state: string,
+  ok: boolean,
+  redirectPath?: string
+): boolean {
   const attemptState = stripDesktopOAuthState(state);
-  notifyOAuthComplete(attemptState, ok);
+  notifyOAuthComplete(attemptState, ok, redirectPath);
   return closeOAuthCallbackWindow(attemptState);
 }
 
@@ -259,7 +275,7 @@ export function reportOAuthCallback(state: string, ok: boolean): boolean {
 export function openOAuthAuthorization(
   authorizationUrl: string,
   options: OAuthLaunchOptions = {}
-): Promise<void> {
+): Promise<OAuthCompletion> {
   return launchOAuth(async () => authorizationUrl, options).catch(
     (error: unknown) => {
       if (
@@ -267,7 +283,7 @@ export function openOAuthAuthorization(
         error.reason === "popup_blocked"
       ) {
         window.location.assign(authorizationUrl);
-        return new Promise<void>(() => {});
+        return new Promise<OAuthCompletion>(() => {});
       }
       throw error;
     }

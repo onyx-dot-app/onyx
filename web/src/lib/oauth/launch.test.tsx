@@ -90,7 +90,7 @@ test("resolves from a BroadcastChannel completion and rejects a failed one", asy
   const ok = launchOAuth(async () => authUrl);
   await flush();
   notifyOAuthComplete("abc_123");
-  await expect(ok).resolves.toBeUndefined();
+  await expect(ok).resolves.toEqual({});
 
   openPopup();
   const failed = launchOAuth(async () => authUrl);
