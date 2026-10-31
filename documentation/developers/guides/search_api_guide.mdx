@@ -23,7 +23,8 @@ use [`POST /chat/send-chat-message`](/developers/api_reference/chat/handle_send_
 Authenticate with an API key or a Personal Access Token. A limited-access token needs the **Search &mdash; Read** scope.
 See [Authentication](/developers/overview#authentication).
 Query expansion and LLM document selection use the workspace's default LLM,
-so the same token limits that apply to chat apply to them.
+so the same token limits that apply to chat apply to them. A search with `retrieval_only` makes no LLM calls,
+but the token limits still apply to the caller.
 
 ## POST /search
 
@@ -39,6 +40,7 @@ The request needs nothing but a query. Everything else narrows the search or cha
 | `persona_id` | Search as an Agent. The Agent's document sets, attached documents and search start date apply on top of the other filters, and its LLM is used for query expansion. |
 | `provider` / `model` | The LLM used for query expansion and section selection. Both must be sent together, and the caller must have access to the provider. Defaults to the Agent's LLM, or the deployment default. |
 | `skip_query_expansion` | Run the query as written instead of rewriting and expanding it first. Useful when the query is already precise, or when you have your own expansion step. |
+| `retrieval_only` | Make no LLM calls. The search runs the query as written, with no source or time detection, federated Slack search, document selection or context expansion. Results come back in retrieval order, and `message_history` has no effect. The deployment still needs a configured LLM. Do not send `provider` / `model` with it. |
 | `message_history` | Preceding conversation turns, so a query like "what about last quarter?" can be interpreted in context. Defaults to `query` on its own. |
 
 Results come back most relevant first:
