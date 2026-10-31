@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
@@ -756,6 +756,8 @@ def get_chat_messages_by_session(
     # Only the session replay reads tool call search docs; building chat
     # history for a new message does not, so it skips this load.
     prefetch_tool_call_search_docs: bool = False,
+    # Load only these messages (one page of the session); None loads all.
+    message_ids: Collection[int] | None = None,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -772,6 +774,8 @@ def get_chat_messages_by_session(
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
+    if message_ids is not None:
+        stmt = stmt.where(ChatMessage.id.in_(message_ids))
 
     if prefetch_message_details:
         stmt = stmt.options(
@@ -796,6 +800,62 @@ def get_chat_messages_by_session(
         result = db_session.scalars(stmt).all()
 
     return list(result)
+
+
+def get_chat_message_page_ids(
+    chat_session_id: UUID,
+    db_session: Session,
+    limit: int,
+    before_message_id: int | None = None,
+) -> tuple[set[int], bool]:
+    """One page of a session's current branch, for paged loading.
+
+    The page holds the last `limit` messages of the current branch (the chain
+    of `latest_child_message_id` from the root), or of the part of it before
+    `before_message_id`. It also holds every child of those messages, so a
+    branch switcher and multi-model replies have their siblings, including the
+    siblings of the first message of the next, newer page.
+
+    Returns the message ids and whether the branch has older messages. A
+    `before_message_id` that is not on the current branch gives an empty page.
+    """
+    rows = db_session.execute(
+        select(
+            ChatMessage.id,
+            ChatMessage.parent_message_id,
+            ChatMessage.latest_child_message_id,
+        )
+        .where(ChatMessage.chat_session_id == chat_session_id)
+        .where(visible_chat_messages_filter())
+    ).all()
+
+    latest_child_by_id: dict[int, int | None] = {}
+    children_by_parent: dict[int, list[int]] = {}
+    root_id: int | None = None
+    for message_id, parent_id, latest_child_id in rows:
+        latest_child_by_id[message_id] = latest_child_id
+        if parent_id is None:
+            root_id = message_id
+        else:
+            children_by_parent.setdefault(parent_id, []).append(message_id)
+
+    branch: list[int] = []
+    next_id = root_id
+    while next_id is not None and next_id in latest_child_by_id:
+        branch.append(next_id)
+        next_id = latest_child_by_id[next_id]
+
+    if before_message_id is not None:
+        # The branch changed since the client loaded this message.
+        if before_message_id not in branch:
+            return set(), False
+        branch = branch[: branch.index(before_message_id)]
+
+    page = branch[-limit:]
+    page_ids = set(page)
+    for message_id in page:
+        page_ids.update(children_by_parent.get(message_id, []))
+    return page_ids, len(branch) > limit
 
 
 def get_or_create_root_message(

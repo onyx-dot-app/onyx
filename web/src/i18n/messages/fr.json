@@ -12158,6 +12158,9 @@
       "firstOpenLoader": {
         "ariaLabel": "Chargement de la discussion"
       },
+      "olderMessagesLoader": {
+        "ariaLabel": "Chargement des messages plus anciens"
+      },
       "newChatButton": {
         "label": "Démarrer une nouvelle discussion"
       },

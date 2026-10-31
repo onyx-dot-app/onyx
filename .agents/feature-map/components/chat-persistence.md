@@ -98,7 +98,10 @@ ChatResponsePersistence.save               chat/persistence.py; for USAGE_ONLY i
       save_chat_turn                       ONE commit: text, SearchDoc rows, links,
                                            citations, final records
 GET /chat/get-chat-session/{id}
-  get_chat_messages_by_session             loads all branches, two ToolCall levels
+  get_chat_message_page_ids                with `limit`: one page of the current
+                                           branch and the children of its messages
+  get_chat_messages_by_session             that page, or all branches without
+                                           `limit`; two ToolCall levels
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
                                            read_response_replay_data ->
                                            chat/presentation.py:replay_response;

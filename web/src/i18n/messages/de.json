@@ -12158,6 +12158,9 @@
       "firstOpenLoader": {
         "ariaLabel": "Chat wird geladen"
       },
+      "olderMessagesLoader": {
+        "ariaLabel": "Ältere Nachrichten werden geladen"
+      },
       "newChatButton": {
         "label": "Neuen Chat starten"
       },
