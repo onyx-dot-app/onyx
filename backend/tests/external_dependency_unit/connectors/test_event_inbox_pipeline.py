@@ -33,6 +33,7 @@ from onyx.connectors.event_inbox.models import (
 from onyx.connectors.event_inbox.source_registry import (
     register_webhook_source,
     unregister_webhook_source,
+    webhook_source_for,
 )
 from onyx.connectors.event_models import EventParseResult, ParsedEvent
 from onyx.connectors.models import Document, InputType, TextSection
@@ -84,8 +85,21 @@ def _handler(event: ConnectorEventInbox) -> Document:
     )
 
 
+def _claim_the_source() -> None:
+    """Take the source from whatever registered it.
+
+    A source registers when its module is imported, and pytest imports every
+    test module while collecting, so another file's source can already own
+    this one before any fixture runs.
+    """
+    owner = webhook_source_for(SOURCE)
+    if owner is not None:
+        unregister_webhook_source(owner.slug)
+
+
 @pytest.fixture(autouse=True)
 def registered_source() -> Generator[None, None, None]:
+    _claim_the_source()
     register_webhook_source(
         WebhookSourceSpec(source=SOURCE, slug=SLUG, parser=_parser, verifier=_verifier)
     )
