@@ -9,6 +9,11 @@ import { type Page, type Locator, expect } from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { InputBar } from "@tests/e2e/chat/InputBar";
 
+interface SavedChatMessage {
+  message_type: string;
+  message: string;
+}
+
 export class ChatPage {
   readonly page: Page;
   readonly inputBar: InputBar;
@@ -17,9 +22,13 @@ export class ChatPage {
   readonly container: Locator;
   readonly scrollContainer: Locator;
 
-  // Message collections
+  // Message collections. Only messages near the viewport are mounted, so
+  // these hold the rendered ones, not the whole chat.
   readonly humanMessages: Locator;
   readonly aiMessages: Locator;
+  /** One row per message; far from the viewport, an empty placeholder. */
+  readonly messageRows: Locator;
+  readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
@@ -40,6 +49,10 @@ export class ChatPage {
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
     this.aiMessages = page.getByTestId("onyx-ai-message");
+    this.messageRows = this.scrollContainer.locator('[id^="message-"]');
+    this.scrollToBottomButton = page.getByRole("button", {
+      name: "Scroll to bottom",
+    });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
@@ -147,6 +160,45 @@ export class ChatPage {
 
   async expectAnswerAbsent(text: string): Promise<void> {
     await expect(this.scrollContainer).not.toContainText(text);
+  }
+
+  /** Waits for the reply to the latest message to finish. */
+  async expectLatestReplyComplete(timeout = 30000): Promise<void> {
+    // The latest turn is always mounted, whatever the chat's length.
+    await expect(
+      this.messageRows.last().getByTestId("onyx-ai-message")
+    ).toBeVisible({ timeout });
+  }
+
+  /**
+   * Waits until the open chat's saved messages are these user messages, in
+   * order, each with a reply. Reads the server, not the page: the page mounts
+   * only the messages near the viewport.
+   */
+  async expectSavedTurns(userMessages: string[]): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const chatId = new URL(this.page.url()).searchParams.get("chatId");
+          if (!chatId) return null;
+          const response = await this.page.request.get(
+            `/api/chat/get-chat-session/${chatId}`
+          );
+          if (!response.ok()) return null;
+          const session: { messages: SavedChatMessage[] } =
+            await response.json();
+          return {
+            userMessages: session.messages
+              .filter((message) => message.message_type === "user")
+              .map((message) => message.message),
+            replies: session.messages.filter(
+              (message) => message.message_type === "assistant"
+            ).length,
+          };
+        },
+        { timeout: 60000 }
+      )
+      .toEqual({ userMessages, replies: userMessages.length });
   }
 
   async expectCompleteAnswers(count: number): Promise<void> {

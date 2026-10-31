@@ -16,6 +16,9 @@ import { cn } from "@opal/utils";
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
 const DEFAULT_FADE_THRESHOLD_PX = 80; // 5rem
 const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
+// After opening a chat, how long to follow content that settles below the end
+// (late layout, a reply's footer), whatever the auto-scroll setting.
+const OPENING_FOLLOW_MS = 1000;
 
 // Fade configuration
 const TOP_FADE_HEIGHT = "1rem";
@@ -97,6 +100,7 @@ const ChatScrollContainer = React.memo(
       const [isAtBottom, setIsAtBottom] = useState(true);
       const isAtBottomRef = useRef(true); // Ref for use in callbacks
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
+      const followOpeningUntilRef = useRef(0);
       const prevScrollTopRef = useRef(0); // Track scroll position to detect scroll direction
       const [isScrollReady, setIsScrollReady] = useState(false);
 
@@ -228,6 +232,7 @@ const ChatScrollContainer = React.memo(
         // Only update isAtBottomRef when user explicitly scrolls UP
         // This prevents content growth or programmatic scrolls from disabling auto-scroll
         if (scrolledUp) {
+          followOpeningUntilRef.current = 0;
           updateScrollState();
         } else {
           // Still update fade overlays, but preserve isAtBottomRef
@@ -264,8 +269,11 @@ const ChatScrollContainer = React.memo(
             // scroll to avoid competing scroll commands.
             // Skip it during a smooth scroll to the bottom too: an instant
             // scroll would cut it short.
+            const following =
+              autoScrollRef.current ||
+              performance.now() < followOpeningUntilRef.current;
             if (
-              autoScrollRef.current &&
+              following &&
               wasAtBottom &&
               !isAutoScrollingRef.current &&
               container.dataset.smoothScrollActive !== "true"
@@ -378,6 +386,7 @@ const ChatScrollContainer = React.memo(
         // Opening a chat: its messages are laid out already, so scroll now,
         // before paint. The content is never painted hidden or out of place.
         if (isLoadingExistingContent) {
+          followOpeningUntilRef.current = performance.now() + OPENING_FOLLOW_MS;
           scrollIntoPlace();
           return;
         }
