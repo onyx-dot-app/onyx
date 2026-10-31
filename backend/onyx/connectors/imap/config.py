@@ -8,7 +8,8 @@ DEFAULT_IMAP_PORT_NUMBER = int(os.environ.get("IMAP_PORT", 993))
 
 
 class ImapCredentialBinding(CredentialBinding):
-    # Document ids are Message-ID headers, so the server picks what they resolve to.
+    # Document ids hash the host, port, username and Message-ID, so the server
+    # picks what they resolve to.
     host: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
     port: Annotated[int, FieldPolicy(FieldClass.IDENTITY)] = DEFAULT_IMAP_PORT_NUMBER
 

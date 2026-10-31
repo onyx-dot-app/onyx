@@ -1,6 +1,8 @@
 import copy
 import email
+import hashlib
 import imaplib
+import json
 import os
 import re
 import ssl
@@ -207,6 +209,12 @@ class ImapConnector(
             yield _convert_email_headers_and_body_into_document(
                 email_msg=email_msg,
                 email_headers=email_headers,
+                document_id=_build_document_id(
+                    host=self._host,
+                    port=self._port,
+                    username=self.credentials[_USERNAME_KEY],
+                    message_id=email_headers.id,
+                ),
                 include_perm_sync=include_perm_sync,
             )
 
@@ -342,9 +350,17 @@ def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | Non
     return email.message_from_bytes(raw_email)
 
 
+def _build_document_id(host: str, port: int, username: str, message_id: str) -> str:
+    """The sender writes Message-ID, so hash it with the account. Otherwise a
+    sender could pick the id of another connector's or account's document."""
+    key = json.dumps([host, port, username, message_id])
+    return f"{DocumentSource.IMAP.value}:{hashlib.sha256(key.encode()).hexdigest()}"
+
+
 def _convert_email_headers_and_body_into_document(
     email_msg: Message,
     email_headers: EmailHeaders,
+    document_id: str,
     include_perm_sync: bool,
 ) -> Document:
     sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
@@ -378,7 +394,7 @@ def _convert_email_headers_and_body_into_document(
     )
 
     return Document(
-        id=email_headers.id,
+        id=document_id,
         title=email_headers.subject,
         semantic_identifier=email_headers.subject,
         metadata={},

@@ -298,6 +298,15 @@ the error type on purpose in auth code.
     never assume a locale. Percentages and mixed currencies are never summed,
     and a clipped breakdown says how much it shows. The tests in
     `backend/tests/unit/onyx/indexing/test_workbook_chunks.py` hold the cases.
+16. `no-cross-source-claim` **A connector cannot claim another source's
+    document id.** Document ids share one namespace, and the prepare upsert
+    rewrites a shared row and adds the pair's readers to its ACL.
+    `background/celery/tasks/docprocessing/tasks.py:_docprocessing_task` drops
+    each id that `backend/onyx/db/document.py:get_document_ids_claimed_by_other_sources`
+    returns and records a failure for it.
+    `background/indexing/run_targeted_reindex.py:_flush_batch` applies the same
+    gate. Same-source pairs, OneDrive with SharePoint, and links that already
+    exist stay allowed. The ingestion API has its own permission gate.
 
 ## Decisions
 

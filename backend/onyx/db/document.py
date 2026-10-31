@@ -849,6 +849,54 @@ def get_document_source_types(
     }
 
 
+# OneDrive and SharePoint index the same drive items under the same ids.
+_SOURCES_SHARING_DOCUMENT_IDS: frozenset[DocumentSource] = frozenset(
+    {DocumentSource.ONEDRIVE, DocumentSource.SHAREPOINT}
+)
+
+
+def get_document_ids_claimed_by_other_sources(
+    db_session: Session,
+    document_ids: list[str],
+    connector_id: int,
+    credential_id: int,
+    source: DocumentSource,
+) -> set[str]:
+    """Ids that a pair of another source serves and this pair does not yet.
+
+    Indexing such an id would rewrite the other source's row and chunks and add
+    this pair's readers to them. Links that already exist are left alone.
+    """
+    if not document_ids:
+        return set()
+
+    allowed_sources = (
+        _SOURCES_SHARING_DOCUMENT_IDS
+        if source in _SOURCES_SHARING_DOCUMENT_IDS
+        else frozenset({source})
+    )
+    already_linked = select(DocumentByConnectorCredentialPair.id).where(
+        DocumentByConnectorCredentialPair.connector_id == connector_id,
+        DocumentByConnectorCredentialPair.credential_id == credential_id,
+        DocumentByConnectorCredentialPair.id.in_(document_ids),
+    )
+    return set(
+        db_session.scalars(
+            select(DocumentByConnectorCredentialPair.id)
+            .join(
+                Connector,
+                DocumentByConnectorCredentialPair.connector_id == Connector.id,
+            )
+            .where(
+                DocumentByConnectorCredentialPair.id.in_(document_ids),
+                Connector.source.not_in(allowed_sources),
+                DocumentByConnectorCredentialPair.id.not_in(already_linked),
+            )
+            .distinct()
+        )
+    )
+
+
 def get_document_source_types_after_cc_pair_removal(
     db_session: Session,
     document_id: str,

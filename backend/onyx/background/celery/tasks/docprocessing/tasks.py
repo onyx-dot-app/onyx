@@ -67,7 +67,12 @@ from onyx.configs.constants import (
     OnyxRedisSignals,
 )
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
-from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    IndexAttemptMetadata,
+)
 from onyx.db.backfill_models import PendingBackfill
 from onyx.db.cc_pair_run_resolution import (
     clear_resolved_repeated_error_states__no_commit,
@@ -91,6 +96,7 @@ from onyx.db.connector_edit_requests import (
     resolve_backfill_attempts__no_commit,
     track_backfills_covered_by_attempt__no_commit,
 )
+from onyx.db.document import get_document_ids_claimed_by_other_sources
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
@@ -2022,6 +2028,13 @@ def _docprocessing_task(
             connector_source: str = (
                 index_attempt.connector_credential_pair.connector.source.value
             )
+            claimed_doc_ids = get_document_ids_claimed_by_other_sources(
+                db_session=db_session,
+                document_ids=[document.id for document in documents],
+                connector_id=index_attempt_metadata.connector_id,
+                credential_id=index_attempt_metadata.credential_id,
+                source=index_attempt.connector_credential_pair.connector.source,
+            )
             search_settings_id: int = index_attempt.search_settings.id
             from_beginning: bool = index_attempt.from_beginning
             # FUTURE build: skip the PRESENT-only content_hash dedup so the two
@@ -2064,11 +2077,30 @@ def _docprocessing_task(
             ignore_time_skip=True,  # Documents are already filtered during extraction
             index_to_secondary=index_to_secondary,
             tenant_id=tenant_id,
-            document_batch=documents,
+            document_batch=[
+                document for document in documents if document.id not in claimed_doc_ids
+            ],
             request_id=index_attempt_metadata.request_id,
             adapter=adapter,
             from_beginning=from_beginning,
             skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
+        )
+        # Indexing these would rewrite another source's document and widen its ACL.
+        index_pipeline_result.failures.extend(
+            ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=document.id,
+                    document_link=(
+                        document.sections[0].link if document.sections else None
+                    ),
+                ),
+                failure_message=(
+                    f"Document id {document.id!r} is already indexed by a "
+                    "connector of another source"
+                ),
+            )
+            for document in documents
+            if document.id in claimed_doc_ids
         )
 
         # Track chunk indexing usage for cloud usage limits
