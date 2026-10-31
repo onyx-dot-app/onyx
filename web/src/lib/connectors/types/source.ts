@@ -19,6 +19,7 @@ export enum ValidSources {
   Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
+  JiraServiceManagement = "jira_service_management",
   Productboard = "productboard",
   Slab = "slab",
   Coda = "coda",
@@ -119,6 +120,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
   | ValidSources.UserFile
   | ValidSources.CraftFile // User Library - managed through dedicated UI
+  | ValidSources.JiraServiceManagement
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [
