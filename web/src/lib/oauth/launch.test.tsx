@@ -163,6 +163,7 @@ test("only a tab that launchOAuth opened closes itself", () => {
   expect(close).toHaveBeenCalledTimes(1);
   window.__ONYX_DESKTOP__ = { oauthCallbackWindow: true };
   expect(reportOAuthCallback("abc_123", true)).toBe(true);
+  expect(reportOAuthCallback("abc_123", false)).toBe(false);
 });
 
 test("desktop state helpers", () => {
