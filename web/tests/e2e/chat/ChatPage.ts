@@ -164,9 +164,10 @@ export class ChatPage {
 
   /** Waits for the reply to the latest message to finish. */
   async expectLatestReplyComplete(timeout = 30000): Promise<void> {
-    // The latest turn is always mounted, whatever the chat's length.
+    // The latest turn is always mounted, whatever the chat's length. A
+    // multi-model turn holds several replies; any complete one will do.
     await expect(
-      this.messageRows.last().getByTestId("onyx-ai-message")
+      this.messageRows.last().getByTestId("onyx-ai-message").first()
     ).toBeVisible({ timeout });
   }
 
