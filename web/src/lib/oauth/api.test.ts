@@ -5,7 +5,8 @@ const location = { href: "https://onyx.example.com/app" };
 beforeEach(() => {
   location.href = "https://onyx.example.com/app";
   Object.defineProperty(globalThis, "window", {
-    value: { location },
+    // A blocked tab falls back to the current-tab redirect.
+    value: { location, open: () => null },
     configurable: true,
   });
 });

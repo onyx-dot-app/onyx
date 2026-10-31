@@ -23,6 +23,7 @@ import {
 } from "@/lib/mcp/types";
 import { getActionIcon } from "@/lib/tools/utils";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
+import { openOAuthAuthorization } from "@/lib/oauth/launch";
 
 /** Which system a connectable came from. Surfaced to the user: the two are
  * connected and governed differently, so a row must never be ambiguous. */
@@ -134,7 +135,7 @@ export function mcpServerToConnectable(server: MCPServer): ConnectableApp {
     saveCredentials: async (values) => {
       await saveMCPUserCredentials(server.id, values, server.transport);
       if (server.auth_type === MCPAuthenticationType.OAUTH) {
-        window.location.href = await startOAuth();
+        await openOAuthAuthorization(await startOAuth());
       }
     },
     disconnect: userConnectable ? () => disconnectMCPServer(server.id) : null,

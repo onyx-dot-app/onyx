@@ -14180,6 +14180,11 @@
       "completeFailed": {
         "message": "認可を完了できませんでした"
       },
+      "desktopHandoff": {
+        "button": "Onyx を開く",
+        "description": "接続を完了するため、ブラウザーが Onyx デスクトップアプリを開きます。アプリが開いたら、このタブを閉じてかまいません。",
+        "title": "Onyx に戻る"
+      },
       "genericError": {
         "description": "OAuth処理中にエラーが発生しました。もう一度お試しください。",
         "title": "問題が発生しました"

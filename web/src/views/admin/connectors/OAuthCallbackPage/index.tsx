@@ -9,8 +9,10 @@ import CardSection from "@/components/admin/CardSection";
 import { handleOAuthAuthorizationResponse } from "@/lib/oauth_utils";
 import { SvgKey } from "@opal/icons";
 import { useTranslations } from "next-intl";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
+import { reportOAuthCallback } from "@/lib/oauth/launch";
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackPageContent() {
   const t = useTranslations("admin.connectorsList");
   const searchParams = useSearchParams();
 
@@ -94,6 +96,7 @@ export default function OAuthCallbackPage() {
         if (!response) {
           throw new Error("Empty response from OAuth server.");
         }
+        if (reportOAuthCallback(state, true)) return;
 
         setStatusMessage(t("oauthCallback.success.title"));
 
@@ -116,6 +119,7 @@ export default function OAuthCallbackPage() {
         setIsError(false);
       } catch (error) {
         console.error("OAuth error:", error);
+        if (reportOAuthCallback(state, false)) return;
         setStatusMessage(t("oauth.error.title"));
         setStatusDetails(t("oauthCallback.error.description"));
         setIsError(true);
@@ -151,3 +155,5 @@ export default function OAuthCallbackPage() {
     </div>
   );
 }
+
+export default withDesktopOAuthHandoff(OAuthCallbackPageContent);

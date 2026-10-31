@@ -14180,6 +14180,11 @@
       "completeFailed": {
         "message": "无法完成授权"
       },
+      "desktopHandoff": {
+        "button": "打开 Onyx",
+        "description": "浏览器将打开 Onyx 桌面应用以完成连接。应用打开后，您可以关闭此标签页。",
+        "title": "返回 Onyx"
+      },
       "genericError": {
         "description": "OAuth 过程中发生错误。请重试。",
         "title": "出了点问题"
