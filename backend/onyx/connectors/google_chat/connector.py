@@ -85,10 +85,12 @@ _MAX_READER_CANDIDATES = 5
 # Bounds the memory one day of a busy space holds.
 _MAX_MESSAGES_PER_DOCUMENT = 10_000
 _REPLY_INDENT = "    "
+_SLIM_PROGRESS_LABEL = "google_chat_slim_retrieval"
 
 
 class SpaceUnreadableError(Exception):
-    """Google refused every member tried as the reader of a space."""
+    """No member of a space could read it: none is active, or Google refused
+    every member tried."""
 
 
 class GoogleChatCheckpoint(ConnectorCheckpoint):
@@ -285,9 +287,9 @@ class GoogleChatConnector(
         fields: str,
     ) -> Iterator[dict[str, Any]]:
         """The space's messages created in the window, oldest first, read as
-        the first member Google lets read them. Yields nothing for a space
-        without an active member, and raises SpaceUnreadableError when Google
-        refuses every member tried."""
+        the first member Google lets read them. Raises SpaceUnreadableError
+        when the space has no active member or Google refuses every member
+        tried, so a prune never reads the space as empty."""
         refused: list[str] = []
         for reader in islice(self._reader_candidates(space), _MAX_READER_CANDIDATES):
             chat: GoogleChatService = get_google_service(
@@ -324,7 +326,10 @@ class GoogleChatConnector(
                 f"Google Chat refused every member tried as the reader of "
                 f"{space.display_name} ({space.name}): {', '.join(refused)}"
             )
-        logger.info("Skipping %s: it has no active member to read it as", space.name)
+        raise SpaceUnreadableError(
+            f"Google Chat found no joined, unsuspended member to read "
+            f"{space.display_name} ({space.name}) as"
+        )
 
     def _sender(self, message: dict[str, Any]) -> BasicExpertInfo:
         """Google returns a sender's display name only while they share the
@@ -473,14 +478,16 @@ class GoogleChatConnector(
             # and an unreadable space both raise.
             if callback is not None and callback.should_stop():
                 raise RuntimeError("Google Chat slim retrieval: stop signal detected")
-            days: set[date] = {
-                _created_at(message).date()
-                for message in self._messages(
-                    space, window_start, window_end, _SLIM_MESSAGE_FIELDS
-                )
-                if (window_start is None or _created_at(message) >= window_start)
-                and _message_text(message)
-            }
+            days: set[date] = set()
+            for message in self._messages(
+                space, window_start, window_end, _SLIM_MESSAGE_FIELDS
+            ):
+                if callback is not None:
+                    callback.progress(_SLIM_PROGRESS_LABEL, 1)
+                if (
+                    window_start is None or _created_at(message) >= window_start
+                ) and _message_text(message):
+                    days.add(_created_at(message).date())
             yield [self._space_node(space)] + [
                 SlimDocument(
                     id=document_id(space, day), parent_hierarchy_raw_node_id=space.name
