@@ -168,20 +168,16 @@
         cursor: default;
       }
 
-      #${HISTORY_NAV_ID} button:hover:not(:disabled) {
+      #${HISTORY_NAV_ID} button:hover {
         background: rgba(0, 0, 0, 0.06);
         color: rgba(0, 0, 0, 0.85);
-      }
-
-      #${HISTORY_NAV_ID} button:disabled {
-        opacity: 0.35;
       }
 
       .dark #${HISTORY_NAV_ID} button {
         color: rgba(255, 255, 255, 0.65);
       }
 
-      .dark #${HISTORY_NAV_ID} button:hover:not(:disabled) {
+      .dark #${HISTORY_NAV_ID} button:hover {
         background: rgba(255, 255, 255, 0.08);
         color: rgba(255, 255, 255, 0.9);
       }
