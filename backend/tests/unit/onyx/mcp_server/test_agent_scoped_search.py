@@ -1,9 +1,10 @@
-"""Filter resolution in the MCP document-search tool.
+"""Argument handling in the MCP document-search tool.
 
 `agent`, `source_types` and `document_set_names` all resolve on the search call
 itself, so the happy path needs no discovery round trip. A value that does not
 resolve must fail rather than be dropped, and the error teaches the caller
-without dumping the whole inventory.
+without dumping the whole inventory. `retrieval_only` passes through to
+`/search`, and the server setting can force it on.
 """
 
 import json
@@ -251,3 +252,25 @@ async def test_ambiguous_agent_name_errors(stub: _Stub) -> None:
     assert payload["results"] == []
     assert "ambiguous" in payload["error"]
     assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested", "forced", "sent"),
+    [(False, False, False), (True, False, True), (False, True, True)],
+)
+async def test_retrieval_only_is_sent_when_requested_or_forced(
+    stub: _Stub,
+    monkeypatch: pytest.MonkeyPatch,
+    requested: bool,
+    forced: bool,
+    sent: bool,
+) -> None:
+    monkeypatch.setattr(search_module, "MCP_SERVER_SEARCH_RETRIEVAL_ONLY", forced)
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", retrieval_only=requested
+    )
+
+    assert "error" not in payload
+    assert stub.search_requests[0]["retrieval_only"] is sent

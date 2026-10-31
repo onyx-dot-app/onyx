@@ -1965,6 +1965,12 @@ MCP_SERVER_CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# Run every MCP document search in retrieval-only mode (no LLM calls), whatever
+# the client asks for.
+MCP_SERVER_SEARCH_RETRIEVAL_ONLY = (
+    os.environ.get("MCP_SERVER_SEARCH_RETRIEVAL_ONLY", "").lower() == "true"
+)
+
 
 POD_NAME = os.environ.get("POD_NAME")
 POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
