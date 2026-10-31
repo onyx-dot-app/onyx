@@ -490,6 +490,7 @@
   "POST /admin/llm/default-vision": "manage:llms",
   "POST /admin/llm/litellm/available-models": "manage:llms",
   "POST /admin/llm/lm-studio/available-models": "manage:llms",
+  "POST /admin/llm/nace/available-models": "manage:llms",
   "POST /admin/llm/nebius-tokenfactory/available-models": "admin",
   "POST /admin/llm/ollama/available-models": "manage:llms",
   "POST /admin/llm/openai-compatible/available-models": "manage:llms",

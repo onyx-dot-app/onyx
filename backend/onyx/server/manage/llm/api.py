@@ -51,6 +51,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import (
+    HOSTED_DECISION_PROVIDER_NAMES,
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
     LlmProviderNames,
@@ -100,6 +101,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
     fetch_available_well_known_llms,
 )
+from onyx.llm.well_known_providers.nace import fetch_nace_models
 from onyx.llm.well_known_providers.typesafe import (
     fetch_typesafe_models,
 )
@@ -113,6 +115,7 @@ from onyx.server.manage.llm.models import (
     DecisionProviderConnection,
     DecisionProviderUpsertRequest,
     DefaultModel,
+    HostedDecisionModelsRequest,
     LitellmFinalModelResponse,
     LitellmModelDetails,
     LitellmModelsRequest,
@@ -126,6 +129,7 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationPage,
     ModelConfigurationUpsertRequest,
     ModelRoutingUpdateRequest,
+    NaceModelsRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
     OllamaFinalModelResponse,
@@ -905,11 +909,12 @@ def _resolve_decision_connection(
                 if existing.api_key
                 else None
             )
-    if request.provider == LlmProviderNames.TYPESAFE and (
+    if request.provider in HOSTED_DECISION_PROVIDER_NAMES and (
         request.api_base or request.custom_config
     ):
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI uses its hosted System One API"
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"{PROVIDER_DISPLAY_NAMES[request.provider]} uses its hosted System One API",
         )
     _validate_zoom_decision_connection(
         provider=request.provider,
@@ -956,6 +961,8 @@ def _decision_provider_catalog(
         return {
             model.name: False for model in fetch_typesafe_models(request.api_key or "")
         }
+    if request.provider == LlmProviderNames.NACE:
+        return {model.name: False for model in fetch_nace_models(request.api_key or "")}
     if request.provider == LlmProviderNames.OPENROUTER:
         return {
             model.id: model.supports_chat
@@ -1149,11 +1156,12 @@ def put_llm_provider(
     _reject_assume_role_in_multi_tenant(llm_provider_upsert_request.custom_config)
 
     if (
-        llm_provider_upsert_request.provider == LlmProviderNames.TYPESAFE
+        llm_provider_upsert_request.provider in HOSTED_DECISION_PROVIDER_NAMES
         and not (llm_provider_upsert_request.api_key or "").strip()
     ):
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI requires an API key"
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"{PROVIDER_DISPLAY_NAMES[llm_provider_upsert_request.provider]} requires an API key",
         )
 
     # Check if we're transitioning to Auto mode
@@ -1540,7 +1548,7 @@ def _build_provider_descriptors(
     providers = [
         provider
         for provider in providers
-        if provider.provider != LlmProviderNames.TYPESAFE
+        if provider.provider not in HOSTED_DECISION_PROVIDER_NAMES
     ]
     windows = _page_model_windows(
         db_session, providers, pinned_models, flow_type=LLMModelFlowType.CHAT
@@ -2290,38 +2298,50 @@ def _get_openrouter_models_response(
         )
 
 
-@admin_router.post("/typesafe/available-models")
-def get_typesafe_available_models(
-    request: TypeSafeModelsRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
-    db_session: Session = Depends(get_session),
-) -> list[OpenRouterFinalModelResponse]:
+def _hosted_decision_discovery_key(
+    request: HostedDecisionModelsRequest,
+    provider: LlmProviderNames,
+    db_session: Session,
+) -> str:
+    """The key to discover models with: the request's, or the saved one when
+    the request names an existing provider and omits or masks the key."""
+    display_name = PROVIDER_DISPLAY_NAMES[provider]
     api_key = request.api_key
     if request.provider_id is not None:
-        provider = fetch_existing_llm_provider_by_id(request.provider_id, db_session)
-        if provider is None or provider.provider != LlmProviderNames.TYPESAFE:
+        existing = fetch_existing_llm_provider_by_id(request.provider_id, db_session)
+        if existing is None or existing.provider != provider:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
-                "Model discovery requires a TypeSafe AI provider",
+                f"Model discovery requires a {display_name} provider",
             )
-        if provider.api_key:
-            stored_key = provider.api_key.get_value(apply_mask=False)
+        if existing.api_key:
+            stored_key = existing.api_key.get_value(apply_mask=False)
             if not api_key or api_key == _mask_string(stored_key):
                 api_key = stored_key
     if not api_key or not api_key.strip():
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI requires an API key"
+            OnyxErrorCode.VALIDATION_ERROR, f"{display_name} requires an API key"
         )
+    return api_key
+
+
+def _hosted_decision_models(
+    db_session: Session,
+    request: HostedDecisionModelsRequest,
+    model_names: list[str],
+    source_label: str,
+) -> list[OpenRouterFinalModelResponse]:
+    """Decision-only rows for discovered models, synced onto a saved provider."""
     results = [
         OpenRouterFinalModelResponse(
-            name=model.name,
-            display_name=model.name,
+            name=name,
+            display_name=name,
             max_input_tokens=None,
             supports_image_input=False,
             supports_chat=False,
             supports_decisions=True,
         )
-        for model in fetch_typesafe_models(api_key)
+        for name in model_names
     ]
     if request.provider_id is not None:
         _sync_fetched_models(
@@ -2336,9 +2356,41 @@ def get_typesafe_available_models(
                 )
                 for model in results
             ],
-            source_label="TypeSafe AI",
+            source_label=source_label,
         )
     return results
+
+
+@admin_router.post("/typesafe/available-models")
+def get_typesafe_available_models(
+    request: TypeSafeModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[OpenRouterFinalModelResponse]:
+    api_key = _hosted_decision_discovery_key(
+        request, LlmProviderNames.TYPESAFE, db_session
+    )
+    return _hosted_decision_models(
+        db_session,
+        request,
+        [model.name for model in fetch_typesafe_models(api_key)],
+        source_label="TypeSafe AI",
+    )
+
+
+@admin_router.post("/nace/available-models")
+def get_nace_available_models(
+    request: NaceModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[OpenRouterFinalModelResponse]:
+    api_key = _hosted_decision_discovery_key(request, LlmProviderNames.NACE, db_session)
+    return _hosted_decision_models(
+        db_session,
+        request,
+        [model.name for model in fetch_nace_models(api_key)],
+        source_label="Nace",
+    )
 
 
 @admin_router.post("/openrouter/available-models")

@@ -25,6 +25,7 @@ restricting a provider to groups needs EE.
 - **An admin** sets up decision providers at Admin > Decision Models and may
   select one decision model. It starts unset and never inherits the chat model.
   When it is set, internal search ranks and expands sections with it.
+  TypeSafe and Nace are decision-only and stay out of chat and Auto mode.
 - **A user** picks a model per chat, or keeps the agent's model, or the
   workspace default. Tokens and, where the model supports it, reasoning stream
   in. A short network failure before the first token retries without notice.
@@ -163,6 +164,16 @@ search is the product caller of `get_decision_client`
 ([[internal-search#decision-path-gate]]); the admin and Zoom test endpoints
 build their own clients.
 
+TypeSafe, Nace and OpenRouter use the System One request shape in
+`llm/decisions/client.py:DecisionClient.decide`. Nace discovery
+(`llm/well_known_providers/nace.py:fetch_nace_models`) drops catalog aliases.
+It separates rejected credentials from upstream, transport and invalid-catalog
+failures; public errors omit upstream response bodies.
+`llm/decisions/models.py:SystemOneScoreAnswer.index_listed_legend` maps Nace's
+ordered score labels to level keys; `_validate_answers` then restores each
+score label from the requested level and allows rounding error in
+probability sums.
+
 ---
 
 ## Contracts and traps
@@ -276,7 +287,11 @@ build their own clients.
   tenant policy and the cost cap still apply.
 - **Decisions use their own client.** Decision protocols return structured
   probabilities that LiteLLM does not model. Requests have a finite timeout
-  and no automatic retries.
+  and no automatic retries. `llm/decisions/client.py:DecisionClient` defaults
+  to 60 seconds for Nace, covering its 55-second server wait, and 30 seconds
+  for other providers. The factories leave default selection to the client
+  and pass explicit caller budgets through, including internal search's
+  shorter deadline.
 
 ---
 

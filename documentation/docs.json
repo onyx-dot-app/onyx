@@ -192,6 +192,7 @@
                   "admins/ai_models/portkey",
                   "admins/ai_models/vercel_ai_gateway",
                   "admins/ai_models/nebius_tokenfactory",
+                  "admins/ai_models/nace_drex",
                   "admins/ai_models/litellm_proxy",
                   "admins/ai_models/custom_inference_provider"
                 ]

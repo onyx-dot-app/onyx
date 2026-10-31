@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class DecisionProvider(StrEnum):
@@ -10,6 +10,7 @@ class DecisionProvider(StrEnum):
     OPENAI = "openai"
     OPENROUTER = "openrouter"
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
+    NACE = "nace"
 
 
 class DecisionModel(BaseModel):
@@ -144,6 +145,15 @@ class SystemOneScoreAnswer(DecisionModel):
     confidence: float
     probabilities: dict[str, Probability]
     legend: dict[str, str]
+
+    @field_validator("legend", mode="before")
+    @classmethod
+    def index_listed_legend(cls, value: object) -> object:
+        # TypeSafe keys the legend by level index; Nace returns the level
+        # labels as a list in level order. Both map onto the indexed form.
+        if isinstance(value, list):
+            return {str(index): label for index, label in enumerate(value)}
+        return value
 
     @model_validator(mode="after")
     def valid_level_keys(self) -> Self:

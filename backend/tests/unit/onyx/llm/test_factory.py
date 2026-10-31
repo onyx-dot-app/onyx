@@ -207,6 +207,34 @@ def test_decision_client_unset_has_no_fallback() -> None:
     client.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "provider,timeout,expected_timeout",
+    [
+        ("nace", None, 60.0),
+        ("typesafe", None, 30.0),
+        ("nace", 5.0, 5.0),
+        ("nace", 90.0, 90.0),
+    ],
+)
+def test_selected_decision_client_uses_provider_timeout(
+    provider: str, timeout: float | None, expected_timeout: float
+) -> None:
+    model = ModelConfiguration(id=22, name="test-model", is_visible=False)
+    LLMProviderModel(id=12, provider=provider, model_configurations=[model])
+    with (
+        patch("onyx.llm.factory.get_session_with_current_tenant"),
+        patch("onyx.llm.factory.fetch_default_model", return_value=model),
+        patch("onyx.llm.factory.check_llm_cost_limit_for_provider"),
+    ):
+        client = (
+            get_decision_client()
+            if timeout is None
+            else get_decision_client(timeout=timeout)
+        )
+    assert client is not None
+    assert client.timeout == expected_timeout
+
+
 def test_decision_client_uses_selected_provider_and_model() -> None:
     model = ModelConfiguration(id=22, name="typesafe/jev-latest", is_visible=False)
     LLMProviderModel(

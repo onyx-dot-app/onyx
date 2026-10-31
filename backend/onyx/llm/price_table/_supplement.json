@@ -16,6 +16,22 @@
       }
     }
   },
+  "nace": {
+    "models": {
+      "drex-max": {
+        "name": "Nace Drex Max",
+        "mode": "decisions",
+        "supports_decisions": true,
+        "modalities": {"input": ["text", "image"], "output": ["decisions"]}
+      },
+      "drex-v2.0": {
+        "name": "Nace Drex 2.0",
+        "mode": "decisions",
+        "supports_decisions": true,
+        "modalities": {"input": ["text"], "output": ["decisions"]}
+      }
+    }
+  },
   "zoom_ai": {
     "models": {
       "zoom-decisions": {

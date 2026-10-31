@@ -13,6 +13,7 @@ from onyx.llm.decisions.models import (
     DecisionProvider,
     DecisionRequest,
     PredicateQuestion,
+    ScoreAnswer,
     ScoreLevel,
     ScoreQuestion,
 )
@@ -49,6 +50,7 @@ def decision_request() -> DecisionRequest:
     "provider,url",
     [
         (DecisionProvider.TYPESAFE, "https://api.typesafe.ai/v1/systemone"),
+        (DecisionProvider.NACE, "https://console.nace.ai/v1/systemone"),
         (DecisionProvider.OPENROUTER, "https://openrouter.ai/api/alpha/decisions"),
     ],
 )
@@ -247,6 +249,44 @@ def test_rejects_malformed_results(answers: list[dict[str, object]]) -> None:
                 )
 
 
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "https://other.example/v1",
+        "https://console.nace.ai.other.example/v1",
+        "https://console.nace.ai@other.example/v1",
+        "http://console.nace.ai/v1",
+        "https://console.nace.ai:8443/v1",
+    ],
+)
+def test_nace_key_never_reaches_another_origin(
+    api_base: str, decision_request: DecisionRequest
+) -> None:
+    sent: list[httpx.Request] = []
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        sent.append(http_request)
+        return httpx.Response(500)
+
+    with closing(httpx.Client(transport=httpx.MockTransport(handler))) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            with pytest.raises(ValueError, match="fixed hosted endpoint"):
+                DecisionClient(
+                    DecisionProvider.NACE, "drex-max", "nace-key", api_base=api_base
+                ).decide(decision_request, flow=LLMFlow.MODEL_VALIDATION)
+    assert sent == []
+
+
+def test_nace_accepts_its_own_origin() -> None:
+    client = DecisionClient(
+        DecisionProvider.NACE,
+        "drex-max",
+        "nace-key",
+        api_base="https://console.nace.ai/v1/",
+    )
+    assert client.url == "https://console.nace.ai/v1/systemone"
+
+
 def test_rejects_duplicate_question_names() -> None:
     with pytest.raises(ValidationError, match="names must be unique"):
         DecisionRequest(
@@ -269,16 +309,34 @@ def test_propagates_http_failure(
                 )
 
 
-def test_propagates_timeout(decision_request: DecisionRequest) -> None:
+@pytest.mark.parametrize(
+    "provider,timeout,expected_timeout",
+    [
+        (DecisionProvider.NACE, None, 60.0),
+        (DecisionProvider.TYPESAFE, None, 30.0),
+        (DecisionProvider.OPENAI, 7.0, 7.0),
+        (DecisionProvider.NACE, 5.0, 5.0),
+        (DecisionProvider.NACE, 90.0, 90.0),
+    ],
+)
+def test_propagates_timeout(
+    decision_request: DecisionRequest,
+    provider: DecisionProvider,
+    timeout: float | None,
+    expected_timeout: float,
+) -> None:
+    decision_client = (
+        DecisionClient(provider, "test", "test-key")
+        if timeout is None
+        else DecisionClient(provider, "test", "test-key", timeout=timeout)
+    )
     with patch("onyx.llm.decisions.client.httpx.Client") as client:
         client.return_value.__enter__.return_value.post.side_effect = httpx.ReadTimeout(
             "timed out"
         )
         with pytest.raises(httpx.ReadTimeout):
-            DecisionClient(
-                DecisionProvider.OPENAI, "test", "test-key", timeout=7
-            ).decide(decision_request, flow=LLMFlow.MODEL_VALIDATION)
-        client.assert_called_once_with(timeout=7)
+            decision_client.decide(decision_request, flow=LLMFlow.MODEL_VALIDATION)
+        client.assert_called_once_with(timeout=expected_timeout)
 
 
 def test_openrouter_custom_base_uses_alpha() -> None:
@@ -477,44 +535,139 @@ def test_rejects_invalid_distributions(probabilities: list[dict[str, object]]) -
                 )
 
 
-@pytest.mark.parametrize("legend", [{"0": "Low"}, {"bad": "Low", "1": "High"}])
-def test_rejects_malformed_score_legend(legend: dict[str, str]) -> None:
-    with closing(
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(
-                    200,
-                    json={
-                        "model": "test",
-                        "answers": {
-                            "severity": {
-                                "type": "score",
-                                "score": 0.5,
-                                "confidence": 0.5,
-                                "probabilities": {"0": 0.5, "1": 0.5},
-                                "legend": legend,
-                            }
-                        },
+def _score_only_request() -> DecisionRequest:
+    return DecisionRequest(
+        input="text",
+        questions=[
+            ScoreQuestion(
+                name="severity",
+                instructions="How severe?",
+                levels=[ScoreLevel(label="Low"), ScoreLevel(label="High")],
+            )
+        ],
+    )
+
+
+def _score_answer_transport(legend: object) -> httpx.Client:
+    return httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "model": "test",
+                    "answers": {
+                        "severity": {
+                            "type": "score",
+                            "score": 0.5,
+                            "confidence": 0.5,
+                            "probabilities": {"0": 0.5, "1": 0.5},
+                            "legend": legend,
+                        }
                     },
-                )
+                },
             )
         )
-    ) as transport:
+    )
+
+
+def test_nace_list_legend_maps_onto_score_levels() -> None:
+    with closing(_score_answer_transport(["Low", "High"])) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            result = DecisionClient(
+                DecisionProvider.NACE, "drex-max", "test-key"
+            ).decide(_score_only_request(), flow=LLMFlow.MODEL_VALIDATION)
+    assert result.model_dump()["answers"] == [
+        {
+            "type": "score",
+            "name": "severity",
+            "score": 0.5,
+            "confidence": 0.5,
+            "probabilities": [
+                {"value": 0, "label": "Low", "probability": 0.5},
+                {"value": 1, "label": "High", "probability": 0.5},
+            ],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "legend",
+    [{"0": "Low"}, {"bad": "Low", "1": "High"}, ["Low"], ["Low", "Mid", "High"]],
+)
+def test_rejects_malformed_score_legend(legend: object) -> None:
+    with closing(_score_answer_transport(legend)) as transport:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             with pytest.raises(ValueError, match="legend must match"):
                 DecisionClient(DecisionProvider.TYPESAFE, "test", "test-key").decide(
-                    DecisionRequest(
-                        input="text",
-                        questions=[
-                            ScoreQuestion(
-                                name="severity",
-                                instructions="How severe?",
-                                levels=[
-                                    ScoreLevel(label="Low"),
-                                    ScoreLevel(label="High"),
-                                ],
-                            )
-                        ],
-                    ),
-                    flow=LLMFlow.MODEL_VALIDATION,
+                    _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
+                )
+
+
+def test_nace_score_labels_come_from_requested_levels() -> None:
+    request = DecisionRequest(
+        input="text",
+        questions=[
+            ScoreQuestion(
+                name="severity",
+                instructions="How severe?",
+                levels=[
+                    ScoreLevel(label="Low", description="minor"),
+                    ScoreLevel(label="High"),
+                ],
+            )
+        ],
+    )
+    with closing(
+        _score_answer_transport({"0": "Low: minor", "1": "High"})
+    ) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            result = DecisionClient(
+                DecisionProvider.NACE, "drex-max", "test-key"
+            ).decide(request, flow=LLMFlow.MODEL_VALIDATION)
+    answer = result.answers[0]
+    assert isinstance(answer, ScoreAnswer)
+    assert [item.label for item in answer.probabilities] == ["Low", "High"]
+
+
+def _probability_transport(probabilities: dict[str, float]) -> httpx.Client:
+    return httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "model": "test",
+                    "answers": {
+                        "severity": {
+                            "type": "score",
+                            "score": 0.5,
+                            "confidence": 0.5,
+                            "probabilities": probabilities,
+                            "legend": ["Low", "High"],
+                        }
+                    },
+                },
+            )
+        )
+    )
+
+
+@pytest.mark.parametrize("probabilities", [(0.4999, 0.5), (0.5001, 0.5)])
+def test_probability_sums_within_rounding_are_accepted(
+    probabilities: tuple[float, float],
+) -> None:
+    with closing(
+        _probability_transport({"0": probabilities[0], "1": probabilities[1]})
+    ) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            DecisionClient(DecisionProvider.NACE, "drex-max", "test-key").decide(
+                _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
+            )
+
+
+def test_probability_sums_beyond_rounding_are_rejected() -> None:
+    with closing(_probability_transport({"0": 0.49, "1": 0.5})) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            with pytest.raises(ValueError, match="sum to one"):
+                DecisionClient(DecisionProvider.NACE, "drex-max", "test-key").decide(
+                    _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
                 )

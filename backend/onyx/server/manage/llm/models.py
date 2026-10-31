@@ -9,7 +9,11 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import resolve_api_surface
-from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS, LlmProviderNames
+from onyx.llm.constants import (
+    DYNAMIC_LLM_PROVIDERS,
+    HOSTED_DECISION_PROVIDER_NAMES,
+    PROVIDER_DISPLAY_NAMES,
+)
 from onyx.llm.model_capabilities import (
     anthropic_supports_thinking,
     catalog_model_supports_image_input,
@@ -203,14 +207,15 @@ class LLMProviderUpsertRequest(LLMProvider):
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
     @model_validator(mode="after")
-    def validate_typesafe_configuration(self) -> LLMProviderUpsertRequest:
-        if self.provider == LlmProviderNames.TYPESAFE:
+    def validate_hosted_decision_configuration(self) -> LLMProviderUpsertRequest:
+        if self.provider in HOSTED_DECISION_PROVIDER_NAMES:
+            display_name = PROVIDER_DISPLAY_NAMES[self.provider]
             if any(model.supports_chat is True for model in self.model_configurations):
                 raise ValueError(
-                    "TypeSafe AI does not support chat model configuration"
+                    f"{display_name} does not support chat model configuration"
                 )
             if self.api_base or self.custom_config:
-                raise ValueError("TypeSafe AI uses its hosted System One API")
+                raise ValueError(f"{display_name} uses its hosted System One API")
             self.is_auto_mode = False
         return self
 
@@ -653,12 +658,22 @@ class OllamaModelDetails(BaseModel):
         return value if value > 0 else None
 
 
-# OpenRouter dynamic models fetch
-class TypeSafeModelsRequest(BaseModel):
+# Hosted System One model discovery (TypeSafe AI, Nace): the request key, or the
+# saved provider key when provider_id is set and the key is omitted or masked.
+class HostedDecisionModelsRequest(BaseModel):
     api_key: str | None = None
     provider_id: int | None = None
 
 
+class TypeSafeModelsRequest(HostedDecisionModelsRequest):
+    pass
+
+
+class NaceModelsRequest(HostedDecisionModelsRequest):
+    pass
+
+
+# OpenRouter dynamic models fetch
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
     api_key: str

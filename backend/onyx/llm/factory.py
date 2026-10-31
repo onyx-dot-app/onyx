@@ -17,8 +17,12 @@ from onyx.db.llm import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.decisions.client import DEFAULT_DECISION_TIMEOUT_S, DecisionClient
+from onyx.llm.constants import (
+    HOSTED_DECISION_PROVIDER_NAMES,
+    PROVIDER_DISPLAY_NAMES,
+    LlmProviderNames,
+)
+from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.decisions.factory import build_decision_client
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
@@ -440,7 +444,7 @@ def get_default_utility_llm(
 
 def get_decision_client(
     additional_headers: dict[str, str] | None = None,
-    timeout: float = DEFAULT_DECISION_TIMEOUT_S,
+    timeout: float | None = None,
 ) -> DecisionClient | None:
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_model(db_session, LLMModelFlowType.DECISION)
@@ -508,8 +512,10 @@ def get_llm(
     is_router: bool = False,
     model_configuration_id: int | None = None,
 ) -> LitellmLLM:
-    if provider == LlmProviderNames.TYPESAFE:
-        raise ValueError("TypeSafe AI does not support chat generation")
+    if provider in HOSTED_DECISION_PROVIDER_NAMES:
+        raise ValueError(
+            f"{PROVIDER_DISPLAY_NAMES[provider]} does not support chat generation"
+        )
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
 

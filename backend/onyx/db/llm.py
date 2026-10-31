@@ -32,9 +32,10 @@ from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import (
+    HOSTED_DECISION_PROVIDER_NAMES,
     LLM_PROVIDER_MODEL_PAGE_SIZE,
+    PROVIDER_DISPLAY_NAMES,
     SOURCE_API_CONTEXT_LIMIT_PROVIDERS,
-    LlmProviderNames,
 )
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
@@ -861,10 +862,12 @@ def sync_model_configurations(
     if not provider:
         raise ValueError(f"LLM Provider with id={provider_id} not found")
 
-    if provider.provider == LlmProviderNames.TYPESAFE and any(
+    if provider.provider in HOSTED_DECISION_PROVIDER_NAMES and any(
         model.supports_chat for model in models
     ):
-        raise ValueError("TypeSafe AI does not support chat model discovery")
+        raise ValueError(
+            f"{PROVIDER_DISPLAY_NAMES[provider.provider]} does not support chat model discovery"
+        )
 
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
     defaults_by_model_id: dict[int, set[LLMModelFlowType]] | None = None
