@@ -859,6 +859,19 @@ export const connectorConfigs: Record<
     values: [],
     advanced_values: [],
   },
+  google_chat: {
+    description: "connectors.google_chat.description",
+    values: [
+      {
+        type: "list",
+        label: "connectors.google_chat.fields.spaces.label",
+        name: "spaces",
+        optional: true,
+        description: "connectors.google_chat.fields.spaces.description",
+      },
+    ],
+    advanced_values: [],
+  },
   bookstack: {
     description: "connectors.bookstack.description",
     values: [

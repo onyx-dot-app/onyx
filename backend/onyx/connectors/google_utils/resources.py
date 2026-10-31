@@ -27,11 +27,16 @@ class GmailService(Resource):
     pass
 
 
+class GoogleChatService(Resource):
+    pass
+
+
 class GoogleService(Enum):
     DOCS = ("docs", "v1")
     DRIVE = ("drive", "v3")
     ADMIN = ("admin", "directory_v1")
     GMAIL = ("gmail", "v1")
+    CHAT = ("chat", "v1")
 
 
 @overload
@@ -66,11 +71,25 @@ def get_google_service(
 ) -> GmailService: ...
 
 
+@overload
+def get_google_service(
+    service: Literal[GoogleService.CHAT],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GoogleChatService: ...
+
+
 def get_google_service(
     service: GoogleService,
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
-) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
+) -> (
+    GoogleDriveService
+    | GoogleDocsService
+    | AdminService
+    | GmailService
+    | GoogleChatService
+):
     creds = get_impersonated_creds(creds, user_email)
     service_name, service_version = service.value
     resource: Resource = build(service_name, service_version, credentials=creds)
