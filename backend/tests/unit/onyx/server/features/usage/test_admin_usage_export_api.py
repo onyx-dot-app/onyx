@@ -477,13 +477,7 @@ class TestResetUsageEndpoint:
         seen: dict[str, object] = {}
         monkeypatch.setattr(api, "get_user_by_email", lambda _email, _db: _U())
         monkeypatch.setattr(
-            api, "fetch_all_user_token_rate_limits", lambda *_a, **_k: []
-        )
-        monkeypatch.setattr(
-            api, "fetch_all_global_token_rate_limits", lambda *_a, **_k: []
-        )
-        monkeypatch.setattr(
-            api, "fetch_user_group_token_rate_limits", lambda *_a, **_k: {}
+            api, "fetch_token_rate_limits_applying_to_user", lambda *_a, **_k: []
         )
         monkeypatch.setattr(
             api, "get_usage_reset_window_start", lambda _now, _limits: window_start

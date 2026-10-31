@@ -29,6 +29,7 @@ def public_search_dependencies(primary: MagicMock) -> Iterator[MagicMock]:
         patch.multiple(
             api,
             get_default_llm=MagicMock(return_value=primary),
+            check_model_spend_limits=MagicMock(),
             llm_from_provider=MagicMock(return_value=primary),
             get_current_search_settings=MagicMock(),
             get_default_document_index=MagicMock(),

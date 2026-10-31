@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user, scope_exempt
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import PUBLIC_API_TAGS, TokenRateLimitScope
 from onyx.db.cost_override import (
     create_cost_override,
     delete_cost_override,
@@ -34,9 +34,9 @@ from onyx.db.system_usage import (
     get_system_usage_export,
 )
 from onyx.db.token_limit import (
-    fetch_all_global_token_rate_limits,
-    fetch_all_user_token_rate_limits,
-    fetch_user_group_token_rate_limits,
+    fetch_enforced_token_rate_limits,
+    fetch_token_rate_limits_applying_to_user,
+    fetch_user_group_enforced_token_rate_limits,
 )
 from onyx.db.user_usage import (
     cost_budget_limits,
@@ -136,7 +136,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
                 )
             )
 
-    user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
+    user_rls = fetch_enforced_token_rate_limits(db_session, TokenRateLimitScope.USER)
     user_cost_rls = cost_budget_limits(user_rls)
     if user_cost_rls:
         fetch_cutoff = period_fetch_cutoff(now, user_cost_rls)
@@ -145,7 +145,9 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
         )
 
-    global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
+    global_rls = fetch_enforced_token_rate_limits(
+        db_session, TokenRateLimitScope.GLOBAL
+    )
     global_cost_rls = cost_budget_limits(global_rls)
     if global_cost_rls:
         fetch_cutoff = period_fetch_cutoff(now, global_cost_rls)
@@ -174,7 +176,9 @@ def _group_cost_budget_candidate(
 ) -> EffectiveCostBudget | None:
     """Group cost headroom. Gate requires all groups over budget → pick most
     permissive; cost-exempt group exempts scope."""
-    group_limits = fetch_user_group_token_rate_limits(db_session, UUID(user_id))
+    group_limits = fetch_user_group_enforced_token_rate_limits(
+        db_session, UUID(user_id), TokenRateLimitScope.USER_GROUP
+    )
     if not group_limits:
         return None
 
@@ -432,13 +436,10 @@ def reset_usage(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     user_id = str(user.id)
-    group_limits = fetch_user_group_token_rate_limits(db_session, user.id)
-    rate_limits = [
-        *fetch_all_user_token_rate_limits(db_session, enabled_only=True),
-        *fetch_all_global_token_rate_limits(db_session, enabled_only=True),
-        *(limit for limits in group_limits.values() for limit in limits),
-    ]
-    window_start = get_usage_reset_window_start(datetime.now(timezone.utc), rate_limits)
+    window_start = get_usage_reset_window_start(
+        datetime.now(timezone.utc),
+        fetch_token_rate_limits_applying_to_user(db_session, user.id),
+    )
     reset_rows = reset_user_usage(db_session, user_id, window_start)
     db_session.commit()
     return ResetUsageResponse(reset_rows=reset_rows)

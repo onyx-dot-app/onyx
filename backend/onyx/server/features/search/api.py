@@ -47,7 +47,10 @@ from onyx.server.features.search.models import (
     SearchResult,
 )
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
@@ -157,6 +160,7 @@ def search(
             tenant_id=get_current_tenant_id(),
             llm_provider_api_key=llm.config.api_key,
         )
+        check_model_spend_limits(user, llm.config.model_configuration_id)
 
     # 3. Build filters. The public time_cutoff maps onto the internal
     # updated_at_range lower bound; TimeRange coerces naive bounds to UTC.

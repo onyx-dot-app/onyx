@@ -172,7 +172,8 @@ configuration.
    different budget.
 7. `metered-model-resolution` **A new generating endpoint resolves through
    `ee/onyx/server/gateway/api.py:_resolve_metered_gateway_model`.**
-   `resolve_gateway_model` alone skips the cloud cost cap on Onyx-managed keys.
+   `resolve_gateway_model` alone skips the cloud cost cap on Onyx-managed keys
+   and the spending limits on the resolved model (`check_model_spend_limits`).
    Call `backend/onyx/server/query_and_chat/token_limit.py:check_token_rate_limits` first.
    `count_tokens` and `/v1/models` generate nothing and skip both.
 8. `generating-path-opens-span` **Every generating path opens
