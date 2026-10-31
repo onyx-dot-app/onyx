@@ -1,0 +1,128 @@
+name: CLI Check
+
+# The Claude Code and Codex plugin vendors the Greptile CLI at
+# plugins/greptile/scripts/greptile.mjs. Vendoring is a manual step, so the two
+# things that can silently go wrong are shipping a bundle that is not the
+# release it claims to be, and shipping one that is not what npm publishes at
+# all. Both are checked by running the file and by comparing it byte-for-byte
+# against the published tarball.
+#
+# A local rebuild of the CLI is NOT byte-identical to the npm artifact for the
+# same version, so the vendored file must always be extracted from `npm pack`,
+# never from a local `bun scripts/bundle.ts`.
+#
+# The npm comparison runs before anything executes the bundle, so a fork pull
+# request cannot run a modified script, and checkout keeps no credential.
+#
+# No secrets. As in mcp-check.yml, repo-controlled values are read from disk
+# and never interpolated into shell source with `${{ }}` — a fork pull request
+# controls these files.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/greptile/scripts/**'
+      - 'plugins/greptile/skills/**'
+      - '.github/workflows/cli-check.yml'
+  pull_request:
+    paths:
+      - 'plugins/greptile/scripts/**'
+      - 'plugins/greptile/skills/**'
+      - '.github/workflows/cli-check.yml'
+  schedule:
+    - cron: '41 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Recorded version is well formed
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < plugins/greptile/scripts/greptile.version)
+          if ! printf '%s' "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::plugins/greptile/scripts/greptile.version is not a plain semver string."
+            exit 1
+          fi
+          printf '%s' "$version" > "$RUNNER_TEMP/version.txt"
+          echo "Recorded version $version"
+
+      - name: Bundle is byte-identical to the published npm release
+        run: |
+          set -euo pipefail
+          version=$(cat "$RUNNER_TEMP/version.txt")
+          cd "$RUNNER_TEMP"
+          npm pack "greptile@$version" >/dev/null
+          tar -xzf "greptile-$version.tgz"
+          cd "$GITHUB_WORKSPACE"
+          published=$(shasum -a 256 "$RUNNER_TEMP/package/dist/greptile.js" | cut -d' ' -f1)
+          vendored=$(shasum -a 256 plugins/greptile/scripts/greptile.mjs | cut -d' ' -f1)
+          if [ "$published" != "$vendored" ]; then
+            echo "::error::Vendored bundle does not match npm greptile@$version. published=$published vendored=$vendored. Re-vendor with: npm pack greptile@$version && tar -xzf greptile-$version.tgz && cp package/dist/greptile.js plugins/greptile/scripts/greptile.mjs"
+            exit 1
+          fi
+          echo "Vendored bundle matches npm greptile@$version ($vendored)."
+
+      - name: Bundle runs and reports the recorded version
+        run: |
+          set -euo pipefail
+          version=$(cat "$RUNNER_TEMP/version.txt")
+          reported=$(node plugins/greptile/scripts/greptile.mjs --version | tr -d '[:space:]')
+          if [ "$reported" != "$version" ]; then
+            echo "::error::Vendored bundle reports $reported but greptile.version records $version."
+            exit 1
+          fi
+          echo "Bundle reports $reported."
+
+      - name: Login and review run outside the checkout
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/installed plugin/scripts"
+          cp plugins/greptile/scripts/greptile.mjs "$RUNNER_TEMP/installed plugin/scripts/greptile.mjs"
+          cd "$RUNNER_TEMP"
+          GREPTILE_NO_UPDATE_CHECK=1 node "$RUNNER_TEMP/installed plugin/scripts/greptile.mjs" login --help
+          GREPTILE_NO_AUTO_INSTALL=1 GREPTILE_NO_UPDATE_CHECK=1 node "$RUNNER_TEMP/installed plugin/scripts/greptile.mjs" review --agent --help
+
+      - name: Skills invoke the vendored bundle, not a fetched one
+        run: |
+          set -euo pipefail
+          # Assert against the fenced command blocks only. Matching whole files
+          # would fail on a prose mention of npx, and — worse — would accept a
+          # command that dropped an environment variable as long as the
+          # paragraph explaining it survived.
+          for f in plugins/greptile/skills/review/SKILL.md plugins/greptile/skills/login/SKILL.md; do
+            block=$(awk '/^```/{fence = !fence; next} fence' "$f")
+            if [ -z "$block" ]; then
+              echo "::error::$f has no fenced command block to validate."
+              exit 1
+            fi
+            if grep -q 'npx' <<<"$block"; then
+              echo "::error::$f fetches the CLI with npx. The plugin vendors it; invoke \${CLAUDE_PLUGIN_ROOT}/scripts/greptile.mjs instead."
+              exit 1
+            fi
+            # GREPTILE_NO_UPDATE_CHECK stops CLI versions that predate
+            # plugin-install detection from naming an installer that cannot
+            # update the plugin's copy.
+            if ! grep -qF 'GREPTILE_NO_UPDATE_CHECK=1 node "${CLAUDE_PLUGIN_ROOT}/scripts/greptile.mjs"' <<<"$block"; then
+              echo "::error::$f must invoke the vendored bundle as GREPTILE_NO_UPDATE_CHECK=1 node \"\${CLAUDE_PLUGIN_ROOT}/scripts/greptile.mjs\"."
+              exit 1
+            fi
+          done
+          # GREPTILE_NO_AUTO_INSTALL stops the CLI fetching the mmdr Mermaid
+          # renderer, which the plugin README says the plugin never does.
+          block=$(awk '/^```/{fence = !fence; next} fence' plugins/greptile/skills/review/SKILL.md)
+          if ! grep -qF 'GREPTILE_NO_AUTO_INSTALL=1 GREPTILE_NO_UPDATE_CHECK=1 node "${CLAUDE_PLUGIN_ROOT}/scripts/greptile.mjs" review --agent' <<<"$block"; then
+            echo "::error::plugins/greptile/skills/review/SKILL.md must run GREPTILE_NO_AUTO_INSTALL=1 GREPTILE_NO_UPDATE_CHECK=1 node \"\${CLAUDE_PLUGIN_ROOT}/scripts/greptile.mjs\" review --agent."
+            exit 1
+          fi
+          echo "Skills invoke the vendored bundle with downloads suppressed."

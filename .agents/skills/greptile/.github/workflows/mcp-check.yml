@@ -1,0 +1,160 @@
+name: MCP Check
+
+# Behavioural check on the MCP server the Claude Code and Codex plugins point at.
+#
+# The plugins' .mcp.json is a copy of an install definition that lives
+# server-side. It has drifted before: the config carried a hardcoded
+# `Authorization: Bearer ${GREPTILE_API_KEY}` header, which sent an unexpanded
+# literal on the wire whenever the variable was unset AND disabled Claude
+# Code's OAuth fallback (setting headers.Authorization suppresses it), leaving
+# no way to recover from the /mcp menu. Diffing text would not have caught
+# that. Connecting does.
+#
+# No secrets: both `tools/list` and the 401 challenge on `tools/call` are
+# reachable unauthenticated.
+#
+# Everything here reads the manifest from disk. On a fork pull request that
+# manifest is attacker-controlled, so its contents must never reach shell
+# source: no `${{ }}` interpolation inside a `run:` block, and no step outputs
+# carrying manifest values.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/greptile/.mcp.json'
+      - 'plugins/greptile/README.md'
+      - 'plugins/greptile/.codex-plugin/**'
+      - '.github/workflows/mcp-check.yml'
+  pull_request:
+    paths:
+      - 'plugins/greptile/.mcp.json'
+      - 'plugins/greptile/README.md'
+      - 'plugins/greptile/.codex-plugin/**'
+      - '.github/workflows/mcp-check.yml'
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Resolve the declared server config
+        run: |
+          set -euo pipefail
+          config=plugins/greptile/.mcp.json
+          # Claude Code accepts a bare server map and one wrapped in
+          # `mcpServers`; Codex needs the wrapper. Normalise before asserting
+          # anything, so either shape is checked.
+          jq -e 'if has("mcpServers") then .mcpServers else . end' "$config" > "$RUNNER_TEMP/servers.json"
+          if ! jq -e '.greptile | type == "object"' "$RUNNER_TEMP/servers.json" >/dev/null; then
+            echo "::error::$config does not declare a \"greptile\" server object in either the bare or mcpServers shape."
+            exit 1
+          fi
+          # Pin the server before trusting its replies below: a pull request
+          # pointing the plugins at another host could otherwise serve the
+          # expected challenge and tool list and pass.
+          if ! jq -e '.greptile.url == "https://api.greptile.com/mcp"' "$RUNNER_TEMP/servers.json" >/dev/null; then
+            echo "::error::$config must point the greptile server at https://api.greptile.com/mcp."
+            exit 1
+          fi
+          jq -r '.greptile.url' "$RUNNER_TEMP/servers.json" > "$RUNNER_TEMP/url.txt"
+          echo "Resolved $(cat "$RUNNER_TEMP/url.txt")"
+
+      - name: Config uses OAuth discovery
+        run: |
+          set -euo pipefail
+          if jq -e '.greptile | has("headers") or has("bearer_token_env_var")' "$RUNNER_TEMP/servers.json" >/dev/null; then
+            echo "::error::plugins/greptile/.mcp.json declares headers or bearer_token_env_var. An Authorization header disables Claude Code's OAuth fallback; the server authenticates over OAuth and needs neither."
+            exit 1
+          fi
+          echo "No headers declared."
+
+      - name: Server still advertises OAuth
+        run: |
+          set -euo pipefail
+          url=$(cat "$RUNNER_TEMP/url.txt")
+          response=$(curl -sS -o /dev/null -D - -X POST "$url" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_code_reviews","arguments":{}}}' \
+            -w 'http_code=%{http_code}\n')
+          echo "$response"
+          if ! grep -q 'http_code=401' <<<"$response"; then
+            echo "::error::An unauthenticated tools/call on $url did not return 401. Claude Code and Codex start the OAuth flow from that challenge."
+            exit 1
+          fi
+          if ! grep -qi '^www-authenticate:.*resource_metadata=' <<<"$response"; then
+            echo "::error::$url returned 401 without an RFC 9728 www-authenticate challenge. Claude Code and Codex need resource_metadata to discover the authorization server."
+            exit 1
+          fi
+          echo "OAuth challenge present."
+
+      - name: README and OpenAI submission match the tools the server serves
+        run: |
+          set -euo pipefail
+          url=$(cat "$RUNNER_TEMP/url.txt")
+          curl -sS -X POST "$url" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' > "$RUNNER_TEMP/tools.json"
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'tools.json')) as fh:
+              payload = json.load(fh)
+          result = payload.get('result') if isinstance(payload, dict) else None
+          tools = result.get('tools') if isinstance(result, dict) else None
+          if not isinstance(tools, list) or not all(
+              isinstance(tool, dict)
+              and isinstance(tool.get('name'), str)
+              and isinstance(tool.get('annotations', {}), dict)
+              for tool in tools
+          ):
+              sys.exit(f"::error::tools/list returned an unexpected shape: {json.dumps(payload)[:400]}")
+          served_tools = {tool['name']: tool for tool in tools}
+          served = set(served_tools)
+          if not served:
+              sys.exit('::error::tools/list returned no tools.')
+
+          readme = open('plugins/greptile/README.md').read()
+          documented = set(re.findall(r'^- `([a-z_]+)`', readme, re.M))
+          documented |= set(re.findall(r'/ `([a-z_]+)`', readme))
+
+          missing = sorted(served - documented)
+          extra = sorted(documented - served)
+          if missing:
+              print(f"::error::README does not document: {', '.join(missing)}")
+          if extra:
+              print(f"::error::README documents tools the server does not serve: {', '.join(extra)}")
+          if missing or extra:
+              sys.exit(1)
+          print(f"README documents all {len(served)} served tools.")
+
+          submission = json.load(open('plugins/greptile/.codex-plugin/chatgpt-app-submission.json'))
+          assert set(submission['tools']) == served, 'Submission tool names differ from tools/list'
+          assert len(submission['test_cases']) == 5
+          assert len(submission['negative_test_cases']) == 3
+          for name, tool in submission['tools'].items():
+              for hint in ('readOnlyHint', 'openWorldHint', 'destructiveHint'):
+                  assert type(tool['annotations'][hint]) is bool
+                  if served_tools[name].get('annotations', {}).get(hint) != tool['annotations'][hint]:
+                      message = f'{name}.{hint} differs from production; deploy matching server metadata before submitting'
+                      if os.environ.get('GITHUB_EVENT_NAME') == 'pull_request':
+                          print(f'::warning::{message}')
+                      else:
+                          sys.exit(f'::error::{message}')
+              for field in ('read_only_justification', 'open_world_justification', 'destructive_justification'):
+                  assert tool['justifications'][field].strip()
+          for case in submission['test_cases']:
+              assert set(map(str.strip, case['tools_triggered'].split(','))) <= served
+          assert all(case['tools_triggered'] is None for case in submission['negative_test_cases'])
+          print('Submission has explicit annotations, justifications, five positive cases, and three negative cases.')
+          PY
