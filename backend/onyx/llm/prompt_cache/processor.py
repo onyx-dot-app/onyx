@@ -167,6 +167,16 @@ def cached_user_message(llm_config: LLMConfig, prefix: str, suffix: str) -> User
     if not isinstance(message, ProviderUserMessage):
         raise TypeError("User prompt caching must preserve the message role")
     if message.cache_control:
+        if prefix and suffix:
+            # The provider merges the two strings into one message, so mark the
+            # prefix part explicitly: the cache boundary must end where the
+            # reusable prefix ends, not after the per-call suffix.
+            return UserMessage(
+                content=[
+                    TextContentPart(text=prefix, cache_control=message.cache_control),
+                    TextContentPart(text=suffix),
+                ]
+            )
         content = (
             [TextContentPart(text=message.content)]
             if isinstance(message.content, str)

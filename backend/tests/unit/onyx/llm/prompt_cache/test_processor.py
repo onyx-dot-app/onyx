@@ -77,7 +77,7 @@ def test_with_metadata_true_default_keeps_current_behavior() -> None:
     assert processed_with_metadata == processed_without_metadata
 
 
-def test_canonical_cached_prompt_preserves_continuation_and_cache_boundary() -> None:
+def test_cached_user_message_ends_cache_boundary_at_prefix() -> None:
     from onyx.llm.models import TextContentPart
     from onyx.llm.prompt_cache.processor import cached_user_message
 
@@ -86,8 +86,10 @@ def test_canonical_cached_prompt_preserves_continuation_and_cache_boundary() -> 
 
     assert message.text == "document\nchunk"
     assert isinstance(message.content, list)
+    # Only the reusable prefix is cached; the per-call suffix sits after the boundary.
     assert message.content == [
-        TextContentPart(text="document\nchunk", cache_control={"type": "ephemeral"})
+        TextContentPart(text="document\n", cache_control={"type": "ephemeral"}),
+        TextContentPart(text="chunk"),
     ]
 
     with patch.object(processor_module, "ENABLE_PROMPT_CACHING", False):
