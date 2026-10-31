@@ -12,6 +12,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from onyx.configs.app_configs import (
     MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS,
+    MCP_SERVER_SEARCH_RETRIEVAL_ONLY,
     OPEN_URLS_MAX_URLS_PER_REQUEST,
 )
 from onyx.configs.constants import DocumentSource
@@ -280,6 +281,7 @@ async def search_indexed_documents(
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
     agent: str | None = None,
+    retrieval_only: bool = False,
 ) -> dict[str, Any]:
     """
     Search the user's knowledge base indexed in Onyx.
@@ -308,12 +310,17 @@ async def search_indexed_documents(
     `agent` and `document_set_names` are mutually exclusive: explicit document
     sets replace an agent's knowledge scope rather than narrowing it, so passing
     both is rejected.
+    `retrieval_only` skips every LLM step (query expansion, filter detection,
+    document selection and context expansion) and returns the top retrieved
+    sections in retrieval order. Use it when you rank results yourself: it is
+    faster and has no LLM cost. The server can force it on.
 
     Returns ``{"results": [{title, url, source_type, content, updated_at},
     ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
     full chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
-    short search blurb.
+    short search blurb. With `retrieval_only`, ``content`` is the retrieved
+    section text.
 
     Example usage:
     ```
@@ -335,12 +342,14 @@ async def search_indexed_documents(
     """
     _start = time.monotonic()
     tool = MCPServerToolName.SEARCH_INDEXED_DOCUMENTS
+    use_retrieval_only = retrieval_only or MCP_SERVER_SEARCH_RETRIEVAL_ONLY
     logger.info(
-        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s",
+        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s, retrieval_only=%s",
         query,
         source_types,
         document_set_names,
         agent,
+        use_retrieval_only,
     )
 
     _record_requested_sources(source_types)
@@ -392,6 +401,7 @@ async def search_indexed_documents(
             document_sets=document_set_names,
             time_cutoff=parsed_cutoff,
             skip_query_expansion=skip_query_expansion,
+            retrieval_only=use_retrieval_only,
             persona_id=filters.persona_id,
         )
         endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
