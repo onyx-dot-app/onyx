@@ -47,6 +47,7 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
       securityAndHardening: t("adminNav.items.securityAndHardening.label"),
       ssoProviders: t("adminNav.items.ssoProviders.label"),
       usage: t("adminNav.items.usage.label"),
+      spendingLimits: t("adminNav.items.spendingLimits.label"),
       analytics: t("adminNav.items.analytics.label"),
       queryHistory: t("adminNav.items.queryHistory.label"),
       tracing: t("adminNav.items.tracing.label"),

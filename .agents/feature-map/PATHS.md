@@ -180,8 +180,8 @@ covers new files that match it.
 | `backend/onyx/utils/fleet_telemetry.py`, `backend/onyx/utils/fleet_query_telemetry.py`, `backend/onyx/utils/fleet_telemetry_collector.py`, `backend/onyx/utils/fleet_telemetry_resources.py`, `backend/onyx/db/fleet_enrollment.py`, `backend/onyx/db/fleet_telemetry.py`, `deployment/fleet-telemetry.md` | fleet-telemetry |
 | `backend/ee/onyx/server/log_export/`, `backend/ee/onyx/background/celery/tasks/log_export/`, `deployment/helm/charts/onyx/templates/log-export-rbac.yaml`, `deployment/helm/charts/onyx/dashboards/` | observability |
 | `backend/onyx/hooks/`, `backend/ee/onyx/hooks/`, `backend/onyx/db/hook.py`, `backend/onyx/server/features/hooks/`, `backend/ee/onyx/server/features/hooks/`, `backend/onyx/utils/external_endpoint.py` | hooks |
-| `backend/onyx/db/token_limit.py`, `backend/onyx/server/token_rate_limits/`, `backend/onyx/server/usage_limits.py`, `backend/onyx/server/tenant_usage_limits.py`, `backend/onyx/server/manage/invite_rate_limit.py`, `backend/onyx/db/tenant_invite_counter.py` | rate-and-usage-limits |
-| `backend/onyx/server/api_key_usage.py`, `backend/ee/onyx/server/usage_limits.py`, `backend/ee/onyx/server/tenant_usage_limits.py`, `backend/ee/onyx/server/token_rate_limits/`, `backend/ee/onyx/server/spending_limits/`, `backend/ee/onyx/db/token_limit.py`, `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
+| `backend/onyx/db/token_limit.py`, `backend/onyx/server/usage_limits.py`, `backend/onyx/server/tenant_usage_limits.py`, `backend/onyx/server/manage/invite_rate_limit.py`, `backend/onyx/db/tenant_invite_counter.py` | rate-and-usage-limits |
+| `backend/onyx/server/api_key_usage.py`, `backend/ee/onyx/server/usage_limits.py`, `backend/ee/onyx/server/tenant_usage_limits.py`, `backend/ee/onyx/server/spending_limits/`, `backend/ee/onyx/db/token_limit.py`, `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/server/metrics/`, `backend/scripts/seed_dev_license.py` | billing |
 | `backend/ee/onyx/server/middleware/license_enforcement.py`, `backend/ee/onyx/db/license.py`, `backend/ee/onyx/utils/license.py`, `backend/ee/onyx/utils/license_expiry.py`, `backend/ee/onyx/background/celery/tasks/license_reclaim/` | billing |
 | `backend/ee/onyx/server/tenants/proxy.py`, `backend/ee/onyx/server/tenants/product_gating.py`, `backend/ee/onyx/configs/multi_tenant_gating_config.py` | billing |
@@ -330,7 +330,7 @@ covers new files that match it.
 | `web/src/app/mcp/[[...path]]/` | mcp-server |
 | `web/src/app/admin/bots/`, `web/src/lib/updateSlackBotField.ts` | slack-bot |
 | `web/src/app/admin/discord-bot/` | discord-bot |
-| `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |
+| `web/src/views/admin/SpendingLimitsPage/`, `web/src/lib/spendingLimits/`, `web/src/app/ee/admin/spending-limits/` | rate-and-usage-limits |
 | `web/src/app/admin/billing/`, `web/src/lib/billing/`, `web/src/components/GatedContentWrapper.tsx`, `web/src/sections/modals/DowngradeToCommunityModal.tsx`, `web/src/components/errorPages/AccessRestrictedPage.tsx`, `web/src/providers/ProductGatingWrapper.tsx`, `web/src/hooks/useLicense.ts`, `web/src/hooks/useBillingInformation.ts`, `web/src/hooks/useCloudSubscription.ts` | billing |
 | `web/src/proxy.ts`, `web/src/app/ee/layout.tsx`, `web/src/app/ee/EEFeatureRedirect.tsx` | editions-and-gating |
 | `web/src/app/admin/hooks/`, `web/src/ee/views/admin/HooksPage/`, `web/src/ee/hooks/` | hooks |
@@ -375,6 +375,8 @@ the admin routes and check that each has a row above, run
 | `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
 | `.github/` | CI. Read the workflow. |
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
-| `web/src/lib/admin-routes.ts`, `web/src/app/admin/layout.tsx` | The admin route list and the admin shell. A new admin route needs its own row above. |
+| `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, its sidebar ids and labels, and the admin shell. A new admin route needs its own row above. |
+| `web/src/lib/swr-keys.ts` | SWR cache keys for every surface. Read the component that owns the key's endpoint. |
+| `web/.type-coverage-baseline.yaml` | Type-coverage floors per web directory, kept by `ods type-coverage typescript --update`. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
 | `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

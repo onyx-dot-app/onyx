@@ -16,14 +16,11 @@ import {
   createGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
-  saveTokenLimits,
   saveGroupPermissions,
 } from "./svc";
 import { makeMemberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
-import TokenLimitSection from "./TokenLimitSection";
-import type { TokenLimit } from "./TokenLimitSection";
 import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
@@ -39,15 +36,6 @@ function CreateGroupPage() {
   const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
     new Set()
   );
-  const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    {
-      tokenId: null,
-      enabled: true,
-      tokenBudget: null,
-      period: null,
-      costBudgetDollars: null,
-    },
-  ]);
 
   const { isAdmin } = useUser();
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
@@ -81,7 +69,6 @@ function CreateGroupPage() {
       }
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
-      await saveTokenLimits(groupId, tokenLimits, []);
       toast.success(t("create.toasts.created", { name: trimmed }));
       router.push("/admin/groups");
     } catch (e) {
@@ -188,11 +175,6 @@ function CreateGroupPage() {
           onDocSetIdsChange={setSelectedDocSetIds}
           selectedAgentIds={selectedAgentIds}
           onAgentIdsChange={setSelectedAgentIds}
-        />
-
-        <TokenLimitSection
-          limits={tokenLimits}
-          onLimitsChange={setTokenLimits}
         />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

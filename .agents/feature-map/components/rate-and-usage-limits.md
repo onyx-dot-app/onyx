@@ -16,12 +16,15 @@ limits are CE.
 
 - **A user over a token or cost budget** sees the message fail with a "Usage
   limit reached" banner. The banner names the scope that tripped (your account,
-  your user group or your organization) and when the budget resets. It has no
-  retry button, because a retry trips the same budget. Craft shows the same
-  banner.
-- **An EE admin** sets budgets at Admin > Token Rate Limits: thousands of tokens
-  or cents, over a period, for the whole workspace, each user, or a user group. A
-  CE workspace has no such page.
+  your group allowance, your user group or your organization) and when the
+  budget resets. A limit on one model also says other models are still
+  available. It has no retry button, because a retry trips the same budget.
+  Craft shows the same banner.
+- **An Enterprise admin** sets budgets at Admin > Spending Limits: cost or
+  thousands of tokens per day, week or month, on all models or one model, for
+  the workspace pool, each user, a group's pool or each member of a group. A
+  group manager edits their group's pool on the group page; per-member limits
+  are admin-only. A CE workspace has no such page.
 - **A cloud tenant** that passes its weekly LLM cost, indexed chunks or API calls
   gets a 429 that names the metric and asks it to upgrade or wait. A trial has
   lower limits than a paid tenant. Its own admin cannot raise the limit.
@@ -286,20 +289,21 @@ rejected signup attempt still counts.
   once the provider is known. Outside a route, call the checks inline, as the
   Slack bot does. List the current entry points with
   `git grep -n "check_token_rate_limits\|check_llm_cost_limit_for_provider" backend`.
-- `add-budget-scope` **Add a budget scope.** Change the EE parallel check list, the admin UI scope
-  tabs (`web/src/app/admin/token-rate-limits/`) and
-  `backend/onyx/db/token_limit.py:get_token_rate_limit_scope_and_group_id`. A
-  scope that names a group also goes in the `ck_token_rate_limit_group` check
-  on `token_rate_limit`.
+- `add-budget-scope` **Add a budget scope.** Change the EE checks
+  (`backend/ee/onyx/server/query_and_chat/token_limit.py:_check_spend_limits`),
+  the card routes in `backend/ee/onyx/server/spending_limits/api.py` and the
+  admin page (`web/src/views/admin/SpendingLimitsPage/`). A scope that names a group
+  also goes in the `ck_token_rate_limit_group` check on `token_rate_limit`.
 - `add-tenant-usage-type` **Add a tenant usage type.** Copy `UsageType.NON_STREAMING_API_CALLS`: add it to
   `backend/onyx/db/usage.py:UsageType`, the `tenant_usage` columns, the env
   defaults in `shared_configs/configs.py`, `_FIELD_AND_DEFAULT` in
   `backend/onyx/server/usage_limits.py`, and the override model
   `TenantUsageLimitOverrides`.
-- `trip-budget-by-hand` **Trip a budget by hand.** On an EE build, create a GLOBAL budget of
-  `token_budget: 1` (1,000 tokens) for one hour. Send one long chat message, wait
+- `trip-budget-by-hand` **Trip a budget by hand.** On an EE build, `PUT
+  /admin/spending-limits/workspace/pool` with one DAILY limit of
+  `cost_budget_cents: 0.001`; one chat message spends more. Send a message, wait
   2 s for the usage flush, and send another. The second gets the 429 and the
-  banner.
+  banner. A token budget is at least 1,000 tokens, more than one short message.
 - `investigate-limit-not-applied` **Investigate "my limit did not apply".** Check, in order: the entry point
   calls the check ([[#every-entry-point-checks]]); the call ran inside a root
   trace ([[#untraced-call-not-counted]]); the principal is not shared
@@ -312,7 +316,12 @@ rejected signup attempt still counts.
 ## Verification
 
 - Unit tests: `backend/tests/unit/onyx/server/query_and_chat/`,
-  `backend/tests/unit/ee/onyx/server/token_rate_limits/`,
+  `backend/tests/unit/ee/onyx/server/test_spending_limit_models.py`,
   `backend/tests/unit/onyx/server/manage/` and `backend/tests/unit/onyx/auth/`.
 - Entry-point order: `backend/tests/external_dependency_unit/server/`.
+- Resolution against real rows:
+  `backend/tests/external_dependency_unit/ee/onyx/server/query_and_chat/test_spend_limit_resolution.py`.
+- Admin API, a per-member model limit blocking chat, and group-manager gates:
+  `backend/tests/integration/tests/spending_limits/` and
+  `backend/tests/integration/tests/permissions/test_group_manager_agents.py`.
 - End-to-end usage recording: `backend/tests/integration/tests/streaming_endpoints/`.

@@ -6294,33 +6294,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "한도 추가"
-        },
-        "costLimit": {
-          "header": "비용 한도",
-          "placeholder": "비용 한도",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Token 사용량 제한은 [Onyx 엔터프라이즈 버전](/admin/billing)에서만 사용할 수 있습니다.",
-        "section": {
-          "description": "이 그룹이 지정된 기간 동안 사용할 수 있는 token 수를 제한합니다.",
-          "title": "Token 사용량 제한"
-        },
-        "timeWindow": {
-          "header": "시간 범위",
-          "placeholder": "주기 선택",
-          "options": {
-            "DAILY": "매일",
-            "WEEKLY": "매주",
-            "MONTHLY": "매월"
-          }
-        },
-        "tokenLimit": {
-          "header": "Token 한도",
-          "placeholder": "Token 한도(천 단위)",
-          "unit": "(천 단위)"
-        }
+        "disabledTooltip": "Token 사용량 제한은 [Onyx 엔터프라이즈 버전](/admin/billing)에서만 사용할 수 있습니다."
       },
       "builtIn": {
         "admin": {
@@ -9868,170 +9842,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "최대 {cost} 또는 {tokens} tokens",
-          "cost": "최대 {cost}",
-          "none": "설정된 예산 없음",
-          "tokens": "최대 {tokens} tokens"
-        },
-        "cadence": {
-          "label": "{period, select, DAILY {매일 UTC 자정에 초기화} WEEKLY {매주 월요일 UTC 자정에 초기화} other {매월 1일 UTC 자정에 초기화}}"
-        },
-        "deleteFailed": {
-          "error": "token 사용 한도를 삭제하지 못했습니다"
-        },
-        "empty": {
-          "message": "아직 한도가 없습니다. 사용량을 제한하려면 지출 한도를 생성하세요."
-        },
-        "loadFailed": {
-          "error": "token 사용 한도를 불러오지 못했습니다"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "{label} 삭제",
-            "tooltip": "한도 삭제"
-          },
-          "disable": {
-            "ariaLabel": "{label} 비활성화"
-          },
-          "enable": {
-            "ariaLabel": "{label} 활성화"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "token 사용 한도를 업데이트하지 못했습니다"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "취소"
-        },
-        "costBudget": {
-          "description": "초기화 주기당 최대 지출액입니다. 비용 예산, token 예산 또는 둘 다 설정하세요.",
-          "placeholder": "비용 한도 없음",
-          "title": "비용 예산",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "비용 예산, token 예산 또는 둘 다 입력하세요",
-          "costMax": "최대 비용 예산은 ${amount, number}입니다",
-          "costMinCents": "비용 예산은 최소 $0.01이어야 합니다",
-          "costMoreThanZero": "비용 예산은 0보다 커야 합니다",
-          "groupRequired": "사용자 그룹을 선택하세요",
-          "scopeRequired": "대상 범위는 필수 항목입니다",
-          "tokenIncrement": "1,000 tokens 단위로 입력하세요",
-          "tokenInteger": "token 수를 정수로 입력하세요",
-          "tokenMax": "최대 token 예산은 1조입니다",
-          "tokenMin": "최소 1,000 tokens 이상이어야 합니다"
-        },
-        "groupMenu": {
-          "empty": "아직 사용자 그룹이 없습니다. 사용자 및 그룹에서 그룹을 생성하세요."
-        },
-        "groupPicker": {
-          "placeholder": "그룹 선택"
-        },
-        "header": {
-          "title": "지출 한도 생성"
-        },
-        "period": {
-          "description": "예산은 UTC 자정에 초기화됩니다",
-          "title": "초기화 주기",
-          "options": {
-            "DAILY": "매일",
-            "WEEKLY": "매주",
-            "MONTHLY": "매월"
-          }
-        },
-        "scope": {
-          "caption": {
-            "global": "워크스페이스의 모든 사용자가 하나의 예산을 공유합니다.",
-            "group": "{group} 그룹의 구성원이 하나의 예산을 공유합니다.",
-            "groupUnchosen": "선택한 그룹의 구성원이 하나의 예산을 공유합니다.",
-            "user": "각 사용자가 자신의 예산을 갖습니다."
-          },
-          "title": "적용 대상"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "워크스페이스"
-          },
-          "user": {
-            "title": "사용자별"
-          },
-          "userGroup": {
-            "title": "사용자 그룹"
-          }
-        },
-        "submit": {
-          "label": "한도 생성"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} 또는 {tokens} tokens",
-            "tokens": "{tokens} tokens"
-          },
-          "global": "{period, select, DAILY {워크스페이스의 모든 사용자가 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {워크스페이스의 모든 사용자가 매주 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {워크스페이스의 모든 사용자가 매월 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "group": "{period, select, DAILY {{group} 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {{group} 그룹의 구성원이 매주 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {{group} 그룹의 구성원이 매월 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "groupUnchosen": "{period, select, DAILY {선택한 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {선택한 그룹의 구성원이 매주 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {선택한 그룹의 구성원이 매월 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "user": "{period, select, DAILY {각 사용자가 매일 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.} WEEKLY {각 사용자가 매주 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {각 사용자가 매월 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}"
-        },
-        "tokenBudget": {
-          "description": "초기화 주기당 최대 token 수",
-          "placeholder": "token 한도 없음",
-          "title": "Token 예산",
-          "unit": "tokens"
-        },
-        "userGroup": {
-          "description": "이 예산을 공유할 그룹을 선택하세요",
-          "title": "사용자 그룹"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "지출 한도 생성"
-        },
-        "createFailed": {
-          "error": "지출 한도를 생성하지 못했습니다"
-        },
-        "created": {
-          "message": "지출 한도를 생성했습니다!"
-        },
-        "embedded": {
-          "description": "워크스페이스, 사용자, 그룹의 사용량에 가드레일을 설정하세요. 한도는 구성을 삭제하지 않고 활성화하거나 비활성화할 수 있습니다.",
-          "title": "지출 한도 관리"
-        },
-        "global": {
-          "description": "전역 한도는 모든 사용자, 사용자 그룹, API 키에 적용됩니다. 전역 한도에 도달하면 더 이상 token을 사용할 수 없습니다."
-        },
-        "intro": {
-          "description": "지출 한도를 사용하면 지정한 기간에 사용할 수 있는 token 수를 제어할 수 있습니다.",
-          "groupLimit": "사용자 그룹에 한도를 설정하여 팀의 지출을 제어하세요.",
-          "toggleLimit": "필요에 따라 한도를 활성화하거나 비활성화하세요.",
-          "userLimit": "사용자에게 한도를 설정하여 한 사용자가 너무 많이 지출하지 않도록 하세요.",
-          "workspaceLimit": "팀 전체 지출에 대해 워크스페이스 전역 한도를 설정하세요."
-        },
-        "tabs": {
-          "global": {
-            "name": "전역"
-          },
-          "groups": {
-            "name": "그룹"
-          },
-          "users": {
-            "name": "사용자"
-          }
-        },
-        "user": {
-          "description": "사용자 한도는 각 사용자에게 개별적으로 적용됩니다. 사용자가 한도에 도달하면 일시적으로 token 사용이 차단됩니다."
-        },
-        "userGroup": {
-          "description": "그룹 한도는 그룹 내 모든 사용자에게 적용됩니다. 사용자가 여러 그룹에 속한 경우 가장 관대한 한도가 적용됩니다."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM 호출 추적 정보가 더 이상 **{label}**(으)로 전송되지 않습니다. 이미 전송된 추적 정보는 영향을 받지 않습니다.",
@@ -11159,6 +10969,132 @@
         "retry": "{count, plural, other {#회 실패했습니다. 다음 재시도: {time}.}}",
         "scoped": "추가되거나 변경된 항목만",
         "failures": "{count, plural, other {실패 #회}}"
+      }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "조직 전체의 LLM 지출을 관리하도록 지출 한도를 설정합니다.",
+        "loadFailed": "지출 한도를 불러오지 못했습니다."
+      },
+      "workspace": {
+        "title": "워크스페이스 한도",
+        "description": "이 조직의 모든 사용자에게 적용됩니다.",
+        "pool": {
+          "title": "공유 예산",
+          "description": "주기마다 모두가 함께 쓰는 예산입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요."
+        },
+        "perUser": {
+          "title": "사용자별 한도",
+          "description": "사용자마다 따로 주어지는 예산입니다. 같은 주기에는 그룹의 멤버별 한도가 이를 대체합니다."
+        }
+      },
+      "groups": {
+        "title": "그룹 한도",
+        "description": "그룹 한도는 그룹 간에 차단하지 않습니다. 사용자는 속한 그룹 중 하나의 공유 예산에 여유가 있는 한 계속 사용할 수 있습니다. 주기마다 사용자가 속한 그룹의 멤버별 한도 중 가장 큰 값이 적용됩니다. 한 사람에게만 한도를 설정하려면 그 사람만 있는 그룹을 만드세요.",
+        "add": {
+          "label": "그룹 한도 추가"
+        },
+        "picker": {
+          "placeholder": "그룹 선택"
+        },
+        "members": "{count, plural, other {멤버 #명}}",
+        "empty": "아직 지출 한도가 설정된 그룹이 없습니다.",
+        "pool": {
+          "title": "그룹 공유 예산",
+          "description": "이 그룹의 모두가 함께 쓰는 예산입니다."
+        },
+        "perMember": {
+          "title": "멤버별 한도",
+          "description": "이 그룹의 각 멤버에게 따로 주어지는 예산입니다. 주기마다 사용자가 속한 그룹의 한도 중 가장 큰 값이 적용됩니다.",
+          "adminOnly": "멤버별 한도는 멤버를 워크스페이스 한도보다 높일 수 있으므로 관리자만 변경할 수 있습니다."
+        },
+        "remove": {
+          "tooltip": "이 그룹의 한도 제거"
+        },
+        "removed": "{group}의 지출 한도를 제거했습니다"
+      },
+      "groupPage": {
+        "title": "지출 한도",
+        "description": "이 그룹이 LLM 사용에 쓸 수 있는 금액을 제한합니다."
+      },
+      "card": {
+        "enabled": {
+          "ariaLabel": "{title} 켜기 또는 끄기"
+        },
+        "addLimit": "한도 추가",
+        "addModelBudget": "모델 예산 추가",
+        "modelBudget": {
+          "title": "모델 예산",
+          "description": "특정 모델의 지출을 제한합니다. 모델 사용량은 위의 한도에도 함께 계산됩니다."
+        },
+        "cancel": "취소",
+        "save": "변경 사항 저장",
+        "saved": "지출 한도를 저장했습니다",
+        "saveFailed": "지출 한도를 저장하지 못했습니다: {error}"
+      },
+      "alerts": {
+        "title": "알림",
+        "description": "API로 설정된 알림 전용 한도입니다. 사용을 차단하지 않으며 여기서 저장해도 바뀌지 않습니다.",
+        "row": "{model}, {period}: {target}",
+        "allModels": "모든 모델",
+        "percent": "한도의 {percent}%",
+        "tokens": "토큰 {tokens}개"
+      },
+      "row": {
+        "model": {
+          "title": "모델",
+          "placeholder": "모델 선택"
+        },
+        "period": {
+          "title": "초기화 주기",
+          "options": {
+            "DAILY": {
+              "title": "일일 한도",
+              "description": "매일 00:00 UTC에 초기화"
+            },
+            "WEEKLY": {
+              "title": "주간 한도",
+              "description": "매주 월요일 00:00 UTC에 초기화"
+            },
+            "MONTHLY": {
+              "title": "월간 한도",
+              "description": "매월 1일 00:00 UTC에 초기화"
+            }
+          }
+        },
+        "nextReset": "다음 초기화: {at} UTC",
+        "remove": {
+          "tooltip": "한도 제거"
+        },
+        "cost": {
+          "title": "비용 한도"
+        },
+        "tokens": {
+          "title": "토큰 한도",
+          "placeholder": "토큰 한도 없음",
+          "suffix": "K"
+        },
+        "usage": {
+          "spent": "{amount} 사용",
+          "tokens": "토큰 {tokens}개 사용",
+          "percent": "{percent}%"
+        },
+        "whenReached": {
+          "title": "이 한도에 도달하면",
+          "blockAll": {
+            "title": "한도에 도달하면 모든 사용 차단",
+            "description": "채팅, 검색, 봇, API 호출을 포함한 모든 모델 사용이 다음 초기화까지 중지됩니다."
+          },
+          "blockModel": {
+            "title": "한도에 도달하면 이 모델 차단",
+            "description": "이 모델의 사용이 다음 초기화까지 중지됩니다. 다른 모델은 계속 사용할 수 있습니다."
+          }
+        },
+        "errors": {
+          "budgetRequired": "비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
+          "duplicate": "다른 한도가 이미 이 주기를 사용하고 있습니다.",
+          "modelRequired": "모델을 선택하세요."
+        }
       }
     }
   },
@@ -12833,6 +12769,9 @@
         },
         "tryAgainNow": {
           "text": "지금 다시 시도할 수 있습니다."
+        },
+        "otherModels": {
+          "text": "다른 모델은 계속 사용할 수 있습니다."
         }
       },
       "resubmit": {
@@ -16724,6 +16663,9 @@
         },
         "webSearch": {
           "label": "웹 검색"
+        },
+        "spendingLimits": {
+          "label": "지출 한도"
         }
       },
       "sections": {

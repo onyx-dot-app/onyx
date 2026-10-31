@@ -6294,33 +6294,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "Ajouter une limite"
-        },
-        "costLimit": {
-          "header": "Limite de coût",
-          "placeholder": "Limite de coût",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Les limites de débit de jetons sont disponibles uniquement dans la [version Enterprise d'Onyx](/admin/billing).",
-        "section": {
-          "description": "Limitez le nombre de jetons que ce groupe peut utiliser sur une période donnée.",
-          "title": "Limite de débit de jetons"
-        },
-        "timeWindow": {
-          "header": "Fenêtre de temps",
-          "placeholder": "Sélectionnez une période",
-          "options": {
-            "DAILY": "Quotidien",
-            "WEEKLY": "Hebdomadaire",
-            "MONTHLY": "Mensuel"
-          }
-        },
-        "tokenLimit": {
-          "header": "Limite de jetons",
-          "placeholder": "Limite de jetons (milliers)",
-          "unit": "(milliers)"
-        }
+        "disabledTooltip": "Les limites de débit de jetons sont disponibles uniquement dans la [version Enterprise d'Onyx](/admin/billing)."
       },
       "builtIn": {
         "admin": {
@@ -9868,170 +9842,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "Jusqu'à {cost} ou {tokens} jetons",
-          "cost": "Jusqu'à {cost}",
-          "none": "Aucun budget défini",
-          "tokens": "Jusqu'à {tokens} jetons"
-        },
-        "cadence": {
-          "label": "{period, select, DAILY {Réinitialisation chaque jour à minuit UTC} WEEKLY {Réinitialisation chaque lundi à minuit UTC} other {Réinitialisation le 1er de chaque mois à minuit UTC}}"
-        },
-        "deleteFailed": {
-          "error": "Échec de la suppression de la limite de débit de jetons"
-        },
-        "empty": {
-          "message": "Aucune limite pour l'instant. Créez une limite de dépenses pour plafonner l'utilisation."
-        },
-        "loadFailed": {
-          "error": "Échec du chargement des limites de débit de jetons"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "Supprimer {label}",
-            "tooltip": "Supprimer la limite"
-          },
-          "disable": {
-            "ariaLabel": "Désactiver {label}"
-          },
-          "enable": {
-            "ariaLabel": "Activer {label}"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "Échec de la mise à jour de la limite de débit de jetons"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "Annuler"
-        },
-        "costBudget": {
-          "description": "Dépense maximale par période de réinitialisation. Définissez un budget de coût, un budget de jetons, ou les deux.",
-          "placeholder": "Aucune limite de coût",
-          "title": "Budget de coût",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "Saisissez un budget de coût, un budget de jetons, ou les deux",
-          "costMax": "Le budget de coût maximal est de {amount, number} $",
-          "costMinCents": "Le budget de coût doit être d'au moins 0,01 $",
-          "costMoreThanZero": "Le budget de coût doit être supérieur à 0",
-          "groupRequired": "Sélectionnez un groupe d'utilisateurs",
-          "scopeRequired": "La portée cible est un champ obligatoire",
-          "tokenIncrement": "Utilisez des incréments de 1 000 jetons",
-          "tokenInteger": "Saisissez un nombre entier de jetons",
-          "tokenMax": "Le budget de jetons maximal est de 1 000 milliards",
-          "tokenMin": "Utilisez au moins 1 000 jetons"
-        },
-        "groupMenu": {
-          "empty": "Aucun groupe d'utilisateurs pour l'instant. Créez-en un dans Utilisateurs et groupes."
-        },
-        "groupPicker": {
-          "placeholder": "Choisissez un groupe"
-        },
-        "header": {
-          "title": "Créer une limite de dépenses"
-        },
-        "period": {
-          "description": "Les budgets sont réinitialisés à minuit UTC",
-          "title": "Période de réinitialisation",
-          "options": {
-            "DAILY": "Quotidien",
-            "WEEKLY": "Hebdomadaire",
-            "MONTHLY": "Mensuel"
-          }
-        },
-        "scope": {
-          "caption": {
-            "global": "Tout le monde dans l'espace de travail partage un seul budget.",
-            "group": "Les membres de {group} partagent un seul budget.",
-            "groupUnchosen": "Les membres du groupe choisi partagent un seul budget.",
-            "user": "Chaque utilisateur dispose de son propre budget."
-          },
-          "title": "S'applique à"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "Espace de travail"
-          },
-          "user": {
-            "title": "Par utilisateur"
-          },
-          "userGroup": {
-            "title": "Groupe d'utilisateurs"
-          }
-        },
-        "submit": {
-          "label": "Créer la limite"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} ou {tokens} jetons",
-            "tokens": "{tokens} jetons"
-          },
-          "global": "{period, select, DAILY {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "group": "{period, select, DAILY {Les membres de {group} partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Les membres de {group} partagent jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres de {group} partagent jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "groupUnchosen": "{period, select, DAILY {Les membres du groupe choisi partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Les membres du groupe choisi partagent jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres du groupe choisi partagent jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "user": "{period, select, DAILY {Chaque utilisateur peut dépenser jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} WEEKLY {Chaque utilisateur peut dépenser jusqu'à {budget} chaque semaine. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Chaque utilisateur peut dépenser jusqu'à {budget} chaque mois. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}"
-        },
-        "tokenBudget": {
-          "description": "Nombre maximal de jetons par période de réinitialisation",
-          "placeholder": "Aucune limite de jetons",
-          "title": "Budget de jetons",
-          "unit": "jetons"
-        },
-        "userGroup": {
-          "description": "Choisissez le groupe qui partage ce budget",
-          "title": "Groupe d'utilisateurs"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "Créer une limite de dépenses"
-        },
-        "createFailed": {
-          "error": "Échec de la création de la limite de dépenses"
-        },
-        "created": {
-          "message": "Limite de dépenses créée !"
-        },
-        "embedded": {
-          "description": "Définissez des garde-fous pour l'utilisation de l'espace de travail, des utilisateurs et des groupes. Les limites peuvent être activées ou désactivées sans supprimer leur configuration.",
-          "title": "Gérer les limites de dépenses"
-        },
-        "global": {
-          "description": "Les limites globales s'appliquent à tous les utilisateurs, groupes d'utilisateurs et clés d'API. Quand la limite globale est atteinte, plus aucun jeton ne peut être dépensé."
-        },
-        "intro": {
-          "description": "Les limites de dépenses vous aident à contrôler le nombre de jetons dépensés sur une période donnée.",
-          "groupLimit": "Définissez des limites pour les groupes d'utilisateurs afin de contrôler les dépenses des équipes.",
-          "toggleLimit": "Activez et désactivez les limites selon vos besoins.",
-          "userLimit": "Définissez des limites pour les utilisateurs afin qu'aucun utilisateur ne dépense trop.",
-          "workspaceLimit": "Définissez une limite pour tout l'espace de travail afin d'encadrer les dépenses globales de votre équipe."
-        },
-        "tabs": {
-          "global": {
-            "name": "Global"
-          },
-          "groups": {
-            "name": "Groupes"
-          },
-          "users": {
-            "name": "Utilisateurs"
-          }
-        },
-        "user": {
-          "description": "Les limites par utilisateur s'appliquent à chaque utilisateur individuellement. Quand un utilisateur atteint une limite, il ne peut temporairement plus dépenser de jetons."
-        },
-        "userGroup": {
-          "description": "Les limites de groupe s'appliquent à tous les utilisateurs d'un groupe. Si un utilisateur appartient à plusieurs groupes, la limite la plus permissive s'applique."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "Les traces des appels LLM ne seront plus envoyées à **{label}**. Les traces déjà envoyées ne sont pas affectées.",
@@ -11159,6 +10969,132 @@
         "retry": "{count, plural, one {Échec une fois. Prochaine tentative : {time}.} other {Échec # fois. Prochaine tentative : {time}.}}",
         "scoped": "Éléments ajoutés ou modifiés uniquement",
         "failures": "{count, plural, one {# échec} other {# échecs}}"
+      }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "Définissez des limites de dépenses pour maîtriser les dépenses LLM de votre organisation.",
+        "loadFailed": "Impossible de charger les limites de dépenses."
+      },
+      "workspace": {
+        "title": "Limites de l'espace de travail",
+        "description": "S'appliquent à tous dans cette organisation.",
+        "pool": {
+          "title": "Budget partagé",
+          "description": "Un budget par période partagé par tous. Définissez une limite de coût, de jetons, ou les deux."
+        },
+        "perUser": {
+          "title": "Limite par utilisateur",
+          "description": "Un budget propre à chaque utilisateur. La limite par membre d'un groupe la remplace pour la même période."
+        }
+      },
+      "groups": {
+        "title": "Limites de groupe",
+        "description": "Les limites de groupe ne bloquent jamais d'un groupe à l'autre : un utilisateur peut continuer tant que le budget partagé de l'un de ses groupes a de la marge. Pour chaque période, la plus grande limite par membre parmi les groupes de l'utilisateur s'applique. Pour limiter une seule personne, créez un groupe ne contenant qu'elle.",
+        "add": {
+          "label": "Ajouter une limite de groupe"
+        },
+        "picker": {
+          "placeholder": "Sélectionnez un groupe"
+        },
+        "members": "{count, plural, one {# membre} other {# membres}}",
+        "empty": "Aucun groupe n'a encore de limite de dépenses.",
+        "pool": {
+          "title": "Budget partagé du groupe",
+          "description": "Un budget partagé par tous les membres de ce groupe."
+        },
+        "perMember": {
+          "title": "Limite par membre",
+          "description": "Un budget propre à chaque membre de ce groupe. Pour chaque période, la plus grande limite parmi les groupes de l'utilisateur s'applique.",
+          "adminOnly": "Seul un administrateur peut modifier les limites par membre, car elles peuvent placer un membre au-dessus de la limite de l'espace de travail."
+        },
+        "remove": {
+          "tooltip": "Supprimer les limites de ce groupe"
+        },
+        "removed": "Limites de dépenses de {group} supprimées"
+      },
+      "groupPage": {
+        "title": "Limites de dépenses",
+        "description": "Limitez ce que ce groupe peut dépenser en utilisation de LLM."
+      },
+      "card": {
+        "enabled": {
+          "ariaLabel": "Activer ou désactiver {title}"
+        },
+        "addLimit": "Ajouter une limite",
+        "addModelBudget": "Ajouter un budget de modèle",
+        "modelBudget": {
+          "title": "Budget de modèle",
+          "description": "Plafonnez les dépenses sur des modèles précis. L'utilisation d'un modèle compte aussi pour les limites ci-dessus."
+        },
+        "cancel": "Annuler",
+        "save": "Enregistrer les modifications",
+        "saved": "Limites de dépenses enregistrées",
+        "saveFailed": "Impossible d'enregistrer les limites de dépenses : {error}"
+      },
+      "alerts": {
+        "title": "Alertes",
+        "description": "Limites d'alerte définies via l'API. Elles ne bloquent pas l'utilisation et restent inchangées lors d'un enregistrement ici.",
+        "row": "{model}, {period} : {target}",
+        "allModels": "Tous les modèles",
+        "percent": "{percent} % de la limite",
+        "tokens": "{tokens} jetons"
+      },
+      "row": {
+        "model": {
+          "title": "Modèle",
+          "placeholder": "Sélectionnez un modèle"
+        },
+        "period": {
+          "title": "Période de réinitialisation",
+          "options": {
+            "DAILY": {
+              "title": "Limite quotidienne",
+              "description": "Réinitialisation chaque jour à 00:00 UTC"
+            },
+            "WEEKLY": {
+              "title": "Limite hebdomadaire",
+              "description": "Réinitialisation chaque lundi à 00:00 UTC"
+            },
+            "MONTHLY": {
+              "title": "Limite mensuelle",
+              "description": "Réinitialisation le 1er de chaque mois à 00:00 UTC"
+            }
+          }
+        },
+        "nextReset": "Prochaine réinitialisation : {at} UTC",
+        "remove": {
+          "tooltip": "Supprimer la limite"
+        },
+        "cost": {
+          "title": "Limite de coût"
+        },
+        "tokens": {
+          "title": "Limite de jetons",
+          "placeholder": "Aucune limite de jetons",
+          "suffix": "k"
+        },
+        "usage": {
+          "spent": "{amount} dépensés",
+          "tokens": "{tokens} jetons utilisés",
+          "percent": "{percent} %"
+        },
+        "whenReached": {
+          "title": "Quand cette limite est atteinte",
+          "blockAll": {
+            "title": "Bloquer toute utilisation à la limite",
+            "description": "L'utilisation de tous les modèles, y compris le chat, la recherche, les bots et les appels API, s'arrête jusqu'à la prochaine réinitialisation."
+          },
+          "blockModel": {
+            "title": "Bloquer ce modèle à la limite",
+            "description": "L'utilisation de ce modèle s'arrête jusqu'à la prochaine réinitialisation. Les autres modèles restent disponibles."
+          }
+        },
+        "errors": {
+          "budgetRequired": "Définissez une limite de coût, de jetons, ou les deux.",
+          "duplicate": "Une autre limite utilise déjà cette période.",
+          "modelRequired": "Choisissez un modèle."
+        }
       }
     }
   },
@@ -12833,6 +12769,9 @@
         },
         "tryAgainNow": {
           "text": "Vous pouvez réessayer maintenant."
+        },
+        "otherModels": {
+          "text": "Les autres modèles restent disponibles."
         }
       },
       "resubmit": {
@@ -16724,6 +16663,9 @@
         },
         "webSearch": {
           "label": "Recherche web"
+        },
+        "spendingLimits": {
+          "label": "Limites de dépenses"
         }
       },
       "sections": {

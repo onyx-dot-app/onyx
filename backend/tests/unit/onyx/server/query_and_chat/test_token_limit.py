@@ -542,34 +542,3 @@ class TestCostEnforcementRealLedgerPath:
         )
 
         token_limit._user_is_rate_limited_by_global(None)  # no raise
-
-
-class TestTokenRateLimitArgsValidation:
-    """A limit must carry a token budget, a cost budget, or both — never neither."""
-
-    def test_neither_budget_rejected(self) -> None:
-        from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-
-        with pytest.raises(ValueError):
-            TokenRateLimitArgs(
-                enabled=True, token_budget=None, period=TokenRateLimitPeriod.DAILY
-            )
-
-    def test_cost_only_accepted(self) -> None:
-        from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-
-        args = TokenRateLimitArgs(
-            enabled=True,
-            token_budget=None,
-            period=TokenRateLimitPeriod.DAILY,
-            cost_budget_cents=500.0,
-        )
-        assert args.token_budget is None and args.cost_budget_cents == 500.0
-
-    def test_token_only_accepted(self) -> None:
-        from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-
-        args = TokenRateLimitArgs(
-            enabled=True, token_budget=1000, period=TokenRateLimitPeriod.DAILY
-        )
-        assert args.token_budget == 1000 and args.cost_budget_cents is None

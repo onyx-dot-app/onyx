@@ -9,7 +9,9 @@ from onyx.configs.constants import (
     TokenRateLimitScope,
 )
 from onyx.server.query_and_chat.token_limit import BudgetUnit
-from onyx.server.token_rate_limits.models import MAX_TOKEN_BUDGET_THOUSANDS
+
+# 1T tokens; stored in thousands so the ceiling stays inside the int32 column.
+MAX_TOKEN_BUDGET_THOUSANDS = 1_000_000_000
 
 
 class SpendingLimitRequest(BaseModel):

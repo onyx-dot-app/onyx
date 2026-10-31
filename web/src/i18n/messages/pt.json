@@ -6294,33 +6294,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "Adicionar limite"
-        },
-        "costLimit": {
-          "header": "Limite de custo",
-          "placeholder": "Limite de custo",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Os limites de taxa de tokens estão disponíveis apenas na [versão Enterprise do Onyx](/admin/billing).",
-        "section": {
-          "description": "Limite o número de tokens que este grupo pode usar dentro de um período de tempo.",
-          "title": "Limite de taxa de tokens"
-        },
-        "timeWindow": {
-          "header": "Janela de tempo",
-          "placeholder": "Selecione um período",
-          "options": {
-            "DAILY": "Diário",
-            "WEEKLY": "Semanal",
-            "MONTHLY": "Mensal"
-          }
-        },
-        "tokenLimit": {
-          "header": "Limite de tokens",
-          "placeholder": "Limite de tokens (milhares)",
-          "unit": "(milhares)"
-        }
+        "disabledTooltip": "Os limites de taxa de tokens estão disponíveis apenas na [versão Enterprise do Onyx](/admin/billing)."
       },
       "builtIn": {
         "admin": {
@@ -9868,170 +9842,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "Até {cost} ou {tokens} tokens",
-          "cost": "Até {cost}",
-          "none": "Nenhum orçamento definido",
-          "tokens": "Até {tokens} tokens"
-        },
-        "cadence": {
-          "label": "{period, select, DAILY {Reinicia todo dia à meia-noite UTC} WEEKLY {Reinicia toda segunda-feira à meia-noite UTC} other {Reinicia no dia 1 de cada mês à meia-noite UTC}}"
-        },
-        "deleteFailed": {
-          "error": "Falha ao excluir o limite de taxa de tokens"
-        },
-        "empty": {
-          "message": "Nenhum limite ainda. Crie um limite de gastos para restringir o uso."
-        },
-        "loadFailed": {
-          "error": "Falha ao carregar os limites de taxa de tokens"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "Excluir {label}",
-            "tooltip": "Excluir limite"
-          },
-          "disable": {
-            "ariaLabel": "Desativar {label}"
-          },
-          "enable": {
-            "ariaLabel": "Ativar {label}"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "Falha ao atualizar o limite de taxa de tokens"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "Cancelar"
-        },
-        "costBudget": {
-          "description": "Gasto máximo por período de reinício. Defina um orçamento de custo, um orçamento de tokens ou ambos.",
-          "placeholder": "Sem limite de custo",
-          "title": "Orçamento de custo",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "Digite um orçamento de custo, um orçamento de tokens ou ambos",
-          "costMax": "O orçamento de custo máximo é US$ {amount, number}",
-          "costMinCents": "O orçamento de custo precisa ser de pelo menos US$ 0,01",
-          "costMoreThanZero": "O orçamento de custo precisa ser maior que 0",
-          "groupRequired": "Selecione um grupo de usuários",
-          "scopeRequired": "O escopo de destino é um campo obrigatório",
-          "tokenIncrement": "Use incrementos de 1.000 tokens",
-          "tokenInteger": "Digite um número inteiro de tokens",
-          "tokenMax": "O orçamento máximo é de 1 trilhão de tokens",
-          "tokenMin": "Use pelo menos 1.000 tokens"
-        },
-        "groupMenu": {
-          "empty": "Nenhum grupo de usuários ainda. Crie um em Usuários e grupos."
-        },
-        "groupPicker": {
-          "placeholder": "Escolha um grupo"
-        },
-        "header": {
-          "title": "Criar limite de gastos"
-        },
-        "period": {
-          "description": "Os orçamentos reiniciam à meia-noite UTC",
-          "title": "Período de reinício",
-          "options": {
-            "DAILY": "Diário",
-            "WEEKLY": "Semanal",
-            "MONTHLY": "Mensal"
-          }
-        },
-        "scope": {
-          "caption": {
-            "global": "Todos no espaço de trabalho compartilham um orçamento.",
-            "group": "Os membros de {group} compartilham um orçamento.",
-            "groupUnchosen": "Os membros do grupo escolhido compartilham um orçamento.",
-            "user": "Cada usuário tem o próprio orçamento."
-          },
-          "title": "Aplica-se a"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "Espaço de trabalho"
-          },
-          "user": {
-            "title": "Por usuário"
-          },
-          "userGroup": {
-            "title": "Grupo de usuários"
-          }
-        },
-        "submit": {
-          "label": "Criar limite"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} ou {tokens} tokens",
-            "tokens": "{tokens} tokens"
-          },
-          "global": "{period, select, DAILY {Todos no espaço de trabalho compartilham até {budget} por dia. O uso fica bloqueado até o período reiniciar.} WEEKLY {Todos no espaço de trabalho compartilham até {budget} por semana. O uso fica bloqueado até o período reiniciar.} other {Todos no espaço de trabalho compartilham até {budget} por mês. O uso fica bloqueado até o período reiniciar.}}",
-          "group": "{period, select, DAILY {Os membros de {group} compartilham até {budget} por dia. O uso fica bloqueado até o período reiniciar.} WEEKLY {Os membros de {group} compartilham até {budget} por semana. O uso fica bloqueado até o período reiniciar.} other {Os membros de {group} compartilham até {budget} por mês. O uso fica bloqueado até o período reiniciar.}}",
-          "groupUnchosen": "{period, select, DAILY {Os membros do grupo escolhido compartilham até {budget} por dia. O uso fica bloqueado até o período reiniciar.} WEEKLY {Os membros do grupo escolhido compartilham até {budget} por semana. O uso fica bloqueado até o período reiniciar.} other {Os membros do grupo escolhido compartilham até {budget} por mês. O uso fica bloqueado até o período reiniciar.}}",
-          "user": "{period, select, DAILY {Cada usuário pode gastar até {budget} por dia. O uso fica bloqueado até o período reiniciar.} WEEKLY {Cada usuário pode gastar até {budget} por semana. O uso fica bloqueado até o período reiniciar.} other {Cada usuário pode gastar até {budget} por mês. O uso fica bloqueado até o período reiniciar.}}"
-        },
-        "tokenBudget": {
-          "description": "Máximo de tokens por período de reinício",
-          "placeholder": "Sem limite de tokens",
-          "title": "Orçamento de tokens",
-          "unit": "tokens"
-        },
-        "userGroup": {
-          "description": "Escolha qual grupo compartilha este orçamento",
-          "title": "Grupo de usuários"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "Criar limite de gastos"
-        },
-        "createFailed": {
-          "error": "Falha ao criar o limite de gastos"
-        },
-        "created": {
-          "message": "Limite de gastos criado!"
-        },
-        "embedded": {
-          "description": "Defina limites de proteção para o uso do espaço de trabalho, dos usuários e dos grupos. Os limites podem ser ativados ou desativados sem excluir a configuração deles.",
-          "title": "Gerenciar os limites de gastos"
-        },
-        "global": {
-          "description": "Os limites globais se aplicam a todos os usuários, grupos de usuários e chaves de API. Quando o limite global é atingido, não é possível gastar mais tokens."
-        },
-        "intro": {
-          "description": "Os limites de gastos ajudam você a controlar quantos tokens podem ser gastos em um determinado período.",
-          "groupLimit": "Defina limites para grupos de usuários para controlar os gastos das equipes.",
-          "toggleLimit": "Ative e desative os limites conforme a necessidade.",
-          "userLimit": "Defina limites para os usuários para que nenhum usuário gaste demais.",
-          "workspaceLimit": "Defina um limite para todo o espaço de trabalho e controle os gastos totais da sua equipe."
-        },
-        "tabs": {
-          "global": {
-            "name": "Global"
-          },
-          "groups": {
-            "name": "Grupos"
-          },
-          "users": {
-            "name": "Usuários"
-          }
-        },
-        "user": {
-          "description": "Os limites de usuário se aplicam a cada usuário individualmente. Quando um usuário atinge um limite, ele fica temporariamente impedido de gastar tokens."
-        },
-        "userGroup": {
-          "description": "Os limites de grupo se aplicam a todos os usuários de um grupo. Se um usuário pertence a vários grupos, vale o limite mais permissivo."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "Os rastreamentos de chamadas de LLM não serão mais enviados para **{label}**. Os rastreamentos já enviados não são afetados.",
@@ -11159,6 +10969,132 @@
         "retry": "{count, plural, one {Falhou uma vez. Próxima tentativa: {time}.} other {Falhou # vezes. Próxima tentativa: {time}.}}",
         "scoped": "Apenas itens adicionados ou alterados",
         "failures": "{count, plural, one {# falha} other {# falhas}}"
+      }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "Defina limites de gastos para controlar os gastos com LLM na sua organização.",
+        "loadFailed": "Não foi possível carregar os limites de gastos."
+      },
+      "workspace": {
+        "title": "Limites do espaço de trabalho",
+        "description": "Aplicam-se a todos nesta organização.",
+        "pool": {
+          "title": "Orçamento compartilhado",
+          "description": "Um orçamento por período compartilhado por todos. Defina um limite de custo, de tokens ou ambos."
+        },
+        "perUser": {
+          "title": "Limite por usuário",
+          "description": "Um orçamento próprio para cada usuário. O limite por membro de um grupo o substitui no mesmo período."
+        }
+      },
+      "groups": {
+        "title": "Limites de grupo",
+        "description": "Limites de grupo nunca bloqueiam entre grupos: um usuário pode continuar enquanto o orçamento compartilhado de algum dos seus grupos tiver margem. Em cada período vale o maior limite por membro entre os grupos do usuário. Para limitar uma pessoa, crie um grupo só com ela.",
+        "add": {
+          "label": "Adicionar limite de grupo"
+        },
+        "picker": {
+          "placeholder": "Selecione um grupo"
+        },
+        "members": "{count, plural, one {# membro} other {# membros}}",
+        "empty": "Nenhum grupo tem limites de gastos ainda.",
+        "pool": {
+          "title": "Orçamento compartilhado do grupo",
+          "description": "Um orçamento compartilhado por todos neste grupo."
+        },
+        "perMember": {
+          "title": "Limite por membro",
+          "description": "Um orçamento próprio para cada membro deste grupo. Em cada período vale o maior limite entre os grupos do usuário.",
+          "adminOnly": "Só um administrador pode alterar limites por membro, porque eles podem elevar um membro acima do limite do espaço de trabalho."
+        },
+        "remove": {
+          "tooltip": "Remover os limites deste grupo"
+        },
+        "removed": "Limites de gastos de {group} removidos"
+      },
+      "groupPage": {
+        "title": "Limites de gastos",
+        "description": "Limite o que este grupo pode gastar com uso de LLM."
+      },
+      "card": {
+        "enabled": {
+          "ariaLabel": "Ativar ou desativar {title}"
+        },
+        "addLimit": "Adicionar limite",
+        "addModelBudget": "Adicionar orçamento de modelo",
+        "modelBudget": {
+          "title": "Orçamento de modelo",
+          "description": "Limite os gastos em modelos específicos. O uso de um modelo também conta para os limites acima."
+        },
+        "cancel": "Cancelar",
+        "save": "Salvar alterações",
+        "saved": "Limites de gastos salvos",
+        "saveFailed": "Não foi possível salvar os limites de gastos: {error}"
+      },
+      "alerts": {
+        "title": "Alertas",
+        "description": "Limites só de alerta definidos pela API. Eles não bloqueiam o uso e continuam inalterados ao salvar aqui.",
+        "row": "{model}, {period}: {target}",
+        "allModels": "Todos os modelos",
+        "percent": "{percent}% do limite",
+        "tokens": "{tokens} tokens"
+      },
+      "row": {
+        "model": {
+          "title": "Modelo",
+          "placeholder": "Selecione um modelo"
+        },
+        "period": {
+          "title": "Período de reinício",
+          "options": {
+            "DAILY": {
+              "title": "Limite diário",
+              "description": "Reinicia todo dia às 00:00 UTC"
+            },
+            "WEEKLY": {
+              "title": "Limite semanal",
+              "description": "Reinicia toda segunda-feira às 00:00 UTC"
+            },
+            "MONTHLY": {
+              "title": "Limite mensal",
+              "description": "Reinicia no dia 1 de cada mês às 00:00 UTC"
+            }
+          }
+        },
+        "nextReset": "Próximo reinício: {at} UTC",
+        "remove": {
+          "tooltip": "Remover limite"
+        },
+        "cost": {
+          "title": "Limite de custo"
+        },
+        "tokens": {
+          "title": "Limite de tokens",
+          "placeholder": "Sem limite de tokens",
+          "suffix": "mil"
+        },
+        "usage": {
+          "spent": "{amount} gastos",
+          "tokens": "{tokens} tokens usados",
+          "percent": "{percent}%"
+        },
+        "whenReached": {
+          "title": "Quando este limite for atingido",
+          "blockAll": {
+            "title": "Bloquear todo o uso no limite",
+            "description": "O uso de todos os modelos, incluindo chat, busca, bots e chamadas de API, para até o próximo reinício."
+          },
+          "blockModel": {
+            "title": "Bloquear este modelo no limite",
+            "description": "O uso deste modelo para até o próximo reinício. Os outros modelos continuam disponíveis."
+          }
+        },
+        "errors": {
+          "budgetRequired": "Defina um limite de custo, de tokens ou ambos.",
+          "duplicate": "Outro limite já usa este período.",
+          "modelRequired": "Escolha um modelo."
+        }
       }
     }
   },
@@ -12833,6 +12769,9 @@
         },
         "tryAgainNow": {
           "text": "Você já pode tentar novamente."
+        },
+        "otherModels": {
+          "text": "Os outros modelos continuam disponíveis."
         }
       },
       "resubmit": {
@@ -16724,6 +16663,9 @@
         },
         "webSearch": {
           "label": "Pesquisa na web"
+        },
+        "spendingLimits": {
+          "label": "Limites de gastos"
         }
       },
       "sections": {
