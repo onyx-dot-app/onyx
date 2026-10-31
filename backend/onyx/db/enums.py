@@ -965,3 +965,23 @@ class SkillInstallationPolicy(str, PyEnum):
     AVAILABLE = "AVAILABLE"
     DEFAULT = "DEFAULT"
     REQUIRED = "REQUIRED"
+
+
+class ConnectorEventType(str, PyEnum):
+    """What an inbound connector event says happened to one document."""
+
+    UPSERT = "upsert"
+    DELETE = "delete"
+
+
+class ConnectorEventStatus(str, PyEnum):
+    """Lifecycle of one row in `connector_event_inbox`.
+
+    IN_PROGRESS means an index attempt has claimed the row. The next run of the
+    same pair settles it against that attempt's outcome.
+    """
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"

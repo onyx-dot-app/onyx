@@ -85,6 +85,8 @@ from onyx.db.enums import (
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
+    ConnectorEventStatus,
+    ConnectorEventType,
     ConnectorManageRole,
     DefaultAppMode,
     ExternalAppType,
@@ -8062,4 +8064,119 @@ class SSOProvider(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class ConnectorEventInbox(Base):
+    """One pending document change pushed to Onyx by an event-based connector.
+
+    The webhook server writes a row per event; a later drain claims rows inside
+    an ordinary docfetching run and yields the documents they describe. A row
+    completes only once the index attempt that claimed it succeeds, so nothing
+    is acknowledged before it is durable.
+    """
+
+    __tablename__ = "connector_event_inbox"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+
+    # Decides the ACL and the document attribution, so an event that resolves
+    # to no pair is rejected at the edge rather than stored.
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Denormalised from the pair's connector: lets a consumer route a row to
+    # its handler without a join. Immutable for a pair, so it cannot drift.
+    source: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False), nullable=False
+    )
+
+    # The source's own stable id, which becomes Document.id.
+    document_id: Mapped[str] = mapped_column(String, nullable=False)
+    event_type: Mapped[ConnectorEventType] = mapped_column(
+        Enum(ConnectorEventType, native_enum=False, name="connectoreventtype"),
+        nullable=False,
+    )
+    # The provider's delivery id, or one the parser derives. Unique per pair,
+    # so a redelivered webhook writes nothing.
+    event_key: Mapped[str] = mapped_column(String, nullable=False)
+
+    # The stored body. NULL on a delete. RESTRICT so file store cleanup cannot
+    # strand a pending row.
+    file_id: Mapped[str | None] = mapped_column(
+        ForeignKey("file_record.file_id", ondelete="RESTRICT"), nullable=True
+    )
+    # Source-specific extras the handler needs. Never the document body.
+    payload: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+
+    status: Mapped[ConnectorEventStatus] = mapped_column(
+        Enum(ConnectorEventStatus, native_enum=False, name="connectoreventstatus"),
+        nullable=False,
+        default=ConnectorEventStatus.PENDING,
+        # `.name`: a non-native Enum column stores the member name, as every
+        # other enum column in this schema does.
+        server_default=ConnectorEventStatus.PENDING.name,
+    )
+    # The attempt that claimed the row; how the event is acknowledged.
+    index_attempt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    # Claim gate and retry backoff.
+    available_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Source event time, which orders two events on one document. NULL when the
+    # provider sends none; `id` then orders them.
+    occurred_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    processed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair", foreign_keys=[connector_credential_pair_id]
+    )
+
+    __table_args__ = (
+        # Idempotent receipt: the writer inserts ON CONFLICT DO NOTHING.
+        UniqueConstraint(
+            "connector_credential_pair_id",
+            "event_key",
+            name="uq_connector_event_inbox_pair_event_key",
+        ),
+        # The claim query's index.
+        Index(
+            "ix_connector_event_inbox_claim",
+            "available_at",
+            "id",
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+        # Collapsing several events for one document.
+        Index(
+            "ix_connector_event_inbox_pair_document",
+            "connector_credential_pair_id",
+            "document_id",
+        ),
+        # Per-pair backlog counts and drain checks.
+        Index(
+            "ix_connector_event_inbox_pair_status",
+            "connector_credential_pair_id",
+            "status",
+        ),
     )
