@@ -34,6 +34,7 @@ from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.scim.api import register_scim_exception_handlers, scim_router
 from ee.onyx.server.seeding import seed_db
+from ee.onyx.server.spending_limits.api import router as spending_limits_router
 from ee.onyx.server.tenants.api import router as tenants_router
 from ee.onyx.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
@@ -152,6 +153,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
+    include_router_with_global_prefix_prepended(application, spending_limits_router)
     include_router_with_global_prefix_prepended(application, enterprise_settings_router)
     include_router_with_global_prefix_prepended(application, usage_export_router)
     # Admin log export

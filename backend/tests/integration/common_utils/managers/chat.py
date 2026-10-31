@@ -234,6 +234,8 @@ class ChatSessionManager:
                 error = ErrorResponse(
                     error=str(data["error"]),
                     stack_trace=str(data.get("stack_trace") or ""),
+                    error_code=data.get("error_code"),
+                    details=data.get("details") or {},
                 )
             elif (error_obj := cast(dict[str, Any], data.get("obj") or {})) and (
                 error_obj.get("error")
@@ -244,6 +246,8 @@ class ChatSessionManager:
                     stack_trace=str(
                         error_obj.get("stack_trace") or data.get("stack_trace") or ""
                     ),
+                    error_code=error_obj.get("error_code"),
+                    details=error_obj.get("details") or {},
                 )
             elif (
                 (data_obj := data.get("obj"))

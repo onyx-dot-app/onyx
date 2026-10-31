@@ -12,11 +12,11 @@ A check on one model reads only that model's limits and usage."""
 from datetime import datetime, timezone
 from uuid import UUID
 
-from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
-from onyx.db.models import TokenRateLimit, User
+from onyx.db.models import User
 from onyx.db.token_limit import (
     fetch_enforced_token_rate_limits,
     fetch_user_group_enforced_token_rate_limits,
@@ -29,13 +29,13 @@ from onyx.db.user_usage import (
 )
 from onyx.server.query_and_chat.token_limit import (
     BudgetUnit,
-    BudgetWindow,
     WindowUsage,
     _user_is_rate_limited_by_global,
     budget_windows,
     exhausted_windows,
     latest_reset,
     raise_rate_limited,
+    resolve_member_allowance,
     token_buckets,
     usage_cutoff,
 )
@@ -65,25 +65,6 @@ def _check_spend_limits(user: User, model_configuration_id: int | None) -> None:
 """
 Per-user allowance
 """
-
-
-def resolve_member_allowance(
-    default_limits: list[TokenRateLimit],
-    member_limits_by_group: dict[int, list[TokenRateLimit]],
-) -> list[BudgetWindow]:
-    """The user's budget for each (period, unit): the largest among their
-    groups that set it, else the workspace default. A group that doesn't set a
-    bucket has no say in it."""
-    allowance: dict[tuple[TokenRateLimitPeriod, BudgetUnit], BudgetWindow] = {}
-    for group_id, limits in member_limits_by_group.items():
-        for window in budget_windows(limits, user_group_id=group_id):
-            key = (window.period, window.unit)
-            current = allowance.get(key)
-            if current is None or window.budget > current.budget:
-                allowance[key] = window
-    for window in budget_windows(default_limits):
-        allowance.setdefault((window.period, window.unit), window)
-    return list(allowance.values())
 
 
 def _user_is_rate_limited(user_id: UUID, model_configuration_id: int | None) -> None:

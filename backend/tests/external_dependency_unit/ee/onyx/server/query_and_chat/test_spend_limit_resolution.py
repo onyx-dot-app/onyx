@@ -37,6 +37,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import (
     BudgetUnit,
     _user_is_rate_limited_by_global,
+    resolve_member_allowance,
 )
 from onyx.tracing.flows import LLMFlow
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
@@ -199,7 +200,7 @@ def test_largest_group_allowance_wins_per_bucket(
     _limit(db_session, created, TokenRateLimitScope.USER, DAILY, 5)
     _limit(db_session, created, TokenRateLimitScope.USER, WEEKLY, 50)
 
-    allowance = ee_token_limit.resolve_member_allowance(
+    allowance = resolve_member_allowance(
         list(fetch_enforced_token_rate_limits(db_session, TokenRateLimitScope.USER)),
         fetch_user_group_enforced_token_rate_limits(db_session, user.id, member),
     )

@@ -73,6 +73,10 @@ from onyx.server.features.usage.models import (
     UsageExportUser,
     UserUsageResponse,
 )
+from onyx.server.query_and_chat.token_limit import (
+    BudgetUnit,
+    resolve_member_allowance,
+)
 from onyx.utils.datetime import get_window_start
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
@@ -114,7 +118,8 @@ def _used_from_buckets(
 
 
 def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget | None:
-    """Effective cost budget (most binding across user/global/group limits)."""
+    """Effective cost budget on all models: the most binding of the per-user
+    allowance, the workspace pool and the most permissive group pool."""
     now = datetime.now(tz=timezone.utc)
     candidates: list[EffectiveCostBudget] = []
 
@@ -136,13 +141,37 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
                 )
             )
 
-    user_rls = fetch_enforced_token_rate_limits(db_session, TokenRateLimitScope.USER)
-    user_cost_rls = cost_budget_limits(user_rls)
-    if user_cost_rls:
-        fetch_cutoff = period_fetch_cutoff(now, user_cost_rls)
-        _add_from_limits(
-            user_cost_rls,
-            get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
+    # The per-user allowance: the largest group value per period, else the
+    # workspace default, against the user's own usage.
+    allowance = [
+        window
+        for window in resolve_member_allowance(
+            list(
+                fetch_enforced_token_rate_limits(db_session, TokenRateLimitScope.USER)
+            ),
+            fetch_user_group_enforced_token_rate_limits(
+                db_session, UUID(user_id), TokenRateLimitScope.USER_GROUP_MEMBER
+            ),
+        )
+        if window.unit == BudgetUnit.COST
+    ]
+    if allowance:
+        user_buckets = get_user_cost_cents_buckets_since(
+            db_session,
+            user_id,
+            min(get_period_window_start(now, w.period) for w in allowance),
+        )
+        candidates.extend(
+            EffectiveCostBudget(
+                budget_cents=window.budget,
+                remaining_cents=window.budget
+                - _used_from_buckets(
+                    user_buckets, get_period_window_start(now, window.period)
+                ),
+                period=window.period,
+                reset_at=get_period_window_reset(now, window.period),
+            )
+            for window in allowance
         )
 
     global_rls = fetch_enforced_token_rate_limits(

@@ -157,7 +157,9 @@ def chat_error(
             error=error.detail,
             error_code=error.error_code.code,
             is_retryable=error.status_code >= 500,
-            details=details,
+            # The structured payload a 429 would carry (scope, reset_at, ...)
+            # must survive when the error is raised mid-turn.
+            details={**details, **(error.extra or {})},
         )
     elif isinstance(error, ValueError) and llm is None:
         return StreamingError(
