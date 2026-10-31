@@ -626,7 +626,13 @@ export default function useChatSessionController({
             nextId !== undefined &&
             !newMessageTree.has(nextId)
           ) {
-            void saved.then(() => reloadLatestChatPage(currentSessionId));
+            void saved.then((response) => {
+              if (response.ok) return reloadLatestChatPage(currentSessionId);
+              console.error("Failed to save the selected branch", {
+                messageId: message.messageId,
+                status: response.status,
+              });
+            });
           }
         } else {
           console.error("Message has no messageId", nodeId);

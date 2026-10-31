@@ -57,6 +57,11 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
     });
   } catch (error) {
     console.error("Failed to load older chat messages", { sessionId, error });
+    // Stop loading older pages, so a failing request does not repeat while
+    // the loader stays in view. Reopening the chat tries again.
+    useChatSessionStore
+      .getState()
+      .updateSessionData(sessionId, { hasOlderMessages: false });
   } finally {
     if (useChatSessionStore.getState().sessions.has(sessionId)) {
       useChatSessionStore
@@ -68,9 +73,13 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
 
 /**
  * Replaces the chat's message tree with the last page of its current branch,
- * for example after a switch to a branch whose messages are not loaded.
+ * for example after a switch to a branch whose messages are not loaded. Does
+ * nothing if the tree changed while the page loaded.
  */
 export async function reloadLatestChatPage(sessionId: string): Promise<void> {
+  const treeAtStart = useChatSessionStore
+    .getState()
+    .sessions.get(sessionId)?.messageTree;
   try {
     const response = await fetch(chatPageUrl(sessionId));
     if (!response.ok) {
@@ -78,7 +87,9 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
     }
     const page: BackendChatSession = await response.json();
     const store = useChatSessionStore.getState();
-    if (!store.sessions.has(sessionId)) return;
+    const session = store.sessions.get(sessionId);
+    // The chat changed meanwhile (for example, a message was sent): keep it.
+    if (!session || session.messageTree !== treeAtStart) return;
 
     store.updateSessionMessageTree(
       sessionId,
