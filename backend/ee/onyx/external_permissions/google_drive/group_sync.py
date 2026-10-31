@@ -1,11 +1,11 @@
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Mapping, Sequence
 
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive.folder_retrieval import (
-    get_modified_folders,
+    get_folders,
 )
 from ee.onyx.external_permissions.google_drive.models import (
     GoogleDrivePermission,
@@ -19,7 +19,15 @@ from onyx.access.utils import build_domain_group_id
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.drive_access import (
+    DriveMember,
+    PrincipalType,
+    parse_drive_member,
+    select_drive_organizer,
+)
+from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.source_operations import (
+    DriveFolderScope,
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
@@ -55,121 +63,252 @@ def _check_sync_deadline(deadline: float) -> None:
         )
 
 
-def _get_all_folders(
-    google_drive_connector: GoogleDriveConnector,
-    skip_folders_without_permissions: bool,
-    deadline: float | None = None,
+_MAX_FAILED_PERCENTAGE = 0.5
+# Skips are counted and logged in aggregate: per-folder lines here produce
+# millions of records on large domains.
+_SKIP_LOG_INTERVAL = 1000
+
+
+def _own_permissions(
+    ops: GoogleDriveSourceOperations, user_email: str, folder: GoogleDriveFileType
+) -> list[GoogleDrivePermission]:
+    """The folder's non-inherited permissions. Inherited ones are captured by
+    the folder or shared drive they come from."""
+    permission_ids = folder.get("permissionIds", [])
+    raw_permissions = folder.get("permissions", [])
+    if not raw_permissions and permission_ids:
+        # The API sometimes lists permissions by id only.
+        permissions = get_permissions_by_ids(
+            ops=ops,
+            user_email=user_email,
+            doc_id=folder["id"],
+            permission_ids=permission_ids,
+        )
+    else:
+        permissions = [
+            GoogleDrivePermission.from_drive_permission(permission)
+            for permission in raw_permissions
+        ]
+    return [
+        permission for permission in permissions if permission.inherited_from is None
+    ]
+
+
+def _run_partitions(
+    keys: Sequence[str],
+    list_partition: Callable[[str], Generator[FolderInfo, None, None]],
+    kind: str,
+    deadline: float,
+    abort_on_failures: bool = True,
+    failed_keys: set[str] | None = None,
 ) -> Generator[FolderInfo, None, None]:
-    """Have to get all folders since the group syncing system assumes all groups
-    are returned every time.
-
-    Folders are yielded as they are discovered rather than accumulated into a
-    list, so the full folder/permission graph is never resident at once.
-
-    TODO: tweak things so we can fetch deltas.
-    """
-    MAX_FAILED_PERCENTAGE = 0.5
-    # Skips are counted and logged in aggregate: per-folder lines here produce
-    # millions of records on large domains (every folder is revisited for every
-    # enumerated user).
-    SKIP_LOG_INTERVAL = 1000
-
-    crawl_deadline = (
-        deadline if deadline is not None else time.monotonic() + PERMISSION_SYNC_TIMEOUT
-    )
-
-    seen_folder_ids: set[str] = set()
-    skipped_already_seen = 0
-    skipped_no_permissions = 0
-
-    def _get_all_folders_for_user(
-        google_drive_connector: GoogleDriveConnector,
-        skip_folders_without_permissions: bool,
-        user_email: str,
-    ) -> Generator[FolderInfo, None, None]:
-        """Helper to get folders for a specific user + update shared seen_folder_ids"""
-        nonlocal skipped_already_seen, skipped_no_permissions
-
-        ops = google_drive_connector.ops
-        for folder in get_modified_folders(ops=ops, user_email=user_email):
-            _check_sync_deadline(crawl_deadline)
-            folder_id = folder["id"]
-            if folder_id in seen_folder_ids:
-                skipped_already_seen += 1
-                if skipped_already_seen % SKIP_LOG_INTERVAL == 0:
-                    logger.debug(
-                        "Skipped %d already-seen folders so far.", skipped_already_seen
-                    )
-                continue
-
-            seen_folder_ids.add(folder_id)
-
-            # Check if the folder has permission IDs but no permissions
-            permission_ids = folder.get("permissionIds", [])
-            raw_permissions = folder.get("permissions", [])
-
-            if not raw_permissions and permission_ids:
-                # Fetch permissions using the IDs
-                permissions = get_permissions_by_ids(
-                    ops=ops,
-                    user_email=user_email,
-                    doc_id=folder_id,
-                    permission_ids=permission_ids,
-                )
-            else:
-                permissions = [
-                    GoogleDrivePermission.from_drive_permission(permission)
-                    for permission in raw_permissions
-                ]
-
-            # Don't include inherited permissions, those will be captured
-            # by the folder/shared drive itself
-            permissions = [
-                permission
-                for permission in permissions
-                if permission.inherited_from is None
-            ]
-
-            if not permissions and skip_folders_without_permissions:
-                skipped_no_permissions += 1
-                if skipped_no_permissions % SKIP_LOG_INTERVAL == 0:
-                    logger.debug(
-                        "Skipped %d folders without permissions so far.",
-                        skipped_no_permissions,
-                    )
-                continue
-
-            yield FolderInfo(
-                id=folder_id,
-                permissions=permissions,
-            )
-
-    failed_count = 0
-    user_emails = google_drive_connector._get_all_user_emails()
-    for user_email in user_emails:
+    """Runs one listing per key. A failed key is skipped; with
+    ``abort_on_failures``, more than half of them failing ends the sync.
+    Passes over the same keys share ``failed_keys`` so a key that failed in
+    any of them counts once toward that threshold."""
+    failed = failed_keys if failed_keys is not None else set()
+    for key in keys:
+        _check_sync_deadline(deadline)
         try:
-            yield from _get_all_folders_for_user(
-                google_drive_connector, skip_folders_without_permissions, user_email
-            )
+            yield from list_partition(key)
         except TimeoutError:
-            # The crawl deadline is fatal for the whole sync, not a per-user
-            # failure — let it end the task.
+            # The crawl deadline is fatal for the whole sync, not a
+            # per-partition failure — let it end the task.
             raise
         except Exception as e:
             # 401 indicates a customer-side credential issue (token revoked /
             # expired), not a bug — surface as a warning instead of an error.
             if isinstance(e, GoogleDriveHttpError) and e.status_code == 401:
                 logger.warning(
-                    "Google Drive returned 401 for user %s; credentials may need to be reconnected. %s",
-                    user_email,
+                    "Google Drive returned 401 for %s %s; credentials may "
+                    "need to be reconnected. %s",
+                    kind,
+                    key,
                     e,
                 )
             else:
-                logger.exception("Error getting folders for user %s", user_email)
-            failed_count += 1
+                logger.exception("Error getting folders for %s %s", kind, key)
+            failed.add(key)
 
-            if failed_count > MAX_FAILED_PERCENTAGE * len(user_emails):
-                raise RuntimeError("Too many failed folder fetches during group sync")
+            if abort_on_failures and len(failed) > _MAX_FAILED_PERCENTAGE * len(keys):
+                raise RuntimeError(
+                    f"Too many failed folder fetches during group sync ({kind}s)"
+                )
+
+
+def _get_all_folders(
+    google_drive_connector: GoogleDriveConnector,
+    skip_folders_without_permissions: bool,
+    drive_members: Mapping[str, Sequence[DriveMember]],
+    expand_group: Callable[[str], list[str]],
+    deadline: float | None = None,
+) -> Generator[FolderInfo, None, None]:
+    """Every folder that carries its own permissions. Have to get all folders
+    since the group syncing system assumes all groups are returned every time.
+
+    A service account lists each folder once, the way the connector's phased
+    retrieval does: a shared drive as its organizer, every My Drive as its
+    owner, then the My Drive folders each user can see but does not own, which
+    is where a folder owned outside those partitions reaches the domain. Listing
+    everything every user can see instead costs users times folders on a large
+    domain. OAuth has one identity, so it lists everything that identity can
+    see in one pass.
+
+    Folders are yielded as they are discovered rather than accumulated into a
+    list, so the full folder/permission graph is never resident at once.
+
+    TODO: tweak things so we can fetch deltas.
+    """
+    crawl_deadline = (
+        deadline if deadline is not None else time.monotonic() + PERMISSION_SYNC_TIMEOUT
+    )
+    ops = google_drive_connector.ops
+
+    seen_folder_ids: set[str] = set()
+    # Shared drives an organizer listed in full. Only an organizer is
+    # guaranteed to see every folder, so any other listing leaves the drive
+    # for its members' passes, as does a listing that failed.
+    covered_drive_ids: set[str] = set()
+    skipped_already_seen = 0
+    skipped_no_permissions = 0
+
+    def _folders(
+        user_email: str,
+        scope: DriveFolderScope,
+        drive_id: str | None = None,
+        continue_on_404_or_403: bool = True,
+    ) -> Generator[FolderInfo, None, None]:
+        """Lists one partition as ``user_email`` and updates the shared seen set."""
+        nonlocal skipped_already_seen, skipped_no_permissions
+
+        _check_sync_deadline(crawl_deadline)
+        for folder in get_folders(
+            ops=ops,
+            user_email=user_email,
+            scope=scope,
+            drive_id=drive_id,
+            continue_on_404_or_403=continue_on_404_or_403,
+        ):
+            _check_sync_deadline(crawl_deadline)
+            folder_id = folder["id"]
+            if folder_id in seen_folder_ids:
+                skipped_already_seen += 1
+                if skipped_already_seen % _SKIP_LOG_INTERVAL == 0:
+                    logger.debug(
+                        "Skipped %d already-seen folders so far.", skipped_already_seen
+                    )
+                continue
+            seen_folder_ids.add(folder_id)
+
+            permissions = _own_permissions(ops, user_email, folder)
+            if not permissions and skip_folders_without_permissions:
+                skipped_no_permissions += 1
+                if skipped_no_permissions % _SKIP_LOG_INTERVAL == 0:
+                    logger.debug(
+                        "Skipped %d folders without permissions so far.",
+                        skipped_no_permissions,
+                    )
+                continue
+
+            yield FolderInfo(id=folder_id, permissions=permissions)
+
+    def _all_folders_of(email: str) -> Generator[FolderInfo, None, None]:
+        yield from _folders(email, DriveFolderScope.ALL_DRIVES)
+
+    def _shared_drive_folders(drive_id: str) -> Generator[FolderInfo, None, None]:
+        """Lists a shared drive as its organizer, the one role that sees every
+        folder in it. A drive without one is left to its members' passes: an
+        admin has no file-level access beyond their own membership, and the
+        admin is one of the enumerated users."""
+
+        def _can_list(email: str) -> bool:
+            # Each probe is two API calls; a drive with many unusable
+            # candidates must not outlast the deadline between listings.
+            _check_sync_deadline(crawl_deadline)
+            return ops.can_list_drive(user_email=email, drive_id=drive_id)
+
+        _check_sync_deadline(crawl_deadline)
+        choice = select_drive_organizer(
+            drive_id=drive_id,
+            members=list(drive_members.get(drive_id, [])),
+            google_domain=google_drive_connector.google_domain,
+            expand_group=expand_group,
+            can_list_drive=_can_list,
+        )
+        if choice.email is None:
+            logger.warning(
+                "Drive %s: no impersonable member can list it; its folders are "
+                "synced only through the members found in the user pass.",
+                drive_id,
+            )
+            return
+        # A denial must raise here: a listing that ended quietly on a 403 or
+        # 404 would otherwise be mistaken for a complete one.
+        yield from _folders(
+            choice.email,
+            DriveFolderScope.SHARED_DRIVE,
+            drive_id,
+            continue_on_404_or_403=False,
+        )
+        # Reached only when the listing finished without an error.
+        if choice.complete:
+            covered_drive_ids.add(drive_id)
+
+    def _owned_folders(email: str) -> Generator[FolderInfo, None, None]:
+        yield from _folders(email, DriveFolderScope.OWNED)
+
+    def _visible_folders(email: str) -> Generator[FolderInfo, None, None]:
+        """The My Drive folders the user can see but does not own (which is
+        where a folder owned outside the domain reaches it), and the folders
+        of any shared drive no organizer listed in full: one the admin's
+        inventory did not include, such as a partner domain's drive, one listed
+        by a lesser role, or one whose listing failed."""
+        yield from _folders(email, DriveFolderScope.NOT_OWNED)
+        for drive_id in ops.list_drives(
+            user_email=email, use_domain_admin_access=False
+        ):
+            _check_sync_deadline(crawl_deadline)
+            if drive_id in covered_drive_ids:
+                continue
+            logger.info(
+                "Drive %s has no complete organizer listing; listing its folders "
+                "as member %s.",
+                drive_id,
+                email,
+            )
+            yield from _folders(email, DriveFolderScope.SHARED_DRIVE, drive_id)
+
+    user_emails = google_drive_connector._get_all_user_emails()
+    if not google_drive_connector.is_service_account:
+        yield from _run_partitions(user_emails, _all_folders_of, "user", crawl_deadline)
+    else:
+        # A drive whose organizer listing failed stays uncovered for the user
+        # pass to recover, so drive failures do not end the sync on their own.
+        yield from _run_partitions(
+            list(drive_members),
+            _shared_drive_folders,
+            "shared drive",
+            crawl_deadline,
+            abort_on_failures=False,
+        )
+        # Every owner lists before any non-owner: an owner always reads a
+        # folder's full ACL, while a non-owner's read can stop at a denial, and
+        # the first listing to reach a folder is the one that claims it.
+        failed_users: set[str] = set()
+        yield from _run_partitions(
+            user_emails,
+            _owned_folders,
+            "user",
+            crawl_deadline,
+            failed_keys=failed_users,
+        )
+        yield from _run_partitions(
+            user_emails,
+            _visible_folders,
+            "user",
+            crawl_deadline,
+            failed_keys=failed_users,
+        )
 
     if skipped_no_permissions or skipped_already_seen:
         logger.info(
@@ -227,19 +366,16 @@ def _drive_folder_to_onyx_group(
 def _get_drive_members(
     google_drive_connector: GoogleDriveConnector,
     deadline: float,
-) -> dict[str, tuple[set[str], set[str]]]:
+) -> dict[str, list[DriveMember]]:
     """
-    This builds a map of drive ids to their members (group and user emails).
-    E.g. {
-        "drive_id_1": ({"group_email_1"}, {"user_email_1", "user_email_2"}),
-        "drive_id_2": ({"group_email_3"}, {"user_email_3"}),
-    }
+    This builds a map of drive ids to their members, with each member's role.
+    A drive whose members cannot be read maps to an empty list.
     """
 
     # fetches shared drives only
     drive_ids = google_drive_connector.get_all_drive_ids()
 
-    drive_id_to_members_map: dict[str, tuple[set[str], set[str]]] = {}
+    drive_id_to_members_map: dict[str, list[DriveMember]] = {}
     ops = google_drive_connector.ops
 
     try:
@@ -262,8 +398,7 @@ def _get_drive_members(
 
     for drive_id in drive_ids:
         _check_sync_deadline(deadline)
-        group_emails: set[str] = set()
-        user_emails: set[str] = set()
+        members: list[DriveMember] = []
 
         try:
             for permission in ops.list_drive_members(
@@ -273,12 +408,9 @@ def _get_drive_members(
                 use_domain_admin_access=is_admin,
             ):
                 _check_sync_deadline(deadline)
-                # NOTE: don't need to check for PermissionType.ANYONE since
-                # you can't share a drive with the internet
-                if permission["type"] == PermissionType.GROUP:
-                    group_emails.add(permission["emailAddress"])
-                elif permission["type"] == PermissionType.USER:
-                    user_emails.add(permission["emailAddress"])
+                member = parse_drive_member(permission)
+                if member is not None:
+                    members.append(member)
         except GoogleDriveHttpError as e:
             if e.status_code in (403, 404):
                 logger.warning(
@@ -291,27 +423,36 @@ def _get_drive_members(
             else:
                 raise e
 
-        drive_id_to_members_map[drive_id] = (group_emails, user_emails)
+        drive_id_to_members_map[drive_id] = members
     return drive_id_to_members_map
 
 
 def _drive_member_map_to_onyx_groups(
-    drive_id_to_members_map: dict[str, tuple[set[str], set[str]]],
+    drive_id_to_members_map: Mapping[str, Sequence[DriveMember]],
     group_email_to_member_emails_map: dict[str, list[str]],
 ) -> Generator[ExternalUserGroup, None, None]:
     """The `user_emails` for the Shared Drive should be all individuals in the
     Shared Drive + the union of all flattened group emails."""
-    for drive_id, (group_emails, user_emails) in drive_id_to_members_map.items():
-        drive_member_emails: set[str] = user_emails
-        for group_email in group_emails:
-            if group_email not in group_email_to_member_emails_map:
-                logger.warning(
-                    "Group email %s for drive %s not found in group_email_to_member_emails_map",
-                    group_email,
-                    drive_id,
-                )
+    for drive_id, members in drive_id_to_members_map.items():
+        drive_member_emails: set[str] = set()
+        # NOTE: don't need to check for PrincipalType.ANYONE since you can't
+        # share a drive with the internet
+        for member in members:
+            if member.email is None:
                 continue
-            drive_member_emails.update(group_email_to_member_emails_map[group_email])
+            if member.principal_type is PrincipalType.USER:
+                drive_member_emails.add(member.email)
+            elif member.principal_type is PrincipalType.GROUP:
+                if member.email not in group_email_to_member_emails_map:
+                    logger.warning(
+                        "Group email %s for drive %s not found in group_email_to_member_emails_map",
+                        member.email,
+                        drive_id,
+                    )
+                    continue
+                drive_member_emails.update(
+                    group_email_to_member_emails_map[member.email]
+                )
         yield ExternalUserGroup(
             id=drive_id,
             user_emails=list(drive_member_emails),
@@ -404,10 +545,15 @@ def gdrive_group_sync(
     ):
         yield onyx_group
 
-    # Get all folder permissions
+    # Get all folder permissions. Organizer selection expands groups through
+    # the memberships already read above instead of calling the directory again.
     folder_info = _get_all_folders(
         google_drive_connector=google_drive_connector,
         skip_folders_without_permissions=True,
+        drive_members=drive_id_to_members_map,
+        expand_group=lambda group_email: group_email_to_member_emails_map.get(
+            group_email, []
+        ),
         deadline=sync_deadline,
     )
     for folder in folder_info:

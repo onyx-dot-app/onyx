@@ -282,6 +282,22 @@ runs.
   (`db/permission_sync_attempt.py:is_doc_permission_sync_attempt_resumable`),
   and when the file is younger than `NUM_DAYS_TO_KEEP_CHECKPOINTS` and the
   connector config hash did not change (`FileStoreDocSyncCheckpointer`).
+- **Drive folder groups are listed by partition, not per user.** A Drive
+  file's inherited permission names the folder it comes from, and doc sync
+  puts that folder ID in the file's group IDs, so group sync
+  (`ee/onyx/external_permissions/google_drive/group_sync.py:_get_all_folders`)
+  must emit every folder that carries its own permissions on every run.
+  Listing every user's whole view costs users times folders and can run past
+  `PERMISSION_SYNC_TIMEOUT` on a large domain. A service account instead
+  lists each shared drive once as an organizer
+  (`onyx/connectors/google_drive/drive_access.py:select_drive_organizer`), then
+  every user's owned My Drive folders, then every user's not-owned folders and
+  the drives no organizer listed in full. Only a complete organizer listing
+  marks a drive covered; a denied, failed or lesser-role listing leaves it to
+  the members' pass. Owners list before non-owners because an owner reads a
+  folder's full ACL. The listing forms are the `DriveFolderScope` values of
+  `onyx/connectors/google_drive/source_operations.py:list_folders_with_permissions`.
+  OAuth has one identity and lists every folder it can see in one pass.
 
 ## Known issues
 
