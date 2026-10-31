@@ -148,9 +148,14 @@ pub fn setup(app: &AppHandle) {
     }
     let handle = app.clone();
     app.deep_link().on_open_url(move |event| {
-        for url in event.urls() {
-            handle_deep_link(&handle, &url);
-        }
+        // The listener runs under Tauri's listener lock; building a window here deadlocks.
+        let handle = handle.clone();
+        let urls = event.urls();
+        tauri::async_runtime::spawn(async move {
+            for url in urls {
+                handle_deep_link(&handle, &url);
+            }
+        });
     });
     if let Ok(Some(urls)) = app.deep_link().get_current() {
         for url in urls {

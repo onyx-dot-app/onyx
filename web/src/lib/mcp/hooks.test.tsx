@@ -174,6 +174,7 @@ describe("useMcpAuthentication", () => {
       await new Promise<void>((resolve) => {
         complete = resolve;
       });
+      return {};
     });
     const { result } = renderHook(() => useMcpAuthentication(0), {
       wrapper: makeWrapper(),
