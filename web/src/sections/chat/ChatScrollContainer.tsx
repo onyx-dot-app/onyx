@@ -376,6 +376,9 @@ const ChatScrollContainer = React.memo(
             data-chat-scroll
             className={cn(
               "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
+              // WindowedRow keeps the content still when rows above the
+              // viewport resize; native anchoring would correct it twice.
+              "[overflow-anchor:none]",
               hideScrollbar ? "no-scrollbar" : "default-scrollbar",
               // Full-width (always the case below md) drops the reserved
               // gutters so content sits flush with the chat edge; centered
