@@ -163,6 +163,16 @@ const ChatScrollContainer = React.memo(
           // Use scrollTo instead of scrollIntoView for better cross-browser support
           const targetScrollTop =
             container.scrollHeight - container.clientHeight;
+
+          // A long smooth scroll would mount every windowed row on the way.
+          // Jump to one viewport above the end, then glide the rest.
+          if (behavior === "smooth") {
+            const glideStart = targetScrollTop - container.clientHeight;
+            if (container.scrollTop < glideStart) {
+              container.scrollTop = glideStart;
+            }
+          }
+
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Update tracking refs
@@ -175,6 +185,11 @@ const ChatScrollContainer = React.memo(
             setTimeout(() => {
               isAutoScrollingRef.current = false;
               if (container) {
+                // Rows that mounted on the way can move the end; settle on it.
+                container.scrollTo({
+                  top: container.scrollHeight - container.clientHeight,
+                  behavior: "instant",
+                });
                 prevScrollTopRef.current = container.scrollTop;
               }
               // Refresh scroll state so the scroll-to-bottom button hides
@@ -242,9 +257,12 @@ const ChatScrollContainer = React.memo(
             // Auto-scroll: follow content if we were at bottom.
             // Skip instant auto-scroll during DynamicBottomSpacer's smooth
             // scroll to avoid competing scroll commands.
+            // Skip it during a smooth scroll to the bottom too: an instant
+            // scroll would cut it short.
             if (
               autoScrollRef.current &&
               wasAtBottom &&
+              !isAutoScrollingRef.current &&
               container.dataset.smoothScrollActive !== "true"
             ) {
               // scrollToBottom handles isAutoScrollingRef and ref updates
@@ -376,9 +394,6 @@ const ChatScrollContainer = React.memo(
             data-chat-scroll
             className={cn(
               "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
-              // WindowedRow keeps the content still when rows above the
-              // viewport resize; native anchoring would correct it twice.
-              "[overflow-anchor:none]",
               hideScrollbar ? "no-scrollbar" : "default-scrollbar",
               // Full-width (always the case below md) drops the reserved
               // gutters so content sits flush with the chat edge; centered

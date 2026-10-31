@@ -28,9 +28,9 @@ export interface WindowedRowProps {
  * it, the row is an empty placeholder at its last measured height.
  *
  * When a row above the viewport changes height (a placeholder mounts, or
- * mounted content grows), the row moves the scroll position by the same
- * amount, so what is on screen stays still. The scroll container must set
- * `overflow-anchor: none`, or the browser corrects the position a second time.
+ * mounted content grows), what is on screen must stay still. Browsers with
+ * native scroll anchoring (`overflow-anchor`) do this themselves. In others,
+ * the row moves the scroll position by the same amount.
  *
  * A row that holds focus stays mounted. Outside a ChatScrollContainer, the
  * row always renders its content.
@@ -72,6 +72,7 @@ export default function WindowedRow({
     const row = rowRef.current;
     if (!root || !row) return;
 
+    const nativeAnchoring = CSS.supports("overflow-anchor", "auto");
     let previousHeight = row.offsetHeight;
     // Resize callbacks run after layout and before paint, so the correction
     // is never painted.
@@ -80,7 +81,12 @@ export default function WindowedRow({
       const delta = height - previousHeight;
       previousHeight = height;
       heightCache.set(id, height);
-      if (delta === 0) return;
+      if (delta === 0 || nativeAnchoring) return;
+
+      // At the end of the scroll range, the browser has already clamped the
+      // position by the amount the content shrank.
+      const atEnd = root.scrollTop >= root.scrollHeight - root.clientHeight - 1;
+      if (delta < 0 && atEnd) return;
 
       const previousBottom = row.getBoundingClientRect().bottom - delta;
       if (previousBottom <= root.getBoundingClientRect().top) {
