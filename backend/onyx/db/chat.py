@@ -816,7 +816,8 @@ def get_chat_message_page_ids(
     branch switcher and multi-model replies have their siblings, including the
     siblings of the first message of the next, newer page.
 
-    Returns the message ids and whether the branch has older messages.
+    Returns the message ids and whether the branch has older messages. A
+    `before_message_id` that is not on the current branch gives an empty page.
     """
     rows = db_session.execute(
         select(
@@ -844,7 +845,10 @@ def get_chat_message_page_ids(
         branch.append(next_id)
         next_id = latest_child_by_id[next_id]
 
-    if before_message_id is not None and before_message_id in branch:
+    if before_message_id is not None:
+        # The branch changed since the client loaded this message.
+        if before_message_id not in branch:
+            return set(), False
         branch = branch[: branch.index(before_message_id)]
 
     page = branch[-limit:]

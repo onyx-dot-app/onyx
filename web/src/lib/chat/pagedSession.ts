@@ -43,6 +43,11 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
     const current = useChatSessionStore.getState().sessions.get(sessionId);
     if (!current) return;
 
+    // The tree was replaced meanwhile (a reload or a branch switch): the
+    // page no longer attaches to it. The loader asks again for the new tree.
+    const head = getLatestMessageChain(current.messageTree)[0];
+    if (head?.messageId !== oldest.messageId) return;
+
     // Loaded messages win over the page's copies (the page repeats the
     // children of its last message, the first loaded ones among them).
     const olderMessages = processRawChatHistory(page.messages, page.packets);
