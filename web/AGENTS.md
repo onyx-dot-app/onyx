@@ -63,6 +63,9 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
   - A covered input: to group inputs visually, put them in a white, borderless `<Card padding={2}>`.
     The card adds 0.5rem, and the input's own 0.5rem internal padding adds the rest. Do not wrap
     inputs inside the card in `InputPadder`.
+- **Open popups inside the click.** Call `window.open("about:blank")` in the event handler, then
+  set its `location` after the `await`. Popup blockers and the desktop app block a `window.open`
+  that runs after an `await`.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 

@@ -473,7 +473,7 @@
             return;
           }
 
-          window.location.href = currentServerUrl;
+          window.location.replace(currentServerUrl);
         } catch (error) {
           // On error, default to cloud
           domainInput.value = DEFAULT_DOMAIN;
@@ -535,7 +535,7 @@
           await invoke("set_server_url", { url: validation.url });
 
           // Success - redirect to the new URL (login page)
-          window.location.href = validation.url;
+          window.location.replace(validation.url);
         } catch (error) {
           showError(error || "Failed to save configuration");
           saveBtn.disabled = false;
