@@ -296,6 +296,8 @@ class ChatSessionDetailResponse(BaseModel):
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.
     incognito: bool = False
+    # Set on a paged load when the current branch has messages before the page.
+    has_older_messages: bool = False
 
 
 class AdminSearchRequest(BaseModel):

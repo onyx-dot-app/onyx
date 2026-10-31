@@ -7,6 +7,7 @@ import {
   SvgAsana,
   SvgAWS,
   SvgAxero,
+  SvgAzure,
   SvgBitbucket,
   SvgBookStack,
   SvgBox,
@@ -147,6 +148,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Braintrust]: "sources.braintrust.description",
   [ValidSources.Lumapps]: "sources.lumapps.description",
   [ValidSources.YouTrack]: "sources.youtrack.description",
+  [ValidSources.AzureDatalake]: "sources.azureDatalake.description",
   [ValidSources.Canvas]: "sources.canvas.description",
   [ValidSources.CraftFile]: "sources.craftFile.description",
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
@@ -329,6 +331,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Amazon S3",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/s3`,
+  },
+  azure_datalake: {
+    icon: SvgAzure,
+    displayName: "Azure Data Lake Storage",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/azure_datalake`,
   },
   google_cloud_storage: {
     icon: SvgGoogleCloud,

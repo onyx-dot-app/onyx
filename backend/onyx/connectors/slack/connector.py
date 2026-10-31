@@ -21,6 +21,7 @@ from onyx.configs.app_configs import (
     SLACK_NUM_THREADS,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.configs.slack_configs import is_slack_host
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -1086,7 +1087,7 @@ class SlackConnector(
     def normalize_url(cls, url: str) -> NormalizationResult:
         """Normalize a Slack URL to extract channel_id__thread_ts format."""
         parsed = urlparse(url)
-        if "slack.com" not in parsed.netloc.lower():
+        if not is_slack_host(parsed.netloc):
             return NormalizationResult(normalized_url=None, use_default=False)
 
         # Slack document IDs are format: channel_id__thread_ts

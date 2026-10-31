@@ -133,7 +133,7 @@ export function useAdminAgents(
  * disagree about what is pinned.
  */
 export function usePinnedAgents() {
-  const { user, refreshUser } = useUser();
+  const { user, userResolution, refreshUser } = useUser();
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
   const [localPinnedAgents, setLocalPinnedAgents] = useState<MinimalAgent[]>(
@@ -148,11 +148,16 @@ export function usePinnedAgents() {
       .filter((agent): agent is MinimalAgent => !!agent);
   }, [agents, user?.preferences.pinned_assistants]);
 
+  // Set once the pins have been copied from a resolved user. Until then the
+  // local list can be empty although the user has pins.
+  const [hasSyncedPins, setHasSyncedPins] = useState(false);
+
   useEffect(() => {
     if (agents.length > 0) {
       setLocalPinnedAgents(serverPinnedAgents);
+      if (userResolution !== "loading") setHasSyncedPins(true);
     }
-  }, [serverPinnedAgents, agents.length]);
+  }, [serverPinnedAgents, agents.length, userResolution]);
 
   const togglePinnedAgent = useCallback(
     async (agent: MinimalAgent, shouldPin: boolean) => {
@@ -196,7 +201,11 @@ export function usePinnedAgents() {
     pinnedAgents: localPinnedAgents,
     togglePinnedAgent,
     updatePinnedAgents,
-    isLoading: isLoadingAgents,
+    // Loading until the agents and the user's pins are both in the list.
+    isLoading:
+      isLoadingAgents ||
+      userResolution === "loading" ||
+      (agents.length > 0 && !hasSyncedPins),
   };
 }
 

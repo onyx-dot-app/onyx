@@ -141,6 +141,9 @@ def _validate_answers(
     return response
 
 
+DEFAULT_DECISION_TIMEOUT_S = 30.0
+
+
 class DecisionClient:
     def __init__(
         self,
@@ -148,7 +151,7 @@ class DecisionClient:
         model: str,
         api_key: str,
         api_base: str | None = None,
-        timeout: float = 30.0,
+        timeout: float = DEFAULT_DECISION_TIMEOUT_S,
         extra_headers: dict[str, str] | None = None,
         api_key_resolver: Callable[[], str] | None = None,
         model_configuration_id: int | None = None,

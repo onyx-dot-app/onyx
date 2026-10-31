@@ -51,6 +51,31 @@ class ImageGenerationConfigCreate(BaseModel):
     is_default: bool = False
 
 
+class ImageGenerationConfigLink(BaseModel):
+    """Link a model on an existing LLM provider. No credentials are sent;
+    the LLM provider's own credentials are used."""
+
+    llm_provider_id: int
+    model_name: str
+    is_default: bool = False
+
+
+class ImageGenerationProviderModel(BaseModel):
+    name: str
+    display_name: str | None
+    # Catalog or model name says this is an image generation model.
+    is_recommended: bool
+    image_provider_id: str | None  # Set when this model is already connected
+
+
+class ImageGenerationLLMProvider(BaseModel):
+    llm_provider_id: int
+    llm_provider_name: str | None
+    provider: str
+    is_public: bool
+    models: list[ImageGenerationProviderModel]
+
+
 class ImageGenerationConfigUpdate(BaseModel):
     """Request model for updating an image generation config.
 
@@ -79,6 +104,8 @@ class ImageGenerationConfigView(BaseModel):
     model_name: str  # From model_configuration.name
     llm_provider_id: int  # From model_configuration.llm_provider_id
     llm_provider_name: str | None  # From model_configuration.llm_provider.name
+    llm_provider_type: str  # From model_configuration.llm_provider.provider
+    llm_provider_owned: bool
     is_default: bool
 
     @classmethod
@@ -92,6 +119,8 @@ class ImageGenerationConfigView(BaseModel):
             model_name=config.model_configuration.name,
             llm_provider_id=config.model_configuration.llm_provider_id,
             llm_provider_name=config.model_configuration.llm_provider.name,
+            llm_provider_type=config.model_configuration.llm_provider.provider,
+            llm_provider_owned=config.llm_provider_owned,
             is_default=config.is_default,
         )
 

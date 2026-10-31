@@ -21,7 +21,10 @@ import type { MCPOAuthDiscovery } from "@/lib/mcp/types";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { SvgCircle, SvgCheckCircle } from "@opal/icons";
-interface MCPOAuthFieldsProps extends OAuthDiscoveryStatusProps {
+interface MCPOAuthFieldsProps extends Omit<
+  OAuthDiscoveryStatusProps,
+  "hasChosenClientMetadata"
+> {
   redirectUri: string;
   onSetupChosen: () => void;
   onSettingsChange: () => void;
@@ -40,6 +43,7 @@ export function MCPOAuthFields({
 }: MCPOAuthFieldsProps) {
   const t = useTranslations("actions");
   const recommendedCopy = useTranslations("craft.llmPopover.recommended");
+  const [hasChosenClientMetadata, setHasChosenClientMetadata] = useState(false);
   const recommendedMode =
     !checking && !failed && oauthDiscovery?.status === "metadata_found"
       ? oauthDiscovery.supports_automatic_registration === true
@@ -162,6 +166,7 @@ export function MCPOAuthFields({
       <Section alignItems="stretch" height="auto" gap={4}>
         <OAuthDiscoveryStatus
           hasChosenSetup={hasChosenSetup}
+          hasChosenClientMetadata={hasChosenClientMetadata}
           discovery={oauthDiscovery}
           checking={checking}
           failed={failed}
@@ -176,7 +181,10 @@ export function MCPOAuthFields({
             <InputSwitchField
               name="oauth_cimd_enabled"
               disabled={disabled}
-              onCheckedChange={onSettingsChange}
+              onCheckedChange={() => {
+                setHasChosenClientMetadata(true);
+                onSettingsChange();
+              }}
             />
           </InputHorizontal>
         )}
@@ -425,6 +433,7 @@ export function MCPOAuthFields({
 }
 interface OAuthDiscoveryStatusProps {
   hasChosenSetup: boolean;
+  hasChosenClientMetadata: boolean;
   discovery: MCPOAuthDiscovery | undefined;
   checking: boolean;
   failed: boolean;
@@ -433,6 +442,7 @@ interface OAuthDiscoveryStatusProps {
 
 function OAuthDiscoveryStatus({
   hasChosenSetup,
+  hasChosenClientMetadata,
   discovery,
   checking,
   failed,
@@ -442,33 +452,45 @@ function OAuthDiscoveryStatus({
   const { values, setFieldValue, setValues, dirty, resetForm } =
     useFormikContext<MCPAuthFormValues>();
   const requiresClient = discovery?.supports_automatic_registration === false;
+  const rejectsClientMetadata = discovery?.supports_client_metadata === false;
   const hasAppliedRecommendation = useRef(false);
   useEffect(() => {
     if (
       checking ||
       failed ||
       hasChosenSetup ||
-      !requiresClient ||
+      !(requiresClient || rejectsClientMetadata) ||
       hasAppliedRecommendation.current
     )
       return;
     hasAppliedRecommendation.current = true;
-    if (values.oauth_setup_mode === "automatic") {
-      if (dirty) {
-        void setFieldValue("oauth_setup_mode", "own_client");
-      } else {
-        resetForm({ values: { ...values, oauth_setup_mode: "own_client" } });
-      }
+    const ownClient = requiresClient && values.oauth_setup_mode === "automatic";
+    const disableClientMetadata =
+      rejectsClientMetadata &&
+      values.oauth_cimd_enabled &&
+      !hasChosenClientMetadata;
+    if (!ownClient && !disableClientMetadata) return;
+    const recommended: MCPAuthFormValues = {
+      ...values,
+      ...(ownClient && { oauth_setup_mode: "own_client" as const }),
+      ...(disableClientMetadata && { oauth_cimd_enabled: false }),
+    };
+    if (dirty) {
+      void setValues(recommended);
+    } else {
+      resetForm({ values: recommended });
     }
   }, [
     checking,
     failed,
     hasChosenSetup,
+    hasChosenClientMetadata,
     requiresClient,
+    rejectsClientMetadata,
     values,
     dirty,
     resetForm,
-    setFieldValue,
+    setValues,
   ]);
 
   if (

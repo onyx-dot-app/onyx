@@ -1,921 +1,367 @@
 # Craft Sandboxes
 
-> The container a Craft session runs in: provisioning, the pod spec, the exec
-> sidecar, the shared workspace volume, snapshot and restore, and reaping.
-> This document does not cover session/turn orchestration, streaming, the
-> webapp preview, or admin policy; it covers the runtime the agent executes
-> inside.
+> The sandbox a user's Craft sessions run in, on Kubernetes or Docker:
+> provisioning, the sidecar daemon, snapshot and restore, idle sleep, resource
+> cleanup, and the network lockdown that sends all traffic to the egress proxy.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** craft
-**Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
-**Owns:**
-`backend/onyx/server/features/build/sandbox/base.py`, `factory.py`, `models.py`,
-`labels.py`, `locks.py`, `resources.py`, `session_workspace.py`, `snapshot_manager.py`, `serve_transport.py`,
-`event_schema.py`, `nextjs_dev.py` (spec only; the runtime lives in
-`[[craft-webapp-proxy]]`),
-`backend/onyx/server/features/build/sandbox/kubernetes/` (`kubernetes_sandbox_manager.py`,
-`k8s_client.py`, `sidecar_client.py`),
-`backend/onyx/server/features/build/sandbox/docker/` (`docker_sandbox_manager.py`,
-`dev_mode_serve.py`, `internal/exec_helpers.py`),
-`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/` (`server.py`,
-`snapshot.py`, `extract.py`, `filesystem.py`, `outputs_manifest.py`, `models.py`,
-`opencode_history.py`),
-`backend/onyx/server/features/build/sandbox/util/` (`agent_instructions.py`,
-`opencode_config.py`, `mcp_config.py`, `api_url_check.py`),
-`backend/onyx/server/features/build/db/sandbox.py`,
-`backend/onyx/server/features/build/session/sandbox_lifecycle.py`,
-`backend/onyx/server/features/build/session/resource_cleanup.py`,
-`backend/onyx/background/celery/tasks/build/tasks.py`,
-`deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `sandbox-rbac.yaml`,
-`network-policy-sandbox-egress.yaml`, `network-policy-sandbox-push.yaml`
-
-**Read first:** `backend/onyx/server/features/build/sandbox/README.md`
-("Sandbox Image Design Notes") for the image, tag coupling, and cold-start story.
-`deployment/helm/dev/README.md` describes the local kind workflow, and
-`backend/onyx/server/features/build/sandbox/docker/README.md` the Docker backend workflow.
+**Verified against:** `73e0ae3c31` (2026-10-28)
+**Edition:** CE
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-Every user who has Craft enabled gets exactly one sandbox: a container (pod or
-Docker container, depending on deployment) that runs their agent sessions. The
-user never provisions it explicitly; it is created on first use and reused across
-sessions (`backend/onyx/server/features/build/sandbox/base.py:SandboxManager`,
-class docstring, "User-Shared Sandbox Model"). Each Craft session gets its own
-directory inside that shared sandbox, not its own container.
+Each Craft user has one sandbox, created on first use and shared by all of
+that user's sessions. Each session has its own session workspace, a directory
+inside the sandbox. The user never manages the sandbox.
 
-If the user is idle for an hour (`SANDBOX_IDLE_TIMEOUT_SECONDS`, default 3600,
-`backend/onyx/server/features/build/configs.py:29`), the sandbox is put to sleep:
-its container is destroyed, but each session's generated files and chat history
-are captured first so the next message wakes a fresh container and restores them.
-The user experiences this as a short delay ("waking up") on their next message
-after a long gap, not as lost work, unless a snapshot could not be taken (see §4.4
-and §9).
+After an idle period (`SANDBOX_IDLE_TIMEOUT_SECONDS`, one hour by default) the
+sandbox sleeps: the platform saves each session's outputs, attachments and the
+agent's chat history, then removes the container. The next message wakes a new
+container and restores the session, with a short delay. Work that only lives
+outside `outputs/` and `attachments/`, such as installed packages or browser
+logins, is not kept.
 
----
+The agent can reach the public internet through the egress proxy to install
+packages and read docs. It cannot reach cluster or host services other than
+the Onyx API and Craft MCP servers that the proxy allows.
 
-## 2. Surfaces
+An operator deploys sandboxes on Kubernetes (the default) or Docker Compose.
+When the pod template, RBAC or network setup is wrong, provisioning fails and
+the user sees Craft fail to start.
 
-Craft sandboxes have no direct HTTP surface for end users; they are driven
-internally by `[[craft-sessions]]` and `[[craft-streaming]]`. The externally
-visible seams:
-
-- `POST /api/build/sessions/{session_id}/snapshot` and
-  `POST /api/build/sessions/{session_id}/opencode-history-snapshot`
-  (`backend/onyx/server/features/build/session/api.py:create_session_snapshot`, `create_session_opencode_history_snapshot`): manual snapshot
-  triggers for the owned session. The history one is a manual capture hook used
-  by tests and operators (`backend/tests/integration/common_utils/managers/build_session.py:BuildSessionManager.create_opencode_history_snapshot`). No frontend code calls it.
-- The sandbox's own preview/dev-server surface is owned by `[[craft-webapp-proxy]]`.
-
-### Environment configuration (`backend/onyx/server/features/build/configs.py` unless noted)
-
-| Variable | Default | Effect |
-|---|---|---|
-| `SANDBOX_BACKEND` | `kubernetes` | `kubernetes` or `docker`; picked by `factory.py:get_sandbox_manager`. There is no `local` backend. |
-| `SANDBOX_IDLE_TIMEOUT_SECONDS` | 3600 | Idle threshold the reaper (`sandbox_lifecycle.py:is_sandbox_idle`) checks. |
-| `SANDBOX_NAMESPACE` | `onyx-sandboxes` | K8s namespace sandbox pods/services live in. |
-| `SANDBOX_CONTAINER_IMAGE` | `onyxdotapp/sandbox:latest` | Overrides the chart's normal image default, `onyxdotapp/sandbox:${global.version}`; see the sandbox `README.md`, "Image and tag coupling". |
-| `SANDBOX_SERVICE_ACCOUNT_NAME` | `sandbox` | Service account the pod runs as; must match `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`. |
-| `SANDBOX_NEXTJS_PORT_START` / `_END` | 3010 / 3100 | Per-session Next.js dev-server port range, shared by the Service, the NetworkPolicy, and the PodTemplate's container ports. |
-| `ONYX_SANDBOX_PUSH_PRIVATE_KEY` | required | Ed25519 seed signing every sidecar request (`kubernetes/sidecar_client.py:get_push_key_pair`). |
-| `SANDBOX_PROXY_HOST` / `SANDBOX_PROXY_NAMESPACE` | required (K8s) / `onyx` | The egress-proxy endpoint pinned via `hostAliases` (see §5, §9). |
-| `SANDBOX_LISTEN_HOST` | `0.0.0.0` | Shared listener for OpenCode, the sidecar, and generated previews. Helm `sandboxPod.listenHost` sets it; use `::` for IPv6-only pods. |
-
-Celery task: `CLEANUP_IDLE_SANDBOXES` (`backend/onyx/background/celery/tasks/build/tasks.py`),
-scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS` on self-hosted beats
-(`beat_schedule.py:get_tasks_to_schedule`). In `MULTI_TENANT` deployments,
-`get_cloud_tasks_to_schedule` fans the same template out with the cloud beat
-multiplier (`backend/onyx/background/celery/tasks/beat_schedule.py`). The default
-interval is `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8`
-(`CLOUD_BEAT_MULTIPLIER_DEFAULT`). Operators can change the multiplier in Redis
-(`backend/onyx/server/runtime/onyx_runtime.py:OnyxRuntime.get_beat_multiplier`). It is consumed by the
-**`sandbox` Celery queue**, currently routed to `celery-worker-heavy`
-(`deployment/helm/charts/onyx/templates/celery-worker-heavy.yaml`). That worker only
-POSTs to the sidecar, so it needs two grants: sidecar-port-only ingress in
-`network-policy-sandbox-push.yaml`, and the restricted `auth.sandboxPushSecret`
-key to sign requests. If either is missing, no snapshots are created (a
-connect timeout on enforcing CNIs, or a `get_push_key_pair` error). Move both
-grants together if the `sandbox` queue moves to another worker.
+In this document "session workspace" is the directory of one session under
+`/workspace/sessions`. "Workspace" alone, as in "workspace policy", means the
+tenant-wide scope and belongs to [[craft-admin]].
 
 ---
 
-## 3. Data model
+## Scope
 
-- `Sandbox` (`backend/onyx/db/models.py:Sandbox`): one row per user
-  (`user_id` unique). Carries `status: SandboxStatus`
-  (`PROVISIONING`/`RUNNING`/`SLEEPING`/`TERMINATED`/`FAILED`,
-  `backend/onyx/db/enums.py:SandboxStatus`), `last_heartbeat`, `provisioning_attempt_number`
-  (fencing token for concurrent provisioners, see §4.1), `skills_hash` and
-  `mcp_config_hash` (last-pushed managed-content fingerprints), and
-  `encrypted_pat` (the Craft-scoped PAT injected into the sandbox).
-- `Snapshot` (`backend/onyx/db/models.py:Snapshot`): one row per **session** output
-  snapshot, `storage_path` + `size_bytes`, FK to `BuildSession`. Only one row is
-  kept per session (`get_latest_snapshot_for_session`,
-  `backend/onyx/server/features/build/db/sandbox.py`); see §4.4 for
-  prune-on-write.
-- Labels (`backend/onyx/server/features/build/sandbox/labels.py`):
-  `LABEL_SANDBOX_ID` / `LABEL_TENANT_ID` (stamped onto the K8s Pod/Service, and
-  used as the Docker manager's equivalent tag), `LABEL_PROVISIONING_ATTEMPT`
-  (read into resource inventory and compared with database attempts during cleanup;
-  conditional updates fence provisioning status writes), `LABEL_K8S_COMPONENT`
-  (`"sandbox"`, the NetworkPolicy pod selector).
-- Snapshot storage layout (FileStore, `FileOrigin.SANDBOX_SNAPSHOT`,
-  `backend/onyx/server/features/build/sandbox/snapshot_manager.py`):
-  - Session snapshot: `sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz`
-    (`persist_snapshot_from_stream`), a fresh UUID-named blob each write.
-  - Sandbox-global opencode history: a **fixed** path,
-    `sandbox-snapshots/{tenant_id}/{sandbox_id}/opencode-history.tar.gz`
-    (`SnapshotManager.opencode_history_storage_path`), overwritten in place each
-    capture rather than versioned.
+This component owns:
+- the sandbox manager interface and its Kubernetes and Docker backends;
+- the sandbox image, the in-pod sidecar daemon and the network lockdown;
+- the sandbox lifecycle: provisioning, health, sleep and wake, and the Craft
+  PAT the sandbox uses;
+- session snapshots, the opencode history archive, and the cleanup of runtime
+  resources;
+- the Helm sandbox pod template, RBAC and network policies, and the local
+  Kubernetes dev tooling.
+
+Neighbours:
+- [[craft-sessions]]: sessions, turns and `SessionManager`, which call this
+  component.
+- [[craft-external-apps]]: the egress proxy, its CA and action policies.
+- [[craft-webapp-proxy]]: running and previewing the Next.js dev server.
+- [[craft-admin]]: organization instructions, which this component renders
+  into each session's agent instructions file.
 
 ---
 
-## 4. How it works
+## Architecture
 
-### 4.1 Two managers, one interface
-
-`SandboxManager` (`base.py`) is an `ABC` defining the full lifecycle contract:
-`provision`, `terminate`, `setup_session_workspace`, `cleanup_session_workspace`,
-`create_snapshot`/`restore_snapshot`, `session_workspace_exists`,
-`list_session_workspaces`, `health_check`, `send_message` (turn streaming, see
-`[[craft-streaming]]`), and filesystem primitives (`list_directory`, `read_file`,
-`upload_file`, `delete_file`, `write_sandbox_file`). It explicitly forbids talking
-to the database directly (`base.py`, module docstring): every caller (session
-lifecycle code, Celery tasks) owns its own DB transactions.
-
-`factory.py:get_sandbox_manager` picks the implementation from `SANDBOX_BACKEND`
-and caches a process-wide singleton, assigned only after construction succeeds so
-a failed init retries on the next call (`factory.py:20-57`):
-
-- **`KubernetesSandboxManager`** (`kubernetes/kubernetes_sandbox_manager.py`): the
-  production backend. One Kubernetes Pod per user, with true container/pod
-  isolation, a sidecar container, RBAC-scoped API access, and FileStore-backed
-  snapshots streamed through the sidecar.
-- **`DockerSandboxManager`** (`docker/docker_sandbox_manager.py`): the
-  self-hosted docker-compose backend. One Docker container per user on a
-  dedicated bridge network, snapshots streamed through `docker exec` instead of
-  a sidecar HTTP API. There is **no sidecar container** on Docker; filesystem
-  and snapshot operations exec directly into the sandbox container
-  (`docker_sandbox_manager.py`, module docstring, "Snapshots"). The manager
-  reads the bridge's `EnableIPv4` flag. IPv6-only bridges inject
-  `SANDBOX_LISTEN_HOST=::`; IPv4 and dual-stack bridges retain `0.0.0.0`.
-  Proxy listener configuration is separate: use `SANDBOX_PROXY_LISTEN_HOST=::`
-  for an IPv6-only bridge, with complete internal CIDRs. The API can remain
-  on the original Compose network because the proxy forwards sandbox API
-  traffic. Existing IPv4 bridge behavior remains the default.
-
-Where they diverge, by design (`docker_sandbox_manager.py` module docstring,
-"Threat model: Docker vs Kubernetes parity gap"):
-- K8s isolates via the pod/network boundary plus an iptables lockdown inside the
-  container; Docker additionally cap-drops the container itself
-  (`--cap-drop ALL`, `--security-opt no-new-privileges`, `user=1000:1000`, no
-  Docker-socket mount, no S3/Postgres/Redis credentials in env,
-  `docker_sandbox_manager.py:536-561`).
-- K8s snapshot I/O goes through the always-running sidecar's signed HTTP API;
-  Docker's `create_snapshot`/`restore_snapshot` run `tar` via `docker exec` and
-  pipe bytes through the same `SnapshotManager` (`docker_sandbox_manager.py`
-  module docstring, "Snapshots").
-- Both managers set `supports_opencode_history_persistence = True` (the base
-  class defaults it `False`, `base.py`). On Docker, `_maybe_restore_opencode_history`
-  restores the archive before the sandbox serves, with no sidecar
-  `startupProbe` gate. A new backend must set the flag itself.
-- Only the dedicated sandbox bridge network is used on Docker; Postgres, Redis,
-  MinIO, and the model server stay unreachable by service name
-  (`docker_sandbox_manager.py` module docstring, "Security model").
-
-### 4.2 Provisioning (Kubernetes)
-
-`ensure_sandbox_ready` (`session/sandbox_lifecycle.py:690`) drives a
-reserve → reconcile → finalize state machine, split so no DB transaction spans
-external I/O (module docstring):
-
-1. **Reserve** (`reserve_sandbox__no_commit`, short transaction, user row
-   locked): create or find the `Sandbox` row, assign a new
-   `provisioning_attempt_number` (a fencing token: every later status write is
-   conditional on the row still holding that number,
-   `db/sandbox.py:finalize_provisioning_attempt__no_commit`), and mint/reuse the
-   Craft PAT (`db/sandbox.py:ensure_sandbox_pat`).
-2. **Reconcile** (`reconcile_sandbox`, no open transaction):
-   - If already `RUNNING`, a cheap `health_check` against the pod confirms it is
-     real; an unhealthy `RUNNING` row triggers **recovery** (snapshot opencode
-     history best-effort, terminate, re-provision under a new attempt number).
-   - `KubernetesSandboxManager.provision` (`kubernetes_sandbox_manager.py:996`)
-     is idempotent: if a healthy pod already exists it is reused. Otherwise it:
-     a. Provisions a per-pod opencode-serve auth Secret
-        (`_provision_opencode_secret`).
-     b. Reads the Helm **PodTemplate** named `sandbox-pod` and overlays the
-        dynamic fields (see §4.3) to build the `V1Pod`
-        (`_create_sandbox_pod`, `_overlay_dynamic_fields`).
-     c. Creates the Pod, then the ClusterIP Service
-        (`_ensure_service_exists`, handles a Terminating leftover Service).
-     d. Waits for a pod IP, then calls
-        `restore_opencode_history_snapshot` **before** the main container's
-        readiness gate opens (the init sidecar serves the restore endpoint while
-        its own `startupProbe` blocks, so opencode-serve never opens an empty DB
-        first, `provision()` step 3 comment).
-     e. Watches for pod `Ready` (`_wait_for_pod_ready`, uses
-        `kubernetes.watch.Watch()`, not polling; see §5, §9 for the RBAC this
-        requires) and for opencode-serve to bind its port.
-   - Managed content (skills, user library, MCP fingerprint) is pushed
-     best-effort (`push_managed_content`) before the sandbox is reported
-     `RUNNING`, because turns can dispatch the instant `RUNNING` is visible.
-3. **Finalize** (short transaction): `finalize_provisioning_attempt__no_commit`
-   records `RUNNING`/`FAILED`, a no-op if a newer attempt superseded this one.
-
-A per-sandbox `CacheBackend` lock (`sandbox/locks.py:sandbox_provision_lock`)
-serializes creation and resource collection across replicas for both backends.
-A losing acquirer raises `SandboxProvisionContentionError`, which the lifecycle
-layer treats as retryable. Cache failure during lock acquisition aborts the operation.
-Lock release errors are logged without replacing the operation's result or original error.
-
-`setup_session_workspace` (per-session, called after `provision`) execs into the
-pod (`k8s_stream`/`connect_get_namespaced_pod_exec`) to run a replay-safe,
-`flock`-serialized shell script (`session_workspace.py:build_session_workspace_setup_script`)
-that creates `/workspace/sessions/$id/{outputs,attachments}`, symlinks `.opencode/skills` and
-`user_library` to the sandbox-wide managed directories, writes `AGENTS.md` and
-`opencode.json`, and (if the session has a port) writes `start-webapp.sh`. It
-never scaffolds or starts the dev server itself (`[[craft-webapp-proxy]]` owns that).
-New session config directories copy the image's preinstalled OpenCode plugin SDK
-from `/workspace/templates/opencode`. Existing dependencies and package manifests
-remain intact. Older images without this template use OpenCode's install fallback.
-The image-owned script handles SDK copies
-(`backend/onyx/server/features/build/sandbox/image/seed-opencode-dependencies.sh`).
-Configuration regeneration also calls this script after snapshot restore.
-A session seed lock serializes copies. Dependencies publish by rename after copying.
-Kubernetes verifies a completion sentinel before reporting configuration regeneration success.
-SDK files stay outside snapshots, which contain outputs and attachments.
-Global configuration directories hardlink template dependencies to save image space.
-Their manifests and all session dependency copies remain independent.
-A completion sentinel (`ONYX_WORKSPACE_SETUP_COMPLETE`) is the only reliable
-success signal, because the K8s exec client returns buffered output without
-raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
-
-### 4.3 The pod: Helm PodTemplate, sidecar, shared volume
+Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
+and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`
+(Docker backend), and `deployment/helm/dev/README.md` (local kind cluster).
 
 ```
-                     Pod "sandbox-{uuid[:8]}"  (namespace onyx-sandboxes)
- ┌─────────────────────────────────────────────────────────────────────┐
- │ initContainer: sandbox-init   (firewall-init.sh)                    │
- │   installs the proxy CA, applies the iptables egress lockdown        │
- │                                                                       │
- │ initContainer (restartable, restartPolicy=Always): sidecar           │
- │   /workspace/sidecar-entrypoint.sh -> sandbox_daemon/server.py :8731 │
- │   mounts: workspace, opencode-data, managed, sidecar-tmp, ca-bundle  │
- │   readinessProbe /health, startupProbe /ready (blocks on             │
- │   opencode_history_restored())                                      │
- │                                                                       │
- │ container: sandbox                                                   │
- │   /workspace/entrypoint.sh -> opencode-serve :4096, per-session      │
- │   Next.js dev servers on 3010-3099                                   │
- │   mounts: workspace (rw), opencode-data (rw), managed (ro), tmp,     │
- │   ca-bundle (ro)                                                     │
- │                                                                       │
- │ volumes (all emptyDir, pod-lifetime only):                           │
- │   workspace (50Gi)  -> mounted at /workspace/sessions in BOTH        │
- │                        sandbox and sidecar containers                │
- │   opencode-data (5Gi) -> /workspace/opencode-data in both            │
- │   managed (5Gi)     -> /workspace/managed (rw sidecar, ro sandbox)   │
- └─────────────────────────────────────────────────────────────────────┘
-```
-(`deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`)
+SessionManager / scheduled executor / sweep
+  -> session/sandbox_lifecycle.py:ensure_sandbox_ready
+       reserve   (short txn, user row locked) a new provisioning_attempt_number
+                 when it must provision; Craft PAT
+       reconcile (no txn) health check; provision() reuses a healthy pod or
+                 creates one from the PodTemplate; restore opencode history
+                 before the main container is ready; push managed content
+       finalize  (short txn) RUNNING or FAILED, only if the attempt still owns
+                 the row
+  -> SandboxManager.setup_session_workspace (per session)
 
-The diagram shows the default firewall-enabled configuration. With
-`sandboxPod.netAdminLockdown: false`, CA bootstrap remains, but `NET_ADMIN`
-and iptables setup are omitted. A per-pod lockdown label keeps these pods excluded
-from bootstrap DNS access across Helm upgrades. The image prepuller uses the same
-RuntimeClass as sandbox pods. See §5 for the required cluster controls.
-
-**The pod spec comes from a Helm-rendered `core/v1` `PodTemplate` object**, not
-from Python. `KubernetesSandboxManager._create_sandbox_pod`
-(`kubernetes_sandbox_manager.py`) calls
-`read_namespaced_pod_template(name="sandbox-pod", namespace=SANDBOX_NAMESPACE)`,
-deep-copies `.template.spec`, and overlays only a few dynamic fields
-(`_overlay_dynamic_fields`):
-`spec.host_aliases` (the resolved proxy ClusterIP; DNS is blocked by the
-firewall so the pod can't resolve it itself), the two `secretKeyRef` env entries
-on the sandbox container (the per-pod opencode-auth Secret name), the sandbox
-container's `ONYX_WEBAPP_ALLOWED_DEV_ORIGINS` env value (from
-`allowed_dev_origins()`), the sidecar's push public key env var, and (separately, at pod-creation time) the object's
-name and `LABEL_SANDBOX_ID`/`LABEL_TENANT_ID`/`LABEL_PROVISIONING_ATTEMPT`
-labels. Everything else, including the container images, resource
-requests/limits, security contexts, node selector/tolerations, volumes, and
-probes, is defined once in
-`deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml` and instantiated
-per user at runtime. A missing PodTemplate is a hard provisioning failure with a
-named error (`_create_sandbox_pod`, 404 branch), and `_require_container` raises
-a clear "PodTemplate/api-server version skew" error rather than a bare
-`StopIteration` if an expected container is absent.
-
-**This means changing the sandbox image, resource limits, node placement, or
-volumes is a Helm change, not a Python change.** A `core/v1` PodTemplate is used
-because pods are created per user at runtime, so a static Helm Pod cannot work,
-and the PodTemplate is typed and validated. The per-sandbox Service stays in
-Python because Kubernetes has no Service template; the Next.js port range is
-single-sourced so the two cannot drift.
-
-The `onyx.sandboxApiUrl` Helm helper supplies the same `ONYX_SERVER_URL` to the
-API ConfigMap and sandbox PodTemplate. It defaults to the release's internal API
-Service URL, including the release namespace and Service port. An explicit
-`configMap.ONYX_SERVER_URL` overrides both. Kubernetes sandbox callbacks need no
-host gateway alias or public ingress by default.
-
-**The exec sidecar** (`_SIDECAR_CONTAINER_NAME = "sidecar"`) is a K8s
-"restartable init container" (`restartPolicy: Always` on an `initContainers`
-entry): it starts before the main container, keeps running for the pod's whole
-life, and can be restarted independently by the kubelet without restarting the
-main container. It runs `sandbox_daemon/server.py`
-(`image/sandbox_daemon/server.py`), a FastAPI app on port 8731
-(`PUSH_DAEMON_PORT`, `models.py`) that owns nearly all filesystem access:
-`/push` (file bundle install), `/filesystem/list`, `/filesystem/outputs-manifest`,
-`/snapshot/create`, `/snapshot/restore/{session_id}`,
-`/opencode-history/{create,restore,mark-restored}`, `/health`, `/ready`. Every
-mutating endpoint verifies an Ed25519 signature over
-`{timestamp}|{path}|{sha256}` (`server.py:_verify_signature`), keyed against
-`ONYX_SANDBOX_PUSH_PUBLIC_KEY`, the public half of the api-server's
-`SANDBOX_PUSH_PRIVATE_KEY` (`kubernetes/sidecar_client.py:get_push_key_pair`).
-The main container and the sidecar **share state only through the three mounted
-volumes** (`workspace` at `/workspace/sessions`, `opencode-data` at
-`/workspace/opencode-data`, and `managed` at `/workspace/managed`, read-write in
-the sidecar and read-only in the sandbox); there is no other IPC (`shareProcessNamespace:
-false`), which is exactly why the Next.js dev-server process itself must stay a
-`kubectl exec` into the main container rather than move to the sidecar. The dev
-server serves traffic on the main container's port, and the sidecar cannot signal it.
-
-`kubernetes/sidecar_client.py:SidecarClient` is what the api-server talks to:
-signed `GET`/`POST` over plain HTTP to
-`http://{pod-name}.{namespace}.svc.cluster.local:8731`, with retry-until-deadline
-on transient failures (`_post`) and a streaming path for archive
-create/download (`request_and_stream_new_snapshot`).
-
-Directory listings use one `FilesystemEntry` model in `sandbox_daemon/models.py`
-across the daemon, both sandbox managers, and the API. The sidecar client returns
-these validated entries directly.
-
-The outputs manifest scans visible regular files under `outputs/` without reading file contents.
-It shares file browsing's hidden-name rules through `sandbox_daemon/models.py`.
-The scan excludes dotfiles, dependencies, caches, runtime logs, symlinks, and special files.
-Ordinary file inventories skip the root web subtree before descent. Nested directories named `web` remain visible.
-Turn attribution requests `include_web=True` to scan app sources too. Generated `dist`, `build`, `coverage`, and `out` entries at the web root remain excluded.
-The scan also ignores root next-env.d.ts and tsconfig.tsbuildinfo; similarly named nested source paths remain visible.
-Both modes share the same traversal limits and symlink protections. The extended request requires a matching sandbox daemon image.
-All examined entries count toward one scan budget, including ignored names and directories.
-A depth limit bounds recursion. Descriptor-relative descent refuses symlinks at every workspace component.
-
-Kubernetes sends a signed request with the session ID. Docker invokes
-`python -E -s -m sandbox_daemon.outputs_manifest` from the root-owned `/opt` copy.
-Both transports call `build_outputs_manifest` and return paths, sizes, modification times, change times, and completeness.
-The API exposes sizes and string revisions, so JavaScript does not round nanosecond timestamps.
-Revisions include change time to detect same-size overwrites that preserve modification time.
-Missing session workspaces, scan limits, and unreadable entries make the response incomplete.
-An existing workspace without an outputs directory returns a complete empty response.
-Callers must not infer deletions from incomplete responses.
-
-This contract requires the matching sandbox image alongside the API server.
-Existing healthy sandboxes keep their image until replacement.
-Update running sandboxes through the normal snapshot and recovery lifecycle during rollout.
-
-**Current state versus the sidecar-migration doc:** as of this code, snapshot
-create/restore and file push already go through the sidecar HTTP API (confirmed
-above). `list_directory` and `get_outputs_manifest` also use the sidecar.
-`setup_session_workspace`, `cleanup_session_workspace`,
-`session_workspace_exists`, `list_session_workspaces`, `read_file`,
-`upload_file`, `delete_file`, `write_sandbox_file`, `get_upload_stats`, and
-`regenerate_session_config` still use
-`k8s_stream`/`connect_get_namespaced_pod_exec` shell scripts today.
-Do not assume a filesystem operation uses the signed sidecar path; verify
-against the manager method you're touching.
-
-### 4.4 The workspace volume
-
-`workspace` is a K8s `emptyDir` (`sizeLimit: 50Gi`,
-`sandbox-podtemplate.yaml`), mounted at **`/workspace/sessions`** in both the
-`sandbox` and `sidecar` containers (`SESSIONS_ROOT`, both
-`session_workspace.py:19` on the api-server side and
-`image/sandbox_daemon/snapshot.py:18` inside the image, kept as two literal
-copies because the daemon can't import the api-server package at runtime,
-per `backend/onyx/server/features/build/configs.py`'s comment). Session directories live directly under it:
-`/workspace/sessions/$session_id/{outputs,attachments,venv,.opencode/skills,AGENTS.md,
-start-webapp.sh}` (`kubernetes_sandbox_manager.py` builds `{SESSIONS_ROOT}/{session_id}`;
-`base.py` class docstring, "Directory Structure", shows the generic layout). `emptyDir`
-means this volume, and everything in it, **is destroyed with the pod**; nothing
-here survives a `terminate()` unless captured into a snapshot first (§4.5).
-
-`opencode-data` (`sizeLimit: 5Gi`) is a **separate** `emptyDir`, mounted at
-`/workspace/opencode-data` in both containers, holding opencode's own SQLite
-history database (`opencode/opencode.db`). It is **not** part of a session's
-`outputs`/`attachments` tree and is captured by a **different, sandbox-wide**
-snapshot mechanism (§4.5), not by the per-session snapshot
-(`base.py:create_snapshot` docstring, `image/sandbox_daemon/snapshot.py`).
-
-`managed` (`sizeLimit: 5Gi`) holds pushed skills and the user library, mounted
-read-write in the sidecar and read-only in the sandbox container; sessions
-symlink into it rather than copying (`session_workspace.py`).
-
-### 4.5 Snapshot and restore
-
-**What triggers a snapshot** (`session/sandbox_lifecycle.py`,
-`background/celery/tasks/build/tasks.py:cleanup_idle_sandboxes_task`):
-
-1. **Idle reap** (`sleep_sandbox`, `sandbox_lifecycle.py:810`): when a sandbox
-   has had no heartbeat for `SANDBOX_IDLE_TIMEOUT_SECONDS` (default 1h), the
-   sweep snapshots the sandbox-global opencode history, then every session's
-   outputs/attachments, **before** terminating the pod. This path is
-   **fail-closed**: any checkpoint or workspace discovery failure aborts the
-   reap. The sandbox stays `RUNNING` for retry. An unhealthy endpoint does
-   not prove that pod-local files are lost.
-   Docker snapshot probes raise on execution failure or incomplete output.
-   Only a completed probe can report that no session files need an archive.
-2. **Periodic background snapshot** (same task, non-idle branch): the sweep
-   skips a sandbox unless its user has a stale ACTIVE session
-   (`db/sandbox.py:user_has_stale_active_session`). Otherwise, workspaces whose
-   latest `Snapshot` is older than
-   `SANDBOX_IDLE_TIMEOUT_SECONDS / 4` (15 min at the default) get re-snapshotted
-   even though the sandbox stays `RUNNING`, bounding data loss from an
-   *ungraceful* pod death (node eviction, spot reclaim, crash) rather than a
-   clean reap. The sandbox-global opencode history is re-captured in the same
-   sweep **only if at least one session's output snapshot actually succeeded**
-   (`tasks.py`: `if snapshots_created and ...supports_opencode_history_persistence`).
-3. **Recovery** (`snapshot_opencode_history_before_recovery`,
-   `sandbox_lifecycle.py:151`): best-effort opencode-history capture right
-   before an unhealthy `RUNNING` sandbox is terminated for re-provisioning.
-4. **Failed-runtime cleanup** (`session/resource_cleanup.py:_checkpoint_failed_runtime`):
-   capture prior session work before collecting a FAILED owner's older runtime.
-   Cleanup renews its claim with the session-flow lease before checkpoint calls,
-   so a full bulk-transfer timeout does not expire the claim.
-   It also checks and renews the held session-creation lock before and after
-   history capture, workspace listing, and each snapshot, including the final snapshot.
-   Losing either lock stops checkpointing before cleanup proof or deletion.
-   A checkpoint failure preserves resources for retry. Fresh Kubernetes pods with
-   current attempt labels do not need this checkpoint. Retained Docker volumes do.
-   Cleanup commits proof before deleting a runtime. A later sweep can reuse it
-   only when the runtime is absent and the attempt, storage identity, and heartbeat match.
-5. **Manual API** (`POST /{session_id}/snapshot`,
-   `POST /{session_id}/opencode-history-snapshot`, §2): the history endpoint
-   is a manual capture hook for tests and operators. No frontend code calls it.
-
-**What a session snapshot contains:** the session's `outputs/` and
-`attachments/` directories only (`base.py:create_snapshot` docstring); `venv`,
-skills, `AGENTS.md`, and the `user_library` symlink are excluded and regenerated
-on restore. `node_modules` and `.next` are excluded even from `outputs/`
-(`image/sandbox_daemon/snapshot.py:_SNAPSHOT_GENERATED_DIR_NAMES`), rebuilt on
-restore via `bun install` against the image's pre-warmed Bun cache.
-
-**How it's taken (Kubernetes):** the api-server POSTs to the sidecar's
-`/snapshot/create` (`SnapshotCreateRequest{session_id}`); the sidecar
-(`image/sandbox_daemon/snapshot.py`) tars the session's `outputs`/`attachments`
-in-process and streams the archive back over the open HTTP response; the
-api-server pipes that stream straight into FileStore
-(`SnapshotManager.persist_snapshot_from_stream`) without ever writing it to the
-pod's disk on the api-server side. A `204` means nothing to snapshot.
-
-**How restore works:** `KubernetesSandboxManager.restore_snapshot`
-(`kubernetes_sandbox_manager.py`) reads the archive back out of FileStore,
-streams it to the sidecar's `/snapshot/restore/{session_id}` with a SHA-256
-integrity header, the sidecar extracts it under a temp dir and atomically
-swaps it into place (`sandbox_daemon/extract.py:safe_extract_then_atomic_swap`,
-symlink-swap plus a delayed `rmtree` of the old target), then
-`regenerate_session_config` rewrites `AGENTS.md`/`opencode.json` (not part of
-the snapshot) and, if the session has a port, the webapp bootstrap script is
-rewritten and the dev server is restarted via exec, but only if the restored
-snapshot actually contains a webapp.
-
-**Retention: prune-on-write, keep one in the normal case.** After a new session snapshot
-lands, `create_session_snapshot_keep_latest`
-(`session/sandbox_lifecycle.py:174`) deletes every prior `Snapshot` for that
-session (`SnapshotManager.delete_snapshot`, idempotent: a missing blob counts as
-already-deleted). The new archive is stored before any old blob is deleted.
-Pruning is best-effort. If `delete_snapshot` raises, the function logs a
-warning and keeps that old row, so more than one `Snapshot` row can remain.
-The new `Snapshot` row commits before any old blob is deleted. If this initial
-commit fails, prior committed archives remain intact. Pruned row deletions commit
-in a second transaction. If that commit fails, prior blobs may already be deleted,
-but the new reference remains committed.
-The sandbox-global opencode history snapshot is **not** versioned at all: it
-overwrites one fixed FileStore path each capture (§3).
-
-**Opencode-history durability, stated plainly:** opencode session/chat history
-lives in `/workspace/opencode-data`, an `emptyDir` destroyed with the pod. It is
-durable only from the moment it is captured into the sandbox-global snapshot
-described above. The capture points are: idle reap (always), periodic
-background snapshot (only when a session output snapshot also succeeded that
-tick, roughly every 15 minutes of active use at defaults), best-effort recovery,
-and failed-runtime cleanup before it collects prior session work.
-**There is no per-turn capture.** Work that lives only in opencode's
-history (not in a session's `outputs/`) since the last successful capture is
-lost if the pod dies ungracefully (node eviction, OOM-kill, spot reclaim,
-crash) between captures.
-
-### 4.6 Reaping
-
-The task first runs `session/resource_cleanup.py:reconcile_sandbox_resources`,
-even when no RUNNING row exists. It marks stale PROVISIONING attempts FAILED
-with a conditional update, so late finalization cannot report them RUNNING.
-It then inventories runtime resources. A successful per-resource DB read must
-find no owner, or an owner in FAILED, SLEEPING, or TERMINATED state.
-RUNNING and live PROVISIONING owners remain protected. Resources get a creation
-grace period of `SANDBOX_RESOURCE_GRACE_SECONDS` (15 minutes by default). Each
-pass attempts at most 100 resource deletions under the same per-sandbox lock
-that provisioning uses. Errors retain the resource for retry and do not prevent
-independent resource cleanup.
-If a FAILED owner's resources can contain prior session work, cleanup checkpoints
-that work first. A checkpoint failure retains the resources for retry. A failed
-fresh Kubernetes pod from the current provisioning attempt has not admitted new
-user work and can be collected without repeating restoration snapshots.
-Docker workspace volumes require a checkpoint even when a new container mounts them.
-FAILED cleanup saves the same durable proof as idle cleanup, with a FAILED status
-fence. It checks each resource against current proof instead of a sweep-local map.
-Inventory failures stop reconciliation but do not skip snapshots or idle cleanup
-while the cleanup lease remains owned. Losing that lease aborts the task.
-
-The sweep renews the 720-second session-flow lease through `CacheBackend`.
-Its application deadline remains 6000 seconds.
-It checks ownership between operations and before idle termination. RUNNING
-rows use batches of 100 with a tenant-scoped cursor. Each sweep continues
-through pages until it reaches the end or its deadline. It processes rows in UUID
-order and advances the cursor after each attempt, including failed attempts.
-A slow failing row cannot pin later rows to the same page. Failed resources have a
-retry delay so repeated errors do not consume every sweep's deletion budget.
-Retry keys include resource names because Docker volume creation timestamps
-can match across distinct volumes.
-Idle cleanup captures resource identities before checkpointing and compares
-them again under the provisioning lock before deletion. It deletes only those
-observed instances. Confirmed missing storage skips checkpoint calls, while
-unready, stopped, or unreachable storage still requires a successful checkpoint.
-
-Reap = `sleep_sandbox` (§4.5, step 1), run from `cleanup_idle_sandboxes_task`.
-Idle is `last_heartbeat` (falling back to `created_at`) older than
-`SANDBOX_IDLE_TIMEOUT_SECONDS` (`sandbox_lifecycle.py:is_sandbox_idle`). On
-reap: snapshot opencode history, snapshot every session's outputs, re-check
-idleness (snapshotting can take minutes), terminate the pod+service
-(`KubernetesSandboxManager.terminate`), mark the `Sandbox` row `SLEEPING`
-(conditional on the attempt number that started the reap, so a concurrent
-wake wins cleanly), clear allocated Next.js ports, and mark the user's
-`BuildSession` rows `IDLE`. A session creation lock is held around the
-existence check and the final kill so a session cannot be created mid-reap and
-then have its brand-new workspace deleted. The next request for that user
-re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
-
-Both backends attempt resource removal independently and report incomplete cleanup.
-Confirmed missing workspace storage skips checkpoints, so partial deletion can finish on a later sweep.
-An existing Docker volume still requires preservation, even when its container is missing.
-Before deletion, cleanup commits `Sandbox.cleanup_checkpoint` with the provisioning attempt, storage identity, and observed heartbeat.
-A later worker can reuse this proof only when the runtime is absent and all values still match.
-A changed storage instance, new attempt, or existing runtime requires a fresh checkpoint.
-Successful fenced sleep and new provisioning clear the proof. Cache entries never authorize volume deletion.
-Heartbeat updates clear the proof. File uploads and deletions commit that invalidation before changing files.
-Uploads acquire the session quota lock after that commit and hold it through the file write.
-The proof update requires the observed heartbeat, so intervening activity prevents the save.
-Kubernetes checks each resource once even after the shared deletion wait budget expires.
-Kubernetes waits for Pod, Service, and Secret absence within one teardown budget.
-A deletion error or wait timeout aborts sleep. The row stays eligible for retry,
-and session ports remain allocated until termination succeeds.
-
-`SandboxManager.iter_resources` inventories resources with full sandbox and tenant
-labels. Kubernetes uses namespace-scoped, paginated lists of Pods, Services, and
-Secrets. New auth Secrets carry tenant and attempt labels. Docker scopes containers
-and volumes by sandbox network, with a Compose project fallback for older resources.
-Host-run legacy containers can prove ownership through their network attachment.
-Their mounted volumes must have matching full sandbox and tenant labels.
-Detached legacy volumes require a matching network or Compose project label.
-The sandbox ID and volume name alone do not prove deployment ownership.
-Idle cleanup refuses to report sleep when existing storage has no owned inventory.
-Resources without enough ownership metadata require operator inspection.
-Legacy auth Secrets lack tenant labels. Cleanup requires a matching database
-owner or a sandbox resource with verified tenant labels before collecting them.
-An isolated legacy Secret with no such evidence remains intact and logs a warning.
-`delete_resource` checks the observed identity again. Kubernetes also requires
-the component label to be `sandbox` or `sandbox-opencode-auth` before deletion.
-Kubernetes deletes with UID
-and resource-version preconditions. Docker deletes containers by ID and checks
-volume creation time. It refuses volume removal while a container uses the volume.
-Runtime Kubernetes clients have request deadlines and disable hidden HTTP retries.
-Docker inventory and deletion use a separate client with a 15-second timeout.
-Bulk restoration retains its existing client timeout.
-Readiness watches use the remaining provisioning budget rather than the default
-short REST timeout, so slow image pulls can still finish within that budget.
-The sandbox-manager Role grants `list` for Pods, Services, and Secrets within
-the sandbox namespace. The proxy-resolution Role retains only Service `get`.
-Both bind the chart's service account and, when `logExport.kubernetes.enabled`
-gives the api-server its own account, that account too.
-
----
-
-## 5. Contracts and invariants
-
-1. **A session's workspace must be recoverable or explicitly declared lost.**
-   The reap path aborts after snapshot or workspace discovery failure,
-   including on unhealthy pods (`sandbox_lifecycle.py:sleep_sandbox`).
-   Workspace listing requires successful execution. Kubernetes also checks a
-   completion marker so truncated output cannot report an empty workspace.
-2. **A snapshot write must not corrupt the previous one.** The new blob and DB
-   reference commit before pruning begins (`create_session_snapshot_keep_latest`, §4.5).
-   A failed initial reference commit preserves the previous archive. Restore extracts
-   to a temp dir and atomically renames into place
-   (`sandbox_daemon/extract.py:safe_extract_then_atomic_swap`).
-3. **The pod spec lives in Helm, not in Python.** `_create_sandbox_pod` reads
-   the `sandbox-pod` PodTemplate and overlays only the dynamic fields
-   Python owns (§4.3). A change to resources, images, volumes, or security context belongs
-   in `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`; adding
-   it in Python instead will be silently overwritten by the next
-   `read_namespaced_pod_template` call or, worse, drift from what the chart
-   documents.
-4. **The sandbox must not reach internal cluster/host addresses.** By default,
-   enforced at two layers: the in-pod iptables lockdown
-   (`image/firewall-init.sh:step_apply_iptables`, applied by the `sandbox-init`
-   init container, dropping all outbound traffic except to the proxy) is
-   authoritative; the `onyx-sandbox-egress`
-   NetworkPolicy (`network-policy-sandbox-egress.yaml`) is a CNI-layer
-   backstop that only takes effect where the cluster's CNI enforces
-   NetworkPolicy, and allows only the proxy and DNS. See §9 and `[[craft-admin]]`
-   §5.4 for why this is a different mechanism from the egress-proxy action
-   gate. Both IPv4 and IPv6 OUTPUT chains use a DROP policy. They allow
-   loopback and established connections. Only the resolved proxy address
-   family permits new TCP connections to the proxy port. IPv6 permits
-   neighbor solicitations and advertisements with hop limit 255. The unused
-   address family stays blocked, including IPv4 compatibility egress on EKS.
-   Helm `sandboxPod.netAdminLockdown: false` removes `NET_ADMIN` and skips
-   firewall setup and verification. CA bootstrap still runs as root. The chart
-   excludes these pods from bootstrap DNS access and relies on cluster enforcement of proxy-only
-   egress. Operators must enforce policy before workload startup and address
-   node-traffic exceptions and broader additive policies. The chart cannot
-   verify those controls. Docker cannot disable firewall bootstrap.
-   `sandboxPod.runtimeClassName` selects an optional cluster-provided runtime;
-   it does not change network enforcement. Both settings affect new pods.
-5. **The sidecar and main container must agree on the workspace path.**
-   `SESSIONS_ROOT` is defined twice (`session_workspace.py:19` on the
-   api-server side, `image/sandbox_daemon/snapshot.py:18` inside the image)
-   because the daemon cannot import the api-server package at runtime
-   (`backend/onyx/server/features/build/configs.py`). A path change on one side without the other silently
-   breaks snapshot/restore or workspace setup.
-6. **Every sidecar-mutating request must be Ed25519-signed and fresh.**
-   `_verify_signature` (`sandbox_daemon/server.py`) checks both the signature
-   and a 60-second timestamp drift window; an unsigned or stale request is
-   rejected with 401, never executed.
-7. **`SandboxManager` implementations must not touch the database.** Stated
-   in `base.py`'s module docstring; all DB writes belong to the caller
-   (`session/sandbox_lifecycle.py`, the Celery task). A manager method that
-   grows a DB read/write breaks this separation and the "no transaction spans
-   external I/O" invariant `ensure_sandbox_ready` depends on.
-8. **A provisioning attempt's writes are fenced by `provisioning_attempt_number`.**
-   Every status-changing UPDATE in `db/sandbox.py` is conditional on the row
-   still holding the attempt's number; a superseded attempt's late writes are
-   guaranteed no-ops, never a stale overwrite of a newer attempt's outcome.
-9. **`supports_opencode_history_persistence` must be checked before calling
-   the opencode-history methods.** The base class implementation raises
-   `NotImplementedError` (`base.py:create_opencode_history_snapshot`); `KubernetesSandboxManager` and
-   `DockerSandboxManager` set the flag `True`.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[craft-admin]]: `util/agent_instructions.py:generate_agent_instructions` reads
-  `Settings.craft_instructions` (via `load_settings()`) and splices the
-  "Organization instructions" section into every session's `AGENTS.md`
-  (`kubernetes_sandbox_manager.py:_load_agent_instructions`); the network-egress
-  model described here is a different mechanism from the action-policy gate
-  `[[craft-admin]]` §5 owns.
-- [[multi-tenancy]]: every sandbox, snapshot path, and cache lock is
-  tenant-scoped (`tenant_id` threaded through `provision`, `create_snapshot`,
-  the provisioning lock key).
-- [[background-jobs]]: the reap/background-snapshot sweep is a Celery beat
-  task (`CLEANUP_IDLE_SANDBOXES`); scheduled-task wakeups
-  (`ensure_sandbox_running`) go through the same reserve/reconcile/finalize
-  machinery headlessly.
-- [[file-store-and-user-files]]: every snapshot blob is a FileStore object
-  under `FileOrigin.SANDBOX_SNAPSHOT`.
-
-**Depended on by**
-- [[craft-sessions]]: session create/restore calls
-  `setup_session_workspace`/`restore_snapshot` directly; a session cannot exist
-  without a `RUNNING` sandbox.
-- [[craft-streaming]]: `SandboxManager.send_message` (via `_ServeMixin` /
-  `serve_transport.py`) is the transport a turn's tokens and tool calls stream
-  over.
-- [[craft-webapp-proxy]]: previews a session's Next.js dev server, which runs
-  inside this sandbox on a port this component allocates and exposes via the
-  ClusterIP Service; `nextjs_dev.py`'s bootstrap-script *content* is owned here,
-  its runtime lifecycle is owned there.
-- [[craft-external-apps]]: the egress proxy this component's iptables lockdown
-  routes traffic to is where connected-app credential injection and action
-  policy actually run; see `[[craft-admin]]` for the policy surface.
-- [[code-execution]]: contrast only. The chat code interpreter's isolation
-  (`[[code-execution]]` §4.1) is an unverified infrastructure assumption
-  delegated to an external service this codebase has no code for. Craft
-  sandboxes are the opposite: a fully-owned, in-repo mechanism (Helm PodTemplate,
-  RBAC, NetworkPolicy, a purpose-built signed sidecar daemon, FileStore-backed
-  snapshot/restore) with its isolation, network posture, and persistence model
-  all implemented and testable in this tree.
-
----
-
-## 7. Blast radius
-
-| If your change… | Also check |
-|---|---|
-| changes the sandbox image (`image/Dockerfile`, `initial-requirements.txt`) | the app-image/sandbox-image tag coupling (sandbox `README.md`, "Image and tag coupling"); `ENABLE_BROWSER` build-arg/runtime coupling; the prepuller DaemonSet's pinned tag (`sandbox-image-prepuller.yaml`); `ENABLE_SKILLS` build-arg gating; re-run the spinup benchmark (`kubernetes/scripts/bench-sandbox-spinup.sh`) |
-| changes the pod template (`sandbox-podtemplate.yaml`) | `_overlay_dynamic_fields`/`_require_container` (version-skew handling); the dynamic fields Python still owns; resource requests vs the CI/localdev values overlays; the Service's port range staying in sync with the template's container ports |
-| changes the snapshot format (what's included/excluded, archive layout) | `sandbox_daemon/snapshot.py`'s `_SNAPSHOT_ROOTS`/`_SNAPSHOT_GENERATED_*` sets; `restore_snapshot`'s webapp-restore path; existing snapshots in FileStore become unreadable by a format change unless restore stays backward-compatible |
-| changes the sidecar contract (`models.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
-| changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`; removing it makes every provision fail with an `ApiException`, and no unit test catches it (see §9); `pods/exec` is still needed for the many residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
-| changes network policy (`network-policy-sandbox-*.yaml`) | with default settings, the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; without it, verify cluster enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
-| changes idle timeout or snapshot cadence | the `SNAPSHOT_INTERVAL_DIVISOR` relationship between idle timeout and background-snapshot freshness bound; opencode-history durability exposure scales with this gap |
-| adds a new sandbox-wide (not per-session) persisted artifact | it needs its own capture point like opencode history's, since only `outputs/`+`attachments/` ride the per-session snapshot |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# Unit: daemon logic, manager plumbing, config generation
-cd backend && uv run pytest tests/unit/onyx/server/features/craft/sandbox
-cd backend && uv run pytest tests/unit/onyx/server/features/craft/sandbox/sandbox_daemon
-
-# External dependency unit: lifecycle, PAT, image prepuller chart render
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_sandbox_lifecycle.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_ensure_sandbox_running.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_sandbox_pat.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_terminated_sandbox_fast_fail.py
-cd backend && uv run pytest tests/external_dependency_unit/craft_helm/test_sandbox_image_prepuller.py
-
-# Integration: real kind cluster / real docker-compose sandboxes
-cd backend && uv run pytest tests/integration/tests/craft/k8s/test_kubernetes_sandbox.py
-cd backend && uv run pytest tests/integration/tests/craft/k8s/test_kubernetes_sandbox_file_ops.py
-cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_sandbox_network_posture_docker.py
+Pod "sandbox-<id>" (namespace onyx-sandboxes)
+  init: sandbox-init       firewall-init.sh: install proxy CA, iptables lockdown
+  init (restartable): sidecar  sandbox_daemon/server.py, signed HTTP API:
+                           push, list, outputs manifest, snapshot, history
+  container: sandbox       opencode serve, per-session Next.js dev servers
+  volumes (emptyDir): workspace /workspace/sessions, opencode-data, managed
 ```
 
-See `deployment/helm/dev/README.md` for standing up the kind cluster these
-integration tests need, and `backend/onyx/server/features/build/sandbox/docker/README.md`
-for the docker-compose backend. See `backend/AGENTS.md` for authoritative env/command
-details.
+**One interface, two backends.** `backend/onyx/server/features/build/sandbox/base.py:SandboxManager` defines the
+lifecycle, and callers own every transaction ([[#managers-never-touch-db]]). On
+Kubernetes the API server talks to the sidecar over signed HTTP
+(`backend/onyx/server/features/build/sandbox/kubernetes/sidecar_client.py:SidecarClient`) and uses `kubectl exec`
+for the rest. Docker has no sidecar; it runs the same work with `docker exec`
+in the single container.
 
-**RBAC gaps only appear when exercised live.** A missing `pods:watch`
-permission does not fail at import time or in a unit test with a mocked
-client; it only surfaces as a real `ApiException` from `_wait_for_pod_ready`'s
-`watch.Watch()` call against a live (or kind) API server. `helm template`
-lint checks the Role renders; it does not check the Role is sufficient. Only
-`test_kubernetes_sandbox.py` against a real cluster exercises the actual verb
-set.
+**The pod spec comes from Helm.** `KubernetesSandboxManager._create_sandbox_pod`
+reads the `sandbox-pod` PodTemplate and `_overlay_dynamic_fields` adds only
+per-pod values: a `hostAliases` entry for the proxy (DNS is blocked inside the
+pod), the per-pod opencode Secret references, the dev-origin allowlist, and
+the sidecar's push public key. Images, resources, volumes, probes and security
+context live in `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`.
+A PodTemplate is used because pods are created per user at run time.
 
-### Manual reproduction
+**Network lockdown.** `backend/onyx/server/features/build/sandbox/image/firewall-init.sh` sets IPv4 and IPv6
+OUTPUT policy to DROP and allows only loopback, established connections, TCP
+to the proxy, and the ICMPv6 types that IPv6 neighbour discovery needs. The
+`deployment/helm/charts/onyx/templates/network-policy-sandbox-egress.yaml` policy is a second layer where the CNI
+enforces it. With `sandboxPod.netAdminLockdown: false`, the init container
+skips iptables, and the cluster must enforce proxy-only egress before the
+workload starts. Docker always applies the lockdown. A change to these
+settings reaches new pods only; running pods keep their lockdown.
 
-1. Confirm services are up; for K8s, `kubectl -n onyx-sandboxes get pods`.
-2. Start a Craft session, send a message, confirm a `sandbox-{id}` pod appears
-   `Running`/`Ready` with `sandbox` + `sidecar` containers.
-3. Force an idle reap: lower `SANDBOX_IDLE_TIMEOUT_SECONDS` or wait it out,
-   confirm the pod is deleted and the `Sandbox` row moves to `SLEEPING`
-   (`psql` per root `CLAUDE.md`'s connection snippet).
-4. Send a new message to the same session; confirm the pod is recreated and
-   the session's prior outputs are present (restore worked).
-5. Delete the sandbox's `sandbox-pod` PodTemplate and attempt to provision a
-   new sandbox; confirm a clear "PodTemplate not found" error, not a hang.
+**Snapshots.** A session snapshot holds `outputs/` and `attachments/` only.
+The agent instructions file, the opencode config, skills and the venv are
+rebuilt on restore. The opencode chat history in `opencode-data` is a separate
+sandbox-wide archive at one fixed FileStore path, overwritten on each capture.
+Capture points:
+- sleep (`backend/onyx/server/features/build/session/sandbox_lifecycle.py:sleep_sandbox`): history, then every session;
+- the periodic sweep: sessions whose last snapshot is older than
+  `SANDBOX_IDLE_TIMEOUT_SECONDS / SNAPSHOT_INTERVAL_DIVISOR`
+  (`background/celery/tasks/build/tasks.py`), for users with a
+  stale active session, then history only if a session snapshot succeeded;
+- recovery of an unhealthy pod (`snapshot_opencode_history_before_recovery`);
+- cleanup of a failed runtime (`backend/onyx/server/features/build/session/resource_cleanup.py:_checkpoint_failed_runtime`).
 
-### What "working" looks like
+History restore runs before the main container starts, so `opencode serve`
+cannot open an empty database first. The sidecar is a restartable init
+container whose startup probe hits `/ready`, and `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/server.py`
+fails `/ready` until the history is marked restored
+(`KubernetesSandboxManager.provision` restores it, then calls
+`_mark_opencode_history_restored`). Keep this gate for any sandbox-wide state
+that boot must restore.
 
-- Idle reap always snapshots before terminating a reachable pod; a reachable
-  pod whose snapshot fails stays `RUNNING`, never goes dark silently.
-- A restored session's `outputs/` matches what was there before sleep, minus
-  `node_modules`/`.next` (rebuilt).
-- The pod never carries S3/Postgres/Redis credentials or a Docker socket
-  (Docker backend) or reaches cluster-internal service names other than the
-  proxy alias (K8s backend).
+`create_session_snapshot_keep_latest` commits the new snapshot row before it
+deletes old ones. On Kubernetes, restore extracts to a staging directory and
+then replaces `outputs/` and `attachments/`
+(`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/snapshot.py:restore_snapshot`). The Docker backend extracts
+in place with `tar`. Managed-content pushes, not snapshots, use
+`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py:safe_extract_then_atomic_swap`.
+
+**Sweep.** `cleanup_idle_sandboxes_task` runs on the `sandbox` Celery queue.
+It first reconciles runtime resources
+(`backend/onyx/server/features/build/session/resource_cleanup.py:reconcile_sandbox_resources`): it fails stale
+`PROVISIONING` attempts and deletes runtime resources
+(`backend/onyx/server/features/build/sandbox/models.py:SandboxResourceKind`) whose owner row is absent, failed,
+sleeping or terminated, after a grace period. It then snapshots active
+sandboxes and puts idle ones to sleep. Sleep also clears every Next.js port of
+the user, so a restored session can get a different port
+([[craft-webapp-proxy]]).
+
+**Managed content.** Provisioning and a live push build the skills and user
+library payload with the same code
+(`backend/onyx/server/features/build/session/sandbox_lifecycle.py:build_managed_content_payload`). The read transaction
+must close before the push. `push_managed_content` runs before the sandbox is
+reported `RUNNING`, because opencode scans the skills directory once per
+instance: a turn that starts during the push misses managed skills for good. It
+logs a failure and never raises. `skills_hash` is written
+only after a successful push, so the next session create or reload retries.
+User library blobs use `FileOrigin.USER_FILE` but have no `UserFile` rows, so
+the chat user-file lifecycle does not apply to them.
+
+**Document previews.** `SandboxManager.generate_document_preview` converts a
+PDF or PowerPoint file in the session workspace to page images inside the
+sandbox. LibreOffice and poppler ship in the image only when it is built with
+`ENABLE_SKILLS=true`, the default
+(`server/features/build/sandbox/image/Dockerfile`). [[craft-sessions]]
+calls it for deck slides and for first-page output thumbnails. The page images
+are cached under `outputs/.pptx-preview` and `outputs/.document-thumbnails`,
+keyed by a hash of the source path, and reused while the source revision
+matches.
+
+**LLM credentials.** The opencode gateway config holds a placeholder API key
+(`backend/onyx/server/features/build/session/llm_config.py:build_onyx_gateway_config`). The egress proxy
+overwrites the auth headers for the API host with the Craft PAT.
+
+**The Craft PAT.** `server/features/build/db/sandbox.py:ensure_sandbox_pat`
+mints one `PatType.CRAFT` token per user, with only the `CRAFT_SANDBOX` scope
+and a 30-day expiry, and stores it encrypted on `Sandbox.encrypted_pat`. It
+reuses the stored token only when it is the user's single active Craft PAT
+with the current scopes. Otherwise it revokes the user's other Craft PATs and
+mints a new one. The reserve step calls it on each provision. For a healthy
+sandbox it re-mints only when `has_active_craft_pat` is false, for example
+after a password change revoked it ([[auth-and-identity]]). The proxy reads
+the stored token on each request, so a new token takes effect at once.
 
 ---
 
-## 9. Footguns
+## Contracts and traps
 
-- **The pod spec is Helm-owned; don't add fields in Python.** Anything beyond
-  the dynamic fields `_overlay_dynamic_fields` sets belongs in
-  `sandbox-podtemplate.yaml`. Don't build pod fields field-by-field in Python.
-- **`pods:watch` is an easy-to-miss RBAC trap.** `_wait_for_pod_ready` uses
-  `kubernetes.watch.Watch()` (`kubernetes_sandbox_manager.py`), which needs
-  the `watch` verb on `pods` in `sandbox-rbac.yaml`. Nothing in the Python
-  code names the verb explicitly (it calls `list_namespaced_pod` through the
-  watch wrapper), so `grep`-ing the manager for RBAC requirements will miss
-  it; the RBAC template's own comment ("watch is required: `_wait_for_pod_ready`
-  streams pod events during provision") is the only place this is spelled out.
-  A trimmed-down Role that looks unused-but-safe makes every provision fail:
-  `_wait_for_pod_ready` re-raises the authorization `ApiException` from the
-  watch request. There is no polling fallback.
-- **Opencode-history durability is snapshot-dependent, and the only automatic
-  capture points are idle reap and a ~15-minute-cadence background sweep
-  (itself gated on a session output snapshot also succeeding that tick).**
-  There is no per-turn capture. An ungraceful pod death between captures loses
-  whatever opencode-only history (not reflected in a session's `outputs/`)
-  accumulated since the last one. See §4.5.
-- **Opencode data is not in the per-session snapshot.** It is a separate,
-  sandbox-wide artifact. Trust `_SNAPSHOT_ROOTS` and the manager docstrings for
-  snapshot scope.
-- **Filesystem access is split between the sidecar and `kubectl exec`.**
-  Snapshot, push, directory listing, and the outputs manifest use the sidecar; workspace
-  setup/cleanup/existence/listing and file reads/writes still use `kubectl exec`.
-  Check the manager method before you assume a signed HTTP path.
-- **Agent browser state is ephemeral.** `agent-browser` keeps cookies and the
-  Chromium profile under `/home/sandbox/.agent-browser/`, outside the session
-  workspace, so logins do not survive a reap or restore. Persisting them would put
-  auth cookies into FileStore snapshots; treat that as a security decision.
-- **General internet egress from a sandbox is allowed by design; only
-  connected-app traffic is policy-gated.** The iptables lockdown
-  (`firewall-init.sh`) drops all outbound traffic except to the proxy, which
-  forwards public HTTPS (needed for `npm`/`pip`); the NetworkPolicy is a CNI-dependent backstop
-  restricted to the proxy and DNS by default, but inert on non-enforcing
-  clusters. With `netAdminLockdown: false`, it becomes the primary network
-  control and omits DNS. See §5 for the operator requirements. Neither of these is the same control as the
-  egress-proxy's action-policy gate (`[[craft-admin]]` §5.4), which only
-  evaluates traffic attributed to a connected app or MCP server. Don't conflate
-  "the sandbox can reach `example.com`" with "the org didn't approve that."
-- **Docker has no sidecar.** Anything in this document keyed on "the sidecar"
-  is Kubernetes-only; the Docker backend execs directly into the single
-  sandbox container for the same operations. It does support opencode history
-  persistence (`supports_opencode_history_persistence = True`), through
-  `docker exec` instead of the sidecar.
-- **`emptyDir` volumes vanish with the pod, full stop.** `workspace` and
-  `opencode-data` are not persistent volumes; anything not captured by a
-  snapshot before `terminate()` is gone, including on a crash the reaper never
-  gets to run for.
-- **The sandbox-global opencode-history snapshot is a single overwritten
-  blob, not versioned like session snapshots.** A corrupted or short write to
-  it (rare, but the sidecar's SQLite backup step exists specifically to avoid
-  copying a hot, inconsistent DB file) has no fallback prior version to
-  restore from the way a session's outputs/attachments do.
+1. `image-ships-with-api-server` **The API server and the sandbox image ship
+   together; running pods keep their image.** The image tag follows the
+   application tag. The sidecar daemon ships in the image and the API server
+   calls it, with no version negotiation. A healthy pod is reused, so an old
+   image stays in use until sleep or recovery replaces the pod. Change both
+   sides of a sidecar or `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` contract in one release,
+   and make new requests safe against an old daemon. Stored archives cross
+   deploys too: a sleeping session wakes from a session archive or history
+   archive that older code wrote. A change to the archive layout or
+   `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/snapshot.py:_SNAPSHOT_ROOTS` must keep `restore_snapshot`
+   and the history restore able to read the old form, or sleeping sessions
+   lose outputs or agent history.
+2. `internet-egress-intentional` **General internet egress is intentional.**
+   The lockdown forces traffic to the proxy, and the proxy forwards public
+   hosts with no policy check. Only requests to a connected app or MCP server
+   are policy-gated ([[craft-external-apps]]). Do not treat "the sandbox
+   reached `example.com`" as a bypass. Do not add an allowlist without a
+   product decision: package installs depend on it.
+3. `pod-fields-in-helm` **Put pod fields in Helm, not Python.** A field set in
+   Python outside
+   `server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:KubernetesSandboxManager._overlay_dynamic_fields` drifts from the chart.
+   `_require_container` raises a version-skew error when the template lacks an
+   expected container.
+4. `pods-watch-rbac` **`pods:watch` is required.**
+   `server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:KubernetesSandboxManager._wait_for_pod_ready` uses
+   `kubernetes.watch.Watch()`. Python never names the verb, so a search for
+   RBAC needs misses it. Without it, provisioning fails whenever the pod is not
+   ready at the first read, with no polling fallback. Only a real cluster test
+   shows this.
+5. `provisioning-writes-fenced` **Provisioning writes are fenced.** Status
+   updates in `server/features/build/db/sandbox.py` require the row to still
+   hold the attempt's `provisioning_attempt_number`. A superseded attempt's
+   late write does nothing. Keep this condition on every new status write.
+6. `sleep-fail-closed` **Sleep is fail-closed.** If any snapshot or session
+   workspace listing fails,
+   `server/features/build/session/sandbox_lifecycle.py:sleep_sandbox` aborts and the sandbox stays
+   `RUNNING` for the next sweep. An unhealthy endpoint does not prove files are
+   lost. The session creation lock is held around the final check and
+   termination, so a new session cannot start in a pod that is being removed.
+7. `exec-completion-sentinel` **Use the completion sentinel for exec
+   scripts.** The Kubernetes exec client returns buffered output without
+   raising on a non-zero exit or a timeout. Session workspace setup is done
+   only when the output holds the sentinel from `backend/onyx/server/features/build/sandbox/session_workspace.py`.
+8. `sessions-root-defined-twice` **`SESSIONS_ROOT` is defined twice.**
+   `backend/onyx/server/features/build/sandbox/session_workspace.py` and `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/snapshot.py`
+   each hold it, because the daemon cannot import the API server package.
+   Change both.
+9. `sidecar-requests-signed` **Sidecar requests are signed and fresh.**
+   `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/server.py:_verify_signature` checks an Ed25519 signature
+   over timestamp, path and body hash, with a 60-second window. The worker that
+   runs the `sandbox` queue needs the push private key and the sidecar-port
+   ingress rule in `deployment/helm/charts/onyx/templates/network-policy-sandbox-push.yaml`. The `scheduled_tasks`
+   worker drives sandboxes too, so the same policy also gives it the opencode
+   and dev-server ports. Update the policy if either worker or queue moves.
+10. `history-persistence-flag` **Check `supports_opencode_history_persistence`
+    first.** The base class
+    `server/features/build/sandbox/base.py:SandboxManager.create_opencode_history_snapshot` raises
+    `NotImplementedError`. A new backend must set the flag, implement it, and
+    restore the history during provisioning.
+11. `cleanup-proof-not-cache` **Do not mix cleanup proof with cache state.**
+    Before it deletes the resources of a `FAILED` sandbox, cleanup takes a
+    fresh checkpoint unless `Sandbox.cleanup_checkpoint` still matches the
+    attempt, storage identity and heartbeat
+    (`backend/onyx/server/features/build/session/resource_cleanup.py:_prepare_failed_resource_cleanup`). It deletes with
+    the observed resource identity. The Redis retry key only delays a retry; a
+    cache entry never authorizes a deletion. A heartbeat clears the proof
+    (`server/features/build/db/sandbox.py:update_sandbox_heartbeat`, which
+    flushes; a function of the same name in
+    `server/features/build/db/build_session.py` commits), so any path that writes
+    into a session workspace must commit a heartbeat before the write, as
+    `SessionManager.upload_file` and `delete_file` do. Without it, a sweep can
+    delete a volume or pod that holds files no checkpoint captured.
+12. `preview-cache-dot-prefix` **Preview caches depend on the dot prefix.** The
+    caches live under `outputs/`, so only the leading dot keeps them out of the
+    output list (`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py:is_hidden_workspace_name`).
+    Snapshots exclude `outputs/.document-thumbnails` in two places that must
+    agree: `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/snapshot.py:_is_excluded_snapshot_dir` and the
+    `tar --exclude` in `DockerSandboxManager`. A new cache under `outputs/`
+    needs a dot name and, if it must not survive sleep, an entry in both
+    places.
+13. `managers-never-touch-db` **Sandbox managers never touch the database.**
+    Implementations of `backend/onyx/server/features/build/sandbox/base.py:SandboxManager` take no session. The
+    caller (`SessionManager`, Celery tasks) owns every transaction. Managers
+    make one database read: `load_settings()` for the organization instructions
+    when they build the agent instructions file ([[craft-admin]]). Callers
+    avoid a transaction across pod or container I/O, with one exception:
+    `SessionManager.upload_file` holds the session row lock through the file
+    write, to enforce the attachment quota ([[craft-sessions]]).
 
-### Document thumbnail conversion
+---
 
-Both providers use `SandboxManager.generate_document_preview` for PowerPoint slides
-and first-page PDF or PowerPoint thumbnails. They deploy the shared converter and
-LibreOffice helper as real files in a versioned bundle through the existing sandbox
-push API. This bundle is independent of enabled agent skills.
+## Decisions
 
-The converter checks session workspace confinement. The 20 MiB thumbnail size
-check is advisory preflight. Concurrent edits can change input during rendering.
-A 30-second thumbnail deadline and 120-second full-slide deadline bound lock waiting
-and conversion time. All conversions use the same bounded subprocess executor.
-The lock opens without blocking and must be a regular file.
+- **One sandbox per user, not per session.** Sessions share a warm pod, the
+  managed skills and the user library.
+- **A signed sidecar for file and snapshot work.** The main container never
+  holds object-store credentials; the API server stores archives through the
+  FileStore. Do not add storage CLIs to the image.
 
-Finished JPEGs replace cached files atomically. Failed conversion retains the last
-complete image. Source revision checks reject changed input; cache metadata records
-the rendered revision. Missing, invalid, or non-regular metadata causes regeneration. Metadata opens do not block on special files or follow symlinks.
-Both providers validate conversion status and session-relative JPEG paths with one parser.
-Conversion failures return a protocol error handled as an HTTP 400 client error.
+---
 
-Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.
-Both providers exclude this root cache from snapshots. Nested user directories
-with the same name remain in snapshots.
+## Known issues
 
-A complete-file probe reuses deployed bundles. Failed pushes cannot publish a ready bundle.
-Docker and Kubernetes publish through symlink swaps and the shared managed-content retry policy.
-Updates to an existing symlink are atomic. Replacing a legacy directory first removes that directory.
-Container lookup and archive transfer retry transport and Engine server failures; rejected requests and extraction failures do not retry.
-Previous bundles remain available for 60 seconds so readers can finish.
-Cleanup accepts only direct bundle children and remains best effort under concurrent publication.
+- Opencode history has no per-turn capture. A pod that dies between capture
+  points loses the chat history recorded since the last one. The history
+  archive has no older version to fall back to.
+- The backends snapshot different content. The Kubernetes daemon excludes
+  `node_modules` and `.next` and fails above 100 MiB
+  (`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/snapshot.py:MAX_SNAPSHOT_ARCHIVE_BYTES`). The Docker
+  manager's `tar` excludes only the thumbnail cache and has no size limit.
+  Neither backend excludes `outputs/.pptx-preview`, so slide images count
+  toward the Kubernetes limit. Because sleep is fail-closed, a Kubernetes
+  session above the limit can keep its sandbox awake. These consequences are
+  reasoned from the code, not tested.
+- Agent browser state lives outside the session workspace and is lost on
+  sleep. Saving it would put login cookies in FileStore snapshots.
+- Docker mode mounts the host Docker socket in the API server and background
+  worker. Only enable it on hosts you control (see the sandbox `README.md`).
 
-### Local development lifecycle tools
+---
 
-`deployment/helm/dev/dev.py` supplies shared Make and VS Code commands for image
-refresh, setup diagnostics, readiness, migrations, and data-preserving cluster pause/resume.
-`deployment/helm/dev/runtime.py` resolves the deployed API container's ConfigMaps,
-Secrets, and inline env settings. Personal `.env.k8s` entries override deployment defaults;
-the selected context, sandbox backend, and sandbox namespace stay pinned.
-Resolved secrets remain in process memory. No launch task writes an env file.
-`deployment/helm/dev/launch.py` starts both terminal and debugger API/worker processes
-with that configuration and preserves the existing reload implementations.
+## Dependencies
 
-Infrastructure startup waits for active Onyx controllers and the Telepresence manager.
-Application readiness checks the real API readiness response through the frontend proxy,
-then checks the frontend HTML page. It does not verify worker readiness, login, or licensing.
-The intercept command checks the existing intercept forwards container port 8080 to local port 8080 before reuse. A known stale-agent identity failure
-allows one targeted rollout and retry after command failures or timeouts; unrelated failures propagate.
-A failed log probe preserves the original intercept failure. Captured command errors show stderr, never configuration stdout.
-Migration upgrades detect this checkout's API launcher even when its relative script path outlives a directory change.
-Short probes have process timeouts. Builds, image loads, cleanup, and migration upgrades allow longer execution; rollout deadlines remain bounded.
+- [[craft-external-apps]]: the proxy all sandbox traffic goes through; its CA
+  is installed by `backend/onyx/server/features/build/sandbox/image/firewall-init.sh`.
+- [[craft-admin]]: organization instructions in the agent instructions file.
+- [[file-store-and-user-files]]: snapshot archives under
+  `FileOrigin.SANDBOX_SNAPSHOT`.
+- [[background-jobs]]: the Beat entry and the `sandbox` queue.
+- [[multi-tenancy]]: tenant labels on resources and tenant keys in paths and
+  locks.
+- [[skills]]: managed skill content pushed into the `managed` volume.
+- [[auth-and-identity]]: the PAT type and its revocation on password change.
 
-Doctor checks prerequisites and effective configuration without printing secret values.
-The local overlay selects the dev sandbox image with `IfNotPresent` for all containers.
-Startup forwards `SANDBOX_IMAGE` overrides to Helm, and doctor detects template drift.
-Image refresh updates init and main containers together and does not recycle live pods.
-Cleanup previews checkout-labeled dangling images and never deletes volumes.
-See `deployment/helm/dev/README.md` for command scope and cache retention.
+---
 
-### Zed local startup
+## Recipes
 
-Zed records only intercepts it creates and preserves reused intercepts on exit.
-A failed rollout check releases an intercept created by that command.
+- `sidecar-endpoint` **A sidecar endpoint.** Copy the snapshot-create route in
+  `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/server.py` and its `SidecarClient` call; list the routes
+  with `git grep -n '@app\.' backend/onyx/server/features/build/sandbox/image/sandbox_daemon/server.py`.
+  Keep the signature check, and add the models to `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py`.
+  Handle an old daemon that lacks the route ([[#image-ships-with-api-server]]).
+  Give the Docker backend the same behaviour with `docker exec`.
+- `sandbox-wide-artifact` **A sandbox-wide artifact that must survive sleep.** Copy the opencode
+  history: a create and restore route, a capture point at each place listed
+  under Snapshots, and the `/ready` gate if boot must restore it. The
+  per-session snapshot only carries `outputs/` and `attachments/`.
+- `pod-setting` **A pod setting.** Change
+  `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`. Add to
+  `_overlay_dynamic_fields` only a value that differs per pod
+  ([[#pod-fields-in-helm]]). A new Kubernetes API call needs its verb in
+  `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml` ([[#pods-watch-rbac]]).
+- `sandbox-backend` **A sandbox backend.** Copy `DockerSandboxManager`; list the backends with
+  `git grep -n 'class .*SandboxManager' backend/onyx/server/features/build/sandbox/`.
+  Register it in `backend/onyx/server/features/build/sandbox/factory.py:get_sandbox_manager` and set
+  `supports_opencode_history_persistence` ([[#history-persistence-flag]]).
+- `investigate-craft-fails-to-start` **Investigate "Craft fails to start".** Read the user's `Sandbox` row:
+  `PROVISIONING` that does not end points to the pod wait, `FAILED` to a
+  provision error in the API server log. On Kubernetes, run
+  `kubectl get pods,events -n onyx-sandboxes` and read the `sandbox-init` and
+  `sidecar` container logs. A provision error with a 403 `ApiException`
+  from the pod watch means `pods:watch` is missing ([[#pods-watch-rbac]]).
+- `setup-sleep-wake-test` **Set up a sleep and wake test.** Lower `SANDBOX_IDLE_TIMEOUT_SECONDS`, wait
+  for a sweep, and confirm the pod is gone and the `Sandbox` row is
+  `SLEEPING`. Send a message to the same session and confirm its outputs come
+  back. For a local kind cluster, use the `onyx-craft-dev` skill and
+  `deployment/helm/dev/README.md`.
 
-`.zed/run-all-k8s.sh` prepares the API intercept through the shared Craft command, including targeted stale-agent recovery.
-`.zed/process-compose.k8s.yaml` starts the API and workers through `deployment/helm/dev/launch.py`.
-Deployed secrets stay in process memory; the local environment file supplies personal overrides.
-A one-shot readiness process waits for API health, then checks the API through the frontend.
-Failed readiness leaves local services running for diagnosis.
+---
 
-Local image checks treat missing Docker image labels as an unknown source and rebuild on refresh.
-With `ENABLE_SKILLS=true`, the sandbox image includes LibreOffice Writer, Calc, Impress, and Draw.
-Writer and Calc provide document and spreadsheet conversions, including DOCX, XLSX, and ODS to PDF.
-With a custom build certificate bundle, backend tokenizer downloads use standard HTTPS without the optional Xet client.
-Image refresh accepts `CRAFT_BUILD_CA_BUNDLE` for backend Python dependencies, Chromium, tokenizers, and sandbox npm, pip, GitHub CLI, OpenCode, and Bun downloads behind a trusted TLS inspection proxy.
-The certificate bundle is a BuildKit secret and does not enter the image.
-Without this bundle, downloads retain their default certificate and transport settings.
+## Verification
+
+- Unit: `backend/tests/unit/onyx/server/features/craft/sandbox/`.
+- Lifecycle, sweep and snapshots with real Postgres and Redis:
+  `backend/tests/external_dependency_unit/craft/`.
+- Real cluster: `backend/tests/integration/tests/craft/k8s/` (kind setup in
+  `deployment/helm/dev/README.md`). Only these tests catch
+  [[#pods-watch-rbac]].
+- Network posture: `backend/tests/integration/tests/craft/docker_e2e/`.

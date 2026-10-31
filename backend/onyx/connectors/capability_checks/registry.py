@@ -1,5 +1,8 @@
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.asana.capability_checks import build_asana_indexing_checks
+from onyx.connectors.azure_datalake.capability_checks import (
+    build_azure_datalake_indexing_checks,
+)
 
 # Re-exported: existing callers resolve applicability through the registry; the
 # function lives in ``applicability`` so hot-path modules can import it without
@@ -60,6 +63,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.GITHUB: build_github_indexing_checks(),
     DocumentSource.YOUTRACK: build_youtrack_indexing_checks(),
     DocumentSource.ASANA: build_asana_indexing_checks(),
+    DocumentSource.AZURE_DATALAKE: build_azure_datalake_indexing_checks(),
 }
 
 

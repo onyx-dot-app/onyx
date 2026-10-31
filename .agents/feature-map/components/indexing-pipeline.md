@@ -1,835 +1,399 @@
 # Indexing Pipeline
 
-> Turns a fetched document into indexed chunks. A two-phase Celery flow (docfetching,
-> then docprocessing) chunks, embeds, and writes each document to the index of the
-> attempt's own `SearchSettings`, then tracks the run as an `IndexAttempt`.
+> Turns the documents a connector yields into chunks in the search index, in two
+> Celery phases: docfetching runs the connector and stages batches, and
+> docprocessing chunks, embeds and writes each batch. It owns the `IndexAttempt`
+> record that the admin sees, and the chunking of spreadsheets.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** indexing
-**Edition:** CE, with EE-relevant usage-limit and hook checks inline (`USAGE_LIMITS_ENABLED`,
-`onyx.hooks.points.document_ingestion`, `onyx.hooks.points.document_push`)
-**Owns:**
-`backend/onyx/indexing/` (`indexing_pipeline.py`, `chunker.py`, `chunking/`, `embedder.py`,
-`models.py`, `vector_db_insertion.py`, `chunk_batch_store.py`, `persistent_indexing.py`,
-`document_push.py`, `port_reembed.py`, `indexing_heartbeat.py`, `adapters/`),
-`backend/onyx/background/celery/tasks/docfetching/`, `docprocessing/`, `pruning/`,
-`connector_deletion/` (the document-removal half only), `index_reclaim/`, `port/`,
-`backend/onyx/background/indexing/` (`run_docfetching.py`, `checkpointing_utils.py`,
-`index_attempt_utils.py`, `job_client.py`, `memory_tracer.py`),
-`backend/onyx/db/index_attempt.py`, `index_attempt_metrics.py`, `indexing_coordination.py`
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** CE. The cloud usage meter and the EE document-ingestion hook run
+inline when they are on.
 
-**Does not own:** how a connector talks to a source and yields `Document` objects
-([[connectors]]); the cc-pair/credential model, scheduling triggers, and admin
-connect flow ([[cc-pairs-and-credentials]]); the `DocumentIndex` interface, the
-OpenSearch schema, hybrid retrieval, and the embedding-model swap state
-machine ([[document-index]], read first, this document does not repeat its §4.4
-swap state machine); ACL computation ([[access-control]]); external permission
-sync ([[permission-sync]]); user file upload/project storage
-([[file-store-and-user-files]]); the generic Celery worker/queue topology
-([[background-jobs]]); tenant scoping mechanics ([[multi-tenancy]]); LLM provider
-resolution ([[llm-providers]]).
+## User experience
 
----
+- **An admin connects a source.** Onyx schedules the first run without a click.
+  On the connector page the admin sees the document count go up as batches
+  finish. The run ends with document and chunk counts. Each document that
+  failed shows as its own error with a link and a message, resolved when a
+  later run indexes that document. More than 3 failures that are also more than
+  10% of the documents fail the run, unless `PERSISTENT_INDEXING` is on.
+- **Later runs pick up changes only.** A connector that polls by time fetches
+  what changed since the last run. An unchanged document costs no embedding.
+- **A run that dies resumes.** After a deploy, a worker restart or a crash, the
+  admin sees the interrupted attempt in the history. The next attempt starts by
+  itself. A checkpointed connector continues from its checkpoint, and the next
+  attempt processes the batches that were staged but not processed. Other
+  connectors start the extraction again.
+- **A stuck run fails.** A run whose workers stop sending heartbeats is marked
+  failed after 30 minutes, so the admin sees "failed", not a run that never
+  ends.
+- **A spreadsheet is findable, but not row by row.** A search finds a workbook
+  or CSV by its name, its sheets, its columns and a summary of its values. A
+  query that names one row of a large sheet has little to match. With
+  `SKIP_SPREADSHEET_CONTENT` on, a spreadsheet indexes as its title and a
+  placeholder.
+- **A user uploads a file** in chat or a project. It goes through the same
+  chunk, embed and write steps with no fetch phase and no cc-pair
+  (`UserFileIndexingAdapter`, [[file-store-and-user-files]]).
+- **An embedding rate limit** slows indexing down, not search.
 
-## 1. What the user experiences
+## Scope
 
-An admin connects a source (Slack, Confluence, Google Drive, and so on) and Onyx
-schedules an indexing run automatically. On the connector's status page the admin
-watches document counts climb as batches complete, sees the run finish with a
-document and chunk count, and can drill into individual failures with a document
-link and an error message. If the connector supports incremental pulls, later runs
-only touch documents that changed. A run that dies mid-flight (a worker restart, a
-deploy) can resume from its checkpoint on the next scheduled attempt when the
-connector supports checkpointing. Other connectors restart extraction. The admin
-sees the interrupted run in history and a fresh attempt picks up automatically.
+This component owns the path from a connector's `Document` stream to chunks in
+the index: the two phases, staging, checkpoints, the dedup gate, chunking
+(text, image and tabular), contextual RAG, embedding, the write, the
+`IndexAttempt` lifecycle and its errors, heartbeats, the tabular re-chunk
+migration, and the user-file adapter.
 
-For an active cc-pair whose connector has `prune_freq` set
-(`pruning/tasks.py:_is_pruning_due`), the next scheduled prune removes a vanished
-source document from search results. Deleting a connector entirely, or removing a cc-pair, removes every
-document that connector uniquely owned and clears the reference from documents
-still held by another connector.
+Its neighbours own:
+- [[connectors]]: how a connector reads a source and yields documents,
+  checkpoints and tabular sections.
+- [[cc-pairs-and-creds]]: the cc-pair, its status, and the admin connect
+  flow.
+- [[document-index]]: the `DocumentIndex` interface, the OpenSearch schema, the
+  embedding-model swap, the reindex port, and the metadata sync that keeps
+  ACLs and document sets current after a write.
+- [[background-jobs]]: workers, queues, beat, task conventions, and the pruning
+  and connector deletion flows.
+- [[access-control]]: what ACL a document gets. This component only attaches it.
+- [[file-store-and-user-files]]: the user-file lifecycle and the file store.
 
-Uploading a file directly (Chat attachments, Projects) goes through the same
-chunk/embed/write machinery but skips the connector-fetch phase entirely; the file
-is already local.
-
----
-
-## 2. Surfaces
-
-### Celery tasks (no HTTP surface; driven by Celery beat, see `beat_schedule.py`)
-
-| Task | Queue | Trigger | Notes |
-|---|---|---|---|
-| `CHECK_FOR_INDEXING` (`check_for_indexing`, `docprocessing/tasks.py`) | `celery` (primary) | beat, 15s | Kicks off docfetching for cc-pairs due for indexing; also monitors active attempts for completion and validates heartbeats. |
-| `CONNECTOR_DOC_FETCHING_TASK` (`docfetching_proxy_task`, `docfetching/tasks.py`) | `connector_doc_fetching` | sent by `check_for_indexing` via `try_creating_docfetching_task` | The watchdog. Spawns `docfetching_task` in a subprocess and monitors it. |
-| `DOCPROCESSING_TASK` (`docprocessing_task`, `docprocessing/tasks.py`) | `docprocessing` | sent by docfetching, once per document batch | Chunks, embeds, writes one batch. |
-| `CHECK_FOR_CHECKPOINT_CLEANUP` / `CLEANUP_CHECKPOINT` | `celery` / `checkpoint_cleanup` | beat, 1h | Deletes checkpoint blobs older than `NUM_DAYS_TO_KEEP_CHECKPOINTS`. |
-| `CHECK_FOR_INDEX_ATTEMPT_CLEANUP` / `CLEANUP_INDEX_ATTEMPT` | `celery` / `index_attempt_cleanup` | beat, 30m | Deletes `IndexAttempt` rows older than `NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS`, keeping the last `NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP` per cc-pair/search-settings pair. |
-| `CHECK_FOR_PRUNING` / `CONNECTOR_PRUNING_GENERATOR_TASK` (`pruning/tasks.py`) | `celery` / `connector_pruning` | beat, 20s | Diffs the source's live doc-ID list against Postgres and queues per-doc cleanup for the difference. |
-| `CHECK_FOR_CONNECTOR_DELETION` (`connector_deletion/tasks.py`) | `celery` / `connector_deletion` | beat, 20s | Fans out `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over the documents tied to a cc-pair marked `DELETING`, one batch of `DOCUMENT_INDEX_SYNC_MAX_TASKS` at a time. The monitor queues the next batch when the taskset drains. Blocks while indexing, pruning, or a port attempt is active on that cc-pair. |
-| `CHECK_FOR_OLD_INDEX_RECLAIM` / `RUN_OLD_INDEX_RECLAIM` (`index_reclaim/tasks.py`) | `celery` | beat, 30m | Advances the `IndexReclaimStatus` state machine on PAST search-settings rows. Owned in detail by [[document-index]] §4.4; this component only writes the FUTURE-index docs the reclaim eventually deletes. |
-| `CHECK_FOR_PORT` / `RUN_PORT_ATTEMPT` (`port/tasks.py`) | `celery` / `port` | beat, 30s | Backfills a secondary index by re-embedding stored PRESENT chunks (`port_reembed.py`), without re-fetching the source. See §4.6. |
-
-### Environment configuration (`backend/onyx/configs/app_configs.py` unless noted)
-
-| Variable | Default | Effect |
-|---|---|---|
-| `INDEX_BATCH_SIZE` | 16 | Documents per connector-fetch batch, and thus per `docprocessing` task. |
-| `MAX_CHUNKS_PER_DOC_BATCH` | 1000 | Sub-batch size for the embed step inside one docprocessing task; see §4.4. |
-| `MAX_DOCUMENT_CHARS` | set | A document above this char count is skipped with a `ConnectorFailure`, not chunked. |
-| `SKIP_SPREADSHEET_CONTENT` | false | Connectors skip tabular content at extraction (see [[connectors]]). Docprocessing replaces any `TabularSection` that still reaches it with the same `<content-skipped>` section. See §4.3. |
-| `PERSISTENT_INDEXING` | see configs | When true, an unhandled docprocessing batch exception is converted into per-doc failures and the attempt can finish (`COMPLETED_WITH_ERRORS`) instead of `FAILED`. Unhandled connector-generator exceptions in docfetching still mark the attempt `FAILED`. See `indexing/persistent_indexing.py` and §4.5. |
-| `ENABLE_CONTEXTUAL_RAG` | see configs | Contextual RAG is on when this global flag or `SearchSettings.enable_contextual_rag` is true. A per-model false does not turn off a true global flag (`indexing_pipeline.py`). |
-| `USE_DOCUMENT_SUMMARY` / `USE_CHUNK_SUMMARY` (`onyx/configs/app_configs.py`) | see configs | Which contextual-RAG LLM calls run; at least one must be true for `enable_contextual_rag`. |
-| `CONTEXTUAL_RAG_LLM_TIMEOUT` (`chat_configs.py`) | see configs | Timeout for each contextual-RAG LLM call. |
-| `MINI_CHUNK_SIZE`, `LARGE_CHUNK_RATIO`, `BLURB_SIZE`, `SKIP_METADATA_IN_CHUNK` | see configs | Multipass/large-chunk and blurb/metadata chunking knobs, `chunker.py`. |
-| `STRICT_CHUNK_TOKEN_LIMIT` (`shared_configs/configs.py`) | see configs | Forces an oversized split chunk to be re-split at token boundaries in `text_section_chunker.py`. |
-| `INDEXING_WORKER_HEARTBEAT_INTERVAL` (`configs/constants.py`) | see configs | Cadence of the DB heartbeat counter increment (§4.7). |
-| `INDEXING_WORKER_MEMORY_LIMIT_MB` | see configs | Docfetching watchdog kills the subprocess if RSS exceeds this. |
-| `NUM_DAYS_TO_KEEP_CHECKPOINTS`, `NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS` | see configs | Retention windows for the two cleanup beat tasks. |
-| `DOCUMENT_PUSH_ENDPOINT_URL`, `DOCUMENT_PUSH_API_KEY`, `DOCUMENT_PUSH_TIMEOUT_SECONDS` | unset | Config-driven external sink; see §4.4 and `document_push.py`. Single-tenant only. |
-| `CONNECTOR_CHECKS_ENABLED` | false | When true, a cc-pair's first index attempt waits for its required capability checks (§4.1). Pair it with `NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED`. |
-
----
-
-## 3. Data model
-
-### `IndexAttempt` (`onyx/db/models.py:IndexAttempt`)
-
-One row per run of the pipeline for one cc-pair against one `SearchSettings`
-generation. Key columns: `status` (`IndexingStatus`), `from_beginning`,
-`checkpoint_pointer` (a file-store key, see §4.2), `total_batches` /
-`completed_batches` (set by docfetching / incremented by docprocessing, §4.5),
-`total_docs_indexed`, `new_docs_indexed`, `total_chunks`, `poll_range_start` /
-`poll_range_end`, `heartbeat_counter` / `last_heartbeat_value` /
-`last_heartbeat_time` (§4.7), `cancellation_requested`, `celery_task_id`,
-`targeted_reindex_job_id` (non-null only for a synthetic reindex-triggered
-attempt), `is_synthetic_seed` (marks the port flow's synthetic FUTURE poll-cursor
-seed, not a real connector run).
-
-### `IndexAttemptError` (`onyx/db/index_attempt.py:create_index_attempt_error`)
-
-One row per failed document or entity within an attempt. Carries `document_id` or
-`entity_id`, the failure message (capped at `MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS`),
-and `is_resolved` (flipped when a later
-successful index of the same document clears the error;
-`resolve_index_attempt_errors_for_documents` and `_resolve_indexing_entity_errors`).
-
-### `IndexAttemptStageMetric` (`onyx/db/models.py`, written via `onyx/db/index_attempt_metrics.py`)
-
-Per-stage timing aggregates keyed by `(index_attempt_id, stage)`. `IndexAttemptStage`
-(`onyx/db/index_attempt_metrics_models.py`) enumerates every timed stage across both
-phases, in pipeline order: docfetching stages (`CONNECTOR_VALIDATION` through
-`DOC_BATCH_ENQUEUE`) then docprocessing stages (`QUEUE_WAIT` through `GC_COLLECT`),
-plus the aggregate `BATCH_TOTAL` and the derived, never-written
-`BATCH_UNACCOUNTED`. `StageScope` marks each as `ATTEMPT_LEVEL` (one event) or
-`BATCH_LEVEL` (many, per docprocessing task).
-
-The fleet telemetry collection pass reads the rows of recent attempts that changed
-(`db/fleet_telemetry.py:stage_rows`) and never writes them (§4.10).
-
-### `Document`, `DocumentByConnectorCredentialPair`, `Tag` (`onyx/db/models.py`, `onyx/db/document.py`, `onyx/db/tag.py`)
-
-`Document` is the durable Postgres row per source document: `content_hash` (used by
-the dedup gate, §4.3), `doc_updated_at`, `chunk_count`, `boost`, `file_id` (for a
-staged/promoted blob), `parent_hierarchy_node_id`. `DocumentByConnectorCredentialPair`
-is the many-to-many join that lets one document be owned by more than one cc-pair;
-pruning and deletion only fully remove a document when its connector count drops to
-zero (`get_document_connector_count`, in `onyx/background/celery/tasks/shared/tasks.py`).
-`Tag` rows hold connector-supplied metadata key/values, upserted per document by
-`onyx.db.tag:upsert_document_tags`.
-
-### Chunk schema
-
-Owned by [[document-index]]. This component produces the chunk objects
-(`DocAwareChunk` -> `IndexChunk` -> `DocMetadataAwareIndexChunk`, all in
-`onyx/indexing/models.py`) that cross the `DocumentIndex.index()` boundary; it does
-not define the OpenSearch mapping those objects must match.
-
-### Redis / cache
-
-| Key family | Owner | Meaning |
-|---|---|---|
-| `RedisConnector(tenant_id, cc_pair_id).stop` | `redis_connector.py` | Fence checked by docfetching/docprocessing callbacks (`IndexingCallback.should_stop`) and by the watchdog before spawning. |
-| `RedisConnector(...).delete` | `redis_connector.py` | Fence + taskset for connector deletion (§4.8). |
-| `RedisConnector(...).prune` | `redis_connector_prune.py` | Fence + taskset for a pruning run (§4.8). |
-| `RedisDocprocessing(index_attempt_id, redis_client)` | `redis_docprocessing.py` | Per-attempt `pending`/`in_flight` batch counters, incremented on enqueue and consulted by the heartbeat-staleness check (§4.7); `cleanup()` on terminal status. |
-
----
-
-## 4. How it works
-
-### 4.1 The two-phase split, end to end
+## Architecture
 
 ```
- beat: check_for_indexing (15s)
-   |
-   v
- docfetching_proxy_task  [queue: connector_doc_fetching]  (watchdog, primary/docfetching worker)
-   |  spawns subprocess -> docfetching_task -> run_docfetching_entrypoint
-   |
-   |  for each connector-yielded batch of Documents:
-   |    1. strip_null_characters, resolve hierarchy parent ids
-   |    2. batch_storage.store_batch(batch_num, docs)     -- FileStore, DocumentBatchStorage
-   |    3. save_checkpoint(...)                            -- FileStore, connector's ConnectorCheckpoint
-   |    4. app.send_task(DOCPROCESSING_TASK, batch_num, ...)
-   |
-   v
- docprocessing_task  [queue: docprocessing]  (docprocessing worker, one task per batch)
-   |
-   |  storage.get_batch(batch_num)                          -- load staged Documents
-   |  index_doc_batch_prepare(...)                           -- upsert Document/Tag rows, dedup gate
-   |  chunker.chunk(...)                                     -- DocAwareChunk list
-   |  [optional] add_contextual_summaries(...)               -- LLM doc/chunk context
-   |  embed_and_stream(...)                                  -- IndexChunk, spilled to local disk (ChunkBatchStore)
-   |  adapter.lock_context(...)                               -- per-document Postgres row lock
-   |    enricher.enrich_chunk(...)                            -- ACL, doc sets, boost, cc_pair_ids -> DocMetadataAwareIndexChunk
-   |    write_chunks_to_vector_db_with_backoff(...)  x N      -- once, to the index of the attempt's SearchSettings
-   |    adapter.post_index(...)                                -- chunk counts, indexed timestamps
-   |  IndexingCoordination.update_batch_completion_and_docs    -- counter update under the attempt row lock
-   |
-   v
- check_for_indexing (next tick): monitor_indexing_attempt_progress
-   -> check_indexing_completion  (completed_batches >= total_batches)
-   -> mark_attempt_succeeded / mark_attempt_partially_succeeded
+beat: check_for_indexing (primary)                docprocessing/tasks.py
+  -> try_creating_docfetching_task                 creates IndexAttempt, sends task
+docfetching_proxy_task (watchdog)                  docfetching/tasks.py
+  -> spawned process: run_docfetching_entrypoint   background/indexing/run_docfetching.py
+       connector generator -> per batch:
+         store_batch(batch_num)                    DocumentBatchStorage (file store)
+         save_checkpoint                           checkpointing_utils.py
+         send DOCPROCESSING_TASK(batch_num)
+       set_total_batches                           extraction is done
+docprocessing_task, one per batch                  docprocessing/tasks.py
+  -> run_indexing_pipeline                         indexing/indexing_pipeline.py
+       prepare: upsert Document rows, dedup gate   get_docs_to_update
+       chunk -> [contextual RAG] -> embed          ChunkBatchStore spills to local disk
+       lock rows -> enrich (ACL, sets, boost) -> write_chunks_to_vector_db_with_backoff
+  -> IndexingCoordination.update_batch_completion_and_docs   attempt row lock
+  -> resolve_index_attempt_errors_for_documents              one UPDATE, no lock
+check_for_indexing (next tick): completed_batches >= total_batches -> mark done
 ```
 
-### 4.2 Docfetching: fetch, stage, checkpoint
-
-`run_docfetching_entrypoint` (`background/indexing/run_docfetching.py`) transitions
-the attempt to `IN_PROGRESS` (`transition_attempt_to_in_progress`, row-locked, only
-legal from `NOT_STARTED`), reaps orphaned STAGING files from a crashed prior attempt
-on the same cc-pair (`file_store/staging.py:reap_prior_attempt_staged_files`), then
-calls `connector_document_extraction`.
-
-That function computes the poll window (`window_start`/`window_end`), decides
-whether to resume from a checkpoint or start clean
-(`get_latest_valid_checkpoint`, §4.6), and drives the connector's generator
-(`ConnectorRunner.run(checkpoint)`, [[connectors]]) inside `_timed_connector_runs`,
-which records one `CONNECTOR_FETCH` timing event per document or hierarchy
-batch. Failure and checkpoint-only yields do not count as batches: their wait
-time goes into the next batch of the same checkpoint step. For every
-yielded `(document_batch, hierarchy_node_batch, failure, next_checkpoint)`:
-
-- a connector-level `failure` becomes an `IndexAttemptError`
-  (`create_index_attempt_error`) and counts toward the failure-ratio threshold
-  (`_check_failure_threshold`, disabled entirely when `PERSISTENT_INDEXING` is set);
-- hierarchy nodes are persisted and cached in Redis
-  (`cache_and_upsert_hierarchy_nodes`) so a document's ancestor path can be resolved
-  without a DB hit during docprocessing enrichment;
-- the document batch, after `strip_null_characters` and hierarchy-parent
-  resolution, is written to **`DocumentBatchStorage`**
-  (`onyx/file_store/document_batch_storage.py`, backed by the FileStore/S3
-  abstraction, not Postgres) via `batch_storage.store_batch(batch_num, docs)`;
-- a `docprocessing` task is enqueued with `{index_attempt_id, cc_pair_id,
-  tenant_id, batch_num, enqueue_time_ms}` (`app.send_task(OnyxCeleryTask.DOCPROCESSING_TASK, ...)`),
-  and `RedisDocprocessing.incr_pending()` bumps the per-attempt pending counter used
-  by the heartbeat-staleness check (§4.7);
-- the connector's own checkpoint object is serialized to the FileStore
-  (`checkpointing_utils.py:save_checkpoint`) and `IndexAttempt.checkpoint_pointer`
-  is updated to point at it.
-
-**First-attempt hold.** `try_creating_docfetching_task` creates a cc-pair's first
-`IndexAttempt` as usual. When `get_first_indexing_hold`
-(`connectors/capability_checks/indexing_hold.py`) returns a hold, it creates the
-attempt without a Celery task id and sends no docfetching task. A hold applies when
-a capability-check run is in flight, a run failed to run, or a required and
-applicable check `FAILED`. `CONNECTOR_CHECKS_ENABLED` off, a pair with a dispatched
-attempt, and a source with no named checks never hold. Each `check_for_indexing` beat
-calls `try_dispatching_waiting_attempt`. It sends the task once no hold applies. See
-[[connectors]] §4.8.
-
-When the connector's checkpoint reports no more work, docfetching calls
-`IndexingCoordination.set_total_batches`, which is the signal `check_for_indexing`
-polls to know extraction is done.
-
-**Correction to a common assumption:** the data that crosses from docfetching to
-docprocessing is `DocumentBatchStorage` (file-store-backed), not
-`onyx/indexing/chunk_batch_store.py`. `ChunkBatchStore` is a different, narrower
-mechanism entirely internal to one docprocessing task: it spills *embedded* chunks
-to a local temp directory between the embed step and the vector-db-write step of a
-single batch (§4.4), and is torn down when that task's `with` block exits. It never
-crosses a process or task boundary.
-
-### 4.3 Docprocessing: prepare and dedup
-
-`docprocessing_task` starts a DB heartbeat thread (`docprocessing/heartbeat.py:start_heartbeat`,
-§4.7), loads the staged batch (`storage.get_batch(batch_num)`), and opens a
-short-lived session to resolve the embedder, the document index for the attempt's
-`SearchSettings` (`document_index.factory:get_default_document_index`), and the `IndexAttemptMetadata`
-for this batch, then closes that session before the slow work begins.
-
-`run_indexing_pipeline` (`indexing_pipeline.py`) resolves which `SearchSettings`
-generation applies (FUTURE if one is `IndexModelStatus.FUTURE`, else PRESENT),
-builds a `Chunker` sized to that generation's multipass/contextual-RAG config, and
-calls `index_doc_batch`, which:
-
-1. `filter_documents` drops documents with no title and no content, or over
-   `MAX_DOCUMENT_CHARS`. Before it, when `SKIP_SPREADSHEET_CONTENT` is true,
-   `skip_tabular_content` replaces each document's `TabularSection`s with one
-   `<content-skipped>` `TextSection`. Connectors already do this at extraction,
-   so this catches only sections that still arrive, for example in batches
-   staged before the option was set. Only docprocessing and targeted reindex
-   pass the option; user files and the ingestion API do not.
-2. `_apply_document_ingestion_hook` runs the EE `DOCUMENT_INGESTION` hook, which can
-   rewrite a document's sections or drop it (`hooks/points/document_ingestion.py`).
-3. `adapter.prepare` -> `index_doc_batch_prepare` -> `get_docs_to_update`: a
-   **two-gate dedup**. Gate 1 (timestamp) skips a document whose `doc_updated_at`
-   hasn't advanced past what's stored, with no hashing. Gate 2 (content hash)
-   applies only when the timestamp hasn't advanced; it's skipped for a FUTURE/port
-   write (`index_to_secondary=True`) so the FUTURE build doesn't cross-suppress
-   against the PRESENT-only hash. Docprocessing always passes
-   `ignore_time_skip=True` (the connector already filtered by recency at fetch
-   time), so only gate 2 applies here in practice. A caller can also bypass both
-   gates with `force_update=True`, which `run_indexing_pipeline` exposes: the
-   per-document retry in `index_doc_batch_with_handler` uses it, and so does the
-   tabular re-chunk migration (`background/indexing/run_tabular_rechunk.py`),
-   which re-indexes documents nobody changed. That migration has no alternative
-   - `content_hash()` walks Text and Image sections only, so a tabular
-   document's hash never moves however much the workbook changed. With both
-   gates off, the migration's own adapter re-reads `file_id` and `chunk_count`
-   under the document lock and raises rather than replace the chunks a crawl
-   wrote while the batch embedded.
-4. Documents that pass the gate are upserted (`upsert_documents`, `upsert_document_tags`),
-   linked to the cc-pair (`upsert_document_by_connector_credential_pair`), and
-   linked to their hierarchy node.
-
-### 4.4 Chunking, embedding, and writing
-
-**Chunking** (`chunker.py:Chunker.chunk` -> `chunking/document_chunker.py:DocumentChunker`).
-A document's `processed_sections` (connector-level `Section`/`TextSection`/
-`ImageSection`/`TabularSection` from `onyx.connectors.models`, distinct from the
-retrieval-layer `InferenceSection` in the glossary) are dispatched per section
-type to one of three `SectionChunker` implementations
-(`chunking/section_chunker.py:SectionChunker`):
-
-- `TextChunker` (`text_section_chunker.py`): accumulates section text into an
-  `AccumulatorState` buffer up to `content_token_limit`, flushing to a `ChunkPayload`
-  when the next section would overflow it; an oversized single section is split with
-  `chonkie.SentenceChunker` and, if `STRICT_CHUNK_TOKEN_LIMIT` is set, hard-split at
-  token boundaries as a last resort.
-- `ImageChunker` (`image_section_chunker.py`): always flushes the buffer and emits
-  its own one-section chunk carrying `image_file_id`; images never share a chunk
-  with text.
-- `TabularChunker` (`tabular_section_chunker/tabular_section_chunker.py`): the one
-  path for spreadsheets and CSVs. `DocumentChunker` groups a document's
-  `TabularSection`s by `link` and sends each group to
-  `TabularChunker.chunk_workbook` in one call, at the first section of that
-  group, so the chunks describe one file. A document carrying two attachments
-  therefore yields two sets of chunks, not one merged workbook.
-  `workbook_chunks.py:build_workbook_chunks` (with the cell-level parsing in
-  `tabular_section_chunker/cell_values.py` and the data shapes in
-  `tabular_section_chunker/models.py`) emits one workbook overview, the full rows of
-  small sheets, and a bounded profile (column roles, identifier ranges, totals,
-  breakdowns by category and by month, frequent values, sample rows) of large
-  sheets. `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file,
-  so chunk count does not grow with row count. Each sheet is streamed once and
-  never materialized in memory. A file that yields no chunks is logged. The
-  document still reaches the index through the empty payload
-  `DocumentChunker.chunk` adds, so it stays findable by title and metadata, but
-  none of its sheet contents are.
-
-  There is no per-row chunking. Rows reach the index only through a small
-  sheet's verbatim block or a profile's sample rows, so a query naming one row
-  of a large sheet has little to match. The chunks make a file findable and say
-  what it holds; the file itself remains the record.
-
-  What the chunks will and will not claim:
-
-  - **Dates carry no locale assumption.** `date_key` reads ISO, `YYYY/MM/DD` and
-    written months outright. For `5/3/2024` or `5.3.2024` the separator settles
-    nothing, so the order comes from the column's own values — a part above 12
-    cannot be a month — tracked per column as `DateOrder` while both readings run
-    side by side. A column that never settles gets no time range and no monthly
-    totals, and says so in the log. Never assume dots mean day-first.
-  - **A title block does not hide the table.** `profile_sheet` skips up to
-    `_MAX_PREAMBLE_ROWS` narrow rows to reach the header, keeping them as
-    `preamble` for the overview. Only a sheet with nothing wider in that span is
-    text.
-  - **Partial lines say they are partial.** `_shown_suffix` appends
-    `(N of M shown)` to a clipped breakdown, so a truncated list is never read as
-    the whole truth.
-  - **Percentages are never summed**; a `%` column reports average, min and max
-    only (`ColumnStats.summable`, which also refuses a column that mixes
-    currencies), and a `$` column keeps its unit.
-  - **Sheets merge only when merging costs nothing.** `_can_merge` refuses to
-    pool same-header tabs whose combined category values would pass
-    `_CATEGORY_MAX_DISTINCT`, since that would delete a breakdown each tab had
-    alone.
-  - **Blocks queue one per sheet before any sheet gets extras**, and the overview
-    (up to `_OVERVIEW_MAX_CHUNKS`) names every sheet, so exhausting the budget
-    costs detail rather than whole sheets. `_Packer` logs whatever it drops.
-
-`DocumentChunker.chunk` assigns `chunk_id` sequentially over the section-ordered
-payload stream, then `ChunkPayload.to_doc_aware_chunk` attaches the per-document
-`title_prefix` (from the blurb splitter) and `metadata_suffix_semantic`/`_keyword`
-(`get_metadata_suffix_for_document_index`), each computed once by `Chunker` before
-dispatch. If the semantic metadata suffix would reach `MAX_METADATA_PERCENTAGE`
-(25%) of the chunk budget, `Chunker._handle_single_document` drops it. The title
-prefix and keyword suffix have no such check. `CHUNK_OVERLAP` is always 0 (no
-sentence-level overlap between chunks); the only overlap-like behavior is in
-multipass "large chunks" (`generate_large_chunks`), which concatenate
-`LARGE_CHUNK_RATIO` consecutive normal chunks into one oversized chunk for a second
-retrieval pass, referencing their original `chunk_id`s via
-`large_chunk_reference_ids`.
-
-**Contextual RAG** (`indexing_pipeline.py:add_contextual_summaries`, gated by
-`enable_contextual_rag and llm_enrichment_allowed`) runs after chunking and before
-embedding, using a dedicated LLM from
-`llm.factory:get_contextual_rag_llm_for_search_settings`. `add_document_summaries`
-generates one document-level summary per document (`LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY`);
-`add_chunk_summaries` generates a per-chunk context string relating the chunk to the
-document (`LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT`), run in parallel across chunks
-(`MAX_CONTEXTUAL_RAG_WORKERS = 128`). Both are skipped per-chunk when
-`chunk.contextual_rag_reserved_tokens == 0` (the chunker determined there was no
-room). This step never fires for a document whose full content already fits in one
-chunk (`single_chunk_fits`, computed in `Chunker._handle_single_document`) or when
-the LLM-enrichment global spend limit is tripped
-(`_system_llm_enrichment_is_allowed`, `check_global_token_rate_limits`), in which
-case the document is instead diverted into a `ConnectorFailure` naming the blocked
-enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
-
-**Embedding** (`embedder.py:DefaultIndexingEmbedder.embed_chunks`, called via
-`embed_chunks_with_failure_handling` -> `_embed_chunks_to_store` in
-`indexing_pipeline.py`). Chunks are split into sub-batches of at most
-`MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
-`EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
-reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`, or the
-cloud provider directly. Failed passage calls retry with exponential backoff.
-The admin can set a global rate limit on passage requests on the Index Settings
-page (`embedding_rate_limit_*` in workspace `Settings`). Every outgoing request,
-retries included, takes a slot in a per-tenant sliding window in Redis
-(`embedding_rate_limit.py`). When the window is full, or a provider answers
-429, the worker thread blocks and tries again instead of failing, so the
-thread takes no new Celery task. Self-hosted retries about once a minute
-(jittered) for up to six hours; cloud (`MULTI_TENANT`), whose workers all
-tenants share, backs off exponentially for up to one minute. When the wait runs
-out the request fails, and every remaining document of the batch fails without
-per-document retries. `docprocessing_task` acks on receipt (`acks_late=False`),
-so the broker never redelivers a waiting or slow batch to another worker; a
-duplicate delivery would count the batch twice in `completed_batches`. The wait time is
-recorded as the `EMBEDDING_RATE_LIMIT_WAIT` and `EMBEDDING_PROVIDER_THROTTLE_WAIT`
-stage metrics, which are parts of `EMBEDDING`. `encode` reads the limit once
-per call, so a change applies to the next batch. Query embeddings are never
-limited or blocked. Titles
-get no separate embedding: the title reaches the vector only through the chunk's
-`title_prefix`.
-Each successfully embedded sub-batch is immediately pickled to disk via
-`ChunkBatchStore.save` (`chunk_batch_store.py`) so the full embedded batch never
-sits entirely in process memory; `store.stream()` re-reads it lazily for the write
-step. If a document fails embedding, its chunks are stripped from every sub-batch
-already written to disk (`store.scrub_failed_docs`), keeping the per-document
-all-or-nothing invariant (§5).
-
-**Writing** (`vector_db_insertion.py:write_chunks_to_vector_db_with_backoff`,
-called once per batch). `docprocessing_task` builds the index with
-`get_default_document_index(index_attempt.search_settings, None)`, so a batch
-writes only to the index of the attempt's own `SearchSettings`: PRESENT or FUTURE.
-It does not write to both generations. The port backfill (`port/tasks.py`) fills a
-FUTURE index (see [[document-index]] §4.4). The write tries the whole
-batch in one call to `DocumentIndex.index()`; on any exception it falls back to a
-per-document retry loop so one bad document doesn't fail the batch. The exception
-is `OpenSearchIndexWriteBlockedError` (the index carries a write block): every
-document would fail the same way, so the batch fails at once with one failure per
-document and one log line. Before writing,
-`adapter.lock_context` (`document.py:prepare_to_modify_documents` ->
-`acquire_document_locks`) takes a Postgres row lock on every document in the batch,
-so no other process can concurrently modify the same document's index entry during
-the write.
-
-### 4.5 Coordination across batches
-
-Many `docprocessing` tasks (one per batch) run concurrently against the **same**
-`IndexAttempt`. `IndexingCoordination` (`db/indexing_coordination.py`) is the sole
-writer of the attempt's aggregate counters:
-
-- `try_create_index_attempt` is the fencing mechanism that prevents two full-run
-  attempts from starting for the same `(cc_pair_id, search_settings_id)`: it does a
-  `SELECT ... FOR UPDATE NOWAIT` for any existing non-terminal attempt before
-  inserting a new one, inside one transaction. A targeted-reindex attempt
-  (`targeted_reindex_job_id` set) is explicitly excluded from this check and may run
-  concurrently with a full crawl, relying instead on the per-document row locks in
-  §4.4.
-- The creators in `docfetching/task_creation_utils.py` (new attempt, pending
-  backfill, dispatch of a waiting attempt) take the tenant-wide Redis creation
-  lock, then the cc-pair's row lock (`lock_connector_credential_pair_row`), check
-  the pair's status under it, and hold it until the attempt commits. The pause
-  and deletion routes take the same row lock before they read the attempts to
-  cancel, so a pause or delete never misses an attempt created at the same time.
-  Lock order: Redis creation lock, then the cc-pair row, then its attempt rows.
-- `update_batch_completion_and_docs` increments `completed_batches`,
-  `total_docs_indexed`, `new_docs_indexed`, `total_chunks` under a
-  `SELECT ... FOR UPDATE` on the `IndexAttempt` row. The row lock alone
-  serializes concurrent batches, and Postgres releases it when a worker dies.
-  After the update, `resolve_index_attempt_errors_for_documents` resolves the
-  batch's open document errors with one bounded `UPDATE`, outside any lock. The
-  partial index `ix_index_attempt_errors_unresolved_cc_pair_document` keeps that
-  `UPDATE` independent of the pair's error history.
-- `check_cancellation_requested` / `request_cancellation__no_commit` implement admin-triggered
-  cancellation without Redis fencing: a boolean column on `IndexAttempt`, polled by
-  both docfetching (`_check_connector_and_attempt_status`) and
-  `check_for_indexing`'s monitor loop.
-
-### 4.6 Checkpointing and resumption
-
-A checkpointed connector (`connectors/interfaces.py:CheckpointedConnector`) yields
-its own `ConnectorCheckpoint` alongside each document batch. `checkpointing_utils.py`
-persists it to the FileStore keyed by `checkpoint_{index_attempt_id}.json`
-(`save_checkpoint`) and points `IndexAttempt.checkpoint_pointer` at it. On a fresh
-attempt for the same cc-pair, `get_latest_valid_checkpoint` looks back through up to
-`_NUM_RECENT_ATTEMPTS_TO_CONSIDER = 50` recent attempts for one whose poll window
-matches exactly and whose status `should_reuse_checkpoint()` (`FAILED`, `CANCELED`,
-or `INTERRUPTED`, but not a successful terminal state, which always starts a fresh
-window), then loads that attempt's checkpoint blob. If 50 consecutive attempts made
-no progress at all, the checkpoint is discarded and the run starts from scratch
-rather than replaying a permanently stuck cursor. The lookback, and the "most
-recent attempt" whose poll window a new attempt reuses, skip attempts with no
-`poll_range_end` (`get_recent_completed_attempts_for_cc_pair`). Such an attempt
-ended before docfetching set its window, for example one cancelled by a pause
-right after the scheduler created it. Without the skip, the next attempt takes a
-fresh window, finds no matching checkpoint and deletes the leftover batches.
-
-Checkpointing tracks **which batches were sent to the file store**, not which
-batches finished processing (`run_docfetching.py` comment, verified in source). A
-worker death after docfetching enqueued a batch but before docprocessing finished it
-is handled separately, by `reissue_old_batches`: on resume, every batch still
-sitting in `DocumentBatchStorage` for the cc-pair is re-issued as a fresh
-`docprocessing` task under the new attempt's ID, and the new attempt's batch
-numbering picks up after the reissued + already-completed count.
-
-The failed attempt's `docprocessing` tasks can still run during the reissue. Each
-task increments `completed_batches` and then deletes its batch. So
-`reissue_old_batches` moves the batches first and then reads the old attempt's
-`completed_batches` again from the database. Every old batch is then moved,
-counted, or both (both only leaves an unused batch number). The sum is the next
-batch number. The count can come from a later attempt that failed before it
-fetched anything, so the next number is also kept above every moved batch. The
-new attempt starts with `completed_batches` = next batch number - moved batches,
-set before the reissued tasks go out, so completion still fires at
-`completed_batches >= total_batches`. A batch that a task deleted before the
-move is skipped (`change_file_id` returns `False`), and `store_batch` refuses
-to overwrite an existing batch.
-
-`check_checkpoint_size` enforces a 200MB cap on the serialized checkpoint
-(`deep_getsizeof`), raising rather than silently truncating a runaway checkpoint
-(e.g., a Slack connector accumulating too much per-channel cache state).
-
-### 4.7 Heartbeats and dead-attempt detection
-
-Two independent heartbeat threads exist, started by `start_heartbeat` /
-`stop_heartbeat` in `docprocessing/heartbeat.py` and used identically by both
-`docfetching_task` and `docprocessing_task`: a daemon thread ticks every
-`INDEXING_WORKER_HEARTBEAT_INTERVAL` seconds and increments
-`IndexAttempt.heartbeat_counter` in the DB. This is a liveness signal only; it says
-nothing about progress rate.
-
-`validate_active_indexing_attempts` (`docprocessing/tasks.py`, run from
-`check_for_indexing`) compares each active attempt's `heartbeat_counter` against the
-value it last observed. If the counter hasn't advanced for
-`HEARTBEAT_TIMEOUT_SECONDS = 1800` (30 minutes):
-
-- if docfetching hasn't finished (`total_batches is None`), the attempt is
-  immediately marked `FAILED` ("No heartbeat received");
-- if docfetching finished, the check reads `RedisDocprocessing.in_flight()` /
-  `.pending()`: `in_flight > 0` means workers crashed while holding batches
-  (`FAILED`); `in_flight == 0 and pending > 0` means batches are merely queued
-  behind other work, so the attempt is left alone; `in_flight == 0 and pending == 0`
-  with no forward progress is also `FAILED`.
-
-Separately, an attempt stuck in `NOT_STARTED` for over
-`NOT_STARTED_SCAN_THRESHOLD_HOURS = 12` (its heartbeat never started) is checked
-against Celery's queued/unacked task IDs directly and marked `FAILED` if its task is
-truly gone. The `docfetching_proxy_task` watchdog additionally polls the subprocess
-every 5 seconds for worker shutdown (SIGTERM -> `mark_attempt_interrupted`, resumable),
-memory-limit breach (`INDEXING_WORKER_MEMORY_LIMIT_MB` -> `mark_attempt_failed`,
-terminates the subprocess before the kernel OOM-killer can take the whole pod), or
-the `IndexAttempt` row reaching a terminal status written by someone else, in which
-case it kills the now-orphaned subprocess.
-
-### 4.8 Pruning and deletion
-
-**Pruning** (`connector_pruning_generator_task`, `pruning/tasks.py`) does not touch
-the indexing pipeline directly. It re-enumerates the source's live document IDs
-(`extract_ids_from_runnable_connector`, a `SLIM_RETRIEVAL` connector call, no
-content fetched), diffs them against `get_documents_for_connector_credential_pair`,
-and for every ID present locally but absent from the listing, dispatches
-`DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` (`redis_connector_prune.py:generate_tasks`) on the
-`connector_deletion` queue. When the pair has an `indexing_start` and the
-connector's listing filters by the same date as indexing
-(`connectors/interfaces.py:prune_listing_honors_indexing_start`), the listing
-starts at `indexing_start`. The prune then also removes documents that still
-exist at the source but were last updated before the start. A dated listing
-omits unchanged folders, so `pruning/tasks.py:_get_live_hierarchy_node_ids`
-keeps the hierarchy nodes above each kept document. A generator that starts for a
-pair that is gone, `PAUSED` or `DELETING` does not enumerate. Like the other paths
-that abandon a prune on purpose (the deletion beat's stop timeout, a pause), it
-calls `reset_prune_and_cancel_sync_record`: the `PRUNING` sync record ends
-`CANCELED` and the fence is reset. Fence validation and startup reset a lost
-prune's fence through `fail_orphaned_prune_records`, which ends its record `FAILED`. The generator checks the status and marks
-its start under the pair's row lock, and a pause drops a queued prune under the
-same lock. A generator whose fence now holds a different prune, or whose fence
-names another Celery task, exits without a reset. A manual prune of a `PAUSED`
-pair is refused with `CONFLICT`, and `try_creating_prune_generator_task` does not
-dispatch one.
-
-**`document_by_cc_pair_cleanup_task`** (`background/celery/tasks/shared/tasks.py`) is
-the actual removal path, shared by both pruning and connector deletion. It reads
-`get_document_connector_count`: if this cc-pair is the document's only owner, it
-deletes the document from every configured `DocumentIndex` and the Postgres `Document`
-row; if other cc-pairs still reference it, it instead patches the index entry's
-access list via `Updatable.update` to drop this cc-pair's contribution, leaving the
-document itself intact.
-
-**Connector deletion** (`check_for_connector_deletion_task` ->
-`try_generate_document_cc_pair_cleanup_tasks`, `connector_deletion/tasks.py`) only
-proceeds once a cc-pair is marked `DELETING`. It explicitly refuses to start while
-an `IN_PROGRESS` index attempt, an active port attempt, or a fenced pruning run
-exists for that cc-pair (raising `TaskDependencyError`, which the caller reacts to
-by leaving the cc-pair fenced for the next beat tick rather than racing with an
-in-flight write); an active port attempt is additionally asked to cancel
-(`request_port_cancel`) so it stops writing to the index it would otherwise
-resurrect documents into. Once clear, it fans out the same
-`DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over the cc-pair's documents in batches of
-`DOCUMENT_INDEX_SYNC_MAX_TASKS`, so the broker holds at most one batch per cc-pair.
-`monitor_connector_deletion_taskset` queues the next batch each time the taskset
-drains with documents still linked, and fails the deletion when a batch does not
-lower the linked count.
-
-### 4.9 User files: the other adapter
-
-User-uploaded files (Chat attachments, Projects) go through the same
-`index_doc_batch`/chunk/embed/write pipeline but plug in
-`UserFileIndexingAdapter` (`adapters/user_file_indexing_adapter.py`) instead of
-`DocumentIndexingBatchAdapter`. Differences: `connector_id`/`credential_id` are
-always `None` (no cc-pair); its `lock_context` locks `UserFile` rows directly
-(`_acquire_user_file_locks`, `SELECT ... FOR UPDATE NOWAIT`, three retries) and
-raises `UserFileDeletingSkip` (a `ConnectorStopSignal` subclass, so the pipeline
-re-raises it rather than recording a failure) if the file is mid-delete, since a
-write would resurrect a document the delete path is actively removing and no port
-sweep exists to clean up a non-port chunk; its `post_index` sets `UserFile.status`
-to `COMPLETED`, stores plaintext for fast retrieval
-(`file_store/utils.py:store_user_file_plaintext`), and notifies assistant owners
-once every file attached to their assistant is processed. On a FUTURE/secondary
-write, `post_index` deliberately does nothing beyond the chunk write itself, leaving
-status/notification side effects to the PRESENT pass. Full ownership of user file
-storage, projects, and the upload flow belongs to [[file-store-and-user-files]];
-this component only describes how a `UserFile` reaches the vector index.
-
-### 4.10 Fleet telemetry counters
-
-The fetch, embed, and write steps send per-batch counter deltas to the process's
-fleet sender through `utils/fleet_telemetry.py:emit_stage_counter`: fetch in
-`run_docfetching.py:_timed_connector_runs`, embed in
-`indexing_pipeline.py:embed_and_stream`, and write in
-`opensearch/client.py:_report_written_chunks` ([[document-index]] §4.2). These
-calls never raise into the pipeline. The sender sums the deltas per attempt and
-stage ([[observability]] §4.11). Attempt state reaches the fleet only from the
-collection pass's reads of `IndexAttempt` rows.
-
-A spawned docfetching process starts its own sender in `job_client.py:_initializer`
-and stops it with a bounded wait (`EXIT_FLUSH_SECONDS`) in that function's `finally`
-block. `docfetching/tasks.py:_docfetching_task` ends with `os._exit`, which skips
-that block, so it calls `stop_telemetry` itself first.
-
----
-
-## 5. Contracts and invariants
-
-1. **An index attempt writes only to the index of its own `SearchSettings`.**
-   Docprocessing builds a single-index handle with `get_default_document_index(...,
-   None)`. The port backfill, not a second write, fills the FUTURE index; see
-   [[document-index]] §5 for the retrieval-side half of this contract.
-2. **A document's chunks are grouped per document, per index.** All
-   chunks for one document must be passed to `DocumentIndex.index()` in a single
-   call (never split across calls). The write is not atomic: the OpenSearch
-   implementation flushes a large document in several bulk writes, so a late
-   failure can leave earlier chunks indexed; `write_chunks_to_vector_db_with_backoff`'s
-   per-document retry loop groups by document ID for exactly this reason, and
-   `_embed_chunks_to_store` strips a failed document's chunks from every already-
-   written sub-batch so a partial embedding failure never leaves stale successor
-   chunks in `ChunkBatchStore`.
-3. **A shortened re-indexed document's stale trailing chunks are the index
-   backend's responsibility to delete**, driven by `IndexingMetadata.doc_id_to_chunk_cnt_diff`
-   (computed here, from `doc_id_to_previous_chunk_cnt` vs. `doc_id_to_new_chunk_cnt`);
-   this component supplies the diff, [[document-index]] enforces the deletion.
-4. **Checkpoints must be resumable across a worker crash.** A checkpoint tracks
-   what was staged to the file store, not what finished processing; the reissue path
-   (§4.6) is what makes an in-flight batch survive a crash, not the checkpoint
-   itself.
-5. **A heartbeat must be refreshed or the attempt is reaped.** Any new long-running
-   step inside `docfetching_task`/`docprocessing_task` that can block for more than
-   `HEARTBEAT_TIMEOUT_SECONDS` without the heartbeat thread's DB write succeeding
-   will eventually be killed as dead, even if it's still making real progress.
-6. **ACLs are attached at index-write time, not read time.** `enrich_chunk` bakes
-   `access`, `document_sets`, `boost`, `cc_pair_ids`, and ancestor hierarchy into the chunk at write.
-   A permission change requires either a metadata-only `Updatable.update` patch (no
-   re-embed) or a full reindex, depending on what changed; see [[access-control]].
-7. **The chunk schema this component produces must match the index mapping
-   exactly.** `DocMetadataAwareIndexChunk`'s fields and the OpenSearch schema are
-   independently maintained; see [[document-index]] §5 for the enforcement (a hard
-   write-time error under `"dynamic": "strict"`, not a silent drop).
-8. **The two dedup gates in `get_docs_to_update` must not be reordered or merged.**
-   A timestamp advance is authoritative and skips the content-hash check on purpose
-   (some connectors replace image bytes in place under the same ID); breaking this
-   makes those updates silently invisible to indexing.
-9. **A FUTURE/secondary write must not touch the shared PRESENT-only content
-   hash.** `index_to_secondary=True` disables both the hash gate and the
-   post-write hash stamp; violating this cross-suppresses writes between the two
-   generations during a swap.
-10. **`try_create_index_attempt`'s fence excludes targeted-reindex attempts on
-    purpose.** Any change that makes a full-run and a targeted-reindex attempt
-    compete for the same fence row removes the concurrency this design relies on.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[connectors]]: supplies the `Document`/`Section` stream and the
-  `ConnectorCheckpoint` model this component persists and resumes from.
-- [[cc-pairs-and-credentials]]: owns the `ConnectorCredentialPair` row, its status
-  (`ACTIVE`/`PAUSED`/`DELETING`), and the scheduling trigger `check_for_indexing`
-  reads.
-- [[document-index]]: the `DocumentIndex` interface this pipeline writes through,
-  the embedding-model swap state machine that decides PRESENT vs. FUTURE, and the
-  chunk schema this pipeline's output must match.
-- [[access-control]]: supplies `get_access_for_documents` / `get_access_for_user_files`,
-  baked into every chunk at enrichment time.
-- [[permission-sync]]: a separate flow keeps ACLs current between full reindexes;
-  this component only attaches whatever ACL state exists at index time.
-- [[file-store-and-user-files]]: staged/uploaded file bytes
-  (`get_default_file_store`), and the `UserFile` model the user-file adapter writes
-  status back to.
-- [[llm-providers]]: resolves the contextual-RAG LLM and the image-summarization
-  vision LLM used during chunk enrichment.
-- [[background-jobs]]: the Celery queue/worker/beat infrastructure every task here
-  runs on.
-- [[multi-tenancy]]: every DB/Redis access here is tenant-scoped
-  (`get_session_with_current_tenant`, `TenantRedisClient`).
-
-**Depended on by**
-- [[document-index]]: waits on `check_and_perform_index_swap` to promote a FUTURE
-  generation once this pipeline's attempts against it reach the swap criterion.
-- [[cc-pairs-and-credentials]]: the admin connector-status page reads `IndexAttempt`
-  rows this component writes.
-- [[observability]]: the fleet telemetry collection pass reads `IndexAttempt`,
-  `IndexAttemptError`, and `IndexAttemptStageMetric` rows (`db/fleet_telemetry.py`),
-  and the pipeline sends stage counters to the fleet sender (§4.10).
-- Nothing in the retrieval or chat path calls into this component directly; it is a
-  write-only, background producer for [[document-index]].
-
----
-
-## 7. Blast radius
-
-| If your change… | Also check |
-|---|---|
-| adds a chunk field | `onyx/indexing/models.py:DocAwareChunk`/`IndexChunk`/`DocMetadataAwareIndexChunk`, the chunker/embedder code that populates it, both `IndexingBatchAdapter` implementations' `enrich_chunk`, and [[document-index]]'s schema and migration story |
-| changes the chunker (splitting, overlap, title/metadata prefix budget) | `chunker.py:Chunker`, all three `SectionChunker` implementations, `port_reembed.py` (the AUGMENTATION re-embed path reconstructs chunk text using the same budget logic and will silently drift if you change one without the other), and any admin-visible chunk-count/preview UI |
-| changes a Celery task signature or queue | `docfetching/tasks.py`, `docprocessing/tasks.py`, `beat_schedule.py`'s queue/priority entries, and every `app.send_task` call site that constructs the kwargs by hand (there is no shared schema enforcing the two stay in sync across a rolling deploy) |
-| changes the checkpoint format (`ConnectorCheckpoint` subclass fields) | `checkpointing_utils.py:load_checkpoint`/`get_latest_valid_checkpoint`, and every in-flight `IndexAttempt.checkpoint_pointer` written by the old format: a rolling deploy must tolerate reading both |
-| changes `IndexAttempt` states (`IndexingStatus`) | `should_reuse_checkpoint()`, `is_terminal()`, `is_successful()`, every `mark_attempt_*` function in `db/index_attempt.py`, `validate_active_indexing_attempts`, and the admin connector-status UI that renders the enum |
-| changes `IndexingCoordination` locking | every concurrent `docprocessing_task` for the same attempt; keep each counter increment under the `IndexAttempt` row lock, and keep slow work (such as error resolution) out of that transaction |
-| changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), the FUTURE-write path (`ignore_content_hash_gate=True`), and the forced path (`force_update=True`: the per-document retry and the tabular re-chunk migration) |
-| changes pruning or deletion's document-removal task | both callers (`pruning/tasks.py` and `connector_deletion/tasks.py`) share `document_by_cc_pair_cleanup_task`; a change there affects both flows even though they trigger differently |
-| changes the reindex-port re-embed logic | `port_reembed.py`'s two strategies must still match what the chunker/embedder currently produce for a fresh index, or the ported chunks will diverge from a true reindex |
-| renames or drops an `IndexAttempt`, `IndexAttemptError`, or `IndexAttemptStageMetric` column | the fleet queries (`db/fleet_telemetry.py:attempt_rows`, `stage_rows`) and [[observability]] §7; only the collection pass fails, so no indexing test catches it |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# Unit tests for chunking/embedding internals
-cd backend && uv run pytest tests/unit/onyx/indexing -x
-cd backend && uv run pytest tests/unit -k "chunker or chunking or embedder"
-
-# External dependency unit tests (real Postgres/Redis/OpenSearch, connector mocked)
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/indexing
-
-# Integration tests for the full docfetching -> docprocessing -> index flow
-uv run --env-file .vscode/.env pytest backend/tests/integration -k "indexing or pruning or connector_deletion"
-```
-
-See `backend/AGENTS.md` for the authoritative commands and required env.
-
-### Manual reproduction
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log
-   backend/log/docfetching_debug.log backend/log/docprocessing_debug.log`.
-2. Open `http://localhost:3000`, sign in as `admin_user@example.com` /
-   `TestPassword123!`, and connect a small source (or trigger a reindex on an
-   existing cc-pair from its status page).
-3. Watch the connector status page: document count climbing, then a completed run
-   with a final doc/chunk count. Trigger a failure (e.g. an oversized fake document)
-   and confirm it surfaces as a per-document error with a link, not a run-wide
-   failure.
-4. Inspect the attempt directly:
-   ```bash
-   PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}" -U postgres \
-     -c "SELECT id, status, total_batches, completed_batches, total_docs_indexed, total_chunks, heartbeat_counter FROM index_attempt ORDER BY id DESC LIMIT 5;"
-   ```
-5. With a checkpoint-capable connector (a `CheckpointedConnector`), kill the
-   docprocessing worker mid-run (or `docker stop` the container) and
-   confirm: the attempt eventually flips to `FAILED` via the heartbeat check (up to
-   `HEARTBEAT_TIMEOUT_SECONDS`), and a fresh scheduled attempt resumes from the
-   saved checkpoint rather than re-fetching everything. Other connectors
-   restart extraction by design.
-6. Delete a document from the source and wait for the next prune cycle; confirm it
-   drops out of search results and its `Document` row is removed (or its ACL
-   patched, if another cc-pair still owns it).
-
-### What "working" looks like
-
-- `completed_batches` reaches `total_batches` and the attempt reaches a terminal
-  `IndexingStatus` that matches whether any `IndexAttemptError` rows exist
-  (`SUCCESS` vs. `COMPLETED_WITH_ERRORS`).
-- No document is missing its chunks in the index while its `Document.chunk_count`
-  in Postgres says otherwise (§5 contract 2/3).
-- A resumed attempt after a crash does not re-process already-completed batches,
-  and does not lose batches that were staged but never processed.
-- Pruned/deleted documents disappear from search results within one cycle of the
-  relevant beat task, not immediately (there is no synchronous propagation).
-
----
-
-## 9. Footguns
-
-- **The docfetching-to-docprocessing handoff is not `ChunkBatchStore`.** It is easy
-  to conflate the two file-backed stores in this component: `DocumentBatchStorage`
-  (file-store-backed, crosses the Celery task boundary, holds raw `Document`
-  objects) versus `ChunkBatchStore` (local temp-dir pickle, never leaves one
-  docprocessing task's process, holds embedded chunks). See §4.2.
-- **Checkpointing tracks what was staged, not what finished indexing.** A batch can
-  be checkpointed as "fetched" while its `docprocessing` task is still queued or
-  even lost; `reissue_old_batches` (not the checkpoint) is what recovers a batch
-  that never got processed after a crash.
-- **`PERSISTENT_INDEXING` changes failure semantics for the whole attempt, not just
-  logging.** With it on, an unhandled exception inside `_docprocessing_task` is
-  caught, converted into a generic `ConnectorFailure` per document (or one
-  `EntityFailure` if the batch never loaded), and the batch is marked "complete"
-  with zero counts so the attempt can still reach `COMPLETED_WITH_ERRORS`. Without
-  it, the same exception fails the task outright. Celery does not redeliver it;
-  the batch stays in storage for the next attempt's `reissue_old_batches`.
-- **Batch completion uses no Redis lock on purpose.** A Redis lock with a
-  multi-hour TTL around the counter update outlived any holder killed mid-section
-  and stopped completions for every docprocessing thread of the pair until it
-  expired. The `IndexAttempt` row lock already serializes the increments and dies
-  with its connection. Do not add a cross-process lock around this section.
-- **The targeted-reindex fence exclusion is deliberate, not an oversight.**
-  `try_create_index_attempt`'s active-attempt check explicitly filters out
-  `targeted_reindex_job_id IS NOT NULL` rows, so a targeted reindex and a full
-  connector crawl can run concurrently against the same cc-pair. The per-document
-  row lock in `prepare_to_modify_documents` is what actually prevents them from
-  corrupting each other's writes, not the attempt-level fence.
-- **`Chunker.chunk_token_limit * 2` is passed as the contextual-RAG chunk token
-  limit**, a "fudge factor" the code comments as compensating for the chunker's
-  tokenizer differing from the LLM's tokenizer. It is not a precise budget
-  calculation.
-- **A document-push destination is single-tenant only and fires on a cached local
-  read.** `get_document_push_config()` is `lru_cache(maxsize=1)`, so changing
-  `DOCUMENT_PUSH_ENDPOINT_URL` at runtime (without a process restart) will not be
-  picked up.
+**Why two phases.** A connector is a serial generator that runs third-party
+SDK code for minutes or hours. Docfetching runs it in a spawned process under a
+watchdog (`background/indexing/job_client.py`), so the watchdog can kill it on
+a memory limit or a terminal status without losing the worker. The work after
+fetch is parallel and needs the model server. Docprocessing runs one task per
+batch on its own worker pool, so embedding scales apart from fetching.
+The staged batch file is the handoff and the recovery unit
+([[#staged-batch-reissue]]). The spawned process ends with `os._exit`
+(`background/celery/tasks/docfetching/tasks.py:_docfetching_task`), which skips
+the `finally` block of `background/indexing/job_client.py:_initializer`; cleanup
+that must run there goes before the exit.
+
+**Two batch stores.** `file_store/document_batch_storage.py:DocumentBatchStorage`
+holds raw batches in the file store; they cross the task boundary and survive a
+crash. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
+local disk inside one docprocessing task, so a large batch is never in memory.
+
+**Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
+decides which documents to re-chunk. Gate 1 skips a document whose
+`doc_updated_at` did not advance. Gate 2 skips one whose `content_hash()` is
+unchanged. An ACL change bypasses both. Docprocessing turns gate 1 off, because
+the connector already filtered by time. A FUTURE attempt turns gate 2 off.
+`force_update` turns both off, for the per-document retry and the tabular
+re-chunk migration.
+
+**The write.** The enricher bakes access, document sets, boost, cc-pair IDs and
+hierarchy ancestors into each chunk. A later permission change reaches the index
+through the metadata sync ([[document-index]]), not through re-indexing. When
+OpenSearch has a write block (`OpenSearchIndexWriteBlockedError`), every
+document fails alike, so `indexing/vector_db_insertion.py:write_chunks_to_vector_db_with_backoff`
+skips the per-document retry and records one failure per document.
+
+**Coordination.** `db/indexing_coordination.py:IndexingCoordination` writes an
+attempt's batch counters ([[#batch-completion-row-lock]]).
+`try_create_index_attempt` is the per cc-pair and search-settings fence: a
+`SELECT ... FOR UPDATE NOWAIT` on any open full-run attempt, in the insert's
+transaction. Creators take the tenant Redis creation lock, then the cc-pair row
+lock, then the attempt rows. Pause and delete take the same cc-pair row lock,
+so they never miss an attempt that is being created.
+
+**Liveness and outside stops.** `background/celery/tasks/docprocessing/heartbeat.py:start_heartbeat`
+runs a thread in both phases that increments `IndexAttempt.heartbeat_counter`.
+`background/celery/tasks/docprocessing/tasks.py:validate_active_indexing_attempts`
+fails an attempt whose counter did not move for `HEARTBEAT_TIMEOUT_SECONDS`;
+after fetch ends, it waits instead while batches are only queued
+(`RedisDocprocessing`). It also fails a `NOT_STARTED` attempt older than
+`NOT_STARTED_SCAN_THRESHOLD_HOURS` whose task Celery does not hold. An admin
+cancel sets `IndexAttempt.cancellation_requested`, which docfetching and the
+monitor poll. The watchdog kills the spawned process when its RSS passes
+`INDEXING_WORKER_MEMORY_LIMIT_MB` (before the kernel OOM killer takes the pod)
+or another writer sets a terminal status. It marks the attempt `INTERRUPTED` on
+worker shutdown.
+
+**Checkpoints and reissue.** `background/indexing/checkpointing_utils.py:get_latest_valid_checkpoint`
+reuses the checkpoint of a recent failed, canceled or interrupted attempt with
+the same poll window. Docfetching starts fresh when the attempt is from the
+beginning, is a backfill, follows a success, or the connector config hash
+changed. `background/indexing/run_docfetching.py:reissue_old_batches` sends every
+batch still in storage for the cc-pair as a task of the new attempt. It runs
+when a checkpointed connector resumes, or when the previous attempt finished
+fetching. Otherwise docfetching throws those batches away, because it fetches
+them again.
+
+**Dispatch priority and the first-index hold.** `docfetching_priority` sends a
+pair's first index at HIGH and refreshes at MEDIUM ([[#future-attempts-first]]);
+priority orders the queue only. While
+`connectors/capability_checks/indexing_hold.py:get_first_indexing_hold` returns
+a hold, a pair's first attempt is created with no task, and each
+`check_for_indexing` tick checks again (`try_dispatching_waiting_attempt`).
+With `CONNECTOR_CHECKS_ENABLED` off (the default), nothing is held
+([[connector-capability-checks]]).
+
+**Tabular content.** A connector turns a CSV or a workbook sheet into a
+`TabularSection` whose CSV is staged in the file store ([[connectors]]).
+`indexing/chunking/document_chunker.py:DocumentChunker` groups a document's
+tabular sections by `link` and sends each group to
+`TabularChunker.chunk_workbook` once, so a document with two attachments yields
+two sets of chunks. `indexing/chunking/tabular_section_chunker/workbook_chunks.py:build_workbook_chunks`
+emits an overview, the full rows of small sheets, and a bounded profile of large
+sheets. With `SKIP_SPREADSHEET_CONTENT` on, connectors replace the sections with
+one placeholder, and `indexing/indexing_pipeline.py:skip_tabular_content` does
+the same in docprocessing and targeted reindex. User files and the ingestion API
+keep their content.
+
+**The tabular re-chunk migration** (`background/indexing/run_tabular_rechunk.py`,
+on beat only with `TABULAR_RECHUNK_ENABLED`) re-chunks stored tabular documents
+that hold more chunks than the chunker can produce. It reads the raw file from
+the file store, never the connector. It passes `force_update`, so its adapter
+re-reads `file_id` and `chunk_count` under the document lock and raises when a
+crawl rewrote the document while the batch embedded. It runs once: a stored
+record (`KV_TABULAR_RECHUNK_PROGRESS_KEY`) stops it even while the variable
+stays set. To run it again, delete that record through the KV store.
+
+**Contextual RAG.** The pipeline asks an LLM for a document summary
+(`indexing/indexing_pipeline.py:add_document_summaries`) and a context line per
+chunk, and embeds both. `SearchSettings.enable_contextual_rag` or the
+`ENABLE_CONTEXTUAL_RAG` env flag turns it on; the setting cannot turn the flag
+off ([[document-index#contextual-rag-validator]]).
+
+**Hooks and push.** The document-ingestion hook and the document-push sink
+call the customer endpoint once per document, in sequence. The push runs only
+for PUBLIC cc-pairs, never in a from-beginning index, and never under
+`MULTI_TENANT` (`indexing/indexing_pipeline.py:_maybe_push_documents`, [[hooks]]).
+`indexing/document_push.py:get_document_push_config` is cached per process, so
+a changed push endpoint needs a restart.
+
+**Credential errors.** A connector that raises `ConnectorValidationError`
+cancels the attempt. When the 5 most recent completed attempts of a PRESENT,
+non-backfill run all ended this way, `connector_document_extraction` marks the
+cc-pair `INVALID`. A `RuntimeError` fails the attempt and does neither, so pick
+the error type on purpose in auth code.
+
+## Contracts and traps
+
+1. `one-index-per-batch` **A batch writes to one index only:** the index of its
+   attempt's own `SearchSettings`. During a REINDEX or ACTIVE_ONLY reindex,
+   `background/celery/tasks/docprocessing/tasks.py:check_for_indexing` creates
+   attempts for both generations; an INSTANT reindex creates none for FUTURE.
+   Do not make docprocessing write both: the port fills FUTURE, and a second
+   writer would race its create-only copy.
+2. `document-written-whole` **A document's chunks go to `DocumentIndex.index()`
+   in one call.** The index deletes stale trailing chunks from
+   `IndexingMetadata.doc_id_to_chunk_cnt_diff`. The write is not atomic, so the
+   per-document retry in
+   `indexing/vector_db_insertion.py:write_chunks_to_vector_db_with_backoff`
+   groups by document. An embedding failure in a later sub-batch makes
+   `indexing/chunk_batch_store.py:ChunkBatchStore.scrub_failed_docs` remove the
+   document's earlier chunks, so a document is written whole or not at all.
+3. `staged-batch-reissue` **A checkpoint records what was staged, not what was
+   processed.** Only `background/indexing/run_docfetching.py:reissue_old_batches`
+   recovers a staged batch that was never processed. A change to batch numbering
+   must keep its arithmetic: it moves old batches first, then reads the old
+   `completed_batches` again, because old tasks can still finish during the move.
+4. `staged-data-crosses-deploys` **Staged batches and checkpoints outlive the
+   code that wrote them.** A newer docprocessing pod reads a batch that an
+   older docfetching pod staged, and a reissue can read one from days before.
+   A change to `Document` or a section model must still validate old batch
+   JSON; `file_store/document_batch_storage.py:DocumentBatchStorage._deserialize_documents`
+   normalizes or skips the old shapes it knows. A checkpoint that fails
+   validation does not fail the attempt: `get_latest_valid_checkpoint` logs it
+   and starts the run from the beginning.
+5. `acks-on-receipt` **`docprocessing_task` acks on receipt
+   (`acks_late=False`), as docfetching does.** With late acks, the broker
+   redelivers a batch that runs past the visibility timeout, and the duplicate
+   completion ends the attempt early. A lost batch is safe: its file stays in
+   storage for the next attempt.
+6. `batch-completion-row-lock` **Batch completion takes only the attempt row
+   lock.** `db/indexing_coordination.py:IndexingCoordination.update_batch_completion_and_docs`,
+   called from `background/celery/tasks/docprocessing/tasks.py:_docprocessing_task`,
+   increments the counters under `SELECT ... FOR UPDATE` on the `IndexAttempt` row.
+   Postgres serializes concurrent batches and releases the lock when a worker's
+   connection dies. Do not add a Redis or other cross-process lock around this
+   section: a lock that outlives a holder killed mid-section stops completions
+   for every docprocessing thread of the pair until it expires. Keep slow work,
+   such as `db/index_attempt.py:resolve_index_attempt_errors_for_documents`,
+   out of the row-lock transaction.
+7. `heartbeat-must-advance` **A long new step must not stop the heartbeat.** A
+   step that blocks the database write of
+   `background/celery/tasks/docprocessing/heartbeat.py:start_heartbeat` for
+   `HEARTBEAT_TIMEOUT_SECONDS` gets its attempt failed while it still works.
+8. `dedup-gate-order` **Do not reorder or merge the two dedup gates** in
+   `indexing/indexing_pipeline.py:get_docs_to_update`. A timestamp advance is
+   authoritative. Some connectors replace image bytes in place under the same
+   ID, and the content hash cannot see that.
+   `connectors/models.py:DocumentBase.content_hash` walks text and image
+   sections only, so a changed spreadsheet looks unchanged to gate 2.
+9. `future-ignores-content-hash` **A FUTURE write must not read or stamp the
+   content hash.** The hash column is shared and belongs to PRESENT. If FUTURE
+   uses it, the two generations suppress each other's writes during a reindex.
+10. `targeted-reindex-outside-fence` **The attempt fence excludes targeted
+   reindex on purpose.**
+   `db/indexing_coordination.py:IndexingCoordination.try_create_index_attempt`
+   ignores rows with `targeted_reindex_job_id`. A targeted reindex and a full
+   crawl run at the same time. The per-document row lock in
+   `backend/onyx/db/document.py:prepare_to_modify_documents` keeps their writes
+   apart. The heartbeat check skips these attempts too; the targeted-reindex
+   job owns their lifecycle.
+11. `chunk-text-second-copy` **The chunk text recipe has a second copy.**
+    `indexing/port_reembed.py` rebuilds the embedding input from stored chunks
+    for the reindex port. A change to title prefix, metadata suffix or
+    contextual-RAG text in the chunker must change it too, or ported chunks
+    differ from freshly indexed ones.
+12. `checkpoint-reuse-guards` **Keep the three guards on checkpoint reuse.**
+    `db/index_attempt.py:get_recent_completed_attempts_for_cc_pair` skips
+    attempts with no `poll_range_end`. Without the skip, an attempt that a pause
+    canceled before docfetching set its window makes the next attempt take a
+    fresh window, find no checkpoint and delete the staged batches.
+    `background/indexing/checkpointing_utils.py:get_latest_valid_checkpoint`
+    drops the checkpoint after `_NUM_RECENT_ATTEMPTS_TO_CONSIDER` attempts in a
+    row with no progress.
+    `background/indexing/checkpointing_utils.py:check_checkpoint_size` fails the
+    attempt above `CHECKPOINT_SIZE_LIMIT_BYTES`; a connector must cap its own
+    checkpoint state.
+13. `future-attempts-first` **Do not starve FUTURE attempts of a finalizing
+    reindex.** While a port-flow reindex is finalizing
+    (`db/port_attempt.py:reindex_finalizing`: every connector port succeeded),
+    `background/celery/tasks/docfetching/task_creation_utils.py:docfetching_priority`
+    sends FUTURE attempts at HIGH. `background/indexing/run_docfetching.py`
+    applies the same rule to the docprocessing sends and checks it again during
+    a long FUTURE run. The index swap waits until no FUTURE attempt of a
+    required pair runs ([[document-index]]). A change to attempt creation or
+    priority that delays FUTURE attempts stalls the swap.
+14. `tabular-chunks-bounded` **Tabular chunk count does not grow with row
+    count.** `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file, and
+    there is no per-row chunking.
+    `indexing/chunking/tabular_section_chunker/workbook_chunks.py:build_workbook_chunks`
+    queues one block per sheet before any sheet gets extras, and the overview
+    names every sheet, so a full budget costs detail, not whole sheets. A file
+    that yields no chunks still gets the empty payload of
+    `indexing/chunking/document_chunker.py:DocumentChunker.chunk`, so it is
+    findable by title and metadata only. Stream sheets from the staged CSV; do
+    not materialize a sheet in memory.
+15. `tabular-summaries-honest` **A tabular chunk never claims more than the data
+    proves.** Only a column's own values settle the day and month order of a
+    date (`indexing/chunking/tabular_section_chunker/cell_values.py:DateOrder`);
+    never assume a locale. Percentages and mixed currencies are never summed,
+    and a clipped breakdown says how much it shows. The tests in
+    `backend/tests/unit/onyx/indexing/test_workbook_chunks.py` hold the cases.
+
+## Decisions
+
+- **`PERSISTENT_INDEXING` trades a failed attempt for per-document errors.**
+  With it on, an unexpected docprocessing exception becomes one failure per
+  document, and the batch counts as complete, so the attempt can end
+  `COMPLETED_WITH_ERRORS` (`indexing/persistent_indexing.py`). Without it, the
+  task fails and the next attempt reissues the batch. Connector generator
+  exceptions in docfetching fail the attempt either way.
+- **The embedding rate limit blocks instead of failing.** The limit is one
+  sliding window per tenant in Redis
+  (`natural_language_processing/embedding_rate_limit.py`). A full window or a
+  provider 429 makes the worker thread wait, so it takes no new task.
+  Self-hosted waits up to hours. Cloud workers are shared by all tenants, so
+  cloud backs off for about a minute and then fails the batch.
+- **LLM enrichment respects the global spend limit.** When the global token
+  budget is spent, documents that need contextual RAG or an image summary
+  become per-document failures. They are not indexed without enrichment.
+  [[rate-and-usage-limits]] owns the budget.
+
+## Known issues
+
+- **A PRESENT attempt can chunk with FUTURE settings.**
+  `run_indexing_pipeline` takes multipass and contextual-RAG settings from the
+  FUTURE `SearchSettings` whenever one exists, but `docprocessing_task` embeds
+  with the attempt's own. It is unconfirmed as a bug; check before you rely on
+  either behaviour.
+- **Index-time LLM steps skip the provider cost limit.** Contextual RAG
+  (`llm/factory.py:get_llm_for_contextual_rag`) and image summarization
+  (`llm/factory.py:get_default_llm_with_vision`) do not call
+  `check_llm_cost_limit_for_provider`. Only the global token budget gates them.
+  Whether that is on purpose is open; [[rate-and-usage-limits]] decides.
+
+## Dependencies
+
+- [[connectors]]: the document stream, checkpoints, tabular sections, failures.
+- [[cc-pairs-and-creds]]: the cc-pair, its status and its schedule.
+- [[document-index]]: `DocumentIndex.index()`, the chunk schema, and which
+  `SearchSettings` generations exist.
+- [[access-control]]: the ACL that the enricher attaches.
+- [[background-jobs]]: queues, beat, `TenantAwareTask` and the task conventions.
+- [[llm-providers]]: the contextual-RAG and image-summary models.
+- [[file-store-and-user-files]]: storage for batches, checkpoints and CSVs.
+- [[rate-and-usage-limits]]: the global budget check and the chunk usage meter.
+
+## Recipes
+
+- `chunk-field` **A chunk field.** Copy how `doc_summary` flows: add the field
+  to the chunk models in `indexing/models.py`, and fill it in the chunker or the
+  enricher. Check every adapter (`git ls-files backend/onyx/indexing/adapters`).
+- `docprocessing-long-step` **A long step in docprocessing.** Copy the
+  `time_stage_if_set(IndexAttemptStage.CONTEXTUAL_RAG, ...)` block of
+  `run_indexing_pipeline`. Add the
+  stage to `db/index_attempt_metrics_models.py:IndexAttemptStage` and to its
+  hand mirror `web/src/lib/types.ts:INDEX_ATTEMPT_STAGES`, in the same order.
+  Keep the heartbeat moving ([[#heartbeat-must-advance]]), and make a failure a
+  per-document failure, not a task failure.
+- `llm-enrichment-step` **An LLM enrichment step.** Copy contextual RAG
+  (`add_contextual_summaries`), and check for an existing output first
+  (`doc_summary`, image summaries). Add the step to `llm_enrichment_configured`
+  in `run_indexing_pipeline`, so the `INDEXING_PIPELINE_TRACE_NAME` root trace
+  opens and usage is recorded. Gate it on `_system_llm_enrichment_is_allowed`.
+  Give `_partition_documents_blocked_by_llm_spend_limit` a keyword flag and a
+  `*_ENRICHMENT_NAME` constant for the step. Call the LLM with
+  `TraceContentMode.METADATA_ONLY`, so document text does not reach the trace
+  backends. Give it an `LLMFlow` and add the flow to
+  `tracing/flows.py:SYSTEM_TEXT_GENERATION_FLOWS`. Let a failed call raise, so
+  the document fails alone (`_summarize_document`). If it changes the embedded
+  text, change `indexing/port_reembed.py` too ([[#chunk-text-second-copy]]).
+- `pipeline-caller` **A new caller of `run_indexing_pipeline`.** Copy
+  `background/indexing/run_targeted_reindex.py`. Pass the right gate flags
+  ([[#dedup-gate-order]], [[#future-ignores-content-hash]]) and an adapter. Pass
+  `skip_spreadsheet_content` only for connector content. List the callers with
+  `git grep -l 'run_indexing_pipeline(' backend/onyx backend/ee`.
+- `tabular-chunking-change` **A change to tabular chunking.** Change the profile
+  in `indexing/chunking/tabular_section_chunker/workbook_chunks.py`, keep
+  [[#tabular-summaries-honest]], and add a case to the tests it names. Chunks in
+  the index keep the old shape until the document changes. To rewrite them, run
+  the tabular re-chunk migration (Architecture); it re-chunks documents whose
+  chunk count passes the new ceiling.
+- `investigate-stuck-attempt` **Investigate a stuck or slow attempt.** Read the
+  pair's latest `index_attempt` rows. An empty `total_batches` means docfetching
+  still runs. A `heartbeat_counter` that does not move means no worker holds the
+  attempt. `completed_batches` that stops below `total_batches` means batches
+  wait in the queue or were lost; the `RedisDocprocessing` counters tell which.
+  The `index_attempt_stage_metric` rows show the slow stage.
+- `reproduce-resume` **Reproduce a resume.** Start a run of a checkpointed
+  connector, not the file connector; list them with
+  `git grep -l CheckpointedConnector backend/onyx/connectors`. Kill the
+  docprocessing worker during the run. The attempt fails after the heartbeat timeout, and the next attempt resumes from
+  the checkpoint and reissues the staged batches. At the end,
+  `completed_batches` equals `total_batches`.
+
+## Verification
+
+- Unit tests: `backend/tests/unit/onyx/indexing/`, `backend/tests/unit/onyx/background/`.
+- External dependency tests: `backend/tests/external_dependency_unit/indexing/`
+  and `backend/tests/external_dependency_unit/db/`.
+- Integration tests: `backend/tests/integration/tests/indexing/`.

@@ -4,8 +4,9 @@ import { InputSingleSelect, OverflowText, Text } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
+import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
+import { SvgOnyxLogo, SvgOnyxLogoWordmark, SvgOnyxWordmark } from "@opal/logos";
 import { IconProps } from "@opal/types";
 import {
   DEFAULT_LOCALE,
@@ -74,7 +75,7 @@ export function FoldableLogo({
 }: FoldableLogoProps) {
   const t = useTranslations("common");
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
+  const { enterprise, logoUrl, hide_onyx_branding, isLoading } = useSettings();
   const logoDisplayStyle = enterprise?.logo_display_style;
   const applicationName = enterprise?.application_name;
 
@@ -82,7 +83,7 @@ export function FoldableLogo({
     return folded ? (
       <Logo onyxBranded size={resolvedSize} className={className} />
     ) : (
-      <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+      <SvgOnyxLogoWordmark size={resolvedSize} className={className} />
     );
   }
 
@@ -120,23 +121,94 @@ export function FoldableLogo({
     );
   };
 
-  // Handle "logo_only" display style
-  if (logoDisplayStyle === "logo_only") {
-    return renderNameAndPoweredBy({ includeLogo: true, includeName: false });
+  // No custom name: the Onyx wordmark beside the mark, which a custom logo
+  // overrides.
+  if (!applicationName) {
+    if (folded) return <Logo size={resolvedSize} className={className} />;
+    if (!logoUrl) {
+      return <SvgOnyxLogoWordmark size={resolvedSize} className={className} />;
+    }
+    return (
+      <Section
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="start"
+        gap={2}
+        width="fit"
+        height="fit"
+      >
+        <Logo size={resolvedSize} className={className} />
+        <SvgOnyxWordmark size={resolvedSize} />
+      </Section>
+    );
   }
 
-  // Handle "name_only" display style
-  if (logoDisplayStyle === "name_only") {
-    return renderNameAndPoweredBy({ includeLogo: false, includeName: true });
+  // A custom name, with the custom logo or the Onyx mark. The display style
+  // can leave out either one.
+  return renderNameAndPoweredBy({
+    includeLogo: logoDisplayStyle !== "name_only",
+    includeName: logoDisplayStyle !== "logo_only",
+  });
+}
+
+/**
+ * The sidebar's logo mark: the workspace's custom logo, or the Onyx mark.
+ * Renders nothing when a workspace with a custom name shows the name only.
+ */
+export function SidebarLogoMark({ size }: { size: number }) {
+  const { enterprise } = useSettings();
+  if (
+    enterprise?.application_name &&
+    enterprise.logo_display_style === "name_only"
+  ) {
+    return null;
+  }
+  return <Logo size={size} />;
+}
+
+/**
+ * The sidebar's wordmark, beside the mark: the custom name, which overrides
+ * the Onyx wordmark, with the "Powered by" line unless Onyx branding is
+ * hidden. Without a custom name, the Onyx wordmark.
+ */
+export function SidebarWordmark({ size }: { size: number }) {
+  const t = useTranslations("common");
+  const { enterprise, hide_onyx_branding, isLoading } = useSettings();
+  const logoDisplayStyle = enterprise?.logo_display_style;
+  const applicationName = enterprise?.application_name;
+
+  if (!applicationName) {
+    return <SvgOnyxWordmark size={size} />;
   }
 
-  // Handle "logo_and_name" or default behavior
-  return applicationName ? (
-    renderNameAndPoweredBy({ includeLogo: true, includeName: true })
-  ) : folded ? (
-    <Logo size={resolvedSize} className={className} />
-  ) : (
-    <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+  return (
+    /* The name's line is as tall as the 28px mark, so the two sit level; the
+    "Powered by" line hangs below and never moves the name. */
+    <Section
+      flexDirection="column"
+      alignItems="start"
+      justifyContent="start"
+      gap={0}
+      height="fit"
+      className="min-w-0 flex-1"
+    >
+      {logoDisplayStyle !== "logo_only" && (
+        <OverflowText
+          as="p"
+          textPosition="text-start"
+          font="heading-h3"
+          color="text-05"
+        >
+          {applicationName}
+        </OverflowText>
+      )}
+      {/* Wait for settings so a hidden tagline never flashes. */}
+      {!isLoading && !hide_onyx_branding && (
+        <Text font="secondary-body" color="text-03" maxLines={1}>
+          {t("logo.poweredBy.label")}
+        </Text>
+      )}
+    </Section>
   );
 }
 

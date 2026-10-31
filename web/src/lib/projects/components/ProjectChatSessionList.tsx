@@ -9,6 +9,7 @@ import {
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/lib/projects/svc";
 import { useProjectsContext } from "@/lib/projects/providers";
+import { useAppPosition } from "@/lib/position/hooks";
 import { ChatSession } from "@/app/app/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/lib/agents/hooks";
@@ -54,6 +55,7 @@ function ProjectChatItem({
   afterRefresh,
 }: ProjectChatItemProps) {
   const t = useTranslations("chat");
+  const appPosition = useAppPosition();
   const tSidebar = useTranslations("sidebar");
   const locale = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -228,7 +230,7 @@ function ProjectChatItem({
 
       <Hoverable.Root group={chat.id} width="full">
         <LineItemButton
-          href={`/app?chatId=${chat.id}`}
+          {...appPosition.linkToChat(chat.id)}
           group={chat.id}
           icon={icon}
           title={chat.name || UNNAMED_CHAT}

@@ -4,6 +4,7 @@ import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from datetime import timedelta
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
@@ -69,6 +70,7 @@ from onyx.db.chat import (
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
     get_chat_message,
+    get_chat_message_page_ids,
     get_chat_messages_by_session,
     get_chat_session_by_id,
     get_chat_sessions_by_user,
@@ -168,6 +170,9 @@ from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# Largest page a client can ask of `get-chat-session`.
+MAX_CHAT_SESSION_PAGE_SIZE = 200
 
 router = APIRouter(prefix="/chat")
 
@@ -368,6 +373,29 @@ def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
     include_deleted: bool = False,
+    # In `Annotated`, so a direct call (as in tests) gets the plain default.
+    limit: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            le=MAX_CHAT_SESSION_PAGE_SIZE,
+            description=(
+                "Return one page of the current branch: its last `limit` "
+                "messages and their children. `has_older_messages` tells "
+                "whether the branch has messages before the page. Without it, "
+                "every message on every branch is returned."
+            ),
+        ),
+    ] = None,
+    before_message_id: Annotated[
+        int | None,
+        Query(
+            description=(
+                "With `limit`, return the page that ends before this message. "
+                "Pass the oldest loaded message to load the next older page."
+            ),
+        ),
+    ] = None,
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
@@ -420,10 +448,21 @@ def get_chat_session(
         chat_session.user_id = user_id
         db_session.commit()
 
+    page_message_ids: set[int] | None = None
+    has_older_messages = False
+    if limit is not None:
+        page_message_ids, has_older_messages = get_chat_message_page_ids(
+            chat_session_id=session_id,
+            db_session=db_session,
+            limit=limit,
+            before_message_id=before_message_id,
+        )
+
     session_messages = get_chat_messages_by_session(
         chat_session_id=session_id,
         user_id=user_id,
         db_session=db_session,
+        message_ids=page_message_ids,
         # we already did a permission check above with the call to
         # `get_chat_session_by_id`, so we can skip it here
         skip_permission_check=True,
@@ -483,6 +522,7 @@ def get_chat_session(
         current_stream=current_stream,
         is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
+        has_older_messages=has_older_messages,
     )
 
 

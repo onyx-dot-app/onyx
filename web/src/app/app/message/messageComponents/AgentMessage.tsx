@@ -292,7 +292,11 @@ const AgentMessage = React.memo(function AgentMessage({
   });
 
   // Streaming TTS integration
-  const { streamTTS, resetTTS, stopTTS } = useVoiceMode();
+  const { streamTTS, resetTTS, stopTTS, activeMessageNodeId } = useVoiceMode();
+  const activeTTSNodeIdRef = useRef(activeMessageNodeId);
+  useEffect(() => {
+    activeTTSNodeIdRef.current = activeMessageNodeId;
+  }, [activeMessageNodeId]);
   const ttsCompletedRef = useRef(false);
   const hasStreamedIncompleteRef = useRef(false);
   const hasObservedPacketGrowthRef = useRef(false);
@@ -379,10 +383,12 @@ const AgentMessage = React.memo(function AgentMessage({
     lastSeenPacketCountRef.current = packetCount ?? rawPackets.length;
   }, [nodeId]);
 
-  // Reset TTS when component unmounts or nodeId changes
+  // Reset TTS when this message unmounts or its nodeId changes, if it is the
+  // one speaking. A chat unmounts rows far from the viewport, and that must
+  // not stop another message's audio.
   useEffect(() => {
     return () => {
-      resetTTS();
+      if (activeTTSNodeIdRef.current === nodeId) resetTTS();
     };
   }, [nodeId, resetTTS]);
 

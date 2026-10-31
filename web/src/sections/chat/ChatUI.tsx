@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Message } from "@/app/app/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
@@ -18,9 +24,13 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
   useCurrentMessageTree,
+  useHasOlderMessages,
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
+import WindowedRow from "@/sections/chat/WindowedRow";
+import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
+import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 import { cn } from "@opal/utils";
 
 /** Width constraint for normal (non-multi-model) messages. */
@@ -31,6 +41,15 @@ import { cn } from "@opal/utils";
 // (and the top-bar toggle is hidden).
 const MSG_W =
   "md:max-w-[var(--app-chat-column-width,var(--width-chat-message-max))]";
+
+/**
+ * Rows at the end of the chat mount on the first render. Rows above them
+ * mount once they near the viewport.
+ */
+const INITIALLY_MOUNTED_ROWS = 6;
+
+/** Rows at the end of the chat that never unmount: the latest turn. */
+const PINNED_ROWS = 2;
 
 /** Animates the full-width toggle; every surface it widens uses this. */
 export const FULL_WIDTH_TRANSITION =
@@ -104,6 +123,50 @@ const ChatUI = React.memo(
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
+    const rowHeightCache = useRef(new Map<string, number>()).current;
+    const hasOlderMessages = useHasOlderMessages();
+    const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
+
+    // A page of older messages goes in above the first row. Keep the view
+    // still: scroll by the distance the former first row moved. Native scroll
+    // anchoring cannot be relied on: Safari has none, and Chrome skips it at
+    // the very top, where a page most often arrives.
+    const lastScrollTopRef = useRef(0);
+    useEffect(() => {
+      const root = scrollContainerRef?.current;
+      if (!root) return;
+      const onScroll = () => {
+        lastScrollTopRef.current = root.scrollTop;
+      };
+      onScroll();
+      root.addEventListener("scroll", onScroll, { passive: true });
+      return () => root.removeEventListener("scroll", onScroll);
+    }, [scrollContainerRef]);
+
+    const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
+    const firstNodeId = messages[0]?.nodeId;
+    useLayoutEffect(() => {
+      const root = scrollContainerRef?.current;
+      if (!root || firstNodeId === undefined) return;
+
+      const previous = firstRowRef.current;
+      if (previous && previous.nodeId !== firstNodeId) {
+        const previousRow = document.getElementById(
+          `message-${previous.nodeId}`
+        );
+        if (previousRow) {
+          // A no-op where the browser's anchoring already moved it.
+          const target =
+            lastScrollTopRef.current + previousRow.offsetTop - previous.top;
+          if (Math.abs(root.scrollTop - target) > 1) root.scrollTop = target;
+        }
+      }
+
+      const firstRow = document.getElementById(`message-${firstNodeId}`);
+      firstRowRef.current = firstRow
+        ? { nodeId: firstNodeId, top: firstRow.offsetTop }
+        : null;
+    }, [scrollContainerRef, firstNodeId]);
 
     // Reading-width cap on messages, from the page's chat column width.
     const msgWidth = cn(MSG_W, FULL_WIDTH_TRANSITION);
@@ -188,8 +251,16 @@ const ChatUI = React.memo(
             !fullWidthChat && "md:pe-1"
           )}
         >
+          {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
+
           {messages.map((message, i) => {
             const messageReactComponentKey = `message-${message.nodeId}`;
+            const rowsFromEnd = messages.length - i;
+            const pinned =
+              rowsFromEnd <= PINNED_ROWS ||
+              message.is_generating ||
+              message.nodeId === anchorNodeId;
+            const initiallyMounted = rowsFromEnd <= INITIALLY_MOUNTED_ROWS;
             const parentMessage = message.parentNodeId
               ? messageTree?.get(message.parentNodeId)
               : null;
@@ -200,10 +271,13 @@ const ChatUI = React.memo(
                 getMultiModelResponsesForMessage(message);
 
               return (
-                <div
+                <WindowedRow
                   id={messageReactComponentKey}
                   key={messageReactComponentKey}
                   className="flex flex-col gap-12 w-full"
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
                 >
                   <div className={cn("w-full self-center", msgWidth)}>
                     <HumanMessage
@@ -244,7 +318,7 @@ const ChatUI = React.memo(
                       selectionDisabled={chatState !== "input"}
                     />
                   )}
-                </div>
+                </WindowedRow>
               );
             } else if (
               message.type === "assistant" ||
@@ -270,10 +344,13 @@ const ChatUI = React.memo(
               };
 
               return (
-                <div
-                  id={`message-${message.nodeId}`}
+                <WindowedRow
+                  id={messageReactComponentKey}
                   key={messageReactComponentKey}
                   className={cn("w-full self-center", msgWidth)}
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
                 >
                   {(message.type !== "error" || message.packets.length > 0) && (
                     <AgentMessage
@@ -313,7 +390,7 @@ const ChatUI = React.memo(
                       stackTrace={message.stackTrace}
                     />
                   )}
-                </div>
+                </WindowedRow>
               );
             }
             return null;

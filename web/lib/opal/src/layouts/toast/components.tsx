@@ -237,7 +237,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   return (
     <div
       data-testid="toast-container"
-      className="fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
+      className="opal-toast-viewport fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
     >
       <div className="opal-toast-stack">
         {[...allToasts].reverse().map((t, index) => (

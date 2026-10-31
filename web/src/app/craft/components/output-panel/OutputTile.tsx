@@ -3,6 +3,7 @@
 import { useState, useRef, type ReactNode, type Ref } from "react";
 import { useInView } from "motion/react";
 import { useTranslations } from "next-intl";
+import UnseenMarker from "@/app/craft/components/UnseenMarker";
 import { Button, SelectCard, Text } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import type { RichStr } from "@opal/types";
@@ -325,11 +326,5 @@ function OutputTileFrame({
 
 function OutputUnseenMarker({ className }: { className: string }) {
   const t = useTranslations("craft.outputsTab");
-  return (
-    <span
-      role="img"
-      aria-label={t("unseen")}
-      className={cn("size-2 rounded-full bg-status-info-05", className)}
-    />
-  );
+  return <UnseenMarker label={t("unseen")} className={className} />;
 }

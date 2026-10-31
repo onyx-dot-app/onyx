@@ -64,6 +64,7 @@ const AUTOFILL_CAP = 3;
 export interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
+  /** Active model's cap: one session temperature, validated against it on save. */
   maxTemperature: number;
   /** True only when an override was set locally or is stored on the session. */
   hasTemperatureOverride: boolean;
@@ -121,17 +122,19 @@ export function useModelDetailManagers(
 }
 
 /** Where the slider parks on open: the session's own choice, else the admin
- *  default, else the user's own default, bounded by the selected model's
- *  slider maximum. */
+ *  default, else the user's own default, bounded by the session's cap. */
 function initialTemperature(
   option: LLMOption,
   manager: TemperatureManager | undefined,
   userTemperatureDefault: number | null
 ): number {
   const sessionTemperature = manager?.temperature ?? 0.5;
-  if (manager?.hasTemperatureOverride) return sessionTemperature;
   return Math.min(
-    option.temperatureDefault ?? userTemperatureDefault ?? sessionTemperature,
+    manager?.hasTemperatureOverride
+      ? sessionTemperature
+      : (option.temperatureDefault ??
+          userTemperatureDefault ??
+          sessionTemperature),
     manager?.maxTemperature ?? 2
   );
 }
@@ -515,9 +518,14 @@ export default function ModelSelectorContent({
     new Set([defaultGroupKey])
   );
 
+  // Applied once the options first resolve, so a pick that moves the first
+  // selected group does not swap the expanded group while the menu fades out.
+  const defaultGroupAppliedRef = useRef(false);
   useEffect(() => {
+    if (defaultGroupAppliedRef.current || groupedOptions.length === 0) return;
+    defaultGroupAppliedRef.current = true;
     setExpandedGroups(new Set([defaultGroupKey]));
-  }, [defaultGroupKey]);
+  }, [defaultGroupKey, groupedOptions.length]);
 
   const isSearching = searchQuery.trim().length > 0;
 

@@ -231,6 +231,12 @@ CELERY_USER_FILE_PROCESSING_TASK_EXPIRES = 60  # 1 minute (in seconds)
 # beat generator stops adding more.  Prevents unbounded queue growth when workers
 # fall behind.
 USER_FILE_PROCESSING_MAX_QUEUE_DEPTH = 500
+
+# Pickups a user file gets before it is marked FAILED. A worker killed
+# mid-file (OOM) leaves the row PROCESSING, and the beat task would
+# otherwise re-enqueue it forever.
+USER_FILE_PROCESSING_MAX_ATTEMPTS = 3
+
 # How long a queued user-file-project-sync task remains valid.
 # Should be short enough to discard stale queue entries under load while still
 # allowing workers enough time to pick up new tasks.
@@ -333,6 +339,7 @@ class DocumentSource(str, Enum):
     BRAINTRUST = "braintrust"
     LUMAPPS = "lumapps"
     YOUTRACK = "youtrack"
+    AZURE_DATALAKE = "azure_datalake"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -851,4 +858,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
     DocumentSource.LUMAPPS: "Intranet pages, news, and content",
     DocumentSource.YOUTRACK: "Issues and project tracking",
+    DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
 }

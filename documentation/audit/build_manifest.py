@@ -17,11 +17,55 @@ os.chdir(ROOT)
 
 # docs path prefix -> feature-map components (.agents/feature-map/components/*.md in onyx)
 COMPONENT_MAP = [
+    # Source pages first: the first matching prefix wins.
+    (
+        "admins/connectors/official/google_drive",
+        ["google-drive", "connectors", "cc-pairs-and-creds", "permission-sync"],
+    ),
+    (
+        "admins/connectors/official/confluence",
+        ["confluence", "connectors", "cc-pairs-and-creds", "permission-sync"],
+    ),
+    (
+        "admins/connectors/official/slack",
+        [
+            "slack",
+            "federated-search",
+            "connectors",
+            "cc-pairs-and-creds",
+            "permission-sync",
+        ],
+    ),
+    (
+        "admins/connectors/official/microsoft-365/outlook",
+        [
+            "outlook",
+            "microsoft-graph",
+            "connectors",
+            "cc-pairs-and-creds",
+            "permission-sync",
+        ],
+    ),
+    (
+        "admins/connectors/official/microsoft-365/teams",
+        [
+            "teams",
+            "microsoft-graph",
+            "connectors",
+            "cc-pairs-and-creds",
+            "permission-sync",
+        ],
+    ),
+    (
+        "admins/connectors/official/microsoft-365",
+        ["microsoft-graph", "connectors", "cc-pairs-and-creds", "permission-sync"],
+    ),
     (
         "admins/connectors",
         [
             "connectors",
-            "cc-pairs-and-credentials",
+            "connector-capability-checks",
+            "cc-pairs-and-creds",
             "indexing-pipeline",
             "permission-sync",
         ],
@@ -39,9 +83,15 @@ COMPONENT_MAP = [
         ],
     ),
     ("admins/agents", ["agents-personas", "chat-preferences"]),
-    ("admins/plugins", ["mcp-and-custom-tools", "craft-external-apps", "craft-admin"]),
-    ("admins/user_management", ["access-control", "auth-and-identity"]),
-    ("admins/permissions", ["access-control"]),
+    (
+        "admins/plugins",
+        ["plugins", "mcp-and-custom-tools", "craft-external-apps", "craft-admin"],
+    ),
+    (
+        "admins/user_management",
+        ["access-control", "auth-and-identity", "authorization"],
+    ),
+    ("admins/permissions", ["access-control", "authorization"]),
     (
         "admins/managing_features",
         [
@@ -141,7 +191,26 @@ def nav_pages(nav) -> dict:
     return out
 
 
+FEATURE_MAP_COMPONENTS = os.path.join(
+    os.path.dirname(ROOT), ".agents", "feature-map", "components"
+)
+
+
+def check_component_map() -> None:
+    """Fail when COMPONENT_MAP names a feature-map component that does not exist."""
+    existing = {
+        os.path.splitext(f)[0]
+        for _, _, files in os.walk(FEATURE_MAP_COMPONENTS)
+        for f in files
+        if f.endswith(".md")
+    }
+    missing = sorted({c for _, comps in COMPONENT_MAP for c in comps} - existing)
+    if missing:
+        sys.exit(f"COMPONENT_MAP names missing feature-map components: {missing}")
+
+
 def main() -> None:
+    check_component_map()
     docs = json.load(open("docs.json"))
     in_nav = nav_pages(docs["navigation"])
     pages = []

@@ -109,11 +109,69 @@ class AppPosition {
     this.go({ location: "new-session" }, options);
   }
 
+  // ## Linking somewhere
+  //
+  // A link to a position: its `href` (so a new tab or a copied link still
+  // works) and a click handler that sends a plain click through `go`, so it
+  // switches at once instead of waiting on a server render. Spread both onto
+  // the link; a caller with its own click handling calls `onClick` first.
+
+  linkToChat(chatSessionId: string): AppLinkProps {
+    return this.linkTo({ location: "chat", id: chatSessionId });
+  }
+
+  linkToAgent(agentId: number): AppLinkProps {
+    return this.linkTo({ location: "agent", id: agentId });
+  }
+
+  linkToProject(projectId: number): AppLinkProps {
+    return this.linkTo({ location: "project", id: projectId });
+  }
+
+  linkToNewSession(): AppLinkProps {
+    return this.linkTo({ location: "new-session" });
+  }
+
+  private linkTo(value: AppPositionType): AppLinkProps {
+    return {
+      href: hrefFor(value),
+      onClick: (event) => {
+        // A modified or middle click keeps the link's own behavior, e.g.
+        // opening a new tab.
+        const plainClick =
+          event.button === 0 &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.shiftKey &&
+          !event.altKey;
+        if (event.defaultPrevented || !plainClick) return;
+        event.preventDefault();
+        this.go(value);
+      },
+    };
+  }
+
   private go(
     value: AppPositionType,
     { replace = false }: NavigationOptions = {}
   ) {
     const href = hrefFor(value);
+    // Within /app only the query changes, and the page renders on the client,
+    // so the URL is written in place: Next keeps useSearchParams in sync with
+    // the history API, and no server round trip holds the switch back (the
+    // sidebar, the URL and the loading view update at once). Leaving or
+    // entering /app is a real navigation.
+    if (typeof window !== "undefined" && window.location.pathname === "/app") {
+      const target = new URL(href, window.location.origin);
+      if (target.pathname === "/app") {
+        // Already there: a second entry for the same URL would make Back
+        // look like it does nothing.
+        if (target.search === window.location.search) return;
+        if (replace) window.history.replaceState(null, "", href);
+        else window.history.pushState(null, "", href);
+        return;
+      }
+    }
     if (replace) this.router.replace(href);
     else this.router.push(href);
   }
@@ -210,6 +268,12 @@ class AppPosition {
       this.isSharedChat()
     );
   }
+}
+
+/** Props for a link to an app position; see `AppPosition.linkToChat`. */
+export interface AppLinkProps {
+  href: Route;
+  onClick: (event: React.MouseEvent<HTMLElement>) => void;
 }
 
 export function useAppPosition(): AppPosition {

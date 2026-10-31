@@ -31,6 +31,8 @@ logger = setup_logger()
 _CATALOG_DIR = Path(__file__).parent / "price_table"
 _SUPPLEMENT_PATH = _CATALOG_DIR / "_supplement.json"
 _ENRICHMENTS_PATH = Path(__file__).parent / "model_metadata_enrichments.json"
+# Supplement fields that override an entry the upstream feed still lists.
+_SUPPLEMENT_OVERRIDE_KEYS = ("supports_decisions", "status")
 
 # Bedrock cross-region inference-profile prefixes (us., eu., global., apac.,
 # ...). Matches the sync script's alias derivation.
@@ -142,11 +144,14 @@ def _catalog() -> dict[str, dict[str, Any]]:
                 target = catalog.setdefault(provider, {"models": {}, "aliases": {}})
                 for model_id, entry in (section.get("models") or {}).items():
                     if model_id not in target["models"]:
+                        if set(entry) <= set(_SUPPLEMENT_OVERRIDE_KEYS):
+                            continue
                         target["models"][model_id] = entry
-                    elif "supports_decisions" in entry:
-                        target["models"][model_id]["supports_decisions"] = entry[
-                            "supports_decisions"
-                        ]
+                    else:
+                        existing = target["models"][model_id]
+                        for key in _SUPPLEMENT_OVERRIDE_KEYS:
+                            if key in entry:
+                                existing[key] = entry[key]
                     if provider == "bedrock":
                         for region in _BEDROCK_REGION_PREFIXES:
                             target["aliases"].setdefault(
@@ -228,6 +233,101 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
         for model_id, entry in models.items()
         if _catalog_mode(entry, model_id) == mode
     )
+
+
+_DATED_SNAPSHOT_SUFFIX = re.compile(r"-\d{4}-?\d{2}-?\d{2}$")
+
+
+@lru_cache(maxsize=1)
+def _supplement_only_model_ids() -> dict[str, frozenset[str]]:
+    if not _SUPPLEMENT_PATH.exists():
+        return {}
+    try:
+        supplement = json.loads(_SUPPLEMENT_PATH.read_text())
+    except Exception:
+        logger.exception("Failed to load catalog supplement %s", _SUPPLEMENT_PATH)
+        return {}
+    supplement_only: dict[str, frozenset[str]] = {}
+    for provider, section in supplement.items():
+        if provider.startswith("_"):
+            continue
+        upstream_path = _CATALOG_DIR / f"{provider}.json"
+        try:
+            upstream = (
+                json.loads(upstream_path.read_text()).get("models") or {}
+                if upstream_path.exists()
+                else {}
+            )
+        except Exception:
+            logger.exception("Failed to load catalog file %s", upstream_path)
+            continue
+        supplement_only[provider] = frozenset(
+            model_id
+            for model_id in section.get("models") or {}
+            if model_id not in upstream
+        )
+    return supplement_only
+
+
+_PRICING_PREFIX = re.compile(
+    r"^(?:(?:\d+|max)-x-(?:\d+|max)|hd|standard|low|medium|high)$"
+)
+
+
+def _is_pricing_or_provider_prefixed(provider: str, model_id: str) -> bool:
+    prefix, sep, _ = model_id.partition("/")
+    return bool(sep) and (prefix == provider or bool(_PRICING_PREFIX.match(prefix)))
+
+
+def iter_image_generation_models(
+    provider: str, recommended_only: bool = True
+) -> list[str]:
+    """Non-deprecated image generation models under a provider.
+
+    Always skips pricing keys prefixed with a size or quality (e.g.
+    ``1024-x-1024/dall-e-2``) and supplement-only entries (upstream pruned
+    them as deprecated). Recommended models also skip dated snapshots whose
+    undated alias is also listed."""
+    models = _catalog().get(provider, {}).get("models", {})
+    supplement_only = _supplement_only_model_ids().get(provider, frozenset())
+    candidates = {
+        model_id
+        for model_id, entry in models.items()
+        if not _is_pricing_or_provider_prefixed(provider, model_id)
+        and model_id not in supplement_only
+        and entry.get("status") != "deprecated"
+        and _catalog_mode(entry, model_id) == "image_generation"
+    }
+    if not recommended_only:
+        return sorted(candidates)
+    return sorted(
+        model_id
+        for model_id in candidates
+        if _DATED_SNAPSHOT_SUFFIX.sub("", model_id) == model_id
+        or _DATED_SNAPSHOT_SUFFIX.sub("", model_id) not in candidates
+    )
+
+
+def is_recommended_image_model(provider: str, model_name: str) -> bool:
+    """Whether a stored image model belongs in the recommended view. A name
+    that another provider's catalog lists (e.g. a proxy that serves
+    ``gpt-image-2``) follows that provider's recommendation. Unknown names
+    fall back to the name-based mode."""
+    prefix, _, bare_name = model_name.partition("/")
+    if bare_name and prefix in _catalog():
+        model_name = bare_name
+    if model_name in iter_image_generation_models(provider):
+        return True
+    if _vendored_model_entry(provider, model_name) is not None:
+        return False
+    listed_elsewhere = False
+    for other in _catalog():
+        if _vendored_model_entry(other, model_name) is None:
+            continue
+        if model_name in iter_image_generation_models(other):
+            return True
+        listed_elsewhere = True
+    return not listed_elsewhere and resolve_model_mode(model_name) == "image_generation"
 
 
 def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:

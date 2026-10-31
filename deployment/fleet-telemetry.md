@@ -83,7 +83,10 @@ Telemetry needs no extra container, Helm value, or migration.
 
 Each pass reads the rows that changed since the previous pass, and all work that is still running.
 It reads 5 minutes of the previous window again, for rows that committed late. Event IDs come from
-the row identity and update time, so the fleet service drops the repeated events. Each read returns
+the row identity and the time of its state, so the fleet service drops the repeated events. Running
+attempts and jobs go out at revision 0. A finished one goes out at its end, at a higher revision,
+so the service orders runs by when they ended. It goes out again only when a late batch or a
+rewritten final status changes it. Each read returns
 the oldest changes first. When a read reaches its row limit, or the sender cannot take more events,
 the next pass starts at the first row that this pass did not send.
 

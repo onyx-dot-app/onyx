@@ -1328,6 +1328,7 @@
       "words": 2395,
       "last_commit": "2026-10-20",
       "components": [
+        "plugins",
         "mcp-and-custom-tools",
         "craft-external-apps",
         "craft-admin"
@@ -1363,6 +1364,7 @@
       "words": 1088,
       "last_commit": "2026-10-20",
       "components": [
+        "plugins",
         "mcp-and-custom-tools",
         "craft-external-apps",
         "craft-admin"
@@ -1418,6 +1420,7 @@
       "words": 983,
       "last_commit": "2026-10-20",
       "components": [
+        "plugins",
         "mcp-and-custom-tools",
         "craft-external-apps",
         "craft-admin"
@@ -1449,6 +1452,7 @@
       "words": 1443,
       "last_commit": "2026-10-20",
       "components": [
+        "plugins",
         "mcp-and-custom-tools",
         "craft-external-apps",
         "craft-admin"
@@ -1473,7 +1477,8 @@
       "last_commit": "2026-10-19",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1517,7 +1522,8 @@
       "last_commit": "2026-02-13",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1532,7 +1538,8 @@
       "last_commit": "2025-11-25",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1547,7 +1554,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1562,7 +1570,8 @@
       "last_commit": "2025-11-25",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1586,7 +1595,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1618,7 +1628,8 @@
       "last_commit": "2026-07-31",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1633,7 +1644,8 @@
       "last_commit": "2026-09-17",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1653,7 +1665,8 @@
       "last_commit": "2026-09-17",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1677,7 +1690,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1713,7 +1727,8 @@
       "last_commit": "2026-09-17",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1732,9 +1747,9 @@
       "words": 747,
       "last_commit": "2026-09-22",
       "components": [
+        "confluence",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": [
@@ -1764,9 +1779,9 @@
       "words": 893,
       "last_commit": "2026-09-22",
       "components": [
+        "confluence",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": [
@@ -1788,9 +1803,9 @@
       "words": 899,
       "last_commit": "2026-09-22",
       "components": [
+        "confluence",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": [
@@ -1813,7 +1828,8 @@
       "last_commit": "2025-11-25",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1828,7 +1844,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1860,7 +1877,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1888,7 +1906,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1924,7 +1943,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1944,7 +1964,8 @@
       "last_commit": "2025-11-25",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1959,7 +1980,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -1979,7 +2001,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2007,7 +2030,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2031,7 +2055,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2059,7 +2084,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2074,7 +2100,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2098,7 +2125,8 @@
       "last_commit": "2026-09-23",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2122,7 +2150,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2142,7 +2171,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2186,7 +2216,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2210,7 +2241,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2234,7 +2266,8 @@
       "last_commit": "2026-10-12",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2262,7 +2295,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2277,7 +2311,8 @@
       "last_commit": "2026-09-14",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2309,7 +2344,8 @@
       "last_commit": "2026-10-12",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2324,7 +2360,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2339,7 +2376,8 @@
       "last_commit": "2026-09-17",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2359,7 +2397,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2374,7 +2413,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2406,7 +2446,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2446,7 +2487,8 @@
       "last_commit": "2025-11-25",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2461,7 +2503,8 @@
       "last_commit": "2025-11-25",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2476,7 +2519,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2516,7 +2560,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2540,7 +2585,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2572,7 +2618,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2592,7 +2639,8 @@
       "last_commit": "2026-09-17",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2612,7 +2660,8 @@
       "last_commit": "2026-09-18",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2636,7 +2685,8 @@
       "last_commit": "2026-09-22",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2651,7 +2701,8 @@
       "last_commit": "2025-11-25",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2666,7 +2717,8 @@
       "last_commit": "2026-10-19",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2681,7 +2733,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2701,7 +2754,8 @@
       "last_commit": "2026-10-14",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2749,7 +2803,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -2780,9 +2835,10 @@
       "words": 531,
       "last_commit": "2026-09-22",
       "components": [
+        "slack",
+        "federated-search",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": [
@@ -2812,9 +2868,10 @@
       "words": 978,
       "last_commit": "2026-05-14",
       "components": [
+        "slack",
+        "federated-search",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": [
@@ -2844,9 +2901,9 @@
       "words": 1095,
       "last_commit": "2026-09-28",
       "components": [
+        "microsoft-graph",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": []
@@ -2859,9 +2916,10 @@
       "words": 1691,
       "last_commit": "2026-10-07",
       "components": [
+        "outlook",
+        "microsoft-graph",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": []
@@ -2874,9 +2932,9 @@
       "words": 2582,
       "last_commit": "2026-10-06",
       "components": [
+        "microsoft-graph",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": []
@@ -2889,9 +2947,9 @@
       "words": 1816,
       "last_commit": "2026-09-28",
       "components": [
+        "microsoft-graph",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": []
@@ -2904,9 +2962,10 @@
       "words": 2440,
       "last_commit": "2026-09-23",
       "components": [
+        "teams",
+        "microsoft-graph",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": []
@@ -2919,9 +2978,9 @@
       "words": 885,
       "last_commit": "2026-10-06",
       "components": [
+        "google-drive",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": [
@@ -2959,9 +3018,9 @@
       "words": 205,
       "last_commit": "2026-07-08",
       "components": [
+        "google-drive",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": []
@@ -2974,9 +3033,9 @@
       "words": 593,
       "last_commit": "2026-10-06",
       "components": [
+        "google-drive",
         "connectors",
-        "cc-pairs-and-credentials",
-        "indexing-pipeline",
+        "cc-pairs-and-creds",
         "permission-sync"
       ],
       "images": [
@@ -2999,7 +3058,8 @@
       "last_commit": "2026-10-06",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -3031,7 +3091,8 @@
       "last_commit": "2026-07-08",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -3046,7 +3107,8 @@
       "last_commit": "2026-10-06",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -3066,7 +3128,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -3094,7 +3157,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -3114,7 +3178,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -3142,7 +3207,8 @@
       "last_commit": "2026-01-11",
       "components": [
         "connectors",
-        "cc-pairs-and-credentials",
+        "connector-capability-checks",
+        "cc-pairs-and-creds",
         "indexing-pipeline",
         "permission-sync"
       ],
@@ -3497,7 +3563,7 @@
       "title": "Service Accounts",
       "words": 521,
       "last_commit": "2026-08-25",
-      "components": ["access-control", "auth-and-identity"],
+      "components": ["access-control", "auth-and-identity", "authorization"],
       "images": []
     },
     {
@@ -3507,7 +3573,7 @@
       "title": "Service Accounts before v4.7",
       "words": 344,
       "last_commit": "2026-08-25",
-      "components": ["access-control", "auth-and-identity"],
+      "components": ["access-control", "auth-and-identity", "authorization"],
       "images": [
         {
           "src": "/assets/admins/user_management/legacy/create_api_key.png",
@@ -3522,7 +3588,7 @@
       "title": "Users and Groups",
       "words": 634,
       "last_commit": "2026-08-22",
-      "components": ["access-control", "auth-and-identity"],
+      "components": ["access-control", "auth-and-identity", "authorization"],
       "images": [
         {
           "src": "/assets/admins/user_management/manage_users.png",
@@ -3545,7 +3611,7 @@
       "title": "Users and Groups before v4.7",
       "words": 232,
       "last_commit": "2026-08-22",
-      "components": ["access-control", "auth-and-identity"],
+      "components": ["access-control", "auth-and-identity", "authorization"],
       "images": [
         {
           "src": "/assets/admins/user_management/legacy/user_management.png",
@@ -3887,7 +3953,7 @@
       "title": "Understanding Permissions",
       "words": 1884,
       "last_commit": "2026-08-22",
-      "components": ["access-control"],
+      "components": ["access-control", "authorization"],
       "images": [
         {
           "src": "/assets/admins/user_management/group_permission_toggle.png",
@@ -3906,7 +3972,7 @@
       "title": "What's Changing in Permissions",
       "words": 606,
       "last_commit": "2026-08-22",
-      "components": ["access-control"],
+      "components": ["access-control", "authorization"],
       "images": []
     },
     {

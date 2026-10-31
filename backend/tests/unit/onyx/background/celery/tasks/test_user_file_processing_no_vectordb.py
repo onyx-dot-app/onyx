@@ -55,6 +55,7 @@ def _make_user_file(
     # Explicit: an attribute left to MagicMock reads as truthy and would send
     # every file down the incognito branch.
     uf.incognito = incognito
+    uf.processing_attempts = 0
     uf.token_count = None
     uf.chunk_count = None
     uf.last_project_sync_at = None

@@ -33,7 +33,12 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { isScheduledRunContextInFlight } from "@/app/craft/v1/tasks/utils";
+import {
+  isRunUnviewed,
+  isScheduledRunContextInFlight,
+} from "@/app/craft/v1/tasks/utils";
+import { markScheduledRunViewed } from "@/app/craft/v1/tasks/api";
+import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { toast } from "@opal/layouts";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {
@@ -143,6 +148,29 @@ function ChatPanelContent({
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
   const scheduledRunId = scheduledRunContext?.run_id;
+  const viewedScheduledRunRevision = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !scheduledRunContext ||
+      scheduledRunContext.status === "RUNNING" ||
+      !isRunUnviewed(scheduledRunContext)
+    )
+      return;
+    const { task_id, run_id, revision } = scheduledRunContext;
+    const key = `${run_id}:${revision}`;
+    if (viewedScheduledRunRevision.current === key) return;
+    viewedScheduledRunRevision.current = key;
+    void markScheduledRunViewed(task_id, run_id, revision)
+      .then(() =>
+        Promise.all([
+          mutateScheduledRunContext(),
+          revalidateScheduledRunViews(task_id),
+        ])
+      )
+      .catch(() => {
+        viewedScheduledRunRevision.current = null;
+      });
+  }, [scheduledRunContext, mutateScheduledRunContext]);
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;

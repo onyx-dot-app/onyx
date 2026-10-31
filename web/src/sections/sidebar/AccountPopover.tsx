@@ -37,9 +37,9 @@ import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
-import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
+import { SidebarLoader } from "@opal/loaders";
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 
@@ -292,7 +292,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
     ],
   };
   if (userResolution === "loading") {
-    return <SidebarTabSkeleton folded={folded} />;
+    return <SidebarLoader width="full" folded={folded} />;
   }
 
   return (
