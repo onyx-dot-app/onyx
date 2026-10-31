@@ -322,6 +322,32 @@ def test_space_no_member_can_read_is_a_failure(world: _World) -> None:
 
 
 @pytest.mark.usefixtures("world")
+def test_space_without_active_member_is_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Only the suspended Dave has joined, so no member can read the space.
+    monkeypatch.setitem(_MEMBERS, "spaces/ENG", _MEMBERS["spaces/ENG"][:2])
+
+    items = _items(_connector(["Engineering"]), 0, _ts("2026-10-30T00:00:00Z"))
+
+    assert len(items) == 1
+    assert isinstance(items[0], ConnectorFailure)
+    assert "no joined, unsuspended member" in items[0].failure_message
+    with pytest.raises(google_chat_module.SpaceUnreadableError):
+        list(_connector().retrieve_all_slim_docs())
+
+
+def test_slim_listing_reports_progress_per_message(world: _World) -> None:
+    callback = MagicMock()
+    callback.should_stop.return_value = False
+
+    list(_connector(["Engineering"]).retrieve_all_slim_docs(callback=callback))
+
+    assert callback.progress.call_count == len(_MESSAGES["spaces/ENG"])
+    assert world.readers == ["bob@acme.com"]
+
+
+@pytest.mark.usefixtures("world")
 def test_slim_listing_matches_indexed_documents() -> None:
     connector = _connector()
     indexed: set[str] = {
