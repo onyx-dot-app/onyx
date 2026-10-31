@@ -284,7 +284,7 @@ jobs:
         run: |
           set -uo pipefail
 
-          TEST_PATH="backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py"
+          TEST_PATH="backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py backend/tests/integration/tests/llm_workflows/test_nightly_provider_image_generation.py"
 
           # Build the env-var prefix, omitting unset optional values. Credentials
           # (NIGHTLY_LLM_API_KEY / NIGHTLY_LLM_CUSTOM_CONFIG_JSON) are intentionally
