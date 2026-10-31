@@ -21,10 +21,10 @@ from sqlalchemy.orm import Session
 import onyx.server.query_and_chat.token_limit as token_limit
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from ee.onyx.server.query_and_chat.search_backend import handle_send_search_message
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import TokenRateLimit, User, UserUsage
-from onyx.db.user_usage import get_token_window_start, record_user_usage
+from onyx.db.user_usage import get_period_window_start, record_user_usage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
@@ -79,7 +79,9 @@ def over_budget_user(
             output_tokens=500,
             cache_read_tokens=0,
             cost_cents=0.0,
-            window_start=get_token_window_start(datetime.now(timezone.utc), 24),
+            window_start=get_period_window_start(
+                datetime.now(timezone.utc), TokenRateLimitPeriod.DAILY
+            ),
         ),
     )
     db_session.commit()
@@ -88,7 +90,7 @@ def over_budget_user(
         enabled=True,
         token_budget=1,
         cost_budget_cents=None,
-        period_hours=24,
+        period=TokenRateLimitPeriod.DAILY,
         scope=TokenRateLimitScope.GLOBAL,
     )
     monkeypatch.setattr(token_limit, "any_rate_limit_exists", lambda: True)

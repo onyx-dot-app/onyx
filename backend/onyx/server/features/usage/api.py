@@ -39,17 +39,17 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
-    cost_budget_fetch_cutoff,
     cost_budget_limits,
-    get_cost_window_reset,
-    get_cost_window_start,
     get_group_cost_cents_buckets_since,
+    get_period_window_reset,
+    get_period_window_start,
     get_total_cost_cents_buckets_since,
     get_usage_export,
     get_usage_reset_window_start,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
+    period_fetch_cutoff,
     reset_user_usage,
 )
 from onyx.db.users import get_user_by_email
@@ -125,21 +125,21 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = get_cost_window_start(now, rl.period_hours)
+            cutoff = get_period_window_start(now, rl.period)
             used = _used_from_buckets(buckets, cutoff)
             candidates.append(
                 EffectiveCostBudget(
                     budget_cents=rl.cost_budget_cents,
                     remaining_cents=rl.cost_budget_cents - used,
-                    period_hours=rl.period_hours,
-                    reset_at=get_cost_window_reset(now, rl.period_hours),
+                    period=rl.period,
+                    reset_at=get_period_window_reset(now, rl.period),
                 )
             )
 
     user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
     user_cost_rls = cost_budget_limits(user_rls)
     if user_cost_rls:
-        fetch_cutoff = cost_budget_fetch_cutoff(now, user_cost_rls)
+        fetch_cutoff = period_fetch_cutoff(now, user_cost_rls)
         _add_from_limits(
             user_cost_rls,
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
@@ -148,7 +148,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
     global_cost_rls = cost_budget_limits(global_rls)
     if global_cost_rls:
-        fetch_cutoff = cost_budget_fetch_cutoff(now, global_cost_rls)
+        fetch_cutoff = period_fetch_cutoff(now, global_cost_rls)
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -164,7 +164,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     return EffectiveCostBudget(
         budget_cents=best.budget_cents,
         remaining_cents=max(best.remaining_cents, 0.0),
-        period_hours=best.period_hours,
+        period=best.period,
         reset_at=best.reset_at,
     )
 
@@ -186,7 +186,7 @@ def _group_cost_budget_candidate(
         return None
 
     # One batched query for every group's cost buckets, then window in Python.
-    fetch_cutoff = cost_budget_fetch_cutoff(now, cost_rls)
+    fetch_cutoff = period_fetch_cutoff(now, cost_rls)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
@@ -198,15 +198,15 @@ def _group_cost_budget_candidate(
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = get_cost_window_start(now, rl.period_hours)
+            cutoff = get_period_window_start(now, rl.period)
             used = _used_from_buckets(group_buckets, cutoff)
             remaining = rl.cost_budget_cents - used
             if group_binding is None or remaining < group_binding.remaining_cents:
                 group_binding = EffectiveCostBudget(
                     budget_cents=rl.cost_budget_cents,
                     remaining_cents=remaining,
-                    period_hours=rl.period_hours,
-                    reset_at=get_cost_window_reset(now, rl.period_hours),
+                    period=rl.period,
+                    reset_at=get_period_window_reset(now, rl.period),
                 )
         if group_binding is None:
             return None  # a cost-exempt group exempts the whole group scope
@@ -319,7 +319,7 @@ def get_my_usage(
         window_cost_cents=window_cost_cents,
         budget_cents=budget.budget_cents if budget is not None else None,
         budget_remaining_cents=(budget.remaining_cents if budget is not None else None),
-        budget_period_hours=budget.period_hours if budget is not None else None,
+        budget_period=budget.period if budget is not None else None,
         budget_reset_at=budget.reset_at if budget is not None else None,
         selected_model_price=selected_model_price,
         available_model_prices=available_model_prices,

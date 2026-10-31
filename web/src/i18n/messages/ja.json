@@ -6309,7 +6309,12 @@
         },
         "timeWindow": {
           "header": "期間",
-          "unit": "(UTC 日数)"
+          "placeholder": "期間を選択",
+          "options": {
+            "DAILY": "毎日",
+            "WEEKLY": "毎週",
+            "MONTHLY": "毎月"
+          }
         },
         "tokenLimit": {
           "header": "Token 上限",
@@ -6326,9 +6331,6 @@
           "name": "基本",
           "description": "基本権限を持つ全ユーザーのデフォルトグループ。"
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9875,7 +9877,7 @@
           "tokens": "最大 {tokens} tokens"
         },
         "cadence": {
-          "label": "{days, plural, one {毎日 UTC 午前 0 時にリセット} other {# 日ごとに UTC 午前 0 時にリセット}}"
+          "label": "{period, select, DAILY {毎日 UTC 午前 0 時にリセット} WEEKLY {毎週月曜日の UTC 午前 0 時にリセット} other {毎月 1 日の UTC 午前 0 時にリセット}}"
         },
         "deleteFailed": {
           "error": "Token レート制限の削除に失敗しました"
@@ -9919,9 +9921,6 @@
           "costMinCents": "コスト予算は $0.01 以上にしてください",
           "costMoreThanZero": "コスト予算は 0 より大きい値にしてください",
           "groupRequired": "ユーザーグループを選択してください",
-          "periodInteger": "日数は整数で入力してください",
-          "periodMin": "1 日以上を指定してください",
-          "periodRequired": "リセット期間を入力してください",
           "scopeRequired": "適用範囲は必須項目です",
           "tokenIncrement": "1,000 tokens 単位で指定してください",
           "tokenInteger": "token 数は整数で入力してください",
@@ -9940,7 +9939,11 @@
         "period": {
           "description": "予算は UTC 午前 0 時にリセットされます",
           "title": "リセット期間",
-          "unit": "日"
+          "options": {
+            "DAILY": "毎日",
+            "WEEKLY": "毎週",
+            "MONTHLY": "毎月"
+          }
         },
         "scope": {
           "caption": {
@@ -9970,10 +9973,10 @@
             "both": "{cost} または {tokens} tokens",
             "tokens": "{tokens} tokens"
           },
-          "global": "{days, plural, one {ワークスペースの全員が毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {ワークスペースの全員が # 日ごとに {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "group": "{days, plural, one {{group} のメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {{group} のメンバーが # 日ごとに {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "groupUnchosen": "{days, plural, one {選択したグループのメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {選択したグループのメンバーが # 日ごとに {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "user": "{days, plural, one {各ユーザーは毎日 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。} other {各ユーザーは # 日ごとに {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。}}"
+          "global": "{period, select, DAILY {ワークスペースの全員が毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} WEEKLY {ワークスペースの全員が毎週 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {ワークスペースの全員が毎月 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
+          "group": "{period, select, DAILY {{group} のメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} WEEKLY {{group} のメンバーが毎週 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {{group} のメンバーが毎月 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
+          "groupUnchosen": "{period, select, DAILY {選択したグループのメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} WEEKLY {選択したグループのメンバーが毎週 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {選択したグループのメンバーが毎月 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
+          "user": "{period, select, DAILY {各ユーザーは毎日 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。} WEEKLY {各ユーザーは毎週 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。} other {各ユーザーは毎月 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。}}"
         },
         "tokenBudget": {
           "description": "リセット期間ごとの最大 token 数",

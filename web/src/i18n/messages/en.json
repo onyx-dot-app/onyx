@@ -6309,7 +6309,12 @@
         },
         "timeWindow": {
           "header": "Time Window",
-          "unit": "(UTC days)"
+          "placeholder": "Select a period",
+          "options": {
+            "DAILY": "Daily",
+            "WEEKLY": "Weekly",
+            "MONTHLY": "Monthly"
+          }
         },
         "tokenLimit": {
           "header": "Token Limit",
@@ -6326,9 +6331,6 @@
           "name": "Basic",
           "description": "Default group for all users with basic permissions."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9875,7 +9877,7 @@
           "tokens": "Up to {tokens} tokens"
         },
         "cadence": {
-          "label": "{days, plural, one {Resets every day at midnight UTC} other {Resets every # days at midnight UTC}}"
+          "label": "{period, select, DAILY {Resets every day at midnight UTC} WEEKLY {Resets every Monday at midnight UTC} other {Resets on the 1st of every month at midnight UTC}}"
         },
         "deleteFailed": {
           "error": "Failed to delete token rate limit"
@@ -9919,9 +9921,6 @@
           "costMinCents": "Cost budget must be at least $0.01",
           "costMoreThanZero": "Cost budget must be greater than 0",
           "groupRequired": "Select a user group",
-          "periodInteger": "Enter a whole number of days",
-          "periodMin": "Use at least 1 day",
-          "periodRequired": "Enter a reset period",
           "scopeRequired": "Target Scope is a required field",
           "tokenIncrement": "Use increments of 1,000 tokens",
           "tokenInteger": "Enter a whole number of tokens",
@@ -9940,7 +9939,11 @@
         "period": {
           "description": "Budgets reset at midnight UTC",
           "title": "Reset period",
-          "unit": "days"
+          "options": {
+            "DAILY": "Daily",
+            "WEEKLY": "Weekly",
+            "MONTHLY": "Monthly"
+          }
         },
         "scope": {
           "caption": {
@@ -9970,10 +9973,10 @@
             "both": "{cost} or {tokens} tokens",
             "tokens": "{tokens} tokens"
           },
-          "global": "{days, plural, one {Everyone in the workspace shares up to {budget} every day. Usage is blocked until the period resets.} other {Everyone in the workspace shares up to {budget} every # days. Usage is blocked until the period resets.}}",
-          "group": "{days, plural, one {Members of {group} share up to {budget} every day. Usage is blocked until the period resets.} other {Members of {group} share up to {budget} every # days. Usage is blocked until the period resets.}}",
-          "groupUnchosen": "{days, plural, one {Members of the chosen group share up to {budget} every day. Usage is blocked until the period resets.} other {Members of the chosen group share up to {budget} every # days. Usage is blocked until the period resets.}}",
-          "user": "{days, plural, one {Each user can spend up to {budget} every day. Usage is blocked until the period resets.} other {Each user can spend up to {budget} every # days. Usage is blocked until the period resets.}}"
+          "global": "{period, select, DAILY {Everyone in the workspace shares up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Everyone in the workspace shares up to {budget} every week. Usage is blocked until the period resets.} other {Everyone in the workspace shares up to {budget} every month. Usage is blocked until the period resets.}}",
+          "group": "{period, select, DAILY {Members of {group} share up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Members of {group} share up to {budget} every week. Usage is blocked until the period resets.} other {Members of {group} share up to {budget} every month. Usage is blocked until the period resets.}}",
+          "groupUnchosen": "{period, select, DAILY {Members of the chosen group share up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Members of the chosen group share up to {budget} every week. Usage is blocked until the period resets.} other {Members of the chosen group share up to {budget} every month. Usage is blocked until the period resets.}}",
+          "user": "{period, select, DAILY {Each user can spend up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Each user can spend up to {budget} every week. Usage is blocked until the period resets.} other {Each user can spend up to {budget} every month. Usage is blocked until the period resets.}}"
         },
         "tokenBudget": {
           "description": "Maximum tokens per reset period",

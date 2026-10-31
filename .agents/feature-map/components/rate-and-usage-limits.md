@@ -68,8 +68,10 @@ indexing pipeline (`check_global_token_rate_limits`, GLOBAL scope, no user).
 `any_rate_limit_exists()` says the tenant has no enabled budget. That answer is
 cached per tenant for 60 s. Otherwise it dispatches to the CE or EE
 `_check_token_rate_limits` through `fetch_versioned_implementation`. EE runs the
-USER, USER_GROUP and GLOBAL checks in parallel. Each scope sums the `user_usage`
-buckets in the widest window and raises at the latest reset among the budgets it
+USER, USER_GROUP and GLOBAL checks in parallel. Each budget has a period: a
+UTC calendar day, a week from Monday, or a calendar month
+(`TokenRateLimitPeriod`). Each scope sums the `user_usage` buckets from the start
+of its widest window, and raises at the latest reset among the budgets it
 exceeds. A caller who waits until that time does not trip a budget that clears
 later.
 
@@ -163,8 +165,8 @@ rejected signup attempt still counts.
    other's scans.** A cost-only budget skips the token query, and a long cost
    window does not extend the token cutoff
    (`backend/onyx/server/query_and_chat/token_limit.py:_user_is_rate_limited_by_global`).
-   Token budgets reset at the UTC-day boundary where the trailing window drops
-   under budget. Cost budgets reset at fixed daily, weekly or monthly boundaries.
+   Both kinds reset at the end of their calendar period
+   (`backend/onyx/db/user_usage.py:get_period_window_reset`).
 10. `cost-cap-managed-keys-only` **The cloud cost cap applies only to
     Onyx-managed provider keys.**
     `backend/onyx/server/usage_limits.py:check_llm_cost_limit_for_provider`

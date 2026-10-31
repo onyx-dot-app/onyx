@@ -119,12 +119,12 @@ def test_default_group_rejects_every_non_membership_write(
         # token limits live on their own router, so they need their own guard
         "token_limit_create": client.post(
             f"{TOKEN_LIMIT_URL}/user-group/{group.id}",
-            json={"enabled": True, "token_budget": 1000, "period_hours": 24},
+            json={"enabled": True, "token_budget": 1000, "period": "DAILY"},
             headers=headers,
         ),
         "token_limit_update": client.put(
             f"{TOKEN_LIMIT_URL}/user-group/{group.id}/rate-limit/999999",
-            json={"enabled": False, "token_budget": 1, "period_hours": 24},
+            json={"enabled": False, "token_budget": 1, "period": "DAILY"},
             headers=headers,
         ),
         "token_limit_delete": client.delete(

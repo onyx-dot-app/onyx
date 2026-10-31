@@ -61,7 +61,7 @@ def test_create_persists_cost_budget_and_get_returns_it(db_session: Session) -> 
         json={
             "enabled": True,
             "token_budget": 1000,
-            "period_hours": 24,
+            "period": "DAILY",
             "cost_budget_cents": 500.0,
         },
     )
@@ -81,13 +81,13 @@ def test_cost_budget_optional_defaults_null(db_session: Session) -> None:
 
     created = client.post(
         "/admin/token-rate-limits/global",
-        json={"enabled": True, "token_budget": 1000, "period_hours": 24},
+        json={"enabled": True, "token_budget": 1000, "period": "DAILY"},
     )
     assert created.status_code == 200
     assert created.json()["cost_budget_cents"] is None
 
 
-def test_cost_budget_rejects_partial_day_period(db_session: Session) -> None:
+def test_rejects_unknown_period(db_session: Session) -> None:
     client = TestClient(_make_app(db_session))
 
     response = client.post(
@@ -95,7 +95,7 @@ def test_cost_budget_rejects_partial_day_period(db_session: Session) -> None:
         json={
             "enabled": True,
             "token_budget": None,
-            "period_hours": 25,
+            "period_hours": 24,
             "cost_budget_cents": 500.0,
         },
     )

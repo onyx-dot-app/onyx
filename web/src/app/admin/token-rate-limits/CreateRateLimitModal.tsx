@@ -4,6 +4,7 @@ import * as Yup from "yup";
 import {
   Button,
   Dropdown,
+  InputSingleSelect,
   InputTypeIn,
   Modal,
   SelectCard,
@@ -13,7 +14,7 @@ import {
 import React, { useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Form, Formik, useField, useFormikContext } from "formik";
-import { Scope } from "./types";
+import { Period, Scope } from "./types";
 import {
   ContentAction,
   InputErrorText,
@@ -26,7 +27,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import useShareableGroups from "@/hooks/useShareableGroups";
 import { formatCurrency, formatTokenCount } from "@/lib/format";
 
-const HOURS_PER_DAY = 24;
+const PERIODS = [Period.DAILY, Period.WEEKLY, Period.MONTHLY];
 // 1T tokens stored as thousands (1e9) stays well inside the column's int32.
 const MAX_TOKEN_BUDGET = 1_000_000_000_000;
 // Keeps *100 finite: an unbounded value can overflow to Infinity, which JSON.stringify serializes as null.
@@ -34,7 +35,7 @@ const MAX_COST_BUDGET_DOLLARS = 10_000_000_000;
 
 interface RateLimitFormValues {
   enabled: boolean;
-  period_days: string;
+  period: Period;
   token_budget: string;
   cost_budget_dollars: string;
   target_scope: Scope;
@@ -338,9 +339,7 @@ function LimitSummary({ groupName }: LimitSummaryProps) {
   const locale = useLocale();
   const { values } = useFormikContext<RateLimitFormValues>();
 
-  const period = Number(values.period_days);
-  if (!Number.isInteger(period) || period < 1) return null;
-
+  const period = values.period;
   const costAmount = parseBudgetInput(values.cost_budget_dollars);
   const tokenAmount = parseBudgetInput(values.token_budget);
   const cost = costAmount === null ? null : formatCurrency(costAmount, locale);
@@ -360,12 +359,12 @@ function LimitSummary({ groupName }: LimitSummaryProps) {
 
   const summary =
     values.target_scope === Scope.GLOBAL
-      ? t("modal.summary.global", { days: period, budget })
+      ? t("modal.summary.global", { period, budget })
       : values.target_scope === Scope.USER
-        ? t("modal.summary.user", { days: period, budget })
+        ? t("modal.summary.user", { period, budget })
         : groupName
-          ? t("modal.summary.group", { days: period, budget, group: groupName })
-          : t("modal.summary.groupUnchosen", { days: period, budget });
+          ? t("modal.summary.group", { period, budget, group: groupName })
+          : t("modal.summary.groupUnchosen", { period, budget });
 
   return (
     <div className="rounded-08 bg-background-tint-01 p-2">
@@ -381,7 +380,7 @@ interface CreateRateLimitModalProps {
   setIsOpen: (isOpen: boolean) => void;
   onSubmit: (
     target_scope: Scope,
-    period_hours: number,
+    period: Period,
     token_budget: number | null,
     cost_budget_cents: number | null,
     group_id?: number
@@ -432,17 +431,13 @@ export default function CreateRateLimitModal({
         <Formik<RateLimitFormValues>
           initialValues={{
             enabled: true,
-            period_days: "30",
+            period: Period.MONTHLY,
             token_budget: "",
             cost_budget_dollars: "",
             target_scope: forSpecificScope || Scope.GLOBAL,
             user_group_id: forSpecificUserGroup,
           }}
           validationSchema={Yup.object().shape({
-            period_days: Yup.number()
-              .required(t("modal.errors.periodRequired"))
-              .integer(t("modal.errors.periodInteger"))
-              .min(1, t("modal.errors.periodMin")),
             cost_budget_dollars: Yup.number()
               .transform((value, original) =>
                 original === "" ? undefined : value
@@ -503,7 +498,7 @@ export default function CreateRateLimitModal({
                 : Math.round(Number(values.cost_budget_dollars) * 100);
             await onSubmit(
               values.target_scope,
-              Number(values.period_days) * HOURS_PER_DAY,
+              values.period,
               tokenBudget,
               costBudgetCents,
               values.target_scope === Scope.USER_GROUP
@@ -637,25 +632,21 @@ export default function CreateRateLimitModal({
                     </InputVertical>
 
                     <InputVertical
-                      withLabel="period_days"
                       title={t("modal.period.title")}
                       description={t("modal.period.description")}
                     >
-                      <InputTypeInField
-                        name="period_days"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        rightChildren={
-                          <div className="pe-1">
-                            <Text
-                              font="secondary-action"
-                              color="text-03"
-                              wordWrap="whitespace-nowrap"
-                            >
-                              {t("modal.period.unit")}
-                            </Text>
-                          </div>
-                        }
+                      <InputSingleSelect
+                        value={values.period}
+                        onValueChange={(value) => {
+                          const period = PERIODS.find((p) => p === value);
+                          if (period) void setFieldValue("period", period);
+                        }}
+                        defaultOption={Period.MONTHLY}
+                        placeholder={t("modal.period.title")}
+                        options={PERIODS.map((period) => ({
+                          value: period,
+                          title: t(`modal.period.options.${period}`),
+                        }))}
                       />
                     </InputVertical>
 

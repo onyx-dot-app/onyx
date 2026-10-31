@@ -1,3 +1,4 @@
+import type { Period } from "@/app/admin/token-rate-limits/types";
 import type { UserGroupInfo, UserRow } from "@/views/admin/UsersPage/types";
 
 export interface ApiKeyDescriptor {
@@ -18,7 +19,7 @@ export interface TokenRateLimitDisplay {
   enabled: boolean;
   // null for a cost-only limit (matches the backend's nullable column).
   token_budget: number | null;
-  period_hours: number;
+  period: Period;
   cost_budget_cents: number | null;
 }
 

@@ -2,6 +2,7 @@ import { render, screen } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import UsageSettings from "@/app/app/settings/usage/UsageSettings";
 import { useUserUsage } from "@/app/app/settings/usage/lib";
+import { Period } from "@/app/admin/token-rate-limits/types";
 
 jest.mock("@/app/app/settings/usage/lib", () => ({
   useUserUsage: jest.fn(),
@@ -19,7 +20,7 @@ describe("UsageSettings", () => {
         window_cost_cents: 0,
         budget_cents: null,
         budget_remaining_cents: null,
-        budget_period_hours: null,
+        budget_period: null,
         budget_reset_at: null,
         selected_model_price: null,
         available_model_prices: [],
@@ -58,7 +59,7 @@ describe("UsageSettings", () => {
         window_cost_cents: 897.2,
         budget_cents: 1500,
         budget_remaining_cents: 602.8,
-        budget_period_hours: 720,
+        budget_period: Period.MONTHLY,
         budget_reset_at: "2026-09-01T00:00:00Z",
         selected_model_price: null,
         available_model_prices: [],
@@ -123,7 +124,7 @@ describe("UsageSettings", () => {
         window_cost_cents: 28,
         budget_cents: null,
         budget_remaining_cents: null,
-        budget_period_hours: null,
+        budget_period: null,
         budget_reset_at: null,
         selected_model_price: null,
         available_model_prices: [],

@@ -428,6 +428,14 @@ class TokenRateLimitScope(str, Enum):
     GLOBAL = "global"
 
 
+class TokenRateLimitPeriod(str, Enum):
+    """Fixed UTC calendar windows: the day, the week from Monday, the month."""
+
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+
+
 class FileStoreType(str, Enum):
     S3 = "s3"
     POSTGRES = "postgres"

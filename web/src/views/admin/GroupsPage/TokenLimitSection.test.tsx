@@ -9,7 +9,7 @@ function TokenLimitSectionHarness() {
       tokenId: null,
       enabled: true,
       tokenBudget: null,
-      periodDays: null,
+      period: null,
       costBudgetDollars: null,
     },
   ]);

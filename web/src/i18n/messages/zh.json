@@ -6309,7 +6309,12 @@
         },
         "timeWindow": {
           "header": "时间窗口",
-          "unit": "(UTC 天)"
+          "placeholder": "选择周期",
+          "options": {
+            "DAILY": "每天",
+            "WEEKLY": "每周",
+            "MONTHLY": "每月"
+          }
         },
         "tokenLimit": {
           "header": "Token 上限",
@@ -6326,9 +6331,6 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9875,7 +9877,7 @@
           "tokens": "最多 {tokens} 个 token"
         },
         "cadence": {
-          "label": "{days, plural, one {每天在 UTC 午夜重置} other {每 # 天在 UTC 午夜重置}}"
+          "label": "{period, select, DAILY {每天在 UTC 午夜重置} WEEKLY {每周一在 UTC 午夜重置} other {每月 1 日在 UTC 午夜重置}}"
         },
         "deleteFailed": {
           "error": "删除 token 速率限制失败"
@@ -9919,9 +9921,6 @@
           "costMinCents": "费用预算至少为 $0.01",
           "costMoreThanZero": "费用预算必须大于 0",
           "groupRequired": "请选择用户组",
-          "periodInteger": "请输入整数天数",
-          "periodMin": "至少为 1 天",
-          "periodRequired": "请输入重置周期",
           "scopeRequired": "目标范围为必填项",
           "tokenIncrement": "请以 1,000 个 token 为增量",
           "tokenInteger": "请输入整数个 token",
@@ -9940,7 +9939,11 @@
         "period": {
           "description": "预算在 UTC 午夜重置",
           "title": "重置周期",
-          "unit": "天"
+          "options": {
+            "DAILY": "每天",
+            "WEEKLY": "每周",
+            "MONTHLY": "每月"
+          }
         },
         "scope": {
           "caption": {
@@ -9970,10 +9973,10 @@
             "both": "{cost} 或 {tokens} 个 token",
             "tokens": "{tokens} 个 token"
           },
-          "global": "{days, plural, one {工作区中的所有人每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {工作区中的所有人每 # 天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "group": "{days, plural, one {每天，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {每 # 天，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "groupUnchosen": "{days, plural, one {所选用户组的成员每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {所选用户组的成员每 # 天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "user": "{days, plural, one {每位用户每天最多可花费 {budget}。在周期重置之前将无法继续使用。} other {每位用户每 # 天最多可花费 {budget}。在周期重置之前将无法继续使用。}}"
+          "global": "{period, select, DAILY {工作区中的所有人每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} WEEKLY {工作区中的所有人每周共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {工作区中的所有人每月共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
+          "group": "{period, select, DAILY {每天，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} WEEKLY {每周，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {每月，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
+          "groupUnchosen": "{period, select, DAILY {所选用户组的成员每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} WEEKLY {所选用户组的成员每周共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {所选用户组的成员每月共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
+          "user": "{period, select, DAILY {每位用户每天最多可花费 {budget}。在周期重置之前将无法继续使用。} WEEKLY {每位用户每周最多可花费 {budget}。在周期重置之前将无法继续使用。} other {每位用户每月最多可花费 {budget}。在周期重置之前将无法继续使用。}}"
         },
         "tokenBudget": {
           "description": "每个重置周期的最大 token 数",

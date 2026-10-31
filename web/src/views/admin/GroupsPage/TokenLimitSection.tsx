@@ -9,7 +9,8 @@ import type { RichStr } from "@opal/types";
 import { usePlans } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { Section } from "@/layouts/general-layouts";
-import { InputNumber } from "@opal/components";
+import { InputNumber, InputSingleSelect } from "@opal/components";
+import { Period } from "@/app/admin/token-rate-limits/types";
 import { Collapsible, Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
@@ -20,11 +21,13 @@ export interface TokenLimit {
   tokenId: number | null;
   enabled: boolean;
   tokenBudget: number | null;
-  periodDays: number | null;
+  period: Period | null;
   costBudgetDollars: number | null;
 }
 
-type TokenLimitValueField = "tokenBudget" | "periodDays" | "costBudgetDollars";
+type TokenLimitNumberField = "tokenBudget" | "costBudgetDollars";
+
+const PERIODS = [Period.DAILY, Period.WEEKLY, Period.MONTHLY];
 
 interface TokenLimitSectionProps {
   limits: TokenLimit[];
@@ -78,7 +81,7 @@ function TokenLimitSection({
     const emptyIndex = limits.findIndex(
       (l) =>
         l.tokenBudget === null &&
-        l.periodDays === null &&
+        l.period === null &&
         l.costBudgetDollars === null
     );
     if (emptyIndex !== -1) return;
@@ -92,7 +95,7 @@ function TokenLimitSection({
         tokenId: null,
         enabled: true,
         tokenBudget: null,
-        periodDays: null,
+        period: null,
         costBudgetDollars: null,
       },
     ]);
@@ -108,12 +111,17 @@ function TokenLimitSection({
 
   function updateLimit(
     index: number,
-    field: TokenLimitValueField,
+    field: TokenLimitNumberField,
     value: number | null
   ) {
     onLimitsChange(
       limits.map((l, i) => (i === index ? { ...l, [field]: value } : l))
     );
+  }
+
+  function updatePeriod(index: number, value: string) {
+    const period = PERIODS.find((p) => p === value) ?? null;
+    onLimitsChange(limits.map((l, i) => (i === index ? { ...l, period } : l)));
   }
 
   return (
@@ -158,11 +166,6 @@ function TokenLimitSection({
                   <Text font="main-ui-action" color="text-04">
                     {t("tokenLimits.timeWindow.header")}
                   </Text>
-                  <span className="ms-0.5">
-                    <Text font="main-ui-muted" color="text-03">
-                      {t("tokenLimits.timeWindow.unit")}
-                    </Text>
-                  </span>
                 </div>
               </div>
 
@@ -188,11 +191,14 @@ function TokenLimitSection({
                     />
                   </div>
                   <div className="flex-1">
-                    <InputNumber
-                      value={limit.periodDays}
-                      onChange={(v) => updateLimit(i, "periodDays", v)}
-                      min={1}
-                      placeholder={t("placeholders.tokenBudget")}
+                    <InputSingleSelect
+                      value={limit.period ?? ""}
+                      onValueChange={(v) => updatePeriod(i, v)}
+                      placeholder={t("tokenLimits.timeWindow.placeholder")}
+                      options={PERIODS.map((period) => ({
+                        value: period,
+                        title: t(`tokenLimits.timeWindow.options.${period}`),
+                      }))}
                     />
                   </div>
                   <Button
