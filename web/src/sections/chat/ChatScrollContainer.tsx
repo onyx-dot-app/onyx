@@ -237,6 +237,8 @@ const ChatScrollContainer = React.memo(
       }, [updateScrollState, getScrollState]);
 
       // MutationObserver (structural) + ResizeObserver (height growth).
+      // Re-attached per session: the scroll element remounts on a session
+      // change (it is keyed by `sessionId`).
       // NOT characterData — typewriter reveals don't change scrollHeight
       // and firing per-char thrashed auto-scroll.
       useEffect(() => {
@@ -253,6 +255,18 @@ const ChatScrollContainer = React.memo(
 
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
+            console.debug(
+              "[scrolldbg] change",
+              JSON.stringify({
+                wasAtBottom,
+                auto: autoScrollRef.current,
+                autoScrolling: isAutoScrollingRef.current,
+                smooth: container.dataset.smoothScrollActive,
+                h: container.scrollHeight,
+                top: container.scrollTop,
+                connected: container.isConnected,
+              })
+            );
 
             // Auto-scroll: follow content if we were at bottom.
             // Skip instant auto-scroll during DynamicBottomSpacer's smooth
@@ -290,7 +304,7 @@ const ChatScrollContainer = React.memo(
           resizeObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
-      }, [updateScrollState, scrollToBottom]);
+      }, [updateScrollState, scrollToBottom, sessionId]);
 
       // Handle session changes and anchor changes. A layout effect: opening a
       // chat whose messages are already rendered scrolls it into place before
