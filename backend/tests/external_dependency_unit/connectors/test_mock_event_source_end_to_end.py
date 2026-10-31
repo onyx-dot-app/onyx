@@ -31,6 +31,7 @@ from onyx.connectors.event_inbox.handlers import unregister_event_handler
 from onyx.connectors.event_inbox.source_registry import (
     get_webhook_source,
     unregister_webhook_source,
+    webhook_source_for,
 )
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import Document, InputType
@@ -59,7 +60,9 @@ def loaded_source(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None
     pass without it. A source registers once per process, so the cached
     module must go too.
     """
-    unregister_webhook_source(mock_event_source.SLUG)
+    owner = webhook_source_for(mock_event_source.SOURCE)
+    if owner is not None:
+        unregister_webhook_source(owner.slug)
     unregister_event_handler(mock_event_source.SOURCE)
     sys.modules.pop(MODULE, None)
 

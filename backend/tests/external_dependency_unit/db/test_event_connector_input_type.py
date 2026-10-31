@@ -16,6 +16,7 @@ from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
 from onyx.connectors.event_inbox.source_registry import (
     register_webhook_source,
     unregister_webhook_source,
+    webhook_source_for,
 )
 from onyx.connectors.event_models import EventParseResult
 from onyx.connectors.models import InputType
@@ -33,7 +34,9 @@ def _parse(request: WebhookRequest) -> EventParseResult:  # noqa: ARG001
 
 @pytest.fixture
 def registered_event_source() -> Generator[None, None, None]:
-    unregister_webhook_source("input-type-test")
+    owner = webhook_source_for(EVENT_SOURCE)
+    if owner is not None:
+        unregister_webhook_source(owner.slug)
     register_webhook_source(
         WebhookSourceSpec(
             source=EVENT_SOURCE,
