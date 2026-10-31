@@ -44,6 +44,33 @@ CT = TypeVar("CT", bound=ConnectorCheckpoint)
 _EPOCH_SECONDS: SecondsSinceUnixEpoch = 0.0
 
 
+class PruningStopRequested(RuntimeError):
+    """A prune heartbeat observed a stop during connector enumeration."""
+
+
+class _StopRequestingCallback(IndexingHeartbeatInterface):
+    """Make an observed prune stop an error for the connector.
+
+    A connector may honor the heartbeat by returning normally, before it has
+    listed everything. The caller cannot tell that return from a complete
+    listing, so the stop must not be reported as a boolean the connector can
+    swallow. Raising here forces the partial listing to abort.
+    """
+
+    def __init__(self, callback: IndexingHeartbeatInterface):
+        self._callback = callback
+
+    def should_stop(self) -> bool:
+        if self._callback.should_stop():
+            raise PruningStopRequested(
+                "Pruning stop requested during connector enumeration"
+            )
+        return False
+
+    def progress(self, tag: str, amount: int) -> None:
+        self._callback.progress(tag, amount)
+
+
 class SlimConnectorExtractionResult(BaseModel):
     """Result of extracting document IDs and hierarchy nodes from a connector.
 
@@ -191,13 +218,19 @@ def extract_ids_from_runnable_connector(
         | None
     ) = None
 
+    # Slim connectors get a heartbeat that raises on a stop. A connector that
+    # returns early cannot hand back a partial listing as if it were complete.
+    connector_callback = (
+        _StopRequestingCallback(callback) if callback is not None else None
+    )
+
     if isinstance(runnable_connector, SlimConnector):
         raw_batch_generator = runnable_connector.retrieve_all_slim_docs(
-            start=start, callback=callback
+            start=start, callback=connector_callback
         )
     elif isinstance(runnable_connector, SlimConnectorWithPermSync):
         raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync(
-            start=start, callback=callback
+            start=start, callback=connector_callback
         )
     # If the connector isn't slim, fall back to running it normally to get ids
     elif isinstance(runnable_connector, LoadConnector):

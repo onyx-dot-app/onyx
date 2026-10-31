@@ -5,7 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.background.celery.celery_utils import (
+    PruningStopRequested,
+    extract_ids_from_runnable_connector,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
@@ -408,7 +411,7 @@ def test_pruning_helper_forwards_the_heartbeat_to_the_slim_path() -> None:
         labels_to_skip=["skip-me"],
     )
 
-    with pytest.raises(RuntimeError, match="stopped by heartbeat"):
+    with pytest.raises(PruningStopRequested):
         extract_ids_from_runnable_connector(connector, callback=heartbeat)
 
     assert heartbeat.should_stop_calls == 2
