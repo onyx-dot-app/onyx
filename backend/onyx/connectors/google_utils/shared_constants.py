@@ -17,13 +17,25 @@ GOOGLE_SCOPES = {
         "https://www.googleapis.com/auth/admin.directory.user.readonly",
         "https://www.googleapis.com/auth/admin.directory.group.readonly",
     ],
+    # Google Chat reads through domain-wide delegation only: the admin scopes
+    # list every space and its members, and a member reads the messages.
+    DocumentSource.GOOGLE_CHAT: [
+        "https://www.googleapis.com/auth/chat.admin.spaces.readonly",
+        "https://www.googleapis.com/auth/chat.admin.memberships.readonly",
+        "https://www.googleapis.com/auth/chat.messages.readonly",
+        "https://www.googleapis.com/auth/admin.directory.user.readonly",
+    ],
 }
 
 # A credential shared by Gmail and Drive (a Google family credential) consents to
 # both sources' scopes, so re-authorizing it for one source keeps the other
 # working.
 GOOGLE_FAMILY_SCOPES = sorted(
-    {scope for source_scopes in GOOGLE_SCOPES.values() for scope in source_scopes}
+    {
+        scope
+        for source in (DocumentSource.GMAIL, DocumentSource.GOOGLE_DRIVE)
+        for scope in GOOGLE_SCOPES[source]
+    }
 )
 
 GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/auth"

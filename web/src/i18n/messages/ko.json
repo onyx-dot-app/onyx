@@ -1331,6 +1331,9 @@
         "gmail": {
           "description": "Google 이메일"
         },
+        "googleChat": {
+          "description": "스페이스 대화"
+        },
         "bookstack": {
           "description": "자체 호스팅 위키"
         },
@@ -4058,6 +4061,15 @@
         "gmail": {
           "description": "Gmail 커넥터 구성"
         },
+        "google_chat": {
+          "description": "Google Chat 커넥터 구성",
+          "fields": {
+            "spaces": {
+              "label": "스페이스",
+              "description": "색인을 생성할 스페이스의 이름 또는 ID(스페이스 URL에서 확인)입니다. 비워 두면 조직의 이름이 지정된 모든 스페이스의 색인을 생성합니다. 채팅 메시지와 그룹 채팅은 색인되지 않습니다."
+            }
+          }
+        },
         "bookstack": {
           "description": "Bookstack 커넥터 구성",
           "fields": {
@@ -5234,6 +5246,8 @@
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요.",
+        "googleChatPrimaryAdmin": "Chat 및 스페이스 대화 권한이 있는 Google Workspace 관리자입니다. Onyx는 이 관리자로 스페이스와 구성원을 조회합니다.",
+        "googleChatServiceAccountKey": "설정 가이드에 나온 Google Chat 및 Admin Directory 범위에 대해 도메인 전체 위임이 설정된 서비스 계정의 `.json` 키를 업로드하거나 붙여넣으세요.",
         "confluencePersonalAccessToken": "Confluence 관리자 계정의 [개인 액세스 토큰](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)을 붙여 넣으세요."
       },
       "methods": {

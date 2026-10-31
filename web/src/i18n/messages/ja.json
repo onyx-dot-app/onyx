@@ -1331,6 +1331,9 @@
         "gmail": {
           "description": "Google のメール"
         },
+        "googleChat": {
+          "description": "スペースの会話"
+        },
         "bookstack": {
           "description": "セルフホスト型 Wiki"
         },
@@ -4058,6 +4061,15 @@
         "gmail": {
           "description": "Gmail コネクターを設定"
         },
+        "google_chat": {
+          "description": "Google Chat コネクタを設定",
+          "fields": {
+            "spaces": {
+              "label": "スペース",
+              "description": "インデックスを作成するスペースの名前または ID（スペースの URL から取得）。空欄にすると、組織内のすべての名前付きスペースのインデックスを作成します。ダイレクト メッセージとグループ チャットはインデックスに含まれません。"
+            }
+          }
+        },
         "bookstack": {
           "description": "Bookstack コネクターを設定",
           "fields": {
@@ -5234,6 +5246,8 @@
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。",
+        "googleChatPrimaryAdmin": "Chat とスペースの会話の権限を持つ Google Workspace 管理者。Onyx はこの管理者としてスペースとそのメンバーを一覧表示します。",
+        "googleChatServiceAccountKey": "セットアップ ガイドに記載された Google Chat と Admin Directory のスコープについて、ドメイン全体の委任が設定されたサービス アカウントの `.json` キーをアップロードまたは貼り付けてください。",
         "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。"
       },
       "methods": {

@@ -1331,6 +1331,9 @@
         "gmail": {
           "description": "Google 邮箱"
         },
+        "googleChat": {
+          "description": "聊天室对话"
+        },
         "bookstack": {
           "description": "自托管维基"
         },
@@ -4058,6 +4061,15 @@
         "gmail": {
           "description": "配置 Gmail 连接器"
         },
+        "google_chat": {
+          "description": "配置 Google Chat 连接器",
+          "fields": {
+            "spaces": {
+              "label": "聊天室",
+              "description": "要编入索引的聊天室名称或 ID（来自聊天室网址）。留空则为组织中的所有命名聊天室编入索引。不会为私信和群聊编入索引。"
+            }
+          }
+        },
         "bookstack": {
           "description": "配置 Bookstack 连接器",
           "fields": {
@@ -5234,6 +5246,8 @@
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。",
+        "googleChatPrimaryAdmin": "拥有 Chat 和聊天室对话权限的 Google Workspace 管理员。Onyx 以该管理员身份列出聊天室及其成员。",
+        "googleChatServiceAccountKey": "上传或粘贴服务账号的 `.json` 密钥，该账号需针对设置指南中的 Google Chat 和 Admin Directory 范围启用全网域授权。",
         "confluencePersonalAccessToken": "粘贴您的 Confluence 管理员账户的[个人访问令牌](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)。"
       },
       "methods": {

@@ -107,6 +107,10 @@
       "src": "logos/gong"
     },
     {
+      "out": "assets/overview/core_features/connectors/google_chat.svg",
+      "src": "logos/google-chat"
+    },
+    {
       "out": "assets/overview/core_features/connectors/google_drive.svg",
       "src": "logos/google-drive"
     },
