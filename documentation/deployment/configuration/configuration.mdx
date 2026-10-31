@@ -841,7 +841,7 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
 
     `ENV_SEED_CONFIGURATION` accepts a JSON string with the following options:
     - `llms`: List of LLM configurations (name, provider, api_key, api_base, api_version, custom_config, default_model_name, fast_default_model_name)
-    - `admin_user_emails`: List of email addresses for automatic admin role assignment
+    - `admin_user_emails`: List of email addresses for automatic admin role assignment. Password users get admin access only after they verify their email address.
     - `seeded_name`: Pre-set name for your Onyx instance
     - `seeded_logo_path`: Path to your logo within the assets folder
   </Accordion>
