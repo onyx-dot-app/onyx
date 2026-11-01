@@ -10,6 +10,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.models import SearchSettings
 from onyx.indexing import indexing_pipeline
 from onyx.utils.postgres_sanitization import (
     sanitize_document_for_postgres,
@@ -182,6 +183,14 @@ def test_index_doc_batch_prepare_sanitizes_before_db_ops(
 
     monkeypatch.setattr(
         indexing_pipeline, "get_documents_by_ids", _get_documents_by_ids
+    )
+
+    def _get_current_search_settings(db_session: object) -> SearchSettings:
+        _ = db_session
+        return SearchSettings(id=1)
+
+    monkeypatch.setattr(
+        indexing_pipeline, "get_current_search_settings", _get_current_search_settings
     )
 
     def _capture_upsert_documents_in_db(**kwargs: object) -> None:
