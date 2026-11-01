@@ -103,9 +103,13 @@ def _extract_sla_lines_and_latest_dt(
         ongoing = metric.get("ongoingCycle")
         if isinstance(ongoing, dict):
             parts: list[str] = [f"{name} (ongoing)"]
+            is_breached = ongoing.get("breached") is True
             for key in ("startTime", "breachTime", "stopTime"):
                 dt = _parse_jsm_epoch_ms(ongoing.get(key))
-                _record_dt(dt)
+                if key in ("startTime", "stopTime") or (
+                    key == "breachTime" and is_breached
+                ):
+                    _record_dt(dt)
                 if dt is not None:
                     parts.append(f"{key}={dt.isoformat()}")
             if "breached" in ongoing:
@@ -124,9 +128,13 @@ def _extract_sla_lines_and_latest_dt(
             if not isinstance(cycle, dict):
                 continue
             parts = [f"{name} (completed)"]
+            is_breached = cycle.get("breached") is True
             for key in ("startTime", "stopTime", "breachTime"):
                 dt = _parse_jsm_epoch_ms(cycle.get(key))
-                _record_dt(dt)
+                if key in ("startTime", "stopTime") or (
+                    key == "breachTime" and is_breached
+                ):
+                    _record_dt(dt)
                 if dt is not None:
                     parts.append(f"{key}={dt.isoformat()}")
             if "breached" in cycle:

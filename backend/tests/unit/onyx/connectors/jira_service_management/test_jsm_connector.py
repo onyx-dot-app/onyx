@@ -288,3 +288,34 @@ def test_jsm_comment_fetch_failure_propagates(mock_get: MagicMock) -> None:
 
     with pytest.raises(requests.HTTPError):
         list(connector.load_from_state())
+
+
+@patch("onyx.connectors.jira_service_management.connector._jsm_get")
+def test_jsm_future_sla_breach_deadline_does_not_future_date_doc(
+    mock_get: MagicMock,
+) -> None:
+    req_resp = MagicMock()
+    req_resp.json.return_value = {
+        "values": [_sample_request(issue_key="SD-101", epoch_ms=1730000000000)],
+        "isLastPage": True,
+    }
+    comment_resp = MagicMock()
+    comment_resp.json.return_value = {"values": [], "isLastPage": True}
+    mock_get.side_effect = [req_resp, comment_resp]
+
+    connector = JiraServiceManagementConnector(
+        jsm_base_url="https://acme.atlassian.net"
+    )
+    connector.load_credentials(
+        {"jira_user_email": "bot@example.com", "jira_api_token": "secret"}
+    )
+
+    batches = list(
+        connector.poll_source(start=1729999900.0, end=1730000050.0)
+    )
+    assert len(batches) == 1
+    assert len(batches[0]) == 1
+    doc = batches[0][0]
+    assert doc.id == "jsm:https://acme.atlassian.net:SD-101"
+    assert doc.doc_updated_at is not None
+    assert doc.doc_updated_at.timestamp() == 1730000000.0
