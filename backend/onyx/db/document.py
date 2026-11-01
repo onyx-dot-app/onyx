@@ -376,8 +376,11 @@ def record_reindex_write__no_commit(
     With `skip_docs_recorded_for_target`, a doc whose secondary_search_settings_id is
     already the target is left alone. The port uses this, because that doc was written
     after the port read its hash.
+
+    A write into an index older than `present` saves nothing: that index is retired,
+    so its hash says nothing about PRESENT, and the record may describe PRESENT.
     """
-    if not ids_to_hash:
+    if not ids_to_hash or written_search_settings_id < present.id:
         return
     doc_hash = _doc_hash_values(ids_to_hash)
     stmt = update(DbDocument).where(DbDocument.id == doc_hash.c.id)

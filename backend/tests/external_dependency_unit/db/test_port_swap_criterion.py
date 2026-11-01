@@ -1192,6 +1192,26 @@ def test_reindex_write_copies_the_present_hash_into_content_hash(
     assert _columns(db_session, indexed) == ("v1", "v9", next_id)
 
 
+def test_reindex_write_for_an_older_index_changes_nothing(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A batch for the index PRESENT replaced finishes late. That index is retired,
+    so its hash must not replace the record that says what PRESENT holds."""
+    cc_pair, present_id = cc_pair_and_future
+    present = PresentSearchSettingsRef(id=present_id, port_backfill_source_id=None)
+    doc = _seed_hashed_doc(db_session, cc_pair, "late", "old", ("v1", present_id))
+
+    record_reindex_write__no_commit(
+        db_session,
+        {doc: "v2"},
+        present_id - 1,
+        present,
+        skip_docs_recorded_for_target=False,
+    )
+    db_session.commit()
+    assert _columns(db_session, doc) == ("old", "v1", present_id)
+
+
 def test_lazy_resolution_through_two_reindexes(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
