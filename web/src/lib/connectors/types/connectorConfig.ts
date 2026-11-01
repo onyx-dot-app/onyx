@@ -85,6 +85,8 @@ export interface JiraConfig {
   jql_query?: string;
 }
 
+export interface JiraServiceManagementConfig extends JiraConfig {}
+
 export interface SalesforceConfig {
   requested_objects?: string[];
 }
