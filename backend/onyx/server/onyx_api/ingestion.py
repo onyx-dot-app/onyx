@@ -27,10 +27,7 @@ from onyx.db.port_orphan_candidate import (
     delete_port_orphan_candidates_by_id,
     record_port_orphan_candidates_for_document,
 )
-from onyx.db.search_settings import (
-    get_active_search_settings,
-    get_current_search_settings,
-)
+from onyx.db.search_settings import get_active_search_settings
 from onyx.db.user_file import get_owned_file_ids, get_user_file_by_id
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -189,13 +186,12 @@ def upsert_ingestion_doc(
         )
 
     # Need to index for both the primary and secondary index if possible
+    # One settings row for the embedder, the index and the recorded id, as in the
+    # secondary run below.
     active_search_settings = get_active_search_settings(db_session)
     document_index = get_default_document_index(active_search_settings.primary, None)
-
-    search_settings = get_current_search_settings(db_session)
-
     index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
-        search_settings=search_settings
+        search_settings=active_search_settings.primary
     )
 
     # Build adapter for primary indexing
