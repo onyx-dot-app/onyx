@@ -91,11 +91,13 @@ class JiraServiceManagementConnectorConfig(BaseUrlCredentialBinding, ConnectorCo
     @field_validator("project_key")
     @classmethod
     def _check_project_key(cls, value: str) -> str:
+        """Validate that project_key adheres to Jira Cloud key naming rules."""
         return validate_project_key(value)
 
     @field_validator("request_jql")
     @classmethod
     def _check_request_jql(cls, value: str | None) -> str | None:
+        """Validate that request_jql has no ORDER BY clause and has balanced parentheses."""
         if value is None:
             return None
         if has_order_by(value):

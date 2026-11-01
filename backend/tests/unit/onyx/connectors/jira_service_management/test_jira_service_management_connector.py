@@ -24,14 +24,17 @@ class HB(IndexingHeartbeatInterface):
     """Minimal heartbeat implementing the real interface contract."""
 
     def __init__(self, stop: bool = False) -> None:
+        """Initialize mock heartbeat with stop state and tracking calls."""
         super().__init__()
         self._stop = stop
         self.calls: list[tuple[str, int]] = []
 
     def should_stop(self) -> bool:
+        """Return True if indexing stop was requested."""
         return self._stop
 
     def progress(self, tag: str, amount: int) -> None:
+        """Record a progress callback event."""
         self.calls.append((tag, amount))
 
 
@@ -40,6 +43,7 @@ def _connector(
     batch_size: int = 10,
     base_url: str = "https://acme.atlassian.net",
 ) -> JiraServiceManagementConnector:
+    """Instantiate a JiraServiceManagementConnector for testing."""
     return JiraServiceManagementConnector(
         base_url=base_url,
         project_key="ABC",
@@ -49,6 +53,7 @@ def _connector(
 
 
 def _issue(key: str) -> dict[str, Any]:
+    """Generate a sample Jira Cloud issue dictionary."""
     return {
         "key": key,
         "fields": {

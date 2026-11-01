@@ -49,6 +49,7 @@ _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 
 def _is_loopback(host: str | None) -> bool:
+    """Return True if host resolves to a local loopback IP or hostname."""
     if not host:
         return False
     host = host.lower().strip("[]")
@@ -105,6 +106,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         batch_size: int = INDEX_BATCH_SIZE,
         request_jql: str | None = None,
     ) -> None:
+        """Initialize the Jira Service Management connector with scoped configuration."""
         self.base_url = _validate_base_url(base_url)
         self.project_key = validate_project_key(project_key)
         self.batch_size = batch_size
@@ -131,6 +133,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         self._session.mount("http://", adapter)
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        """Load API email and token credentials and bind them to the session auth."""
         self.email = (
             credentials.get("jsm_email") or credentials.get("email") or self.email
         )
@@ -145,6 +148,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
     # ------------------------------------------------------------------ HTTP
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Send a GET request to the Jira REST API with retry handling and detailed error logging."""
         url = urljoin(self.base_url + "/", path.lstrip("/"))
         resp = self._session.get(url, params=params, timeout=60)
         if not resp.ok:
@@ -161,6 +165,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         return resp.json()
 
     def _search(self, jql: str, next_page_token: str | None) -> dict[str, Any]:
+        """Execute a paginated JQL search via Jira Cloud REST API v3."""
         params: dict[str, Any] = {
             "jql": jql,
             "maxResults": _JSM_PAGE_SIZE,
@@ -207,6 +212,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         return collected
 
     def _issue_to_document(self, issue: dict[str, Any]) -> Document:
+        """Convert a Jira issue dictionary into a searchable Onyx Document."""
         key = str(issue["key"])
         fields = issue.get("fields") or {}
         summary = str(fields.get("summary") or "")
@@ -283,9 +289,11 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
     # ------------------------------------------------------------ Interfaces
     def load_from_state(self) -> GenerateDocumentsOutput:
+        """Bulk load all documents within the configured project scope."""
         yield from self._yield_batches(self.request_jql)
 
     def poll_source(self, start: float, end: float) -> GenerateDocumentsOutput:
+        """Incrementally pull documents modified within the given epoch timestamp range."""
         time_filter = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
         yield from self._yield_batches(f"{self.request_jql} AND {time_filter}")
 
@@ -295,6 +303,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
+        """Retrieve all document IDs for deletion sync, notifying heartbeat callbacks."""
         # Full project listing is intentional: Jira Cloud nextPageToken cursor
         # pagination provides all project keys for deletion sync.
         slim: list[SlimDocument] = []
