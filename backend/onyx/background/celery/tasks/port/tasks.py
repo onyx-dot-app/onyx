@@ -151,6 +151,7 @@ def _copy_batch_with_retry(
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
     on_docs_already_in_target: Callable[[set[str]], None] | None = None,
+    on_docs_written: Callable[[set[str]], None] | None = None,
 ) -> tuple[int, bool]:
     """Copy one batch, retrying up to _PORT_BATCH_MAX_RETRIES on any failure.
     Returns (chunks written, aborted); aborted=True means should_abort stopped
@@ -174,6 +175,7 @@ def _copy_batch_with_retry(
                 surviving_doc_ids=surviving_doc_ids,
                 should_abort=should_abort,
                 on_docs_already_in_target=on_docs_already_in_target,
+                on_docs_written=on_docs_written,
             )
         except Exception as e:
             last_error = e
@@ -492,6 +494,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         # Docs the create-only write found already in FUTURE: secondary indexing or
         # an earlier copy (a retry, or a resume) owns them, so this copy wrote nothing.
         docs_already_in_target: set[str] = set()
+        # Docs this copy created chunks for.
+        docs_written: set[str] = set()
         try:
             if record_hashes:
                 # A write is searchable only after a refresh. Without this the scan
@@ -504,6 +508,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 surviving_doc_ids=_surviving_doc_ids,
                 should_abort=_should_abort,
                 on_docs_already_in_target=docs_already_in_target.update,
+                on_docs_written=docs_written.update,
             )
         except Exception as e:
             log.exception("Port batch failed after retries; marking FAILED")
@@ -525,13 +530,13 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         cursor = doc_ids[-1]
         docs_ported += len(doc_ids)
         if record_hashes:
-            # Record only what this copy put in FUTURE: not a doc already there, nor
-            # one deleted mid-batch (its chunks were dropped before the write).
-            copied_ids = _surviving_doc_ids() - docs_already_in_target
+            # Record what this copy put in FUTURE: not a doc already there, nor one
+            # deleted mid-batch (its chunks were dropped before the write). A doc the
+            # scan found no chunks for is recorded as absent: FUTURE does not have it.
+            surviving = _surviving_doc_ids() - docs_already_in_target
             snapshot_hashes = {
-                doc_id: content_hash
-                for doc_id, content_hash in snapshot_hashes.items()
-                if doc_id in copied_ids
+                doc_id: snapshot_hashes.get(doc_id) if doc_id in docs_written else None
+                for doc_id in surviving
             }
         with get_session_with_current_tenant() as db_session:
             if record_hashes:

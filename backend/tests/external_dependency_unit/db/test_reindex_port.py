@@ -769,17 +769,18 @@ def test_run_port_attempt_records_ported_content_hash(
     db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """For each doc its copy put in the target, the port records the version the
-    source index holds, copying the PRESENT hash into content_hash first. It records nothing
-    for a doc the create-only write found already there (secondary indexing or an
-    earlier copy wrote it) or a doc deleted mid-batch, and it keeps the record
-    secondary indexing already made for the target."""
+    source index holds, copying the PRESENT hash into content_hash first. A doc the scan
+    found no chunks for is recorded as absent from the target. It records nothing for
+    a doc the create-only write found already there (secondary indexing or an earlier
+    copy wrote it) or a doc deleted mid-batch, and it keeps the record secondary
+    indexing already made for the target."""
     cc_pair, future_id = cc_pair_and_port_future
     present = get_current_search_settings(db_session)
     present_ref = PresentSearchSettingsRef.from_settings(present)
-    secondary, existing, deleted, no_hash, copied, stale = _seed_cc_pair_documents(
-        db_session, cc_pair, 6
+    secondary, existing, deleted, no_hash, copied, stale, missing = (
+        _seed_cc_pair_documents(db_session, cc_pair, 7)
     )
-    for doc_id in (secondary, existing, deleted, copied):
+    for doc_id in (secondary, existing, deleted, copied, missing):
         doc = db_session.get(DbDocument, doc_id)
         assert doc is not None
         doc.content_hash = f"hash-{doc_id}"
@@ -804,10 +805,13 @@ def test_run_port_attempt_records_ported_content_hash(
     def copy(
         ids: list[str],
         on_docs_already_in_target: Callable[[set[str]], None],
+        on_docs_written: Callable[[set[str]], None],
         **_: object,
     ) -> tuple[int, bool]:
         # `secondary` and `existing` already have chunks in FUTURE: benign 409s.
         on_docs_already_in_target({secondary, existing})
+        # `missing` survives but the scan found no chunks for it.
+        on_docs_written({no_hash, copied, stale})
         # `deleted` loses its cc_pair link mid-batch, so its chunks are dropped.
         db_session.query(DocumentByConnectorCredentialPair).filter(
             DocumentByConnectorCredentialPair.id == deleted
@@ -831,7 +835,7 @@ def test_run_port_attempt_records_ported_content_hash(
             )
             for row in db_session.query(DbDocument).filter(
                 DbDocument.id.in_(
-                    [secondary, existing, deleted, no_hash, copied, stale]
+                    [secondary, existing, deleted, no_hash, copied, stale, missing]
                 )
             )
         }
@@ -842,6 +846,7 @@ def test_run_port_attempt_records_ported_content_hash(
             no_hash: (None, None, future_id),
             copied: (f"hash-{copied}", f"hash-{copied}", future_id),
             stale: ("present-v", "present-v", future_id),
+            missing: (f"hash-{missing}", None, future_id),
         }
     finally:
         # Unlinked, so the fixture cleanup (cc_pair-linked docs only) misses it.

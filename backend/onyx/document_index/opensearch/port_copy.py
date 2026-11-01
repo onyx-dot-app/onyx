@@ -100,6 +100,7 @@ def copy_present_chunks_to_future(
     should_abort: Callable[[], bool] | None = None,
     strip_stored_context: bool = False,
     on_docs_already_in_target: Callable[[set[str]], None] | None = None,
+    on_docs_written: Callable[[set[str]], None] | None = None,
 ) -> tuple[int, bool]:
     """Port one batch PRESENT -> FUTURE; returns (chunks written, aborted).
     aborted=True means should_abort stopped the copy mid-batch, so the caller must not
@@ -107,10 +108,10 @@ def copy_present_chunks_to_future(
 
     should_abort brackets each re-embed and precedes each write — it aborts a cancelled
     attempt and heartbeats so a slow-but-live port isn't stall-failed. surviving_doc_ids
-    drops chunks of docs deleted mid-batch (no resurrection). on_docs_already_in_target gets,
-    per write, the docs the create-only write found already in FUTURE (a secondary
-    indexing or earlier port write owns them), so the caller does not count them as
-    written by this copy."""
+    drops chunks of docs deleted mid-batch (no resurrection). After each write,
+    on_docs_already_in_target gets the docs the create-only write found already in FUTURE
+    (a secondary indexing or earlier port write owns them) and on_docs_written the docs
+    it created chunks for, so the caller knows what this copy put there."""
     if strategy is ReembedStrategy.COPY_VECTORS:
         return _copy_stored_vectors(
             present_client=present_client,
@@ -123,6 +124,7 @@ def copy_present_chunks_to_future(
             should_abort=should_abort,
             strip_stored_context=strip_stored_context,
             on_docs_already_in_target=on_docs_already_in_target,
+            on_docs_written=on_docs_written,
         )
     pages: Iterable[list[DocumentChunkWithoutVectors]]
     # Contextual RAG-on AUGMENTATION: buffer to reassemble each doc (chunks span PIT pages), then
@@ -166,6 +168,7 @@ def copy_present_chunks_to_future(
             surviving_doc_ids,
             should_abort,
             on_docs_already_in_target,
+            on_docs_written,
         )
         chunks_written += written
         if aborted:
@@ -184,6 +187,7 @@ def _copy_stored_vectors(
     should_abort: Callable[[], bool] | None,
     strip_stored_context: bool,
     on_docs_already_in_target: Callable[[set[str]], None] | None,
+    on_docs_written: Callable[[set[str]], None] | None,
 ) -> tuple[int, bool]:
     """COPY_VECTORS: write each PRESENT chunk with its stored content vector.
     Only a chunk whose stored context the FUTURE strips is re-embedded."""
@@ -212,6 +216,7 @@ def _copy_stored_vectors(
             surviving_doc_ids,
             should_abort,
             on_docs_already_in_target,
+            on_docs_written,
         )
         chunks_written += written
         if aborted:
@@ -225,6 +230,7 @@ def _write_port_chunks(
     surviving_doc_ids: Callable[[], set[str]] | None,
     should_abort: Callable[[], bool] | None,
     on_docs_already_in_target: Callable[[set[str]], None] | None,
+    on_docs_written: Callable[[set[str]], None] | None,
 ) -> tuple[int, bool]:
     """Writes one page of ported chunks create-only; returns (written, aborted)."""
     if not chunks:
@@ -256,6 +262,8 @@ def _write_port_chunks(
         existing = future_index.index_raw_chunks(sub, use_create_only=True)
         if existing and on_docs_already_in_target is not None:
             on_docs_already_in_target(existing)
+        if on_docs_written is not None:
+            on_docs_written({c.document_id for c in sub} - existing)
         written += len(sub)
     return written, False
 
@@ -346,6 +354,7 @@ class PortCopier:
         surviving_doc_ids: Callable[[], set[str]] | None = None,
         should_abort: Callable[[], bool] | None = None,
         on_docs_already_in_target: Callable[[set[str]], None] | None = None,
+        on_docs_written: Callable[[set[str]], None] | None = None,
     ) -> tuple[int, bool]:
         return copy_present_chunks_to_future(
             present_client=self._source_client,
@@ -360,4 +369,5 @@ class PortCopier:
             should_abort=should_abort,
             strip_stored_context=self._strip_stored_context,
             on_docs_already_in_target=on_docs_already_in_target,
+            on_docs_written=on_docs_written,
         )

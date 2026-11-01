@@ -38,6 +38,8 @@ def test_copier_drops_docs_deleted_mid_batch(mock_reembed: MagicMock) -> None:
     ]
     mock_reembed.side_effect = _passthrough_reembed
     future_index = MagicMock()
+    future_index.index_raw_chunks.return_value = set()
+    written_docs: set[str] = set()
 
     written, aborted = copy_present_chunks_to_future(
         present_client=present_client,
@@ -48,12 +50,14 @@ def test_copier_drops_docs_deleted_mid_batch(mock_reembed: MagicMock) -> None:
         present_tokenizer=MagicMock(),
         tenant_state=TenantState(tenant_id="public", multitenant=False),
         surviving_doc_ids=lambda: {"doc_a"},  # doc_b deleted mid-batch
+        on_docs_written=written_docs.update,
     )
 
     assert written == 1
     assert aborted is False
     (written_chunks,), _ = future_index.index_raw_chunks.call_args
     assert [c.document_id for c in written_chunks] == ["doc_a"]
+    assert written_docs == {"doc_a"}
 
 
 @patch("onyx.document_index.opensearch.port_copy.re_embed_chunks")
@@ -261,7 +265,7 @@ def test_copier_writes_all_without_filter(mock_reembed: MagicMock) -> None:
 @patch("onyx.document_index.opensearch.port_copy.re_embed_chunks")
 def test_copier_reports_docs_already_in_target(mock_reembed: MagicMock) -> None:
     """A doc whose chunk the create-only write found already in FUTURE (benign 409)
-    is reported, so the port does not record it as written by this copy."""
+    is reported as already there, not as written by this copy."""
     present_client = MagicMock()
     present_client.iter_chunks_for_doc_ids.return_value = [
         [_chunk("doc_a"), _chunk("doc_b")]
@@ -270,6 +274,7 @@ def test_copier_reports_docs_already_in_target(mock_reembed: MagicMock) -> None:
     future_index = MagicMock()
     future_index.index_raw_chunks.return_value = {"doc_b"}
     existing: set[str] = set()
+    written_docs: set[str] = set()
 
     written, aborted = copy_present_chunks_to_future(
         present_client=present_client,
@@ -280,7 +285,9 @@ def test_copier_reports_docs_already_in_target(mock_reembed: MagicMock) -> None:
         present_tokenizer=MagicMock(),
         tenant_state=TenantState(tenant_id="public", multitenant=False),
         on_docs_already_in_target=existing.update,
+        on_docs_written=written_docs.update,
     )
 
     assert (written, aborted) == (2, False)
     assert existing == {"doc_b"}
+    assert written_docs == {"doc_a"}
