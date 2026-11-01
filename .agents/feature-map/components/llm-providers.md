@@ -169,10 +169,11 @@ TypeSafe, Nace and OpenRouter use the System One request shape in
 (`llm/well_known_providers/nace.py:fetch_nace_models`) drops catalog aliases.
 It separates rejected credentials from upstream, transport and invalid-catalog
 failures; public errors omit upstream response bodies.
-`llm/decisions/models.py:SystemOneScoreAnswer.index_listed_legend` maps Nace's
-ordered score labels to level keys; `_validate_answers` then restores each
-score label from the requested level and allows rounding error in
-probability sums.
+`llm/decisions/client.py:_index_listed_legends` maps Nace's ordered score
+labels to level keys (Nace only; `SystemOneScoreAnswer` stays map-only);
+`_validate_answers` then restores each score label from the requested level
+and allows Nace's 4-decimal rounding in probability sums (other providers
+1e-5).
 
 ---
 

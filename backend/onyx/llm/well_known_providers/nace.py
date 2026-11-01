@@ -2,10 +2,15 @@ import httpx
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.decisions.client import NACE_CLIENT_HEADER, nace_client_header_value
+from onyx.llm.decisions.client import (
+    NACE_API_BASE,
+    NACE_CLIENT_HEADER,
+    nace_client_header_value,
+)
 from onyx.llm.well_known_providers.models import NaceModel, NaceModelsResponse
+from onyx.utils.logger import setup_logger
 
-NACE_API_BASE = "https://console.nace.ai/v1"
+logger = setup_logger()
 
 
 def fetch_nace_models(api_key: str) -> list[NaceModel]:
@@ -25,9 +30,17 @@ def fetch_nace_models(api_key: str) -> list[NaceModel]:
                 },
             )
             response.raise_for_status()
-            models = NaceModelsResponse.model_validate(response.json()).models
+            payload = response.json()
+    except UnicodeEncodeError:
+        # HTTP headers are ASCII; a key with other characters cannot be valid.
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Unable to discover Nace models. Check the API key and model access.",
+        ) from None
     except httpx.HTTPStatusError as error:
-        if error.response.status_code in (
+        upstream_status = error.response.status_code
+        logger.warning("Nace model discovery returned HTTP %s", upstream_status)
+        if upstream_status in (
             OnyxErrorCode.UNAUTHENTICATED.status_code,
             OnyxErrorCode.UNAUTHORIZED.status_code,
         ):
@@ -38,14 +51,28 @@ def fetch_nace_models(api_key: str) -> list[NaceModel]:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             "Nace model discovery returned an upstream error. Try again later.",
-            status_code_override=error.response.status_code,
+            # Only 4xx/5xx are relayed; a redirect or other status is a bad gateway.
+            status_code_override=(
+                upstream_status if 400 <= upstream_status < 600 else None
+            ),
         ) from None
-    except httpx.RequestError:
+    except httpx.RequestError as error:
+        logger.warning("Nace model discovery failed: %s", type(error).__name__)
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             "Unable to reach Nace model discovery. Try again later.",
         ) from None
-    except ValueError:
+    except ValueError as error:
+        # response.json() failed: the body was not JSON.
+        logger.warning("Nace model discovery failed: %s", type(error).__name__)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Nace model discovery returned an invalid catalog.",
+        ) from None
+    try:
+        models = NaceModelsResponse.model_validate(payload).models
+    except ValueError as error:
+        logger.warning("Nace model discovery failed: %s", type(error).__name__)
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             "Nace model discovery returned an invalid catalog.",

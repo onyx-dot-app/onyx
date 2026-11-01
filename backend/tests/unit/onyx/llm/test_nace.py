@@ -100,6 +100,57 @@ def test_discovery_rejects_malformed_catalog(payload: object) -> None:
     assert failure.value.error_code is OnyxErrorCode.BAD_GATEWAY
 
 
+@pytest.mark.parametrize("status", [302, 304])
+def test_discovery_maps_redirects_to_bad_gateway(status: int) -> None:
+    response = httpx.Response(
+        status,
+        headers={"location": "https://other.example/models"},
+        request=httpx.Request("GET", "https://console.nace.ai/v1/models"),
+    )
+    with patch("onyx.llm.well_known_providers.nace.httpx.Client") as client:
+        client.return_value.__enter__.return_value.get.return_value = response
+        with pytest.raises(OnyxError) as failure:
+            fetch_nace_models("secret")
+    assert failure.value.error_code is OnyxErrorCode.BAD_GATEWAY
+    assert failure.value.status_code == 502
+
+
+def test_discovery_logs_failure_type_without_upstream_body() -> None:
+    with (
+        patch("onyx.llm.well_known_providers.nace.httpx.Client") as client,
+        patch("onyx.llm.well_known_providers.nace.logger") as logger,
+    ):
+        client.return_value.__enter__.return_value.get.side_effect = httpx.ReadTimeout(
+            "private transport detail"
+        )
+        with pytest.raises(OnyxError):
+            fetch_nace_models("secret")
+    logger.warning.assert_called_once_with(
+        "Nace model discovery failed: %s", "ReadTimeout"
+    )
+
+
+def test_discovery_logs_invalid_catalog_type() -> None:
+    with (
+        patch("onyx.llm.well_known_providers.nace.httpx.Client") as client,
+        patch("onyx.llm.well_known_providers.nace.logger") as logger,
+    ):
+        client.return_value.__enter__.return_value.get.return_value.json.return_value = {}
+        with pytest.raises(OnyxError, match="invalid catalog"):
+            fetch_nace_models("secret")
+    logger.warning.assert_called_once_with(
+        "Nace model discovery failed: %s", "ValidationError"
+    )
+
+
+def test_discovery_reports_non_ascii_key_as_credential_problem() -> None:
+    """The real httpx client rejects the header before any request is sent."""
+    with pytest.raises(OnyxError) as failure:
+        fetch_nace_models("clé-ключ")
+    assert failure.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+    assert "invalid catalog" not in failure.value.detail
+
+
 @pytest.mark.parametrize("status", [401, 403, 429, 500, 529])
 def test_discovery_separates_credentials_from_upstream_failures(status: int) -> None:
     """Upstream outages must not tell an admin to replace a valid API key."""

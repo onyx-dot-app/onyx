@@ -261,6 +261,8 @@ def test_rejects_malformed_results(answers: list[dict[str, object]]) -> None:
         "https://console.nace.ai@other.example/v1",
         "http://console.nace.ai/v1",
         "https://console.nace.ai:8443/v1",
+        "https://console.nace.ai:80/v1",
+        "https://console.nace.ai:99999/v1",
     ],
 )
 def test_nace_key_never_reaches_another_origin(
@@ -281,14 +283,22 @@ def test_nace_key_never_reaches_another_origin(
     assert sent == []
 
 
-def test_nace_accepts_its_own_origin() -> None:
+@pytest.mark.parametrize(
+    "api_base,url",
+    [
+        ("https://console.nace.ai/v1/", "https://console.nace.ai/v1/systemone"),
+        (
+            "https://console.nace.ai:443/v1",
+            "https://console.nace.ai:443/v1/systemone",
+        ),
+        ("HTTPS://Console.Nace.AI/v1", "HTTPS://Console.Nace.AI/v1/systemone"),
+    ],
+)
+def test_nace_accepts_its_own_origin(api_base: str, url: str) -> None:
     client = DecisionClient(
-        DecisionProvider.NACE,
-        "drex-max",
-        "nace-key",
-        api_base="https://console.nace.ai/v1/",
+        DecisionProvider.NACE, "drex-max", "nace-key", api_base=api_base
     )
-    assert client.url == "https://console.nace.ai/v1/systemone"
+    assert client.url == url
 
 
 def test_rejects_duplicate_question_names() -> None:
@@ -594,14 +604,33 @@ def test_nace_list_legend_maps_onto_score_levels() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "legend",
-    [{"0": "Low"}, {"bad": "Low", "1": "High"}, ["Low"], ["Low", "Mid", "High"]],
-)
-def test_rejects_malformed_score_legend(legend: object) -> None:
+@pytest.mark.parametrize("provider", [DecisionProvider.TYPESAFE, DecisionProvider.NACE])
+@pytest.mark.parametrize("legend", [{"0": "Low"}, {"bad": "Low", "1": "High"}])
+def test_rejects_malformed_score_legend_map(
+    provider: DecisionProvider, legend: object
+) -> None:
     with closing(_score_answer_transport(legend)) as transport:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             with pytest.raises(ValueError, match="legend must match"):
+                DecisionClient(provider, "test", "test-key").decide(
+                    _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
+                )
+
+
+@pytest.mark.parametrize("legend", [["Low"], ["Low", "Mid", "High"]])
+def test_nace_rejects_malformed_score_legend_list(legend: object) -> None:
+    with closing(_score_answer_transport(legend)) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            with pytest.raises(ValueError, match="legend must match"):
+                DecisionClient(DecisionProvider.NACE, "drex-max", "test-key").decide(
+                    _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
+                )
+
+
+def test_typesafe_rejects_list_legend() -> None:
+    with closing(_score_answer_transport(["Low", "High"])) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            with pytest.raises(ValidationError):
                 DecisionClient(DecisionProvider.TYPESAFE, "test", "test-key").decide(
                     _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
                 )
@@ -633,7 +662,9 @@ def test_nace_score_labels_come_from_requested_levels() -> None:
     assert [item.label for item in answer.probabilities] == ["Low", "High"]
 
 
-def _probability_transport(probabilities: dict[str, float]) -> httpx.Client:
+def _probability_transport(
+    probabilities: dict[str, float], legend: object = ["Low", "High"]
+) -> httpx.Client:
     return httpx.Client(
         transport=httpx.MockTransport(
             lambda _: httpx.Response(
@@ -646,7 +677,7 @@ def _probability_transport(probabilities: dict[str, float]) -> httpx.Client:
                             "score": 0.5,
                             "confidence": 0.5,
                             "probabilities": probabilities,
-                            "legend": ["Low", "High"],
+                            "legend": legend,
                         }
                     },
                 },
@@ -656,7 +687,7 @@ def _probability_transport(probabilities: dict[str, float]) -> httpx.Client:
 
 
 @pytest.mark.parametrize("probabilities", [(0.4999, 0.5), (0.5001, 0.5)])
-def test_probability_sums_within_rounding_are_accepted(
+def test_nace_probability_sums_within_rounding_are_accepted(
     probabilities: tuple[float, float],
 ) -> None:
     with closing(
@@ -673,5 +704,16 @@ def test_probability_sums_beyond_rounding_are_rejected() -> None:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             with pytest.raises(ValueError, match="sum to one"):
                 DecisionClient(DecisionProvider.NACE, "drex-max", "test-key").decide(
+                    _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
+                )
+
+
+def test_other_providers_keep_the_strict_probability_tolerance() -> None:
+    with closing(
+        _probability_transport({"0": 0.4999, "1": 0.5}, {"0": "Low", "1": "High"})
+    ) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            with pytest.raises(ValueError, match="sum to one"):
+                DecisionClient(DecisionProvider.TYPESAFE, "test", "test-key").decide(
                     _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
                 )

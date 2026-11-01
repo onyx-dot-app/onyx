@@ -1,7 +1,6 @@
 import math
 import re
 from collections.abc import Callable
-from urllib.parse import urlsplit
 
 import httpx
 from pydantic import JsonValue
@@ -25,12 +24,18 @@ from onyx.llm.decisions.models import (
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
 from onyx.tracing.llm_utils import traced_llm_call
+from onyx.utils.url import url_origin
 
-_PROBABILITY_ROUNDING_STEP = 1e-4
+NACE_API_BASE = "https://console.nace.ai/v1"
+
+_PROBABILITY_TOLERANCE = 1e-5
+# Nace rounds each probability to 4 decimals, so a sum may miss 1.0 by up to
+# half a rounding step per entry.
+_NACE_PROBABILITY_ROUNDING_STEP = 1e-4
 
 _ENDPOINTS = {
     DecisionProvider.TYPESAFE: ("https://api.typesafe.ai/v1", "systemone"),
-    DecisionProvider.NACE: ("https://console.nace.ai/v1", "systemone"),
+    DecisionProvider.NACE: (NACE_API_BASE, "systemone"),
     DecisionProvider.ZOOM_AI: ("https://api.zoom.us/v2", "aiservices/decisions/decide"),
     DecisionProvider.OPENAI: ("https://api.openai.com/v1", "decisions"),
     DecisionProvider.OPENROUTER: ("https://openrouter.ai/api/alpha", "decisions"),
@@ -43,10 +48,30 @@ _ENDPOINTS = {
 
 def _origin(url: str) -> tuple[str, str | None, int | None] | None:
     try:
-        parts = urlsplit(url)
-        return parts.scheme.lower(), parts.hostname, parts.port
+        return url_origin(url)
     except ValueError:
         return None
+
+
+def _index_listed_legends(payload: object) -> object:
+    """Nace returns a score legend as a list of labels in level order, where
+    TypeSafe keys it by level index. Rewrite the list form to the indexed map."""
+    if not isinstance(payload, dict) or not isinstance(payload.get("answers"), dict):
+        return payload
+    answers = {
+        name: (
+            {
+                **answer,
+                "legend": {str(index): label for index, label in enumerate(legend)},
+            }
+            if isinstance(answer, dict)
+            and answer.get("type") == "score"
+            and isinstance((legend := answer.get("legend")), list)
+            else answer
+        )
+        for name, answer in payload["answers"].items()
+    }
+    return {**payload, "answers": answers}
 
 
 def _system_one_request(request: DecisionRequest, model: str) -> dict[str, JsonValue]:
@@ -72,7 +97,11 @@ def _system_one_request(request: DecisionRequest, model: str) -> dict[str, JsonV
     return {"state": request.input, "questions": questions, "model": model}
 
 
-def _system_one_response(payload: object) -> DecisionResponse:
+def _system_one_response(
+    payload: object, provider: DecisionProvider
+) -> DecisionResponse:
+    if provider == DecisionProvider.NACE:
+        payload = _index_listed_legends(payload)
     parsed = SystemOneResponse.model_validate(payload)
     answers: list[DecisionAnswer] = []
     for name, answer in parsed.answers.items():
@@ -110,7 +139,9 @@ def _system_one_response(payload: object) -> DecisionResponse:
 
 
 def _validate_answers(
-    request: DecisionRequest, response: DecisionResponse
+    request: DecisionRequest,
+    response: DecisionResponse,
+    provider: DecisionProvider,
 ) -> DecisionResponse:
     by_name = {answer.name: answer for answer in response.answers}
     if len(by_name) != len(response.answers) or set(by_name) != {
@@ -150,12 +181,14 @@ def _validate_answers(
             # report the caller's own label instead.
             for item in answer.probabilities:
                 item.label = question.levels[item.value].label
-        # Providers round each probability (Nace to 4 decimals), so the sum
-        # may miss 1.0 by up to half a rounding step per entry.
         if isinstance(answer, (ChoiceAnswer, ScoreAnswer)) and not math.isclose(
             sum(item.probability for item in answer.probabilities),
             1.0,
-            abs_tol=_PROBABILITY_ROUNDING_STEP / 2 * len(answer.probabilities) + 1e-9,
+            abs_tol=(
+                _NACE_PROBABILITY_ROUNDING_STEP / 2 * len(answer.probabilities) + 1e-9
+                if provider == DecisionProvider.NACE
+                else _PROBABILITY_TOLERANCE
+            ),
         ):
             raise ValueError("Decision probabilities must sum to one")
     response.answers = [by_name[question.name] for question in request.questions]
@@ -250,7 +283,7 @@ class DecisionClient:
                 result = client.post(self.url, json=body, headers=headers)
                 result.raise_for_status()
             if system_one:
-                response = _system_one_response(result.json())
+                response = _system_one_response(result.json(), self.provider)
             elif self.provider == DecisionProvider.ZOOM_AI:
                 zoom = ZoomResponse.model_validate(result.json())
                 response = DecisionResponse(
@@ -267,7 +300,7 @@ class DecisionClient:
                 )
             else:
                 response = DecisionResponse.model_validate(result.json())
-            response = _validate_answers(request, response)
+            response = _validate_answers(request, response, self.provider)
             if span.content_mode == TraceContentMode.FULL:
                 span.span_data.output = [response.model_dump(mode="json")]
             if response.usage:
