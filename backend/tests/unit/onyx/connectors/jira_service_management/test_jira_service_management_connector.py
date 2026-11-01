@@ -6,7 +6,12 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
+from onyx.connectors.jira_service_management.config import (
+    JiraServiceManagementConnectorConfig,
+    validate_project_key,
+)
 from onyx.connectors.jira_service_management.jira_service_management_connector import (
     JiraServiceManagementConnector,
     _validate_base_url,
@@ -129,6 +134,20 @@ def test_project_key_validated() -> None:
         )
 
 
+def test_project_key_trailing_newline_rejected() -> None:
+    with pytest.raises(ValueError):
+        validate_project_key("ABC\n")
+
+
+def test_request_jql_order_by_rejected() -> None:
+    with pytest.raises(ValueError, match="Unsupported clause: ORDER BY"):
+        JiraServiceManagementConnectorConfig(
+            base_url="https://acme.atlassian.net",
+            project_key="ABC",
+            request_jql="status = Open ORDER BY created DESC",
+        )
+
+
 # -------------------------------------------------------------- pagination
 def test_pagination_follows_cursor() -> None:
     pages = [
@@ -180,11 +199,12 @@ def test_poll_source_applies_time_range_filter() -> None:
     c = _connector()
     c._search = stub.__get__(c, type(c))  # type: ignore[method-assign]
     c._get_comments = MagicMock(return_value=[])  # type: ignore[method-assign]
-    # start = 1704067200 (2024-01-01 00:00:00 UTC), end = 1704153600 (2024-01-02 00:00:00 UTC)
-    batches = list(c.poll_source(start=1704067200.0, end=1704153600.0))
+    start_ts = 1704067200.0
+    end_ts = 1704153600.0
+    batches = list(c.poll_source(start=start_ts, end=end_ts))
     assert len(batches) == 1
-    assert 'updated >= "2024-01-01 00:00"' in stub.last_jql
-    assert 'updated <= "2024-01-02 00:00"' in stub.last_jql
+    assert f"updated >= {int(start_ts * 1000)}" in stub.last_jql
+    assert f"updated <= {int(end_ts * 1000)}" in stub.last_jql
 
 
 def test_conversion_error_is_skipped_without_crashing_batch() -> None:
@@ -203,8 +223,18 @@ def test_conversion_error_is_skipped_without_crashing_batch() -> None:
     c._issue_to_document = fail_first  # type: ignore[method-assign]
     batches = list(c.load_from_state())
     assert len(batches) == 1
-    # 123 skipped due to exception in mapping, ABC-GOOD successfully returned
+    # 123 skipped due to ValueError, ABC-GOOD successfully returned
     assert [d.id for d in batches[0]] == ["ABC-GOOD"]
+
+
+def test_network_exception_propagates_from_yield_batches() -> None:
+    def fail_search(*_args: Any, **_kwargs: Any) -> Any:
+        raise requests.ConnectionError("Network connection reset")
+
+    c = _connector()
+    c._search = fail_search.__get__(c, type(c))  # type: ignore[method-assign]
+    with pytest.raises(requests.ConnectionError, match="Network connection reset"):
+        list(c.load_from_state())
 
 
 # ------------------------------------------------------------- document & ADF
@@ -260,5 +290,5 @@ def test_slim_stop_requested() -> None:
     c = _connector()
     c._search = stub.__get__(c, type(c))  # type: ignore[method-assign]
     hb = HB(stop=True)
-    out = [d.id for g in c.retrieve_all_slim_docs(callback=hb) for d in g]
-    assert out == ["ABC-1"]
+    with pytest.raises(RuntimeError, match="stop signal detected"):
+        list(c.retrieve_all_slim_docs(callback=hb))

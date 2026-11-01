@@ -12,6 +12,7 @@ from typing import Annotated
 from pydantic import field_validator
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.connectors.atlassian_query import has_order_by
 from onyx.connectors.connector_config import (
     BaseUrlCredentialBinding,
     ConnectorConfig,
@@ -26,10 +27,14 @@ from onyx.connectors.field_policy import (
 # Atlassian Cloud project keys start with an uppercase letter and contain only
 # uppercase ASCII letters and digits. Rejecting anything else here prevents a
 # quote from breaking out of the ``project = "<key>"`` JQL clause.
-_PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
+_PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*\Z")
 _PROJECT_KEY_ERROR = (
     "Project key must start with an uppercase letter and contain only "
     "uppercase letters and digits."
+)
+
+JQL_ORDER_BY_ERROR = (
+    "Unsupported clause: ORDER BY. Jira does not allow it inside the sync filter."
 )
 
 
@@ -60,3 +65,10 @@ class JiraServiceManagementConnectorConfig(BaseUrlCredentialBinding, ConnectorCo
     @classmethod
     def _check_project_key(cls, value: str) -> str:
         return validate_project_key(value)
+
+    @field_validator("request_jql")
+    @classmethod
+    def _check_request_jql(cls, value: str | None) -> str | None:
+        if value is not None and has_order_by(value):
+            raise field_format_error(JQL_ORDER_BY_ERROR)
+        return value

@@ -10,8 +10,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
-import re
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -29,6 +28,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
+from onyx.connectors.jira_service_management.config import validate_project_key
 from onyx.connectors.models import (
     Document,
     SlimDocument,
@@ -42,21 +42,7 @@ logger = setup_logger()
 _JSM_PAGE_SIZE = 50
 _RETRY_STATUSES = [429, 500, 502, 503, 504]
 
-# Atlassian Cloud project keys start with an uppercase letter and contain only
-# uppercase ASCII letters and digits. Reject anything else before we interpolate
-# it into JQL, otherwise a quote could break out of the quoted value.
-_PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
-
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
-
-
-def _validate_project_key(project_key: str) -> str:
-    if not _PROJECT_KEY_RE.match(project_key or ""):
-        raise ValueError(
-            f"Invalid Jira project key {project_key!r}: must start with an "
-            "uppercase letter and contain only uppercase letters and digits."
-        )
-    return project_key
 
 
 def _is_loopback(host: str | None) -> bool:
@@ -115,7 +101,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         request_jql: str | None = None,
     ) -> None:
         self.base_url = _validate_base_url(base_url)
-        self.project_key = _validate_project_key(project_key)
+        self.project_key = validate_project_key(project_key)
         self.batch_size = batch_size
         self.request_jql = _and_scope(self.project_key, request_jql)
 
@@ -156,7 +142,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         url = urljoin(self.base_url + "/", path.lstrip("/"))
         resp = self._session.get(url, params=params, timeout=60)
-        resp.raise_for_status()
+        if not resp.ok:
+            error_msg = f"JSM API error {resp.status_code} for {url}: {resp.text[:500]}"
+            logger.error(error_msg)
+            resp.raise_for_status()
         return resp.json()
 
     def _search(self, jql: str, next_page_token: str | None) -> dict[str, Any]:
@@ -185,7 +174,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             parts.extend(
                 self._flatten_adf(child) for child in node.get("content", []) or []
             )
-            return " ".join(p for p in parts if p).strip()
+            return "\n".join(p for p in parts if p).strip()
         return ""
 
     def _get_comments(self, issue_key: str) -> list[dict[str, Any]]:
@@ -259,7 +248,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             for issue in page.get("issues", []) or []:
                 try:
                     batch.append(self._issue_to_document(issue))
-                except Exception as e:
+                except (KeyError, TypeError, ValueError) as e:
                     logger.warning(
                         "Failed to convert issue %s: %s", issue.get("key"), e
                     )
@@ -284,12 +273,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         yield from self._yield_batches(self.request_jql)
 
     def poll_source(self, start: float, end: float) -> GenerateDocumentsOutput:
-        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
-        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-        time_filter = (
-            f'updated >= "{start_dt.strftime("%Y-%m-%d %H:%M")}" '
-            f'AND updated <= "{end_dt.strftime("%Y-%m-%d %H:%M")}"'
-        )
+        time_filter = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
         yield from self._yield_batches(f"{self.request_jql} AND {time_filter}")
 
     def retrieve_all_slim_docs(
@@ -312,7 +296,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             if callback is not None:
                 if callback.should_stop():
                     logger.info("Slim indexing stop requested; halting early.")
-                    break
+                    raise RuntimeError(
+                        "Jira Service Management slim retrieval: stop signal detected"
+                    )
                 if slim:
                     callback.progress("jira_service_management", len(slim))
             nxt = page.get("nextPageToken")
