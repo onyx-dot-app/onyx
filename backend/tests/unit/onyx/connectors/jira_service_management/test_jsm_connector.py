@@ -1,7 +1,10 @@
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
@@ -10,12 +13,13 @@ from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError, Document
+from onyx.onyxbot.slack.icons import source_to_github_img_link
 
 
 def _sample_request(
     issue_key: str = "SD-101",
     epoch_ms: int = 1730000000000,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "issueId": "10101",
         "issueKey": issue_key,
@@ -25,6 +29,29 @@ def _sample_request(
         "currentStatus": {
             "status": "Waiting for support",
             "statusDate": {"epochMillis": epoch_ms},
+        },
+        "sla": {
+            "values": [
+                {
+                    "id": "1",
+                    "name": "Time to first response",
+                    "ongoingCycle": {
+                        "startTime": {"epochMillis": epoch_ms - 60_000},
+                        "breachTime": {"epochMillis": epoch_ms + 300_000},
+                        "breached": False,
+                    },
+                    "completedCycles": {
+                        "values": [
+                            {
+                                "startTime": {"epochMillis": epoch_ms - 120_000},
+                                "stopTime": {"epochMillis": epoch_ms - 60_000},
+                                "breachTime": {"epochMillis": epoch_ms},
+                                "breached": False,
+                            }
+                        ]
+                    },
+                }
+            ]
         },
         "reporter": {
             "displayName": "Alice Smith",
@@ -65,6 +92,12 @@ def test_jsm_config_matches_connector_init() -> None:
     assert connector.batch_size == 25
 
 
+def test_jsm_source_icon_mapping() -> None:
+    for source in DocumentSource:
+        link = source_to_github_img_link(source)
+        assert link.startswith("https://")
+
+
 def test_jsm_missing_credentials_raises() -> None:
     connector = JiraServiceManagementConnector(
         jsm_base_url="https://acme.atlassian.net"
@@ -83,22 +116,37 @@ def test_jsm_validate_connector_settings(mock_get: MagicMock) -> None:
     )
     connector.validate_connector_settings()
     mock_get.assert_called_once_with(
-        "https://acme.atlassian.net/rest/servicedeskapi/info",
+        "https://acme.atlassian.net/rest/servicedeskapi/servicedesk",
         auth=("bot@example.com", "tok"),
+        params={"start": 0, "limit": 1},
     )
 
 
 def test_jsm_validate_rejects_invalid_scheme() -> None:
-    connector = JiraServiceManagementConnector(jsm_base_url="acme.atlassian.net")
+    connector = JiraServiceManagementConnector(jsm_base_url="http://acme.atlassian.net")
     connector.load_credentials(
         {"jira_user_email": "bot@example.com", "jira_api_token": "tok"}
     )
-    with pytest.raises(ConnectorValidationError, match="http"):
+    with pytest.raises(ConnectorValidationError, match="https://"):
+        connector.validate_connector_settings()
+
+
+def test_jsm_validate_rejects_request_type_without_service_desk() -> None:
+    connector = JiraServiceManagementConnector(
+        jsm_base_url="https://acme.atlassian.net",
+        request_type_id="12",
+    )
+    connector.load_credentials(
+        {"jira_user_email": "bot@example.com", "jira_api_token": "tok"}
+    )
+    with pytest.raises(ConnectorValidationError, match="service_desk_id"):
         connector.validate_connector_settings()
 
 
 @patch("onyx.connectors.jira_service_management.connector._jsm_get")
-def test_jsm_load_from_state_filters_internal_comments(mock_get: MagicMock) -> None:
+def test_jsm_load_from_state_filters_internal_comments_and_indexes_sla(
+    mock_get: MagicMock,
+) -> None:
     req_resp = MagicMock()
     req_resp.json.return_value = {
         "values": [_sample_request()],
@@ -113,8 +161,13 @@ def test_jsm_load_from_state_filters_internal_comments(mock_get: MagicMock) -> N
                 "author": {"displayName": "Agent"},
             },
             {
+                "body": "Missing public flag note",
+                "author": {"displayName": "Agent"},
+            },
+            {
                 "body": "Reset VPN profile and retry.",
                 "public": True,
+                "created": {"epochMillis": 1730000010000},
                 "author": {"displayName": "Support Engineer"},
             },
         ],
@@ -140,26 +193,65 @@ def test_jsm_load_from_state_filters_internal_comments(mock_get: MagicMock) -> N
     assert doc.semantic_identifier == "SD-101: VPN gateway timeout"
     assert doc.metadata["service_desk_id"] == "1"
     assert doc.metadata["request_type_id"] == "12"
+    assert "sla" in doc.metadata
     text = doc.sections[0].text or ""
     assert "Cannot connect to EU-Central VPN." in text
     assert "Priority: High" in text
+    assert "Time to first response (ongoing)" in text
+    assert "Time to first response (completed)" in text
     assert "Support Engineer: Reset VPN profile and retry." in text
     assert "Internal triage note" not in text
+    assert "Missing public flag note" not in text
 
 
 @patch("onyx.connectors.jira_service_management.connector._jsm_get")
-def test_jsm_poll_source_respects_time_window(mock_get: MagicMock) -> None:
-    in_window = _sample_request(issue_key="SD-101", epoch_ms=1730000000000)
-    out_of_window = _sample_request(issue_key="SD-100", epoch_ms=1720000000000)
+def test_jsm_poll_source_includes_new_public_comment_activity(
+    mock_get: MagicMock,
+) -> None:
+    status_updated_in_window = _sample_request(
+        issue_key="SD-101", epoch_ms=1730000000000
+    )
+    old_status_with_new_comment = _sample_request(
+        issue_key="SD-100", epoch_ms=1720000000000
+    )
+    old_status_no_new_activity = _sample_request(
+        issue_key="SD-099", epoch_ms=1710000000000
+    )
 
     req_resp = MagicMock()
     req_resp.json.return_value = {
-        "values": [in_window, out_of_window],
+        "values": [
+            status_updated_in_window,
+            old_status_with_new_comment,
+            old_status_no_new_activity,
+        ],
         "isLastPage": True,
     }
-    comment_resp = MagicMock()
-    comment_resp.json.return_value = {"values": [], "isLastPage": True}
-    mock_get.side_effect = [req_resp, comment_resp]
+    comment_resp_101 = MagicMock()
+    comment_resp_101.json.return_value = {"values": [], "isLastPage": True}
+
+    comment_resp_100 = MagicMock()
+    comment_resp_100.json.return_value = {
+        "values": [
+            {
+                "body": "Follow-up from customer",
+                "public": True,
+                "created": {"epochMillis": 1731000000000},
+                "author": {"displayName": "Customer"},
+            }
+        ],
+        "isLastPage": True,
+    }
+
+    comment_resp_099 = MagicMock()
+    comment_resp_099.json.return_value = {"values": [], "isLastPage": True}
+
+    mock_get.side_effect = [
+        req_resp,
+        comment_resp_101,
+        comment_resp_100,
+        comment_resp_099,
+    ]
 
     connector = JiraServiceManagementConnector(
         jsm_base_url="https://acme.atlassian.net"
@@ -173,5 +265,26 @@ def test_jsm_poll_source_respects_time_window(mock_get: MagicMock) -> None:
     )
     assert len(batches) == 1
     assert [d.id for d in batches[0]] == [
-        "jsm:https://acme.atlassian.net:SD-101"
+        "jsm:https://acme.atlassian.net:SD-101",
+        "jsm:https://acme.atlassian.net:SD-100",
     ]
+
+
+@patch("onyx.connectors.jira_service_management.connector._jsm_get")
+def test_jsm_comment_fetch_failure_propagates(mock_get: MagicMock) -> None:
+    req_resp = MagicMock()
+    req_resp.json.return_value = {
+        "values": [_sample_request()],
+        "isLastPage": True,
+    }
+    mock_get.side_effect = [req_resp, requests.HTTPError("502 Bad Gateway")]
+
+    connector = JiraServiceManagementConnector(
+        jsm_base_url="https://acme.atlassian.net"
+    )
+    connector.load_credentials(
+        {"jira_user_email": "bot@example.com", "jira_api_token": "secret"}
+    )
+
+    with pytest.raises(requests.HTTPError):
+        list(connector.load_from_state())

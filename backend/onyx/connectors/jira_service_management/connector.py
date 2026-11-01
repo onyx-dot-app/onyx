@@ -28,12 +28,29 @@ logger = setup_logger()
 _JSM_PAGE_LIMIT = 50
 
 
-@retry_builder(tries=3, delay=1, backoff=2)
+def _is_transient_jsm_error(exc: BaseException) -> bool:
+    if isinstance(exc, requests.HTTPError):
+        response = exc.response
+        if response is None:
+            return False
+        return response.status_code == 429 or response.status_code >= 500
+    return isinstance(exc, (requests.ConnectionError, requests.Timeout))
+
+
+@retry_builder(
+    tries=3,
+    delay=1,
+    backoff=2,
+    exceptions=(requests.RequestException,),
+    retry_if=_is_transient_jsm_error,
+)
 def _jsm_get(
     url: str,
     auth: tuple[str, str],
     params: dict[str, Any] | None = None,
 ) -> requests.Response:
+    if not url.startswith("https://"):
+        raise ConnectorValidationError("jsm_base_url must start with https://")
     response = rl_requests.get(
         url,
         auth=auth,
@@ -58,6 +75,65 @@ def _parse_jsm_epoch_ms(raw: dict[str, Any] | None) -> datetime | None:
         except ValueError:
             return None
     return None
+
+
+def _extract_sla_lines_and_latest_dt(
+    req: dict[str, Any],
+) -> tuple[list[str], datetime | None]:
+    sla_obj = req.get("sla")
+    if isinstance(sla_obj, dict):
+        sla_values = sla_obj.get("values") or []
+    elif isinstance(sla_obj, list):
+        sla_values = sla_obj
+    else:
+        sla_values = []
+
+    lines: list[str] = []
+    latest_dt: datetime | None = None
+
+    def _record_dt(dt: datetime | None) -> None:
+        nonlocal latest_dt
+        if dt is not None and (latest_dt is None or dt > latest_dt):
+            latest_dt = dt
+
+    for metric in sla_values:
+        if not isinstance(metric, dict):
+            continue
+        name = metric.get("name") or str(metric.get("id") or "SLA")
+        ongoing = metric.get("ongoingCycle")
+        if isinstance(ongoing, dict):
+            parts: list[str] = [f"{name} (ongoing)"]
+            for key in ("startTime", "breachTime", "stopTime"):
+                dt = _parse_jsm_epoch_ms(ongoing.get(key))
+                _record_dt(dt)
+                if dt is not None:
+                    parts.append(f"{key}={dt.isoformat()}")
+            if "breached" in ongoing:
+                parts.append(f"breached={bool(ongoing.get('breached'))}")
+            lines.append("SLA " + ", ".join(parts))
+
+        completed_raw = metric.get("completedCycles")
+        if isinstance(completed_raw, dict):
+            completed_cycles = completed_raw.get("values") or []
+        elif isinstance(completed_raw, list):
+            completed_cycles = completed_raw
+        else:
+            completed_cycles = []
+
+        for cycle in completed_cycles:
+            if not isinstance(cycle, dict):
+                continue
+            parts = [f"{name} (completed)"]
+            for key in ("startTime", "stopTime", "breachTime"):
+                dt = _parse_jsm_epoch_ms(cycle.get(key))
+                _record_dt(dt)
+                if dt is not None:
+                    parts.append(f"{key}={dt.isoformat()}")
+            if "breached" in cycle:
+                parts.append(f"breached={bool(cycle.get('breached'))}")
+            lines.append("SLA " + ", ".join(parts))
+
+    return lines, latest_dt
 
 
 class JiraServiceManagementConnector(LoadConnector, PollConnector):
@@ -92,15 +168,26 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
     def validate_connector_settings(self) -> None:
         if self._auth is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
-        if not self.jsm_base_url.startswith(("http://", "https://")):
+        if not self.jsm_base_url.startswith("https://"):
             raise ConnectorValidationError(
-                "jsm_base_url must start with http:// or https://"
+                "jsm_base_url must start with https://"
+            )
+        if self.request_type_id and not self.service_desk_id:
+            raise ConnectorValidationError(
+                "request_type_id requires service_desk_id"
             )
         try:
-            _jsm_get(
-                f"{self.jsm_base_url}/rest/servicedeskapi/info",
-                auth=self._auth,
-            )
+            if self.service_desk_id:
+                _jsm_get(
+                    f"{self.jsm_base_url}/rest/servicedeskapi/servicedesk/{self.service_desk_id}",
+                    auth=self._auth,
+                )
+            else:
+                _jsm_get(
+                    f"{self.jsm_base_url}/rest/servicedeskapi/servicedesk",
+                    auth=self._auth,
+                    params={"start": 0, "limit": 1},
+                )
         except Exception as e:
             raise ConnectorValidationError(
                 f"Failed to validate Jira Service Management settings: {e}"
@@ -128,23 +215,30 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 break
             start += len(values)
 
-    def _fetch_comments(self, issue_key: str) -> list[str]:
+    def _fetch_comments(
+        self, issue_key: str
+    ) -> tuple[list[str], datetime | None]:
         comments: list[str] = []
-        try:
-            for comment in self._iter_paged(
-                f"/rest/servicedeskapi/request/{issue_key}/comment"
+        latest_comment_dt: datetime | None = None
+        for comment in self._iter_paged(
+            f"/rest/servicedeskapi/request/{issue_key}/comment"
+        ):
+            if comment.get("public") is not True:
+                continue
+            comment_dt = _parse_jsm_epoch_ms(
+                comment.get("created") or comment.get("createdDate")
+            )
+            if comment_dt is not None and (
+                latest_comment_dt is None or comment_dt > latest_comment_dt
             ):
-                if not comment.get("public", True):
-                    continue
-                author = (comment.get("author") or {}).get(
-                    "displayName", "Participant"
-                )
-                body = (comment.get("body") or "").strip()
-                if body:
-                    comments.append(f"{author}: {body}")
-        except Exception as e:
-            logger.warning(f"Failed to fetch JSM comments for {issue_key}: {e}")
-        return comments
+                latest_comment_dt = comment_dt
+            author = (comment.get("author") or {}).get(
+                "displayName", "Participant"
+            )
+            body = (comment.get("body") or "").strip()
+            if body:
+                comments.append(f"{author}: {body}")
+        return comments, latest_comment_dt
 
     def _request_to_document(
         self,
@@ -158,7 +252,16 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
 
         created_dt = _parse_jsm_epoch_ms(req.get("createdDate"))
         status_obj = req.get("currentStatus") or {}
-        updated_dt = _parse_jsm_epoch_ms(status_obj.get("statusDate")) or created_dt
+        status_dt = _parse_jsm_epoch_ms(status_obj.get("statusDate"))
+        sla_lines, latest_sla_dt = _extract_sla_lines_and_latest_dt(req)
+        comments, latest_comment_dt = self._fetch_comments(issue_key)
+
+        activity_candidates = [
+            dt
+            for dt in (created_dt, status_dt, latest_sla_dt, latest_comment_dt)
+            if dt is not None
+        ]
+        updated_dt = max(activity_candidates) if activity_candidates else None
 
         if updated_dt is not None:
             ts = updated_dt.timestamp()
@@ -190,9 +293,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 field_lines.append(f"{label}: {val_str}")
 
         status_name = status_obj.get("status") or "Unknown"
-        body_parts = [f"Status: {status_name}", *field_lines]
+        body_parts = [f"Status: {status_name}", *field_lines, *sla_lines]
 
-        comments = self._fetch_comments(issue_key)
         if comments:
             body_parts.append("Comments:\n" + "\n".join(comments))
 
@@ -218,6 +320,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             metadata["service_desk_id"] = str(req["serviceDeskId"])
         if req.get("requestTypeId") is not None:
             metadata["request_type_id"] = str(req["requestTypeId"])
+        if sla_lines:
+            metadata["sla"] = sla_lines
 
         return Document(
             id=f"jsm:{self.jsm_base_url}:{issue_key}",
@@ -234,7 +338,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
-        params: dict[str, Any] = {"expand": "requestFieldValues,currentStatus"}
+        params: dict[str, Any] = {
+            "expand": "requestFieldValues,currentStatus,sla",
+            "requestOwnership": "ALL_REQUESTS",
+        }
         if self.service_desk_id:
             params["serviceDeskId"] = self.service_desk_id
         if self.request_type_id:
