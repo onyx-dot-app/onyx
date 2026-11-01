@@ -247,13 +247,17 @@ the error type on purpose in auth code.
    authoritative. Some connectors replace image bytes in place under the same
    ID, and the content hash cannot see that.
    `connectors/models.py:DocumentBase.content_hash` walks text and image
-   sections only, so a changed spreadsheet looks unchanged to gate 2.
+   sections only, so a changed spreadsheet looks unchanged to gate 2. Keep
+   gate 1 off in a new caller, as every caller does: after a reindex port sets
+   `content_hash` to the hash PRESENT holds, `doc_updated_at` can belong to a
+   newer version than that hash, and gate 1 would skip it.
 9. `future-ignores-content-hash` **A FUTURE write must not read the content
-   hash gate or stamp `content_hash`.** That column belongs to PRESENT. A FUTURE
-   write records its hash with FUTURE's settings id instead
+   hash gate or stamp its own hash into `content_hash`.** That column belongs
+   to PRESENT. A FUTURE write records its hash with FUTURE's settings id, and
+   sets `content_hash` to the hash PRESENT holds, not its own
    (`backend/onyx/db/document.py:record_reindex_write__no_commit`,
-   [[document-index#hash-record-per-generation]]). If FUTURE used
-   `content_hash`, the two generations would suppress each other's writes
+   [[document-index#hash-record-per-generation]]). If FUTURE put its own hash
+   in `content_hash`, the two generations would suppress each other's writes
    during a reindex.
 10. `targeted-reindex-outside-fence` **The attempt fence excludes targeted
    reindex on purpose.**

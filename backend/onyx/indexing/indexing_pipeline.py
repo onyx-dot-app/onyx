@@ -1839,8 +1839,8 @@ def run_indexing_pipeline(
     index.
 
     index_to_secondary marks a FUTURE write. It turns off the content-hash skip, which
-    compares against PRESENT. It also leaves content_hash alone, because content_hash
-    describes PRESENT, and saves the hash in secondary_content_hash instead.
+    compares against PRESENT. It sets content_hash to the hash PRESENT holds and saves
+    the written hash in secondary_content_hash, with written_search_settings_id.
 
     force_update bypasses both change gates. Needed when the document is
     unchanged at the source but must be re-chunked anyway (see

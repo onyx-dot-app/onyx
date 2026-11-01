@@ -144,11 +144,11 @@ finishes after a swap records nothing, since its index is no longer PRESENT.
 The dedup gate reads the three fields through
 `backend/onyx/db/document.py:present_index_content_hash`: a record for PRESENT, or for the
 source of an INSTANT backfill, is what the index holds; a record for an older
-index means the document never reached PRESENT; otherwise `content_hash`. The
-swap changes no document rows. The port reads the hashes before each batch,
-refreshes the source index so its scan sees the writes behind them, and records
-a document only when its hash is unchanged after the copy; a document the scan
-found no chunks for is recorded as absent
+index means the document never reached PRESENT; otherwise `content_hash`. A
+port-flow swap changes no document rows. The port reads the hashes before each
+batch, refreshes the source index so its scan sees the writes behind them, and
+records a document only when its hash is unchanged after the copy; a document
+the scan found no chunks for is recorded as absent
 (`background/celery/tasks/port/tasks.py:_ported_doc_hashes`).
 
 ## Contracts and traps
@@ -254,8 +254,8 @@ found no chunks for is recorded as absent
   only rows without the flag.
 - **The old index is kept for a soak period.** It allows a rollback while the new
   model is judged, and the PAST row stays forever as a record.
-- **The swap changes no document rows.** Stamping every row at the swap is a
-  whole-table update inside the swap transaction, which a large deployment
+- **A port-flow swap changes no document rows.** Stamping every row at the swap
+  is a whole-table update inside the swap transaction, which a large deployment
   cannot afford. The gate resolves which index holds a document per row, on the
   rows it touches.
 
