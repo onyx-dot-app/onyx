@@ -145,7 +145,11 @@ The dedup gate reads the three fields through
 `backend/onyx/db/document.py:present_index_content_hash`: a record for PRESENT, or for the
 source of an INSTANT backfill, is what the index holds; a record for an older
 index means the document never reached PRESENT; otherwise `content_hash`. The
-swap changes no document rows.
+swap changes no document rows. The port reads the hashes before each batch,
+refreshes the source index so its scan sees the writes behind them, and records
+a document only when its hash is unchanged after the copy; a document the scan
+found no chunks for is recorded as absent
+(`background/celery/tasks/port/tasks.py:_ported_doc_hashes`).
 
 ## Contracts and traps
 
