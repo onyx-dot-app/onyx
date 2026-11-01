@@ -73,7 +73,7 @@ def _validate_base_url(base_url: str) -> str:
     parsed = urlparse(base_url)
     if parsed.username or parsed.password:
         raise ValueError(
-            f"Invalid Jira base_url {base_url!r}: embedded credentials (userinfo) are not permitted."
+            "Invalid Jira base_url: embedded credentials (userinfo) are not permitted; remove the user:password portion from the URL."
         )
     scheme = parsed.scheme.lower()
     if scheme not in ("http", "https"):
