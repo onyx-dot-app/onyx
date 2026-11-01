@@ -106,6 +106,12 @@ def test_http_loopback_allowed() -> None:
     assert _validate_base_url("http://[::1]:8080") == "http://[::1]:8080"
 
 
+def test_base_url_with_userinfo_rejected() -> None:
+    """Verify base_url with embedded user credentials is rejected."""
+    with pytest.raises(ValueError, match="embedded credentials"):
+        _validate_base_url("https://user:pass@acme.atlassian.net")
+
+
 def test_https_allowed_and_trailing_slash_stripped() -> None:
     assert _validate_base_url("https://acme.atlassian.net/") == (
         "https://acme.atlassian.net"
@@ -329,3 +335,14 @@ def test_slim_stop_requested() -> None:
     hb = HB(stop=True)
     with pytest.raises(RuntimeError, match="stop signal detected"):
         list(c.retrieve_all_slim_docs(callback=hb))
+
+
+def test_yield_batches_reraises_json_decode_error() -> None:
+    """Ensure requests.exceptions.JSONDecodeError is re-raised rather than swallowed."""
+    c = _connector()
+    c._search = MagicMock(return_value={"issues": [_issue("ABC-1")]})  # type: ignore[method-assign]
+    c._issue_to_document = MagicMock(  # type: ignore[method-assign]
+        side_effect=requests.exceptions.JSONDecodeError("Expecting value", "doc", 0)
+    )
+    with pytest.raises(requests.exceptions.JSONDecodeError):
+        list(c._yield_batches("project = ABC"))

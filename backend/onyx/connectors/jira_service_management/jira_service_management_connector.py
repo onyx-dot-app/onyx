@@ -63,13 +63,18 @@ def _is_loopback(host: str | None) -> bool:
 
 
 def _validate_base_url(base_url: str) -> str:
-    """Reject plaintext HTTP for non-loopback destinations.
+    """Reject plaintext HTTP for non-loopback destinations and embedded credentials.
 
     The connector authenticates every request with its email + API token, so an
     ``http://`` base URL would put those credentials on the wire in cleartext
     (CWE-319). Plaintext is allowed only for localhost/loopback development.
+    Embedded userinfo in the URL is also disallowed to prevent credential leakage.
     """
     parsed = urlparse(base_url)
+    if parsed.username or parsed.password:
+        raise ValueError(
+            f"Invalid Jira base_url {base_url!r}: embedded credentials (userinfo) are not permitted."
+        )
     scheme = parsed.scheme.lower()
     if scheme not in ("http", "https"):
         raise ValueError(
@@ -267,6 +272,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             for issue in page.get("issues", []) or []:
                 try:
                     batch.append(self._issue_to_document(issue))
+                except requests.exceptions.JSONDecodeError:
+                    raise
                 except (KeyError, TypeError, ValueError) as e:
                     logger.warning(
                         "Failed to convert issue %s: %s", issue.get("key"), e
