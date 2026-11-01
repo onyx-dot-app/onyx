@@ -2,6 +2,7 @@ import httpx
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.decisions.client import NACE_CLIENT_HEADER, nace_client_header_value
 from onyx.llm.well_known_providers.models import NaceModel, NaceModelsResponse
 
 NACE_API_BASE = "https://console.nace.ai/v1"
@@ -18,7 +19,10 @@ def fetch_nace_models(api_key: str) -> list[NaceModel]:
         with httpx.Client(timeout=30.0, follow_redirects=False) as client:
             response = client.get(
                 f"{NACE_API_BASE}/models",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    NACE_CLIENT_HEADER: nace_client_header_value(),
+                },
             )
             response.raise_for_status()
             models = NaceModelsResponse.model_validate(response.json()).models

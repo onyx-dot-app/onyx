@@ -1,4 +1,5 @@
 import math
+import re
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
@@ -163,6 +164,15 @@ def _validate_answers(
 
 DEFAULT_DECISION_TIMEOUT_S = 30.0
 NACE_DECISION_TIMEOUT_S = 60.0
+NACE_CLIENT_HEADER = "X-Nace-Client"
+
+
+def nace_client_header_value() -> str:
+    """Identifies this Onyx build to Nace for usage attribution."""
+    from onyx import __version__
+
+    version = re.sub(r"[^A-Za-z0-9 ._@+-]", "-", __version__)
+    return f"onyx/{version}"[:64]
 
 
 class DecisionClient:
@@ -209,6 +219,8 @@ class DecisionClient:
             **(extra_headers or {}),
             "Authorization": f"Bearer {api_key}",
         }
+        if provider == DecisionProvider.NACE:
+            self._headers[NACE_CLIENT_HEADER] = nace_client_header_value()
 
     def decide(self, request: DecisionRequest, *, flow: LLMFlow) -> DecisionResponse:
         system_one = self.provider in {

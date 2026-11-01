@@ -6,6 +6,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
+from onyx import __version__
 from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.decisions.models import (
     ChoiceQuestion,
@@ -61,6 +62,9 @@ def test_system_one_protocol(
         assert str(http_request.url) == url
         assert http_request.headers["Authorization"] == "Bearer test-key"
         assert http_request.headers["X-Onyx"] == "test"
+        assert http_request.headers.get("X-Nace-Client") == (
+            f"onyx/{__version__}" if provider == DecisionProvider.NACE else None
+        )
         assert json.loads(http_request.content) == {
             "model": "test-model",
             "state": "The export failed.",

@@ -4,6 +4,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
+from onyx import __version__
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES, LlmProviderNames
@@ -83,7 +84,10 @@ def test_discovery_lists_models_once_without_catalog_aliases() -> None:
         client.assert_called_once_with(timeout=30.0, follow_redirects=False)
         get.assert_called_once_with(
             "https://console.nace.ai/v1/models",
-            headers={"Authorization": "Bearer secret"},
+            headers={
+                "Authorization": "Bearer secret",
+                "X-Nace-Client": f"onyx/{__version__}",
+            },
         )
 
 
