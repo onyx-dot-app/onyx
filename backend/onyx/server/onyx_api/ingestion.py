@@ -30,7 +30,6 @@ from onyx.db.port_orphan_candidate import (
 from onyx.db.search_settings import (
     get_active_search_settings,
     get_current_search_settings,
-    get_secondary_search_settings,
 )
 from onyx.db.user_file import get_owned_file_ids, get_user_file_by_id
 from onyx.document_index.factory import get_default_document_index
@@ -224,21 +223,13 @@ def upsert_ingestion_doc(
 
     # If there's a secondary index being built, index the doc but don't use it for return here
     if active_search_settings.secondary:
-        sec_search_settings = get_secondary_search_settings(db_session)
-
-        if sec_search_settings is None:
-            # Should not ever happen
-            raise RuntimeError(
-                "Secondary index exists but no search settings configured"
-            )
-
+        # One settings row for the embedder, the index and the recorded id: a swap
+        # during the primary run must not pair the write with a newer id.
+        sec_search_settings = active_search_settings.secondary
         new_index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
             search_settings=sec_search_settings
         )
-
-        sec_document_index = get_default_document_index(
-            active_search_settings.secondary, None
-        )
+        sec_document_index = get_default_document_index(sec_search_settings, None)
 
         run_indexing_pipeline(
             embedder=new_index_embedding_model,
