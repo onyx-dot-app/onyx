@@ -378,9 +378,14 @@ def record_reindex_write__no_commit(
     after the port read its hash.
 
     A write into an index older than `present` saves nothing: that index is retired,
-    so its hash says nothing about PRESENT, and the record may describe PRESENT.
+    so its hash says nothing about PRESENT, and the record may describe PRESENT. The
+    exception is the source of an INSTANT backfill, which the port still copies from:
+    its hash is recorded unless PRESENT already has its own record for the doc.
     """
-    if not ids_to_hash or written_search_settings_id < present.id:
+    if not ids_to_hash:
+        return
+    is_backfill_source = written_search_settings_id == present.port_backfill_source_id
+    if written_search_settings_id < present.id and not is_backfill_source:
         return
     doc_hash = _doc_hash_values(ids_to_hash)
     stmt = update(DbDocument).where(DbDocument.id == doc_hash.c.id)
@@ -389,6 +394,10 @@ def record_reindex_write__no_commit(
             DbDocument.secondary_search_settings_id.is_distinct_from(
                 written_search_settings_id
             )
+        )
+    if is_backfill_source:
+        stmt = stmt.where(
+            DbDocument.secondary_search_settings_id.is_distinct_from(present.id)
         )
     db_session.execute(
         stmt.values(

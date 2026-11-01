@@ -1212,6 +1212,33 @@ def test_reindex_write_for_an_older_index_changes_nothing(
     assert _columns(db_session, doc) == ("old", "v1", present_id)
 
 
+def test_reindex_write_into_the_backfill_source_is_recorded(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """During an INSTANT backfill the port still copies from the pinned source, so a
+    late write into it is recorded, unless PRESENT already has its own record."""
+    cc_pair, present_id = cc_pair_and_future
+    source_id = present_id - 1
+    present = PresentSearchSettingsRef(id=present_id, port_backfill_source_id=source_id)
+    not_copied = _seed_hashed_doc(
+        db_session, cc_pair, "not-copied", "old", ("v1", source_id)
+    )
+    copied = _seed_hashed_doc(db_session, cc_pair, "copied", "v1", ("v1", present_id))
+
+    record_reindex_write__no_commit(
+        db_session,
+        {not_copied: "v2", copied: "v2"},
+        source_id,
+        present,
+        skip_docs_recorded_for_target=False,
+    )
+    db_session.commit()
+    assert _columns(db_session, not_copied) == ("v1", "v2", source_id)
+    assert _columns(db_session, copied) == ("v1", "v1", present_id)
+    assert _present_hash(db_session, not_copied, present) == "v2"
+    assert _present_hash(db_session, copied, present) == "v1"
+
+
 def test_lazy_resolution_through_two_reindexes(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
