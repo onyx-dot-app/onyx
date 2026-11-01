@@ -59,6 +59,7 @@ from onyx.db.document import (
     mark_document_as_modified,
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
+    record_present_index_write__no_commit,
     record_reindex_write__no_commit,
 )
 from onyx.db.enums import (
@@ -772,15 +773,15 @@ def test_run_port_attempt_records_ported_content_hash(
     source index holds, copying the PRESENT hash into content_hash first. A doc the scan
     found no chunks for is recorded as absent from the target. It records nothing for
     a doc the create-only write found already there (secondary indexing or an earlier
-    copy wrote it) or a doc deleted mid-batch, and it keeps the record secondary
-    indexing already made for the target."""
+    copy wrote it), a doc deleted mid-batch, or a doc re-indexed into PRESENT during
+    the copy, and it keeps the record secondary indexing already made for the target."""
     cc_pair, future_id = cc_pair_and_port_future
     present = get_current_search_settings(db_session)
     present_ref = PresentSearchSettingsRef.from_settings(present)
-    secondary, existing, deleted, no_hash, copied, stale, missing = (
-        _seed_cc_pair_documents(db_session, cc_pair, 7)
+    secondary, existing, deleted, no_hash, copied, stale, missing, changed = (
+        _seed_cc_pair_documents(db_session, cc_pair, 8)
     )
-    for doc_id in (secondary, existing, deleted, copied, missing):
+    for doc_id in (secondary, existing, deleted, copied, missing, changed):
         doc = db_session.get(DbDocument, doc_id)
         assert doc is not None
         doc.content_hash = f"hash-{doc_id}"
@@ -811,7 +812,12 @@ def test_run_port_attempt_records_ported_content_hash(
         # `secondary` and `existing` already have chunks in FUTURE: benign 409s.
         on_docs_already_in_target({secondary, existing})
         # `missing` survives but the scan found no chunks for it.
-        on_docs_written({no_hash, copied, stale})
+        on_docs_written({no_hash, copied, stale, changed})
+        # `changed` is re-indexed into PRESENT mid-copy: the scan may have seen either
+        # version, so that write's own record must stand.
+        record_present_index_write__no_commit(
+            db_session, {changed: "newer"}, present.id, present.id
+        )
         # `deleted` loses its cc_pair link mid-batch, so its chunks are dropped.
         db_session.query(DocumentByConnectorCredentialPair).filter(
             DocumentByConnectorCredentialPair.id == deleted
@@ -835,7 +841,16 @@ def test_run_port_attempt_records_ported_content_hash(
             )
             for row in db_session.query(DbDocument).filter(
                 DbDocument.id.in_(
-                    [secondary, existing, deleted, no_hash, copied, stale, missing]
+                    [
+                        secondary,
+                        existing,
+                        deleted,
+                        no_hash,
+                        copied,
+                        stale,
+                        missing,
+                        changed,
+                    ]
                 )
             )
         }
@@ -847,6 +862,7 @@ def test_run_port_attempt_records_ported_content_hash(
             copied: (f"hash-{copied}", f"hash-{copied}", future_id),
             stale: ("present-v", "present-v", future_id),
             missing: (f"hash-{missing}", None, future_id),
+            changed: ("newer", "newer", present.id),
         }
     finally:
         # Unlinked, so the fixture cleanup (cc_pair-linked docs only) misses it.

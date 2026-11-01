@@ -197,6 +197,35 @@ def _copy_batch_with_retry(
     raise last_error
 
 
+def _ported_doc_hashes(
+    db_session: Session,
+    snapshot_hashes: dict[str, str | None],
+    source_search_settings_id: int,
+    surviving_doc_ids: set[str],
+    docs_written: set[str],
+    docs_already_in_target: set[str],
+) -> dict[str, str | None]:
+    """What this copy put in the target, per doc: the hash read before the copy, or
+    None for a doc the scan found no chunks for (the target does not have it).
+
+    Left out: a doc deleted mid-batch, a doc the create-only write found already in
+    the target (secondary indexing or an earlier copy owns it), and a doc whose
+    source hash changed during the copy, since the scan may have seen either
+    version. That write recorded its own hash, which the dedup gate reads as "not in
+    the new index" after the swap.
+    """
+    current = get_port_source_content_hashes(
+        db_session, list(surviving_doc_ids), source_search_settings_id
+    )
+    hashes: dict[str, str | None] = {}
+    for doc_id in surviving_doc_ids - docs_already_in_target:
+        snapshot = snapshot_hashes.get(doc_id)
+        if current.get(doc_id) != snapshot:
+            continue
+        hashes[doc_id] = snapshot if doc_id in docs_written else None
+    return hashes
+
+
 def _sweep_port_orphan_candidates(
     port_attempt_id: int,
     search_settings_id: int,
@@ -464,9 +493,10 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                     limit=INDEX_BATCH_SIZE,
                     up_to_doc_id=up_to_doc_id,
                 )
-            # Read before the copy reads the source: an indexing write in between
-            # then shows as a mismatch, never as a false match. The refresh below
-            # makes the writes behind these hashes visible to the copy's scan.
+            # Read before the copy and compared again after it (_ported_doc_hashes),
+            # so a write in between is never recorded as what the copy put in the
+            # target. The refresh below makes the writes behind these hashes visible
+            # to the copy's scan.
             snapshot_hashes = (
                 get_port_source_content_hashes(
                     db_session,
@@ -529,21 +559,19 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
 
         cursor = doc_ids[-1]
         docs_ported += len(doc_ids)
-        if record_hashes:
-            # Record what this copy put in FUTURE: not a doc already there, nor one
-            # deleted mid-batch (its chunks were dropped before the write). A doc the
-            # scan found no chunks for is recorded as absent: FUTURE does not have it.
-            surviving = _surviving_doc_ids() - docs_already_in_target
-            snapshot_hashes = {
-                doc_id: snapshot_hashes.get(doc_id) if doc_id in docs_written else None
-                for doc_id in surviving
-            }
         with get_session_with_current_tenant() as db_session:
             if record_hashes:
                 # commits with the cursor, rolled back if the attempt is at rest
                 record_reindex_write__no_commit(
                     db_session,
-                    snapshot_hashes,
+                    _ported_doc_hashes(
+                        db_session,
+                        snapshot_hashes,
+                        source_search_settings.id,
+                        surviving_doc_ids=_surviving_doc_ids(),
+                        docs_written=docs_written,
+                        docs_already_in_target=docs_already_in_target,
+                    ),
                     target_search_settings.id,
                     present_ref,
                     skip_docs_recorded_for_target=True,
