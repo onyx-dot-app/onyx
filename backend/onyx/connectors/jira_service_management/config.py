@@ -36,6 +36,33 @@ _PROJECT_KEY_ERROR = (
 JQL_ORDER_BY_ERROR = (
     "Unsupported clause: ORDER BY. Jira does not allow it inside the sync filter."
 )
+JQL_PARENTHESES_ERROR = "Invalid request_jql: unbalanced parentheses detected."
+
+
+def has_balanced_parentheses(query: str) -> bool:
+    """True if query has balanced parentheses outside of quoted strings."""
+    count = 0
+    in_quote: str | None = None
+    escaped = False
+    for ch in query:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if in_quote:
+            if ch == in_quote:
+                in_quote = None
+        elif ch in ('"', "'"):
+            in_quote = ch
+        elif ch == "(":
+            count += 1
+        elif ch == ")":
+            count -= 1
+            if count < 0:
+                return False
+    return count == 0 and in_quote is None
 
 
 def validate_project_key(value: str) -> str:
@@ -69,6 +96,10 @@ class JiraServiceManagementConnectorConfig(BaseUrlCredentialBinding, ConnectorCo
     @field_validator("request_jql")
     @classmethod
     def _check_request_jql(cls, value: str | None) -> str | None:
-        if value is not None and has_order_by(value):
+        if value is None:
+            return None
+        if has_order_by(value):
             raise field_format_error(JQL_ORDER_BY_ERROR)
+        if not has_balanced_parentheses(value):
+            raise field_format_error(JQL_PARENTHESES_ERROR)
         return value

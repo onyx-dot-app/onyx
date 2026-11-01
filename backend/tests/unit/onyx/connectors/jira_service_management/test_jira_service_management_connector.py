@@ -148,6 +148,15 @@ def test_request_jql_order_by_rejected() -> None:
         )
 
 
+def test_request_jql_unbalanced_parentheses_rejected() -> None:
+    with pytest.raises(ValueError, match="unbalanced parentheses"):
+        JiraServiceManagementConnectorConfig(
+            base_url="https://acme.atlassian.net",
+            project_key="ABC",
+            request_jql="status = Open) OR project = OTHER OR (status = Open",
+        )
+
+
 # -------------------------------------------------------------- pagination
 def test_pagination_follows_cursor() -> None:
     pages = [
@@ -159,7 +168,11 @@ def test_pagination_follows_cursor() -> None:
     c._search = stub.__get__(c, type(c))  # type: ignore[method-assign]
     c._get_comments = MagicMock(return_value=[])  # type: ignore[method-assign]
     ids = [d.id for batch in c.load_from_state() for d in batch]
-    assert ids == ["ABC-1", "ABC-2", "ABC-3"]
+    assert ids == [
+        "https://acme.atlassian.net/browse/ABC-1",
+        "https://acme.atlassian.net/browse/ABC-2",
+        "https://acme.atlassian.net/browse/ABC-3",
+    ]
 
 
 def test_empty_page_with_cursor_continues() -> None:
@@ -172,7 +185,7 @@ def test_empty_page_with_cursor_continues() -> None:
     c._search = stub.__get__(c, type(c))  # type: ignore[method-assign]
     c._get_comments = MagicMock(return_value=[])  # type: ignore[method-assign]
     ids = [d.id for batch in c.load_from_state() for d in batch]
-    assert ids == ["ABC-9"]
+    assert ids == ["https://acme.atlassian.net/browse/ABC-9"]
 
 
 def test_repeated_token_detects_cycle_and_raises() -> None:
@@ -224,7 +237,7 @@ def test_conversion_error_is_skipped_without_crashing_batch() -> None:
     batches = list(c.load_from_state())
     assert len(batches) == 1
     # 123 skipped due to ValueError, ABC-GOOD successfully returned
-    assert [d.id for d in batches[0]] == ["ABC-GOOD"]
+    assert [d.id for d in batches[0]] == ["https://acme.atlassian.net/browse/ABC-GOOD"]
 
 
 def test_network_exception_propagates_from_yield_batches() -> None:
@@ -235,6 +248,20 @@ def test_network_exception_propagates_from_yield_batches() -> None:
     c._search = fail_search.__get__(c, type(c))  # type: ignore[method-assign]
     with pytest.raises(requests.ConnectionError, match="Network connection reset"):
         list(c.load_from_state())
+
+
+def test_http_error_includes_response_body() -> None:
+    mock_resp = MagicMock()
+    mock_resp.ok = False
+    mock_resp.status_code = 400
+    mock_resp.text = '{"errorMessages":["Field does not exist"]}'
+    mock_resp.raise_for_status.side_effect = requests.HTTPError("400 Client Error")
+
+    c = _connector()
+    c._session.get = MagicMock(return_value=mock_resp)
+
+    with pytest.raises(requests.HTTPError, match="Field does not exist"):
+        c._get("/rest/api/3/search/jql")
 
 
 # ------------------------------------------------------------- document & ADF
@@ -257,12 +284,13 @@ def test_issue_document_mapping_and_sections() -> None:
         ]
     )
     doc = c._issue_to_document(_issue("ABC-101"))
-    assert doc.id == "ABC-101"
+    assert doc.id == "https://acme.atlassian.net/browse/ABC-101"
     assert doc.semantic_identifier == "Summary ABC-101"
     assert doc.sections[0].link == "https://acme.atlassian.net/browse/ABC-101"
     assert "Desc" in doc.sections[0].text
     assert "Agent Alice: Comment body" in doc.sections[0].text
     assert doc.metadata["project"] == "ABC"
+    assert doc.metadata["key"] == "ABC-101"
     assert doc.metadata["status"] == "Open"
 
 
@@ -280,7 +308,11 @@ def test_slim_uses_interface_callback() -> None:
         c.retrieve_all_slim_docs(start=None, end=None, callback=hb)
     )
     ids = [d.id for g in groups for d in g]
-    assert ids == ["ABC-1", "ABC-2", "ABC-3"]
+    assert ids == [
+        "https://acme.atlassian.net/browse/ABC-1",
+        "https://acme.atlassian.net/browse/ABC-2",
+        "https://acme.atlassian.net/browse/ABC-3",
+    ]
     assert hb.calls, "progress() should have been called"
 
 

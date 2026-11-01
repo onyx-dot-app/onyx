@@ -28,7 +28,10 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
-from onyx.connectors.jira_service_management.config import validate_project_key
+from onyx.connectors.jira_service_management.config import (
+    has_balanced_parentheses,
+    validate_project_key,
+)
 from onyx.connectors.models import (
     Document,
     SlimDocument,
@@ -83,12 +86,14 @@ def _and_scope(project_key: str, request_jql: str | None) -> str:
     """Always AND the mandatory project scope in front of any user JQL.
 
     The user query is parenthesised so a top-level ``OR`` cannot escape the
-    project clause.
+    project clause. Unbalanced parentheses are rejected to prevent JQL breakout.
     """
     project_clause = f'project = "{project_key}"'
     user = (request_jql or "").strip()
     if not user:
         return project_clause
+    if not has_balanced_parentheses(user):
+        raise ValueError("Invalid request_jql: unbalanced parentheses detected.")
     return f"{project_clause} AND ({user})"
 
 
@@ -143,9 +148,16 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         url = urljoin(self.base_url + "/", path.lstrip("/"))
         resp = self._session.get(url, params=params, timeout=60)
         if not resp.ok:
-            error_msg = f"JSM API error {resp.status_code} for {url}: {resp.text[:500]}"
-            logger.error(error_msg)
-            resp.raise_for_status()
+            error_body = resp.text[:1000]
+            logger.error(
+                "JSM API error %s for %s: %s", resp.status_code, url, error_body
+            )
+            try:
+                resp.raise_for_status()
+            except requests.HTTPError as e:
+                raise requests.HTTPError(
+                    f"{e} - Response body: {error_body}", response=resp
+                ) from e
         return resp.json()
 
     def _search(self, jql: str, next_page_token: str | None) -> dict[str, Any]:
@@ -224,12 +236,13 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                 doc_updated_at = None
 
         return Document(
-            id=key,
+            id=link,
             sections=[TextSection(text="\n\n".join(text_parts), link=link)],
             source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
             semantic_identifier=summary,
             metadata={
                 "project": self.project_key,
+                "key": key,
                 "status": (fields.get("status") or {}).get("name", ""),
                 "priority": (fields.get("priority") or {}).get("name", ""),
                 "created": fields.get("created", ""),
@@ -290,7 +303,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         while True:
             page = self._search(self.request_jql, next_page_token)
             slim.extend(
-                SlimDocument(id=str(issue.get("key")))
+                SlimDocument(id=f"{self.base_url}/browse/{issue.get('key')}")
                 for issue in page.get("issues", []) or []
             )
             if callback is not None:
