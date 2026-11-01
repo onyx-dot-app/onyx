@@ -821,6 +821,7 @@ def test_run_port_attempt_records_ported_content_hash(
         with patch.object(port_task, "PortCopier", return_value=mock_copier):
             run_port_attempt(attempt_id)
 
+        mock_copier.refresh_source.assert_called_once()
         db_session.expire_all()
         recorded = {
             row.id: (

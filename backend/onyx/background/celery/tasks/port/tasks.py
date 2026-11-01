@@ -463,7 +463,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                     up_to_doc_id=up_to_doc_id,
                 )
             # Read before the copy reads the source: an indexing write in between
-            # then shows as a mismatch, never as a false match.
+            # then shows as a mismatch, never as a false match. The refresh below
+            # makes the writes behind these hashes visible to the copy's scan.
             snapshot_hashes = (
                 get_port_source_content_hashes(
                     db_session,
@@ -492,6 +493,10 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         # an earlier copy (a retry, or a resume) owns them, so this copy wrote nothing.
         docs_already_in_target: set[str] = set()
         try:
+            if record_hashes:
+                # A write is searchable only after a refresh. Without this the scan
+                # could miss the chunks behind a hash the snapshot already holds.
+                copier.refresh_source()
             batch_chunks, aborted = _copy_batch_with_retry(
                 copier,
                 doc_ids,

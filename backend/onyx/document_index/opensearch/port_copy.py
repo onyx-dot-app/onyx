@@ -335,6 +335,11 @@ class PortCopier:
         legitimately re-added one (unmarked chunks) intact. Returns chunks deleted."""
         return self._target_index.delete_port_written_chunks(document_ids)
 
+    def refresh_source(self) -> None:
+        """Make every write to the source index searchable, so the next copy's scan
+        sees the chunks behind the hashes the port just read."""
+        self._source_client.refresh_index()
+
     def copy_doc_batch(
         self,
         doc_ids: list[str],
