@@ -679,7 +679,7 @@ export default function AppSidebar() {
           )}
           <SidebarTab
             icon={SvgPlug}
-            {...activeSidebarTab.linkToPlugins()}
+            href="/app/plugins"
             selected={activeSidebarTab.isPlugins()}
           >
             {t("appSidebar.plugins.label")}

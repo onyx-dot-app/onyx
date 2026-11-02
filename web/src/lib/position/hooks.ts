@@ -169,10 +169,6 @@ class AppPosition {
     return this.linkTo({ location: "more-agents" });
   }
 
-  linkToPlugins(): AppLinkProps {
-    return this.linkTo({ location: "plugins" });
-  }
-
   private linkTo(value: AppPositionType): AppLinkProps {
     return {
       href: hrefFor(value),

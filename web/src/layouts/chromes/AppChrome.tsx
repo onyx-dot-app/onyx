@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
-import { PageLoader } from "@opal/loaders";
 import { cn, markdown } from "@opal/utils";
 import { INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -36,7 +35,6 @@ import {
   AgentsPageLoader,
   MoveCustomAgentChatModal,
 } from "@/lib/agents/components";
-import { PluginsPageLoader } from "@/lib/plugins/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
@@ -644,9 +642,8 @@ interface NavigationTargetLoaderProps {
 /** The loading screen of the page a navigation in flight is going to. */
 function NavigationTargetLoader({ target }: NavigationTargetLoaderProps) {
   if (target.isMoreAgents()) return <AgentsPageLoader />;
-  if (target.isPlugins()) return <PluginsPageLoader />;
-  if (target.isUserSettings()) return <PageLoader />;
-  // A view of /app: it shows its own loading state once it mounts.
+  // A view of /app shows its own loading state once it mounts. Other pages
+  // have no loader here yet.
   return null;
 }
 
