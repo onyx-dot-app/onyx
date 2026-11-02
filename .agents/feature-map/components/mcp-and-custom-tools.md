@@ -243,7 +243,8 @@ Policy precedence is in [[craft-external-apps]].
     skill files.
 
 14. `cancel-in-flight-request` **Chat cancellation stops an active MCP request.**
-    `MCPTool._run` passes its invocation signal to `client.call_mcp_tool`.
+    `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run` passes its
+    invocation signal to `server/features/mcp/client.py:call_mcp_tool`.
     The synchronous client cancels and drains the request coroutine before
     raising `AgentCancelled`. This bypasses ordinary tool error recovery and
     records `cancelled`, not `error`, in MCP call metrics.
