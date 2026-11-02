@@ -543,3 +543,98 @@ test("generated images from earlier tool steps lead the answer once", async () =
     });
   }
 });
+
+function generatedImageStep(turnIndex: number, fileId: string): Packet[] {
+  return [
+    {
+      placement: { turn_index: turnIndex },
+      obj: { type: PacketType.IMAGE_GENERATION_TOOL_START },
+    },
+    {
+      placement: { turn_index: turnIndex },
+      obj: {
+        type: PacketType.IMAGE_GENERATION_TOOL_DELTA,
+        images: [
+          {
+            file_id: fileId,
+            url: `/api/chat/file/${fileId}`,
+            revised_prompt: "An onyx stone",
+          },
+        ],
+      },
+    },
+    {
+      placement: { turn_index: turnIndex },
+      obj: { type: PacketType.SECTION_END },
+    },
+  ];
+}
+
+test.each([
+  { scenario: "cancellation without answer text", cancelled: true },
+  { scenario: "a second image generation step", cancelled: false },
+])("retains generated images after $scenario", async ({ cancelled }) => {
+  seedSessionAwaitingAnswer();
+  const initialPackets = generatedImageStep(0, "first-image");
+  const renderMessage = (packets: Packet[]) => (
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  const view = render(renderMessage(initialPackets));
+  try {
+    expect(
+      screen.queryByRole("img", { name: "Chat attachment" })
+    ).not.toBeInTheDocument();
+    expect(renderComplete()).toBe(false);
+    const finalPackets: Packet[] = cancelled
+      ? [
+          ...initialPackets,
+          {
+            placement: { turn_index: 1 },
+            obj: {
+              type: PacketType.STOP,
+              stop_reason: StopReason.USER_CANCELLED,
+            },
+          },
+        ]
+      : [
+          ...initialPackets,
+          ...generatedImageStep(1, "second-image"),
+          ...answerPackets.map((packet) => ({
+            ...packet,
+            placement: { turn_index: 2 },
+          })),
+        ];
+    view.rerender(renderMessage(finalPackets));
+    const images = await screen.findAllByRole("img", {
+      name: "Chat attachment",
+    });
+    expect(images).toHaveLength(cancelled ? 1 : 2);
+    expect(images[0]).toHaveAttribute("src", "/api/chat/file/first-image");
+    if (cancelled) {
+      expect(screen.queryByText("A quick answer.")).not.toBeInTheDocument();
+    } else {
+      expect(images[1]).toHaveAttribute("src", "/api/chat/file/second-image");
+      const answer = await screen.findByText("A quick answer.");
+      for (const image of images) {
+        expect(image.compareDocumentPosition(answer)).toBe(
+          Node.DOCUMENT_POSITION_FOLLOWING
+        );
+      }
+    }
+    await waitFor(() => expect(renderComplete()).toBe(true));
+  } finally {
+    view.unmount();
+    useChatSessionStore.setState({
+      currentSessionId: null,
+      sessions: new Map(),
+    });
+  }
+});
