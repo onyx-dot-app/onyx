@@ -178,6 +178,35 @@ describe("CreateSkillModal", () => {
     expect(mockInspectSkillBundle).not.toHaveBeenCalled();
   });
 
+  it("starts a fresh batch when the dialog is reopened", async () => {
+    const user = setupUser();
+    mockUploadSkillBundles.mockResolvedValue({
+      imported: [
+        { skill: { id: "alpha", name: "alpha" }, disabled_reason: null },
+      ],
+      not_imported: [],
+    });
+    const props = {
+      onClose: jest.fn(),
+      onContinue: jest.fn(),
+      onImported: jest.fn(),
+    };
+    const { rerender } = render(<CreateSkillModal open {...props} />);
+    await user.click(
+      screen.getByRole("button", { name: "Select multiple bundles" })
+    );
+    await user.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    await screen.findByRole("button", { name: "Done" });
+    rerender(<CreateSkillModal open={false} {...props} />);
+    rerender(<CreateSkillModal open {...props} />);
+    expect(
+      screen.getByRole("button", { name: "Select multiple bundles" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Done" })
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the modal open and reports inspection failures", async () => {
     const user = setupUser();
     const onContinue = jest.fn();

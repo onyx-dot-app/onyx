@@ -380,6 +380,27 @@ describe("SkillsPage preference toggles", () => {
     }
   );
 
+  it("toggles only the selected skills the user can toggle", async () => {
+    skillsData.customs[1] = { ...skillsData.customs[1]!, can_toggle: false };
+    mockBulkUpdateSkills.mockResolvedValue({
+      succeeded: ["first-id"],
+      failed: [],
+    });
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+    );
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByText("Enable for me", { exact: true }));
+    await waitFor(() =>
+      expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
+        action: "enable",
+        skill_ids: ["first-id"],
+      })
+    );
+  });
+
   it("lists exactly the skills selected for deletion before confirming", async () => {
     const names = [
       "first-skill",

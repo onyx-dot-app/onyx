@@ -384,8 +384,8 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         item.skill.user_permission === "OWNER" ||
         item.skill.user_permission === "EDITOR"
     );
-  const canToggleSelected =
-    selectedItems.length > 0 && selectedItems.every((item) => item.can_toggle);
+  const toggleableItems = selectedItems.filter((item) => item.can_toggle);
+  const canToggleSelected = toggleableItems.length > 0;
 
   const bulkToggleActions: DropdownMenuRow[] = [];
   if (selectedItems.some((item) => !item.enabled)) {
@@ -417,7 +417,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     setBulkBusy(true);
     setBulkFailures([]);
     try {
-      const skill_ids = selectedItems.map((item) => item.id);
+      const targets =
+        action === "enable" || action === "disable"
+          ? toggleableItems
+          : selectedItems;
+      const skill_ids = targets.map((item) => item.id);
       const result = await bulkUpdateSkills(
         action === "share"
           ? { action, skill_ids, sharing: sharing ?? {} }

@@ -334,13 +334,15 @@ export default function CreateSkillModal({
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && !busy && onClose()}>
       <Modal.Content width="sm" maxHeight="80dvh">
-        <CreateSkillModalContent
-          onRequestClose={onClose}
-          onContinue={onContinue}
-          onImported={onImported}
-          onBusyChange={setBusy}
-          validateDraft={validateDraft}
-        />
+        {open && (
+          <CreateSkillModalContent
+            onRequestClose={onClose}
+            onContinue={onContinue}
+            onImported={onImported}
+            onBusyChange={setBusy}
+            validateDraft={validateDraft}
+          />
+        )}
       </Modal.Content>
     </Modal>
   );
