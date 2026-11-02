@@ -633,13 +633,14 @@ function Footer() {
 // AppChrome
 // ---------------------------------------------------------------------------
 
-interface NavigationTargetLoaderProps {
-  target: ReturnType<typeof useShownPosition>;
-}
-
-/** The loading screen of the page a navigation in flight is going to. */
-function NavigationTargetLoader({ target }: NavigationTargetLoaderProps) {
-  if (target.isMoreAgents()) return <AgentsCatalogLoading />;
+/**
+ * The loading screen of the page being shown: the target of a navigation in
+ * flight (`AppChrome`), else the URL while its page loads (`/app`'s
+ * `loading.tsx`).
+ */
+export function AppChromeLoader() {
+  const position = useShownPosition();
+  if (position.isMoreAgents()) return <AgentsCatalogLoading />;
   // A view of /app shows its own loading state once it mounts. Other pages
   // have no loader here yet.
   return null;
@@ -648,7 +649,6 @@ function NavigationTargetLoader({ target }: NavigationTargetLoaderProps) {
 interface AppChromeProps {
   children: React.ReactNode;
 }
-
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
   const navigationTarget = useNavigationTarget();
@@ -764,11 +764,7 @@ export default function AppChrome({ children }: AppChromeProps) {
             <RootLayout.MainContent>
               {/* A navigation in flight shows its target's loading screen
                   at once, rather than the page it is leaving. */}
-              {navigationTarget ? (
-                <NavigationTargetLoader target={navigationTarget} />
-              ) : (
-                children
-              )}
+              {navigationTarget ? <AppChromeLoader /> : children}
             </RootLayout.MainContent>
             <Footer />
           </div>

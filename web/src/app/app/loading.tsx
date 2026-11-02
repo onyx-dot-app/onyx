@@ -1,9 +1,8 @@
 /**
- * The /app pages' loading boundary. With it, Next prefetches each page's
- * shell, so leaving a page for another (More Agents, Plugins, Settings, or
- * back to a chat) switches the URL and the sidebar at once instead of
- * waiting for the server render. The chat view shows its own skeleton.
+ * The /app pages' loading boundary. A navigation between them commits here
+ * first, with the new URL, before Next has the page's own loading state; it
+ * shows the loader for that URL, so a page with one never flashes blank.
+ * With it, Next also prefetches each page's shell. The chat view shows its
+ * own skeleton.
  */
-export default function Loading() {
-  return null;
-}
+export { AppChromeLoader as default } from "@/layouts/chromes/AppChrome";
