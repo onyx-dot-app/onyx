@@ -134,37 +134,35 @@ def _import_skill_bundles(
     created: list[tuple[Skill, bool]] = []
     affected: set[UUID] = set()
     bundle_file_ids: list[str] = []
-    for source in sources:
-        try:
-            ingested = source.ingest(file_store)
-        except OnyxError as exc:
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=source.path, name=source.name, reason=exc.detail
-                )
-            )
-            continue
-        try:
-            skill, enabled, item_affected = create_skill_from_bundle__no_commit(
-                ingested, change, auto_enable, user, db_session
-            )
-        except OnyxError as exc:
-            delete_bundle_blob(file_store, ingested.bundle_file_id)
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=source.path, name=source.name, reason=exc.detail
-                )
-            )
-            continue
-        except Exception:
-            delete_bundle_blob(file_store, ingested.bundle_file_id)
-            raise
-        bundle_file_ids.append(ingested.bundle_file_id)
-        created.append((skill, enabled))
-        affected |= item_affected
     try:
+        for source in sources:
+            try:
+                ingested = source.ingest(file_store)
+            except OnyxError as exc:
+                not_imported.append(
+                    GitHubSkillNotImported(
+                        path=source.path, name=source.name, reason=exc.detail
+                    )
+                )
+                continue
+            bundle_file_ids.append(ingested.bundle_file_id)
+            try:
+                skill, enabled, item_affected = create_skill_from_bundle__no_commit(
+                    ingested, change, auto_enable, user, db_session
+                )
+            except OnyxError as exc:
+                delete_bundle_blob(file_store, bundle_file_ids.pop())
+                not_imported.append(
+                    GitHubSkillNotImported(
+                        path=source.path, name=source.name, reason=exc.detail
+                    )
+                )
+                continue
+            created.append((skill, enabled))
+            affected |= item_affected
         db_session.commit()
     except Exception:
+        # Nothing references the stored blobs once the import fails.
         for file_id in bundle_file_ids:
             delete_bundle_blob(file_store, file_id)
         raise
