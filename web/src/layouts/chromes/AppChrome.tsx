@@ -82,10 +82,16 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 // Header
 // ---------------------------------------------------------------------------
 
-function Header() {
+type Position = ReturnType<typeof useAppPosition>;
+
+interface ChromePartProps {
+  /** The page on screen, which the chrome describes (see `AppChrome`). */
+  position: Position;
+}
+
+function Header({ position: appPosition }: ChromePartProps) {
   const t = useTranslations("chat.appChrome");
   const tSidebar = useTranslations("sidebar");
-  const appPosition = useShownPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
@@ -592,8 +598,7 @@ function Header() {
 // Footer
 // ---------------------------------------------------------------------------
 
-function Footer() {
-  const appPosition = useShownPosition();
+function Footer({ position: appPosition }: ChromePartProps) {
   const customFooterContent = useCustomFooterContent();
 
   return (
@@ -647,7 +652,7 @@ function Footer() {
  * agent, a project, a new session): that view shows its own once it mounts.
  * Other pages without a loader of their own get the page loader.
  */
-function loaderFor(position: ReturnType<typeof useShownPosition>): ReactNode {
+function loaderFor(position: Position): ReactNode {
   if (position.isMoreAgents()) return <AgentsCatalogLoading />;
   if (position.isAgentEditor()) return <AgentEditorLoading />;
   if (
@@ -676,9 +681,13 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
   const urlPosition = useAppPosition();
   const navigationTarget = useNavigationTarget();
-  // What the screen shows: a navigation's target, else the URL.
-  const appPosition = navigationTarget ?? urlPosition;
   const targetLoader = navigationTarget ? loaderFor(navigationTarget) : null;
+  // The page on screen, which the header, footer and background describe:
+  // the target while its loader shows, else the URL's page, which stays shown
+  // until a target without a loader lands. Following the target there would
+  // put the target's chrome around the old page.
+  const appPosition =
+    navigationTarget && targetLoader ? navigationTarget : urlPosition;
   useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -785,7 +794,7 @@ export default function AppChrome({ children }: AppChromeProps) {
             )}
 
             {/* Header */}
-            <Header />
+            <Header position={appPosition} />
             <RootLayout.MainContent>
               {/* A navigation in flight shows its target's loading screen at
                   once. The page it is leaving stays mounted underneath, so a
@@ -796,7 +805,7 @@ export default function AppChrome({ children }: AppChromeProps) {
                 {children}
               </div>
             </RootLayout.MainContent>
-            <Footer />
+            <Footer position={appPosition} />
           </div>
           {rightPanel}
         </div>
