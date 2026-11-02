@@ -47,6 +47,7 @@ def _get_search_filters(
         access_control_list=["user_email:test@example.com"],
         cc_pair_access=None,
         source_types=source_types,
+        excluded_source_types=[],
         tags=[],
         document_sets=document_sets or [],
         project_id_filter=project_id_filter,
