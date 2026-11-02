@@ -542,8 +542,11 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
+                {/* Only for the chat on screen: during a navigation to another
+                    chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
                   currentChatSession &&
+                  currentChatSession.id === appPosition.chat() &&
                   !incognitoEnabled && (
                     <FrostedDiv className="flex shrink flex-row items-center">
                       <Button
