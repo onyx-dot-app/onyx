@@ -232,8 +232,14 @@ def test_import_applies_shared_access_before_publication(
         "onyx.server.features.skill.api._github_authorization_header",
         lambda *_args: None,
     )
+    published: list[SkillSharePermission | None] = []
+
+    def record_publication(_user_ids: set[UUID], session: Session) -> None:
+        skill = session.scalar(select(Skill).where(Skill.name == name))
+        published.append(skill.public_permission if skill else None)
+
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
+        "onyx.server.features.skill.api.push_skills_for_users", record_publication
     )
     result = import_github_skills(
         GitHubSkillsImportRequest(
@@ -249,6 +255,7 @@ def test_import_applies_shared_access_before_publication(
     assert len(result.imported) == 1
     imported = result.imported[0].skill
     assert imported.public_permission == SkillSharePermission.VIEWER
+    assert published == [SkillSharePermission.VIEWER]
     stored = db_session.get(Skill, imported.id)
     assert stored is not None
     assert stored.public_permission == SkillSharePermission.VIEWER
