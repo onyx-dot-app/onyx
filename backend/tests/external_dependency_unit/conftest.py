@@ -223,13 +223,11 @@ def delete_test_users_and_owned_rows(
     db_session.rollback()
     persona_ids = select(Persona.id).where(Persona.user_id.in_(user_ids))
     persona_id_list = list(db_session.scalars(persona_ids))
+    db_session.execute(delete(ChatSession).where(ChatSession.user_id.in_(user_ids)))
     db_session.execute(
-        delete(ChatSession).where(
-            or_(
-                ChatSession.user_id.in_(user_ids),
-                ChatSession.persona_id.in_(persona_id_list),
-            )
-        )
+        update(ChatSession)
+        .where(ChatSession.persona_id.in_(persona_id_list))
+        .values(persona_id=None)
     )
     db_session.execute(
         delete(Persona__User).where(

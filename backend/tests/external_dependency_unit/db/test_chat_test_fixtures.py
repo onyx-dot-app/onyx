@@ -49,11 +49,13 @@ def test_user_cleanup_preserves_shared_personas_and_their_chats(
     db_session.add(Persona__User(persona_id=shared.id, user_id=visitor.id))
     retained_chat = ChatSession(user_id=owner.id, persona_id=shared.id)
     removed_chat = ChatSession(user_id=visitor.id, persona_id=shared.id)
-    db_session.add_all([retained_chat, removed_chat])
+    detached_chat = ChatSession(user_id=owner.id, persona_id=owned.id)
+    db_session.add_all([retained_chat, removed_chat, detached_chat])
     db_session.commit()
     visitor_id, email = visitor.id, visitor.email
     owned_id, shared_id = owned.id, shared.id
     retained_id, removed_id = retained_chat.id, removed_chat.id
+    detached_id = detached_chat.id
 
     delete_test_users_and_owned_rows(db_session, [visitor_id], [email])
 
@@ -62,6 +64,8 @@ def test_user_cleanup_preserves_shared_personas_and_their_chats(
     assert db_session.get(ChatSession, removed_id) is None
     assert db_session.get(Persona, shared_id) is not None
     assert db_session.get(ChatSession, retained_id) is not None
+    detached = db_session.get(ChatSession, detached_id)
+    assert detached is not None and detached.persona_id is None
     assert (
         db_session.scalar(
             select(Persona__User).where(Persona__User.user_id == visitor_id)
