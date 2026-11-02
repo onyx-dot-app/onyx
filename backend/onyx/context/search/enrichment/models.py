@@ -14,11 +14,11 @@ logger = setup_logger()
 
 
 class EnrichmentContext(BaseModel):
-    """One live withheld source, ready to be searched for one user.
+    """One live withheld source, searchable for one user.
 
-    One of these is built per search and shared by every lane of it, so it
-    is also where the search remembers what the provider already said.
-    The lanes run in parallel threads, hence the lock.
+    Built once per search and shared by every lane of it, so it is also
+    where the search remembers what the provider already said. The lanes run
+    in parallel threads, hence the lock.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -28,20 +28,15 @@ class EnrichmentContext(BaseModel):
     user_email: str
     secrets: Mapping[str, str]
 
-    # document id -> may this user read it. One search expands into several
-    # queries, and they retrieve overlapping documents.
+    # A search expands into several queries over overlapping documents.
     _decisions: dict[str, bool] = PrivateAttr(default_factory=dict)
-    # Set once the provider has failed in this search. Asking again would
-    # answer no faster and spend the rate limit that caused it.
+    # Asking a failed provider again spends the rate limit that caused it.
     _unreachable: bool = PrivateAttr(default=False)
     _lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
 
     def allowed(self, chunks: Sequence[InferenceChunk]) -> list[InferenceChunk]:
-        """The chunks the provider says this user may read.
-
-        A filter that raises drops the whole lane rather than the chunk it
-        failed on: the alternative is returning content nobody cleared.
-        """
+        """The chunks the provider says this user may read. A filter that
+        raises drops the lane, not just the chunk it failed on."""
         if not chunks:
             return []
 
@@ -60,9 +55,8 @@ class EnrichmentContext(BaseModel):
         return [chunk for chunk in chunks if decided.get(chunk.document_id, False)]
 
     def _ask(self, chunks: list[InferenceChunk]) -> dict[str, bool] | None:
-        """The provider's verdict per document, or None if it could not
-        answer. A document it did not clear is refused, whether it said no
-        or the filter could not identify the chunk."""
+        """The verdict per document, or None if the provider could not
+        answer. Anything it did not clear is refused."""
         try:
             cleared = self.permission_filter(
                 user_email=self.user_email, chunks=chunks, secrets=self.secrets

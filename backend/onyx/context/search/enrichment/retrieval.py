@@ -1,9 +1,8 @@
-"""The lane that retrieves a withheld source and clears it with its provider.
+"""Which withheld sources are live, and with whose credentials.
 
-Split in two on purpose. Resolving which sources are live, and with whose
-credentials, needs a database session; running the search does not. The
-chat path resolves ahead of time and hands the result down, as it already
-does for federated search.
+Separate from searching them because only this half needs a database
+session. The chat path resolves ahead of time and hands the result down, as
+it already does for federated search.
 """
 
 from collections.abc import Sequence
@@ -42,8 +41,6 @@ def get_enrichment_contexts(
 
     contexts: list[EnrichmentContext] = []
     for source in enrichment_source_types():
-        # An explicit source selection scopes this lane as it scopes the
-        # default one.
         if source_types is not None and source not in source_types:
             continue
         permission_filter = get_enrichment_filter(source)
