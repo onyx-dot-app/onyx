@@ -376,7 +376,7 @@ variable "enable_opensearch" {
 
 variable "opensearch_engine_version" {
   type        = string
-  description = "OpenSearch engine version. 1-bit vector quantization needs 3.6 or later; Amazon OpenSearch Service offers 3.7."
+  description = "OpenSearch engine version. 1-bit vector quantization needs 3.6 or later; Amazon OpenSearch Service offers 3.7. A domain on 1.3 or 2.x must upgrade to 2.19 before 3.x."
   default     = "3.7"
 }
 
