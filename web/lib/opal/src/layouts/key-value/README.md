@@ -15,10 +15,12 @@ One read-only "label … value" row: the label on the start side, the value on t
 ## Usage
 
 ```tsx
+import { KeyValue, Section } from "@opal/layouts";
+
 <Section gap={2} alignItems="stretch">
   <KeyValue label="Authentication Type" value="API Key" />
   <KeyValue label="API Key" value="sk-…a1b2" mono />
 </Section>
 ```
 
-Each side is capped at `--block-width-form-input-column-max` (240px). A long label or value is cut to one line and shows in full on hover (`OverflowText`).
+Each side is capped at `--block-width-form-input-column-max` (240px), and the label at half the row, so the value always keeps room. A long label or value wraps instead of being cut, so its full text shows without a hover.

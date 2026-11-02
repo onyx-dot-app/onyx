@@ -38,7 +38,7 @@
   "accountPopover": {
     "about": {
       "commit": {
-        "label": "الإصدار البرمجي (Commit)"
+        "label": "الإيداع (Commit)"
       },
       "commitDate": {
         "label": "تاريخ الإيداع"
