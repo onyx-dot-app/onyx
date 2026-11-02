@@ -44,10 +44,14 @@ export const ImageToolRenderer: MessageRenderer<
   {}
 > = ({ packets, renderType, stopPacketSeen, children }) => {
   const t = useTranslations("chat.messages");
-  const images = packets.flatMap((packet) =>
-    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
-      ? packet.obj.images
-      : []
+  const images = Array.from(
+    new Map(
+      packets.flatMap((packet) =>
+        packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
+          ? packet.obj.images.map((image) => [image.file_id, image] as const)
+          : []
+      )
+    ).values()
   );
   const isComplete = packets.some(
     (packet) =>

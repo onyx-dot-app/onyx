@@ -191,7 +191,7 @@ def test_image_generation_tool(
                 "tests.external_dependency_unit.mock_image_provider.MockImageGenerationProvider.generate_image",
                 side_effect=RuntimeError("Image provider unavailable"),
             )
-        ),
+        ) as failed_generation,
     ):
         web.add_results(
             "rockets",
@@ -219,6 +219,8 @@ def test_image_generation_tool(
         assert len(images[0]) == 1
         assert images[0][0].url == "/api/chat/file/123"
     else:
+        assert failed_generation is not None
+        failed_generation.assert_called_once()
         assert not images
     # The image does not end the turn: the next step still offers tools.
     assert len(llm.requests) == 3
@@ -227,7 +229,9 @@ def test_image_generation_tool(
         tool["function"]["name"] for tool in llm.requests[1]["tools"]
     }
     assert any(
-        isinstance(part, Packet) and isinstance(part.obj, SearchToolStart)
+        isinstance(part, Packet)
+        and isinstance(part.obj, SearchToolDocumentsDelta)
+        and any(doc.link == "https://rockets.example.com" for doc in part.obj.documents)
         for part in parts
     )
 

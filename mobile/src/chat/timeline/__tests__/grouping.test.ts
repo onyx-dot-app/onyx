@@ -207,6 +207,27 @@ describe("grouping engine", () => {
     expect(state.generatedImages).toEqual([image]);
   });
 
+  it("keeps unique images across separate generation steps", () => {
+    const first = { file_id: "a", url: "a", revised_prompt: "first" };
+    const second = { file_id: "b", url: "b", revised_prompt: "second" };
+    const state = run([
+      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
+      makePlacedPacket(
+        { type: "image_generation_final", images: [first] },
+        { turn_index: 0 },
+      ),
+      sectionEnd(0),
+      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 1 }),
+      makePlacedPacket(
+        { type: "image_generation_final", images: [first, second] },
+        { turn_index: 1 },
+      ),
+      sectionEnd(1),
+      messageStart(2),
+    ]);
+    expect(state.generatedImages).toEqual([first, second]);
+  });
+
   it("groups incrementally across flushes (cursor advances, prior turns survive)", () => {
     let state = createInitialState(1);
     state = processPackets(state, [reasoningStart(0)]);

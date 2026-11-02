@@ -41,7 +41,7 @@ export interface UsePacketProcessorResult {
   // Tool processing duration from backend (via MESSAGE_START packet)
   toolProcessingDuration: number | undefined;
 
-  // A stopped response with no answer has nothing left to render.
+  // Complete after stop when the visible answer finishes, or none is shown.
   isComplete: boolean;
 
   // Callbacks
@@ -151,11 +151,9 @@ export function usePacketProcessor(
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
 
-    // A stopped response with no answer has nothing left to render.
+    // Complete after stop when the visible answer finishes, or none is shown.
     isComplete:
-      state.stopPacketSeen &&
-      (renderComplete || state.potentialDisplayGroups.length === 0),
-
+      state.stopPacketSeen && (renderComplete || displayGroups.length === 0),
 
     // Callbacks
     onRenderComplete,

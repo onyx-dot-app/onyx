@@ -287,3 +287,19 @@ describe("usePacketProcessor", () => {
     });
   });
 });
+
+it("completes a stopped retracted answer without a hidden renderer", () => {
+  const packets = [messageStart(0), messageDelta(0, "Let me check.")];
+  const { result, rerender } = renderHook(
+    ({ packets }: { packets: Packet[] }) => usePacketProcessor(packets, 1),
+    { initialProps: { packets } },
+  );
+  expect(result.current.displayGroups).toHaveLength(1);
+  rerender({
+    packets: [...packets, searchStart(1), stopAt(StopReason.USER_CANCELLED)],
+  });
+  expect(result.current.finalAnswerComing).toBe(false);
+  expect(result.current.displayGroups).toEqual([]);
+  expect(result.current.processed.potentialDisplayGroups).toHaveLength(1);
+  expect(result.current.isComplete).toBe(true);
+});

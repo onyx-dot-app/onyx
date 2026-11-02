@@ -126,8 +126,7 @@ export function usePacketProcessor(
     toolProcessingDuration: state.toolProcessingDuration,
 
     isComplete:
-      state.stopPacketSeen &&
-      (renderComplete || state.potentialDisplayGroups.length === 0),
+      state.stopPacketSeen && (renderComplete || displayGroups.length === 0),
 
     onRenderComplete,
     markAllToolsDisplayed,

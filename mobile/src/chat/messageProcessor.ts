@@ -221,7 +221,7 @@ function handleImagePacket(state: ProcessedMessageState, packet: Packet): void {
   if (packet.obj.type !== PacketType.IMAGE_GENERATION_TOOL_DELTA) return;
   const seenFileIds = new Set(state.generatedImages.map((i) => i.file_id));
   const newImages: GeneratedImage[] = [];
-  for (const image of (packet.obj as ImageGenerationToolDelta).images ?? []) {
+  for (const image of (packet.obj as ImageGenerationToolDelta).images) {
     if (seenFileIds.has(image.file_id)) continue;
     seenFileIds.add(image.file_id);
     newImages.push(image);
