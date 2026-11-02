@@ -97,6 +97,12 @@ export type {
 /* TagList */
 export { TagList, type TagListProps } from "@opal/layouts/tag-list/components";
 
+/* KeyValue */
+export {
+  KeyValue,
+  type KeyValueProps,
+} from "@opal/layouts/key-value/components";
+
 /* Toast */
 export {
   ToastProvider,
