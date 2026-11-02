@@ -144,7 +144,7 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
                           prominence="tertiary"
                           size="md"
                           onClick={noProp(() =>
-                            router.push(`/app/agents/edit/${agent.id}`)
+                            appPosition.openAgentEditor(agent.id)
                           )}
                           tooltip={t("card.edit.tooltip")}
                         />

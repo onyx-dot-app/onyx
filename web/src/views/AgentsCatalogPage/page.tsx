@@ -12,6 +12,7 @@ import { MinimalAgent } from "@/lib/agents/types";
 import { SettingsLayouts } from "@opal/layouts";
 import { GridSearchInput, NoItems, NoResults } from "@/lib/common/components";
 import { useSearchableGrid } from "@/lib/common/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import { Button, EndOfList, Tabs, Text } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
@@ -68,6 +69,7 @@ export default function AgentsCatalogPage() {
   const t = useTranslations("agents");
   const { agents, isLoading, error } = useAgents();
   const { user, permissions } = useUser();
+  const appPosition = useAppPosition();
   const canCreateAgent = hasPermission(permissions, Permission.ADD_AGENTS);
   const [searchQuery, setSearchQuery] = useState("");
   // One viewer for the listing, so the id lives here rather than in whichever
@@ -144,7 +146,7 @@ export default function AgentsCatalogPage() {
         actions={[
           <Button
             key="primary"
-            href={canCreateAgent ? "/app/agents/create" : undefined}
+            {...(canCreateAgent ? appPosition.linkToAgentCreate() : {})}
             icon={SvgPlus}
             aria-label={NEW_AGENT_BUTTON_ARIA_LABEL}
             disabled={!canCreateAgent}

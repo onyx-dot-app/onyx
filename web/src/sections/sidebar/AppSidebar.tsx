@@ -519,7 +519,10 @@ export default function AppSidebar() {
             : SvgMoreHorizontal
         }
         {...activeSidebarTab.linkToMoreAgents()}
-        selected={activeSidebarTab.isMoreAgents()}
+        // The agent editor sits under More Agents.
+        selected={
+          activeSidebarTab.isMoreAgents() || activeSidebarTab.isAgentEditor()
+        }
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
         {visibleAgents.length === 0

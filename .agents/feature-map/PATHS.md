@@ -269,7 +269,7 @@ covers new files that match it.
 | `web/src/lib/tools/` | plugins |
 | `web/src/lib/tools/components/ToolsPopover.tsx` | plugins, chat-frontend |
 | `web/src/lib/onboarding/` | chat-frontend |
-| `web/src/views/AgentEditorPage.tsx`, `web/src/views/AgentsCatalogPage/`, `web/src/sections/agents/` | agents-personas |
+| `web/src/views/AgentEditorPage/`, `web/src/views/AgentsCatalogPage/`, `web/src/sections/agents/` | agents-personas |
 | `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/lib/app/components/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |

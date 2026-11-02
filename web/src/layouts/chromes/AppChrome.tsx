@@ -33,6 +33,7 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import AgentsCatalogLoading from "@/views/AgentsCatalogPage/loading";
+import AgentEditorLoading from "@/views/AgentEditorPage/loading";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
@@ -641,6 +642,7 @@ function Footer() {
 export function AppChromeLoader() {
   const position = useShownPosition();
   if (position.isMoreAgents()) return <AgentsCatalogLoading />;
+  if (position.isAgentEditor()) return <AgentEditorLoading />;
   // A view of /app shows its own loading state once it mounts. Other pages
   // have no loader here yet.
   return null;

@@ -14,10 +14,11 @@ import { routeWithQuery } from "@/lib/routes";
 type AppPositionType =
   // Chat ids are opaque; agent and project ids are rows.
   | { location: "chat"; id: string }
-  | { location: "agent" | "project"; id: number }
+  | { location: "agent" | "project" | "agent-edit"; id: number }
   | {
       location:
         | "more-agents"
+        | "agent-create"
         | "new-session"
         | "user-settings"
         | "shared-chat"
@@ -90,6 +91,13 @@ function hrefFor(value: AppPositionType): Route {
       });
     case "more-agents":
       return "/app/agents";
+    case "agent-create":
+      return "/app/agents/create";
+    case "agent-edit":
+      // SAFETY: `/app/agents/edit/[id]` is a route, and a row id fills its one
+      // segment. Typed routes only accept a computed dynamic path where they
+      // infer it from a literal, at a generic call site, so it is asserted.
+      return `/app/agents/edit/${value.id}` as Route;
     case "plugins":
       return "/app/plugins";
     case "user-settings":
@@ -142,6 +150,10 @@ class AppPosition {
     this.go({ location: "more-agents" }, options);
   }
 
+  openAgentEditor(agentId: number, options?: NavigationOptions) {
+    this.go({ location: "agent-edit", id: agentId }, options);
+  }
+
   // ## Linking somewhere
   //
   // A link to a position: its `href` (so a new tab or a copied link still
@@ -167,6 +179,10 @@ class AppPosition {
 
   linkToMoreAgents(): AppLinkProps {
     return this.linkTo({ location: "more-agents" });
+  }
+
+  linkToAgentCreate(): AppLinkProps {
+    return this.linkTo({ location: "agent-create" });
   }
 
   private linkTo(value: AppPositionType): AppLinkProps {
@@ -281,6 +297,18 @@ class AppPosition {
     return this.value.location === "more-agents";
   }
 
+  /** The agent editor: a new agent, or an existing one by id. */
+  isAgentEditor(): boolean {
+    return (
+      this.value.location === "agent-create" ||
+      this.value.location === "agent-edit"
+    );
+  }
+
+  isAgentCreate(): boolean {
+    return this.value.location === "agent-create";
+  }
+
   isPlugins(): boolean {
     return this.value.location === "plugins";
   }
@@ -359,6 +387,18 @@ export function useAppPosition(): AppPosition {
     }
     if (pathname === "/app/plugins" || pathname.startsWith("/app/plugins/")) {
       return new AppPosition({ location: "plugins" }, router);
+    }
+    if (pathname === "/app/agents/create") {
+      return new AppPosition({ location: "agent-create" }, router);
+    }
+    const editedAgentId = rowId(
+      pathname.match(/^\/app\/agents\/edit\/([^/]+)/)?.[1] ?? null
+    );
+    if (editedAgentId !== null) {
+      return new AppPosition(
+        { location: "agent-edit", id: editedAgentId },
+        router
+      );
     }
     if (pathname.startsWith("/app/agents")) {
       return new AppPosition({ location: "more-agents" }, router);
