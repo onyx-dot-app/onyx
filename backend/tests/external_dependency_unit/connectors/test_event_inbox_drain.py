@@ -722,3 +722,33 @@ def test_a_retried_untimestamped_change_does_not_overwrite_a_newer_one(
     )
 
     assert retried == []
+
+
+def test_a_batch_boundary_does_not_split_one_document(
+    db_session: Session,
+    pair_and_attempt: tuple[int, int],
+    registered_handler: None,  # noqa: ARG001
+) -> None:
+    """Two changes to one document must be compared, not sent to two
+    docprocessing tasks racing to write the same document."""
+    pair_id, attempt_id = pair_and_attempt
+    for key in ("k-1", "k-2"):
+        record_events(
+            db_session,
+            pair_id,
+            SOURCE,
+            [ParsedEvent(document_id="doc-1", event_key=key)],
+        )
+        db_session.commit()
+
+    # A batch size of one would otherwise take them one at a time.
+    documents, failures, checkpoint = _drain(
+        _connector(pair_id, attempt_id, batch_size=1),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    assert failures == []
+    assert [document.id for document in documents] == ["doc-1"]
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.IN_PROGRESS: 2
+    }

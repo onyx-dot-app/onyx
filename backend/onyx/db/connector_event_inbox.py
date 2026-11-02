@@ -187,26 +187,50 @@ def claim_events(
     index_attempt_id: int,
     limit: int,
 ) -> list[ConnectorEventInbox]:
-    """Take ownership of up to `limit` pending rows for one attempt.
+    """Take ownership of up to `limit` pending rows for one attempt, plus the
+    rest of each document those rows belong to.
+
+    A batch boundary therefore does not split two changes to one document.
+    The caller discards all but the newest; split across batches they would
+    instead become two docprocessing tasks racing to write the same
+    document, which nothing orders.
 
     Locks with FOR UPDATE SKIP LOCKED, so two attempts on the same pair never
     claim the same row. Marks each row IN_PROGRESS and stamps the attempt that
     took it; that stamp is how the row is later settled against the attempt's
     outcome. Does not commit.
     """
+    due = (
+        ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
+        ConnectorEventInbox.status == ConnectorEventStatus.PENDING,
+        ConnectorEventInbox.available_at <= func.now(),
+    )
     rows = list(
         db_session.scalars(
             select(ConnectorEventInbox)
-            .where(
-                ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
-                ConnectorEventInbox.status == ConnectorEventStatus.PENDING,
-                ConnectorEventInbox.available_at <= func.now(),
-            )
+            .where(*due)
             .order_by(ConnectorEventInbox.id)
             .limit(limit)
             .with_for_update(skip_locked=True)
         )
     )
+    if rows:
+        taken = {row.id for row in rows}
+        rows.extend(
+            db_session.scalars(
+                select(ConnectorEventInbox)
+                .where(
+                    *due,
+                    ConnectorEventInbox.document_id.in_(
+                        {row.document_id for row in rows}
+                    ),
+                    ConnectorEventInbox.id.notin_(taken),
+                )
+                .order_by(ConnectorEventInbox.id)
+                .with_for_update(skip_locked=True)
+            )
+        )
+        rows.sort(key=lambda row: row.id)
 
     for row in rows:
         row.status = ConnectorEventStatus.IN_PROGRESS
