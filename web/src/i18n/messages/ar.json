@@ -2419,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "تعذر تحديث نموذج تسمية المحادثة",
         "providerResolveFailed": "تعذّر تحديد الموفر",
-        "searchSelectionUpdateFailed": "تعذر تحديث نموذج اختيار مستندات البحث",
+        "searchSelectionUpdateFailed": "تعذر تحديث نموذج اختيار البحث",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "systemPromptUpdateFailed": "فشل تحديث مطالبة النظام",
         "toolsUpdateFailed": "فشل تحديث الأدوات",

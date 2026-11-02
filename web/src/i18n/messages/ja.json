@@ -2419,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
-        "searchSelectionUpdateFailed": "検索選択モデルの更新に失敗しました",
+        "searchSelectionUpdateFailed": "検索ドキュメント選択モデルの更新に失敗しました",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
         "toolsUpdateFailed": "ツールの更新に失敗しました",

@@ -142,12 +142,16 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   const providerNames = useProviderNames();
   const decisionTitle = decisionSection?.title;
   const decisionProviders = decisionSection?.providers;
+  const models = useMemo(
+    () =>
+      buildModelSelectOptions(providers, {
+        grouped,
+        providerNames,
+        includeDecisionOnly,
+      }),
+    [providers, grouped, providerNames, includeDecisionOnly]
+  );
   const options = useMemo((): SelectOptions => {
-    const models = buildModelSelectOptions(providers, {
-      grouped,
-      providerNames,
-      includeDecisionOnly,
-    });
     const decisionRows = decisionProviders
       ? buildModelSelectOptions(decisionProviders, {
           grouped: false,
@@ -184,12 +188,10 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         : models),
     ];
   }, [
-    providers,
-    grouped,
+    models,
     globalDefault,
     t,
     providerNames,
-    includeDecisionOnly,
     decisionTitle,
     decisionProviders,
   ]);
@@ -208,7 +210,9 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       lastServerSearchRef.current = "";
       return;
     }
-    if (!modelPaging?.hasMore || hasLoadedMatch(options, trimmedQuery)) return;
+    // Only the paged models count: the decision section is fully loaded, so
+    // its match must not hide a language model that is not loaded yet.
+    if (!modelPaging?.hasMore || hasLoadedMatch(models, trimmedQuery)) return;
     if (lastServerSearchRef.current === trimmedQuery) return;
     const handle = setTimeout(() => {
       modelPaging
@@ -222,7 +226,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         .catch(console.error);
     }, SERVER_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [modelPaging, trimmedQuery, options]);
+  }, [modelPaging, trimmedQuery, models]);
 
   // Which provider each row belongs to, so scrolling pages the providers
   // whose rows are on show rather than one hidden behind a folded group.

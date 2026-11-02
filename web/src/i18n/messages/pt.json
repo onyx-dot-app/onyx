@@ -2419,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Falha ao atualizar o modelo para nomear chats",
         "providerResolveFailed": "Não foi possível resolver o provedor",
-        "searchSelectionUpdateFailed": "Falha ao atualizar o modelo de seleção da busca",
+        "searchSelectionUpdateFailed": "Falha ao atualizar o modelo de seleção de pesquisa",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "systemPromptUpdateFailed": "Falha ao atualizar o prompt de sistema",
         "toolsUpdateFailed": "Falha ao atualizar as ferramentas",

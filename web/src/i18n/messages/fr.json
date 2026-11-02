@@ -2419,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
-        "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
+        "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection de recherche",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
         "toolsUpdateFailed": "Échec de la mise à jour des outils",

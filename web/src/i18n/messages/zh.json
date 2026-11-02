@@ -2419,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "更新会话命名模型失败",
         "providerResolveFailed": "无法解析提供商",
-        "searchSelectionUpdateFailed": "更新搜索筛选模型失败",
+        "searchSelectionUpdateFailed": "更新搜索选择模型失败",
         "settingsUpdateFailed": "更新设置失败",
         "systemPromptUpdateFailed": "更新系统提示词失败",
         "toolsUpdateFailed": "更新工具失败",
