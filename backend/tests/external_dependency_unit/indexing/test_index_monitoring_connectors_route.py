@@ -240,7 +240,7 @@ def _connectors(
     )
 
 
-def test_ac2_pairs_sort_by_rank_then_name_and_open_errors_take_rank_three(
+def test_pairs_sort_by_rank_then_name_and_open_errors_take_rank_three(
     db_session: Session,
 ) -> None:
     now = datetime.now(timezone.utc)
@@ -466,7 +466,7 @@ def test_a_rows_open_error_count_includes_whole_entity_failures(
     assert rows[resolved.name].open_error_count == 0
 
 
-def test_ac1_a_running_permission_or_group_sync_reads_syncing_unless_an_index_runs(
+def test_a_running_permission_or_group_sync_reads_syncing_unless_an_index_runs(
     db_session: Session,
 ) -> None:
     now = datetime.now(timezone.utc)
@@ -499,7 +499,7 @@ def test_ac1_a_running_permission_or_group_sync_reads_syncing_unless_an_index_ru
     assert response.status_counts[IndexingConnectorStatus.INDEXING] == 1
 
 
-def test_ac3_source_counts_hold_the_full_counts_on_every_page(
+def test_source_counts_hold_the_full_counts_on_every_page(
     db_session: Session,
 ) -> None:
     now = datetime.now(timezone.utc)
@@ -550,7 +550,7 @@ def test_ac3_source_counts_hold_the_full_counts_on_every_page(
     assert searched.source_counts == {DocumentSource.GOOGLE_DRIVE: 1}
 
 
-def test_ac3_no_matching_pairs_gives_empty_counts(db_session: Session) -> None:
+def test_no_matching_pairs_gives_empty_counts(db_session: Session) -> None:
     response = _connectors(db_session, _prefix())
 
     assert response.items == []
@@ -559,7 +559,7 @@ def test_ac3_no_matching_pairs_gives_empty_counts(db_session: Session) -> None:
     assert IndexingConnectorStatus.SYNCING in response.status_counts
 
 
-def test_ac4_a_private_row_names_its_shared_groups(db_session: Session) -> None:
+def test_a_private_row_names_its_shared_groups(db_session: Session) -> None:
     prefix = _prefix()
     private = _create_cc_pair(
         db_session, prefix, "private", access_type=AccessType.PRIVATE
@@ -581,7 +581,7 @@ def test_ac4_a_private_row_names_its_shared_groups(db_session: Session) -> None:
         assert rows[name].group_names == []
 
 
-def test_ac5_a_scoped_reader_counts_only_readable_pairs(db_session: Session) -> None:
+def test_a_scoped_reader_counts_only_readable_pairs(db_session: Session) -> None:
     now = datetime.now(timezone.utc)
     prefix = _prefix()
     reader = create_test_user(db_session, "monitor_list_reader")
@@ -630,7 +630,7 @@ def test_ac5_a_scoped_reader_counts_only_readable_pairs(db_session: Session) -> 
     }
 
 
-def test_ac7_the_syncing_filter_returns_only_syncing_rows_and_keeps_every_count(
+def test_the_syncing_filter_returns_only_syncing_rows_and_keeps_every_count(
     db_session: Session,
 ) -> None:
     now = datetime.now(timezone.utc)
