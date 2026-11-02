@@ -25,7 +25,6 @@ from onyx.access.models import DocumentAccess
 from onyx.background.celery.tasks.port import tasks as port_task
 from onyx.background.celery.tasks.port.tasks import run_check_for_port, run_port_attempt
 from onyx.configs.constants import DocumentSource
-from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX, ASYM_QUERY_PREFIX
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import swap_index
 from onyx.db.enums import (
@@ -63,6 +62,10 @@ from tests.external_dependency_unit.indexing_helpers import (
     seed_cc_pair_documents,
 )
 
+# nomic's own prefixes, set explicitly: the ASYM_* defaults follow the default
+# encoder, which may have none, and the MODEL_ONLY case needs a prefix change.
+_NOMIC_QUERY_PREFIX = "search_query: "
+_NOMIC_PASSAGE_PREFIX = "search_document: "
 _VECTOR_DIM = 768
 _CHUNKS_PER_DOC = 2
 _NUM_DOCS = 4
@@ -130,7 +133,7 @@ def _make_saved_settings(
     index_name: str,
     use_port_flow: bool,
     switchover_type: SwitchoverType,
-    passage_prefix: str = ASYM_PASSAGE_PREFIX,
+    passage_prefix: str = _NOMIC_PASSAGE_PREFIX,
     vector_quantization: VectorQuantization = VectorQuantization.NONE,
 ) -> SavedSearchSettings:
     """nomic settings (contextual RAG off, provider None -> local model
@@ -139,7 +142,7 @@ def _make_saved_settings(
         model_name="nomic-ai/nomic-embed-text-v1",
         model_dim=_VECTOR_DIM,
         normalize=True,
-        query_prefix=ASYM_QUERY_PREFIX,
+        query_prefix=_NOMIC_QUERY_PREFIX,
         passage_prefix=passage_prefix,
         provider_type=None,
         index_name=index_name,
@@ -188,7 +191,7 @@ def _create_os_index(
         ),
         # Only the quantization changes, so the port copies the stored vector.
         pytest.param(
-            ASYM_PASSAGE_PREFIX,
+            _NOMIC_PASSAGE_PREFIX,
             VectorQuantization.SCALAR_1_BIT,
             True,
             id="copy_vectors",
