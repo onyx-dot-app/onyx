@@ -17446,7 +17446,7 @@
       "enable": "Enable for me",
       "disable": "Disable for me",
       "delete": "Delete",
-      "personalEnablement": "Enable and disable change your own skills. Installation policy controls how a skill is installed for people with access.",
+      "personalEnablement": "Enabling and disabling affect only your own skills. Installation policy controls how a skill is installed for people with access.",
       "selectSkill": "Select {name}",
       "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
       "failed": "Could not update skills. Try again.",

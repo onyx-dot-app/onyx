@@ -17446,7 +17446,7 @@
       "enable": "Für mich aktivieren",
       "disable": "Für mich deaktivieren",
       "delete": "Löschen",
-      "personalEnablement": "Aktivieren und Deaktivieren ändern Ihre eigenen Skills. Die Installationsrichtlinie steuert, wie ein Skill für Personen mit Zugriff installiert wird.",
+      "personalEnablement": "Aktivieren und Deaktivieren wirken sich nur auf Ihre eigenen Skills aus. Die Installationsrichtlinie steuert, wie ein Skill für Personen mit Zugriff installiert wird.",
       "selectSkill": "{name} auswählen",
       "updated": "{count, plural, one {# Skill aktualisiert} other {# Skills aktualisiert}}",
       "failed": "Skills konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
