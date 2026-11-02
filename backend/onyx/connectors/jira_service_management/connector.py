@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from datetime import datetime, timezone
 from typing import Any
 
@@ -103,12 +103,9 @@ def _extract_sla_lines_and_latest_dt(
         ongoing = metric.get("ongoingCycle")
         if isinstance(ongoing, dict):
             parts: list[str] = [f"{name} (ongoing)"]
-            is_breached = ongoing.get("breached") is True
             for key in ("startTime", "breachTime", "stopTime"):
                 dt = _parse_jsm_epoch_ms(ongoing.get(key))
-                if key in ("startTime", "stopTime") or (
-                    key == "breachTime" and is_breached
-                ):
+                if key in ("startTime", "stopTime"):
                     _record_dt(dt)
                 if dt is not None:
                     parts.append(f"{key}={dt.isoformat()}")
@@ -128,12 +125,9 @@ def _extract_sla_lines_and_latest_dt(
             if not isinstance(cycle, dict):
                 continue
             parts = [f"{name} (completed)"]
-            is_breached = cycle.get("breached") is True
             for key in ("startTime", "stopTime", "breachTime"):
                 dt = _parse_jsm_epoch_ms(cycle.get(key))
-                if key in ("startTime", "stopTime") or (
-                    key == "breachTime" and is_breached
-                ):
+                if key in ("startTime", "stopTime"):
                     _record_dt(dt)
                 if dt is not None:
                     parts.append(f"{key}={dt.isoformat()}")
@@ -202,11 +196,14 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             ) from e
 
     def _iter_paged(
-        self, path: str, params: dict[str, Any] | None = None
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        initial_start: int = 0,
     ) -> Iterator[dict[str, Any]]:
         if self._auth is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
-        start = 0
+        start = initial_start
         base_params = dict(params or {})
         while True:
             page_params = {**base_params, "start": start, "limit": _JSM_PAGE_LIMIT}
@@ -224,28 +221,56 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             start += len(values)
 
     def _fetch_comments(
-        self, issue_key: str
+        self,
+        issue_key: str,
+        embedded_comments: dict[str, Any] | None = None,
     ) -> tuple[list[str], datetime | None]:
         comments: list[str] = []
         latest_comment_dt: datetime | None = None
-        for comment in self._iter_paged(
-            f"/rest/servicedeskapi/request/{issue_key}/comment"
+
+        def _consume(items: Iterable[dict[str, Any]]) -> None:
+            nonlocal latest_comment_dt
+            for comment in items:
+                if not isinstance(comment, dict):
+                    continue
+                if comment.get("public") is not True:
+                    continue
+                comment_dt = _parse_jsm_epoch_ms(
+                    comment.get("created") or comment.get("createdDate")
+                )
+                if comment_dt is not None and (
+                    latest_comment_dt is None or comment_dt > latest_comment_dt
+                ):
+                    latest_comment_dt = comment_dt
+                author = (comment.get("author") or {}).get(
+                    "displayName", "Participant"
+                )
+                body = (comment.get("body") or "").strip()
+                if body:
+                    comments.append(f"{author}: {body}")
+
+        if isinstance(embedded_comments, dict) and isinstance(
+            embedded_comments.get("values"), list
         ):
-            if comment.get("public") is not True:
-                continue
-            comment_dt = _parse_jsm_epoch_ms(
-                comment.get("created") or comment.get("createdDate")
+            embedded_values = embedded_comments["values"]
+            _consume(embedded_values)
+            if not embedded_comments.get("isLastPage", True):
+                raw_start = embedded_comments.get("start")
+                base_start = raw_start if isinstance(raw_start, int) else 0
+                next_start = base_start + len(embedded_values)
+                _consume(
+                    self._iter_paged(
+                        f"/rest/servicedeskapi/request/{issue_key}/comment",
+                        initial_start=next_start,
+                    )
+                )
+        else:
+            _consume(
+                self._iter_paged(
+                    f"/rest/servicedeskapi/request/{issue_key}/comment"
+                )
             )
-            if comment_dt is not None and (
-                latest_comment_dt is None or comment_dt > latest_comment_dt
-            ):
-                latest_comment_dt = comment_dt
-            author = (comment.get("author") or {}).get(
-                "displayName", "Participant"
-            )
-            body = (comment.get("body") or "").strip()
-            if body:
-                comments.append(f"{author}: {body}")
+
         return comments, latest_comment_dt
 
     def _request_to_document(
@@ -262,7 +287,13 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         status_obj = req.get("currentStatus") or {}
         status_dt = _parse_jsm_epoch_ms(status_obj.get("statusDate"))
         sla_lines, latest_sla_dt = _extract_sla_lines_and_latest_dt(req)
-        comments, latest_comment_dt = self._fetch_comments(issue_key)
+        embedded_comments = req.get("comments")
+        comments, latest_comment_dt = self._fetch_comments(
+            issue_key,
+            embedded_comments=embedded_comments
+            if isinstance(embedded_comments, dict)
+            else None,
+        )
 
         activity_candidates = [
             dt
@@ -347,7 +378,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
         params: dict[str, Any] = {
-            "expand": "requestFieldValues,currentStatus,sla",
+            "expand": "requestFieldValues,currentStatus,sla,comment",
             "requestOwnership": "ALL_REQUESTS",
         }
         if self.service_desk_id:

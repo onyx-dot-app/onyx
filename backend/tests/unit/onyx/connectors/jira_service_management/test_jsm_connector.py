@@ -205,6 +205,95 @@ def test_jsm_load_from_state_filters_internal_comments_and_indexes_sla(
 
 
 @patch("onyx.connectors.jira_service_management.connector._jsm_get")
+def test_jsm_embedded_comments_avoids_extra_http_call_and_fetches_remaining_pages(
+    mock_get: MagicMock,
+) -> None:
+    req_complete = _sample_request(issue_key="SD-101", epoch_ms=1730000000000)
+    req_complete["comments"] = {
+        "start": 0,
+        "limit": 50,
+        "size": 2,
+        "isLastPage": True,
+        "values": [
+            {
+                "body": "Internal embedded note",
+                "public": False,
+                "author": {"displayName": "Agent"},
+            },
+            {
+                "body": "Embedded public answer",
+                "public": True,
+                "created": {"epochMillis": 1730000010000},
+                "author": {"displayName": "Support Engineer"},
+            },
+        ],
+    }
+
+    req_paged = _sample_request(issue_key="SD-102", epoch_ms=1730000000000)
+    req_paged["comments"] = {
+        "start": 0,
+        "limit": 1,
+        "size": 1,
+        "isLastPage": False,
+        "values": [
+            {
+                "body": "First page comment",
+                "public": True,
+                "created": {"epochMillis": 1730000005000},
+                "author": {"displayName": "Alice"},
+            }
+        ],
+    }
+
+    req_resp = MagicMock()
+    req_resp.json.return_value = {
+        "values": [req_complete, req_paged],
+        "isLastPage": True,
+    }
+    page2_comment_resp = MagicMock()
+    page2_comment_resp.json.return_value = {
+        "values": [
+            {
+                "body": "Second page comment",
+                "public": True,
+                "created": {"epochMillis": 1730000020000},
+                "author": {"displayName": "Bob"},
+            }
+        ],
+        "isLastPage": True,
+    }
+    mock_get.side_effect = [req_resp, page2_comment_resp]
+
+    connector = JiraServiceManagementConnector(
+        jsm_base_url="https://acme.atlassian.net"
+    )
+    connector.load_credentials(
+        {"jira_user_email": "bot@example.com", "jira_api_token": "secret"}
+    )
+
+    batches = list(connector.load_from_state())
+    assert len(batches) == 1
+    assert len(batches[0]) == 2
+    assert mock_get.call_count == 2
+    mock_get.assert_any_call(
+        "https://acme.atlassian.net/rest/servicedeskapi/request/SD-102/comment",
+        auth=("bot@example.com", "secret"),
+        params={"start": 1, "limit": 50},
+    )
+
+    doc1, doc2 = batches[0]
+    text1 = doc1.sections[0].text or ""
+    assert "Support Engineer: Embedded public answer" in text1
+    assert "Internal embedded note" not in text1
+
+    text2 = doc2.sections[0].text or ""
+    assert "Alice: First page comment" in text2
+    assert "Bob: Second page comment" in text2
+    assert doc2.doc_updated_at is not None
+    assert doc2.doc_updated_at.timestamp() == 1730000020.0
+
+
+@patch("onyx.connectors.jira_service_management.connector._jsm_get")
 def test_jsm_poll_source_includes_new_public_comment_activity(
     mock_get: MagicMock,
 ) -> None:
