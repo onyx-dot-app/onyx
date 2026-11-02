@@ -13,13 +13,16 @@ import type {
 
 /**
  * Whether a mousedown must keep its default: the target is a control that
- * needs focus to work (an input inside a custom row). Anything else keeps
- * focus on the trigger, so a pick never blurs it.
+ * needs focus to work (an input inside a custom row), or text a custom row
+ * lets the pointer select. Anything else keeps focus on the trigger, so a
+ * pick never blurs it.
  */
 export function targetTakesFocus(event: React.MouseEvent): boolean {
   return (
     event.target instanceof Element &&
-    event.target.closest("input, textarea, select, [contenteditable]") !== null
+    event.target.closest(
+      "input, textarea, select, [contenteditable], [data-selectable-text]"
+    ) !== null
   );
 }
 
@@ -73,6 +76,7 @@ export const Row = React.memo(function Row({
       ...(mode === "picker" && { "aria-selected": false }),
       ...(row.disabled && { "aria-disabled": true }),
       "data-index": index,
+      ...(row.selectableText && { "data-selectable-text": true as const }),
       tabIndex: -1,
       onClick,
       onMouseDown,
