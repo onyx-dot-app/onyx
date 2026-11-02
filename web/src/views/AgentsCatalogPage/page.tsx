@@ -43,7 +43,8 @@ function AgentsSection({
           {description ?? ""}
         </Text>
       </div>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+      {/* Every card is the same height: 8.5rem (136px). */}
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 auto-rows-[8.5rem] gap-2">
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent) => (
