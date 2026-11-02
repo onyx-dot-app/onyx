@@ -1772,7 +1772,7 @@ def test_get_docs_to_update_time_skip_still_works() -> None:
     doc.id = "doc1"
     old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
     doc.doc_updated_at = old_time
-    db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
+    db_doc = _make_db_doc("doc1", content_hash="stale_hash", doc_updated_at=old_time)
 
     docs, hashes = get_docs_to_update(
         [doc],
@@ -1781,6 +1781,24 @@ def test_get_docs_to_update_time_skip_still_works() -> None:
     )
     assert docs == []
     assert hashes == {}
+
+
+def test_get_docs_to_update_time_skip_needs_a_present_index_hash() -> None:
+    """A row with no hash says nothing about what the PRESENT index holds, so an
+    unchanged timestamp alone does not skip the doc."""
+    doc = _doc_with_text("Title", "content")
+    doc.id = "doc1"
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc.doc_updated_at = old_time
+    db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
+
+    docs, hashes = get_docs_to_update(
+        [doc],
+        db_docs=[db_doc],
+        doc_id_to_present_index_hash=_present_index_hashes([db_doc]),
+    )
+    assert [d.id for d in docs] == ["doc1"]
+    assert "doc1" in hashes
 
 
 def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:

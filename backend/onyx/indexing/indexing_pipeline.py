@@ -438,8 +438,8 @@ def get_docs_to_update(
       DocumentBase.content_hash() and compares it to the hash the PRESENT index holds
       (`doc_id_to_present_index_hash`, see present_index_content_hash: after a reindex
       swap the row's content_hash can describe the index that was swapped out). If
-      equal, skip. Gate 1 likewise trusts the row's timestamp only when content_hash
-      describes the PRESENT index.
+      equal, skip. Gate 1 likewise trusts the row's timestamp only when the PRESENT
+      index is known to hold the row's content_hash.
 
       NOT applied when doc_updated_at is present and has advanced past what is stored —
       a timestamp advance is authoritative evidence of a change and must not be
@@ -466,7 +466,9 @@ def get_docs_to_update(
             doc_id_to_present_index_hash.get(doc.id) if db_doc is not None else None
         )
         row_matches_present_index = (
-            db_doc is not None and present_index_hash == db_doc.content_hash
+            db_doc is not None
+            and present_index_hash is not None
+            and present_index_hash == db_doc.content_hash
         )
         access_changed = bool(
             db_doc

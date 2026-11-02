@@ -1,7 +1,7 @@
 """add document secondary content hash
 
 Revision ID: b2785b68357b
-Revises: 3e30a81ec3bd
+Revises: b7d2e4f1a9c3
 Create Date: 2026-10-28 18:45:54.192296
 
 """
