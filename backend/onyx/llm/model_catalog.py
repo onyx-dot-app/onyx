@@ -454,24 +454,59 @@ def find_remote_model_obj(
     return None
 
 
+_remote_supplement_cache: ThreadSafeDict[str, tuple[float, dict[str, Any] | None]] = (
+    ThreadSafeDict()
+)
+_SUPPLEMENT_FILE = "_supplement"
+
+
+def _remote_supplement() -> dict[str, Any] | None:
+    """``_supplement.json`` from main, TTL + negative cached."""
+    now: float = time.time()
+    cached = _remote_supplement_cache.get(_SUPPLEMENT_FILE)
+    if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
+        return cached[1]
+    supplement: dict[str, Any] | None = None
+    try:
+        response: httpx.Response = _fetch_provider_file(_SUPPLEMENT_FILE)
+        if response.status_code == 200:
+            data: Any = response.json()
+            if isinstance(data, dict):
+                supplement = data
+    except Exception as e:
+        logger.warning("Remote catalog supplement fetch failed: %s", e)
+    _remote_supplement_cache[_SUPPLEMENT_FILE] = (now, supplement)
+    return supplement
+
+
 def iter_latest_models(provider: str, mode: str | None = None) -> list[str] | None:
-    """Like ``iter_models``, but from the provider's catalog on main, so it
-    includes models released after this deployment. Air-gapped deployments
-    use the vendored catalog. None when the remote catalog can't be read."""
+    """Like ``iter_models``, but from the provider's catalog and supplement on
+    main, so it includes models released after this deployment. Air-gapped
+    deployments use the vendored catalog. None when either remote file can't
+    be read."""
     if ONYX_AIRGAPPED:
         return iter_models(provider, mode)
     section = _remote_section(provider)
     if section is None:
         return None
-    vendored = _catalog().get(provider, {}).get("models", {})
+    supplement = _remote_supplement()
+    if supplement is None:
+        return None
+    provider_supplement: Any = supplement.get(provider)
+    supplement_models: Any = (
+        provider_supplement.get("models")
+        if isinstance(provider_supplement, dict)
+        else None
+    )
     models: dict[str, Any] = {
         model_id: entry
-        for model_id, entry in section["models"].items()
+        for source in (
+            supplement_models if isinstance(supplement_models, dict) else {},
+            section["models"],
+        )
+        for model_id, entry in source.items()
         if isinstance(model_id, str) and isinstance(entry, dict)
     }
-    for model_id in _supplement_only_model_ids().get(provider, frozenset()):
-        if model_id in vendored:
-            models.setdefault(model_id, vendored[model_id])
     return sorted(
         model_id
         for model_id, entry in models.items()
@@ -482,6 +517,7 @@ def iter_latest_models(provider: str, mode: str | None = None) -> list[str] | No
 def reset_remote_cache() -> None:
     """Testing hook: forget fetched sections."""
     _remote_sections.clear()
+    _remote_supplement_cache.clear()
     _remote_locks.clear()
 
 

@@ -1053,12 +1053,13 @@ def _initial_auto_update_models(
         get_recommendations,
     )
 
-    recommended = {
+    recommended = [
         model.name for model in get_recommendations().get_visible_models(provider_name)
-    }
+    ]
+    catalog = fetch_models_for_provider(provider_name)
     return [
         ModelConfigurationUpsertRequest(name=name, is_visible=name in recommended)
-        for name in fetch_models_for_provider(provider_name)
+        for name in catalog + [name for name in recommended if name not in catalog]
     ]
 
 
