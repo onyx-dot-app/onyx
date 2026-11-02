@@ -2237,7 +2237,8 @@
       },
       "searchDecisionModel": {
         "description": "选择检索到的文档，并决定添加多少上下文。决策模型在一次调用中对其排序。语言模型按原方式进行选择。",
-        "title": "搜索决策模型"
+        "title": "搜索决策模型",
+        "decisionSection": "决策模型"
       },
       "taskModels": {
         "loadFailed": "无法加载任务模型",

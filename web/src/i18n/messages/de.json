@@ -2237,7 +2237,8 @@
       },
       "searchDecisionModel": {
         "description": "Wählt gefundene Dokumente aus und entscheidet, wie viel Kontext hinzukommt. Ein Entscheidungsmodell ordnet sie in einem Aufruf. Ein Sprachmodell wählt sie wie bisher aus.",
-        "title": "Such-Entscheidungsmodell"
+        "title": "Such-Entscheidungsmodell",
+        "decisionSection": "Entscheidungsmodelle"
       },
       "taskModels": {
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",

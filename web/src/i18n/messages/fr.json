@@ -2237,7 +2237,8 @@
       },
       "searchDecisionModel": {
         "description": "Sélectionne les documents récupérés et décide de la quantité de contexte à ajouter. Un modèle de décision les classe en un seul appel. Un modèle de langage les sélectionne comme avant.",
-        "title": "Modèle de décision de recherche"
+        "title": "Modèle de décision de recherche",
+        "decisionSection": "Modèles de décision"
       },
       "taskModels": {
         "loadFailed": "Impossible de charger les modèles de tâches",

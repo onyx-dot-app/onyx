@@ -2237,7 +2237,8 @@
       },
       "searchDecisionModel": {
         "description": "Selects retrieved documents and decides how much context to add. A decision model ranks them in one call. A language model selects them as before.",
-        "title": "Search Decision Model"
+        "title": "Search Decision Model",
+        "decisionSection": "Decision Models"
       },
       "taskModels": {
         "loadFailed": "Could not load task models",
