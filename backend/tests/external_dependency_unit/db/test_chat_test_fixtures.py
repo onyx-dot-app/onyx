@@ -1,5 +1,8 @@
 """Chat test fixtures release owned rows without changing unrelated state."""
 
+from unittest.mock import patch
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -8,12 +11,19 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import fetch_default_model, update_default_model
 from onyx.db.models import (
     ChatSession,
+    DocumentSet,
     LLMModelFlow,
     LLMProvider,
     Persona,
+    Persona__DocumentSet,
+    Persona__PersonaLabel,
     Persona__User,
+    Persona__UserGroup,
+    PersonaLabel,
     User,
+    UserGroup,
 )
+from tests.external_dependency_unit import conftest
 from tests.external_dependency_unit.conftest import (
     MakeTestUser,
     delete_test_users_and_owned_rows,
@@ -92,3 +102,66 @@ def test_temporary_provider_restores_default_after_failure(
             update_default_model(
                 db_session, provider_id, original.name, LLMModelFlowType.CHAT
             )
+
+
+def test_user_cleanup_removes_persona_links(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    user = make_test_user("linked_agent_owner")
+    persona = Persona(name="Linked agent", description="", user_id=user.id)
+    suffix = uuid4().hex
+    document_set = DocumentSet(name=f"fixture-docs-{suffix}")
+    group = UserGroup(name=f"fixture-group-{suffix}")
+    label = PersonaLabel(name=f"fixture-label-{suffix}")
+    db_session.add_all([persona, document_set, group, label])
+    db_session.flush()
+    db_session.add_all(
+        [
+            Persona__DocumentSet(
+                persona_id=persona.id, document_set_id=document_set.id
+            ),
+            Persona__UserGroup(persona_id=persona.id, user_group_id=group.id),
+            Persona__PersonaLabel(persona_id=persona.id, persona_label_id=label.id),
+        ]
+    )
+    db_session.commit()
+    persona_id = persona.id
+    try:
+        delete_test_users_and_owned_rows(db_session, [user.id], [user.email])
+        assert db_session.get(Persona, persona_id) is None
+        assert db_session.get(DocumentSet, document_set.id) is not None
+        assert db_session.get(UserGroup, group.id) is not None
+        assert db_session.get(PersonaLabel, label.id) is not None
+    finally:
+        db_session.rollback()
+        for row in (document_set, group, label):
+            db_session.delete(row)
+        db_session.commit()
+
+
+def test_temporary_provider_cleans_up_failed_setup(db_session: Session) -> None:
+    original_setup = conftest.ensure_default_llm_provider
+    with temporary_default_llm_provider(db_session):
+        original = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        assert original is not None
+        original_id = original.id
+        created_names: list[str] = []
+
+        def fail_after_setup(session: Session, provider_name: str) -> None:
+            created_names.append(provider_name)
+            original_setup(session, provider_name)
+            raise RuntimeError("setup failed")
+
+        with patch.object(conftest, "ensure_default_llm_provider", fail_after_setup):
+            with pytest.raises(RuntimeError, match="setup failed"):
+                with temporary_default_llm_provider(db_session):
+                    pytest.fail("setup must fail before yielding")
+
+        restored = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        assert restored is not None and restored.id == original_id
+        assert (
+            db_session.scalar(
+                select(LLMProvider).where(LLMProvider.name.in_(created_names))
+            )
+            is None
+        )

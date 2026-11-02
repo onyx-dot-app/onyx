@@ -26,7 +26,6 @@ from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
 from tests.external_dependency_unit.conftest import (
     create_test_user,
-    ensure_default_llm_provider,
 )
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -130,9 +129,9 @@ class DeepResearchScriptLLM(FakeModelClient):
 def test_timed_out_research_agent_is_a_failed_call(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
+    default_llm_provider: None,  # noqa: ARG001
     mock_external_deps: None,  # noqa: ARG001
 ) -> None:
-    ensure_default_llm_provider(db_session)
     user = create_test_user(db_session, email_prefix="dr_research_agent_timeout")
     chat_session = create_chat_session(db_session=db_session, user=user)
 

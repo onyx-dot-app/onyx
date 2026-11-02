@@ -12,7 +12,6 @@ from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessage
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.conftest import (
     create_test_user,
-    ensure_default_llm_provider,
 )
 from tests.utils.secret_names import TestSecret
 
@@ -21,6 +20,7 @@ from tests.utils.secret_names import TestSecret
 def test_stream_chat_current_date_response(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
+    default_llm_provider: None,  # noqa: ARG001
     mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """Smoke test that asking for current date yields a streamed response.
@@ -29,7 +29,6 @@ def test_stream_chat_current_date_response(
     the system prompt makes it to the LLM and a response is returned.
     """
     # Ensure LLM provider exists
-    ensure_default_llm_provider(db_session)
 
     # Create user, persona, session
     test_user: User = create_test_user(db_session, email_prefix="test_current_date")

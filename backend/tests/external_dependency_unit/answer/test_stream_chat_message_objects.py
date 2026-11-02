@@ -12,7 +12,6 @@ from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessage
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.conftest import (
     create_test_user,
-    ensure_default_llm_provider,
 )
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -20,10 +19,10 @@ from tests.unit.onyx.agents.fakes import ScriptedLLM
 def test_stream_chat_message_objects_without_web_search(
     db_session: Session,
     full_deployment_setup: None,  # noqa: ARG001
+    default_llm_provider: None,  # noqa: ARG001
     mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """An assistant without web search excludes it from model requests."""
-    ensure_default_llm_provider(db_session)
 
     test_user: User = create_test_user(db_session, email_prefix="test_web_search")
 

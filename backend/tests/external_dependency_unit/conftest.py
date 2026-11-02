@@ -16,6 +16,7 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import AccountType, LLMModelFlowType, UserFileStatus
 from onyx.db.llm import (
     fetch_default_model,
+    fetch_existing_llm_provider,
     remove_llm_provider,
     update_default_model,
     upsert_llm_provider,
@@ -24,7 +25,10 @@ from onyx.db.models import (
     ChatSession,
     MCPServer,
     Persona,
+    Persona__DocumentSet,
+    Persona__PersonaLabel,
     Persona__User,
+    Persona__UserGroup,
     Tool,
     User,
     User__UserGroup,
@@ -233,6 +237,14 @@ def delete_test_users_and_owned_rows(
             )
         )
     )
+    for association in (
+        Persona__DocumentSet,
+        Persona__UserGroup,
+        Persona__PersonaLabel,
+    ):
+        db_session.execute(
+            delete(association).where(association.persona_id.in_(persona_id_list))
+        )
     db_session.execute(delete(Persona).where(Persona.id.in_(persona_id_list)))
     db_session.execute(delete(MCPServer).where(MCPServer.owner.in_(emails)))
     db_session.execute(delete(Tool).where(Tool.user_id.in_(user_ids)))
@@ -266,12 +278,7 @@ def make_test_user(db_session: Session) -> Generator[MakeTestUser, None, None]:
             )
 
 
-TEST_LLM_PROVIDER_NAME = "test-provider"
-
-
-def ensure_default_llm_provider(
-    db_session: Session, provider_name: str = TEST_LLM_PROVIDER_NAME
-) -> None:
+def ensure_default_llm_provider(db_session: Session, provider_name: str) -> None:
     """Make the test provider's model the default chat model."""
     provider = upsert_llm_provider(
         llm_provider_upsert_request=LLMProviderUpsertRequest(
@@ -302,18 +309,17 @@ def temporary_default_llm_provider(db_session: Session) -> Generator[None, None,
         None if previous is None else (previous.llm_provider_id, previous.name)
     )
     provider_name = f"test-provider-{uuid4().hex}"
-    ensure_default_llm_provider(db_session, provider_name)
-    provider = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-    assert provider is not None
-    provider_id = provider.llm_provider_id
     try:
+        ensure_default_llm_provider(db_session, provider_name)
         yield
     finally:
         db_session.rollback()
         if previous_default is not None:
             update_default_model(db_session, *previous_default, LLMModelFlowType.CHAT)
         # Removing the temporary provider also removes its default-flow rows.
-        remove_llm_provider(db_session, provider_id)
+        provider = fetch_existing_llm_provider(provider_name, db_session)
+        if provider is not None:
+            remove_llm_provider(db_session, provider.id)
 
 
 @pytest.fixture

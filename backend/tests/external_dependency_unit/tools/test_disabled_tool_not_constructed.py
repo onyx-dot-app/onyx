@@ -14,7 +14,6 @@ from onyx.tools.tool_constructor import construct_tools
 from tests.external_dependency_unit.conftest import (
     create_test_user,
     delete_test_user,
-    ensure_default_llm_provider,
 )
 
 USER_EMAIL_PREFIX = "disabled_tool_check_user"
@@ -37,8 +36,8 @@ OPENAPI_SCHEMA: dict[str, Any] = {
 
 
 @pytest.fixture(autouse=True)
-def _default_llm_provider(db_session: Session) -> None:
-    ensure_default_llm_provider(db_session)
+def _default_llm_provider(default_llm_provider: None) -> None:
+    pass
 
 
 @pytest.fixture(autouse=True)

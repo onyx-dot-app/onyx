@@ -23,7 +23,6 @@ from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from tests.external_dependency_unit.conftest import (
     create_test_user,
-    ensure_default_llm_provider,
 )
 
 # Simple OpenAPI schema for testing
@@ -113,9 +112,8 @@ class TestOAuthToolIntegrationPriority:
     """Tests for OAuth token priority logic in tool_constructor"""
 
     @pytest.fixture(autouse=True)
-    def setup_llm_provider(self, db_session: Session) -> None:
+    def setup_llm_provider(self, default_llm_provider: None) -> None:
         """Ensure default LLM provider is set up for each test."""
-        ensure_default_llm_provider(db_session)
 
     def test_oauth_config_priority_over_passthrough(self, db_session: Session) -> None:
         """
