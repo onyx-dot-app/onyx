@@ -22,6 +22,9 @@ import { useSharePermissionOptions } from "@/sections/modals/shareAccessConstant
 
 interface BulkSkillSharingModalProps {
   count: number;
+  // False when a selected skill's organization access is not the caller's to
+  // change (owner or admin only); the API would reject that skill's update.
+  canChangeOrgAccess: boolean;
   open: boolean;
   saving: boolean;
   onClose: () => void;
@@ -30,6 +33,7 @@ interface BulkSkillSharingModalProps {
 
 export default function BulkSkillSharingModal({
   count,
+  canChangeOrgAccess,
   open,
   saving,
   onClose,
@@ -119,7 +123,7 @@ export default function BulkSkillSharingModal({
                 value={scope}
                 onChange={setScope}
                 ariaLabel={shareCopy("accessTitle")}
-                disabled={saving}
+                disabled={saving || !canChangeOrgAccess}
                 options={[
                   { value: "KEEP", label: t("unchanged"), icon: SvgUsers },
                   {

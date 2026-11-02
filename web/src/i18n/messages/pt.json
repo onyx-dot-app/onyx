@@ -17446,7 +17446,7 @@
       "enable": "Ativar para mim",
       "disable": "Desativar para mim",
       "delete": "Excluir",
-      "personalEnablement": "Ativar e desativar alteram suas próprias habilidades. Use a política de instalação para disponibilizar habilidades aos funcionários.",
+      "personalEnablement": "Ativar e desativar alteram suas próprias habilidades. A política de instalação controla como uma habilidade é instalada para as pessoas com acesso.",
       "selectSkill": "Selecionar {name}",
       "updated": "{count, plural, one {# habilidade atualizada} other {# habilidades atualizadas}}",
       "failed": "Não foi possível atualizar as habilidades. Tente novamente.",

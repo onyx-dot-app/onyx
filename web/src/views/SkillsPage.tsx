@@ -772,6 +772,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
 
       <BulkSkillSharingModal
         count={selectedItems.length}
+        canChangeOrgAccess={
+          isAdmin ||
+          selectedItems.every((item) => item.skill.user_permission === "OWNER")
+        }
         open={bulkSharingOpen}
         saving={bulkBusy}
         onClose={() => setBulkSharingOpen(false)}

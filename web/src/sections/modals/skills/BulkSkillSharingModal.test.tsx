@@ -26,6 +26,7 @@ describe("BulkSkillSharingModal", () => {
     render(
       <BulkSkillSharingModal
         count={80}
+        canChangeOrgAccess
         open
         saving={false}
         onClose={jest.fn()}
@@ -49,7 +50,13 @@ describe("BulkSkillSharingModal", () => {
   it("keeps staged edits across a generic close and drops them on Cancel", async () => {
     const user = setupUser();
     const onClose = jest.fn();
-    const props = { count: 2, saving: false, onClose, onSave: jest.fn() };
+    const props = {
+      count: 2,
+      canChangeOrgAccess: true,
+      saving: false,
+      onClose,
+      onSave: jest.fn(),
+    };
     const { rerender } = render(<BulkSkillSharingModal open {...props} />);
     await user.click(screen.getByRole("button", { name: "Who can access" }));
     fireEvent.click(
@@ -69,6 +76,21 @@ describe("BulkSkillSharingModal", () => {
     rerender(<BulkSkillSharingModal open {...props} />);
     expect(
       screen.getByRole("button", { name: "Apply to 2 skills" })
+    ).toBeDisabled();
+  });
+  it("locks organization access when the caller cannot change it", () => {
+    render(
+      <BulkSkillSharingModal
+        count={2}
+        canChangeOrgAccess={false}
+        open
+        saving={false}
+        onClose={jest.fn()}
+        onSave={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: "Who can access" })
     ).toBeDisabled();
   });
 });

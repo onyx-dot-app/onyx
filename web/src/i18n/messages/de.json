@@ -16748,7 +16748,7 @@
           "label": "Websuche"
         },
         "skills": {
-          "label": "Fähigkeiten"
+          "label": "Skills"
         }
       },
       "sections": {
@@ -17065,9 +17065,9 @@
       },
       "creationAccess": {
         "title": "Zugriff",
-        "organizationSummary": "Alle in der Organisation können auf diese Fähigkeit zugreifen.",
+        "organizationSummary": "Alle in der Organisation können auf diesen Skill zugreifen.",
         "selectedSummary": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
-        "privateSummary": "Nur Sie können auf diese Fähigkeit zugreifen. Mit „Freigabe bearbeiten“ können Sie Personen, Gruppen oder die Organisation hinzufügen."
+        "privateSummary": "Nur Sie können auf diesen Skill zugreifen. Mit „Freigabe bearbeiten“ können Sie Personen, Gruppen oder die Organisation hinzufügen."
       }
     },
     "modals": {
@@ -17108,11 +17108,11 @@
           "zip": "ZIP-Dateien müssen eine SKILL.md-Datei enthalten."
         },
         "batch": {
-          "title": "Zugriff auf hochgeladene Fähigkeiten",
-          "selected": "{count, plural, one {# Fähigkeitspaket ausgewählt} other {# Fähigkeitspakete ausgewählt}}",
-          "result": "{imported, plural, one {# Fähigkeit importiert} other {# Fähigkeiten importiert}}. {failed, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}.",
+          "title": "Zugriff auf hochgeladene Skills",
+          "selected": "{count, plural, one {# Skill-Paket ausgewählt} other {# Skill-Pakete ausgewählt}}",
+          "result": "{imported, plural, one {# Skill importiert} other {# Skills importiert}}. {failed, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}.",
           "failure": "{name}: {reason}",
-          "requirement": "Wählen Sie mehrere ZIP-Dateien aus, um Fähigkeiten gemeinsam zu importieren. Jede ZIP-Datei muss eine Fähigkeit enthalten."
+          "requirement": "Wählen Sie mehrere ZIP-Dateien aus, um Skills gemeinsam zu importieren. Jede ZIP-Datei muss einen Skill enthalten."
         }
       },
       "importGithub": {
@@ -17191,12 +17191,12 @@
           "label": "Nicht importierbar"
         },
         "sharing": {
-          "title": "Zugriff auf importierte Fähigkeiten",
+          "title": "Zugriff auf importierte Skills",
           "configureButton": "Zugriff konfigurieren",
-          "organizationSummary": "Alle in der Organisation können auf diese Fähigkeiten zugreifen.",
+          "organizationSummary": "Alle in der Organisation können auf diese Skills zugreifen.",
           "selectedSummary": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
-          "privateSummary": "Nur Sie können auf diese Fähigkeiten zugreifen.",
-          "description": "Diese Zugriffseinstellungen gelten für alle {count, plural, one {# ausgewählte Fähigkeit} other {# ausgewählten Fähigkeiten}}."
+          "privateSummary": "Nur Sie können auf diese Skills zugreifen.",
+          "description": "Diese Zugriffseinstellungen gelten für {count, plural, one {den ausgewählten Skill} other {alle # ausgewählten Skills}}."
         }
       },
       "nameConflict": {
@@ -17439,27 +17439,27 @@
       }
     },
     "bulk": {
-      "adminDescription": "Fähigkeiten und Zugriff in Ihrer Organisation verwalten.",
-      "selectAll": "Alle sichtbaren benutzerdefinierten Fähigkeiten auswählen",
+      "adminDescription": "Skills und Zugriff in Ihrer Organisation verwalten.",
+      "selectAll": "Alle sichtbaren benutzerdefinierten Skills auswählen",
       "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
       "share": "Teilen",
       "enable": "Für mich aktivieren",
       "disable": "Für mich deaktivieren",
       "delete": "Löschen",
-      "personalEnablement": "Aktivieren und Deaktivieren ändern Ihre eigenen Fähigkeiten. Verwenden Sie die Installationsrichtlinie, um Fähigkeiten für Mitarbeiter bereitzustellen.",
+      "personalEnablement": "Aktivieren und Deaktivieren ändern Ihre eigenen Skills. Die Installationsrichtlinie steuert, wie ein Skill für Personen mit Zugriff installiert wird.",
       "selectSkill": "{name} auswählen",
-      "updated": "{count, plural, one {# Fähigkeit aktualisiert} other {# Fähigkeiten aktualisiert}}",
-      "failed": "Fähigkeiten konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
-      "partialFailure": "{count, plural, one {# Fähigkeit konnte nicht aktualisiert werden} other {# Fähigkeiten konnten nicht aktualisiert werden}}",
-      "deleteTitle": "{count, plural, one {# Fähigkeit löschen?} other {# Fähigkeiten löschen?}}",
-      "deleteDescription": "{count, plural, one {Die ausgewählte Fähigkeit wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Fähigkeiten werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
-      "shareTitle": "{count, plural, one {Zugriff für # Fähigkeit aktualisieren} other {Zugriff für # Fähigkeiten aktualisieren}}",
-      "shareDescription": "Diese Änderungen auf jede ausgewählte Fähigkeit anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
+      "updated": "{count, plural, one {# Skill aktualisiert} other {# Skills aktualisiert}}",
+      "failed": "Skills konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
+      "partialFailure": "{count, plural, one {# Skill konnte nicht aktualisiert werden} other {# Skills konnten nicht aktualisiert werden}}",
+      "deleteTitle": "{count, plural, one {# Skill löschen?} other {# Skills löschen?}}",
+      "deleteDescription": "{count, plural, one {Der ausgewählte Skill wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Skills werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
+      "shareTitle": "{count, plural, one {Zugriff für # Skill aktualisieren} other {Zugriff für # Skills aktualisieren}}",
+      "shareDescription": "Diese Änderungen auf jeden ausgewählten Skill anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
       "unchanged": "Unverändert lassen",
       "everyone": "Alle in der Organisation",
       "invitedOnly": "Eingeladene Personen und Gruppen",
-      "addAccessDescription": "Diese Personen und Gruppen zu jeder ausgewählten Fähigkeit hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
-      "apply": "{count, plural, one {Auf # Fähigkeit anwenden} other {Auf # Fähigkeiten anwenden}}",
+      "addAccessDescription": "Diese Personen und Gruppen zu jedem ausgewählten Skill hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
+      "apply": "{count, plural, one {Auf # Skill anwenden} other {Auf # Skills anwenden}}",
       "moreActions": "Weitere Aktionen"
     }
   },

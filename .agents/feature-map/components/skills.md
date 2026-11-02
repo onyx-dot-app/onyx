@@ -333,9 +333,8 @@ The library preview of an external-app skill calls the same renderer
   GitHub import.
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
-- `backend/tests/integration/tests/skills/` covers the API.
-  `backend/tests/integration/tests/skills/test_skills_bulk.py` covers bulk access, policy authorization, partial
-  failures, personal toggles, and batch upload sharing.
-  `backend/tests/integration/tests/craft/k8s/` covers a real push.
+- `backend/tests/integration/tests/skills/` covers the API, bulk actions and
+  import sharing. `backend/tests/integration/tests/craft/k8s/` covers a real
+  push.
 - By hand: edit a skill while a Craft session runs. The stale notice must
   appear, and after reload the agent must read the new text.

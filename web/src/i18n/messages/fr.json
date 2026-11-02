@@ -12110,7 +12110,7 @@
           "label": "Indisponible - cliquez pour en savoir plus"
         },
         "shared": {
-          "label": "Partagé"
+          "label": "Partagée"
         },
         "organization": {
           "label": "Organisation"
@@ -17066,7 +17066,7 @@
       "creationAccess": {
         "title": "Accès",
         "organizationSummary": "Tout le monde dans l’organisation peut accéder à cette compétence.",
-        "selectedSummary": "Partagé avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
+        "selectedSummary": "Partagée avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
         "privateSummary": "Vous seul pouvez accéder à cette compétence. Utilisez Modifier le partage pour ajouter des personnes, des groupes ou l’organisation."
       }
     },
@@ -17194,7 +17194,7 @@
           "title": "Accès aux compétences importées",
           "configureButton": "Configurer l’accès",
           "organizationSummary": "Tout le monde dans l’organisation peut accéder à ces compétences.",
-          "selectedSummary": "Partagé avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
+          "selectedSummary": "Partagée avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
           "privateSummary": "Vous seul pouvez accéder à ces compétences.",
           "description": "Ces paramètres d’accès s’appliquent à {count, plural, one {la compétence sélectionnée} other {toutes les # compétences sélectionnées}}."
         }
@@ -17446,7 +17446,7 @@
       "enable": "Activer pour moi",
       "disable": "Désactiver pour moi",
       "delete": "Supprimer",
-      "personalEnablement": "L’activation et la désactivation modifient vos propres compétences. Utilisez la politique d’installation pour déployer des compétences auprès du personnel.",
+      "personalEnablement": "L’activation et la désactivation modifient vos propres compétences. La politique d’installation définit comment une compétence est installée pour les personnes ayant accès.",
       "selectSkill": "Sélectionner {name}",
       "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
       "failed": "Impossible de mettre à jour les compétences. Réessayez.",
