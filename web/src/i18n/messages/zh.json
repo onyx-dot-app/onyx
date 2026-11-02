@@ -7312,6 +7312,7 @@
       },
       "vectorQuantization": {
         "description": "使用更少的位存储文档向量，以减少向量搜索的内存占用。位数越少，搜索质量可能越低。仅更改此设置时，将使用已存储的向量重建索引，无需重新嵌入。",
+        "needsVersion": "需要 OpenSearch {version}+",
         "none": {
           "description": "完整的 32 位精度。",
           "label": "无"
@@ -7324,7 +7325,8 @@
           "description": "向量搜索内存占用降至约 1/4，搜索质量几乎无损。",
           "label": "7 位"
         },
-        "title": "向量量化"
+        "title": "向量量化",
+        "unsupportedTooltip": "此集群运行 OpenSearch {current}。请将 OpenSearch 升级到 {version} 或更高版本以使用此级别。"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {该连接器将被删除} other {这 # 个连接器将被删除}}",

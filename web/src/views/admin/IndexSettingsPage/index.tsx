@@ -31,6 +31,7 @@ import {
   Tabs,
   Text,
   type SelectDivider,
+  type SelectOption,
   type SelectOptions,
 } from "@opal/components";
 import {
@@ -60,6 +61,7 @@ import {
   EmbeddingProviderName,
   SwitchoverType,
   VectorQuantization,
+  type VectorQuantizationLevelSupport,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingModelRef,
@@ -106,6 +108,7 @@ import {
   useCurrentSearchSettings,
   useReindexProgress,
   useSecondarySearchSettings,
+  useVectorQuantizationSupport,
 } from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
@@ -886,6 +889,37 @@ export default function IndexSettingsPage() {
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
   // current index. The reindex-progress endpoint still reports that active port target,
   // so treat it as reindexing too; otherwise the banner never shows for INSTANT.
+  const { data: vectorQuantizationSupport } = useVectorQuantizationSupport({
+    enabled: !NEXT_PUBLIC_CLOUD_ENABLED,
+  });
+  // A level the cluster cannot index stays visible but disabled, with the
+  // OpenSearch version it needs.
+  const quantizationOption = (
+    value: VectorQuantization,
+    title: string,
+    description: string
+  ): SelectOption => {
+    const level: VectorQuantizationLevelSupport | undefined =
+      vectorQuantizationSupport?.levels.find(
+        (l) => l.vector_quantization === value
+      );
+    if (!level || level.supported || !level.min_opensearch_version) {
+      return { value, title, description };
+    }
+    return {
+      value,
+      title,
+      description,
+      disabled: true,
+      suffix: t("vectorQuantization.needsVersion", {
+        version: level.min_opensearch_version,
+      }),
+      tooltip: t("vectorQuantization.unsupportedTooltip", {
+        version: level.min_opensearch_version,
+        current: vectorQuantizationSupport?.opensearch_version ?? "",
+      }),
+    };
+  };
   const { data: reindexProgress } = useReindexProgress({
     pollIntervalMs: 5000,
   });
@@ -2199,31 +2233,21 @@ export default function IndexSettingsPage() {
                               defaultOption={VectorQuantization.NONE}
                               placeholder={tInputSelect("placeholder.fallback")}
                               options={[
-                                {
-                                  value: VectorQuantization.NONE,
-                                  title: t("vectorQuantization.none.label"),
-                                  description: t(
-                                    "vectorQuantization.none.description"
-                                  ),
-                                },
-                                {
-                                  value: VectorQuantization.SCALAR_7_BIT,
-                                  title: t(
-                                    "vectorQuantization.scalar7Bit.label"
-                                  ),
-                                  description: t(
-                                    "vectorQuantization.scalar7Bit.description"
-                                  ),
-                                },
-                                {
-                                  value: VectorQuantization.SCALAR_1_BIT,
-                                  title: t(
-                                    "vectorQuantization.scalar1Bit.label"
-                                  ),
-                                  description: t(
-                                    "vectorQuantization.scalar1Bit.description"
-                                  ),
-                                },
+                                quantizationOption(
+                                  VectorQuantization.NONE,
+                                  t("vectorQuantization.none.label"),
+                                  t("vectorQuantization.none.description")
+                                ),
+                                quantizationOption(
+                                  VectorQuantization.SCALAR_7_BIT,
+                                  t("vectorQuantization.scalar7Bit.label"),
+                                  t("vectorQuantization.scalar7Bit.description")
+                                ),
+                                quantizationOption(
+                                  VectorQuantization.SCALAR_1_BIT,
+                                  t("vectorQuantization.scalar1Bit.label"),
+                                  t("vectorQuantization.scalar1Bit.description")
+                                ),
                               ]}
                             />
                           </InputHorizontal>

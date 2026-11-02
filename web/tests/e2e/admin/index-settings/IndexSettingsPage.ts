@@ -320,6 +320,34 @@ export class IndexSettingsPage {
     );
   }
 
+  /**
+   * Opens the Vector Quantization list and checks one level: whether it can be
+   * picked, and the note beside it when it cannot. Closes the list after.
+   */
+  async expectVectorQuantizationOption(
+    label: string,
+    expected: { disabled: boolean; note?: string }
+  ): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Vector Quantization" })
+      .getByRole("combobox")
+      .click();
+    const option: Locator = this.page
+      .getByRole("listbox", { name: "Select an option" })
+      .getByRole("option")
+      .filter({ hasText: label });
+    if (expected.disabled) {
+      await expect(option).toBeDisabled();
+    } else {
+      await expect(option).toBeEnabled();
+    }
+    if (expected.note) {
+      await expect(option).toContainText(expected.note);
+    }
+    await this.page.keyboard.press("Escape");
+  }
+
   /** Pick a Vector Quantization level by its option title, e.g. "1-bit". */
   async selectVectorQuantization(label: string): Promise<void> {
     await this.page
