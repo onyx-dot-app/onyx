@@ -157,7 +157,7 @@ class MCPTool(Tool):
             parameters=_normalize_parameters_schema(self._tool_definition),
         )
 
-    def _error_result(self, message: str) -> ToolResult:
+    def _error_result(self, message: JsonValue) -> ToolResult:
         error_result = {"error": message}
         return ToolResult(
             details=CustomToolCallSummary(
@@ -251,7 +251,7 @@ class MCPTool(Tool):
 
             if tool_result.isError:
                 # A server-reported tool failure does not reject its credentials.
-                message = process_mcp_result(tool_result)
+                message = _tool_result_value(process_mcp_result(tool_result))
                 logger.info("MCP tool '%s' reported an error", self._name)
                 return self._error_result(message)
 

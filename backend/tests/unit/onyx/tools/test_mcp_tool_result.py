@@ -232,3 +232,41 @@ def test_rejected_user_credentials_still_require_reauthentication() -> None:
         {"headers": {"Authorization": "Bearer valid"}},
         session.return_value.__enter__.return_value,
     )
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        pytest.param(
+            CallToolResult(
+                content=[], structuredContent={"code": "not_found"}, isError=True
+            ),
+            {"code": "not_found"},
+            id="structured-only",
+        ),
+        pytest.param(
+            CallToolResult(
+                content=[TextContent(type="text", text='[{"code": "not_found"}]')],
+                isError=True,
+            ),
+            [{"code": "not_found"}],
+            id="json-text-array",
+        ),
+        pytest.param(
+            CallToolResult(
+                content=[TextContent(type="text", text="Failure details")],
+                structuredContent={"code": "not_found"},
+                isError=True,
+            ),
+            "Failure details",
+            id="text-takes-precedence",
+        ),
+    ],
+)
+def test_server_error_details_are_encoded_once(
+    result: CallToolResult, expected: JsonValue
+) -> None:
+    response, delta = _run_with_server_result(result)
+    assert response.is_error
+    assert json.loads(response.text) == {"error": expected}
+    assert delta.data == {"error": expected}
