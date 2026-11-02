@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -74,7 +75,7 @@ type ShareSkillModalProps = {
       mode: "edit";
       skillId: string;
       initialTab?: "details" | "sharing";
-      fallbackTitle?: string;
+      fallbackTitle?: string | RichStr;
       onSaved: () => void;
     }
 );

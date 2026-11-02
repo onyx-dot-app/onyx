@@ -77,7 +77,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkFailures, setBulkFailures] = useState<
-    { skill_id: string; detail: string }[]
+    { name: string; detail: string }[]
   >([]);
   const { appName } = useSettings();
   const router = useRouter();
@@ -423,7 +423,16 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           : { action, skill_ids }
       );
       setSelectedIds(new Set(result.failed.map((failure) => failure.skill_id)));
-      setBulkFailures(result.failed);
+      // Names come from the request targets: a skill deleted elsewhere in the
+      // meantime is gone from the refreshed list but must still be reported.
+      setBulkFailures(
+        result.failed.map((failure) => ({
+          name:
+            targets.find((item) => item.id === failure.skill_id)?.name ??
+            failure.skill_id,
+          detail: failure.detail,
+        }))
+      );
       if (result.succeeded.length)
         toast.success(bulkCopy("updated", { count: result.succeeded.length }));
       setBulkSharingOpen(false);
@@ -526,10 +535,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             variant="error"
             title={bulkCopy("partialFailure", { count: bulkFailures.length })}
             description={bulkFailures
-              .map(
-                (failure) =>
-                  `${items.find((item) => item.id === failure.skill_id)?.name ?? failure.skill_id}: ${failure.detail}`
-              )
+              .map((failure) => `${failure.name}: ${failure.detail}`)
               .join("\n")}
           />
         )}
