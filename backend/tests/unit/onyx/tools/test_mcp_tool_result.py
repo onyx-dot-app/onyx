@@ -1,10 +1,13 @@
-"""MCPTool encodes a server's JSON text result once, not as an escaped string
-inside another JSON object (onyx-dot-app/onyx#16016)."""
+"""MCPTool results: a server's JSON text is encoded once, not as an escaped string
+inside another JSON object (onyx-dot-app/onyx#16016), and a failure that the server
+reports is a tool error."""
 
 import json
+import logging
 from unittest.mock import patch
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 from pydantic import JsonValue
 
 from onyx.agents.tools import ToolInvocation
@@ -13,6 +16,7 @@ from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
 from onyx.db.models import MCPServer
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolCall, ToolResult, ToolResultMessage
+from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.tools.models import CustomToolCallSummary, ToolContext
@@ -23,7 +27,10 @@ def _reject_non_finite_number(constant: str) -> float:
     raise ValueError(f"Non-finite JSON number: {constant}")
 
 
-def _run_with_server_text(text: str) -> tuple[ToolResult, CustomToolDelta]:
+MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
+
+
+def _github_tool() -> MCPTool:
     server = MCPServer(
         id=1,
         name="GitHub",
@@ -35,27 +42,39 @@ def _run_with_server_text(text: str) -> tuple[ToolResult, CustomToolDelta]:
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
     )
-    tool = MCPTool(
+    return MCPTool(
         tool_id=1,
         mcp_server=server,
         tool_name="list_issues",
         tool_description="List issues",
         tool_definition={"type": "object", "properties": {}},
     )
-    with patch(
-        "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-        return_value=text,
-    ):
-        response = tool.run(
-            ToolInvocation(
-                call_id="call",
-                arguments={},
-                cancellation=CancellationSignal(),
-                update=lambda _: None,
-            ),
-            ToolContext(),
-        )
+
+
+def _run(tool: MCPTool) -> ToolResult:
+    response = tool.run(
+        ToolInvocation(
+            call_id="call",
+            arguments={},
+            cancellation=CancellationSignal(),
+            update=lambda _: None,
+        ),
+        ToolContext(),
+    )
     assert isinstance(response, ToolResult)
+    return response
+
+
+def _text_result(text: str) -> CallToolResult:
+    return CallToolResult(content=[TextContent(type="text", text=text)])
+
+
+def _run_with_server_result(
+    result: CallToolResult,
+) -> tuple[ToolResult, CustomToolDelta]:
+    tool = _github_tool()
+    with patch(f"{MODULE}.call_mcp_tool", return_value=result):
+        response = _run(tool)
     renderer = ToolRenderer(
         ToolCall(id="call", name=tool.name, arguments={}),
         Placement(turn_index=0),
@@ -101,7 +120,7 @@ def _run_with_server_text(text: str) -> tuple[ToolResult, CustomToolDelta]:
 def test_tool_result_is_encoded_once(
     server_text: str, expected_tool_result: JsonValue
 ) -> None:
-    response, delta = _run_with_server_text(server_text)
+    response, delta = _run_with_server_result(_text_result(server_text))
     expected = {"tool_result": expected_tool_result}
 
     llm_facing = json.loads(response.text, parse_constant=_reject_non_finite_number)
@@ -114,10 +133,57 @@ def test_tool_result_is_encoded_once(
 def test_json_object_reaches_the_model_without_extra_escaping() -> None:
     server_text = '{"number":12,"title":"Fix the \\"widget\\" parser"}'
 
-    response, _ = _run_with_server_text(server_text)
+    response, _ = _run_with_server_result(_text_result(server_text))
 
     assert response.text == (
         '{"tool_result": {"number": 12, "title": "Fix the \\"widget\\" parser"}}'
     )
     old_response = json.dumps({"tool_result": server_text})
     assert len(response.text) < len(old_response)
+
+
+def test_text_content_takes_precedence_over_structured_content() -> None:
+    result = CallToolResult(
+        content=[TextContent(type="text", text="2 open issues")],
+        structuredContent={"open": 2},
+    )
+    response, delta = _run_with_server_result(result)
+    assert json.loads(response.text) == {"tool_result": "2 open issues"}
+    assert delta.data == {"tool_result": "2 open issues"}
+
+
+def test_structured_content_is_the_text_when_the_server_sends_no_text() -> None:
+    result = CallToolResult(content=[], structuredContent={"open": 2})
+
+    response, _ = _run_with_server_result(result)
+
+    assert json.loads(response.text) == {"tool_result": {"open": 2}}
+
+
+def test_empty_result_does_not_invent_none_text() -> None:
+    response, _ = _run_with_server_result(CallToolResult(content=[]))
+    assert json.loads(response.text) == {"tool_result": ""}
+
+
+def test_server_reported_error_is_a_tool_error_not_an_auth_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    message = "403 Forbidden: repo access denied"
+    with (
+        patch(
+            f"{MODULE}.call_mcp_tool",
+            return_value=CallToolResult(
+                content=[TextContent(type="text", text=message)], isError=True
+            ),
+        ),
+        patch(f"{MODULE}.mark_connection_config_reauth_required") as mark,
+        patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
+        caplog.at_level(logging.INFO),
+    ):
+        response = _run(_github_tool())
+
+    assert response.is_error
+    assert json.loads(response.content) == {"error": message}
+    assert record_outcome.call_args.kwargs["status"] == MCPToolCallStatus.ERROR
+    mark.assert_not_called()
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]

@@ -212,7 +212,10 @@ Policy precedence is in [[craft-external-apps]].
     fingerprint is overwritten without a conflict.
 11. `expected-failure-tool-response` **An expected failure returns an error
     `ToolResult`.** `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run`
-    catches every exception and reports an auth error for a 401,
+    preserves `CallToolResult.isError` as a failed result without marking
+    credentials for reauthentication. Text content takes precedence; a result
+    with only `structuredContent` is JSON-encoded, then parsed for the model.
+    Transport exceptions report an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
     `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a
     failed result for a blocked destination, a timeout, a connection error
