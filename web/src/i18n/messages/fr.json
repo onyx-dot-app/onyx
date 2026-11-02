@@ -13304,14 +13304,14 @@
           "title": "Votre organisation"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Modifier"
+          "canEdit": {
+            "label": "Peut modifier"
+          },
+          "canUse": {
+            "label": "Peut utiliser"
           },
           "removeAccess": {
             "label": "Retirer l'accès"
-          },
-          "viewAndChat": {
-            "label": "Voir et discuter"
           }
         },
         "privateOption": {
@@ -17254,9 +17254,7 @@
         },
         "ownerLabel": "Propriétaire",
         "permissionMenu": {
-          "ariaLabel": "Mettre à jour l'accès de {name}",
-          "canUse": "Peut utiliser",
-          "canEdit": "Peut modifier"
+          "ariaLabel": "Mettre à jour l'accès de {name}"
         },
         "saveButton": {
           "label": "Enregistrer"

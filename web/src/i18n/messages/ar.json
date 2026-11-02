@@ -13304,14 +13304,14 @@
           "title": "مؤسستك"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "تعديل"
+          "canEdit": {
+            "label": "يمكنه التعديل"
+          },
+          "canUse": {
+            "label": "يمكنه الاستخدام"
           },
           "removeAccess": {
             "label": "إزالة صلاحية الوصول"
-          },
-          "viewAndChat": {
-            "label": "عرض ومحادثة"
           }
         },
         "privateOption": {
@@ -17254,9 +17254,7 @@
         },
         "ownerLabel": "مالك",
         "permissionMenu": {
-          "ariaLabel": "تحديث صلاحية الوصول لـ {name}",
-          "canUse": "يمكنه الاستخدام",
-          "canEdit": "يمكنه التعديل"
+          "ariaLabel": "تحديث صلاحية الوصول لـ {name}"
         },
         "saveButton": {
           "label": "حفظ"
