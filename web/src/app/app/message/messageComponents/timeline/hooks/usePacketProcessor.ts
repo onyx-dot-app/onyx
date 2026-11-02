@@ -154,8 +154,7 @@ export function usePacketProcessor(
 
     // A stopped response with no answer has nothing left to render.
     isComplete:
-      state.stopPacketSeen &&
-      (renderComplete || state.potentialDisplayGroups.length === 0),
+      state.stopPacketSeen && (renderComplete || displayGroups.length === 0),
 
     // Callbacks
     onRenderComplete,
