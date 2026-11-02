@@ -127,18 +127,14 @@ def superseded_by_newer_events(
 ) -> set[int]:
     """Of these, the ids a newer change to the same document has overtaken.
 
-    `_superseded` in the drain compares a batch against itself, which is not
-    enough: rows are claimed in id order, and id is arrival order rather than
-    event time. A provider that redelivers late, or delivers out of order,
-    puts an older change in a later batch -- or a later run -- than the newer
-    one it should not replace. Indexing both would store the older body last.
+    The drain compares a batch against itself, which is not enough: id is
+    arrival order, not event time, so a late or out-of-order delivery puts
+    an older change in a later batch than the newer one it must not replace.
 
-    Only rows the pipeline has already taken count as newer: a PENDING row is
-    not indexed yet, and the batch that claims it will compare it itself.
-
-    The batch's own rows are excluded. `claim_events` has already marked them
-    IN_PROGRESS, so counting them here would let a row the caller discarded
-    suppress the one it kept, and that document would never be indexed.
+    Only IN_PROGRESS and COMPLETED rows count: a PENDING one is not indexed
+    yet. The batch's own rows are excluded -- the claim has already marked
+    them IN_PROGRESS, so counting them would let a row the caller discarded
+    suppress the one it kept.
     """
     documents = {event.document_id for event in events if event.occurred_at}
     if not documents:

@@ -117,8 +117,7 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
     """
 
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
-        # The worker is not the webhook server, so it registers the
-        # handlers itself before it reads any row.
+        # This worker is not the webhook server, so it registers its own.
         load_event_sources()
         self.batch_size = batch_size
         self._cc_pair_id: int | None = None
@@ -166,12 +165,10 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
 
         drained = checkpoint.drained
 
-        # The session closes before any handler runs. A handler can fetch a
-        # body over the network, and the generator suspends at every yield
-        # while the runner stores documents, so holding the session across
-        # either would keep a pooled connection for the whole batch.
-        # `expire_on_commit` is false on these sessions, so the claimed rows
-        # keep their values once detached.
+        # The session closes before any handler runs: a handler can fetch
+        # over the network, and this generator suspends at every yield, so
+        # holding it would pin a pooled connection for the whole batch.
+        # `expire_on_commit` is false, so the rows survive detaching.
         with get_session_with_current_tenant() as db_session:
             settle_events_from_finished_attempts(db_session, self._cc_pair_id)
             events = claim_events(
@@ -185,16 +182,14 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             db_session.commit()
 
             secrets = _secrets_for(db_session, self._cc_pair_id) if events else {}
-            # Within the batch, and against whatever earlier batches and runs
-            # already took: id order is arrival order, not event time.
+            # Within the batch, and against what earlier batches took.
             superseded = _superseded(events) | superseded_by_newer_events(
                 db_session, self._cc_pair_id, events
             )
 
         for event in events:
-            # A later change to this document is in the same batch, and
-            # the first entry would win. Its row still settles with the
-            # attempt: the document is indexed from the newer event.
+            # Still settles with the attempt: the document is indexed
+            # from the newer change instead.
             if event.id in superseded:
                 continue
 
