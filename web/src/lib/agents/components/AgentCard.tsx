@@ -31,6 +31,8 @@ export interface AgentCardProps {
   agent: MinimalAgent;
   /** Opens this agent's viewer, which the listing renders. */
   onView: () => void;
+  /** This agent's viewer is open: the card keeps its focused look under it. */
+  viewing?: boolean;
 }
 
 // Whether the pin icon below shows the pinned pose. A context, so the icon
@@ -53,7 +55,7 @@ function RotatingPinIcon({ className, ...props }: IconProps) {
   );
 }
 
-export function AgentCard({ agent, onView }: AgentCardProps) {
+export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
   const t = useTranslations("agents");
   const appPosition = useAppPosition();
   const router = useRouter();
@@ -96,6 +98,7 @@ export function AgentCard({ agent, onView }: AgentCardProps) {
         state="filled"
         padding={0}
         onClick={onView}
+        interaction={viewing ? "hover" : undefined}
         // Lets the catalog's arrow keys find the cards.
         data-agent-card=""
         // The card's own buttons are labelled by their tooltips; the bare

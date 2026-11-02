@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AgentCard, AgentViewer } from "@/lib/agents/components";
 import { useUser } from "@/providers/UserProvider";
@@ -21,6 +21,8 @@ interface AgentsSectionProps {
   title: string;
   description?: string;
   agents: MinimalAgent[];
+  /** The agent whose viewer is open, if any. */
+  viewedAgentId: number | null;
   onView: (agentId: number) => void;
 }
 
@@ -28,6 +30,7 @@ function AgentsSection({
   title,
   description,
   agents,
+  viewedAgentId,
   onView,
 }: AgentsSectionProps) {
   if (agents.length === 0) return null;
@@ -50,6 +53,7 @@ function AgentsSection({
             <AgentCard
               key={agent.id}
               agent={agent}
+              viewing={agent.id === viewedAgentId}
               onView={() => onView(agent.id)}
             />
           ))}
@@ -70,6 +74,21 @@ export default function AgentsCatalogPage() {
   // One viewer for the listing, so the id lives here rather than in whichever
   // card happened to be clicked.
   const [viewedAgentId, setViewedAgentId] = useState<number | null>(null);
+  // The card that opened the viewer: focus goes back to it on close, so Tab
+  // and the arrows carry on from where the user was.
+  const viewerOpenerRef = useRef<HTMLElement | null>(null);
+  function openViewer(agentId: number) {
+    const opener = document.activeElement;
+    viewerOpenerRef.current = opener instanceof HTMLElement ? opener : null;
+    setViewedAgentId(agentId);
+  }
+  function closeViewer() {
+    setViewedAgentId(null);
+    const opener = viewerOpenerRef.current;
+    viewerOpenerRef.current = null;
+    // After the dialog unmounts and its own focus handling runs.
+    requestAnimationFrame(() => opener?.focus());
+  }
   const [activeTab, setActiveTab] = useState<"all" | "your">("all");
 
   const nonBuiltinAgents = useMemo(
@@ -118,10 +137,7 @@ export default function AgentsCatalogPage() {
       data-testid="AgentsPage/container"
       aria-label={t("navigation.page.ariaLabel")}
     >
-      <AgentViewer
-        agentId={viewedAgentId}
-        onClose={() => setViewedAgentId(null)}
-      />
+      <AgentViewer agentId={viewedAgentId} onClose={closeViewer} />
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title={t("navigation.header.title")}
@@ -191,12 +207,14 @@ export default function AgentsCatalogPage() {
               title={t("navigation.sections.featured.title")}
               description={t("navigation.sections.featured.description")}
               agents={featuredAgents}
-              onView={setViewedAgentId}
+              viewedAgentId={viewedAgentId}
+              onView={openViewer}
             />
             <AgentsSection
               title={t("navigation.sections.all.title")}
               agents={allAgents}
-              onView={setViewedAgentId}
+              viewedAgentId={viewedAgentId}
+              onView={openViewer}
             />
             <TextSeparator
               count={agentCount}
