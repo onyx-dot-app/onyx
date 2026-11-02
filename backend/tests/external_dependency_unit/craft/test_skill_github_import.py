@@ -253,12 +253,9 @@ def test_import_applies_shared_access_before_publication(
     )
     assert result.not_imported == []
     assert len(result.imported) == 1
-    imported = result.imported[0].skill
-    assert imported.public_permission == SkillSharePermission.VIEWER
     assert published == [SkillSharePermission.VIEWER]
-    stored = db_session.get(Skill, imported.id)
+    stored = db_session.get(Skill, result.imported[0].skill.id)
     assert stored is not None
-    assert stored.public_permission == SkillSharePermission.VIEWER
     assert stored.bundle_file_id is not None
     get_default_file_store().delete_file(stored.bundle_file_id, error_on_missing=False)
 

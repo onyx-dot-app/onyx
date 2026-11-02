@@ -115,36 +115,6 @@ def _parse_skill_sharing(sharing: str | None) -> SkillShareRequest | None:
         ) from exc
 
 
-def _create_skill_from_bundle__no_commit(
-    ingested: IngestedBundle,
-    sharing: SkillShareRequest | None,
-    auto_enable: bool,
-    user: User,
-    db_session: Session,
-) -> tuple[Skill, bool, set[UUID]]:
-    skill = add_new_skill__no_commit(
-        Skill(
-            name=ingested.canonical_name,
-            description=ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            is_valid=True,
-            author_user_id=user.id,
-        ),
-        db_session,
-    )
-    affected: set[UUID] = set()
-    if sharing is not None:
-        _apply_skill_sharing__no_commit(skill, sharing, user, db_session)
-        affected = affected_user_ids_for_skill(skill, db_session)
-    enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
-        skill, user.id, db_session
-    )
-    if enabled:
-        affected.add(user.id)
-    return skill, enabled, affected
-
-
 def _import_bundle__no_commit(
     ingest: AbstractContextManager[IngestedBundle],
     sharing: SkillShareRequest | None,
@@ -153,17 +123,55 @@ def _import_bundle__no_commit(
     db_session: Session,
     successful_bundles: ExitStack,
 ) -> tuple[Skill, bool, set[UUID]]:
-    """Create one skill in its own savepoint, so one bad bundle or a name
-    conflict does not undo the other skills of the same import. A failure
-    rolls back the savepoint and deletes the bundle file; a success keeps the
-    file until successful_bundles closes."""
     with ExitStack() as bundle_context, db_session.begin_nested():
         ingested = bundle_context.enter_context(ingest)
-        result = _create_skill_from_bundle__no_commit(
-            ingested, sharing, auto_enable, user, db_session
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=ingested.canonical_name,
+                description=ingested.description,
+                bundle_file_id=ingested.bundle_file_id,
+                bundle_sha256=ingested.bundle_sha256,
+                is_valid=True,
+                author_user_id=user.id,
+            ),
+            db_session,
         )
+        affected: set[UUID] = set()
+        if sharing is not None:
+            _apply_skill_sharing__no_commit(skill, sharing, user, db_session)
+            affected = affected_user_ids_for_skill(skill, db_session)
+        enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
+            skill, user.id, db_session
+        )
+        if enabled:
+            affected.add(user.id)
+        # A failure above rolls back the savepoint and deletes the bundle file.
+        # A success keeps the file until the whole import commits.
         successful_bundles.enter_context(bundle_context.pop_all())
-    return result
+    return skill, enabled, affected
+
+
+def _share_skill__no_commit(
+    skill: Skill, share_req: SkillShareRequest, user: User, db_session: Session
+) -> set[UUID]:
+    before = affected_user_ids_for_skill(skill, db_session)
+    _apply_skill_sharing__no_commit(skill, share_req, user, db_session)
+    return before | affected_user_ids_for_skill(skill, db_session)
+
+
+def _delete_skill__no_commit(
+    skill: Skill, user: User, db_session: Session
+) -> tuple[set[UUID], str | None]:
+    if (
+        skill.installation_policy == SkillInstallationPolicy.REQUIRED
+        and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only admins can delete required skills.",
+        )
+    affected = affected_user_ids_for_skill(skill, db_session)
+    return affected, delete_skill(skill, db_session)
 
 
 def _import_response(
@@ -317,7 +325,6 @@ def bulk_update_skills(
                     )
                     if skill is None:
                         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-                    item_affected = affected_user_ids_for_skill(skill, db_session)
                     if isinstance(request, SkillBulkShareRequest):
                         sharing = request.sharing.model_copy(deep=True)
                         if sharing.user_shares is not None:
@@ -346,23 +353,13 @@ def bulk_update_skills(
                                 }
                             )
                             sharing.group_shares = list(groups.values())
-                        _apply_skill_sharing__no_commit(
+                        item_affected = _share_skill__no_commit(
                             skill, sharing, user, db_session
                         )
-                        item_affected |= affected_user_ids_for_skill(skill, db_session)
                     else:
-                        if (
-                            skill.installation_policy
-                            == SkillInstallationPolicy.REQUIRED
-                            and not has_global_permission(
-                                user, Permission.FULL_ADMIN_PANEL_ACCESS
-                            )
-                        ):
-                            raise OnyxError(
-                                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                                "Only admins can delete required skills.",
-                            )
-                        deleted_file_id = delete_skill(skill, db_session)
+                        item_affected, deleted_file_id = _delete_skill__no_commit(
+                            skill, user, db_session
+                        )
             succeeded.append(skill_id)
             affected |= item_affected
             if deleted_file_id is not None:
@@ -437,11 +434,9 @@ def preview_skill_for_current_user(
 def create_custom_skill(
     bundle: UploadFile = File(...),
     auto_enable: Annotated[bool, Form()] = True,
-    sharing: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    share_request = _parse_skill_sharing(sharing)
     file_store = get_default_file_store()
     with ingested_skill_bundle(
         read_bundle_file(bundle.file),
@@ -459,8 +454,6 @@ def create_custom_skill(
             ),
             db_session,
         )
-        if share_request is not None:
-            _apply_skill_sharing__no_commit(skill, share_request, user, db_session)
         if auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
@@ -470,7 +463,7 @@ def create_custom_skill(
             )
         db_session.commit()
 
-    if auto_enable or share_request is not None:
+    if auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
@@ -1113,13 +1106,10 @@ def share_current_user_skill(
             include_share_details=True,
         )
 
-    before_affected = affected_user_ids_for_skill(skill, db_session)
-    _apply_skill_sharing__no_commit(skill, share_req, user, db_session)
-
-    after_affected = affected_user_ids_for_skill(skill, db_session)
+    affected = _share_skill__no_commit(skill, share_req, user, db_session)
     db_session.commit()
     db_session.expire(skill)
-    push_skills_for_users(before_affected | after_affected, db_session)
+    push_skills_for_users(affected, db_session)
     db_session.commit()
     return skill_response_for_user(
         skill,
@@ -1219,17 +1209,7 @@ def delete_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    if (
-        skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can delete required skills.",
-        )
-
-    affected = affected_user_ids_for_skill(skill, db_session)
-    old_file_id = delete_skill(skill, db_session)
+    affected, old_file_id = _delete_skill__no_commit(skill, user, db_session)
     db_session.commit()
 
     push_skills_for_users(affected, db_session)

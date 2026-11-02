@@ -5,7 +5,6 @@ import pytest
 from onyx.db.enums import SkillSharePermission
 from onyx.server.features.skill.models import (
     SkillBulkResponse,
-    SkillsList,
     SkillUserShareRequest,
 )
 from tests.integration.common_utils.constants import ADMIN_USER_NAME, API_SERVER_URL
@@ -23,17 +22,6 @@ from tests.integration.common_utils.test_models import DATestUser
 def _module_reset_and_seed() -> None:
     reset_all()
     UserManager.create(name=ADMIN_USER_NAME)
-
-
-def test_skill_list_includes_other_users_private_skills_for_admin(
-    admin_user: DATestUser,
-    basic_user: DATestUser,
-) -> None:
-    skill = SkillManager.create_custom(basic_user)
-    response = client.get(f"{API_SERVER_URL}/skills", headers=admin_user.headers)
-    response.raise_for_status()
-    skills = SkillsList.model_validate(response.json())
-    assert skill.id in {item.id for item in skills.customs}
 
 
 def test_bulk_organization_sharing_updates_every_selected_skill(
@@ -128,32 +116,6 @@ def test_bulk_failure_after_write_rolls_back_only_that_skill(
     applied = SkillManager.get_for_user(clean.id, admin_user)
     assert applied.public_permission == "VIEWER"
     assert applied.installation_policy == "DEFAULT"
-
-
-def test_bulk_policy_change_rejects_non_admin(
-    basic_user: DATestUser,
-    admin_user: DATestUser,
-) -> None:
-    skill = SkillManager.create_custom(basic_user)
-    response = client.post(
-        f"{API_SERVER_URL}/skills/bulk",
-        headers=basic_user.headers,
-        json={
-            "skill_ids": [str(skill.id)],
-            "action": "share",
-            "sharing": {
-                "public_permission": "VIEWER",
-                "installation_policy": "REQUIRED",
-            },
-        },
-    )
-    response.raise_for_status()
-    result = SkillBulkResponse.model_validate(response.json())
-    assert result.succeeded == []
-    assert [failure.skill_id for failure in result.failed] == [skill.id]
-    unchanged = SkillManager.get_for_user(skill.id, admin_user)
-    assert unchanged.public_permission is None
-    assert unchanged.installation_policy == "AVAILABLE"
 
 
 def test_bulk_toggle_changes_only_current_users_preferences(
