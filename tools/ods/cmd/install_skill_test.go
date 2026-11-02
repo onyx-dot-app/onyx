@@ -497,6 +497,14 @@ func skillTreeContents(t *testing.T, root string) map[string]string {
 			files[path+string(filepath.Separator)] = ""
 			return nil
 		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			files[path] = "symlink:" + target
+			return nil
+		}
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
