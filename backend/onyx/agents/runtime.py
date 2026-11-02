@@ -55,6 +55,7 @@ from onyx.agents.models import (
     RunAction,
     RunFailure,
     RunFailureKind,
+    RunOutcome,
     RunProgress,
     RunResult,
     RunState,
@@ -1110,9 +1111,7 @@ class Run:
 
     def _finish(
         self,
-        outcome: Literal[
-            RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
-        ],
+        outcome: RunOutcome,
         llm: LLM,
     ) -> None:
         self._cancellation_link.close()

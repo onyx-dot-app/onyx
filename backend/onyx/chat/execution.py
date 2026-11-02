@@ -210,6 +210,7 @@ class ChatTurnExecution:
         self._stopped_by_user = False
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
+        self._response_stops: dict[int, OverallStop] = {}
         self._last_refresh = self._last_stop_check = time.monotonic()
         # Each response run cancels itself at this time and records a DEADLINE failure.
         self._deadline_at = datetime.now(timezone.utc) + timedelta(
@@ -339,7 +340,7 @@ class ChatTurnExecution:
                                     placement=Placement(
                                         turn_index=0, model_index=index
                                     ),
-                                    obj=stop,
+                                    obj=self._response_stops.get(index, stop),
                                 )
                             )
                     self.delivery.finish()
@@ -388,6 +389,12 @@ class ChatTurnExecution:
                     continue
                 if not worker_done:
                     continue
+            if persistence.outcome.done() and persistence.outcome.exception() is None:
+                snapshot = persistence.outcome.result().response.response
+                if snapshot is not None:
+                    self._response_stops[persistence.model_index] = overall_stop(
+                        snapshot.status, snapshot.failure
+                    )
             del self._response_workers[worker]
 
     def _clear_processing_status(self) -> bool:

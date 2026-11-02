@@ -420,3 +420,36 @@ def test_saved_cancelled_answer_preserves_the_stop_reason(
     )
     assert answer == "Partial answer ... \n\n" + reason
     assert save.call_args.kwargs["message_text"] == answer
+
+
+def test_history_keeps_deadline_cancellation_out_of_error_fields() -> None:
+    failure = RunFailure(kind=RunFailureKind.DEADLINE, message="Deadline reached")
+    structured = True
+    message = ChatMessage(
+        id=1,
+        chat_session_id=uuid4(),
+        message="Partial answer",
+        token_count=2,
+        message_type=MessageType.ASSISTANT,
+        time_sent=datetime.now(timezone.utc),
+        search_docs=[],
+        chat_message_feedbacks=[],
+        error=failure.message,
+        response_failure=RunFailure.model_validate_json(failure.model_dump_json())
+        if structured
+        else None,
+        model_display_name="Test model",
+        request_params={
+            "model_name": "test",
+            "model_provider": "openai",
+            "reasoning_effort": "low",
+            "max_tokens": None,
+            "sent_kwargs": {},
+        },
+    )
+    message.response_status = RunStatus.CANCELLED
+    detail = translate_db_message_to_chat_message_detail(message)
+    assert detail.message == "Partial answer"
+    assert detail.error is None
+    assert detail.error_info is None
+    assert message.response_failure == failure

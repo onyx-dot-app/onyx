@@ -316,11 +316,15 @@ Community downgrade clears it ([[billing]]).
    caller. Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
    response with a `DEADLINE` failure gets `timed_out`; other cancellations get
    `user_cancelled`. Lost admission, lost ownership lease and control failures
-   still cancel without a classified failure and replay like Stop. Legacy replay
+   still cancel without a classified failure and replay like Stop. History keeps
+   deadline cancellations out of error fields, so clients retain the partial answer.
+   Preparation timeouts also save a minimal runtime record. Legacy replay
    has its own builders in
    `server/query_and_chat/session_loading.py`; check every `in_code_tool_id`
    branch when a legacy display changes. It finds a stopped answer by the text
-   "generation was stopped", which
+   "generation was stopped"; it does not recognize the new time-limit text.
+   New deadline cancellations always save a runtime record and use runtime replay.
+   The legacy marker is what
    `db/chat_response.py:save_chat_response_to_db` appends. Legacy dispatch is
    on the class name ([[tools-framework#replay-by-class-name]]), and its
    `run_python` builder parses the saved result JSON

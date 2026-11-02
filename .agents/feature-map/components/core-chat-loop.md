@@ -88,7 +88,7 @@ _stream_chat_turn               ChatTurnExecution.run                ChatTurnExe
     clear_stop, admission.publish   admission every 5 s; owner         ChatRunStore (content kept) or
     publish IDs to ChatDelivery     leases every 10 s (content kept)     persistence view; register saved agents
     start control thread          _poll_responses: outcomes, idle      Agent.start(background=False)
-  yield from ChatStream (reader)  all drained: OverallStop (user Stop)   ResponsePresenter -> Emitter -> ChatDelivery
+  yield from ChatStream (reader)  all drained: OverallStop (user Stop or deadline)   ResponsePresenter -> Emitter -> ChatDelivery
                                     delivery.finish, admission.release RunStore.save -> ChatResponsePersistence
 ```
 
@@ -234,7 +234,9 @@ termination grace period is much shorter, so it ends running turns first
    `chat/presentation.py:overall_stop` maps that failure to `timed_out` for live
    and replayed responses. The turn sends a fallback stop after draining when
    preparation times out or the user stops, only for models without a delivered stop.
-   The first cancellation reason wins. Lost admission and control failures still
+   The fallback uses each saved response outcome, so a later Stop cannot replace
+   an earlier response deadline. The first cancellation reason wins.
+   Lost admission and control failures still
    end without a live stop packet; they are not classified as deadlines.
 10. `stop-before-launch` **Stop does nothing before launch.** During setup the
     fence holds no stream ID, and launch clears any earlier stop key for the

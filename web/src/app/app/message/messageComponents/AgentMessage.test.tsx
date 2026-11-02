@@ -458,3 +458,30 @@ test("a timed out answer explains its deadline without claiming the user stopped
   ).not.toBeInTheDocument();
   await waitFor(() => expect(renderComplete()).toBe(true));
 });
+
+test.each([
+  StopReason.TIMED_OUT,
+  StopReason.USER_CANCELLED,
+  StopReason.FINISHED,
+])(
+  "a stopped response without an answer releases the render gate (%s)",
+  async (stopReason) => {
+    seedSessionAwaitingAnswer();
+    render(
+      <AgentMessage
+        rawPackets={[
+          {
+            placement,
+            obj: { type: PacketType.STOP, stop_reason: stopReason },
+          },
+        ]}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    await waitFor(() => expect(renderComplete()).toBe(true));
+  }
+);

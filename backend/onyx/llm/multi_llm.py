@@ -319,7 +319,7 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
         return
     signal = _DeadlineCancellationSignal(parent, context.total_timeout_s)
     with (
-        parent.on_cancel(signal.cancel),
+        parent.on_cancel(lambda: signal.cancel(parent.reason or "requested")),
         cancellation_scope(signal),
     ):
         parent.check()

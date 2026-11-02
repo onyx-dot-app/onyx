@@ -3530,3 +3530,40 @@ def test_completed_model_does_not_hide_a_second_models_stop(
         finally:
             turn.delivery.reader.close()
             _wait_for_chat_workers(chat_workers)
+
+
+def test_user_stop_after_run_deadline_keeps_live_and_saved_timeout(
+    chat_workers: list[Future[Run | None]],
+) -> None:
+    outcome = Future[ChatResponseOutcome]()
+    with patch("onyx.chat.execution.CHAT_EXECUTION_TIMEOUT_S", 0):
+        turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    prepared = _chat_agent(
+        Agent(
+            FakeModelClient(lambda *_: pytest.fail("Expired work must not generate")),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+    )
+    publish = turn._publish
+
+    def stop_before_delivery(packet: Packet) -> None:
+        if isinstance(packet.obj, OverallStop):
+            assert packet.obj.stop_reason == "timed_out"
+            turn._stopped_by_user = True
+            turn.cancellation.cancel()
+        publish(packet)
+
+    with (
+        patch.object(turn, "_publish", side_effect=stop_before_delivery),
+        patch("onyx.chat.execution.create_chat_agent", return_value=prepared),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
+    ):
+        _launch_turn(turn)
+        try:
+            assert _stop_reasons(list(turn.delivery.reader)) == ["timed_out"]
+            response = outcome.result(timeout=5).response.response
+            assert response is not None
+            assert _stop_reasons(replay_response(response, {}, {}, {})) == ["timed_out"]
+        finally:
+            turn.delivery.reader.close()
+            _wait_for_chat_workers(chat_workers)
