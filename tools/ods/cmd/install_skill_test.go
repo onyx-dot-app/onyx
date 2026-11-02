@@ -441,20 +441,28 @@ func TestInstallSkill_readsSkillsFromTheAgentContextDirectory(t *testing.T) {
 }
 
 func TestInstallSkill_workspaceSetupSourceDoesNotChangeIntegrations(t *testing.T) {
-	for _, nested := range []bool{false, true} {
+	for _, layout := range []struct {
+		name      string
+		skillRoot string
+		setupRoot string
+	}{
+		{name: "root"},
+		{name: "nested", skillRoot: agentContextDir, setupRoot: agentContextDir},
+		{name: "root-setup-nested-skills", skillRoot: agentContextDir},
+	} {
 		for _, hasTiers := range []bool{false, true} {
-			name := fmt.Sprintf("nested=%t/tiers=%t", nested, hasTiers)
+			name := fmt.Sprintf("%s/tiers=%t", layout.name, hasTiers)
 			t.Run(name, func(t *testing.T) {
 				home, repoRoot := skillEnv(t)
 				checkout := t.TempDir()
-				source := checkout
-				if nested {
-					source = filepath.Join(checkout, agentContextDir)
+				source := filepath.Join(checkout, layout.skillRoot)
+				if err := os.MkdirAll(source, 0o755); err != nil {
+					t.Fatal(err)
 				}
 				if hasTiers {
 					skillWriteSource(t, source)
 				}
-				setup := filepath.Join(source, "scripts", "setup_agents.py")
+				setup := filepath.Join(checkout, layout.setupRoot, "scripts", "setup_agents.py")
 				deployWriteFile(t, setup, "# workspace setup\n")
 				deployWriteFile(t, filepath.Join(home, ".claude", "settings.json"), "{}\n")
 				deployWriteFile(t, filepath.Join(repoRoot, claudeMDFile), "custom instructions\n")

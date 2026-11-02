@@ -38,20 +38,24 @@ func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve source path: %w", err)
 	}
+	setupRoots := []string{source}
 	info, err := os.Stat(filepath.Join(source, agentContextDir))
 	nested := err == nil && info.IsDir()
 	if nested {
 		source = filepath.Join(source, agentContextDir)
+		setupRoots = append(setupRoots, source)
 	}
-	setup := filepath.Join(source, "scripts", "setup_agents.py")
-	if info, err := os.Stat(setup); err == nil && !info.IsDir() {
-		return nil, fmt.Errorf(
-			"this source uses workspace setup; ods install-skill cannot install it\n"+
-				"  Follow %s and use its setup entry point: %s",
-			filepath.Join(source, "README.md"), setup,
-		)
-	} else if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("could not inspect setup entry point %s: %w", setup, err)
+	for _, root := range setupRoots {
+		setup := filepath.Join(root, "scripts", "setup_agents.py")
+		if info, err := os.Stat(setup); err == nil && !info.IsDir() {
+			return nil, fmt.Errorf(
+				"this source uses workspace setup; ods install-skill cannot install it\n"+
+					"  Follow %s and use its setup entry point: %s",
+				filepath.Join(root, "README.md"), setup,
+			)
+		} else if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("could not inspect setup entry point %s: %w", setup, err)
+		}
 	}
 	if !nested && !hasSkillTier(source) {
 		return nil, fmt.Errorf(
