@@ -142,13 +142,7 @@ def create_connector(
             "Connector by this name already exists, duplicate naming not allowed."
         )
 
-    # An event source has one valid input type, settled by the source
-    # registering a webhook spec. Deciding it here covers every creation
-    # route, so no caller tracks the same list in its own language and a
-    # pair cannot be created as `poll` and then never drain its queue.
-    load_event_sources()
-    if webhook_source_for(connector_data.source) is not None:
-        connector_data.input_type = InputType.EVENT
+    _settle_event_input_type(connector_data)
 
     connector = Connector(
         name=connector_data.name,
@@ -173,6 +167,20 @@ def create_connector(
     return ObjectCreationIdResponse(id=connector.id)
 
 
+def _settle_event_input_type(connector_data: ConnectorBase) -> None:
+    """An event source has one valid input type, settled by the source
+    registering a webhook spec.
+
+    Deciding it here covers every route that writes a connector, so no caller
+    tracks the same list in its own language. A pair stored as `poll` would
+    never drain its queue and would look healthy doing it, whether it was
+    created that way or edited into it.
+    """
+    load_event_sources()
+    if webhook_source_for(connector_data.source) is not None:
+        connector_data.input_type = InputType.EVENT
+
+
 def update_connector(
     connector_id: int,
     connector_data: ConnectorBase,
@@ -188,6 +196,8 @@ def update_connector(
         raise ValueError(
             "Connector by this name already exists, duplicate naming not allowed."
         )
+
+    _settle_event_input_type(connector_data)
 
     connector.name = connector_data.name
     connector.source = connector_data.source

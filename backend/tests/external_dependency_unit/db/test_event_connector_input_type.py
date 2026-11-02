@@ -20,7 +20,7 @@ from onyx.connectors.event_inbox.source_registry import (
 )
 from onyx.connectors.event_models import EventParseResult
 from onyx.connectors.models import InputType
-from onyx.db.connector import create_connector
+from onyx.db.connector import create_connector, update_connector
 from onyx.db.models import Connector
 from onyx.server.documents.models import ConnectorBase
 
@@ -34,9 +34,15 @@ def _parse(request: WebhookRequest) -> EventParseResult:  # noqa: ARG001
 
 @pytest.fixture
 def registered_event_source() -> Generator[None, None, None]:
-    owner = webhook_source_for(EVENT_SOURCE)
-    if owner is not None:
-        unregister_webhook_source(owner.slug)
+    """Take the source over for this module, then hand it back.
+
+    Another module registers the same source at import time. Without the
+    restore, every later test in the process would run with the source no
+    longer registered, and nothing would fail on it.
+    """
+    displaced = webhook_source_for(EVENT_SOURCE)
+    if displaced is not None:
+        unregister_webhook_source(displaced.slug)
     register_webhook_source(
         WebhookSourceSpec(
             source=EVENT_SOURCE,
@@ -50,6 +56,8 @@ def registered_event_source() -> Generator[None, None, None]:
         yield
     finally:
         unregister_webhook_source("input-type-test")
+        if displaced is not None:
+            register_webhook_source(displaced)
 
 
 def _create(db_session: Session, source: DocumentSource, name: str) -> Connector:
@@ -89,6 +97,36 @@ def test_a_polled_source_keeps_what_the_caller_asked_for(
     connector = _create(db_session, POLLED_SOURCE, "polled-input-type")
     try:
         assert connector.input_type == InputType.POLL
+    finally:
+        db_session.rollback()
+        db_session.delete(connector)
+        db_session.commit()
+
+
+def test_an_update_cannot_turn_an_event_pair_back_into_a_poll_pair(
+    db_session: Session,
+    registered_event_source: None,  # noqa: ARG001
+) -> None:
+    """An edit that sends `poll` would leave the pair never draining its
+    queue, and looking healthy doing it."""
+    connector = _create(db_session, EVENT_SOURCE, "event-input-type-update")
+    try:
+        update_connector(
+            connector_id=connector.id,
+            connector_data=ConnectorBase(
+                name="event-input-type-update",
+                source=EVENT_SOURCE,
+                input_type=InputType.POLL,
+                connector_specific_config={},
+                refresh_freq=None,
+                prune_freq=None,
+                indexing_start=None,
+            ),
+            db_session=db_session,
+        )
+        db_session.commit()
+
+        assert connector.input_type == InputType.EVENT
     finally:
         db_session.rollback()
         db_session.delete(connector)
