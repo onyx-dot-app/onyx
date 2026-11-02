@@ -129,7 +129,13 @@ from the server again when the user opens it, so state kept only in the store
 does not survive it. Within `/app`,
 `web/src/lib/position/hooks.ts:AppPosition` switches views by writing the URL
 with the history API, not a server navigation; in-app links use its `linkTo*`
-props.
+props. Leaving `/app` (More Agents, Plugins) is a router navigation. Until it
+lands, `useNavigationTarget` holds its target: the tabs and the chrome read
+`useShownPosition`, and `AppChrome` shows the target's loader in place of the
+page, so the switch is instant even before Next has the route. Read
+`useShownPosition` only for what is drawn; behavior reads `useAppPosition`
+(the URL). A click while a navigation is in flight goes through the router, so
+it supersedes the earlier one.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.

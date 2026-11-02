@@ -18,7 +18,7 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgFolder, SvgFolderPlus } from "@opal/icons";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useShownPosition } from "@/lib/position/hooks";
 import { noProp } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { usePinChatAgent } from "@/lib/agents/hooks";
@@ -47,7 +47,7 @@ function ProjectPopoverRow({
   rowProps,
   rowRef,
 }: ProjectPopoverRowProps) {
-  const appPosition = useAppPosition();
+  const appPosition = useShownPosition();
   const pinChatAgent = usePinChatAgent();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === match.project.id;
@@ -128,7 +128,7 @@ function ProjectPopoverRow({
  */
 export function FoldedProjectsPopover() {
   const tSidebar = useTranslations("sidebar");
-  const appPosition = useAppPosition();
+  const appPosition = useShownPosition();
   const createProjectModal = useCreateModal();
   const [open, setOpen] = useState(false);
   const t = useTranslations("chat");

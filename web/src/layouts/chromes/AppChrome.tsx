@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { cn, markdown } from "@opal/utils";
 import { INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -31,7 +32,11 @@ import {
 } from "@/lib/chat/exportChatSession";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
-import { MoveCustomAgentChatModal } from "@/lib/agents/components";
+import {
+  AgentsPageLoader,
+  MoveCustomAgentChatModal,
+} from "@/lib/agents/components";
+import { PluginsPageLoader } from "@/lib/plugins/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
@@ -64,7 +69,7 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useNavigationTarget, useShownPosition } from "@/lib/position/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -78,7 +83,7 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 function Header() {
   const t = useTranslations("chat.appChrome");
   const tSidebar = useTranslations("sidebar");
-  const appPosition = useAppPosition();
+  const appPosition = useShownPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
@@ -583,7 +588,7 @@ function Header() {
 // ---------------------------------------------------------------------------
 
 function Footer() {
-  const appPosition = useAppPosition();
+  const appPosition = useShownPosition();
   const customFooterContent = useCustomFooterContent();
 
   return (
@@ -632,14 +637,28 @@ function Footer() {
 // AppChrome
 // ---------------------------------------------------------------------------
 
+interface NavigationTargetLoaderProps {
+  target: ReturnType<typeof useShownPosition>;
+}
+
+/** The loading screen of the page a navigation in flight is going to. */
+function NavigationTargetLoader({ target }: NavigationTargetLoaderProps) {
+  if (target.isMoreAgents()) return <AgentsPageLoader />;
+  if (target.isPlugins()) return <PluginsPageLoader />;
+  if (target.isUserSettings()) return <PageLoader />;
+  // A view of /app: it shows its own loading state once it mounts.
+  return null;
+}
+
 interface AppChromeProps {
   children: React.ReactNode;
 }
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
+  const navigationTarget = useNavigationTarget();
 
-  const appPosition = useAppPosition();
+  const appPosition = useShownPosition();
   useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -747,7 +766,15 @@ export default function AppChrome({ children }: AppChromeProps) {
 
             {/* Header */}
             <Header />
-            <RootLayout.MainContent>{children}</RootLayout.MainContent>
+            <RootLayout.MainContent>
+              {/* A navigation in flight shows its target's loading screen
+                  at once, rather than the page it is leaving. */}
+              {navigationTarget ? (
+                <NavigationTargetLoader target={navigationTarget} />
+              ) : (
+                children
+              )}
+            </RootLayout.MainContent>
             <Footer />
           </div>
           {rightPanel}

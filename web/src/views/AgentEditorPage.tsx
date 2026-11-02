@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
@@ -439,7 +438,6 @@ export default function AgentEditorPage({
 }: AgentEditorPageProps) {
   const t = useTranslations("agents");
   const appPosition = useAppPosition();
-  const router = useRouter();
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
@@ -974,7 +972,7 @@ export default function AgentEditorPage({
       toast.success(t("editor.toasts.deleted"));
       deleteAgentModal.toggle(false);
       await refreshAgents();
-      router.push("/app/agents");
+      appPosition.openMoreAgents();
     } catch (e) {
       console.error("Delete agent error:", e);
       toast.error(

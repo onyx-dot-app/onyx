@@ -68,7 +68,7 @@ import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
 import { getFirstPermittedAdminRoute } from "@/lib/permissions/utils";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useShownPosition } from "@/lib/position/hooks";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
@@ -504,7 +504,7 @@ export default function AppSidebar() {
   );
 
   const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
-  const activeSidebarTab = useAppPosition();
+  const activeSidebarTab = useShownPosition();
   const createProjectModal = useCreateModal();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
@@ -518,7 +518,7 @@ export default function AppSidebar() {
             ? SvgOnyxOctagon
             : SvgMoreHorizontal
         }
-        href="/app/agents"
+        {...activeSidebarTab.linkToMoreAgents()}
         selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
@@ -679,7 +679,7 @@ export default function AppSidebar() {
           )}
           <SidebarTab
             icon={SvgPlug}
-            href="/app/plugins"
+            {...activeSidebarTab.linkToPlugins()}
             selected={activeSidebarTab.isPlugins()}
           >
             {t("appSidebar.plugins.label")}

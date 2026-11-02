@@ -27,7 +27,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition, useShownPosition } from "@/lib/position/hooks";
 import { noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject } from "@/lib/projects/hooks";
@@ -144,7 +144,7 @@ export interface ProjectFolderButtonProps {
 export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   const t = useTranslations("chat");
   const appPosition = useAppPosition();
-  const activeSidebar = useAppPosition();
+  const activeSidebar = useShownPosition();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === project.id;
   const [open, setOpen] = useState(isActiveProject);

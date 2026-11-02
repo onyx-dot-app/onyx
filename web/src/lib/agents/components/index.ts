@@ -6,6 +6,7 @@ export { NoAgentModal } from "@/lib/agents/components/NoAgentModal";
 export { MoveCustomAgentChatModal } from "@/lib/agents/components/MoveCustomAgentChatModal";
 export { AgentViewerModal } from "@/lib/agents/components/AgentViewerModal";
 export { AgentViewer } from "@/lib/agents/components/AgentViewer";
+export { AgentsPageLoader } from "@/lib/agents/components/AgentsPageLoader";
 export {
   ShareAgentModal,
   type ShareAgentModalProps,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -23,6 +23,35 @@ type AppPositionType =
         | "shared-chat"
         | "plugins";
     };
+
+// A navigation that leaves the page, from its click until the URL changes. The router takes a moment to render the new page (more on a slow
+// network, or before its shell is prefetched); the sidebar and the chrome show
+// the target and its loading screen meanwhile, so the switch reads as instant. Only what
+// is drawn reads it (`useShownPosition`): behavior waits for the URL.
+interface PendingNavigation {
+  value: AppPositionType;
+  /** The URL the click left from (`urlKey`); a change to it ends the wait. */
+  fromUrl: string;
+}
+
+/** A URL as pathname and query, the same however it was read. */
+function urlKey(pathname: string, search: URLSearchParams): string {
+  const query = search.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+let pendingNavigation: PendingNavigation | null = null;
+const pendingListeners = new Set<() => void>();
+
+function setPendingNavigation(next: PendingNavigation | null) {
+  pendingNavigation = next;
+  pendingListeners.forEach((listener) => listener());
+}
+
+function subscribeToPendingNavigation(listener: () => void): () => void {
+  pendingListeners.add(listener);
+  return () => pendingListeners.delete(listener);
+}
 
 interface NavigationOptions {
   /** Leaves no history entry, so going back skips this address. */
@@ -109,6 +138,10 @@ class AppPosition {
     this.go({ location: "new-session" }, options);
   }
 
+  openMoreAgents(options?: NavigationOptions) {
+    this.go({ location: "more-agents" }, options);
+  }
+
   // ## Linking somewhere
   //
   // A link to a position: its `href` (so a new tab or a copied link still
@@ -130,6 +163,14 @@ class AppPosition {
 
   linkToNewSession(): AppLinkProps {
     return this.linkTo({ location: "new-session" });
+  }
+
+  linkToMoreAgents(): AppLinkProps {
+    return this.linkTo({ location: "more-agents" });
+  }
+
+  linkToPlugins(): AppLinkProps {
+    return this.linkTo({ location: "plugins" });
   }
 
   private linkTo(value: AppPositionType): AppLinkProps {
@@ -156,22 +197,46 @@ class AppPosition {
     { replace = false }: NavigationOptions = {}
   ) {
     const href = hrefFor(value);
+    if (typeof window === "undefined") {
+      if (replace) this.router.replace(href);
+      else this.router.push(href);
+      return;
+    }
+    const here = urlKey(
+      window.location.pathname,
+      new URLSearchParams(window.location.search)
+    );
+    const target = new URL(href, window.location.origin);
+    const there = urlKey(target.pathname, target.searchParams);
+    // A router navigation still in flight would land after this click and
+    // undo it. Only another router navigation supersedes it; writing the
+    // URL does not.
+    const inFlight = pendingNavigation !== null;
+
+    if (there === here) {
+      // Already there: a second entry for the same URL would make Back look
+      // like it does nothing. A navigation in flight is called off.
+      if (inFlight) {
+        setPendingNavigation(null);
+        this.router.replace(href);
+      }
+      return;
+    }
     // Within /app only the query changes, and the page renders on the client,
     // so the URL is written in place: Next keeps useSearchParams in sync with
     // the history API, and no server round trip holds the switch back (the
     // sidebar, the URL and the loading view update at once). Leaving or
     // entering /app is a real navigation.
-    if (typeof window !== "undefined" && window.location.pathname === "/app") {
-      const target = new URL(href, window.location.origin);
-      if (target.pathname === "/app") {
-        // Already there: a second entry for the same URL would make Back
-        // look like it does nothing.
-        if (target.search === window.location.search) return;
-        if (replace) window.history.replaceState(null, "", href);
-        else window.history.pushState(null, "", href);
-        return;
-      }
+    if (
+      !inFlight &&
+      window.location.pathname === "/app" &&
+      target.pathname === "/app"
+    ) {
+      if (replace) window.history.replaceState(null, "", href);
+      else window.history.pushState(null, "", href);
+      return;
     }
+    setPendingNavigation({ value, fromUrl: here });
     if (replace) this.router.replace(href);
     else this.router.push(href);
   }
@@ -311,4 +376,41 @@ export function useAppPosition(): AppPosition {
     }
     return new AppPosition({ location: "new-session" }, router);
   }, [pathname, chatId, agentId, projectId, router]);
+}
+
+/**
+ * Where a navigation in flight is going: set on the click that leaves the
+ * page, and null again once the URL changes. The chrome shows the
+ * target's loading screen meanwhile (`AppChrome`).
+ */
+export function useNavigationTarget(): AppPosition | null {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pending = useSyncExternalStore(
+    subscribeToPendingNavigation,
+    () => pendingNavigation,
+    () => null
+  );
+  // Once the URL changes, the navigation has landed (or gone elsewhere).
+  const inFlight =
+    pending !== null && pending.fromUrl === urlKey(pathname, searchParams);
+  useEffect(() => {
+    if (pending !== null && !inFlight) setPendingNavigation(null);
+  }, [pending, inFlight]);
+
+  return useMemo(
+    () => (inFlight && pending ? new AppPosition(pending.value, router) : null),
+    [inFlight, pending, router]
+  );
+}
+
+/**
+ * The position the screen shows: where a navigation in flight is going, else
+ * `useAppPosition()`. Use it for what is drawn (a tab's selected state, the
+ * chrome); behavior reads `useAppPosition()`, which follows the URL.
+ */
+export function useShownPosition(): AppPosition {
+  const position = useAppPosition();
+  return useNavigationTarget() ?? position;
 }

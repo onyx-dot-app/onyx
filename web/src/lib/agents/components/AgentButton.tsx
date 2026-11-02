@@ -12,7 +12,7 @@ import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useShownPosition } from "@/lib/position/hooks";
 interface SortableItemProps {
   id: number;
   children?: React.ReactNode;
@@ -71,7 +71,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
   const isCurrentAgent = activeAgent?.id === agent.id;
-  const appPosition = useAppPosition();
+  const appPosition = useShownPosition();
 
   const agentLink = appPosition.linkToAgent(agent.id);
 
