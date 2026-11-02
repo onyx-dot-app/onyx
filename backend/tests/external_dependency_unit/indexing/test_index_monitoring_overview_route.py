@@ -203,3 +203,48 @@ def test_the_overview_has_no_all_time_window(db_session: Session) -> None:
         )
 
     assert refused.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_ac6_the_overview_counts_paused_pairs(db_session: Session) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+    now = datetime.now(timezone.utc)
+    with _clock_at(now):
+        before = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=admin, db_session=db_session
+        )
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.PAUSED)
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.PAUSED)
+    _create_cc_pair(db_session)
+    # A deleting pair is neither active nor paused.
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.DELETING)
+
+    with _clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=admin, db_session=db_session
+        )
+
+    assert response.paused_connectors == before.paused_connectors + 2
+    assert response.active_connectors == before.active_connectors + 1
+    assert response.indexing_connectors == before.indexing_connectors
+    assert response.total_docs_indexed == before.total_docs_indexed
+
+
+def test_ac5_a_reader_counts_only_readable_paused_pairs(db_session: Session) -> None:
+    reader = create_test_user(db_session, "overview_reader")
+    now = datetime.now(timezone.utc)
+    with _clock_at(now):
+        before = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=reader, db_session=db_session
+        )
+    _create_cc_pair(db_session, ConnectorCredentialPairStatus.PAUSED)
+    # Private with no group of the reader's, so it stays out of their counts.
+    _create_cc_pair(
+        db_session, ConnectorCredentialPairStatus.PAUSED, AccessType.PRIVATE
+    )
+
+    with _clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_1, user=reader, db_session=db_session
+        )
+
+    assert response.paused_connectors == before.paused_connectors + 1

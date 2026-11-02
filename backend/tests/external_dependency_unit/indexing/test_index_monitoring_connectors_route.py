@@ -1,5 +1,6 @@
-"""Coverage for the indexing status page's connector list: buckets, sort, search,
-filter and queue place, and the row's open error count, whole entities included."""
+"""Coverage for the indexing status page's connector list: buckets, rank sort,
+search, filter and queue place, per-source counts across pages, the row's shared
+groups, and the row's open error count, whole entities included."""
 
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -13,14 +14,21 @@ from onyx.db.enums import (
     AccessType,
     CCPairRunKind,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     IndexingStatus,
+    PermissionSyncStatus,
 )
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    DocPermissionSyncAttempt,
+    ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
     IndexAttemptError,
+    UserGroup,
+    UserGroup__CCPairDataAccess,
+    UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.index_monitoring import get_indexing_connectors
@@ -44,6 +52,7 @@ def _create_cc_pair(
     status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     in_repeated_error_state: bool = False,
     source: DocumentSource = DocumentSource.GOOGLE_DRIVE,
+    access_type: AccessType = AccessType.PUBLIC,
 ) -> ConnectorCredentialPair:
     owner = create_test_user(db_session, "monitor_list_owner")
     owner.personal_name = "Monitor List Owner"
@@ -65,7 +74,7 @@ def _create_cc_pair(
         credential_id=credential.id,
         name=f"{prefix} {name}",
         status=status,
-        access_type=AccessType.PUBLIC,
+        access_type=access_type,
         in_repeated_error_state=in_repeated_error_state,
         creator_id=owner.id,
     )
@@ -100,6 +109,73 @@ def _index_attempt(
     return attempt
 
 
+def _open_error(
+    db_session: Session, cc_pair: ConnectorCredentialPair, attempt: IndexAttempt
+) -> None:
+    db_session.add(
+        IndexAttemptError(
+            index_attempt_id=attempt.id,
+            connector_credential_pair_id=cc_pair.id,
+            document_id=f"doc-{uuid4().hex[:8]}",
+            failure_message="document unreadable",
+            is_resolved=False,
+        )
+    )
+    db_session.commit()
+
+
+def _doc_permission_sync(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    status: PermissionSyncStatus = PermissionSyncStatus.IN_PROGRESS,
+) -> None:
+    db_session.add(
+        DocPermissionSyncAttempt(
+            connector_credential_pair_id=cc_pair.id,
+            status=status,
+            time_started=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+
+def _group_sync(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    status: PermissionSyncStatus = PermissionSyncStatus.IN_PROGRESS,
+) -> None:
+    db_session.add(
+        ExternalGroupPermissionSyncAttempt(
+            connector_credential_pair_id=cc_pair.id,
+            status=status,
+            time_started=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+
+def _share_with_groups(
+    db_session: Session, cc_pair: ConnectorCredentialPair, names: list[str]
+) -> None:
+    """Shares the pair with new groups the way pair creation does for a private
+    pair: each group both manages the pair and reads its documents."""
+    for name in names:
+        group = UserGroup(name=name)
+        db_session.add(group)
+        db_session.flush()
+        db_session.add(
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=group.id,
+                cc_pair_id=cc_pair.id,
+                role=ConnectorManageRole.OPERATOR,
+            )
+        )
+        db_session.add(
+            UserGroup__CCPairDataAccess(user_group_id=group.id, cc_pair_id=cc_pair.id)
+        )
+    db_session.commit()
+
+
 def _connectors(
     db_session: Session,
     q: str,
@@ -118,73 +194,95 @@ def _connectors(
     )
 
 
-def test_pairs_sort_by_bucket_then_source_then_name_and_the_filter_keeps_the_counts(
+def test_ac2_pairs_sort_by_rank_then_name_and_open_errors_take_rank_three(
     db_session: Session,
 ) -> None:
     now = datetime.now(timezone.utc)
     prefix = _prefix()
+    # Indexing and Syncing share rank 1, so the name orders them.
+    indexing = _create_cc_pair(db_session, prefix, "b indexing")
+    syncing = _create_cc_pair(db_session, prefix, "a syncing")
+    failed = _create_cc_pair(db_session, prefix, "failed", in_repeated_error_state=True)
+    # Open errors outrank the name: "y" sorts after every other name.
+    errors = _create_cc_pair(db_session, prefix, "y errors")
+    deleting = _create_cc_pair(
+        db_session, prefix, "deleting", ConnectorCredentialPairStatus.DELETING
+    )
+    scheduled = _create_cc_pair(db_session, prefix, "scheduled")
     indexed_b = _create_cc_pair(db_session, prefix, "b indexed")
-    indexed_a = _create_cc_pair(db_session, prefix, "a indexed")
-    # Confluence sorts before Google Drive within a bucket, whatever the names say.
+    # Case-insensitive: "C" sorts after "b". The source plays no part.
+    indexed_c = _create_cc_pair(db_session, prefix, "C indexed")
     indexed_z = _create_cc_pair(
         db_session, prefix, "z indexed", source=DocumentSource.CONFLUENCE
     )
-    indexing = _create_cc_pair(db_session, prefix, "indexing")
     paused = _create_cc_pair(
         db_session, prefix, "paused", ConnectorCredentialPairStatus.PAUSED
     )
-    erroring = _create_cc_pair(
-        db_session, prefix, "erroring", in_repeated_error_state=True
+    running = _index_attempt(db_session, indexing, IndexingStatus.IN_PROGRESS, now)
+    # A running pair with open errors keeps rank 1.
+    _open_error(db_session, indexing, running)
+    _index_attempt(db_session, syncing, IndexingStatus.SUCCESS, now)
+    _doc_permission_sync(db_session, syncing)
+    failed_attempt = _index_attempt(db_session, failed, IndexingStatus.SUCCESS, now)
+    # A failed pair with open errors keeps rank 2.
+    _open_error(db_session, failed, failed_attempt)
+    errored = _index_attempt(
+        db_session, errors, IndexingStatus.COMPLETED_WITH_ERRORS, now
     )
-    fresh = _create_cc_pair(db_session, prefix, "fresh")
-    canceled = _create_cc_pair(db_session, prefix, "canceled")
-    _index_attempt(db_session, indexed_b, IndexingStatus.SUCCESS, now)
-    _index_attempt(db_session, indexed_a, IndexingStatus.COMPLETED_WITH_ERRORS, now)
-    _index_attempt(db_session, indexed_z, IndexingStatus.SUCCESS, now)
-    _index_attempt(db_session, indexing, IndexingStatus.IN_PROGRESS, now)
-    # A paused pair's attempt does not pull it out of the paused bucket.
-    _index_attempt(db_session, paused, IndexingStatus.SUCCESS, now)
-    _index_attempt(db_session, erroring, IndexingStatus.SUCCESS, now)
-    # A canceled run never completed, so the pair waits for its next run.
-    _index_attempt(db_session, canceled, IndexingStatus.CANCELED, now)
+    _open_error(db_session, errors, errored)
+    for cc_pair in (indexed_b, indexed_c, indexed_z, paused):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
 
     response = _connectors(db_session, prefix)
 
-    assert [row.name for row in response.items] == [
+    expected = [
+        syncing.name,
         indexing.name,
-        erroring.name,
-        paused.name,
-        canceled.name,
-        fresh.name,
-        indexed_z.name,
-        indexed_a.name,
+        failed.name,
+        errors.name,
+        deleting.name,
+        scheduled.name,
         indexed_b.name,
+        indexed_c.name,
+        indexed_z.name,
+        paused.name,
     ]
-    assert response.total_items == 8
+    assert [row.name for row in response.items] == expected
+    by_name = {row.name: row for row in response.items}
+    # Open errors are a count, not a state.
+    assert by_name[errors.name].status == IndexingConnectorStatus.INDEXED
+    assert by_name[errors.name].open_error_count == 1
+    assert by_name[syncing.name].status == IndexingConnectorStatus.SYNCING
+    assert response.total_items == len(expected)
     assert response.status_counts == {
         IndexingConnectorStatus.INDEXING: 1,
+        IndexingConnectorStatus.SYNCING: 1,
         IndexingConnectorStatus.FAILED: 1,
+        IndexingConnectorStatus.DELETING: 1,
+        IndexingConnectorStatus.SCHEDULED: 1,
+        IndexingConnectorStatus.INDEXED: 4,
         IndexingConnectorStatus.PAUSED: 1,
-        IndexingConnectorStatus.DELETING: 0,
-        IndexingConnectorStatus.SCHEDULED: 2,
-        IndexingConnectorStatus.INDEXED: 3,
     }
-    by_name = {row.name: row for row in response.items}
-    assert by_name[fresh.name].latest_index_attempt is None
-    assert by_name[canceled.name].queue_position is None
-    assert by_name[indexed_a.name].latest_index_attempt is not None
-    assert by_name[indexed_a.name].creator_email is not None
-    assert by_name[indexed_a.name].creator_name == "Monitor List Owner"
-    assert by_name[indexed_a.name].permissions["operate"] is True
+    assert by_name[indexed_b.name].creator_name == "Monitor List Owner"
+    assert by_name[indexed_b.name].permissions["operate"] is True
+
+    # The open-errors rank holds across page boundaries, not only within a page.
+    paged = [
+        row.name
+        for page_num in range(4)
+        for row in _connectors(db_session, prefix, page_num=page_num, page_size=3).items
+    ]
+    assert paged == expected
 
     filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.INDEXED)
 
     assert [row.name for row in filtered.items] == [
-        indexed_z.name,
-        indexed_a.name,
+        errors.name,
         indexed_b.name,
+        indexed_c.name,
+        indexed_z.name,
     ]
-    assert filtered.total_items == 3
+    assert filtered.total_items == 4
     assert filtered.status_counts == response.status_counts
 
 
@@ -320,3 +418,192 @@ def test_a_rows_open_error_count_includes_whole_entity_failures(
     assert latest is not None
     assert latest.open_doc_error_count == 0
     assert rows[resolved.name].open_error_count == 0
+
+
+def test_ac1_a_running_permission_or_group_sync_reads_syncing_unless_an_index_runs(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    doc_sync = _create_cc_pair(db_session, prefix, "doc sync")
+    group_sync = _create_cc_pair(db_session, prefix, "group sync")
+    both = _create_cc_pair(db_session, prefix, "index and sync")
+    finished = _create_cc_pair(db_session, prefix, "sync finished")
+    for cc_pair in (doc_sync, group_sync, finished):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+    _index_attempt(db_session, both, IndexingStatus.IN_PROGRESS, now)
+    _doc_permission_sync(db_session, doc_sync)
+    _group_sync(db_session, group_sync)
+    _doc_permission_sync(db_session, both)
+    _group_sync(db_session, both)
+    # Only a sync that runs now counts.
+    _doc_permission_sync(db_session, finished, PermissionSyncStatus.SUCCESS)
+    _group_sync(db_session, finished, PermissionSyncStatus.SUCCESS)
+
+    response = _connectors(db_session, prefix)
+
+    statuses = {row.name: row.status for row in response.items}
+    assert statuses == {
+        doc_sync.name: IndexingConnectorStatus.SYNCING,
+        group_sync.name: IndexingConnectorStatus.SYNCING,
+        both.name: IndexingConnectorStatus.INDEXING,
+        finished.name: IndexingConnectorStatus.INDEXED,
+    }
+    assert response.status_counts[IndexingConnectorStatus.SYNCING] == 2
+    assert response.status_counts[IndexingConnectorStatus.INDEXING] == 1
+
+
+def test_ac3_source_counts_hold_the_full_counts_on_every_page(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    gmail_a = _create_cc_pair(
+        db_session, prefix, "a gmail", source=DocumentSource.GMAIL
+    )
+    gmail_b = _create_cc_pair(
+        db_session, prefix, "b gmail", source=DocumentSource.GMAIL
+    )
+    drive = _create_cc_pair(db_session, prefix, "c drive")
+    gmail_paused = _create_cc_pair(
+        db_session,
+        prefix,
+        "d gmail paused",
+        ConnectorCredentialPairStatus.PAUSED,
+        source=DocumentSource.GMAIL,
+    )
+    for cc_pair in (gmail_a, gmail_b, drive, gmail_paused):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+
+    pages = [
+        _connectors(db_session, prefix, page_num=page_num, page_size=1)
+        for page_num in range(4)
+    ]
+
+    assert [page.items[0].name for page in pages] == [
+        gmail_a.name,
+        gmail_b.name,
+        drive.name,
+        gmail_paused.name,
+    ]
+    for page in pages:
+        assert page.source_counts == {
+            DocumentSource.GMAIL: 3,
+            DocumentSource.GOOGLE_DRIVE: 1,
+        }
+
+    # The status filter and the search narrow the counts too.
+    indexed = _connectors(
+        db_session, prefix, status=IndexingConnectorStatus.INDEXED, page_size=1
+    )
+    assert indexed.source_counts == {
+        DocumentSource.GMAIL: 2,
+        DocumentSource.GOOGLE_DRIVE: 1,
+    }
+    searched = _connectors(db_session, f"{prefix} c drive")
+    assert searched.source_counts == {DocumentSource.GOOGLE_DRIVE: 1}
+
+
+def test_ac3_no_matching_pairs_gives_empty_counts(db_session: Session) -> None:
+    response = _connectors(db_session, _prefix())
+
+    assert response.items == []
+    assert response.source_counts == {}
+    assert response.status_counts == dict.fromkeys(IndexingConnectorStatus, 0)
+    assert IndexingConnectorStatus.SYNCING in response.status_counts
+
+
+def test_ac4_a_private_row_names_its_shared_groups(db_session: Session) -> None:
+    prefix = _prefix()
+    private = _create_cc_pair(
+        db_session, prefix, "private", access_type=AccessType.PRIVATE
+    )
+    public = _create_cc_pair(db_session, prefix, "public")
+    synced = _create_cc_pair(db_session, prefix, "synced", access_type=AccessType.SYNC)
+    group_names = [f"{prefix} group {index}" for index in range(3)]
+    _share_with_groups(db_session, private, group_names)
+    # Groups that manage a public or synced pair do not make it shared.
+    _share_with_groups(db_session, public, [f"{prefix} public managers"])
+    _share_with_groups(db_session, synced, [f"{prefix} synced managers"])
+
+    rows = {row.name: row for row in _connectors(db_session, prefix).items}
+
+    assert rows[private.name].group_count == 3
+    assert sorted(rows[private.name].group_names) == sorted(group_names)
+    for name in (public.name, synced.name):
+        assert rows[name].group_count == 0
+        assert rows[name].group_names == []
+
+
+def test_ac5_a_scoped_reader_counts_only_readable_pairs(db_session: Session) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    reader = create_test_user(db_session, "monitor_list_reader")
+    readable_paused = _create_cc_pair(
+        db_session, prefix, "readable paused", ConnectorCredentialPairStatus.PAUSED
+    )
+    readable_gmail = _create_cc_pair(
+        db_session, prefix, "readable gmail", source=DocumentSource.GMAIL
+    )
+    # Private with no group the reader belongs to, so the reader cannot read it.
+    hidden_paused = _create_cc_pair(
+        db_session,
+        prefix,
+        "hidden paused",
+        ConnectorCredentialPairStatus.PAUSED,
+        source=DocumentSource.GMAIL,
+        access_type=AccessType.PRIVATE,
+    )
+    hidden_syncing = _create_cc_pair(
+        db_session, prefix, "hidden syncing", access_type=AccessType.PRIVATE
+    )
+    for cc_pair in (readable_paused, readable_gmail, hidden_paused, hidden_syncing):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+    _doc_permission_sync(db_session, hidden_syncing)
+
+    response = get_indexing_connectors(
+        page_num=0,
+        page_size=20,
+        q=prefix,
+        status=None,
+        user=reader,
+        db_session=db_session,
+    )
+
+    assert {row.name for row in response.items} == {
+        readable_paused.name,
+        readable_gmail.name,
+    }
+    assert response.status_counts[IndexingConnectorStatus.PAUSED] == 1
+    assert response.status_counts[IndexingConnectorStatus.INDEXED] == 1
+    assert response.status_counts[IndexingConnectorStatus.SYNCING] == 0
+    assert sum(response.status_counts.values()) == 2
+    assert response.source_counts == {
+        DocumentSource.GOOGLE_DRIVE: 1,
+        DocumentSource.GMAIL: 1,
+    }
+
+
+def test_ac7_the_syncing_filter_returns_only_syncing_rows_and_keeps_every_count(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    syncing = _create_cc_pair(db_session, prefix, "syncing")
+    indexed = _create_cc_pair(db_session, prefix, "indexed")
+    paused = _create_cc_pair(
+        db_session, prefix, "paused", ConnectorCredentialPairStatus.PAUSED
+    )
+    for cc_pair in (syncing, indexed, paused):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+    _group_sync(db_session, syncing)
+
+    unfiltered = _connectors(db_session, prefix)
+    filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.SYNCING)
+
+    assert [row.name for row in filtered.items] == [syncing.name]
+    assert filtered.total_items == 1
+    assert filtered.status_counts == unfiltered.status_counts
+    assert filtered.status_counts[IndexingConnectorStatus.SYNCING] == 1
+    assert filtered.status_counts[IndexingConnectorStatus.INDEXED] == 1
+    assert filtered.status_counts[IndexingConnectorStatus.PAUSED] == 1
