@@ -5,7 +5,7 @@ both build from this registry. It mirrors `connectors/registry.py`, which maps
 a source to its connector class, so the two seams read the same way.
 """
 
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import WEBHOOK_PUBLIC_URL
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox.models import WebhookSourceSpec
 
@@ -58,11 +58,11 @@ def registered_webhook_sources() -> list[WebhookSourceSpec]:
 def webhook_callback_url(slug: str, endpoint: str = "") -> str:
     """The URL an admin registers with the provider.
 
-    Built from WEB_DOMAIN because every deployment fronts the webhook server
-    at /webhook on the same host: the Helm nginx and ingress route it there,
-    and so does the Compose nginx.
+    `WEBHOOK_PUBLIC_URL` defaults to WEB_DOMAIN, which is right whenever one
+    host fronts both; the Helm webhook ingress uses `ingress.api.host`, so a
+    split-host deployment sets it.
     """
-    return f"{WEB_DOMAIN.rstrip('/')}/webhook/{slug}{endpoint}"
+    return f"{WEBHOOK_PUBLIC_URL.rstrip('/')}/webhook/{slug}{endpoint}"
 
 
 def webhook_source_for(source: DocumentSource) -> WebhookSourceSpec | None:

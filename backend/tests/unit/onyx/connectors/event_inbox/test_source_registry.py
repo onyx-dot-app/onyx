@@ -210,6 +210,9 @@ def test_one_endpoint_is_the_slug_itself() -> None:
         ("/a", "/a"),
         ("summary",),
         ("/summary/",),
+        ("/summary?x=1",),
+        ("/summary#frag",),
+        ("/sum%2Fmary",),
     ],
 )
 def test_an_endpoint_that_is_not_a_path_is_refused(endpoints: tuple[str, ...]) -> None:

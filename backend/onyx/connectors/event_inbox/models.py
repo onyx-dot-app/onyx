@@ -91,6 +91,12 @@ class WebhookSourceSpec(BaseModel):
                     f"Webhook endpoint {endpoint!r} of {self.slug} must start "
                     'with "/" or be "".'
                 )
+            if any(character in endpoint for character in "?#%"):
+                raise ValueError(
+                    f"Webhook endpoint {endpoint!r} of {self.slug} holds a "
+                    "URL delimiter, so it would serve a different path than "
+                    "the one an admin pastes into the provider."
+                )
             if endpoint.endswith("/"):
                 raise ValueError(
                     f"Webhook endpoint {endpoint!r} of {self.slug} ends with "
