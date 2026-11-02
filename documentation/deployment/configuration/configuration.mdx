@@ -276,6 +276,13 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
     `WEBHOOK_PUBLIC_URL`: The public URL where providers reach the webhook server. It defaults to `WEB_DOMAIN`.
     Set it when the API and web hosts are different, because the Helm webhook ingress is served from the API host.
     Onyx shows callback URLs built from this value, and you paste them into each provider's console.
+
+    `EXTRA_EVENT_SOURCE_MODULES`:
+    Comma-separated Python module paths for event-based connectors installed beside Onyx rather than shipped in it.
+    Each module registers itself when imported. Install the package so that the API server,
+    the webhook server and the docfetching worker can all import it; each loads these modules itself.
+    A path that cannot be imported is logged and skipped,
+    so one bad entry disables one connector rather than the deployment.
   </Accordion>
 
   <Accordion title="Craft Configuration">
