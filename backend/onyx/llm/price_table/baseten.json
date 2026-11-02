@@ -1,6 +1,39 @@
 {
   "aliases": {},
   "models": {
+    "decision-models/baseten-elephant-9b-latest": {
+      "cost": {
+        "input": 0.035,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 16384
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-elephant-9b-latest"
+    },
+    "decision-models/baseten-joey-2b-latest": {
+      "cost": {
+        "input": 0.01,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 16384
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-joey-2b-latest"
+    },
+    "decision-models/baseten-mammoth-27b-latest": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 16384
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-mammoth-27b-latest"
+    },
     "deepseek-ai/DeepSeek-V4-Flash-0731": {
       "attachment": false,
       "cost": {

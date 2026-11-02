@@ -27,7 +27,7 @@ Match kubectl to the cluster's supported version skew. Set `KIND_NODE_IMAGE` whe
 make craft-doctor
 kind get clusters
 kubectl config get-contexts
-telepresence status --format json
+telepresence status --output json
 make craft-up
 ```
 

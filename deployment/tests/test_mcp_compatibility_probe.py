@@ -58,7 +58,7 @@ def test_deployed_probe_fails_on_legacy_discovery_regression(
 
         def do_POST(self) -> None:
             self.send_response(bare_status if self.path == "/mcp" else 401)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "0")
             origin: str = f"http://127.0.0.1:{server.server_port}"
             self.send_header(
                 "WWW-Authenticate",
@@ -94,7 +94,7 @@ def test_deployed_probe_fails_on_legacy_discovery_regression(
         elif resource_suffix:
             assert "resource or authorization server mismatch" in result.stderr
         elif bare_status != 401:
-            assert "MCP initialize /mcp: expected JSON HTTP 401" in result.stderr
+            assert "MCP initialize /mcp: expected HTTP 401" in result.stderr
         else:
             assert "PASS unauthenticated MCP challenge" in result.stdout
             assert "PASS unauthenticated MCP challenge /mcp/" in result.stdout
