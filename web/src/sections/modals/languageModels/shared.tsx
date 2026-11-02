@@ -549,6 +549,7 @@ function inherentOrder(models: ModelConfiguration[]): string[] {
 interface ModelListLayout {
   order: string[];
   foldedCount: number;
+  sortedByName: boolean;
 }
 
 /** Rows only move on open, fold and unfold, never on a checkbox change. */
@@ -556,6 +557,7 @@ function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
   const selected = models.filter((m) => m.is_visible).length;
   return {
     order: inherentOrder(models),
+    sortedByName: models.some((m) => hasModelMetadata(m)),
     foldedCount: Math.min(
       Math.max(selected, FOLDED_MIN_MODELS),
       FOLDED_MAX_MODELS
@@ -801,6 +803,7 @@ export function ModelSelectionField({
     const known = new Set(layout?.order);
     if (
       layout === null ||
+      layout.sortedByName !== models.some((m) => hasModelMetadata(m)) ||
       models.some((m) => !known.has(m.name) && !typedNames.has(m.name))
     ) {
       setLayout(foldedLayout(models));
@@ -831,6 +834,7 @@ export function ModelSelectionField({
           ...inherentOrder(models).filter((name) => !shownSet.has(name)),
         ],
         foldedCount: layout.foldedCount,
+        sortedByName: layout.sortedByName,
       });
     }
     setIsExpanded(!isExpanded);
