@@ -93,6 +93,8 @@ export interface DropdownRowProps {
   "aria-selected"?: boolean;
   "aria-disabled"?: boolean;
   "data-index": number;
+  /** Set when the row's text is selectable (`selectableText`). */
+  "data-selectable-text"?: true;
   tabIndex: -1;
   onClick: (event: React.MouseEvent) => void;
   onMouseDown: (event: React.MouseEvent) => void;
@@ -110,6 +112,11 @@ export interface DropdownCustom extends DropdownRowBase {
   onSecondary?: (views: DropdownViews) => void;
   /** Stay open after `onActivate`. */
   keepOpen?: boolean;
+  /**
+   * The pointer can select the row's text, for example to copy a value.
+   * A press there then moves focus off the trigger, into the list.
+   */
+  selectableText?: boolean;
   render: (row: DropdownRowState) => React.ReactNode;
 }
 

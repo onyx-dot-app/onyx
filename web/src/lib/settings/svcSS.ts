@@ -8,7 +8,7 @@ import {
 import { CUSTOM_ANALYTICS_ENABLED, HOST_URL } from "@/lib/constants";
 import { fetchSS } from "@/lib/utilsSS";
 import { DEFAULT_LOCALE } from "@/i18n/config";
-import { getWebVersion } from "@/lib/version";
+import { getWebVersion } from "@/lib/app/utils";
 
 export async function fetchStandardSettingsSS(): Promise<Settings | null> {
   try {

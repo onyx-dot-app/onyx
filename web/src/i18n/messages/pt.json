@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "Commit"
+      },
+      "commitDate": {
+        "label": "Data do commit"
+      },
+      "instanceUrl": {
+        "label": "URL da instância"
+      },
+      "label": "Sobre",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "Indisponível",
+      "version": {
+        "label": "Versão"
+      }
+    },
     "accountFallback": {
       "label": "Conta"
     },

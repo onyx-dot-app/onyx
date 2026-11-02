@@ -40,10 +40,7 @@ jest.mock("@/lib/app/components", () => ({
   ...jest.requireActual("@/lib/app/components"),
   SidebarLogoMark: () => null,
   SidebarWordmark: () => null,
-}));
-jest.mock("@/sections/sidebar/AccountPopover", () => ({
-  __esModule: true,
-  default: () => null,
+  AccountPopover: () => null,
 }));
 jest.mock("@/app/craft/components/OpencodeDebugLogs", () => ({
   __esModule: true,

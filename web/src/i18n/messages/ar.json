@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "الإيداع (Commit)"
+      },
+      "commitDate": {
+        "label": "تاريخ الإيداع"
+      },
+      "instanceUrl": {
+        "label": "عنوان URL للمثيل"
+      },
+      "label": "حول",
+      "ref": {
+        "label": "المرجع"
+      },
+      "unavailable": "غير متوفر",
+      "version": {
+        "label": "الإصدار"
+      }
+    },
     "accountFallback": {
       "label": "الحساب"
     },

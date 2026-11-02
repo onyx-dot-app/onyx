@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "提交"
+      },
+      "commitDate": {
+        "label": "提交日期"
+      },
+      "instanceUrl": {
+        "label": "实例 URL"
+      },
+      "label": "关于",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "不可用",
+      "version": {
+        "label": "版本"
+      }
+    },
     "accountFallback": {
       "label": "账户"
     },

@@ -9,12 +9,17 @@ import {
   Card,
   Divider,
   Modal,
-  OverflowText,
   SelectCard,
   Text,
   Tooltip,
 } from "@opal/components";
-import { Content, ContentAction, Section, toast } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  KeyValue,
+  Section,
+  toast,
+} from "@opal/layouts";
 import {
   SvgArrowRightCircle,
   SvgCheckSquare,
@@ -42,35 +47,6 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { formatDateLog, formatDateTimeLog } from "@/lib/dateUtils";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
-
-interface DetailRowProps {
-  label: string;
-  value: string;
-  /** Sets the value in the mono font, as for a secret. */
-  mono?: boolean;
-}
-function DetailRow({ label, value, mono = false }: DetailRowProps) {
-  return (
-    <Section flexDirection="row" gap={4}>
-      {/* Each side is capped at the form's input column width, and a long
-      label or value is cut with its full text on hover. */}
-      <div className="min-w-0 max-w-(--block-width-form-input-column-max)">
-        <OverflowText as="p" font="main-ui-action" color="text-03">
-          {label}
-        </OverflowText>
-      </div>
-      <div className="ms-auto min-w-0 max-w-(--block-width-form-input-column-max) flex-1 text-end">
-        <OverflowText
-          as="p"
-          font={mono ? "main-ui-mono" : "main-ui-body"}
-          color="text-04"
-        >
-          {value}
-        </OverflowText>
-      </div>
-    </Section>
-  );
-}
 
 interface AuthenticationAccountCardProps {
   /** The saved account this card shows. */
@@ -419,7 +395,7 @@ export default function AuthenticationAccountCard({
                     }
                   />
                   {details.method && (
-                    <DetailRow
+                    <KeyValue
                       label={t("authenticationType.label")}
                       value={tCredentialCopy(
                         `methods.labels.${details.method.label}`
@@ -427,7 +403,7 @@ export default function AuthenticationAccountCard({
                     />
                   )}
                   {details.fields.map(({ key, field, value }) => (
-                    <DetailRow
+                    <KeyValue
                       key={key}
                       label={fieldCopy(key).title}
                       value={value}
