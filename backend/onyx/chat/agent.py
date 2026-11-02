@@ -48,6 +48,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
@@ -92,6 +93,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
         self.application_tools = list(tools)
+        self.stages_files = any(tool.name == PYTHON_TOOL_NAME for tool in tools)
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context
@@ -326,8 +328,9 @@ class ChatAgent(Agent, RestorableFeature):
     def _finalize_tool(
         self, _context: ToolCallContext, result: ToolResult
     ) -> ToolResult:
-        if isinstance(result.details, SearchDocsResponse):
+        if self.stages_files and isinstance(result.details, SearchDocsResponse):
             search = result.details
+            known_file_ids = {file.file_id for file in self.chat_files if file.file_id}
             result.details = ChatSearchResult(
                 queries=search.queries,
                 sources=search.sources,
@@ -337,7 +340,11 @@ class ChatAgent(Agent, RestorableFeature):
                 citation_mapping=search.citation_mapping,
                 displayed_docs=search.displayed_docs,
                 staged_files=build_python_chat_files_from_search_docs(
-                    search.search_docs
+                    [
+                        doc
+                        for doc in search.search_docs
+                        if doc.file_id not in known_file_ids
+                    ]
                 ),
             )
         return result
