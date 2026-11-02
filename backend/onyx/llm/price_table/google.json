@@ -110,7 +110,8 @@
         "output": 32768
       },
       "mode": "image_generation",
-      "name": "gemini-2.0-flash-exp-image-generation"
+      "name": "gemini-2.0-flash-exp-image-generation",
+      "status": "deprecated"
     },
     "gemini-2.5-computer-use-preview-10-2025": {
       "attachment": true,
@@ -471,7 +472,8 @@
         "output": 32768
       },
       "mode": "image_generation",
-      "name": "gemini-3-pro-image-preview"
+      "name": "gemini-3-pro-image-preview",
+      "status": "deprecated"
     },
     "gemini-3.1-flash-image": {
       "attachment": true,
@@ -516,7 +518,8 @@
         "output": 65536
       },
       "mode": "image_generation",
-      "name": "gemini-3.1-flash-image-preview"
+      "name": "gemini-3.1-flash-image-preview",
+      "status": "deprecated"
     },
     "gemini-3.1-flash-lite": {
       "attachment": true,
@@ -1794,7 +1797,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "veo-3.1-fast-generate-preview"
+      "name": "veo-3.1-fast-generate-preview",
+      "status": "deprecated"
     },
     "veo-3.1-generate-001": {
       "cost": {
@@ -1814,7 +1818,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "veo-3.1-generate-preview"
+      "name": "veo-3.1-generate-preview",
+      "status": "deprecated"
     },
     "veo-3.1-lite-generate-preview": {
       "cost": {
@@ -1824,7 +1829,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "veo-3.1-lite-generate-preview"
+      "name": "veo-3.1-lite-generate-preview",
+      "status": "deprecated"
     }
   },
   "models_dev_providers": [

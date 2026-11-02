@@ -2490,7 +2490,8 @@
         "input": 5.0
       },
       "mode": "image_generation",
-      "name": "gpt-image-1"
+      "name": "gpt-image-1",
+      "status": "deprecated"
     },
     "gpt-image-1-mini": {
       "attachment": true,
@@ -2838,7 +2839,8 @@
         "image_input": 0.167
       },
       "mode": "image_generation",
-      "name": "high/1024-x-1024/gpt-image-1"
+      "name": "high/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1024-x-1024/gpt-image-1.5": {
       "cost": {
@@ -2859,7 +2861,8 @@
         "image_input": 0.25
       },
       "mode": "image_generation",
-      "name": "high/1024-x-1536/gpt-image-1"
+      "name": "high/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1024-x-1536/gpt-image-1.5": {
       "cost": {
@@ -2880,7 +2883,8 @@
         "image_input": 0.25
       },
       "mode": "image_generation",
-      "name": "high/1536-x-1024/gpt-image-1"
+      "name": "high/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1536-x-1024/gpt-image-1.5": {
       "cost": {
@@ -2901,7 +2905,8 @@
         "image_input": 0.011
       },
       "mode": "image_generation",
-      "name": "low/1024-x-1024/gpt-image-1"
+      "name": "low/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1024-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -2929,7 +2934,8 @@
         "image_input": 0.016
       },
       "mode": "image_generation",
-      "name": "low/1024-x-1536/gpt-image-1"
+      "name": "low/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1024-x-1536/gpt-image-1-mini": {
       "cost": {
@@ -2957,7 +2963,8 @@
         "image_input": 0.016
       },
       "mode": "image_generation",
-      "name": "low/1536-x-1024/gpt-image-1"
+      "name": "low/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1536-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -2985,7 +2992,8 @@
         "image_input": 0.042
       },
       "mode": "image_generation",
-      "name": "medium/1024-x-1024/gpt-image-1"
+      "name": "medium/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1024-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -3013,7 +3021,8 @@
         "image_input": 0.063
       },
       "mode": "image_generation",
-      "name": "medium/1024-x-1536/gpt-image-1"
+      "name": "medium/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1024-x-1536/gpt-image-1-mini": {
       "cost": {
@@ -3041,7 +3050,8 @@
         "image_input": 0.063
       },
       "mode": "image_generation",
-      "name": "medium/1536-x-1024/gpt-image-1"
+      "name": "medium/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1536-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -3324,15 +3334,18 @@
     },
     "sora-2": {
       "mode": "video_generation",
-      "name": "sora-2"
+      "name": "sora-2",
+      "status": "deprecated"
     },
     "sora-2-pro": {
       "mode": "video_generation",
-      "name": "sora-2-pro"
+      "name": "sora-2-pro",
+      "status": "deprecated"
     },
     "sora-2-pro-high-res": {
       "mode": "video_generation",
-      "name": "sora-2-pro-high-res"
+      "name": "sora-2-pro-high-res",
+      "status": "deprecated"
     },
     "standard/1024-x-1024/gpt-image-1.5": {
       "cost": {

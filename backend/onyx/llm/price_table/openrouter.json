@@ -3412,9 +3412,9 @@
     "google/gemma-4-26b-a4b-it": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.026,
-        "input": 0.052,
-        "output": 0.157
+        "cache_read": 0.05,
+        "input": 0.1,
+        "output": 0.3
       },
       "family": "gemma",
       "limit": {
@@ -4723,9 +4723,9 @@
     "minimax/minimax-m3.1-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.015,
-        "input": 0.15,
-        "output": 0.6
+        "cache_read": 0.0075,
+        "input": 0.075,
+        "output": 0.3
       },
       "family": "minimax",
       "limit": {
@@ -9028,14 +9028,14 @@
     "openai/gpt-oss-20b": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.03,
-        "output": 0.13
+        "cache_read": 0.009,
+        "input": 0.018,
+        "output": 0.09
       },
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 117964
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -11635,9 +11635,9 @@
     "tencent/hy3": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.033,
-        "input": 0.132,
-        "output": 0.528
+        "cache_read": 0.020625,
+        "input": 0.0825,
+        "output": 0.33
       },
       "family": "Hy",
       "limit": {
@@ -11692,9 +11692,9 @@
     "tencent/hy4-preview": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.042,
-        "input": 0.834,
-        "output": 2.501
+        "cache_read": 0.0378,
+        "input": 0.7506,
+        "output": 2.2509
       },
       "family": "Hy",
       "limit": {
@@ -13028,7 +13028,7 @@
     "z-ai/glm-5.3-flashx": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.09,
+        "cache_read": 0.075,
         "input": 0.37,
         "output": 1.25
       },
@@ -13058,7 +13058,7 @@
     "z-ai/glm-5.3-flashx-legal": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.09,
+        "cache_read": 0.075,
         "input": 0.37,
         "output": 1.25
       },
@@ -13363,7 +13363,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.035,
-        "input": 0.059,
+        "input": 0.0566,
         "output": 0.3
       },
       "family": "deepseek",
@@ -13763,8 +13763,10 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.5,
+        "cache_write": 0,
         "context_over_200k": {
           "cache_read": 1,
+          "cache_write": 0,
           "input": 4,
           "output": 12
         },
@@ -13773,6 +13775,7 @@
         "tiers": [
           {
             "cache_read": 1,
+            "cache_write": 0,
             "input": 4,
             "output": 12,
             "tier": {

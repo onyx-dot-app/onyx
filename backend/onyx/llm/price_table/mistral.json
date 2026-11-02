@@ -1164,7 +1164,8 @@
     },
     "mistral-ocr-4-0": {
       "mode": "ocr",
-      "name": "mistral-ocr-4-0"
+      "name": "mistral-ocr-4-0",
+      "status": "deprecated"
     },
     "mistral-ocr-4-1": {
       "mode": "ocr",

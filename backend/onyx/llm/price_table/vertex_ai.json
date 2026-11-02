@@ -639,7 +639,8 @@
         "output": 1.2
       },
       "mode": "ocr",
-      "name": "deepseek-ai/deepseek-ocr-maas"
+      "name": "deepseek-ai/deepseek-ocr-maas",
+      "status": "deprecated"
     },
     "deepseek-ai/deepseek-v3.1-maas": {
       "attachment": false,
@@ -2581,7 +2582,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "vertex_ai/veo-2.0-generate-001"
+      "name": "vertex_ai/veo-2.0-generate-001",
+      "status": "deprecated"
     },
     "vertex_ai/veo-3.0-fast-generate-001": {
       "cost": {
@@ -2591,7 +2593,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "vertex_ai/veo-3.0-fast-generate-001"
+      "name": "vertex_ai/veo-3.0-fast-generate-001",
+      "status": "deprecated"
     },
     "vertex_ai/veo-3.0-generate-001": {
       "cost": {
@@ -2601,7 +2604,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "vertex_ai/veo-3.0-generate-001"
+      "name": "vertex_ai/veo-3.0-generate-001",
+      "status": "deprecated"
     },
     "vertex_ai/veo-3.1-fast-generate-001": {
       "cost": {

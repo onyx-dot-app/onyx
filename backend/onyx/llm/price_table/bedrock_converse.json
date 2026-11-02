@@ -19,7 +19,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0"
+      "name": "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "1024-x-1024/50-steps/stability.stable-diffusion-xl-v1": {
       "cost": {
@@ -137,7 +138,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "amazon.nova-canvas-v1:0"
+      "name": "amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -300,7 +302,8 @@
         "image_input": 0.0
       },
       "mode": "image_generation",
-      "name": "amazon.titan-image-generator-v2"
+      "name": "amazon.titan-image-generator-v2",
+      "status": "deprecated"
     },
     "amazon.titan-image-generator-v2:0": {
       "cost": {
@@ -308,7 +311,8 @@
         "image_input": 0.0
       },
       "mode": "image_generation",
-      "name": "amazon.titan-image-generator-v2:0"
+      "name": "amazon.titan-image-generator-v2:0",
+      "status": "deprecated"
     },
     "anthropic.claude-fable-5": {
       "attachment": true,
@@ -5619,7 +5623,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "us.amazon.nova-canvas-v1:0"
+      "name": "us.amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "us.amazon.nova-lite-v1:0": {
       "attachment": true,

@@ -849,7 +849,8 @@
         "output": 4096
       },
       "mode": "realtime",
-      "name": "eu/gpt-4o-realtime-preview-2024-10-01"
+      "name": "eu/gpt-4o-realtime-preview-2024-10-01",
+      "status": "deprecated"
     },
     "eu/gpt-4o-realtime-preview-2024-12-17": {
       "cost": {
@@ -1223,7 +1224,8 @@
         "output": 4096
       },
       "mode": "realtime",
-      "name": "gpt-4o-realtime-preview-2024-10-01"
+      "name": "gpt-4o-realtime-preview-2024-10-01",
+      "status": "deprecated"
     },
     "gpt-4o-realtime-preview-2024-12-17": {
       "cost": {
@@ -1248,7 +1250,8 @@
         "output": 2000
       },
       "mode": "audio_transcription",
-      "name": "gpt-4o-transcribe"
+      "name": "gpt-4o-transcribe",
+      "status": "deprecated"
     },
     "gpt-4o-transcribe-diarize": {
       "cost": {
@@ -2823,7 +2826,8 @@
     },
     "high/1024-x-1024/gpt-image-1": {
       "mode": "image_generation",
-      "name": "high/1024-x-1024/gpt-image-1"
+      "name": "high/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1024-x-1024/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -2831,7 +2835,8 @@
     },
     "high/1024-x-1536/gpt-image-1": {
       "mode": "image_generation",
-      "name": "high/1024-x-1536/gpt-image-1"
+      "name": "high/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1024-x-1536/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -2839,7 +2844,8 @@
     },
     "high/1536-x-1024/gpt-image-1": {
       "mode": "image_generation",
-      "name": "high/1536-x-1024/gpt-image-1"
+      "name": "high/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1536-x-1024/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -3012,7 +3018,8 @@
     },
     "low/1024-x-1024/gpt-image-1": {
       "mode": "image_generation",
-      "name": "low/1024-x-1024/gpt-image-1"
+      "name": "low/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1024-x-1024/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -3020,7 +3027,8 @@
     },
     "low/1024-x-1536/gpt-image-1": {
       "mode": "image_generation",
-      "name": "low/1024-x-1536/gpt-image-1"
+      "name": "low/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1024-x-1536/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -3028,7 +3036,8 @@
     },
     "low/1536-x-1024/gpt-image-1": {
       "mode": "image_generation",
-      "name": "low/1536-x-1024/gpt-image-1"
+      "name": "low/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1536-x-1024/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -3036,7 +3045,8 @@
     },
     "medium/1024-x-1024/gpt-image-1": {
       "mode": "image_generation",
-      "name": "medium/1024-x-1024/gpt-image-1"
+      "name": "medium/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1024-x-1024/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -3044,7 +3054,8 @@
     },
     "medium/1024-x-1536/gpt-image-1": {
       "mode": "image_generation",
-      "name": "medium/1024-x-1536/gpt-image-1"
+      "name": "medium/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1024-x-1536/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -3052,7 +3063,8 @@
     },
     "medium/1536-x-1024/gpt-image-1": {
       "mode": "image_generation",
-      "name": "medium/1536-x-1024/gpt-image-1"
+      "name": "medium/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1536-x-1024/gpt-image-1-mini": {
       "mode": "image_generation",
@@ -3447,7 +3459,8 @@
     },
     "sora-2": {
       "mode": "video_generation",
-      "name": "sora-2"
+      "name": "sora-2",
+      "status": "deprecated"
     },
     "sora-2-pro": {
       "mode": "video_generation",
@@ -3633,7 +3646,8 @@
         "output": 4096
       },
       "mode": "realtime",
-      "name": "us/gpt-4o-realtime-preview-2024-10-01"
+      "name": "us/gpt-4o-realtime-preview-2024-10-01",
+      "status": "deprecated"
     },
     "us/gpt-4o-realtime-preview-2024-12-17": {
       "cost": {

@@ -4838,7 +4838,7 @@
       "release_date": "2026-10-13",
       "tool_call": true
     },
-    "meituan/longcat-2.5-preview": {
+    "meituan/longcat-2.5": {
       "attachment": true,
       "cost": {
         "cache_read": 0.006,
@@ -4859,11 +4859,10 @@
           "text"
         ]
       },
-      "name": "LongCat 2.5 Preview",
+      "name": "LongCat 2.5",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2026-09-25",
-      "temperature": false,
+      "release_date": "2026-11-02",
       "tool_call": true
     },
     "meta/llama-3.1-70b": {
@@ -11361,61 +11360,6 @@
       "temperature": false,
       "tool_call": false
     },
-    "xiaomi/mimo-v2.5": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.0025,
-        "input": 0.119,
-        "output": 0.238
-      },
-      "family": "mimo",
-      "limit": {
-        "context": 1050000,
-        "output": 131100
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "MiMo M2.5",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-22",
-      "temperature": true,
-      "tool_call": true
-    },
-    "xiaomi/mimo-v2.5-pro": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.0028,
-        "input": 0.3045,
-        "output": 0.609
-      },
-      "family": "mimo",
-      "limit": {
-        "context": 1050000,
-        "output": 131000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "MiMo V2.5 Pro",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-22",
-      "temperature": true,
-      "tool_call": true
-    },
     "xiaomi/mimo-v2.6-flash": {
       "attachment": true,
       "cost": {
@@ -11938,6 +11882,33 @@
       "release_date": "2026-08-26",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "zai/glm-5.3-flashx-legal": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "input": 0.37,
+        "output": 1.25
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM 5.3 FlashX Legal",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-02",
       "tool_call": true
     },
     "zai/glm-5v-turbo": {
