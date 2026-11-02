@@ -424,7 +424,6 @@ def test_saved_cancelled_answer_preserves_the_stop_reason(
 
 def test_history_keeps_deadline_cancellation_out_of_error_fields() -> None:
     failure = RunFailure(kind=RunFailureKind.DEADLINE, message="Deadline reached")
-    structured = True
     message = ChatMessage(
         id=1,
         chat_session_id=uuid4(),
@@ -435,9 +434,7 @@ def test_history_keeps_deadline_cancellation_out_of_error_fields() -> None:
         search_docs=[],
         chat_message_feedbacks=[],
         error=failure.message,
-        response_failure=RunFailure.model_validate_json(failure.model_dump_json())
-        if structured
-        else None,
+        response_failure=RunFailure.model_validate_json(failure.model_dump_json()),
         model_display_name="Test model",
         request_params={
             "model_name": "test",

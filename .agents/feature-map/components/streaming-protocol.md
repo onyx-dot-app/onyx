@@ -168,11 +168,11 @@ its background task end ([[#pure-asgi-middleware]]).
    `web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`
    returns `null` when no predicate matches. Keep that path for
    new families: an unguarded cast can throw instead.
-4. `emitter-sets-model-index` **Only `chat/emitter.py:Emitter.emit` sets
-   `model_index`.** It
-   overwrites what the producer set. Lines that `chat/execution.py:ChatTurnExecution`
-   or `ChatDelivery` publish directly, such as the user-cancel `OverallStop`
-   and the `STREAM_GAP` error, and heartbeats have no `model_index`.
+4. `emitter-sets-model-index` **`chat/emitter.py:Emitter.emit` sets a producer's
+   `model_index`.** It overwrites what the producer set. The turn's direct
+   cancellation fallbacks also set `Placement.model_index`, one per response
+   without a delivered stop. Direct `STREAM_GAP` errors and heartbeats have no
+   `model_index`.
 5. `not-every-line-is-a-packet` **Not every line is a packet, and heartbeats are
    the consumer's job.** Clients must check for `obj` before they read it, as
    `web/src/hooks/useChatSessionController.ts` does on resume. On web, the name

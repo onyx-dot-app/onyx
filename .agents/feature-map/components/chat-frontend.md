@@ -286,10 +286,11 @@ up its own branding.
    `latestMessageRenderComplete` is true and `queuedMessagesPaused` is false.
    It sends on the change into that state, not while in it, so clearing the
    pause alone sends nothing.
-   `AgentMessage` sets render-complete when its text has drawn;
+   `AgentMessage` sets render-complete when its text has drawn, or when a stop
+   arrives with no answer groups to render;
    `app/app/message/MultiModelResponseView.tsx` sets it when every visible
-   successful panel has drawn. A path that ends a stream without the text
-   renderer finishing must have `settleChatSession` set it
+   successful panel has completed. Other paths that end a stream without
+   completing rendering must have `settleChatSession` set it
    (`completeRendering`). If none does, the queue stalls with no error.
    `onSubmit` clears the pause; errors, failed saves and failed settlement set
    it.
