@@ -20,6 +20,7 @@ import {
   InputTypeIn,
   MessageCard,
   Tooltip,
+  Text,
 } from "@opal/components";
 import { SvgAlertTriangle, SvgBlocks, SvgShare, SvgTrash } from "@opal/icons";
 import {
@@ -27,9 +28,9 @@ import {
   InputHorizontal,
   InputVertical,
   SettingsLayouts,
+  Section,
   toast,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -52,7 +53,9 @@ import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
 import {
+  emptySkillSharingDraft,
   serializeSkillSharing,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
@@ -112,13 +115,11 @@ export default function SkillEditorPage({
   const [creationSharing, setCreationSharing] =
     useState<SkillSharingDraft | null>(null);
   const sharingDraft: SkillSharingDraft = {
-    owner: user ? { id: user.id, email: user.email } : null,
-    ownership_vacant: false,
-    user_permission: "OWNER",
-    user_shares: [],
-    group_shares: [],
+    ...emptySkillSharingDraft(
+      name || t("editor.header.createTitle"),
+      user ? { id: user.id, email: user.email } : null
+    ),
     public_permission: isCreatingForApp ? "VIEWER" : null,
-    installation_policy: "AVAILABLE",
     external_app: isCreatingForApp ? { name: externalAppName ?? "" } : null,
     ...creationSharing,
     name: name || t("editor.header.createTitle"),
@@ -490,7 +491,7 @@ export default function SkillEditorPage({
           }
           cancel={handleCancel}
           actions={[
-            ...(canManageSkill && (isCreating || skill)
+            ...(canManageSkill && !isCreating && skill
               ? [
                   <Button
                     key="sharing"
@@ -517,9 +518,9 @@ export default function SkillEditorPage({
 
         <SettingsLayouts.Body>
           {!isCreating && isLoading && (
-            <div className="flex min-h-40 items-center justify-center">
+            <Section height="auto" className="min-h-40">
               <IconLoader />
-            </div>
+            </Section>
           )}
 
           {!isCreating && error && !isLoading && (
@@ -575,6 +576,17 @@ export default function SkillEditorPage({
 
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
                 </>
+              )}
+
+              {isCreating && (
+                <SkillSharingSummary
+                  title={t("editor.creationAccess.title")}
+                  draft={sharingDraft}
+                  count={1}
+                  configureLabel={t("editor.management.sharing.edit.label")}
+                  disabled={fieldsLocked}
+                  onConfigure={() => setShareOpen(true)}
+                />
               )}
 
               <Section alignItems="stretch">
@@ -644,7 +656,13 @@ export default function SkillEditorPage({
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               <Section alignItems="stretch">
-                <div className="flex w-full items-start justify-between gap-2">
+                <Section
+                  height="auto"
+                  flexDirection="row"
+                  alignItems="start"
+                  justifyContent="between"
+                  gap={2}
+                >
                   <Content
                     title={t("editor.instructions.title")}
                     description={t("editor.instructions.description")}
@@ -655,7 +673,7 @@ export default function SkillEditorPage({
                     value={instructionsDisplayMode}
                     onChange={setInstructionsDisplayMode}
                   />
-                </div>
+                </Section>
 
                 <Card border="solid" rounding={4} padding={2}>
                   {instructionsDisplayMode === "raw" ? (

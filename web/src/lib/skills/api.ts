@@ -60,7 +60,8 @@ export async function previewGitHubSkills(
 
 export async function importGitHubSkills(
   preview: Pick<GitHubSkillsPreview, "repository" | "revision" | "subpath">,
-  paths: string[]
+  paths: string[],
+  sharing?: SkillShareUpdatePayload
 ): Promise<GitHubSkillsImportResult> {
   const res = await fetch("/api/skills/github/import", {
     method: "POST",
@@ -70,9 +71,61 @@ export async function importGitHubSkills(
       revision: preview.revision,
       subpath: preview.subpath,
       paths,
+      sharing,
     }),
   });
   return handle<GitHubSkillsImportResult>(res);
+}
+
+export async function uploadSkillBundles(
+  bundles: File[],
+  sharing?: SkillShareUpdatePayload
+): Promise<GitHubSkillsImportResult> {
+  const form = new FormData();
+  for (const bundle of bundles) form.append("bundles", bundle);
+  if (sharing) form.append("sharing", JSON.stringify(sharing));
+  return handle<GitHubSkillsImportResult>(
+    await fetch("/api/skills/custom/batch", { method: "POST", body: form })
+  );
+}
+
+export type BulkSkillRequest = {
+  skill_ids: string[];
+} & (
+  | { action: "share"; sharing: SkillShareUpdatePayload }
+  | { action: "enable" | "disable" | "delete" }
+);
+
+export interface BulkSkillResult {
+  succeeded: string[];
+  failed: { skill_id: string; detail: string }[];
+}
+
+export async function bulkUpdateSkills(
+  request: BulkSkillRequest
+): Promise<BulkSkillResult> {
+  const result: BulkSkillResult = { succeeded: [], failed: [] };
+  const batchSize = 500;
+  for (let offset = 0; offset < request.skill_ids.length; offset += batchSize) {
+    const skill_ids = request.skill_ids.slice(offset, offset + batchSize);
+    try {
+      const batch = await handle<BulkSkillResult>(
+        await fetch("/api/skills/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...request, skill_ids }),
+        })
+      );
+      result.succeeded.push(...batch.succeeded);
+      result.failed.push(...batch.failed);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      result.failed.push(
+        ...skill_ids.map((skill_id) => ({ skill_id, detail }))
+      );
+    }
+  }
+  return result;
 }
 
 export interface CreateCustomSkillInput {

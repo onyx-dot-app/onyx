@@ -12003,9 +12003,6 @@
         "builtin": {
           "label": "内置"
         },
-        "custom": {
-          "label": "自定义"
-        },
         "invalid": {
           "label": "无效"
         },
@@ -12017,6 +12014,12 @@
         },
         "unavailable": {
           "label": "不可用 - 点击了解更多"
+        },
+        "shared": {
+          "label": "共享"
+        },
+        "organization": {
+          "label": "组织"
         }
       },
       "toggle": {
@@ -16631,6 +16634,9 @@
         },
         "webSearch": {
           "label": "网页搜索"
+        },
+        "skills": {
+          "label": "技能"
         }
       },
       "sections": {
@@ -16944,6 +16950,9 @@
         "inspectFailed": "检查技能包失败",
         "saveFailed": "保存技能失败",
         "saved": "已保存“{name}”"
+      },
+      "creationAccess": {
+        "title": "访问权限"
       }
     },
     "modals": {
@@ -16982,6 +16991,13 @@
           "singleSkill": "每次只能上传一个技能。",
           "title": "文件要求",
           "zip": "ZIP 文件必须包含一个 SKILL.md 文件。"
+        },
+        "batch": {
+          "title": "上传技能的访问权限",
+          "selected": "{count, plural, one {已选择 # 个技能包} other {已选择 # 个技能包}}",
+          "result": "{imported, plural, one {已导入 # 个技能} other {已导入 # 个技能}}。{failed, plural, one {# 个失败} other {# 个失败}}。",
+          "failure": "{name}：{reason}",
+          "requirement": "选择多个 ZIP 文件以批量导入技能。每个 ZIP 必须包含一个技能。"
         }
       },
       "importGithub": {
@@ -17058,6 +17074,11 @@
         "unavailableFallback": "无法导入此技能。",
         "unavailableTag": {
           "label": "无法导入"
+        },
+        "sharing": {
+          "title": "导入技能的访问权限",
+          "configureButton": "配置访问权限",
+          "description": "这些访问设置适用于全部 {count, plural, one {# 个所选技能} other {# 个所选技能}}。"
         }
       },
       "nameConflict": {
@@ -17166,11 +17187,15 @@
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
+      },
+      "tabs": {
+        "details": "详情",
+        "sharing": "共享"
       }
     },
     "page": {
       "browse": {
-        "title": "浏览技能"
+        "title": "选择技能"
       },
       "countSeparator": {
         "label": "{count, plural, one {技能} other {技能}}"
@@ -17198,8 +17223,8 @@
           "title": "没有匹配的技能"
         },
         "noSkills": {
-          "description": "尚无自定义技能与您共享，也未配置内置技能。",
-          "title": "没有可用的技能"
+          "title": "暂无自定义技能",
+          "description": "创建或导入技能，将其添加到技能库。"
         }
       },
       "focusedApp": {
@@ -17236,6 +17261,9 @@
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
         "refreshFailed": "{name} 已更新，但技能列表无法刷新。"
+      },
+      "builtins": {
+        "title": "内置技能（{count, number}）"
       }
     },
     "sections": {
@@ -17291,6 +17319,34 @@
           "readFailed": "无法读取上传的内容。"
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {组织中的所有人都可以访问此技能。} other {组织中的所有人都可以访问这些技能。}}",
+      "selected": "已与 {users, plural, one {# 人} other {# 人}}和 {groups, plural, one {# 个群组} other {# 个群组}}共享。",
+      "private": "{count, plural, one {只有你可以访问此技能。} other {只有你可以访问这些技能。}}"
+    },
+    "bulk": {
+      "adminDescription": "管理整个组织的技能和访问权限。",
+      "selectAll": "选择所有可见的自定义技能",
+      "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
+      "share": "分享",
+      "enable": "为我启用",
+      "disable": "为我禁用",
+      "delete": "删除",
+      "selectSkill": "选择 {name}",
+      "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
+      "failed": "无法更新技能。请重试。",
+      "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
+      "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
+      "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选技能。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选技能。此操作无法撤销。}}",
+      "shareTitle": "{count, plural, one {更新 # 个技能的访问权限} other {更新 # 个技能的访问权限}}",
+      "shareDescription": "将这些更改应用于每个所选技能。未更改的设置将保留当前值。",
+      "unchanged": "保持不变",
+      "everyone": "组织中的所有人",
+      "invitedOnly": "受邀人员和群组",
+      "addAccessDescription": "将这些人员和群组添加到每个所选技能。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
+      "apply": "{count, plural, one {应用于 # 个技能} other {应用于 # 个技能}}",
+      "moreActions": "更多操作"
     }
   },
   "opensearchHealth": {
