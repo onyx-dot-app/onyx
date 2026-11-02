@@ -11,8 +11,11 @@ from onyx.db.models import Persona, Tool, User
 from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.factory import get_default_llm
 from onyx.tools.tool_constructor import construct_tools
-from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
-from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+from tests.external_dependency_unit.conftest import (
+    create_test_user,
+    delete_test_user,
+    ensure_default_llm_provider,
+)
 
 USER_EMAIL_PREFIX = "disabled_tool_check_user"
 

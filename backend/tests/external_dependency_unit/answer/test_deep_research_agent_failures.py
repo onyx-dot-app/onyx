@@ -23,9 +23,11 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from tests.common.models import CI_OPENAI_MODEL
-from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import (
+    create_test_user,
+    ensure_default_llm_provider,
+)
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 FAST_TASK = "Research the alpha market"

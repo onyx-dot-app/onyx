@@ -1,21 +1,45 @@
 import logging
-from collections.abc import Generator
+import os
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
+from typing import Protocol
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import create_engine, delete
+from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
-from onyx.db.enums import AccountType, UserFileStatus
-from onyx.db.models import User, User__UserGroup, UserFile
+from onyx.db.enums import AccountType, LLMModelFlowType, UserFileStatus
+from onyx.db.llm import (
+    fetch_default_model,
+    remove_llm_provider,
+    update_default_model,
+    upsert_llm_provider,
+)
+from onyx.db.models import (
+    ChatSession,
+    MCPServer,
+    Persona,
+    Persona__User,
+    Tool,
+    User,
+    User__UserGroup,
+    UserFile,
+)
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
 from tests.external_dependency_unit.session_state_guard import (
     reset_leaked_session_settings,
@@ -166,11 +190,136 @@ def delete_test_user(db_session: Session, *users: User) -> None:
     membership first — user__user_group.user_id has no ON DELETE CASCADE, so a
     bare delete(user) raises ForeignKeyViolation. Mirrors the production delete
     path in onyx.db.users."""
-    user_ids = [user.id for user in users]
+    _delete_users(db_session, [user.id for user in users])
+
+
+def _delete_users(db_session: Session, user_ids: Sequence[UUID]) -> None:
     db_session.execute(
         delete(User__UserGroup).where(User__UserGroup.user_id.in_(user_ids))
     )
     db_session.execute(delete(User).where(User.__table__.c.id.in_(user_ids)))
+
+
+class MakeTestUser(Protocol):
+    def __call__(
+        self,
+        email_prefix: str,
+        account_type: AccountType = AccountType.STANDARD,
+        is_admin: bool = False,
+    ) -> User: ...
+
+
+def delete_test_users_and_owned_rows(
+    db_session: Session, user_ids: Sequence[UUID], emails: Sequence[str]
+) -> None:
+    """Delete test users with their chat sessions, personas, MCP servers and
+    tools. MCP tools and chat messages go by cascade."""
+    db_session.rollback()
+    persona_ids = select(Persona.id).where(Persona.user_id.in_(user_ids))
+    persona_id_list = list(db_session.scalars(persona_ids))
+    db_session.execute(
+        delete(ChatSession).where(
+            or_(
+                ChatSession.user_id.in_(user_ids),
+                ChatSession.persona_id.in_(persona_id_list),
+            )
+        )
+    )
+    db_session.execute(
+        delete(Persona__User).where(
+            or_(
+                Persona__User.user_id.in_(user_ids),
+                Persona__User.persona_id.in_(persona_id_list),
+            )
+        )
+    )
+    db_session.execute(delete(Persona).where(Persona.id.in_(persona_id_list)))
+    db_session.execute(delete(MCPServer).where(MCPServer.owner.in_(emails)))
+    db_session.execute(delete(Tool).where(Tool.user_id.in_(user_ids)))
+    _delete_users(db_session, user_ids)
+    db_session.commit()
+
+
+@pytest.fixture
+def make_test_user(db_session: Session) -> Generator[MakeTestUser, None, None]:
+    """Create users with `create_test_user`; teardown deletes them and the rows
+    they own."""
+    created: list[tuple[UUID, str]] = []
+
+    def make(
+        email_prefix: str,
+        account_type: AccountType = AccountType.STANDARD,
+        is_admin: bool = False,
+    ) -> User:
+        user = create_test_user(db_session, email_prefix, account_type, is_admin)
+        created.append((user.id, user.email))
+        return user
+
+    try:
+        yield make
+    finally:
+        if created:
+            delete_test_users_and_owned_rows(
+                db_session,
+                [user_id for user_id, _ in created],
+                [email for _, email in created],
+            )
+
+
+TEST_LLM_PROVIDER_NAME = "test-provider"
+
+
+def ensure_default_llm_provider(
+    db_session: Session, provider_name: str = TEST_LLM_PROVIDER_NAME
+) -> None:
+    """Make the test provider's model the default chat model."""
+    provider = upsert_llm_provider(
+        llm_provider_upsert_request=LLMProviderUpsertRequest(
+            name=provider_name,
+            provider=LlmProviderNames.OPENAI,
+            api_key=os.environ.get("OPENAI_API_KEY", "test"),
+            is_public=True,
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=CI_OPENAI_MODEL,
+                    is_visible=True,
+                )
+            ],
+            groups=[],
+        ),
+        db_session=db_session,
+    )
+    update_default_model(
+        db_session, provider.id, CI_OPENAI_MODEL, LLMModelFlowType.CHAT
+    )
+
+
+@contextmanager
+def temporary_default_llm_provider(db_session: Session) -> Generator[None, None, None]:
+    """Use a private test provider and restore the previous chat default."""
+    previous = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    previous_default = (
+        None if previous is None else (previous.llm_provider_id, previous.name)
+    )
+    provider_name = f"test-provider-{uuid4().hex}"
+    ensure_default_llm_provider(db_session, provider_name)
+    provider = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    assert provider is not None
+    provider_id = provider.llm_provider_id
+    try:
+        yield
+    finally:
+        db_session.rollback()
+        if previous_default is not None:
+            update_default_model(db_session, *previous_default, LLMModelFlowType.CHAT)
+        # Removing the temporary provider also removes its default-flow rows.
+        remove_llm_provider(db_session, provider_id)
+
+
+@pytest.fixture
+def default_llm_provider(db_session: Session) -> Generator[None, None, None]:
+    with temporary_default_llm_provider(db_session):
+        yield
 
 
 @pytest.fixture(scope="module")

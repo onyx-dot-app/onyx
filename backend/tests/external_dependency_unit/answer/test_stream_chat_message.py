@@ -23,13 +23,12 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolDocumentsDelta,
     SearchToolStart,
 )
-from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
     final_answer,
     submit_query,
 )
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.mock_content_provider import (
     MockWebContent,
     use_mock_content_provider,
@@ -47,7 +46,9 @@ from tests.external_dependency_unit.mock_search_provider import (
 )
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
-pytestmark = pytest.mark.usefixtures("full_deployment_setup", "mock_external_deps")
+pytestmark = pytest.mark.usefixtures(
+    "full_deployment_setup", "mock_external_deps", "default_llm_provider"
+)
 
 
 def tool_call(
@@ -64,9 +65,9 @@ def tool_call(
 def test_stream_chat_with_answer(
     db_session: Session,
     create_session: bool,
+    make_test_user: MakeTestUser,
 ) -> None:
-    ensure_default_llm_provider(db_session)
-    user = create_test_user(db_session, email_prefix="stream_answer")
+    user = make_test_user("stream_answer")
     session_id = None if create_session else create_chat_session(db_session, user).id
     llm = ScriptedLLM(
         [Delta(content="The capital of France is Paris.")], max_input_tokens=128000
@@ -86,9 +87,10 @@ def test_stream_chat_with_answer(
     )
 
 
-def test_stream_chat_with_search_and_openurl_tools(db_session: Session) -> None:
-    ensure_default_llm_provider(db_session)
-    user = create_test_user(db_session, email_prefix="stream_search")
+def test_stream_chat_with_search_and_openurl_tools(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    user = make_test_user("stream_search")
     session = create_chat_session(db_session, user)
     url = "https://weather.example.com/sydney"
     llm = ScriptedLLM(
@@ -146,9 +148,10 @@ def test_stream_chat_with_search_and_openurl_tools(db_session: Session) -> None:
     assert len(llm.requests) == 3
 
 
-def test_image_generation_tool(db_session: Session) -> None:
-    ensure_default_llm_provider(db_session)
-    user = create_test_user(db_session, email_prefix="stream_image")
+def test_image_generation_tool(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    user = make_test_user("stream_image")
     session = create_chat_session(db_session, user)
     llm = ScriptedLLM(
         [
@@ -183,9 +186,10 @@ def test_image_generation_tool(db_session: Session) -> None:
     assert images[0][0].url == "/api/chat/file/123"
 
 
-def test_parallel_internal_and_web_search_tool_calls(db_session: Session) -> None:
-    ensure_default_llm_provider(db_session)
-    user = create_test_user(db_session, email_prefix="stream_parallel")
+def test_parallel_internal_and_web_search_tool_calls(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    user = make_test_user("stream_parallel")
     session = create_chat_session(db_session, user)
     llm = ScriptedLLM(
         [
