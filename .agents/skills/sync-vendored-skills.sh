@@ -5,8 +5,9 @@
 ### <skills-dir>/<name>/SKILL.md, so a multi-skill repo needs one symlink
 ### per skill).
 ###
-### To vendor another skills repo, add an UPSTREAMS entry. The next run
-### imports it and creates its symlinks.
+### To vendor another skills repo, add an UPSTREAMS entry and add its
+### directory to the top-level `exclude` in .pre-commit-config.yaml. The next
+### run imports it and creates its symlinks.
 ###
 ### Run it from anywhere inside the repo with a clean working tree. It
 ### commits the sync (with the upstream commits in the subject) when an
@@ -70,18 +71,21 @@ for link in "${SKILLS_DIR}"/*; do
   fi
 done
 
-# Add symlinks for vendored skills that lack one.
+# Add symlinks for vendored skills that lack one. Skills live either at the
+# repo root (<dir>/<name>/SKILL.md) or under skills/ (<dir>/skills/<name>/).
 for entry in "${UPSTREAMS[@]}"; do
   read -r dir _ <<<"${entry}"
-  for skill in "${SKILLS_DIR}/${dir}"/*/; do
-    name="$(basename "${skill}")"
+  for skill in "${SKILLS_DIR}/${dir}"/*/ "${SKILLS_DIR}/${dir}"/skills/*/; do
     [ -f "${skill}SKILL.md" ] || continue
+    name="$(basename "${skill}")"
+    target="${skill#"${SKILLS_DIR}/"}"
+    target="${target%/}"
     link="${SKILLS_DIR}/${name}"
     if [ ! -e "${link}" ] && [ ! -L "${link}" ]; then
-      ln -s "${dir}/${name}" "${link}"
+      ln -s "${target}" "${link}"
       git add -- "${link}"
-    elif [ "$(readlink -- "${link}" || true)" != "${dir}/${name}" ]; then
-      echo "warning: ${link} is not a symlink to ${dir}/${name}; skipped" >&2
+    elif [ "$(readlink -- "${link}" || true)" != "${target}" ]; then
+      echo "warning: ${link} is not a symlink to ${target}; skipped" >&2
     fi
   done
 done

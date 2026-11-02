@@ -286,8 +286,9 @@ def iter_image_generation_models(
 
     Always skips pricing keys prefixed with a size or quality (e.g.
     ``1024-x-1024/dall-e-2``) and supplement-only entries (upstream pruned
-    them as deprecated). Recommended models also skip dated snapshots whose
-    undated alias is also listed."""
+    them as deprecated). Dated snapshots of a deprecated model count as
+    deprecated. Recommended models also skip dated snapshots whose undated
+    alias is also listed."""
     models = _catalog().get(provider, {}).get("models", {})
     supplement_only = _supplement_only_model_ids().get(provider, frozenset())
     candidates = {
@@ -296,6 +297,8 @@ def iter_image_generation_models(
         if not _is_pricing_or_provider_prefixed(provider, model_id)
         and model_id not in supplement_only
         and entry.get("status") != "deprecated"
+        and models.get(_DATED_SNAPSHOT_SUFFIX.sub("", model_id), {}).get("status")
+        != "deprecated"
         and _catalog_mode(entry, model_id) == "image_generation"
     }
     if not recommended_only:

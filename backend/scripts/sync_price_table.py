@@ -438,9 +438,14 @@ def _is_gap_fill_chat_model(model_id: str, entry: dict[str, Any], today: str) ->
     )
 
 
-def _litellm_new_entry(model_key: str, entry: dict[str, Any]) -> dict[str, Any]:
+def _litellm_new_entry(
+    model_key: str, entry: dict[str, Any], today: str
+) -> dict[str, Any]:
     """Minimal catalog entry for a model only litellm carries."""
     out: dict[str, Any] = {"name": model_key, "mode": entry["mode"]}
+    deprecation_date: str | None = entry.get("deprecation_date")
+    if deprecation_date and deprecation_date <= today:
+        out["status"] = "deprecated"
     cost = _litellm_cost(entry)
     if cost:
         out["cost"] = cost
@@ -501,10 +506,10 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
             if existing is None:
                 mode = entry.get("mode")
                 if mode and mode not in _LITELLM_CHAT_MODES:
-                    models[model_id] = _litellm_new_entry(model_id, entry)
+                    models[model_id] = _litellm_new_entry(model_id, entry, today)
                     added += 1
                 elif mode and _is_gap_fill_chat_model(model_id, entry, today):
-                    models[model_id] = _litellm_new_entry(model_id, entry)
+                    models[model_id] = _litellm_new_entry(model_id, entry, today)
                     added_chat += 1
                 continue
 

@@ -497,6 +497,30 @@
       "mode": "rerank",
       "name": "rerank-v4.0-pro"
     },
+    "rerank-v5.0-fast": {
+      "cost": {
+        "input": 0.02,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "rerank",
+      "name": "rerank-v5.0-fast"
+    },
+    "rerank-v5.0-pro": {
+      "cost": {
+        "input": 0.049999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "rerank",
+      "name": "rerank-v5.0-pro"
+    },
     "tiny-aya-earth": {
       "attachment": false,
       "limit": {
