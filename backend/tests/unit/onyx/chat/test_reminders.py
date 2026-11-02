@@ -137,3 +137,35 @@ def test_reminder_retains_citation_guidance(
     assert ANSWER_COVERAGE_GUIDANCE.strip() in reminder
     assert ANSWER_COMPLETENESS_REMINDER in reminder
     assert (IMAGE_GEN_REMINDER in reminder) == image_generated
+
+
+def test_image_and_web_search_keep_the_task_instructions() -> None:
+    image = _direct_image()
+    document = SearchDoc(
+        document_id="web-result",
+        chunk_ind=0,
+        semantic_identifier="Result",
+        link="https://example.com",
+        blurb="Evidence",
+        source_type=DocumentSource.WEB,
+        boost=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    search = ToolResultMessage(
+        tool_call_id="search",
+        tool_name=WebSearchTool.NAME,
+        content="Evidence",
+        details=SearchDocsResponse(
+            search_docs=[document], citation_mapping={1: "web-result"}
+        ),
+    )
+    context = _context(task_prompt="Answer in French.", open_url=True)
+    reminder = build_chat_reminder(
+        context, [image, search], [image, search], enabled=True
+    )
+    assert reminder is not None
+    assert reminder.startswith("Answer in French.")
+    assert IMAGE_GEN_REMINDER in reminder
+    assert REQUIRE_CITATION_GUIDANCE.strip() in reminder

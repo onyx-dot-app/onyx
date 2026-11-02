@@ -136,7 +136,8 @@ message and stops moving (`build_chat_prompt`).
 **Reminder.** `chat/prompt_utils.py:build_chat_reminder` starts from the persona
 task prompt, or the open-URL nudge after a web search that found results when
 the agent has the open-URL tool and steps remain. The open-URL nudge replaces
-the task prompt. Image generation does not replace the task prompt.
+the task prompt only when this turn has no generated images. Image generation
+does not replace the task prompt, including steps that also search.
 `chat/prompt_utils.py:build_reminder_message` then adds the last-step reminder,
 the citation guidance once a citeable tool has run in this turn or the turn has
 project files (inline or searched), the file reminder after Python makes a file,

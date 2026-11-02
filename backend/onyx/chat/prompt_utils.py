@@ -106,9 +106,15 @@ def build_chat_reminder(
     if not enabled:
         return context.persona_task_prompt
     reminder_text = context.persona_task_prompt
+    has_generated_images = any(
+        isinstance(result.details, FinalImageGenerationResponse)
+        and result.details.generated_images
+        for result in results
+    )
     # Only suggest opening URLs when this agent has the tool.
     if (
-        context.has_open_url_tool
+        not has_generated_images
+        and context.has_open_url_tool
         and not context.out_of_cycles
         and any(
             result.tool_name == WebSearchTool.NAME
@@ -130,11 +136,7 @@ def build_chat_reminder(
             and result.details.generated_files
             for result in results
         ),
-        include_image_reminder=any(
-            isinstance(result.details, FinalImageGenerationResponse)
-            and result.details.generated_images
-            for result in results
-        ),
+        include_image_reminder=has_generated_images,
         is_last_cycle=context.out_of_cycles,
     )
 
