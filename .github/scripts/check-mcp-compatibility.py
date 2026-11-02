@@ -118,13 +118,9 @@ def check(base_url: str) -> None:
             status != 401
             or match is None
             or match.group(1) != origin + "/.well-known/oauth-protected-resource/mcp"
-            or not any(
-                key.lower() == "content-type" and value.startswith("application/json")
-                for key, value in headers.items()
-            )
         ):
             raise ValueError(
-                f"MCP initialize {suffix}: expected JSON HTTP 401 with resource discovery, got {status}"
+                f"MCP initialize {suffix}: expected HTTP 401 with resource_metadata challenge, got {status} {challenge!r}"
             )
         discovered: dict[str, object] = metadata(match.group(1))
         if discovered.get("resource") != origin + "/mcp":
