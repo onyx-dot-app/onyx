@@ -11189,6 +11189,9 @@
       "pin": {
         "tooltip": "固定到侧边栏"
       },
+      "pinFailed": {
+        "message": "无法更新固定状态，请重试。"
+      },
       "share": {
         "tooltip": "分享智能体"
       },
@@ -11589,6 +11592,7 @@
       },
       "empty": {
         "description": "你创建的智能体以及与你共享的智能体会显示在这里。",
+        "filteredDescription": "没有智能体符合所选标签页和筛选条件。",
         "item": "智能体"
       },
       "header": {

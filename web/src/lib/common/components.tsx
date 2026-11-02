@@ -2,12 +2,13 @@
 
 import { useTranslations } from "next-intl";
 import { InputTypeIn } from "@opal/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import type { RichStr } from "@opal/types";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { IllustrationContent, PageCenter } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import SvgEmpty from "@opal/illustrations/empty";
-import type { SearchableGrid } from "@/lib/common/hooks";
+import type { UseSearchableGridReturn } from "@opal/hooks";
 
 // Stands in for the subject while the translated sentence is built, so a
 // markdown subject can be put back in without the sentence's own text being
@@ -101,13 +102,13 @@ export function NoItems({ item, description }: NoItemsProps) {
 
 export interface GridSearchInputProps {
   /** From `useSearchableGrid`, which owns the keyboard behavior. */
-  search: SearchableGrid;
+  search: UseSearchableGridReturn;
   value: string;
   onChange: (value: string) => void;
   /**
    * What the grid holds, as a plural noun, for the placeholder: 'Search
    * agents or press "/" to focus...'. A placeholder shows plain text only, so
-   * a markdown item contributes its raw text.
+   * a markdown item contributes its text without the markup.
    */
   item?: string | RichStr;
 }
@@ -128,7 +129,7 @@ export function GridSearchInput({
     item === undefined
       ? t("placeholder")
       : t("itemPlaceholder", {
-          item: typeof item === "string" ? item : item.raw,
+          item: toPlainString(item),
         });
   return (
     <InputTypeIn

@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { cn, markdown } from "@opal/utils";
 import { INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -66,7 +67,11 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useNavigationTarget, useShownPosition } from "@/lib/position/hooks";
+import {
+  useAppPosition,
+  useNavigationTarget,
+  useShownPosition,
+} from "@/lib/position/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -635,17 +640,30 @@ function Footer() {
 // ---------------------------------------------------------------------------
 
 /**
- * The loading screen of the page being shown: the target of a navigation in
- * flight (`AppChrome`), else the URL while its page loads (`/app`'s
- * `loading.tsx`).
+ * The loading screen of a position's page. Null for a view of /app (a chat, an
+ * agent, a project, a new session): that view shows its own once it mounts.
+ * Other pages without a loader of their own get the page loader.
  */
-export function AppChromeLoader() {
-  const position = useShownPosition();
+function loaderFor(position: ReturnType<typeof useShownPosition>): ReactNode {
   if (position.isMoreAgents()) return <AgentsCatalogLoading />;
   if (position.isAgentEditor()) return <AgentEditorLoading />;
-  // A view of /app shows its own loading state once it mounts. Other pages
-  // have no loader here yet.
-  return null;
+  if (
+    position.isChat() ||
+    position.isNewSession() ||
+    position.isAgent() ||
+    position.isProject()
+  ) {
+    return null;
+  }
+  return <PageLoader />;
+}
+
+/**
+ * The loading screen of the page being shown: the target of a navigation in
+ * flight, else the URL while its page loads (`/app`'s `loading.tsx`).
+ */
+export function AppChromeLoader() {
+  return loaderFor(useShownPosition());
 }
 
 interface AppChromeProps {
@@ -653,9 +671,11 @@ interface AppChromeProps {
 }
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
+  const urlPosition = useAppPosition();
   const navigationTarget = useNavigationTarget();
-
-  const appPosition = useShownPosition();
+  // What the screen shows: a navigation's target, else the URL.
+  const appPosition = navigationTarget ?? urlPosition;
+  const targetLoader = navigationTarget ? loaderFor(navigationTarget) : null;
   useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -764,9 +784,14 @@ export default function AppChrome({ children }: AppChromeProps) {
             {/* Header */}
             <Header />
             <RootLayout.MainContent>
-              {/* A navigation in flight shows its target's loading screen
-                  at once, rather than the page it is leaving. */}
-              {navigationTarget ? <AppChromeLoader /> : children}
+              {/* A navigation in flight shows its target's loading screen at
+                  once. The page it is leaving stays mounted underneath, so a
+                  cancelled navigation returns to it as it was (an unsaved
+                  draft included); a target with no loader keeps it shown. */}
+              {targetLoader}
+              <div className={targetLoader ? "hidden" : "contents"}>
+                {children}
+              </div>
             </RootLayout.MainContent>
             <Footer />
           </div>

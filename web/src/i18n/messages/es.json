@@ -11189,6 +11189,9 @@
       "pin": {
         "tooltip": "Fijar en la barra lateral"
       },
+      "pinFailed": {
+        "message": "No se pudo actualizar el anclaje. Inténtalo de nuevo."
+      },
       "share": {
         "tooltip": "Compartir el agente"
       },
@@ -11589,6 +11592,7 @@
       },
       "empty": {
         "description": "Aquí aparecen los agentes que creas y los que se comparten contigo.",
+        "filteredDescription": "Ningún agente coincide con la pestaña y los filtros seleccionados.",
         "item": "agentes"
       },
       "header": {

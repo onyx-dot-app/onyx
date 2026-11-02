@@ -11189,6 +11189,9 @@
       "pin": {
         "tooltip": "An Seitenleiste anheften"
       },
+      "pinFailed": {
+        "message": "Die Anheftung konnte nicht aktualisiert werden. Versuche es erneut."
+      },
       "share": {
         "tooltip": "Agent teilen"
       },
@@ -11589,6 +11592,7 @@
       },
       "empty": {
         "description": "Agenten, die du erstellst oder die mit dir geteilt werden, erscheinen hier.",
+        "filteredDescription": "Keine Agenten passen zum gewählten Tab und zu den Filtern.",
         "item": "Agenten"
       },
       "header": {

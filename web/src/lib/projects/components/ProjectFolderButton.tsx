@@ -147,6 +147,10 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   const activeSidebar = useShownPosition();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === project.id;
+  // The project the screen shows: a click's target at once, else the open one.
+  const shownProjectId = activeSidebar.project();
+  const isShownProject =
+    shownProjectId !== null ? shownProjectId === project.id : isActiveProject;
   const [open, setOpen] = useState(isActiveProject);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
     useState(false);
@@ -252,7 +256,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
                 // appears nowhere else in the sidebar (Recents excludes them), so
                 // the folder itself has to carry the "you are here" mark.
                 selected={
-                  isActiveProject && (activeSidebar.isProject() || !open)
+                  isShownProject && (activeSidebar.isProject() || !open)
                 }
                 /* While renaming, drop the click target so the input stays usable. */
                 onClick={isEditing ? undefined : noProp(handleTextClick)}

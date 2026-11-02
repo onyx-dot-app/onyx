@@ -367,10 +367,11 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
 // Loading
 // ---------------------------------------------------------------------------
 
-interface SettingsLoadingProps
-  extends
-    Pick<SettingsHeaderProps, "icon" | "title" | "description">,
-    Pick<SettingsRootProps, "width"> {}
+type SettingsLoadingProps = Pick<
+  SettingsHeaderProps,
+  "icon" | "title" | "description"
+> &
+  Pick<SettingsRootProps, "width">;
 
 /**
  * A whole settings page while it loads: its header over the page loader. For

@@ -11,7 +11,7 @@ import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SettingsLayouts } from "@opal/layouts";
 import { GridSearchInput, NoItems, NoResults } from "@/lib/common/components";
-import { useSearchableGrid } from "@/lib/common/hooks";
+import { useSearchableGrid } from "@opal/hooks";
 import { useAppPosition } from "@/lib/position/hooks";
 import { Button, EndOfList, Tabs, Text } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
@@ -134,7 +134,8 @@ export default function AgentsCatalogPage() {
   return (
     <SettingsLayouts.Root
       loading={isLoading}
-      error={!!error}
+      // A failed refresh keeps the agents already shown.
+      error={!!error && agents.length === 0}
       data-testid="AgentsPage/container"
       aria-label={t("navigation.page.ariaLabel")}
     >
@@ -193,14 +194,20 @@ export default function AgentsCatalogPage() {
       {/* Agents List */}
       <SettingsLayouts.Body>
         {/* A typed search reads as "nothing matched" even when there are no
-            agents at all: that is what the user just asked. */}
-        {nonBuiltinAgents.length === 0 && searchQuery.trim() === "" ? (
+            agents at all: that is what the user just asked. Without one, an
+            empty list is either no agents at all, or the tab and filters
+            leaving none. */}
+        {agentCount === 0 && searchQuery.trim() !== "" ? (
+          <NoResults item={t("navigation.empty.item")} />
+        ) : agentCount === 0 ? (
           <NoItems
             item={t("navigation.empty.item")}
-            description={t("navigation.empty.description")}
+            description={
+              nonBuiltinAgents.length === 0
+                ? t("navigation.empty.description")
+                : t("navigation.empty.filteredDescription")
+            }
           />
-        ) : agentCount === 0 ? (
-          <NoResults item={t("navigation.empty.item")} />
         ) : (
           // `contents`: a box for the grid navigation that adds no layout.
           <div ref={search.gridRef} className="contents">

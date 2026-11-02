@@ -11189,6 +11189,9 @@
       "pin": {
         "tooltip": "Épingler à la barre latérale"
       },
+      "pinFailed": {
+        "message": "Impossible de mettre à jour l’épinglage. Réessayez."
+      },
       "share": {
         "tooltip": "Partager l'agent"
       },
@@ -11589,6 +11592,7 @@
       },
       "empty": {
         "description": "Les agents que vous créez et ceux partagés avec vous apparaissent ici.",
+        "filteredDescription": "Aucun agent ne correspond à l’onglet et aux filtres sélectionnés.",
         "item": "agents"
       },
       "header": {

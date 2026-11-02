@@ -129,13 +129,18 @@ from the server again when the user opens it, so state kept only in the store
 does not survive it. Within `/app`,
 `web/src/lib/position/hooks.ts:AppPosition` switches views by writing the URL
 with the history API, not a server navigation; in-app links use its `linkTo*`
-props. Leaving `/app` is a router navigation; only More Agents goes through
-`AppPosition` so far. Until it lands, `useNavigationTarget` holds its target: the tabs and the chrome read
-`useShownPosition`, and `AppChrome` shows the target's loader in place of the
-page, so the switch is instant even before Next has the route. Read
-`useShownPosition` only for what is drawn; behavior reads `useAppPosition`
-(the URL). A click while a navigation is in flight goes through the router, so
-it supersedes the earlier one.
+props. Leaving `/app` is a router navigation; the agents catalog and editor go
+through `AppPosition` so far. Until it lands,
+`web/src/lib/position/hooks.ts:useNavigationTarget` holds its target: the tabs
+and the chrome read `web/src/lib/position/hooks.ts:useShownPosition`, and
+`web/src/layouts/chromes/AppChrome.tsx:AppChrome` shows the target's loader
+over the page, which stays mounted beneath it. `/app/loading.tsx` re-exports
+`web/src/layouts/chromes/AppChrome.tsx:AppChromeLoader`, so the same loader
+shows while Next commits the navigation. Read `useShownPosition` for what is
+drawn (a tab's selected state, the chrome); anything that depends on where the
+user is now (deleting the open chat, closing a popover on navigation) reads
+`useAppPosition` (the URL). A click while a navigation is in flight goes through
+the router, so it supersedes the earlier one.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.

@@ -1,6 +1,6 @@
 # @opal/layouts
 
-**Import:** `import { Content, ContentAction, IllustrationContent, PageCenter } from "@opal/layouts";`
+**Import:** `import { Content, ContentAction, ErrorState, IllustrationContent, KeyValue, PageCenter, StickyBox } from "@opal/layouts";`
 
 Layout primitives for composing content blocks. These components handle sizing, font selection, icon alignment, and optional inline editing — things that are tedious to get right by hand and easy to get wrong.
 
@@ -90,14 +90,20 @@ From `@opal/layouts`:
 // Components
 Content;
 ContentAction;
+ErrorState;
 IllustrationContent;
+KeyValue;
 PageCenter;
+StickyBox;
 
 // Types
 ContentProps;
 ContentActionProps;
+ErrorStateProps;
 IllustrationContentProps;
+KeyValueProps;
 PageCenterProps;
+StickyBoxRootProps;
 SizePreset;
 ContentVariant;
 ```

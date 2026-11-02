@@ -11189,6 +11189,9 @@
       "pin": {
         "tooltip": "Pin to Sidebar"
       },
+      "pinFailed": {
+        "message": "Couldn't update the pin. Try again."
+      },
       "share": {
         "tooltip": "Share Agent"
       },
@@ -11589,6 +11592,7 @@
       },
       "empty": {
         "description": "Agents you create, and agents shared with you, appear here.",
+        "filteredDescription": "No agents match the selected tab and filters.",
         "item": "agents"
       },
       "header": {

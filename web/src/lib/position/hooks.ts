@@ -42,6 +42,10 @@ function urlKey(pathname: string, search: URLSearchParams): string {
 }
 
 let pendingNavigation: PendingNavigation | null = null;
+
+// A navigation that ends where it began (a redirect back, a failure) never
+// changes the URL, so nothing would clear it: it stops showing after this.
+const PENDING_NAVIGATION_TIMEOUT_MS = 20_000;
 const pendingListeners = new Set<() => void>();
 
 function setPendingNavigation(next: PendingNavigation | null) {
@@ -248,7 +252,11 @@ class AppPosition {
       else window.history.pushState(null, "", href);
       return;
     }
-    setPendingNavigation({ value, fromUrl: here });
+    const next = { value, fromUrl: here };
+    setPendingNavigation(next);
+    window.setTimeout(() => {
+      if (pendingNavigation === next) setPendingNavigation(null);
+    }, PENDING_NAVIGATION_TIMEOUT_MS);
     if (replace) this.router.replace(href);
     else this.router.push(href);
   }
@@ -432,7 +440,10 @@ export function useNavigationTarget(): AppPosition | null {
   const inFlight =
     pending !== null && pending.fromUrl === urlKey(pathname, searchParams);
   useEffect(() => {
-    if (pending !== null && !inFlight) setPendingNavigation(null);
+    // Only this navigation: a newer click may have replaced it meanwhile.
+    if (pending !== null && !inFlight && pendingNavigation === pending) {
+      setPendingNavigation(null);
+    }
   }, [pending, inFlight]);
 
   return useMemo(

@@ -22,7 +22,7 @@ import {
 } from "@opal/icons";
 import { useAppPosition } from "@/lib/position/hooks";
 import { ShareAgentModal } from "@/lib/agents/components/ShareAgentModal";
-import { Content, ContentAction, Section } from "@opal/layouts";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
@@ -67,13 +67,23 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareAgentModal = useCreateModal();
 
+  // A failed pin write reverts the pin; say so rather than fail silently.
+  const setPinned = useCallback(
+    async (next: boolean) => {
+      try {
+        await togglePinnedAgent(agent, next);
+      } catch {
+        toast.error(t("card.pinFailed.message"));
+      }
+    },
+    [togglePinnedAgent, agent, t]
+  );
+
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
-    if (!pinned) {
-      togglePinnedAgent(agent, true);
-    }
+    if (!pinned) void setPinned(true);
     appPosition.openAgent(agent.id);
-  }, [pinned, togglePinnedAgent, agent, appPosition]);
+  }, [pinned, setPinned, agent, appPosition]);
 
   const pinButton = (
     <PinnedContext.Provider value={pinned}>
@@ -81,7 +91,7 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
         icon={RotatingPinIcon}
         prominence="tertiary"
         size="md"
-        onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+        onClick={noProp(() => void setPinned(!pinned))}
         tooltip={pinned ? t("card.unpin.tooltip") : t("card.pin.tooltip")}
       />
     </PinnedContext.Provider>
@@ -101,9 +111,6 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
         interaction={viewing ? "hover" : undefined}
         // Lets the catalog's arrow keys find the cards.
         data-agent-card=""
-        // The card's own buttons are labelled by their tooltips; the bare
-        // name reaches the card alone.
-        aria-label={agent.name}
       >
         <Hoverable.Root group="AgentCard" height="full">
           {/* The card has a fixed height; the footer sits at its bottom. */}

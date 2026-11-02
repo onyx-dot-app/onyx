@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import useGridNavigation from "@opal/hooks/useGridNavigation";
+import useHotkey from "@opal/hooks/useHotkey";
 
 export interface UseSearchableGridOptions {
   /** The search field's text, as typed (not deferred). */
@@ -11,7 +13,7 @@ export interface UseSearchableGridOptions {
   itemSelector: string;
 }
 
-export interface SearchableGrid {
+export interface UseSearchableGridReturn {
   /** Callback ref for the search field. It takes focus once it mounts. */
   inputRef: (input: HTMLInputElement | null) => void;
   /** The search field's key handler. */
@@ -35,11 +37,11 @@ export interface SearchableGrid {
  * - In the grid, the arrows move between items. Leaving the top row, Escape,
  *   or typing returns to the field, typed characters included.
  */
-export function useSearchableGrid({
+export default function useSearchableGrid({
   query,
   setQuery,
   itemSelector,
-}: UseSearchableGridOptions): SearchableGrid {
+}: UseSearchableGridOptions): UseSearchableGridReturn {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const inputRef = useCallback(

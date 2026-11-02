@@ -264,7 +264,7 @@ const ChatButton = memo(
           await refreshCurrentProjectDetails();
 
           // Only route if the deleted chat is the currently opened chat session
-          if (active) {
+          if (appPosition.chat() === chatSession.id) {
             appPosition.openProject(project.id);
           }
         }

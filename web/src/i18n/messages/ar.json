@@ -11189,6 +11189,9 @@
       "pin": {
         "tooltip": "تثبيت في الشريط الجانبي"
       },
+      "pinFailed": {
+        "message": "تعذّر تحديث التثبيت. حاول مرة أخرى."
+      },
       "share": {
         "tooltip": "مشاركة الوكيل"
       },
@@ -11585,10 +11588,11 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {# وكيل} other {# وكلاء}}"
+        "label": "{count, plural, zero {# وكيل} one {وكيل واحد} two {وكيلان} few {# وكلاء} many {# وكيلًا} other {# وكيل}}"
       },
       "empty": {
         "description": "تظهر هنا الوكلاء التي تنشئها والوكلاء التي تمت مشاركتها معك.",
+        "filteredDescription": "لا يطابق أي وكيل علامة التبويب وعوامل التصفية المحددة.",
         "item": "وكلاء"
       },
       "header": {
@@ -14296,7 +14300,7 @@
     },
     "states": {
       "noItems": {
-        "itemTitle": "لا توجد {item}",
+        "itemTitle": "ليس هناك {item}",
         "title": "لا توجد عناصر"
       },
       "noResults": {

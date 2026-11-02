@@ -18,7 +18,7 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgFolder, SvgFolderPlus } from "@opal/icons";
-import { useShownPosition } from "@/lib/position/hooks";
+import { useAppPosition, useShownPosition } from "@/lib/position/hooks";
 import { noProp } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { usePinChatAgent } from "@/lib/agents/hooks";
@@ -47,7 +47,8 @@ function ProjectPopoverRow({
   rowProps,
   rowRef,
 }: ProjectPopoverRowProps) {
-  const appPosition = useShownPosition();
+  const appPosition = useAppPosition();
+  const shownPosition = useShownPosition();
   const pinChatAgent = usePinChatAgent();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === match.project.id;
@@ -85,7 +86,7 @@ function ProjectPopoverRow({
           icon={FolderIcon}
           // Same rule as the sidebar: while the chats are hidden, the folder
           // carries the "you are here" mark for them.
-          selected={isActiveProject && (appPosition.isProject() || !open)}
+          selected={isActiveProject && (shownPosition.isProject() || !open)}
           onClick={noProp(handleClick)}
         >
           {match.project.name}
@@ -105,7 +106,7 @@ function ProjectPopoverRow({
                 pinChatAgent(chatSession);
                 onNavigate();
               }}
-              selected={appPosition.chat() === chatSession.id}
+              selected={shownPosition.chat() === chatSession.id}
             >
               {chatSession.name || UNNAMED_CHAT}
             </SidebarTab>
@@ -128,7 +129,8 @@ function ProjectPopoverRow({
  */
 export function FoldedProjectsPopover() {
   const tSidebar = useTranslations("sidebar");
-  const appPosition = useShownPosition();
+  const appPosition = useAppPosition();
+  const shownPosition = useShownPosition();
   const createProjectModal = useCreateModal();
   const [open, setOpen] = useState(false);
   const t = useTranslations("chat");
@@ -219,7 +221,7 @@ export function FoldedProjectsPopover() {
               icon={SvgFolder}
               type="button"
               folded
-              selected={open || appPosition.isProject()}
+              selected={open || shownPosition.isProject()}
             >
               {tSidebar("appSidebar.projects.title")}
             </SidebarTab>

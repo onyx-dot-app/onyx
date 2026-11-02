@@ -16,5 +16,5 @@ The app's list states, `NoResults` and `NoItems`, live in `web/src/lib/common/co
 ## Usage
 
 ```tsx
-<ErrorState title={t("agents.loadFailed")} />
+<ErrorState title="Agents failed to load" />
 ```

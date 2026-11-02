@@ -11189,6 +11189,9 @@
       "pin": {
         "tooltip": "Fixar na barra lateral"
       },
+      "pinFailed": {
+        "message": "Não foi possível atualizar a fixação. Tente novamente."
+      },
       "share": {
         "tooltip": "Compartilhar agente"
       },
@@ -11589,6 +11592,7 @@
       },
       "empty": {
         "description": "Os agentes que você cria e os compartilhados com você aparecem aqui.",
+        "filteredDescription": "Nenhum agente corresponde à guia e aos filtros selecionados.",
         "item": "agentes"
       },
       "header": {
@@ -14296,12 +14300,12 @@
     },
     "states": {
       "noItems": {
-        "itemTitle": "Nenhum(a) {item}",
+        "itemTitle": "Não há {item}",
         "title": "Nenhum item"
       },
       "noResults": {
         "description": "Nenhum resultado correspondente a esse termo de pesquisa foi encontrado.",
-        "itemTitle": "Nenhum(a) {item} encontrado(a)",
+        "itemTitle": "Nenhum resultado em {item}",
         "title": "Nenhum resultado encontrado"
       }
     },
