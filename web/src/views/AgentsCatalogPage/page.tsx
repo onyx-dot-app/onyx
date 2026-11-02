@@ -216,6 +216,8 @@ export default function AgentsCatalogPage() {
               onView={openViewer}
             />
             <EndOfList
+              paddingParallel={4}
+              paddingPerpendicular={2}
               title={t("navigation.countSeparator.label", {
                 count: agentCount,
               })}

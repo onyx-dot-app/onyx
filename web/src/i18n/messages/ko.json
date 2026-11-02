@@ -11585,7 +11585,7 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {에이전트} other {에이전트}}"
+        "label": "{count, plural, one {# 에이전트} other {# 에이전트}}"
       },
       "empty": {
         "description": "직접 만든 에이전트와 공유받은 에이전트가 여기에 표시됩니다.",

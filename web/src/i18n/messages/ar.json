@@ -11585,7 +11585,7 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {وكيل} other {وكلاء}}"
+        "label": "{count, plural, one {# وكيل} other {# وكلاء}}"
       },
       "empty": {
         "description": "تظهر هنا الوكلاء التي تنشئها والوكلاء التي تمت مشاركتها معك.",

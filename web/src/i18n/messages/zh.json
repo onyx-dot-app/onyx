@@ -11585,7 +11585,7 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {智能体} other {智能体}}"
+        "label": "{count, plural, one {#智能体} other {#智能体}}"
       },
       "empty": {
         "description": "你创建的智能体以及与你共享的智能体会显示在这里。",

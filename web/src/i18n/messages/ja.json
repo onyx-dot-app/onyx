@@ -11585,7 +11585,7 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {エージェント} other {エージェント}}"
+        "label": "{count, plural, one {#エージェント} other {#エージェント}}"
       },
       "empty": {
         "description": "作成したエージェントと共有されたエージェントがここに表示されます。",

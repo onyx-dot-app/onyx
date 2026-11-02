@@ -11585,7 +11585,7 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {Agente} other {Agentes}}"
+        "label": "{count, plural, one {# Agente} other {# Agentes}}"
       },
       "empty": {
         "description": "Os agentes que você cria e os compartilhados com você aparecem aqui.",
