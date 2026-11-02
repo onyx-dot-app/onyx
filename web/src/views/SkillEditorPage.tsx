@@ -54,6 +54,7 @@ import InstructionsDisplayModeToggle, {
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import {
+  emptySkillSharingDraft,
   serializeSkillSharing,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
@@ -113,13 +114,11 @@ export default function SkillEditorPage({
   const [creationSharing, setCreationSharing] =
     useState<SkillSharingDraft | null>(null);
   const sharingDraft: SkillSharingDraft = {
-    owner: user ? { id: user.id, email: user.email } : null,
-    ownership_vacant: false,
-    user_permission: "OWNER",
-    user_shares: [],
-    group_shares: [],
+    ...emptySkillSharingDraft(
+      name || t("editor.header.createTitle"),
+      user ? { id: user.id, email: user.email } : null
+    ),
     public_permission: isCreatingForApp ? "VIEWER" : null,
-    installation_policy: "AVAILABLE",
     external_app: isCreatingForApp ? { name: externalAppName ?? "" } : null,
     ...creationSharing,
     name: name || t("editor.header.createTitle"),

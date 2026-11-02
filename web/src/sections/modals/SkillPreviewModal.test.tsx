@@ -3,7 +3,6 @@ import { Modal } from "@opal/components";
 import { markdown } from "@opal/utils";
 import SkillPreviewModal, {
   SkillPreviewContent,
-  SkillPreviewDetails,
 } from "@/sections/modals/SkillPreviewModal";
 import type { SkillPreview } from "@/lib/skills/types";
 
@@ -104,15 +103,4 @@ it("preserves formatted custom close labels", () => {
   );
   const button = screen.getByRole("button", { name: "Back to skills" });
   expect(button.querySelector("strong")).toHaveTextContent("Back");
-});
-
-it("renders preview details without adding another modal", () => {
-  mockUseSWR.mockReturnValue({ data: preview(), isLoading: false });
-  render(<SkillPreviewDetails skillId="skill-id" />);
-  expect(screen.getByText("owner@example.com")).toBeVisible();
-  expect(screen.getByText("Look up the requested record.")).toBeVisible();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Close" })
-  ).not.toBeInTheDocument();
 });

@@ -12094,9 +12094,6 @@
         "builtin": {
           "label": "기본 제공"
         },
-        "custom": {
-          "label": "사용자 지정"
-        },
         "invalid": {
           "label": "잘못됨"
         },
@@ -17446,7 +17443,6 @@
       "enable": "내 스킬 활성화",
       "disable": "내 스킬 비활성화",
       "delete": "삭제",
-      "personalEnablement": "활성화와 비활성화는 내 스킬에만 영향을 줍니다. 설치 정책은 액세스 권한이 있는 사용자에게 스킬이 설치되는 방식을 제어합니다.",
       "selectSkill": "{name} 선택",
       "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
       "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",

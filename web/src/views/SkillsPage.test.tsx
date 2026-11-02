@@ -284,9 +284,8 @@ describe("SkillsPage preference toggles", () => {
     ).toBeInTheDocument();
   });
 
-  it("uses the admin skill listing on the admin page", () => {
+  it("shows the admin description on the admin page", () => {
     render(<SkillsPage admin />);
-    expect(mockUseUserSkills).toHaveBeenCalledWith(true, true);
     expect(
       screen.getByText("Manage skills and access across your organization.")
     ).toBeInTheDocument();

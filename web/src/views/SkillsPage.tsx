@@ -1,7 +1,7 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -86,7 +86,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     externalAppIdParam !== null && /^\d+$/.test(externalAppIdParam)
       ? Number(externalAppIdParam)
       : null;
-  const { data, error, isLoading, refresh } = useUserSkills(true, admin);
+  const { data, error, isLoading, refresh } = useUserSkills();
+  // Revalidation after a successful change is best effort.
+  function revalidateSkills() {
+    return refresh().catch(() => undefined);
+  }
   const { mutate } = useSWRConfig();
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
@@ -116,13 +120,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     searchInputRef.current?.focus();
   });
 
-  function syncSkillLists() {
-    return Promise.allSettled([
-      mutate(SWR_KEYS.userSkills),
-      mutate(SWR_KEYS.adminSkills),
-    ]);
-  }
-
   async function deleteSkill() {
     if (
       !deleteTarget ||
@@ -144,7 +141,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           },
         { revalidate: false }
       );
-      void syncSkillLists();
+      void revalidateSkills();
       if (deleteTarget.external_app) {
         void mutate(SWR_KEYS.buildExternalAppsAdmin).catch((error: unknown) => {
           console.error(
@@ -219,7 +216,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         replaceConflict
       );
       if (replaceConflict) setPendingSwitchTarget(null);
-      void syncSkillLists();
       await refresh(
         (current) => {
           if (!current) return current;
@@ -371,9 +367,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     (item): item is Extract<SkillCardItem, { source: "builtin" }> =>
       item.source === "builtin"
   );
-  useEffect(() => {
-    if (searchQuery.trim() && visibleBuiltins.length > 0) setBuiltinsOpen(true);
-  }, [searchQuery, visibleBuiltins.length]);
   const selectedItems = selectableItems.filter((item) =>
     selectedIds.has(item.id)
   );
@@ -385,7 +378,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         item.skill.user_permission === "EDITOR"
     );
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
-  const canToggleSelected = toggleableItems.length > 0;
   // A card toggle still in flight must settle before a bulk action may race it.
   const bulkLocked =
     bulkBusy || selectedItems.some((item) => pendingSkillIds.has(item.id));
@@ -397,7 +389,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       id: "enable",
       icon: SvgCheckCircle,
       title: bulkCopy("enable"),
-      disabled: bulkLocked || !canToggleSelected,
+      disabled: bulkLocked || toggleableItems.length === 0,
       onSelect: () => void runBulk("enable"),
     });
   }
@@ -407,7 +399,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       id: "disable",
       icon: SvgXCircle,
       title: bulkCopy("disable"),
-      disabled: bulkLocked || !canToggleSelected,
+      disabled: bulkLocked || toggleableItems.length === 0,
       onSelect: () => void runBulk("disable"),
     });
   }
@@ -437,7 +429,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       setBulkSharingOpen(false);
       setBulkDeleteOpen(false);
       await Promise.all([
-        syncSkillLists(),
+        revalidateSkills(),
         mutate(SWR_KEYS.buildExternalAppsAdmin),
       ]);
     } catch (error) {
@@ -521,7 +513,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           readOnly={bulkBusy}
           onChange={(event) => {
             setSearchQuery(event.target.value);
-            if (!event.target.value.trim()) setBuiltinsOpen(false);
             setSelectedIds(new Set());
             setBulkFailures([]);
           }}
@@ -748,7 +739,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                     title={t("page.builtins.title", {
                       count: visibleBuiltins.length,
                     })}
-                    open={builtinsOpen}
+                    open={
+                      builtinsOpen ||
+                      (searchQuery.trim() !== "" && visibleBuiltins.length > 0)
+                    }
                     onOpenChange={setBuiltinsOpen}
                   >
                     <CardGrid>
@@ -838,14 +832,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           fallbackTitle={editablePreview.name}
           open
           onClose={() => setSkillDialog(null)}
-          onSaved={() => void syncSkillLists()}
+          onSaved={() => void revalidateSkills()}
         />
       )}
 
       <CreateSkillModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onImported={() => void syncSkillLists()}
+        onImported={() => void revalidateSkills()}
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
@@ -857,7 +851,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         <ImportSkillsFromGitHubModal
           open
           onClose={() => setGitHubImportOpen(false)}
-          onImported={() => void syncSkillLists()}
+          onImported={() => void revalidateSkills()}
         />
       )}
 

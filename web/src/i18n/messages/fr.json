@@ -12094,9 +12094,6 @@
         "builtin": {
           "label": "Intégrée"
         },
-        "custom": {
-          "label": "Personnalisée"
-        },
         "invalid": {
           "label": "Non valide"
         },
@@ -17446,7 +17443,6 @@
       "enable": "Activer pour moi",
       "disable": "Désactiver pour moi",
       "delete": "Supprimer",
-      "personalEnablement": "L’activation et la désactivation n’affectent que vos propres compétences. La politique d’installation définit comment une compétence est installée pour les personnes ayant accès.",
       "selectSkill": "Sélectionner {name}",
       "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
       "failed": "Impossible de mettre à jour les compétences. Réessayez.",

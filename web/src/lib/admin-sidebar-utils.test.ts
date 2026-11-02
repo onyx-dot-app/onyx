@@ -113,7 +113,4 @@ test("shows Skills only to full admins when Craft is available", () => {
       (item) => item.link
     )
   ).not.toContain("/admin/skills");
-  expect(matchAdminRoute("/admin/skills")?.requiredPermission).toBe(
-    Permission.FULL_ADMIN_PANEL_ACCESS
-  );
 });

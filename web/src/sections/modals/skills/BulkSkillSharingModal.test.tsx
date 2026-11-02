@@ -78,19 +78,4 @@ describe("BulkSkillSharingModal", () => {
       screen.getByRole("button", { name: "Apply to 2 skills" })
     ).toBeDisabled();
   });
-  it("locks organization access when the caller cannot change it", () => {
-    render(
-      <BulkSkillSharingModal
-        count={2}
-        canChangeOrgAccess={false}
-        open
-        saving={false}
-        onClose={jest.fn()}
-        onSave={jest.fn()}
-      />
-    );
-    expect(
-      screen.getByRole("button", { name: "Who can access" })
-    ).toBeDisabled();
-  });
 });

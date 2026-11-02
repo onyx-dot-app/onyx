@@ -12094,9 +12094,6 @@
         "builtin": {
           "label": "内置"
         },
-        "custom": {
-          "label": "自定义"
-        },
         "invalid": {
           "label": "无效"
         },
@@ -17446,7 +17443,6 @@
       "enable": "为我启用",
       "disable": "为我禁用",
       "delete": "删除",
-      "personalEnablement": "启用和禁用仅影响你自己的技能。安装策略控制技能如何为有访问权限的人员安装。",
       "selectSkill": "选择 {name}",
       "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
       "failed": "无法更新技能。请重试。",

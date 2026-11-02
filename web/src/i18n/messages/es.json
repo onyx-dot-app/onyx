@@ -12094,9 +12094,6 @@
         "builtin": {
           "label": "Integrada"
         },
-        "custom": {
-          "label": "Personalizada"
-        },
         "invalid": {
           "label": "No válida"
         },
@@ -17446,7 +17443,6 @@
       "enable": "Activar para mí",
       "disable": "Desactivar para mí",
       "delete": "Eliminar",
-      "personalEnablement": "Activar y desactivar afecta solo a tus propias habilidades. La política de instalación controla cómo se instala una habilidad para las personas con acceso.",
       "selectSkill": "Seleccionar {name}",
       "updated": "{count, plural, one {# habilidad actualizada} other {# habilidades actualizadas}}",
       "failed": "No se pudieron actualizar las habilidades. Inténtalo de nuevo.",

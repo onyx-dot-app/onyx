@@ -95,26 +95,7 @@ describe("SkillCard", () => {
     }
   );
 
-  it("selects a skill without opening its preview", async () => {
-    const user = setupUser();
-    const onClick = jest.fn();
-    const onCheckedChange = jest.fn();
-    render(
-      <SkillCard
-        item={custom()}
-        onClick={onClick}
-        selection={{ checked: false, disabled: false, onCheckedChange }}
-      />
-    );
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select Report Writer" })
-    );
-    expect(onCheckedChange).toHaveBeenCalledTimes(1);
-    expect(onCheckedChange).toHaveBeenCalledWith(true);
-    expect(onClick).not.toHaveBeenCalled();
-  });
-
-  it("still opens the preview from the title when a checkbox is present", async () => {
+  it("keeps selection and preview clicks separate", async () => {
     const user = setupUser();
     const item = custom();
     const onClick = jest.fn();
@@ -126,9 +107,14 @@ describe("SkillCard", () => {
         selection={{ checked: false, disabled: false, onCheckedChange }}
       />
     );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select Report Writer" })
+    );
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
+    expect(onClick).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: item.name }));
     expect(onClick).toHaveBeenCalledWith(item);
-    expect(onCheckedChange).not.toHaveBeenCalled();
+    expect(onCheckedChange).toHaveBeenCalledTimes(1);
   });
 
   it("opens a required skill preview for a viewer by click or keyboard", async () => {
