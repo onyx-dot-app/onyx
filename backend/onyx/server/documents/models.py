@@ -737,6 +737,7 @@ class IndexingOverviewResponse(BaseModel):
 
     indexing_connectors: int
     active_connectors: int
+    paused_connectors: int
     # Estimated from each run's count spread over its span. A run counts a
     # document each time it processes it, failures included.
     recent_docs_indexed: int
@@ -819,7 +820,7 @@ class IndexingRunsResponse(BaseModel):
 
 
 class IndexingConnectorStatus(str, Enum):
-    """How the status page buckets a pair, in the order the list sorts them."""
+    """How the status page buckets a pair. The list sorts by rank, not member order."""
 
     INDEXING = "indexing"
     FAILED = "failed"
@@ -827,6 +828,8 @@ class IndexingConnectorStatus(str, Enum):
     DELETING = "deleting"
     SCHEDULED = "scheduled"
     INDEXED = "indexed"
+    # A permission or group sync runs and no index run does.
+    SYNCING = "syncing"
 
 
 class IndexingConnectorRow(BaseModel):
@@ -848,6 +851,9 @@ class IndexingConnectorRow(BaseModel):
     latest_index_attempt: IndexAttemptSnapshot | None
     # The latest attempt's open errors, whole entities included.
     open_error_count: int
+    # The groups that read the pair's documents and the caller can see, sorted by name. Empty for public and synced pairs.
+    group_count: int
+    group_names: list[str]
     # Place by age in the line of index attempts handed to the queue, from 1,
     # while the latest waits there. The queue serves first runs ahead of
     # repeats, so a repeat can wait a little longer than its place says.
@@ -858,13 +864,15 @@ class IndexingConnectorRow(BaseModel):
 
 
 class IndexingConnectorsResponse(BaseModel):
-    """One page of the readable pairs, sorted by status then name."""
+    """One page of the readable pairs, sorted by rank then name."""
 
     items: list[IndexingConnectorRow]
     # Pairs matching the search and the status filter.
     total_items: int
     # Per status, ignoring the status filter, so the counts stay put while one is applied.
     status_counts: dict[IndexingConnectorStatus, int]
+    # Per source over every matching pair, not the page's, so a source split across pages counts in full.
+    source_counts: dict[DocumentSource, int]
     # Federated connectors have no runs or documents. Admins see them after the
     # pairs on the first page, under the search but outside the status filter.
     federated_connectors: list[FederatedConnectorStatus]
