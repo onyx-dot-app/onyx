@@ -13,6 +13,7 @@ import {
 import { useUser } from "@/providers/UserProvider";
 import { loginPath } from "@/lib/auth/paths";
 import {
+  Button,
   Dropdown,
   LineItemButton,
   SidebarTab,
@@ -33,7 +34,7 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content, Section, toast, useSidebarFolded } from "@opal/layouts";
+import { ContentAction, Section, toast, useSidebarFolded } from "@opal/layouts";
 import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
@@ -62,6 +63,7 @@ function useSettingsItems({
     user?.is_anonymous_user || checkUserIsNoAuthUser(user?.id ?? "");
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
   const showLogin = isAnonymousUser;
+  const userRowRef = useRef<HTMLDivElement>(null);
 
   const query = searchParams?.toString();
   const currentUrl = query ? `${pathname}?${query}` : pathname;
@@ -94,16 +96,26 @@ function useSettingsItems({
     {
       kind: "custom",
       id: "user-email",
-      disabled: true,
+      keepOpen: true,
+      // ArrowRight moves focus to the About button; Enter then presses it.
+      onSecondary: () =>
+        userRowRef.current?.querySelector<HTMLElement>("button")?.focus(),
       render: ({ props }) => (
-        <div {...props} className="p-2">
-          <Content
+        <div {...props} ref={userRowRef}>
+          <ContentAction
             sizePreset="main-ui"
             title={
               userResolution === "unavailable"
                 ? t("profileUnavailable.title")
                 : getUserEmail(user)
             }
+            // 4px around the 28px button: concentric in the 36px row.
+            rightChildren={
+              <Section width="fit" height="fit" padding={1}>
+                <AboutButton />
+              </Section>
+            }
+            center
           />
         </div>
       ),
@@ -135,7 +147,9 @@ function useSettingsItems({
               title={t("notifications.label")}
               rightChildren={
                 undismissedCount ? (
-                  <SvgNotificationBubble count={undismissedCount} />
+                  <Section width="fit" height="fit" padding={1}>
+                    <SvgNotificationBubble count={undismissedCount} />
+                  </Section>
                 ) : undefined
               }
               {...props}
@@ -164,13 +178,6 @@ function useSettingsItems({
               },
             ]
           : []),
-        {
-          kind: "action",
-          id: "about",
-          icon: SvgInfo,
-          title: t("about.label"),
-          onSelect: (views) => views.push("about"),
-        },
       ],
     },
     ...(showLogin || showLogout
@@ -206,6 +213,22 @@ function useSettingsItems({
         ]
       : []),
   ];
+}
+
+/** Opens the about page, beside the user's email. */
+function AboutButton() {
+  const t = useTranslations("accountPopover");
+  const views = useDropdownViews();
+  return (
+    <Button
+      icon={SvgInfo}
+      prominence="tertiary"
+      size="md"
+      tooltip={t("about.label")}
+      aria-label={t("about.label")}
+      onClick={() => views.push("about")}
+    />
+  );
 }
 
 /** The about page: a back row, then the build's details. */
