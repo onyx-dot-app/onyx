@@ -599,3 +599,34 @@ def test_an_older_change_in_a_later_batch_does_not_overwrite_a_newer_one(
     # The second batch holds the older change. It settles, but it must not
     # be indexed on top of the newer one.
     assert second == []
+
+
+def test_a_discarded_sibling_does_not_suppress_the_change_that_won(
+    db_session: Session,
+    pair_and_attempt: tuple[int, int],
+    registered_handler: None,  # noqa: ARG001
+) -> None:
+    """Three changes to one document in a batch, one of them untimestamped.
+    `_superseded` falls back to arrival order and keeps the last, but the
+    claim has already marked all three IN_PROGRESS, so a cross-batch check
+    that counted them would let the discarded first row suppress the winner
+    and the document would never be indexed at all."""
+    pair_id, attempt_id = pair_and_attempt
+    june = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    january = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    for event in (
+        ParsedEvent(document_id="doc-1", event_key="k-june", occurred_at=june),
+        ParsedEvent(document_id="doc-1", event_key="k-none"),
+        ParsedEvent(document_id="doc-1", event_key="k-jan", occurred_at=january),
+    ):
+        record_events(db_session, pair_id, SOURCE, [event])
+        db_session.commit()
+
+    documents, failures, _ = _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    assert failures == []
+    assert [document.id for document in documents] == ["doc-1"]

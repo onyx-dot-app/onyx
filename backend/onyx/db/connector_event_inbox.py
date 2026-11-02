@@ -135,10 +135,16 @@ def superseded_by_newer_events(
 
     Only rows the pipeline has already taken count as newer: a PENDING row is
     not indexed yet, and the batch that claims it will compare it itself.
+
+    The batch's own rows are excluded. `claim_events` has already marked them
+    IN_PROGRESS, so counting them here would let a row the caller discarded
+    suppress the one it kept, and that document would never be indexed.
     """
     documents = {event.document_id for event in events if event.occurred_at}
     if not documents:
         return set()
+
+    claimed_here = [event.id for event in events]
 
     taken = (
         select(
@@ -152,6 +158,7 @@ def superseded_by_newer_events(
             ConnectorEventInbox.status.in_(
                 [ConnectorEventStatus.IN_PROGRESS, ConnectorEventStatus.COMPLETED]
             ),
+            ConnectorEventInbox.id.notin_(claimed_here),
         )
         .group_by(ConnectorEventInbox.document_id)
     )
