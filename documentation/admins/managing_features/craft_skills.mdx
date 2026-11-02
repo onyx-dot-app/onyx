@@ -5,7 +5,8 @@ icon: "wand-magic-sparkles"
 ---
 
 Skills package reusable instructions and supporting files that teach Craft how to perform a kind of work.
-Open **Craft → Skills** to review, upload, share, and manage Skills.
+Open **Admin Panel → Skills** to manage custom Skills across your organization.
+Open **Craft → Skills** to manage your own library.
 
 <Note>
   Anyone with Craft access can create a Skill and manage the Skills they own or can edit.
@@ -20,7 +21,42 @@ Open **Craft → Skills** to review, upload, share, and manage Skills.
 | **Built-in** | Shipped and maintained by Onyx | Preview its instructions and identify missing dependencies. Built-ins are not editable. |
 | **Custom**   | Created by an admin or user    | Edit, share, set installation policy, manage files, enable or disable, transfer ownership, or delete. |
 
-New custom Skills start private. Share a Skill with people, groups, or the organization when others should use it.
+New custom Skills start private unless you configure access during creation or import. Share Skills with people, groups,
+or the organization when others should use them.
+
+## Manage several Skills
+
+<Steps>
+  <Step title="Select the Skills">
+    Open **Admin Panel → Skills** and use the checkboxes on the custom Skill cards.
+    Use the checkbox beside **Select skills** to select all visible custom Skills. Search first to limit the selection.
+  </Step>
+
+  <Step title="Configure access and installation">
+    Select **Share**. Choose **Everyone in the organization** to share all selected Skills with your staff.
+    You can also add specific people or groups. Existing individual grants remain in place.
+    Settings left at **Keep unchanged** retain their current values.
+  </Step>
+
+  <Step title="Apply the changes">
+    Select **Apply** to update the selected Skills.
+    Onyx reports failures separately and keeps failed Skills selected so you can retry them.
+  </Step>
+</Steps>
+
+**Enable for me** and **Disable for me** change your personal library only.
+Use **Installed by default** or **Required** under **Installation** to deploy Skills to people with access.
+Open **More actions** for personal enablement and deletion. **Delete** removes selected Skills for everyone with access.
+The confirmation lists each selected Skill before deletion.
+
+### Set access during import
+
+In the GitHub import dialog, select **Configure access** before importing the selected Skills.
+The access settings apply to the full selection. For example,
+select 80 Skills and configure organization access to share all 80 during import.
+
+You can also select several ZIP files in **Upload a skill**. Each ZIP must contain one Skill.
+Configure access once before importing the batch. Onyx reports invalid bundles separately.
 
 ### Built-in Skills
 
@@ -89,7 +125,7 @@ description: Create a weekly customer update from account activity and meeting n
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Slug                | Generated from the Skill name when written in Onyx or uploaded as `SKILL.md`; otherwise, the folder name or ZIP filename without `.zip`.     |
 | Root instructions   | One UTF-8 `SKILL.md` with valid YAML frontmatter at the Skill root.                                                                         |
-| Skills per upload   | One.                                                                                                                                        |
+| Skills per ZIP      | One. Select multiple ZIP files to import a batch.                                                                                            |
 | Maximum file size   | 25 MB per file in the extracted bundle.                                                                                                     |
 | Maximum bundle size | 100 MB total.                                                                                                                               |
 

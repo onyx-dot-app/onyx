@@ -12108,6 +12108,12 @@
         },
         "unavailable": {
           "label": "Nicht verfügbar - klicken Sie, um mehr zu erfahren"
+        },
+        "shared": {
+          "label": "Geteilt"
+        },
+        "organization": {
+          "label": "Organisation"
         }
       },
       "toggle": {
@@ -16740,6 +16746,9 @@
         },
         "webSearch": {
           "label": "Websuche"
+        },
+        "skills": {
+          "label": "Fähigkeiten"
         }
       },
       "sections": {
@@ -17053,6 +17062,12 @@
         "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
         "saveFailed": "Skill konnte nicht gespeichert werden",
         "saved": "„{name}“ gespeichert"
+      },
+      "creationAccess": {
+        "title": "Zugriff",
+        "organizationSummary": "Alle in der Organisation können auf diese Fähigkeit zugreifen.",
+        "selectedSummary": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
+        "privateSummary": "Nur Sie können auf diese Fähigkeit zugreifen. Mit „Freigabe bearbeiten“ können Sie Personen, Gruppen oder die Organisation hinzufügen."
       }
     },
     "modals": {
@@ -17091,6 +17106,13 @@
           "singleSkill": "Laden Sie jeweils nur einen Skill hoch.",
           "title": "Dateianforderungen",
           "zip": "ZIP-Dateien müssen eine SKILL.md-Datei enthalten."
+        },
+        "batch": {
+          "title": "Zugriff auf hochgeladene Fähigkeiten",
+          "selected": "{count, plural, one {# Fähigkeitspaket ausgewählt} other {# Fähigkeitspakete ausgewählt}}",
+          "result": "{imported, plural, one {# Fähigkeit importiert} other {# Fähigkeiten importiert}}. {failed, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "Wählen Sie mehrere ZIP-Dateien aus, um Fähigkeiten gemeinsam zu importieren. Jede ZIP-Datei muss eine Fähigkeit enthalten."
         }
       },
       "importGithub": {
@@ -17167,6 +17189,14 @@
         "unavailableFallback": "Dieser Skill kann nicht importiert werden.",
         "unavailableTag": {
           "label": "Nicht importierbar"
+        },
+        "sharing": {
+          "title": "Zugriff auf importierte Fähigkeiten",
+          "configureButton": "Zugriff konfigurieren",
+          "organizationSummary": "Alle in der Organisation können auf diese Fähigkeiten zugreifen.",
+          "selectedSummary": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
+          "privateSummary": "Nur Sie können auf diese Fähigkeiten zugreifen.",
+          "description": "Diese Zugriffseinstellungen gelten für alle {count, plural, one {# ausgewählte Fähigkeit} other {# ausgewählten Fähigkeiten}}."
         }
       },
       "nameConflict": {
@@ -17275,11 +17305,15 @@
       },
       "placeholders": {
         "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
+      },
+      "tabs": {
+        "details": "Details",
+        "sharing": "Freigabe"
       }
     },
     "page": {
       "browse": {
-        "title": "Skills durchsuchen"
+        "title": "Skills auswählen"
       },
       "countSeparator": {
         "label": "{count, plural, one {Skill} other {Skills}}"
@@ -17307,8 +17341,8 @@
           "title": "Keine passenden Skills"
         },
         "noSkills": {
-          "description": "Es wurden noch keine benutzerdefinierten Skills mit Ihnen geteilt und es sind keine integrierten Skills konfiguriert.",
-          "title": "Keine Skills verfügbar"
+          "title": "Noch keine benutzerdefinierten Skills",
+          "description": "Erstellen oder importieren Sie einen Skill, um ihn Ihrer Bibliothek hinzuzufügen."
         }
       },
       "focusedApp": {
@@ -17345,6 +17379,9 @@
         "disableFailed": "{name} konnte nicht deaktiviert werden",
         "enableFailed": "{name} konnte nicht aktiviert werden",
         "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden."
+      },
+      "builtins": {
+        "title": "Integrierte Skills ({count, number})"
       }
     },
     "sections": {
@@ -17400,6 +17437,30 @@
           "readFailed": "Der Upload konnte nicht gelesen werden."
         }
       }
+    },
+    "bulk": {
+      "adminDescription": "Fähigkeiten und Zugriff in Ihrer Organisation verwalten.",
+      "selectAll": "Alle sichtbaren benutzerdefinierten Fähigkeiten auswählen",
+      "selected": "{count, number} ausgewählt",
+      "share": "Teilen",
+      "enable": "Für mich aktivieren",
+      "disable": "Für mich deaktivieren",
+      "delete": "Löschen",
+      "personalEnablement": "Aktivieren und Deaktivieren ändern Ihre eigenen Fähigkeiten. Verwenden Sie die Installationsrichtlinie, um Fähigkeiten für Mitarbeiter bereitzustellen.",
+      "selectSkill": "{name} auswählen",
+      "updated": "{count, plural, one {# Fähigkeit aktualisiert} other {# Fähigkeiten aktualisiert}}",
+      "failed": "Fähigkeiten konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
+      "partialFailure": "{count, plural, one {# Fähigkeit konnte nicht aktualisiert werden} other {# Fähigkeiten konnten nicht aktualisiert werden}}",
+      "deleteTitle": "{count, plural, one {# Fähigkeit löschen?} other {# Fähigkeiten löschen?}}",
+      "deleteDescription": "{count, plural, one {Die ausgewählte Fähigkeit wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Fähigkeiten werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
+      "shareTitle": "{count, plural, one {Zugriff für # Fähigkeit aktualisieren} other {Zugriff für # Fähigkeiten aktualisieren}}",
+      "shareDescription": "Diese Änderungen auf jede ausgewählte Fähigkeit anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
+      "unchanged": "Unverändert lassen",
+      "everyone": "Alle in der Organisation",
+      "invitedOnly": "Eingeladene Personen und Gruppen",
+      "addAccessDescription": "Diese Personen und Gruppen zu jeder ausgewählten Fähigkeit hinzufügen. Bestehender individueller Zugriff bleibt unverändert.",
+      "apply": "{count, plural, one {Auf # Fähigkeit anwenden} other {Auf # Fähigkeiten anwenden}}",
+      "moreActions": "Weitere Aktionen"
     }
   },
   "opensearchHealth": {

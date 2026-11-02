@@ -43,7 +43,7 @@ import {
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
 import type { MinimalUserSnapshot } from "@/lib/types";
-import { Button, Card, SelectCard, Text } from "@opal/components";
+import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
@@ -55,6 +55,7 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
+import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
 
 type ShareModalView = "share" | "transfer";
 
@@ -72,12 +73,20 @@ type ShareSkillModalProps = {
   | {
       mode: "edit";
       skillId: string;
+      initialTab?: "details" | "sharing";
+      fallbackTitle?: string;
       onSaved: () => void;
     }
 );
 
 export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { open, onClose } = props;
+  const initialTab =
+    props.mode === "edit" ? (props.initialTab ?? "sharing") : "sharing";
+  const [tab, setTab] = useState<"details" | "sharing">(initialTab);
+  const [detailsVisited, setDetailsVisited] = useState(
+    initialTab === "details"
+  );
   const skillId = props.mode === "edit" ? props.skillId : null;
   const {
     data: loadedSkill,
@@ -134,6 +143,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     if (!open) {
       setShowIndividualAccess(false);
       setHydrated(false);
+      setTab(initialTab);
+      setDetailsVisited(initialTab === "details");
       setDraftState(null);
       return;
     }
@@ -154,7 +165,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     setTransferTarget(null);
     setView("share");
     setHydrated(true);
-  }, [open, skill, hydrated, skillId, isValidating]);
+  }, [open, skill, hydrated, skillId, isValidating, initialTab]);
 
   const effectiveState = useMemo(() => {
     if (!draftState) return null;
@@ -690,7 +701,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && closeModal()}>
       <Modal.Content
-        height="fit"
+        height={props.mode === "edit" && view !== "transfer" ? "lg" : "fit"}
         width={view === "transfer" ? "sm" : "lg"}
         maxHeight="80dvh"
         position="top"
@@ -699,14 +710,22 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           icon={view === "transfer" ? SvgArrowExchange : SvgBlocks}
           title={
             !skill
-              ? t("share.accessTitle")
+              ? props.mode === "edit"
+                ? (props.fallbackTitle ?? t("preview.fallbackTitle"))
+                : t("share.accessTitle")
               : view === "transfer"
                 ? markdown(
                     t("share.header.transferTitle", { name: skill.name })
                   )
                 : skill.name
           }
-          description={view === "transfer" ? undefined : t("share.description")}
+          description={
+            view === "transfer"
+              ? undefined
+              : props.mode === "edit"
+                ? loadedSkill?.description
+                : t("share.description")
+          }
           gap={1}
           onClose={closeModal}
         />
@@ -723,6 +742,43 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               selectedTarget={transferTarget}
               users={transferableUsersData ?? []}
             />
+          ) : props.mode === "edit" ? (
+            <Tabs
+              value={tab}
+              variant="contained"
+              gap={6}
+              onValueChange={(value) => {
+                if (saving || (value !== "details" && value !== "sharing"))
+                  return;
+                setTab(value);
+                if (value === "details") setDetailsVisited(true);
+              }}
+            >
+              <Tabs.List>
+                <Tabs.Trigger value="details" disabled={saving}>
+                  {t("tabs.details")}
+                </Tabs.Trigger>
+                <Tabs.Trigger value="sharing" disabled={saving}>
+                  {t("tabs.sharing")}
+                </Tabs.Trigger>
+              </Tabs.List>
+              <Tabs.Content
+                value="details"
+                keepMounted
+                hidden={tab !== "details"}
+              >
+                {detailsVisited && (
+                  <SkillPreviewDetails skillId={props.skillId} />
+                )}
+              </Tabs.Content>
+              <Tabs.Content
+                value="sharing"
+                keepMounted
+                hidden={tab !== "sharing"}
+              >
+                {renderSharingContent()}
+              </Tabs.Content>
+            </Tabs>
           ) : (
             renderSharingContent()
           )}
@@ -750,9 +806,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               onClick={closeModal}
               prominence="secondary"
             >
-              {canEditShares || view === "transfer"
+              {view === "transfer" ||
+              (canEditShares && (tab === "sharing" || isDirty))
                 ? t("share.cancelButton.label")
-                : t("share.doneButton.label")}
+                : props.mode === "edit" && tab === "details"
+                  ? t("preview.closeButton.label")
+                  : t("share.doneButton.label")}
             </Button>
             {view === "transfer" ? (
               <Button
@@ -763,7 +822,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               >
                 {t("share.transferButton.label")}
               </Button>
-            ) : canEditShares ? (
+            ) : canEditShares && (tab === "sharing" || isDirty) ? (
               <Button
                 disabled={!isDirty || saving || !!loadError}
                 onClick={handleSave}

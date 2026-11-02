@@ -1,33 +1,46 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Button,
+  Collapsible,
   InputTypeIn,
+  InputCheckbox,
   MessageCard,
   Dropdown,
+  type DropdownMenuRow,
   Text,
 } from "@opal/components";
 import {
   ConfirmationModalLayout,
   IllustrationContent,
   SettingsLayouts,
+  CardGrid,
+  Content,
+  Section,
   toast,
 } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
   SvgAlertTriangle,
   SvgBlocks,
+  SvgCheckCircle,
   SvgEdit,
+  SvgMoreHorizontal,
   SvgPlus,
+  SvgShare,
+  SvgTrash,
   SvgUploadCloud,
+  SvgXCircle,
 } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
+import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
+import { useUser } from "@/providers/UserProvider";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -44,17 +57,28 @@ import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import {
   deleteUserSkill,
+  bulkUpdateSkills,
+  type SkillShareUpdatePayload,
   isSkillNameConflict,
   setSkillEnabled,
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+interface SkillsPageProps {
+  admin?: boolean;
+}
 
-export default function SkillsPage() {
+export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
+  const bulkCopy = useTranslations("skills.bulk");
+  const { isAdmin } = useUser();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkFailures, setBulkFailures] = useState<
+    { skill_id: string; detail: string }[]
+  >([]);
   const { appName } = useSettings();
   const router = useRouter();
   const externalAppIdParam = useSearchParams().get("externalAppId");
@@ -62,20 +86,22 @@ export default function SkillsPage() {
     externalAppIdParam !== null && /^\d+$/.test(externalAppIdParam)
       ? Number(externalAppIdParam)
       : null;
-  const { data, error, isLoading, refresh } = useUserSkills();
+  const { data, error, isLoading, refresh } = useUserSkills(true, admin);
   const { mutate } = useSWRConfig();
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
   );
-  const [sharingSkillId, setSharingSkillId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [builtinsOpen, setBuiltinsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [githubImportOpen, setGitHubImportOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
-    null
-  );
+  const [skillDialog, setSkillDialog] = useState<{
+    item: SkillCardItem;
+    tab: "details" | "sharing";
+  } | null>(null);
+  const previewTarget = skillDialog?.item ?? null;
   const [pendingSkillIds, setPendingSkillIds] = useState<Set<string>>(
     new Set()
   );
@@ -89,6 +115,13 @@ export default function SkillsPage() {
   useOnMount(() => {
     searchInputRef.current?.focus();
   });
+
+  function syncSkillLists() {
+    return Promise.allSettled([
+      mutate(SWR_KEYS.userSkills),
+      mutate(SWR_KEYS.adminSkills),
+    ]);
+  }
 
   async function deleteSkill() {
     if (
@@ -111,6 +144,7 @@ export default function SkillsPage() {
           },
         { revalidate: false }
       );
+      void syncSkillLists();
       if (deleteTarget.external_app) {
         void mutate(SWR_KEYS.buildExternalAppsAdmin).catch((error: unknown) => {
           console.error(
@@ -185,6 +219,7 @@ export default function SkillsPage() {
         replaceConflict
       );
       if (replaceConflict) setPendingSwitchTarget(null);
+      void syncSkillLists();
       await refresh(
         (current) => {
           if (!current) return current;
@@ -255,7 +290,7 @@ export default function SkillsPage() {
     const builtinItems: SkillCardItem[] = data.builtins
       .filter(
         (b): b is BuiltinSkill =>
-          b.source === "builtin" && b.is_available !== null
+          !admin && b.source === "builtin" && b.is_available !== null
       )
       .map((b) => ({
         id: b.id,
@@ -282,7 +317,6 @@ export default function SkillsPage() {
         can_toggle: c.can_toggle,
         external_app: c.external_app,
       }));
-    // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
     const groupRank = (item: SkillCardItem): number => {
       switch (item.source) {
         case "builtin":
@@ -296,7 +330,7 @@ export default function SkillsPage() {
         groupRank(a) - groupRank(b) ||
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
     );
-  }, [data, optimisticEnabledById]);
+  }, [data, optimisticEnabledById, admin]);
 
   const focusedAppName = useMemo(() => {
     if (focusedExternalAppId === null) return null;
@@ -330,8 +364,90 @@ export default function SkillsPage() {
     );
   }, [focusedAppName, focusedExternalAppId, items, searchQuery]);
 
+  const selectableItems = visibleItems.filter(
+    (item): item is CustomSkillCardItem => item.source === "custom"
+  );
+  const visibleBuiltins = visibleItems.filter(
+    (item): item is Extract<SkillCardItem, { source: "builtin" }> =>
+      item.source === "builtin"
+  );
+  useEffect(() => {
+    if (searchQuery.trim() && visibleBuiltins.length > 0) setBuiltinsOpen(true);
+  }, [searchQuery, visibleBuiltins.length]);
+  const selectedItems = selectableItems.filter((item) =>
+    selectedIds.has(item.id)
+  );
+  const canManageSelected =
+    selectedItems.length > 0 &&
+    selectedItems.every(
+      (item) =>
+        item.skill.user_permission === "OWNER" ||
+        item.skill.user_permission === "EDITOR"
+    );
+  const canToggleSelected =
+    selectedItems.length > 0 && selectedItems.every((item) => item.can_toggle);
+
+  const bulkToggleActions: DropdownMenuRow[] = [];
+  if (selectedItems.some((item) => !item.enabled)) {
+    bulkToggleActions.push({
+      kind: "action",
+      id: "enable",
+      icon: SvgCheckCircle,
+      title: bulkCopy("enable"),
+      disabled: bulkBusy || !canToggleSelected,
+      onSelect: () => void runBulk("enable"),
+    });
+  }
+  if (selectedItems.some((item) => item.enabled)) {
+    bulkToggleActions.push({
+      kind: "action",
+      id: "disable",
+      icon: SvgXCircle,
+      title: bulkCopy("disable"),
+      disabled: bulkBusy || !canToggleSelected,
+      onSelect: () => void runBulk("disable"),
+    });
+  }
+
+  async function runBulk(
+    action: "share" | "enable" | "disable" | "delete",
+    sharing?: SkillShareUpdatePayload
+  ) {
+    if (bulkBusy || selectedItems.length === 0) return;
+    setBulkBusy(true);
+    setBulkFailures([]);
+    try {
+      const skill_ids = selectedItems.map((item) => item.id);
+      const result = await bulkUpdateSkills(
+        action === "share"
+          ? { action, skill_ids, sharing: sharing ?? {} }
+          : { action, skill_ids }
+      );
+      setSelectedIds(new Set(result.failed.map((failure) => failure.skill_id)));
+      setBulkFailures(result.failed);
+      if (result.succeeded.length)
+        toast.success(bulkCopy("updated", { count: result.succeeded.length }));
+      setBulkSharingOpen(false);
+      setBulkDeleteOpen(false);
+      await Promise.all([
+        syncSkillLists(),
+        mutate(SWR_KEYS.buildExternalAppsAdmin),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : bulkCopy("failed"));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const switchPending =
     pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
+  const editablePreview =
+    previewTarget?.source === "custom" &&
+    (previewTarget.skill.user_permission === "OWNER" ||
+      previewTarget.skill.user_permission === "EDITOR")
+      ? previewTarget
+      : null;
   const previewUnavailableReason =
     previewTarget?.source === "builtin" && !previewTarget.is_available
       ? (previewTarget.unavailable_reason ??
@@ -343,7 +459,9 @@ export default function SkillsPage() {
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title={t("page.header.title")}
-        description={t("page.header.description")}
+        description={
+          admin ? bulkCopy("adminDescription") : t("page.header.description")
+        }
         actions={[
           <Dropdown
             key="primary"
@@ -393,12 +511,31 @@ export default function SkillsPage() {
           ref={searchInputRef}
           placeholder={t("page.search.placeholder")}
           value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
+          readOnly={bulkBusy}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            if (!event.target.value.trim()) setBuiltinsOpen(false);
+            setSelectedIds(new Set());
+            setBulkFailures([]);
+          }}
           searchIcon
         />
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
+        {bulkFailures.length > 0 && (
+          <MessageCard
+            variant="error"
+            title={bulkCopy("partialFailure", { count: bulkFailures.length })}
+            description={bulkFailures
+              .map(
+                (failure) =>
+                  `${items.find((item) => item.id === failure.skill_id)?.name ?? failure.skill_id}: ${failure.detail}`
+              )
+              .join("\n")}
+          />
+        )}
+
         {focusedAppName && (
           <MessageCard
             variant="info"
@@ -442,57 +579,260 @@ export default function SkillsPage() {
               />
             ) : (
               <>
-                <section className="flex flex-col gap-2">
-                  <Text font="secondary-body" color="text-03">
-                    {t("page.browse.title")}
-                  </Text>
-                  <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {visibleItems.map((item) => (
-                      <SkillCard
-                        key={item.id}
-                        item={item}
-                        hasEnabledNameConflict={
-                          !item.enabled && enabledItemByName.has(item.name)
-                        }
-                        onEdit={handleEdit}
-                        onShare={(skill) => setSharingSkillId(skill.id)}
-                        onDelete={setDeleteTarget}
-                        onClick={setPreviewTarget}
-                        onEnabledChange={(skill, enabled) =>
-                          void updateSkillEnabled(skill, enabled)
-                        }
-                        enablementPending={pendingSkillIds.has(item.id)}
-                      />
-                    ))}
-                  </div>
-                </section>
-                <TextSeparator
-                  count={visibleItems.length}
-                  text={t("page.countSeparator.label", {
-                    count: visibleItems.length,
-                  })}
-                />
+                {selectableItems.length > 0 ? (
+                  <>
+                    <Section height="auto" gap={2} alignItems="stretch">
+                      <Section
+                        role="group"
+                        aria-label={t("page.browse.title")}
+                        flexDirection="row"
+                        justifyContent="between"
+                        height={2.25}
+                        gap={2}
+                      >
+                        <Section
+                          flexDirection="row"
+                          justifyContent="start"
+                          width="auto"
+                          height="auto"
+                          gap={2}
+                          className="shrink-0"
+                        >
+                          <InputCheckbox
+                            aria-label={bulkCopy("selectAll")}
+                            checked={
+                              selectedItems.length === selectableItems.length
+                            }
+                            indeterminate={
+                              selectedItems.length > 0 &&
+                              selectedItems.length < selectableItems.length
+                            }
+                            disabled={bulkBusy}
+                            onCheckedChange={(checked) =>
+                              setSelectedIds(
+                                new Set(
+                                  checked
+                                    ? selectableItems.map((item) => item.id)
+                                    : []
+                                )
+                              )
+                            }
+                          />
+                          <Text font="secondary-body" color="text-03">
+                            {selectedItems.length > 0
+                              ? bulkCopy("selected", {
+                                  count: selectedItems.length,
+                                })
+                              : t("page.browse.title")}
+                          </Text>
+                        </Section>
+                        {selectedItems.length > 0 && (
+                          <Section
+                            flexDirection="row"
+                            width="auto"
+                            height="full"
+                            gap={2}
+                            justifyContent="start"
+                            className="min-w-0 overflow-x-auto"
+                          >
+                            <Button
+                              prominence="secondary"
+                              icon={SvgShare}
+                              disabled={bulkBusy || !canManageSelected}
+                              onClick={() => setBulkSharingOpen(true)}
+                            >
+                              {bulkCopy("share")}
+                            </Button>
+                            <Dropdown align="end" disabled={bulkBusy}>
+                              <Dropdown.Trigger asChild>
+                                <Button
+                                  prominence="tertiary"
+                                  icon={SvgMoreHorizontal}
+                                  aria-label={bulkCopy("moreActions")}
+                                  tooltip={bulkCopy("moreActions")}
+                                  disabled={bulkBusy}
+                                />
+                              </Dropdown.Trigger>
+                              <Dropdown.Data
+                                label={bulkCopy("moreActions")}
+                                items={[
+                                  { kind: "group", items: bulkToggleActions },
+                                  {
+                                    kind: "group",
+                                    items: [
+                                      {
+                                        kind: "action",
+                                        id: "delete",
+                                        icon: SvgTrash,
+                                        title: bulkCopy("delete"),
+                                        danger: true,
+                                        disabled:
+                                          !canManageSelected ||
+                                          (!isAdmin &&
+                                            selectedItems.some(
+                                              (item) =>
+                                                item.skill
+                                                  .installation_policy ===
+                                                "REQUIRED"
+                                            )),
+                                        onSelect: () => setBulkDeleteOpen(true),
+                                      },
+                                    ],
+                                  },
+                                ]}
+                              />
+                            </Dropdown>
+                          </Section>
+                        )}
+                      </Section>
+                      <CardGrid>
+                        {selectableItems.map((item) => (
+                          <SkillCard
+                            key={item.id}
+                            selection={{
+                              checked: selectedIds.has(item.id),
+                              disabled: bulkBusy,
+                              onCheckedChange: (checked) =>
+                                setSelectedIds((current) => {
+                                  const next = new Set(current);
+                                  if (checked) next.add(item.id);
+                                  else next.delete(item.id);
+                                  return next;
+                                }),
+                            }}
+                            item={item}
+                            hasEnabledNameConflict={
+                              !item.enabled && enabledItemByName.has(item.name)
+                            }
+                            onEdit={handleEdit}
+                            onShare={(skill) =>
+                              setSkillDialog({ item: skill, tab: "sharing" })
+                            }
+                            onDelete={setDeleteTarget}
+                            onClick={(skill) =>
+                              setSkillDialog({ item: skill, tab: "details" })
+                            }
+                            onEnabledChange={(skill, enabled) =>
+                              void updateSkillEnabled(skill, enabled)
+                            }
+                            enablementPending={
+                              bulkBusy || pendingSkillIds.has(item.id)
+                            }
+                          />
+                        ))}
+                      </CardGrid>
+                    </Section>
+                    <TextSeparator
+                      count={selectableItems.length}
+                      text={t("page.countSeparator.label", {
+                        count: selectableItems.length,
+                      })}
+                    />
+                  </>
+                ) : !searchQuery.trim() ? (
+                  <IllustrationContent
+                    illustration={SvgNoResult}
+                    title={t("page.empty.noSkills.title")}
+                    description={t("page.empty.noSkills.description")}
+                  />
+                ) : null}
+                {visibleBuiltins.length > 0 && (
+                  <Collapsible
+                    title={t("page.builtins.title", {
+                      count: visibleBuiltins.length,
+                    })}
+                    open={builtinsOpen}
+                    onOpenChange={setBuiltinsOpen}
+                  >
+                    <CardGrid>
+                      {visibleBuiltins.map((item) => (
+                        <SkillCard
+                          key={item.id}
+                          item={item}
+                          onClick={(skill) =>
+                            setSkillDialog({ item: skill, tab: "details" })
+                          }
+                        />
+                      ))}
+                    </CardGrid>
+                  </Collapsible>
+                )}
               </>
             )}
           </>
         )}
       </SettingsLayouts.Body>
 
-      {sharingSkillId && (
+      {bulkSharingOpen && (
+        <BulkSkillSharingModal
+          count={selectedItems.length}
+          saving={bulkBusy}
+          onClose={() => setBulkSharingOpen(false)}
+          onSave={(sharing) => runBulk("share", sharing)}
+        />
+      )}
+      {bulkDeleteOpen && (
+        <ConfirmationModalLayout
+          icon={SvgAlertTriangle}
+          title={bulkCopy("deleteTitle", { count: selectedItems.length })}
+          description={bulkCopy("deleteDescription", {
+            count: selectedItems.length,
+          })}
+          onClose={() => {
+            if (!bulkBusy) setBulkDeleteOpen(false);
+          }}
+          submit={
+            <Button
+              variant="danger"
+              disabled={bulkBusy}
+              onClick={() => void runBulk("delete")}
+            >
+              {bulkCopy("delete")}
+            </Button>
+          }
+        >
+          <Section
+            role="list"
+            height="auto"
+            alignItems="stretch"
+            gap={2}
+            className="max-h-60 overflow-y-auto"
+          >
+            {selectedItems.map((item) => (
+              <Section
+                key={item.id}
+                role="listitem"
+                height="auto"
+                alignItems="stretch"
+              >
+                <Content
+                  icon={SvgBlocks}
+                  title={item.name}
+                  sizePreset="main-ui"
+                  variant="body"
+                />
+              </Section>
+            ))}
+          </Section>
+        </ConfirmationModalLayout>
+      )}
+
+      {editablePreview && (
         <ShareSkillModal
           mode="edit"
-          skillId={sharingSkillId}
-          open={sharingSkillId !== null}
-          onClose={() => setSharingSkillId(null)}
-          onSaved={() => {
-            void refresh();
-          }}
+          skillId={editablePreview.id}
+          initialTab={skillDialog?.tab ?? "details"}
+          fallbackTitle={editablePreview.name}
+          open
+          onClose={() => setSkillDialog(null)}
+          onSaved={() => void syncSkillLists()}
         />
       )}
 
       <CreateSkillModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+        onImported={() => void syncSkillLists()}
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
@@ -504,14 +844,7 @@ export default function SkillsPage() {
         <ImportSkillsFromGitHubModal
           open
           onClose={() => setGitHubImportOpen(false)}
-          onImported={() => {
-            void refresh().catch((refreshError: unknown) => {
-              console.error(
-                "Failed to refresh skills after GitHub import",
-                refreshError
-              );
-            });
-          }}
+          onImported={() => void syncSkillLists()}
         />
       )}
 
@@ -534,11 +867,11 @@ export default function SkillsPage() {
       )}
 
       <SkillPreviewModal
-        open={previewTarget !== null}
+        open={previewTarget !== null && editablePreview === null}
         skillId={previewTarget?.id ?? null}
         fallbackTitle={previewTarget?.name}
         unavailableReason={previewUnavailableReason}
-        onClose={() => setPreviewTarget(null)}
+        onClose={() => setSkillDialog(null)}
       />
 
       {pendingSwitchTarget && (

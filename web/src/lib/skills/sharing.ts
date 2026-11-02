@@ -15,6 +15,23 @@ export type SkillSharingDraft = Pick<
   external_app: Pick<NonNullable<CustomSkill["external_app"]>, "name"> | null;
 };
 
+export function emptySkillSharingDraft(
+  name: string,
+  owner: SkillSharingDraft["owner"]
+): SkillSharingDraft {
+  return {
+    name,
+    owner,
+    ownership_vacant: false,
+    user_permission: "OWNER",
+    user_shares: [],
+    group_shares: [],
+    public_permission: null,
+    installation_policy: "AVAILABLE",
+    external_app: null,
+  };
+}
+
 export function serializeSkillSharing(
   draft: SkillSharingDraft,
   isAdmin: boolean

@@ -82,6 +82,55 @@ function invalidCustom(): CustomSkillCardItem {
 }
 
 describe("SkillCard", () => {
+  it.each([
+    { label: "Personal", is_personal: true, public_permission: null },
+    { label: "Shared", is_personal: false, public_permission: null },
+    { label: "Organization", is_personal: false, public_permission: "VIEWER" },
+  ] as const)(
+    "shows $label access from the saved sharing state",
+    ({ label, is_personal, public_permission }) => {
+      render(<SkillCard item={custom({ is_personal, public_permission })} />);
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.queryByText("Custom")).not.toBeInTheDocument();
+    }
+  );
+
+  it("selects a skill without opening its preview", async () => {
+    const user = setupUser();
+    const onClick = jest.fn();
+    const onCheckedChange = jest.fn();
+    render(
+      <SkillCard
+        item={custom()}
+        onClick={onClick}
+        selection={{ checked: false, disabled: false, onCheckedChange }}
+      />
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select Report Writer" })
+    );
+    expect(onCheckedChange).toHaveBeenCalledTimes(1);
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("still opens the preview from the title when a checkbox is present", async () => {
+    const user = setupUser();
+    const item = custom();
+    const onClick = jest.fn();
+    const onCheckedChange = jest.fn();
+    render(
+      <SkillCard
+        item={item}
+        onClick={onClick}
+        selection={{ checked: false, disabled: false, onCheckedChange }}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: item.name }));
+    expect(onClick).toHaveBeenCalledWith(item);
+    expect(onCheckedChange).not.toHaveBeenCalled();
+  });
+
   it("opens a required skill preview for a viewer by click or keyboard", async () => {
     const user = setupUser();
     const item = custom({

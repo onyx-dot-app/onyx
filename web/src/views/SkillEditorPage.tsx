@@ -20,6 +20,7 @@ import {
   InputTypeIn,
   MessageCard,
   Tooltip,
+  Text,
 } from "@opal/components";
 import { SvgAlertTriangle, SvgBlocks, SvgShare, SvgTrash } from "@opal/icons";
 import {
@@ -27,9 +28,9 @@ import {
   InputHorizontal,
   InputVertical,
   SettingsLayouts,
+  Section,
   toast,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -490,7 +491,7 @@ export default function SkillEditorPage({
           }
           cancel={handleCancel}
           actions={[
-            ...(canManageSkill && (isCreating || skill)
+            ...(canManageSkill && !isCreating && skill
               ? [
                   <Button
                     key="sharing"
@@ -517,9 +518,9 @@ export default function SkillEditorPage({
 
         <SettingsLayouts.Body>
           {!isCreating && isLoading && (
-            <div className="flex min-h-40 items-center justify-center">
+            <Section height="auto" className="min-h-40">
               <IconLoader />
-            </div>
+            </Section>
           )}
 
           {!isCreating && error && !isLoading && (
@@ -575,6 +576,43 @@ export default function SkillEditorPage({
 
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
                 </>
+              )}
+
+              {isCreating && (
+                <Card border="solid" padding={2}>
+                  <Section gap={2} height="auto" alignItems="stretch">
+                    <Section
+                      flexDirection="row"
+                      height="auto"
+                      justifyContent="between"
+                    >
+                      <Text font="main-ui-action">
+                        {t("editor.creationAccess.title")}
+                      </Text>
+                      <Button
+                        prominence="secondary"
+                        size="sm"
+                        icon={SvgShare}
+                        disabled={fieldsLocked}
+                        onClick={() => setShareOpen(true)}
+                      >
+                        {t("editor.management.sharing.edit.label")}
+                      </Button>
+                    </Section>
+                    <Text font="secondary-body" color="text-03">
+                      {sharingDraft.public_permission !== null
+                        ? t("editor.creationAccess.organizationSummary")
+                        : sharingDraft.user_shares.length +
+                              sharingDraft.group_shares.length >
+                            0
+                          ? t("editor.creationAccess.selectedSummary", {
+                              users: sharingDraft.user_shares.length,
+                              groups: sharingDraft.group_shares.length,
+                            })
+                          : t("editor.creationAccess.privateSummary")}
+                    </Text>
+                  </Section>
+                </Card>
               )}
 
               <Section alignItems="stretch">
@@ -644,7 +682,13 @@ export default function SkillEditorPage({
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               <Section alignItems="stretch">
-                <div className="flex w-full items-start justify-between gap-2">
+                <Section
+                  height="auto"
+                  flexDirection="row"
+                  alignItems="start"
+                  justifyContent="between"
+                  gap={2}
+                >
                   <Content
                     title={t("editor.instructions.title")}
                     description={t("editor.instructions.description")}
@@ -655,7 +699,7 @@ export default function SkillEditorPage({
                     value={instructionsDisplayMode}
                     onChange={setInstructionsDisplayMode}
                   />
-                </div>
+                </Section>
 
                 <Card border="solid" rounding={4} padding={2}>
                   {instructionsDisplayMode === "raw" ? (

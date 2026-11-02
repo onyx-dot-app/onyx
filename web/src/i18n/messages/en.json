@@ -12108,6 +12108,12 @@
         },
         "unavailable": {
           "label": "Unavailable - click to learn more"
+        },
+        "shared": {
+          "label": "Shared"
+        },
+        "organization": {
+          "label": "Organization"
         }
       },
       "toggle": {
@@ -16740,6 +16746,9 @@
         },
         "webSearch": {
           "label": "Web Search"
+        },
+        "skills": {
+          "label": "Skills"
         }
       },
       "sections": {
@@ -17053,6 +17062,12 @@
         "inspectFailed": "Failed to inspect skill bundle",
         "saveFailed": "Failed to save skill",
         "saved": "Saved \"{name}\""
+      },
+      "creationAccess": {
+        "title": "Access",
+        "organizationSummary": "Everyone in the organization can access this skill.",
+        "selectedSummary": "Shared with {users, plural, one {# person} other {# people}} and {groups, plural, one {# group} other {# groups}}.",
+        "privateSummary": "Only you can access this skill. Use Edit sharing to add people, groups, or the organization."
       }
     },
     "modals": {
@@ -17091,6 +17106,13 @@
           "singleSkill": "Upload one skill at a time.",
           "title": "File requirements",
           "zip": "ZIP files must contain a SKILL.md file."
+        },
+        "batch": {
+          "title": "Access for Uploaded Skills",
+          "selected": "{count, plural, one {# skill bundle selected} other {# skill bundles selected}}",
+          "result": "{imported, plural, one {# skill imported} other {# skills imported}}. {failed, plural, one {# failed} other {# failed}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "Select multiple ZIP files to import skills together. Each ZIP must contain one skill."
         }
       },
       "importGithub": {
@@ -17167,6 +17189,14 @@
         "unavailableFallback": "This skill cannot be imported.",
         "unavailableTag": {
           "label": "Can't import"
+        },
+        "sharing": {
+          "title": "Access for Imported Skills",
+          "configureButton": "Configure access",
+          "organizationSummary": "Everyone in the organization can access these skills.",
+          "selectedSummary": "Shared with {users, plural, one {# person} other {# people}} and {groups, plural, one {# group} other {# groups}}.",
+          "privateSummary": "Only you can access these skills.",
+          "description": "These access settings apply to all {count, plural, one {# selected skill} other {# selected skills}}."
         }
       },
       "nameConflict": {
@@ -17275,11 +17305,15 @@
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"
+      },
+      "tabs": {
+        "details": "Details",
+        "sharing": "Sharing"
       }
     },
     "page": {
       "browse": {
-        "title": "Browse skills"
+        "title": "Select skills"
       },
       "countSeparator": {
         "label": "{count, plural, one {Skill} other {Skills}}"
@@ -17307,8 +17341,8 @@
           "title": "No matching skills"
         },
         "noSkills": {
-          "description": "No custom skills have been shared with you yet, and no built-ins are configured.",
-          "title": "No skills available"
+          "title": "No custom skills yet",
+          "description": "Create or import a skill to add it to your library."
         }
       },
       "focusedApp": {
@@ -17345,6 +17379,9 @@
         "disableFailed": "Failed to disable {name}",
         "enableFailed": "Failed to enable {name}",
         "refreshFailed": "{name} was updated, but the skill list could not be refreshed."
+      },
+      "builtins": {
+        "title": "Built-in skills ({count, number})"
       }
     },
     "sections": {
@@ -17400,6 +17437,30 @@
           "readFailed": "Could not read the upload."
         }
       }
+    },
+    "bulk": {
+      "adminDescription": "Manage skills and access across your organization.",
+      "selectAll": "Select all visible custom skills",
+      "selected": "{count, number} selected",
+      "share": "Share",
+      "enable": "Enable for me",
+      "disable": "Disable for me",
+      "delete": "Delete",
+      "personalEnablement": "Enable and disable change your own skills. Use installation policy to deploy skills to staff.",
+      "selectSkill": "Select {name}",
+      "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
+      "failed": "Could not update skills. Try again.",
+      "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
+      "deleteTitle": "{count, plural, one {Delete # skill?} other {Delete # skills?}}",
+      "deleteDescription": "{count, plural, one {This deletes the selected skill for everyone who has access. This cannot be undone.} other {This deletes all # selected skills for everyone who has access. This cannot be undone.}}",
+      "shareTitle": "{count, plural, one {Update Access for # Skill} other {Update Access for # Skills}}",
+      "shareDescription": "Apply these changes to every selected skill. Settings left unchanged keep their current values.",
+      "unchanged": "Keep unchanged",
+      "everyone": "Everyone in the organization",
+      "invitedOnly": "Invited people and groups",
+      "addAccessDescription": "Add these people and groups to every selected skill. Existing individual access stays unchanged.",
+      "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
+      "moreActions": "More actions"
     }
   },
   "opensearchHealth": {

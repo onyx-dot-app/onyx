@@ -12108,6 +12108,12 @@
         },
         "unavailable": {
           "label": "غير متاحة - انقر لمعرفة المزيد"
+        },
+        "shared": {
+          "label": "مُشارك"
+        },
+        "organization": {
+          "label": "المؤسسة"
         }
       },
       "toggle": {
@@ -16740,6 +16746,9 @@
         },
         "webSearch": {
           "label": "البحث في الويب"
+        },
+        "skills": {
+          "label": "المهارات"
         }
       },
       "sections": {
@@ -17053,6 +17062,12 @@
         "inspectFailed": "فشل فحص حزمة المهارة",
         "saveFailed": "فشل حفظ المهارة",
         "saved": "تم حفظ \"{name}\""
+      },
+      "creationAccess": {
+        "title": "الوصول",
+        "organizationSummary": "يمكن للجميع في المؤسسة الوصول إلى هذه المهارة.",
+        "selectedSummary": "تمت المشاركة مع {users, plural, one {# شخص} other {# أشخاص}} و{groups, plural, one {# مجموعة} other {# مجموعات}}.",
+        "privateSummary": "يمكنك وحدك الوصول إلى هذه المهارة. استخدم تحرير المشاركة لإضافة أشخاص أو مجموعات أو المؤسسة."
       }
     },
     "modals": {
@@ -17091,6 +17106,13 @@
           "singleSkill": "ارفع مهارة واحدة في كل مرة.",
           "title": "متطلبات الملف",
           "zip": "يجب أن تحتوي ملفات ZIP على ملف SKILL.md."
+        },
+        "batch": {
+          "title": "الوصول إلى المهارات المرفوعة",
+          "selected": "{count, plural, one {تم تحديد # حزمة مهارة} other {تم تحديد # حزم مهارات}}",
+          "result": "{imported, plural, one {تم استيراد # مهارة} other {تم استيراد # مهارات}}. {failed, plural, one {فشل #} other {فشل #}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "حدد ملفات ZIP متعددة لاستيراد المهارات معًا. يجب أن يحتوي كل ZIP على مهارة واحدة."
         }
       },
       "importGithub": {
@@ -17167,6 +17189,14 @@
         "unavailableFallback": "لا يمكن استيراد هذه المهارة.",
         "unavailableTag": {
           "label": "يتعذّر الاستيراد"
+        },
+        "sharing": {
+          "title": "الوصول إلى المهارات المستوردة",
+          "configureButton": "إعداد الوصول",
+          "organizationSummary": "يمكن للجميع في المؤسسة الوصول إلى هذه المهارات.",
+          "selectedSummary": "تمت المشاركة مع {users, plural, one {# شخص} other {# أشخاص}} و{groups, plural, one {# مجموعة} other {# مجموعات}}.",
+          "privateSummary": "يمكنك وحدك الوصول إلى هذه المهارات.",
+          "description": "تنطبق إعدادات الوصول هذه على {count, plural, one {# مهارة محددة} other {جميع المهارات المحددة وعددها #}}."
         }
       },
       "nameConflict": {
@@ -17275,11 +17305,15 @@
       },
       "placeholders": {
         "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"
+      },
+      "tabs": {
+        "details": "التفاصيل",
+        "sharing": "المشاركة"
       }
     },
     "page": {
       "browse": {
-        "title": "تصفح المهارات"
+        "title": "تحديد المهارات"
       },
       "countSeparator": {
         "label": "{count, plural, one {مهارة} other {مهارات}}"
@@ -17307,8 +17341,8 @@
           "title": "لا توجد مهارات مطابقة"
         },
         "noSkills": {
-          "description": "لم تتم مشاركة أي مهارات مخصصة معك بعد، ولا توجد مهارات مدمجة مهيأة.",
-          "title": "لا توجد مهارات متاحة"
+          "title": "لا توجد مهارات مخصصة بعد",
+          "description": "أنشئ مهارة أو استوردها لإضافتها إلى مكتبتك."
         }
       },
       "focusedApp": {
@@ -17345,6 +17379,9 @@
         "disableFailed": "فشل تعطيل {name}",
         "enableFailed": "فشل تفعيل {name}",
         "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات."
+      },
+      "builtins": {
+        "title": "المهارات المضمنة ({count, number})"
       }
     },
     "sections": {
@@ -17400,6 +17437,30 @@
           "readFailed": "تعذّرت قراءة الملف المرفوع."
         }
       }
+    },
+    "bulk": {
+      "adminDescription": "إدارة المهارات والوصول في مؤسستك.",
+      "selectAll": "تحديد جميع المهارات المخصصة الظاهرة",
+      "selected": "تم تحديد {count, number}",
+      "share": "مشاركة",
+      "enable": "تفعيل لي",
+      "disable": "تعطيل لي",
+      "delete": "حذف",
+      "personalEnablement": "يؤثر التفعيل والتعطيل على مهاراتك فقط. استخدم سياسة التثبيت لنشر المهارات للموظفين.",
+      "selectSkill": "تحديد {name}",
+      "updated": "{count, plural, one {تم تحديث # مهارة} other {تم تحديث # مهارات}}",
+      "failed": "تعذر تحديث المهارات. حاول مرة أخرى.",
+      "partialFailure": "{count, plural, one {تعذر تحديث # مهارة} other {تعذر تحديث # مهارات}}",
+      "deleteTitle": "{count, plural, one {حذف # مهارة؟} other {حذف # مهارات؟}}",
+      "deleteDescription": "{count, plural, one {سيؤدي هذا إلى حذف المهارة المحددة لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.} other {سيؤدي هذا إلى حذف جميع المهارات المحددة وعددها # لجميع من لديهم صلاحية الوصول. لا يمكن التراجع عن هذا الإجراء.}}",
+      "shareTitle": "{count, plural, one {تحديث الوصول إلى # مهارة} other {تحديث الوصول إلى # مهارات}}",
+      "shareDescription": "طبّق هذه التغييرات على كل مهارة محددة. تحتفظ الإعدادات التي لم تتغير بقيمها الحالية.",
+      "unchanged": "الإبقاء دون تغيير",
+      "everyone": "الجميع في المؤسسة",
+      "invitedOnly": "الأشخاص والمجموعات المدعوون",
+      "addAccessDescription": "أضف هؤلاء الأشخاص والمجموعات إلى كل مهارة محددة. تبقى صلاحيات الوصول الفردية الحالية دون تغيير.",
+      "apply": "{count, plural, one {تطبيق على # مهارة} other {تطبيق على # مهارات}}",
+      "moreActions": "المزيد من الإجراءات"
     }
   },
   "opensearchHealth": {

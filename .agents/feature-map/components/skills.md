@@ -11,7 +11,9 @@
 
 - **A Craft user** opens the skills library and sees built-in skills and the
   custom skills they can see: their own, shared with them, or published to the
-  organization. They preview a skill's instructions, and turn custom skills
+  organization. Custom skills appear first. Built-ins sit in a collapsed
+  section at the bottom; matching searches expand it, and clearing search
+  collapses it. The Admin Panel shows custom skills only. They preview a skill's instructions, and turn custom skills
   on or off.
 - **Built-in skills** are always on. A built-in that depends on an unavailable
   service, such as image generation with no provider or the browser with
@@ -27,6 +29,23 @@
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
   and the user cannot turn it off). Only an admin can delete a required skill.
+- **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
+  support selection of custom skills, bulk access and installation changes,
+  personal enable/disable, and confirmed deletion. Admins see all manageable
+  custom skills. Bulk sharing adds or updates supplied individual grants;
+  omitted visibility and installation settings remain unchanged. Failed items
+  stay selected. Search changes clear selection.
+  Custom cards show Personal, Shared, or Organization access from
+  `public_permission` and the server's `is_personal`; share-detail arrays can
+  be hidden, so empty arrays do not mean a skill is personal.
+- **Skill dialog.** Owners and editors open custom cards in a single
+  Details/Sharing dialog. Share actions open its Sharing tab directly. Draft
+  sharing edits survive tab switches. Other recipients and built-in skills
+  keep a preview-only dialog. The sharing endpoint requires EDIT; do not
+  require that endpoint for a VIEW-only preview.
+- **Access at import.** GitHub import and multiple-ZIP upload accept one set
+  of sharing settings for the selection. The single-skill editor accepts
+  sharing before creation. These use the same sharing checks as later edits.
 - **In a running Craft session**, a skill change does not reach the agent at
   once. The session shows a stale-skills notice with a reload action. The
   reload restarts the agent's runtime with the current skills.
@@ -202,6 +221,10 @@ The library preview of an external-app skill calls the same renderer
     `db/skill.py:replace_skill_shares`.
     Agents apply a looser form of the rule
     ([[agents-personas#group-share-needs-manage-agents]]).
+    `POST /skills/bulk` applies each item in a savepoint, reports expected
+    business errors per skill, and pushes the combined affected audience after
+    commit. Bulk enable and disable change only the caller's preference.
+    `POST /skills/custom/batch` validates each uploaded bundle separately.
 13. `pptx-scripts-serve-previews` **The `pptx` skill's preview scripts also
     render Craft output previews.**
     `server/features/build/sandbox/base.py:document_preview_command` runs
@@ -310,6 +333,8 @@ The library preview of an external-app skill calls the same renderer
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
 - `backend/tests/integration/tests/skills/` covers the API.
+  `backend/tests/integration/tests/skills/test_skills_bulk.py` covers bulk access, policy authorization, partial
+  failures, personal toggles, and batch upload sharing.
   `backend/tests/integration/tests/craft/k8s/` covers a real push.
 - By hand: edit a skill while a Craft session runs. The stale notice must
   appear, and after reload the agent must read the new text.

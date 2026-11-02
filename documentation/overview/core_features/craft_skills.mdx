@@ -17,6 +17,9 @@ and save the presentation in the right format. You provide the goal and source m
 
 <img className="rounded-image" src="/assets/overview/core_features/craft_skills.webp" alt="The Skills page in Craft"/>
 
+Built-in Skills appear in a collapsed section below your custom Skills. Expand **Built-in skills** to preview them.
+Search includes built-in Skills and expands the section when they match.
+
 ## How Craft uses skills
 
 Craft can choose an available skill automatically when your request matches its description.
@@ -143,8 +146,9 @@ description: Create a concise weekly customer update from meeting notes and acco
   </Step>
 
   <Step title="Upload the Skill">
-    Open **Skills**, select **Create skill** > **Upload a skill**, and select `SKILL.md` or a ZIP.
-    Upload one Skill at a time, then select **Create**.
+    Open **Skills**, select **Create skill** > **Upload a skill**, and select `SKILL.md` or a ZIP. For one Skill,
+    review the editor and configure **Edit sharing** before creating it. To import several Skills together,
+    select multiple ZIP files. Each ZIP must contain one Skill. Configure access once for the batch before importing it.
   </Step>
 </Steps>
 
@@ -152,7 +156,9 @@ description: Create a concise weekly customer update from meeting notes and acco
 
 Select **Create skill** > **Import from GitHub** and enter the repository, such as `owner/repo`.
 Onyx scans the repository for folders that contain a `SKILL.md` and lists the importable Skills.
-Select the Skills you want, then select **Done**. Onyx shows which Skills it imported and which it could not.
+Select the Skills you want. Select **Configure access** to share them with people, groups, or your organization.
+The access settings apply to all selected Skills. Import the selection and review the results.
+Onyx shows which Skills it imported and which it could not.
 
 Public repositories work without setup. To import from a private repository, use **Connect GitHub** in the
 import dialog. If GitHub is not set up for your workspace, ask an admin.
@@ -172,7 +178,12 @@ change its sharing, transfer ownership, or delete it.
 
 ### Share a Skill
 
-Open the Skill and select **Share**.
+Custom Skill cards show **Personal**, **Shared**, or **Organization** access.
+**Shared** means specific people or groups have access. **Organization** means everyone in the organization has access.
+
+Open a Skill to view its instructions.
+Owners and editors can switch between **Details** and **Sharing** to manage access and installation.
+Sharing edits stay in place when you switch tabs.
 Choose who can use it and give each person or group **Can use** or **Can edit** access. Under **Installation**,
 choose how the Skill is installed for people with access:
 
@@ -181,6 +192,16 @@ choose how the Skill is installed for people with access:
 | **Available to install** | People can install or uninstall the Skill at any time. |
 | **Installed by default** | Onyx installs the Skill automatically. People can disable or uninstall it. |
 | **Required** | Onyx installs the Skill automatically. People cannot disable or uninstall it. |
+
+### Manage several Skills
+
+Select Skills with the checkboxes on their cards.
+Use the checkbox beside **Select skills** to select all visible custom Skills. The label changes to the selected count,
+and bulk actions appear beside it. Use **Share** to update access for the selection. You can also enable, disable,
+or delete selected Skills when your permissions allow the action.
+**Enable for me** and **Disable for me** affect your library only.
+Admins use installation policies to deploy Skills to staff.
+Search changes clear the selection so hidden Skills are not changed.
 
 <Warning>
   Never put passwords, API keys, tokens, or production credentials in a skill bundle.
@@ -197,7 +218,8 @@ choose how the Skill is installed for people with access:
   </Accordion>
 
   <Accordion title="My Skill will not upload">
-    Upload one Skill at a time. Put `SKILL.md` at the top level of the folder. In a ZIP,
+    Keep one Skill in each ZIP. You can upload several ZIP files together.
+    Put `SKILL.md` at the top level of the folder. In a ZIP,
     place it at the archive root or directly inside one enclosing folder.
     Confirm that its frontmatter contains non-empty `name` and `description` fields. For a folder or ZIP,
     check that its name is lowercase and hyphenated. If you started from scratch, try a different Skill name.

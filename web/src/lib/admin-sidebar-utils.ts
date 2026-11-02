@@ -29,6 +29,7 @@ export type AdminNavItemId =
   | "craftAccess"
   | "craftApps"
   | "craftPreferences"
+  | "skills"
   | "customAnalytics"
   | "agents"
   | "plugins"
@@ -88,6 +89,7 @@ export const NAV_ITEM_IDS: Record<
   CRAFT_ACCESS: "craftAccess",
   CRAFT_APPS: null,
   CRAFT_PREFERENCES: "craftPreferences",
+  SKILLS: "skills",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
   PLUGINS: "plugins",
