@@ -7312,6 +7312,7 @@
       },
       "vectorQuantization": {
         "description": "Store document vectors with fewer bits so vector search uses less memory. Fewer bits can lower search quality. Changing only this setting rebuilds the index from the stored vectors, without re-embedding.",
+        "needsVersion": "Needs OpenSearch {version}+",
         "none": {
           "description": "Full 32-bit precision.",
           "label": "None"
@@ -7324,7 +7325,8 @@
           "description": "About 4x less vector search memory. Almost no loss in search quality.",
           "label": "7-bit"
         },
-        "title": "Vector Quantization"
+        "title": "Vector Quantization",
+        "unsupportedTooltip": "This cluster runs OpenSearch {current}. Upgrade OpenSearch to {version} or later to use this level."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {This connector will be deleted} other {These # connectors will be deleted}}",

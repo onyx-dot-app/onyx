@@ -7312,6 +7312,7 @@
       },
       "vectorQuantization": {
         "description": "Stockez les vecteurs des documents avec moins de bits pour que la recherche vectorielle utilise moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche. Si vous modifiez uniquement ce paramètre, l'index est reconstruit à partir des vecteurs stockés, sans recalculer les embeddings.",
+        "needsVersion": "Nécessite OpenSearch {version}+",
         "none": {
           "description": "Précision complète sur 32 bits.",
           "label": "Aucune"
@@ -7324,7 +7325,8 @@
           "description": "Environ 4 fois moins de mémoire pour la recherche vectorielle. Presque aucune perte de qualité de recherche.",
           "label": "7 bits"
         },
-        "title": "Quantification des vecteurs"
+        "title": "Quantification des vecteurs",
+        "unsupportedTooltip": "Ce cluster utilise OpenSearch {current}. Mettez OpenSearch à jour vers {version} ou une version ultérieure pour utiliser ce niveau."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Ce connecteur sera supprimé} other {Ces # connecteurs seront supprimés}}",

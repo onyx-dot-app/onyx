@@ -7312,6 +7312,7 @@
       },
       "vectorQuantization": {
         "description": "문서 벡터를 더 적은 비트로 저장하여 벡터 검색의 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다. 이 설정만 변경하면 저장된 벡터로 인덱스를 다시 구축하며, 다시 임베딩하지 않습니다.",
+        "needsVersion": "OpenSearch {version} 이상 필요",
         "none": {
           "description": "32비트 전체 정밀도.",
           "label": "없음"
@@ -7324,7 +7325,8 @@
           "description": "벡터 검색 메모리 사용량 약 4배 감소. 검색 품질 저하가 거의 없습니다.",
           "label": "7비트"
         },
-        "title": "벡터 양자화"
+        "title": "벡터 양자화",
+        "unsupportedTooltip": "이 클러스터는 OpenSearch {current}을(를) 실행 중입니다. 이 수준을 사용하려면 OpenSearch를 {version} 이상으로 업그레이드하세요."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {이 커넥터는 삭제됩니다} other {이 # 개의 커넥터는 삭제됩니다}}",

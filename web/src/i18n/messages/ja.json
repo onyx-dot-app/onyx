@@ -7312,6 +7312,7 @@
       },
       "vectorQuantization": {
         "description": "ドキュメントのベクトルを少ないビット数で保存し、ベクトル検索のメモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。この設定のみを変更した場合、保存済みのベクトルからインデックスを再構築し、再埋め込みは行いません。",
+        "needsVersion": "OpenSearch {version} 以降が必要",
         "none": {
           "description": "32 ビットの完全な精度。",
           "label": "なし"
@@ -7324,7 +7325,8 @@
           "description": "ベクトル検索のメモリ使用量が約 4 分の 1。検索品質はほぼ低下しません。",
           "label": "7 ビット"
         },
-        "title": "ベクトル量子化"
+        "title": "ベクトル量子化",
+        "unsupportedTooltip": "このクラスターは OpenSearch {current} で動作しています。このレベルを使用するには、OpenSearch を {version} 以降にアップグレードしてください。"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {このコネクタは削除されます} other {これら # 個のコネクタは削除されます}}",

@@ -57,6 +57,20 @@ export enum VectorQuantization {
   SCALAR_1_BIT = "scalar_1_bit",
 }
 
+/** Mirrors backend `VectorQuantizationLevelSupport`. */
+export interface VectorQuantizationLevelSupport {
+  vector_quantization: VectorQuantization;
+  supported: boolean;
+  /** "major.minor" of the oldest OpenSearch that can index this level. */
+  min_opensearch_version: string | null;
+}
+
+/** Mirrors backend `VectorQuantizationSupport`; a null version restricts nothing. */
+export interface VectorQuantizationSupport {
+  opensearch_version: string | null;
+  levels: VectorQuantizationLevelSupport[];
+}
+
 // ---------------------------------------------------------------------------
 // Frontend / Registry Types
 // Frontend-only shapes that carry display info (icons, links, descriptions)
