@@ -8,11 +8,15 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.models import CreateChatSessionID
 from onyx.configs.constants import DocumentSource
+from onyx.db.models import ToolCall
+from onyx.llm.model_request import UserMessage as RequestUserMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
     ResponseFunctionCall,
 )
+from onyx.llm.models import ToolChoiceOptions
+from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import (
     ImageGenerationFinal,
@@ -257,3 +261,67 @@ def test_parallel_internal_and_web_search_tool_calls(
     ]
     assert len(documents) == 2
     assert all(documents)
+
+
+def test_chat_stops_tools_at_the_step_cap(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    user = make_test_user("stream_step_cap")
+    session = create_chat_session(db_session, user)
+    cap = 4
+    # Every step before the cap searches; the step at the cap offers no tools.
+    queries = [f"topic {index}" for index in range(cap - 1)]
+    llm = ScriptedLLM(
+        [
+            *(
+                Delta(
+                    tool_calls=[
+                        tool_call(
+                            "web_search",
+                            f"search-{index}",
+                            json.dumps({"queries": [q]}),
+                        )
+                    ]
+                )
+                for index, q in enumerate(queries)
+            ),
+            Delta(content="Answered at the cap."),
+        ],
+        max_input_tokens=128000,
+    )
+    with (
+        patch("onyx.chat.agent.MAX_LLM_CYCLES", cap),
+        patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
+        use_mock_web_provider(db_session) as web,
+    ):
+        for query in queries:
+            web.add_results(
+                query,
+                [
+                    MockWebSearchResult(
+                        title=query,
+                        link=f"https://example.com/{query.replace(' ', '-')}",
+                        snippet=f"About {query}.",
+                    )
+                ],
+            )
+        parts = list(submit_query("Cover every topic.", session.id, user))
+    assert final_answer(parts) == "Answered at the cap."
+    assert len(llm.requests) == cap
+    assert all(
+        request["tool_choice"] == ToolChoiceOptions.AUTO and request["tools"]
+        for request in llm.requests[:-1]
+    )
+    last = llm.requests[-1]
+    assert not last["tools"]
+    assert last["tool_choice"] == ToolChoiceOptions.NONE
+    assert any(
+        isinstance(message, RequestUserMessage)
+        and isinstance(message.content, str)
+        and LAST_CYCLE_CITATION_REMINDER in message.content
+        for message in last["prompt"]
+    )
+    saved_calls = (
+        db_session.query(ToolCall).filter(ToolCall.chat_session_id == session.id).all()
+    )
+    assert len(saved_calls) == cap - 1
