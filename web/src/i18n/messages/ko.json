@@ -17458,7 +17458,7 @@
       "unchanged": "변경하지 않음",
       "everyone": "조직의 모든 사용자",
       "invitedOnly": "초대한 사용자 및 그룹",
-      "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 기존 개별 액세스 권한은 유지됩니다.",
+      "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
       "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
       "moreActions": "추가 작업"
     }

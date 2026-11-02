@@ -17458,7 +17458,7 @@
       "unchanged": "保持不变",
       "everyone": "组织中的所有人",
       "invitedOnly": "受邀人员和群组",
-      "addAccessDescription": "将这些人员和群组添加到每个所选技能。现有的个人访问权限保持不变。",
+      "addAccessDescription": "将这些人员和群组添加到每个所选技能。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
       "apply": "{count, plural, one {应用于 # 个技能} other {应用于 # 个技能}}",
       "moreActions": "更多操作"
     }

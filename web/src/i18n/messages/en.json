@@ -17458,7 +17458,7 @@
       "unchanged": "Keep unchanged",
       "everyone": "Everyone in the organization",
       "invitedOnly": "Invited people and groups",
-      "addAccessDescription": "Add these people and groups to every selected skill. Existing individual access stays unchanged.",
+      "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
       "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
       "moreActions": "More actions"
     }

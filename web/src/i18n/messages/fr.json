@@ -17458,7 +17458,7 @@
       "unchanged": "Ne pas modifier",
       "everyone": "Tout le monde dans l’organisation",
       "invitedOnly": "Personnes et groupes invités",
-      "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les accès individuels existants restent inchangés.",
+      "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
       "apply": "{count, plural, one {Appliquer à # compétence} other {Appliquer à # compétences}}",
       "moreActions": "Plus d’actions"
     }

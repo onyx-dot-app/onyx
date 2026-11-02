@@ -386,6 +386,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     );
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
   const canToggleSelected = toggleableItems.length > 0;
+  // A card toggle still in flight must settle before a bulk action may race it.
+  const bulkLocked =
+    bulkBusy || selectedItems.some((item) => pendingSkillIds.has(item.id));
 
   const bulkToggleActions: DropdownMenuRow[] = [];
   if (selectedItems.some((item) => !item.enabled)) {
@@ -394,7 +397,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       id: "enable",
       icon: SvgCheckCircle,
       title: bulkCopy("enable"),
-      disabled: bulkBusy || !canToggleSelected,
+      disabled: bulkLocked || !canToggleSelected,
       onSelect: () => void runBulk("enable"),
     });
   }
@@ -404,7 +407,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       id: "disable",
       icon: SvgXCircle,
       title: bulkCopy("disable"),
-      disabled: bulkBusy || !canToggleSelected,
+      disabled: bulkLocked || !canToggleSelected,
       onSelect: () => void runBulk("disable"),
     });
   }
@@ -413,7 +416,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     action: "share" | "enable" | "disable" | "delete",
     sharing?: SkillShareUpdatePayload
   ) {
-    if (bulkBusy || selectedItems.length === 0) return;
+    if (bulkLocked || selectedItems.length === 0) return;
     setBulkBusy(true);
     setBulkFailures([]);
     try {
@@ -642,19 +645,19 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                             <Button
                               prominence="secondary"
                               icon={SvgShare}
-                              disabled={bulkBusy || !canManageSelected}
+                              disabled={bulkLocked || !canManageSelected}
                               onClick={() => setBulkSharingOpen(true)}
                             >
                               {bulkCopy("share")}
                             </Button>
-                            <Dropdown align="end" disabled={bulkBusy}>
+                            <Dropdown align="end" disabled={bulkLocked}>
                               <Dropdown.Trigger asChild>
                                 <Button
                                   prominence="tertiary"
                                   icon={SvgMoreHorizontal}
                                   aria-label={bulkCopy("moreActions")}
                                   tooltip={bulkCopy("moreActions")}
-                                  disabled={bulkBusy}
+                                  disabled={bulkLocked}
                                 />
                               </Dropdown.Trigger>
                               <Dropdown.Data

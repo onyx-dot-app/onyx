@@ -17458,7 +17458,7 @@
       "unchanged": "Mantener sin cambios",
       "everyone": "Todos en la organización",
       "invitedOnly": "Personas y grupos invitados",
-      "addAccessDescription": "Añade estas personas y grupos a cada habilidad seleccionada. El acceso individual existente no cambia.",
+      "addAccessDescription": "Añade estas personas y grupos a cada habilidad seleccionada. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
       "apply": "{count, plural, one {Aplicar a # habilidad} other {Aplicar a # habilidades}}",
       "moreActions": "Más acciones"
     }

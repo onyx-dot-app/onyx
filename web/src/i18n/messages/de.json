@@ -17458,7 +17458,7 @@
       "unchanged": "Unverändert lassen",
       "everyone": "Alle in der Organisation",
       "invitedOnly": "Eingeladene Personen und Gruppen",
-      "addAccessDescription": "Diese Personen und Gruppen zu jeder ausgewählten Fähigkeit hinzufügen. Bestehender individueller Zugriff bleibt unverändert.",
+      "addAccessDescription": "Diese Personen und Gruppen zu jeder ausgewählten Fähigkeit hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
       "apply": "{count, plural, one {Auf # Fähigkeit anwenden} other {Auf # Fähigkeiten anwenden}}",
       "moreActions": "Weitere Aktionen"
     }

@@ -401,6 +401,30 @@ describe("SkillsPage preference toggles", () => {
     );
   });
 
+  it("holds bulk actions while a selected skill toggle is pending", async () => {
+    const user = setupUser();
+    const mutation = deferred<CustomSkill>();
+    mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
+    render(<SkillsPage />);
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+    );
+    const browseRow = screen.getByRole("group", { name: "Select skills" });
+    expect(
+      within(browseRow).getByRole("button", { name: "More actions" })
+    ).toBeDisabled();
+    await act(async () => {
+      mutation.resolve(enabledCustomAt(0));
+      await mutation.promise;
+    });
+    await waitFor(() =>
+      expect(
+        within(browseRow).getByRole("button", { name: "More actions" })
+      ).toBeEnabled()
+    );
+  });
+
   it("lists exactly the skills selected for deletion before confirming", async () => {
     const names = [
       "first-skill",
