@@ -4194,7 +4194,7 @@
             },
             "batch_size": {
               "label": "批量大小",
-              "description": "每页从 Jira Service Management API 获取的请求数量。"
+              "description": "每个索引批次生成的客户请求数量（默认：100）。"
             }
           }
         },

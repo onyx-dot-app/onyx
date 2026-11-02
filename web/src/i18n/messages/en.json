@@ -4194,7 +4194,7 @@
             },
             "batch_size": {
               "label": "Batch Size",
-              "description": "Number of requests to fetch per page from the Jira Service Management API."
+              "description": "Number of customer requests yielded per indexing batch (default: 100)."
             }
           }
         },

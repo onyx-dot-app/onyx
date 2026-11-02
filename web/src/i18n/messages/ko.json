@@ -4194,7 +4194,7 @@
             },
             "batch_size": {
               "label": "배치 크기",
-              "description": "Jira Service Management API에서 페이지당 가져올 요청 수입니다."
+              "description": "인덱싱 배치당 생성되는 고객 요청 수입니다(기본값: 100)."
             }
           }
         },

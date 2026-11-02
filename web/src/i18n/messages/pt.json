@@ -4194,7 +4194,7 @@
             },
             "batch_size": {
               "label": "Tamanho do lote",
-              "description": "Número de solicitações a buscar por página da API do Jira Service Management."
+              "description": "Número de solicitações de clientes geradas por lote de indexação (padrão: 100)."
             }
           }
         },

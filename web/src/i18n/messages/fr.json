@@ -4194,7 +4194,7 @@
             },
             "batch_size": {
               "label": "Taille du lot",
-              "description": "Nombre de demandes à récupérer par page depuis l'API Jira Service Management."
+              "description": "Nombre de demandes clients produites par lot d'indexation (par défaut : 100)."
             }
           }
         },

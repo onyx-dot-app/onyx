@@ -4194,7 +4194,7 @@
             },
             "batch_size": {
               "label": "バッチサイズ",
-              "description": "Jira Service Management API から 1 ページあたりに取得するリクエスト数。"
+              "description": "インデックス作成バッチあたりに出力されるカスタマーリクエスト数（デフォルト: 100）。"
             }
           }
         },

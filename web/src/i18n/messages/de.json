@@ -4194,7 +4194,7 @@
             },
             "batch_size": {
               "label": "Batch-Größe",
-              "description": "Anzahl der Anfragen, die pro Seite über die Jira Service Management-API abgerufen werden."
+              "description": "Anzahl der Kundenanfragen, die pro Indexierungs-Batch ausgegeben werden (Standard: 100)."
             }
           }
         },
