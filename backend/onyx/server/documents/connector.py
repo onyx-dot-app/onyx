@@ -2531,7 +2531,9 @@ def get_event_sources(
     return [
         EventSourceSnapshot(
             source=spec.source,
-            callback_url=webhook_callback_url(spec.slug),
+            callback_urls=[
+                webhook_callback_url(spec.slug, endpoint) for endpoint in spec.endpoints
+            ],
             receiving=bool(get_active_event_cc_pairs(db_session, spec.source)),
         )
         for spec in registered_webhook_sources()

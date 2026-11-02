@@ -73,7 +73,10 @@ def parse(request: WebhookRequest) -> EventParseResult:
     return EventParseResult(events=events, ignored=ignored)
 
 
-def to_document(event: ConnectorEventInbox) -> Document | None:
+def to_document(
+    event: ConnectorEventInbox,
+    secrets: Mapping[str, str],  # noqa: ARG001
+) -> Document | None:
     if event.event_type == ConnectorEventType.DELETE:
         # The yield contract cannot express a delete, so the row settles
         # with nothing indexed.

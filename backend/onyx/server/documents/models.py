@@ -1461,8 +1461,9 @@ class EventSourceSnapshot(BaseModel):
     """What an admin needs to wire one source's webhook up at the provider."""
 
     source: DocumentSource
-    # Paste this into the provider's console.
-    callback_url: str
+    # Paste this into the provider's console. One per endpoint the source
+    # declares, in the order the spec lists them.
+    callback_urls: list[str]
     # False until an active event connector exists, at which point the
     # endpoint starts accepting deliveries. Registering the URL before then
     # fails any validation handshake the provider runs.

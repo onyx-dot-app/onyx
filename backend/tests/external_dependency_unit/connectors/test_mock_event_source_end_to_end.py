@@ -31,6 +31,7 @@ from onyx.connectors.event_inbox.handlers import unregister_event_handler
 from onyx.connectors.event_inbox.source_registry import (
     get_webhook_source,
     unregister_webhook_source,
+    webhook_callback_url,
     webhook_source_for,
 )
 from onyx.connectors.factory import instantiate_connector
@@ -43,7 +44,7 @@ from onyx.db.enums import (
     ConnectorEventStatus,
 )
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential, IndexAttempt
-from onyx.server.documents.models import ConnectorBase
+from onyx.server.documents.models import ConnectorBase, EventSourceSnapshot
 from tests.external_dependency_unit.connectors import mock_event_source
 
 MODULE = "tests.external_dependency_unit.connectors.mock_event_source"
@@ -302,3 +303,26 @@ def test_health_still_answers_while_a_source_is_registered(
 ) -> None:
     """The probes share the app with the source's route."""
     assert client.get("/health").status_code == 200
+
+
+def test_the_admin_sees_a_url_for_every_endpoint(
+    loaded_source: None,  # noqa: ARG001
+) -> None:
+    """An admin pastes one URL per endpoint into the provider's console, so
+    the snapshot must list them all rather than the slug alone."""
+    spec = get_webhook_source(mock_event_source.SLUG)
+    assert spec is not None
+
+    snapshot = EventSourceSnapshot(
+        source=spec.source,
+        callback_urls=[
+            webhook_callback_url(spec.slug, endpoint) for endpoint in spec.endpoints
+        ],
+        receiving=False,
+    )
+
+    assert len(snapshot.callback_urls) == len(spec.endpoints)
+    assert all(
+        url.endswith(f"/webhook/{spec.slug}{endpoint}")
+        for url, endpoint in zip(snapshot.callback_urls, spec.endpoints, strict=True)
+    )
