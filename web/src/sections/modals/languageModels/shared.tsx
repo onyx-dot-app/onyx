@@ -794,11 +794,25 @@ export function ModelSelectionField({
   const [isExpanded, setIsExpanded] = useState(false);
   const models = formikProps.values.model_configurations;
   const [layout, setLayout] = useState<ModelListLayout | null>(null);
+  // Models the admin types in stay where they appear; a refetch re-sorts.
+  const [typedNames, setTypedNames] = useState<Set<string>>(new Set());
   useEffect(() => {
-    if (layout === null && models.length > 0) {
+    if (models.length === 0) return;
+    const known = new Set(layout?.order);
+    if (
+      layout === null ||
+      models.some((m) => !known.has(m.name) && !typedNames.has(m.name))
+    ) {
       setLayout(foldedLayout(models));
     }
-  }, [models, layout]);
+  }, [models, layout, typedNames]);
+
+  const addModel =
+    onAddModel &&
+    ((name: string) => {
+      setTypedNames((prev) => new Set(prev).add(name));
+      onAddModel(name);
+    });
 
   function toggleExpanded() {
     if (isExpanded) {
@@ -986,7 +1000,7 @@ export function ModelSelectionField({
                     e.preventDefault();
                     const trimmed = newModelName.trim();
                     if (!models.some((m) => m.name === trimmed)) {
-                      onAddModel(trimmed);
+                      addModel?.(trimmed);
                       setNewModelName("");
                     }
                   }
@@ -1004,7 +1018,7 @@ export function ModelSelectionField({
               onClick={() => {
                 const trimmed = newModelName.trim();
                 if (trimmed && !models.some((m) => m.name === trimmed)) {
-                  onAddModel(trimmed);
+                  addModel?.(trimmed);
                   setNewModelName("");
                 }
               }}
