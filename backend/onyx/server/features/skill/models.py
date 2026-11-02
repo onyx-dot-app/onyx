@@ -13,6 +13,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import Skill
+from onyx.db.skill import SkillSharingChange
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
@@ -336,6 +337,27 @@ class SkillShareRequest(BaseModel):
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
     public_permission: SkillSharePermission | None = None
+
+    def to_change(self) -> SkillSharingChange:
+        return SkillSharingChange(
+            public_permission=self.public_permission,
+            set_public_permission="public_permission" in self.model_fields_set,
+            installation_policy=(
+                self.installation_policy
+                if "installation_policy" in self.model_fields_set
+                else None
+            ),
+            user_shares=(
+                {share.user_id: share.permission for share in self.user_shares}
+                if self.user_shares is not None
+                else None
+            ),
+            group_shares=(
+                {share.group_id: share.permission for share in self.group_shares}
+                if self.group_shares is not None
+                else None
+            ),
+        )
 
 
 class TransferSkillOwnershipRequest(BaseModel):

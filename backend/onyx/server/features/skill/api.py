@@ -1,6 +1,5 @@
 import io
 import zipfile
-from contextlib import AbstractContextManager, ExitStack
 from typing import Annotated
 from uuid import UUID
 
@@ -12,14 +11,11 @@ from onyx.auth.permissions import (
     has_global_permission,
     require_permission,
 )
-from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
 from onyx.db.enums import (
     AccountType,
     ExternalAppType,
     Permission,
-    SkillInstallationPolicy,
-    SkillSharePermission,
 )
 from onyx.db.external_app import (
     associate_custom_skill_with_external_app__no_commit,
@@ -29,17 +25,20 @@ from onyx.db.external_app import (
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillManagementPolicy,
+    SkillSharingChange,
     add_new_skill__no_commit,
     affected_user_ids_for_skill,
-    delete_skill,
+    bulk_update_skill__no_commit,
+    create_skill_from_bundle__no_commit,
+    delete_skill_for_user__no_commit,
     enable_new_skill_if_name_available__no_commit,
+    ensure_can_edit_org_visibility,
     fetch_skill,
     list_skills,
     replace_skill_bundle,
-    replace_skill_shares,
     set_skill_enabled_for_user,
-    set_skill_installation_policy,
     set_skill_public_permission,
+    share_skill__no_commit,
     transfer_skill_ownership,
 )
 from onyx.db.users import fetch_user_by_id
@@ -47,7 +46,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.external_apps.token_refresh import ensure_fresh_credentials
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
     GitHubSkillNotImported,
@@ -64,13 +63,11 @@ from onyx.server.features.skill.models import (
     SkillCreateRequest,
     SkillEditableDetailResponse,
     SkillEnableRequest,
-    SkillGroupShareRequest,
     SkillPatchRequest,
     SkillPreviewResponse,
     SkillResponse,
     SkillShareRequest,
     SkillsList,
-    SkillUserShareRequest,
     TransferSkillOwnershipRequest,
 )
 from onyx.server.features.skill.response_helpers import (
@@ -94,6 +91,7 @@ from onyx.skills.content import read_custom_skill_bundle_bytes
 from onyx.skills.ingest import (
     IngestedBundle,
     delete_bundle_blob,
+    ingest_skill_bundle,
     ingested_skill_bundle,
     save_skill_bundle_bytes,
 )
@@ -115,63 +113,35 @@ def _parse_skill_sharing(sharing: str | None) -> SkillShareRequest | None:
         ) from exc
 
 
-def _import_bundle__no_commit(
-    ingest: AbstractContextManager[IngestedBundle],
-    sharing: SkillShareRequest | None,
+def _create_imported_skill(
+    ingested: IngestedBundle,
+    change: SkillSharingChange | None,
     auto_enable: bool,
     user: User,
     db_session: Session,
-    successful_bundles: ExitStack,
+    file_store: FileStore,
 ) -> tuple[Skill, bool, set[UUID]]:
-    with ExitStack() as bundle_context, db_session.begin_nested():
-        ingested = bundle_context.enter_context(ingest)
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=ingested.canonical_name,
-                description=ingested.description,
-                bundle_file_id=ingested.bundle_file_id,
-                bundle_sha256=ingested.bundle_sha256,
-                is_valid=True,
-                author_user_id=user.id,
-            ),
-            db_session,
+    """Create the skill for a stored bundle; drop the blob when the skill is
+    rejected, since nothing references it then."""
+    try:
+        return create_skill_from_bundle__no_commit(
+            ingested, change, auto_enable, user, db_session
         )
-        affected: set[UUID] = set()
-        if sharing is not None:
-            _apply_skill_sharing__no_commit(skill, sharing, user, db_session)
-            affected = affected_user_ids_for_skill(skill, db_session)
-        enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
-            skill, user.id, db_session
-        )
-        if enabled:
-            affected.add(user.id)
-        # A failure above rolls back the savepoint and deletes the bundle file.
-        # A success keeps the file until the whole import commits.
-        successful_bundles.enter_context(bundle_context.pop_all())
-    return skill, enabled, affected
+    except OnyxError:
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
+        raise
 
 
-def _share_skill__no_commit(
-    skill: Skill, share_req: SkillShareRequest, user: User, db_session: Session
-) -> set[UUID]:
-    before = affected_user_ids_for_skill(skill, db_session)
-    _apply_skill_sharing__no_commit(skill, share_req, user, db_session)
-    return before | affected_user_ids_for_skill(skill, db_session)
-
-
-def _delete_skill__no_commit(
-    skill: Skill, user: User, db_session: Session
-) -> tuple[set[UUID], str | None]:
-    if (
-        skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can delete required skills.",
-        )
-    affected = affected_user_ids_for_skill(skill, db_session)
-    return affected, delete_skill(skill, db_session)
+def _commit_import(
+    db_session: Session, file_store: FileStore, bundle_file_ids: list[str]
+) -> None:
+    """Commit the import; on failure the stored blobs are orphans, so drop them."""
+    try:
+        db_session.commit()
+    except Exception:
+        for file_id in bundle_file_ids:
+            delete_bundle_blob(file_store, file_id)
+        raise
 
 
 def _import_response(
@@ -214,17 +184,6 @@ def _github_authorization_header(user: User) -> str | None:
             github_app_id,
             user.id,
         ).get("Authorization")
-
-
-def _ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
-    if skill.author_user_id == user.id:
-        return
-    if has_global_permission(user, Permission.MANAGE_SKILLS):
-        return
-    raise OnyxError(
-        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-        "You do not have permission to change organization-wide skill access.",
-    )
 
 
 def _editable_skill_response(
@@ -298,74 +257,27 @@ def bulk_update_skills(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillBulkResponse:
+    change = (
+        request.sharing.to_change()
+        if isinstance(request, SkillBulkShareRequest)
+        else None
+    )
     succeeded: list[UUID] = []
     failed: list[SkillBulkFailure] = []
     affected: set[UUID] = set()
     deleted_file_ids: list[str] = []
     for skill_id in sorted(set(request.skill_ids)):
         try:
-            with db_session.begin_nested():
-                item_affected: set[UUID] = set()
-                deleted_file_id: str | None = None
-                if request.action in ("enable", "disable"):
-                    set_skill_enabled_for_user(
-                        skill_id=skill_id,
-                        enabled=request.action == "enable",
-                        user=user,
-                        db_session=db_session,
-                    )
-                    item_affected.add(user.id)
-                else:
-                    skill = fetch_skill(
-                        skill_id,
-                        policy=SkillManagementPolicy.EDIT,
-                        user=user,
-                        db_session=db_session,
-                        lock_for_update=True,
-                    )
-                    if skill is None:
-                        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-                    if isinstance(request, SkillBulkShareRequest):
-                        sharing = request.sharing.model_copy(deep=True)
-                        if sharing.user_shares is not None:
-                            users = {
-                                share.user_id: SkillUserShareRequest(
-                                    user_id=share.user_id, permission=share.permission
-                                )
-                                for share in skill.user_shares
-                            }
-                            users.update(
-                                {share.user_id: share for share in sharing.user_shares}
-                            )
-                            sharing.user_shares = list(users.values())
-                        if sharing.group_shares is not None:
-                            groups = {
-                                share.user_group_id: SkillGroupShareRequest(
-                                    group_id=share.user_group_id,
-                                    permission=share.permission,
-                                )
-                                for share in skill.group_shares
-                            }
-                            groups.update(
-                                {
-                                    share.group_id: share
-                                    for share in sharing.group_shares
-                                }
-                            )
-                            sharing.group_shares = list(groups.values())
-                        item_affected = _share_skill__no_commit(
-                            skill, sharing, user, db_session
-                        )
-                    else:
-                        item_affected, deleted_file_id = _delete_skill__no_commit(
-                            skill, user, db_session
-                        )
-            succeeded.append(skill_id)
-            affected |= item_affected
-            if deleted_file_id is not None:
-                deleted_file_ids.append(deleted_file_id)
+            item_affected, deleted_file_id = bulk_update_skill__no_commit(
+                skill_id, request.action, change, user, db_session
+            )
         except OnyxError as exc:
             failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
+            continue
+        succeeded.append(skill_id)
+        affected |= item_affected
+        if deleted_file_id is not None:
+            deleted_file_ids.append(deleted_file_id)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
@@ -489,34 +401,33 @@ def create_custom_skills_batch(
             f"Upload between 1 and {GITHUB_SKILL_MAX_COUNT} skill bundles.",
         )
     share_request = _parse_skill_sharing(sharing)
+    change = share_request.to_change() if share_request is not None else None
     file_store = get_default_file_store()
     created: list[tuple[Skill, bool]] = []
     not_imported: list[GitHubSkillNotImported] = []
     affected: set[UUID] = set()
-    with ExitStack() as successful_bundles:
-        for bundle in bundles:
-            try:
-                skill, enabled, item_affected = _import_bundle__no_commit(
-                    ingested_skill_bundle(
-                        read_bundle_file(bundle.file), bundle.filename, file_store
-                    ),
-                    share_request,
-                    auto_enable,
-                    user,
-                    db_session,
-                    successful_bundles,
+    bundle_file_ids: list[str] = []
+    for bundle in bundles:
+        try:
+            ingested = ingest_skill_bundle(
+                read_bundle_file(bundle.file), bundle.filename, file_store
+            )
+            skill, enabled, item_affected = _create_imported_skill(
+                ingested, change, auto_enable, user, db_session, file_store
+            )
+        except OnyxError as exc:
+            not_imported.append(
+                GitHubSkillNotImported(
+                    path=bundle.filename or "SKILL.md",
+                    name=bundle.filename or "SKILL.md",
+                    reason=exc.detail,
                 )
-                created.append((skill, enabled))
-                affected |= item_affected
-            except OnyxError as exc:
-                not_imported.append(
-                    GitHubSkillNotImported(
-                        path=bundle.filename or "SKILL.md",
-                        name=bundle.filename or "SKILL.md",
-                        reason=exc.detail,
-                    )
-                )
-        db_session.commit()
+            )
+            continue
+        bundle_file_ids.append(ingested.bundle_file_id)
+        created.append((skill, enabled))
+        affected |= item_affected
+    _commit_import(db_session, file_store, bundle_file_ids)
     if affected:
         push_skills_for_users(affected, db_session)
         db_session.commit()
@@ -567,56 +478,54 @@ def import_github_skills(
     created: list[tuple[Skill, bool]] = []
     affected: set[UUID] = set()
 
+    change = request.sharing.to_change() if request.sharing is not None else None
     file_store = get_default_file_store()
-    with ExitStack() as successful_bundles:
-        for path in selected_paths:
-            selected_skill = skills_by_path.get(path)
-            if selected_skill is None:
-                not_imported.append(
-                    GitHubSkillNotImported(
-                        path=path,
-                        name=path.rsplit("/", maxsplit=1)[-1],
-                        reason="This skill was not found in the previewed revision.",
-                    )
+    bundle_file_ids: list[str] = []
+    for path in selected_paths:
+        selected_skill = skills_by_path.get(path)
+        if selected_skill is None:
+            not_imported.append(
+                GitHubSkillNotImported(
+                    path=path,
+                    name=path.rsplit("/", maxsplit=1)[-1],
+                    reason="This skill was not found in the previewed revision.",
                 )
-                continue
-            if (
-                selected_skill.bundle_bytes is None
-                or selected_skill.unavailable_reason is not None
-            ):
-                not_imported.append(
-                    GitHubSkillNotImported(
-                        path=path,
-                        name=selected_skill.name,
-                        reason=selected_skill.unavailable_reason
-                        or "This skill cannot be imported.",
-                    )
+            )
+            continue
+        if (
+            selected_skill.bundle_bytes is None
+            or selected_skill.unavailable_reason is not None
+        ):
+            not_imported.append(
+                GitHubSkillNotImported(
+                    path=path,
+                    name=selected_skill.name,
+                    reason=selected_skill.unavailable_reason
+                    or "This skill cannot be imported.",
                 )
-                continue
-
-            try:
-                skill, enabled, item_affected = _import_bundle__no_commit(
-                    ingested_skill_bundle(
-                        selected_skill.bundle_bytes,
-                        f"{selected_skill.name}.zip",
-                        file_store,
-                        expected_name=selected_skill.name,
-                    ),
-                    request.sharing,
-                    True,
-                    user,
-                    db_session,
-                    successful_bundles,
+            )
+            continue
+        try:
+            ingested = ingest_skill_bundle(
+                selected_skill.bundle_bytes,
+                f"{selected_skill.name}.zip",
+                file_store,
+                expected_name=selected_skill.name,
+            )
+            skill, enabled, item_affected = _create_imported_skill(
+                ingested, change, True, user, db_session, file_store
+            )
+        except OnyxError as exc:
+            not_imported.append(
+                GitHubSkillNotImported(
+                    path=path, name=selected_skill.name, reason=exc.detail
                 )
-                created.append((skill, enabled))
-                affected |= item_affected
-            except OnyxError as exc:
-                not_imported.append(
-                    GitHubSkillNotImported(
-                        path=path, name=selected_skill.name, reason=exc.detail
-                    )
-                )
-        db_session.commit()
+            )
+            continue
+        bundle_file_ids.append(ingested.bundle_file_id)
+        created.append((skill, enabled))
+        affected |= item_affected
+    _commit_import(db_session, file_store, bundle_file_ids)
 
     if affected:
         push_skills_for_users(affected, db_session)
@@ -706,7 +615,7 @@ def create_custom_skill_from_editor(
                 skill_id=skill.id,
             )
         if share_request is not None:
-            _apply_skill_sharing__no_commit(skill, share_request, user, db_session)
+            share_skill__no_commit(skill, share_request.to_change(), user, db_session)
         if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
@@ -891,7 +800,7 @@ def patch_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     if "public_permission" in patch_req.model_fields_set:
-        _ensure_can_edit_org_visibility(skill, user)
+        ensure_can_edit_org_visibility(skill, user)
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
         return skill_response_for_user(
             skill,
@@ -973,93 +882,6 @@ def patch_current_user_skill(
     )
 
 
-def _assert_group_share_within_scope(
-    skill: Skill,
-    share_req: SkillShareRequest,
-    user: User,
-    db_session: Session,
-) -> None:
-    """GATE 2 — *changing* a skill's group shares is a MANAGE_SKILLS action, matching
-    how agents treat group attachment. Reaching this handler only proves EDIT on the
-    skill, which an owner always has; without this an ordinary owner could publish
-    into any group and inject the skill into that group manager's scope.
-
-    Shares are read from the DB, never the request, so a reassignment can't escape
-    scope. Re-sending the current set is a no-op — the editor round-trips shares on
-    every save.
-    """
-    if share_req.group_shares is None:
-        return
-    current = {share.user_group_id: share.permission for share in skill.group_shares}
-    requested = {share.group_id: share.permission for share in share_req.group_shares}
-    if current == requested:
-        return
-    assert_within_scope(
-        user,
-        db_session,
-        permission=Permission.MANAGE_SKILLS,
-        current_group_ids=list(current),
-        requested_group_ids=list(requested),
-        is_non_public=skill.public_permission is None
-        and share_req.public_permission is None,
-    )
-
-
-def _apply_skill_sharing__no_commit(
-    skill: Skill,
-    share_req: SkillShareRequest,
-    user: User,
-    db_session: Session,
-) -> None:
-    touches_installation_policy = "installation_policy" in share_req.model_fields_set
-    if touches_installation_policy and not has_global_permission(
-        user, Permission.FULL_ADMIN_PANEL_ACCESS
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can change skill installation policies.",
-        )
-
-    touches_org_visibility = "public_permission" in share_req.model_fields_set
-    if touches_org_visibility:
-        _ensure_can_edit_org_visibility(skill, user)
-    # Anchor on the pre-call visibility so a public->private convert plus a
-    # group-share in one request can't slip a published skill into managed scope.
-    _assert_group_share_within_scope(skill, share_req, user, db_session)
-
-    if touches_org_visibility:
-        set_skill_public_permission(
-            skill=skill,
-            public_permission=share_req.public_permission,
-            db_session=db_session,
-        )
-
-    if touches_installation_policy:
-        set_skill_installation_policy(skill, share_req.installation_policy, db_session)
-
-    user_shares: dict[UUID, SkillSharePermission] | None = None
-    if share_req.user_shares is not None:
-        user_shares = {
-            user_share.user_id: user_share.permission
-            for user_share in share_req.user_shares
-            if user_share.user_id != skill.author_user_id
-        }
-
-    group_shares: dict[int, SkillSharePermission] | None = None
-    if share_req.group_shares is not None:
-        group_shares = {
-            group_share.group_id: group_share.permission
-            for group_share in share_req.group_shares
-        }
-
-    replace_skill_shares(
-        skill=skill,
-        user_shares=user_shares,
-        group_shares=group_shares,
-        db_session=db_session,
-    )
-
-
 @user_router.get("/custom/{skill_id}/share")
 def fetch_custom_skill_sharing(
     skill_id: UUID,
@@ -1106,7 +928,7 @@ def share_current_user_skill(
             include_share_details=True,
         )
 
-    affected = _share_skill__no_commit(skill, share_req, user, db_session)
+    affected = share_skill__no_commit(skill, share_req.to_change(), user, db_session)
     db_session.commit()
     db_session.expire(skill)
     push_skills_for_users(affected, db_session)
@@ -1209,7 +1031,7 @@ def delete_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    affected, old_file_id = _delete_skill__no_commit(skill, user, db_session)
+    affected, old_file_id = delete_skill_for_user__no_commit(skill, user, db_session)
     db_session.commit()
 
     push_skills_for_users(affected, db_session)
