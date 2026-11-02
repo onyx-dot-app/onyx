@@ -14,8 +14,12 @@ import {
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import GeneratingImageDisplay from "@/app/app/components/tools/GeneratingImageDisplay";
 
+interface GeneratedImageGridProps {
+  images: GeneratedImage[];
+}
+
 /** The generated images of a response, shown at the top of its answer. */
-export function GeneratedImageGrid({ images }: { images: GeneratedImage[] }) {
+export function GeneratedImageGrid({ images }: GeneratedImageGridProps) {
   return (
     <CardGrid gap={4}>
       {images.map((image) => (

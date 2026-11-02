@@ -286,16 +286,21 @@ test.describe("Chat File Uploads", () => {
 
       await sendMessage(page, "Draw an onyx stone, then search for onyx");
 
-      const aiMessage = chat.aiMessage();
       const images = chat.generatedImages();
       await expect(images).toHaveCount(1, { timeout: 10000 });
       await expect(images.first()).toBeVisible();
       const answerText = chat.answerText(IMAGE_GEN_AI_MESSAGE);
       await expect(answerText).toBeVisible();
 
-      const imageBox = await images.first().boundingBox();
-      const textBox = await answerText.boundingBox();
-      expect(imageBox && textBox && imageBox.y < textBox.y).toBeTruthy();
+      await expect
+        .poll(async () => {
+          const imageBox = await images.first().boundingBox();
+          const textBox = await answerText.boundingBox();
+          return (
+            imageBox !== null && textBox !== null && imageBox.y < textBox.y
+          );
+        })
+        .toBe(true);
       await chat.screenshotContainer("chat-image-before-later-tools");
     });
   });
