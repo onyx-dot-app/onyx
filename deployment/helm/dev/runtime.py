@@ -342,20 +342,21 @@ class Cluster:
 
     def telepresence_workloads(self) -> list[dict[str, Any]]:
         """List workloads as the traffic manager sees them in the application namespace."""
-        return json.loads(
+        result = json.loads(
             self.command(
                 "telepresence",
                 "list",
                 "--namespace",
                 self.namespace,
-                "--format",
+                "--output",
                 "json",
             )
         )
+        return result["stdout"] if isinstance(result, dict) else result
 
     def intercept_active(self, name: str) -> bool:
         """Check for an active API intercept in this cluster and namespace."""
-        status = json.loads(self.command("telepresence", "status", "--format", "json"))
+        status = json.loads(self.command("telepresence", "status", "--output", "json"))
         user = status.get("user_daemon", {})
         if (
             user.get("kubernetes_context") != self.context
