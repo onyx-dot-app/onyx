@@ -113,7 +113,7 @@ def build_chat_reminder(
     )
     # Only suggest opening URLs when this agent has the tool.
     if (
-        not has_generated_images
+        not any(result.tool_name == ImageGenerationTool.NAME for result in results)
         and context.has_open_url_tool
         and not context.out_of_cycles
         and any(

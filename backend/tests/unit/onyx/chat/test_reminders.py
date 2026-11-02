@@ -139,8 +139,16 @@ def test_reminder_retains_citation_guidance(
     assert (IMAGE_GEN_REMINDER in reminder) == image_generated
 
 
-def test_image_and_web_search_keep_the_task_instructions() -> None:
+@pytest.mark.parametrize("image_succeeds", [True, False])
+def test_image_and_web_search_keep_the_task_instructions(image_succeeds: bool) -> None:
     image = _direct_image()
+    if not image_succeeds:
+        image = image.model_copy(
+            update={
+                "details": FinalImageGenerationResponse(generated_images=[]),
+                "is_error": True,
+            }
+        )
     document = SearchDoc(
         document_id="web-result",
         chunk_ind=0,
@@ -167,5 +175,5 @@ def test_image_and_web_search_keep_the_task_instructions() -> None:
     )
     assert reminder is not None
     assert reminder.startswith("Answer in French.")
-    assert IMAGE_GEN_REMINDER in reminder
+    assert (IMAGE_GEN_REMINDER in reminder) == image_succeeds
     assert REQUIRE_CITATION_GUIDANCE.strip() in reminder
