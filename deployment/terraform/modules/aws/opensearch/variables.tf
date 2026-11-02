@@ -19,9 +19,9 @@ variable "ingress_cidrs" {
 }
 
 variable "engine_version" {
-  description = "OpenSearch engine version (e.g., 2.17, 3.6). 1-bit vector quantization needs 3.6 or later."
+  description = "OpenSearch engine version (e.g., 2.17, 3.7). 1-bit vector quantization needs 3.6 or later; Amazon OpenSearch Service offers 3.7."
   type        = string
-  default     = "3.6"
+  default     = "3.7"
 }
 
 variable "instance_type" {

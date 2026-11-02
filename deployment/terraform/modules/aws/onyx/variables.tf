@@ -376,8 +376,8 @@ variable "enable_opensearch" {
 
 variable "opensearch_engine_version" {
   type        = string
-  description = "OpenSearch engine version. 1-bit vector quantization needs 3.6 or later."
-  default     = "3.6"
+  description = "OpenSearch engine version. 1-bit vector quantization needs 3.6 or later; Amazon OpenSearch Service offers 3.7."
+  default     = "3.7"
 }
 
 variable "opensearch_instance_type" {
