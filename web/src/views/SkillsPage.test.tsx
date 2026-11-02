@@ -422,6 +422,32 @@ describe("SkillsPage preference toggles", () => {
     );
   });
 
+  it("locks organization access in bulk sharing when an app skill is selected", async () => {
+    skillsData.customs[1] = {
+      ...skillsData.customs[1]!,
+      user_permission: "OWNER",
+      external_app: {
+        external_app_id: 7,
+        name: "GitHub",
+        enabled: true,
+        ready: true,
+      },
+    };
+    skillsData.customs[0] = {
+      ...skillsData.customs[0]!,
+      user_permission: "OWNER",
+    };
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+    );
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(
+      screen.getByRole("button", { name: "Who can access" })
+    ).toBeDisabled();
+  });
+
   it("lists exactly the skills selected for deletion before confirming", async () => {
     const names = [
       "first-skill",
