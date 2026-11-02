@@ -819,16 +819,16 @@ export function ModelSelectionField({
       setLayout(foldedLayout(models));
     } else if (layout) {
       // Rows already on screen keep their place; the rest go below them.
+      const known = new Set(layout.order);
       const shown = [
         ...layout.order.slice(0, layout.foldedCount),
-        ...models
-          .map((m) => m.name)
-          .filter((name) => !layout.order.includes(name)),
+        ...models.map((m) => m.name).filter((name) => !known.has(name)),
       ];
+      const shownSet = new Set(shown);
       setLayout({
         order: [
           ...shown,
-          ...inherentOrder(models).filter((name) => !shown.includes(name)),
+          ...inherentOrder(models).filter((name) => !shownSet.has(name)),
         ],
         foldedCount: layout.foldedCount,
       });
@@ -917,7 +917,8 @@ export function ModelSelectionField({
               const byName = new Map(models.map((m) => [m.name, m]));
               const ordered = order.flatMap((name) => byName.get(name) ?? []);
               // Models added since the last re-sort, e.g. a custom model.
-              const added = models.filter((m) => !order.includes(m.name));
+              const known = new Set(order);
+              const added = models.filter((m) => !known.has(m.name));
               const isFoldable = ordered.length > foldedCount;
               const shownModels = [
                 ...(isFoldable && !isExpanded
