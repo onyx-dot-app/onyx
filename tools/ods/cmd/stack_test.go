@@ -343,3 +343,20 @@ func TestStackCommands_lifecycleWithFakeService(t *testing.T) {
 	}
 	runStackCommand(t, "down")
 }
+
+func TestModelServerImageEnv(t *testing.T) {
+	env := func(vars map[string]string) func(string) string {
+		return func(key string) string { return vars[key] }
+	}
+	if got := modelServerImageEnv(env(nil)); !reflect.DeepEqual(got, []string{"ONYX_MODEL_SERVER_IMAGE=" + devModelServerImage}) {
+		t.Errorf("default env = %v", got)
+	}
+	for _, chosen := range []map[string]string{
+		{"ONYX_MODEL_SERVER_IMAGE": "onyxdotapp/onyx-model-server:v5.0.3"},
+		{"IMAGE_TAG": "v5.0.3"},
+	} {
+		if got := modelServerImageEnv(env(chosen)); got != nil {
+			t.Errorf("env with %v = %v, want nil", chosen, got)
+		}
+	}
+}
