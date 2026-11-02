@@ -189,7 +189,7 @@ def test_empty_result_does_not_invent_none_text() -> None:
 def test_server_reported_error_is_a_tool_error_not_an_auth_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    message = "403 Forbidden: repo access denied"
+    message = "403 Forbidden: repo access denied; private request data"
     with (
         patch(
             f"{MODULE}.call_mcp_tool",
@@ -208,6 +208,8 @@ def test_server_reported_error_is_a_tool_error_not_an_auth_error(
     assert record_outcome.call_args.kwargs["status"] == MCPToolCallStatus.ERROR
     mark.assert_not_called()
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert message not in caplog.text
+    assert "reported an error" in caplog.text
 
 
 def test_rejected_user_credentials_still_require_reauthentication() -> None:

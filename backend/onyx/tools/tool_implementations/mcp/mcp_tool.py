@@ -252,7 +252,7 @@ class MCPTool(Tool):
             if tool_result.isError:
                 # A server-reported tool failure does not reject its credentials.
                 message = process_mcp_result(tool_result)
-                logger.info("MCP tool '%s' reported an error: %s", self._name, message)
+                logger.info("MCP tool '%s' reported an error", self._name)
                 return self._error_result(message)
 
             logger.info("MCP tool '%s' executed successfully", self._name)
