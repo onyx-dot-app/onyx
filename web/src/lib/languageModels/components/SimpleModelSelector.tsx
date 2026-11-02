@@ -142,14 +142,20 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   const providerNames = useProviderNames();
   const decisionTitle = decisionSection?.title;
   const decisionProviders = decisionSection?.providers;
+  // Under a decision section, a lone provider keeps its header so its rows
+  // are not read as part of that section.
+  const hasDecisionRows = (decisionProviders ?? []).some(
+    (provider) => provider.model_configurations.length > 0
+  );
   const models = useMemo(
     () =>
       buildModelSelectOptions(providers, {
         grouped,
         providerNames,
         includeDecisionOnly,
+        labelSingleGroup: hasDecisionRows,
       }),
-    [providers, grouped, providerNames, includeDecisionOnly]
+    [providers, grouped, providerNames, includeDecisionOnly, hasDecisionRows]
   );
   const options = useMemo((): SelectOptions => {
     const decisionRows = decisionProviders

@@ -327,6 +327,11 @@ export interface BuildModelSelectOptionsOptions {
    * grouping workspace-wide. Defaults to true.
    */
   grouped?: boolean;
+  /**
+   * Keep a single group's header, unfoldable, for when other sections sit
+   * beside it and the rows need a label. Only applies when `grouped`.
+   */
+  labelSingleGroup?: boolean;
   /** `useProviderNames()`, for the provider group titles. */
   providerNames?: ProviderNamesResolver;
 }
@@ -342,6 +347,7 @@ export function buildModelSelectOptions(
     grouped = true,
     providerNames,
     includeDecisionOnly = false,
+    labelSingleGroup = false,
   }: BuildModelSelectOptionsOptions = {}
 ): SelectOptions {
   const dividers: SelectDivider[] = groupLlmOptions(
@@ -373,5 +379,9 @@ export function buildModelSelectOptions(
     }))
     .filter((divider) => divider.options.length > 0);
   if (grouped && dividers.length > 1) return dividers;
+  const [only] = dividers;
+  if (grouped && labelSingleGroup && dividers.length === 1 && only?.title) {
+    return [{ title: only.title, options: only.options }];
+  }
   return dividers.flatMap((divider) => divider.options);
 }
