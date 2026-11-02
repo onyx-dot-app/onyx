@@ -13302,14 +13302,14 @@
           "title": "您的组织"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "编辑"
+          "canEdit": {
+            "label": "可编辑"
+          },
+          "canUse": {
+            "label": "可使用"
           },
           "removeAccess": {
             "label": "移除访问权限"
-          },
-          "viewAndChat": {
-            "label": "查看和对话"
           }
         },
         "privateOption": {
@@ -17252,9 +17252,7 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "更新 {name} 的访问权限",
-          "canUse": "可使用",
-          "canEdit": "可编辑"
+          "ariaLabel": "更新 {name} 的访问权限"
         },
         "saveButton": {
           "label": "保存"

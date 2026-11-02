@@ -101,10 +101,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const skill = props.mode === "create" ? props.draft : loadedSkill;
   const t = useTranslations("skills.modals");
   const skillCopy = useTranslations("skills");
-  const permissionOptions = useSharePermissionOptions({
-    VIEWER: t("share.permissionMenu.canUse"),
-    EDITOR: t("share.permissionMenu.canEdit"),
-  });
+  const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
   const { data: shareableUsersData } = useShareableUsers({
     includeApiKeys: true,

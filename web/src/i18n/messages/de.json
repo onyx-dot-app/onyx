@@ -13302,14 +13302,14 @@
           "title": "Ihre Organisation"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Bearbeiten"
+          "canEdit": {
+            "label": "Kann bearbeiten"
+          },
+          "canUse": {
+            "label": "Kann verwenden"
           },
           "removeAccess": {
             "label": "Zugriff entfernen"
-          },
-          "viewAndChat": {
-            "label": "Ansehen & Chatten"
           }
         },
         "privateOption": {
@@ -17252,9 +17252,7 @@
         },
         "ownerLabel": "Eigentümer",
         "permissionMenu": {
-          "ariaLabel": "Zugriff für {name} aktualisieren",
-          "canUse": "Kann verwenden",
-          "canEdit": "Kann bearbeiten"
+          "ariaLabel": "Zugriff für {name} aktualisieren"
         },
         "saveButton": {
           "label": "Speichern"

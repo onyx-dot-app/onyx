@@ -13302,14 +13302,14 @@
           "title": "내 조직"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "편집"
+          "canEdit": {
+            "label": "편집 가능"
+          },
+          "canUse": {
+            "label": "사용 가능"
           },
           "removeAccess": {
             "label": "액세스 제거"
-          },
-          "viewAndChat": {
-            "label": "보기 및 채팅"
           }
         },
         "privateOption": {
@@ -17252,9 +17252,7 @@
         },
         "ownerLabel": "소유자",
         "permissionMenu": {
-          "ariaLabel": "{name}의 접근 권한 변경",
-          "canUse": "사용 가능",
-          "canEdit": "편집 가능"
+          "ariaLabel": "{name}의 접근 권한 변경"
         },
         "saveButton": {
           "label": "저장"
