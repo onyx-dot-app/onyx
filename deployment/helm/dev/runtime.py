@@ -342,7 +342,7 @@ class Cluster:
 
     def telepresence_workloads(self) -> list[dict[str, Any]]:
         """List workloads as the traffic manager sees them in the application namespace."""
-        result = json.loads(
+        result: list[dict[str, Any]] | dict[str, Any] = json.loads(
             self.command(
                 "telepresence",
                 "list",
