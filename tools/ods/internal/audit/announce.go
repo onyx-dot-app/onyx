@@ -44,7 +44,8 @@ type AnnouncePlan struct {
 	// Markers lists, per issue, the advisory names the post announces, so a
 	// later run threads them under it.
 	Markers []ThreadMarker `json:"markers"`
-	// Replies go in the threads of advisories announced by an earlier run.
+	// Replies go in the threads of advisories announced by an earlier run,
+	// one message per package section so none passes Slack's split size.
 	Replies []SlackReply `json:"replies"`
 	// Issues lists the issues the plan announces, in the post or a reply.
 	Issues []int `json:"issues"`
@@ -68,8 +69,9 @@ type SlackReply struct {
 	Text string `json:"text"`
 }
 
-// noteLimit caps Claude's note per package, so a thread reply stays far
-// below Slack's message size.
+// noteLimit caps Claude's note per package, so one package section stays
+// below the ~4,000 characters past which Slack splits a message, even
+// mid code block.
 const noteLimit = 2500
 
 // PlanAnnouncement splits a run's failing advisories into those announced
@@ -88,6 +90,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	plan := AnnouncePlan{Markers: []ThreadMarker{}, Replies: []SlackReply{}, Issues: []int{}}
 	var lines, sections []string
 	repeats := map[string][]string{}
+	retried := map[string][]string{}
 	announced := map[int]bool{}
 	count := 0
 	for _, a := range opts.Failing {
@@ -108,7 +111,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 			// A retried triage has no new advisory, so its result goes in the
 			// thread the package was announced in.
 			if triaged && a.Issue > 0 {
-				repeats[firstTS] = append(repeats[firstTS], packageSection(a, a.Advisories, triage, true, opts))
+				retried[firstTS] = append(retried[firstTS], packageSection(a, a.Advisories, triage, true, opts))
 				announced[a.Issue] = true
 			}
 			continue
@@ -152,6 +155,9 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	sort.Strings(tss)
 	for _, ts := range tss {
 		plan.Replies = append(plan.Replies, SlackReply{TS: ts, Text: strings.Join(repeats[ts], "\n")})
+		for _, section := range retried[ts] {
+			plan.Replies = append(plan.Replies, SlackReply{TS: ts, Text: section})
+		}
 	}
 	for issue := range announced {
 		plan.Issues = append(plan.Issues, issue)
