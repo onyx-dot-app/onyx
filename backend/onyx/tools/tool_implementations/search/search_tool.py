@@ -51,10 +51,8 @@ from onyx.configs.chat_configs import (
     NUM_RETURNED_HITS,
 )
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
-from onyx.context.search.enrichment.retrieval import (
-    EnrichmentContext,
-    get_enrichment_contexts,
-)
+from onyx.context.search.enrichment.models import EnrichmentContext
+from onyx.context.search.enrichment.retrieval import get_enrichment_contexts
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,

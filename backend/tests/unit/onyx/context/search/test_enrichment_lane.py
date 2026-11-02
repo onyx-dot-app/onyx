@@ -14,6 +14,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox.sources import load_event_sources
+from onyx.context.search.enrichment.models import EnrichmentContext
 from onyx.context.search.enrichment.registry import (
     ChunkPermissionFilter,
     enrichment_source_types,
@@ -21,7 +22,6 @@ from onyx.context.search.enrichment.registry import (
     register_enrichment_source,
     unregister_enrichment_source,
 )
-from onyx.context.search.enrichment.retrieval import EnrichmentContext
 from onyx.context.search.models import ChunkIndexRequest, IndexFilters, InferenceChunk
 from onyx.context.search.retrieval.search_runner import search_chunks
 

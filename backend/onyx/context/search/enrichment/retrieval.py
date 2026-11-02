@@ -6,98 +6,23 @@ chat path resolves ahead of time and hands the result down, as it already
 does for federated search.
 """
 
-import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 
-from pydantic import BaseModel, ConfigDict, PrivateAttr
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox.credentials import pair_secrets
 from onyx.connectors.event_inbox.sources import load_event_sources
+from onyx.context.search.enrichment.models import EnrichmentContext
 from onyx.context.search.enrichment.registry import (
-    ChunkPermissionFilter,
     enrichment_source_types,
     get_enrichment_filter,
 )
-from onyx.context.search.models import InferenceChunk
 from onyx.db.connector_credential_pair import get_active_cc_pairs_for_source
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class EnrichmentContext(BaseModel):
-    """One live withheld source, ready to be searched for one user.
-
-    One of these is built per search and shared by every lane of it, so it
-    is also where the search remembers what the provider already said.
-    The lanes run in parallel threads, hence the lock.
-    """
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    source: DocumentSource
-    permission_filter: ChunkPermissionFilter
-    user_email: str
-    secrets: Mapping[str, str]
-
-    # document id -> may this user read it. One search expands into several
-    # queries, and they retrieve overlapping documents.
-    _decisions: dict[str, bool] = PrivateAttr(default_factory=dict)
-    # Set once the provider has failed in this search. Asking again would
-    # answer no faster and spend the rate limit that caused it.
-    _unreachable: bool = PrivateAttr(default=False)
-    _lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
-
-    def allowed(self, chunks: Sequence[InferenceChunk]) -> list[InferenceChunk]:
-        """The chunks the provider says this user may read.
-
-        A filter that raises drops the whole lane rather than the chunk it
-        failed on: the alternative is returning content nobody cleared.
-        """
-        if not chunks:
-            return []
-
-        with self._lock:
-            if self._unreachable:
-                return []
-            decided = dict(self._decisions)
-
-        undecided = [chunk for chunk in chunks if chunk.document_id not in decided]
-        if undecided:
-            answered = self._ask(undecided)
-            if answered is None:
-                return []
-            decided.update(answered)
-
-        return [chunk for chunk in chunks if decided.get(chunk.document_id, False)]
-
-    def _ask(self, chunks: list[InferenceChunk]) -> dict[str, bool] | None:
-        """The provider's verdict per document, or None if it could not
-        answer. A document it did not clear is refused, whether it said no
-        or the filter could not identify the chunk."""
-        try:
-            cleared = self.permission_filter(
-                user_email=self.user_email, chunks=chunks, secrets=self.secrets
-            )
-        except Exception:
-            logger.exception(
-                "The %s permission filter failed; returning none of its results",
-                self.source.value,
-            )
-            with self._lock:
-                self._unreachable = True
-            return None
-
-        allowed_ids = {chunk.document_id for chunk in cleared}
-        answered = {
-            chunk.document_id: chunk.document_id in allowed_ids for chunk in chunks
-        }
-        with self._lock:
-            self._decisions.update(answered)
-        return answered
 
 
 def get_enrichment_contexts(

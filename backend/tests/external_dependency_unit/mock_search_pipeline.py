@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enrichment.retrieval import EnrichmentContext
+from onyx.context.search.enrichment.models import EnrichmentContext
 from onyx.context.search.models import (
     ChunkSearchRequest,
     InferenceChunk,

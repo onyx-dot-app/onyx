@@ -6,11 +6,9 @@ from sqlalchemy.orm import Session
 from onyx.configs.chat_configs import HYBRID_ALPHA, NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox.sources import load_event_sources
+from onyx.context.search.enrichment.models import EnrichmentContext
 from onyx.context.search.enrichment.registry import enrichment_source_types
-from onyx.context.search.enrichment.retrieval import (
-    EnrichmentContext,
-    get_enrichment_contexts,
-)
+from onyx.context.search.enrichment.retrieval import get_enrichment_contexts
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import (
     ChunkIndexRequest,

@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from onyx.access.access import censor_chunks_for_user
-from onyx.context.search.enrichment.retrieval import EnrichmentContext
+from onyx.context.search.enrichment.models import EnrichmentContext
 from onyx.context.search.forced_document_set import get_forced_document_set_names
 from onyx.context.search.models import (
     BaseFilters,
