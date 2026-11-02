@@ -153,3 +153,59 @@ def test_configuration_can_name_a_source_outside_this_repository() -> None:
         ]
         == EXTRA_EVENT_SOURCE_MODULES
     )
+
+
+def test_a_second_module_claiming_a_source_leaves_the_first_alone() -> None:
+    """The drain registry takes the last registration, so a refusal has to
+    happen before anything is written. Otherwise the module that gets
+    rejected has already replaced the incumbent's handler, and the loader
+    cannot put it back: the source was claimed before that module ran."""
+
+    def _other_handler(
+        event: ConnectorEventInbox,  # noqa: ARG001
+        secrets: Mapping[str, str],  # noqa: ARG001
+    ) -> Document | None:
+        return None
+
+    register_event_source(webhook=_spec(), handler=_handler)
+
+    with pytest.raises(ValueError):
+        register_event_source(
+            webhook=WebhookSourceSpec(
+                source=SOURCE,
+                slug="a-second-slug",
+                parser=_parse,
+                verifier=None,
+                allow_unsigned=True,
+            ),
+            handler=_other_handler,
+        )
+
+    assert get_event_handler(SOURCE) is _handler
+    assert get_webhook_source(SLUG) is not None
+    assert get_webhook_source("a-second-slug") is None
+
+
+def test_a_second_module_claiming_a_slug_leaves_the_first_alone() -> None:
+    def _other_handler(
+        event: ConnectorEventInbox,  # noqa: ARG001
+        secrets: Mapping[str, str],  # noqa: ARG001
+    ) -> Document | None:
+        return None
+
+    register_event_source(webhook=_spec(), handler=_handler)
+
+    with pytest.raises(ValueError):
+        register_event_source(
+            webhook=WebhookSourceSpec(
+                source=DocumentSource.WEB,
+                slug=SLUG,
+                parser=_parse,
+                verifier=None,
+                allow_unsigned=True,
+            ),
+            handler=_other_handler,
+        )
+
+    assert get_event_handler(SOURCE) is _handler
+    assert get_event_handler(DocumentSource.WEB) is None

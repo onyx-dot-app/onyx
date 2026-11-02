@@ -410,9 +410,10 @@ downloaded file with
   (`documentation/AGENTS.md`).
 - `new-event-source` **An event-based connector.** List the existing ones
   with `git grep -l register_event_source backend/onyx`.
-  1. Write the parser, the signature verifier and the handler. All three are
-     given the pair's decrypted credential JSON, and none of them may trust a
-     field in the body ([[#pushed-url-is-not-a-fetch-instruction]]).
+  1. Write the parser, the signature verifier and the handler. The parser is
+     given only the delivery; the verifier and the handler are also given the
+     pair's decrypted credential JSON. None of them may trust a field in the
+     body ([[#pushed-url-is-not-a-fetch-instruction]]).
   2. Make one `register_event_source` call in the source's own module, with a
      `WebhookSourceSpec` naming the slug and one endpoint per URL the provider
      posts to. Add `permission_filter` only if the provider owns read access

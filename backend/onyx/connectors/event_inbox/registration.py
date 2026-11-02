@@ -15,11 +15,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox.handlers import (
     EventHandler,
     event_handler_sources,
+    get_event_handler,
     register_event_handler,
     unregister_event_handler,
 )
 from onyx.connectors.event_inbox.models import WebhookSourceSpec
 from onyx.connectors.event_inbox.source_registry import (
+    get_webhook_source,
     register_webhook_source,
     registered_webhook_sources,
     unregister_webhook_source,
@@ -49,13 +51,46 @@ def register_event_source(
     ([[withheld-sources]]); without it, documents are searchable like any
     other connector's.
 
-    The webhook spec is registered last. The route is the part the internet
-    can reach, so it must not exist before the handler that drains it.
+    Every conflict is found before anything is written, and the webhook spec
+    is registered last. The route is the part the internet can reach, so it
+    must not exist before the handler that drains it; and a second module
+    claiming a source another one already holds must be refused without
+    having replaced the incumbent's handler, which the drain registry would
+    otherwise let it do silently.
     """
+    _refuse_a_claimed_source(webhook)
+
     register_event_handler(webhook.source, handler)
     if permission_filter is not None:
         register_enrichment_source(webhook.source, permission_filter)
     register_webhook_source(webhook)
+
+
+def _refuse_a_claimed_source(webhook: WebhookSourceSpec) -> None:
+    """Raise unless every registry this call writes to is free to take it."""
+    existing_slug = get_webhook_source(webhook.slug)
+    if existing_slug is not None and existing_slug is not webhook:
+        raise ValueError(
+            f"Webhook slug {webhook.slug} is already registered to "
+            f"{existing_slug.source.value}."
+        )
+
+    claimed = webhook_source_for(webhook.source)
+    if claimed is not None and claimed.slug != webhook.slug:
+        raise ValueError(
+            f"{webhook.source.value} already receives events at "
+            f"{claimed.slug}; a source has one endpoint."
+        )
+
+    handler = get_event_handler(webhook.source)
+    if handler is not None and claimed is None:
+        # The drain registry takes the last registration, so without this a
+        # module refused above would already have replaced the handler of
+        # whichever module holds the source.
+        raise ValueError(
+            f"{webhook.source.value} already has an event handler. Two "
+            "modules cannot declare the same source."
+        )
 
 
 def unregister_event_source(source: DocumentSource) -> None:
