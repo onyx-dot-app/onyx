@@ -247,6 +247,7 @@ class MCPTool(Tool):
                 connection_headers=headers,
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
                 auth=auth,
+                cancellation=invocation.cancellation,
             )
 
             if tool_result.isError:

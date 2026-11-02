@@ -5,8 +5,10 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
+import asyncio
 import json
 from collections.abc import Callable, Coroutine
+from contextlib import suppress
 from enum import Enum
 from typing import Any, Dict, TypeVar
 
@@ -29,6 +31,7 @@ from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
@@ -173,19 +176,61 @@ def log_exception_group(e: ExceptionGroup) -> Exception | None:
     return saved_e
 
 
+class _Cancelled:
+    """The result of a call that its cancellation signal stopped."""
+
+
+def _run_until_cancelled(
+    coro: Coroutine[Any, Any, T], cancellation: CancellationSignal | None
+) -> T:
+    """Run `coro` to completion on its own event loop; raise AgentCancelled, and
+    cancel the coroutine, when `cancellation` fires first."""
+    if cancellation is None:
+        return run_async_sync_no_cancel(coro)
+    if cancellation.cancelled:
+        coro.close()
+        raise AgentCancelled()
+    signal = cancellation
+
+    async def until_cancelled() -> T | _Cancelled:
+        loop = asyncio.get_running_loop()
+        stopped = asyncio.Event()
+        work = asyncio.ensure_future(coro)
+
+        def stop_soon() -> None:
+            loop.call_soon_threadsafe(stopped.set)
+
+        with signal.on_cancel(stop_soon):
+            stop = asyncio.ensure_future(stopped.wait())
+            await asyncio.wait({work, stop}, return_when=asyncio.FIRST_COMPLETED)
+            stop.cancel()
+        if work.done():
+            return work.result()
+        work.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await work
+        return _Cancelled()
+
+    result = run_async_sync_no_cancel(until_cancelled())
+    if isinstance(result, _Cancelled):
+        raise AgentCancelled()
+    return result
+
+
 def _call_mcp_client_function_sync(
     function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    cancellation: CancellationSignal | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
         function, server_url, connection_headers, transport, auth, **kwargs
     )
     try:
-        return run_async_sync_no_cancel(run_client_function())
+        return _run_until_cancelled(run_client_function(), cancellation)
     except Exception as e:
         logger.error("Failed to call MCP client function: %s", e)
         if isinstance(e, ExceptionGroup):
@@ -260,14 +305,16 @@ def call_mcp_tool(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    cancellation: CancellationSignal | None = None,
 ) -> CallToolResult:
-    """Call a tool and preserve the server's result, including its error flag."""
+    """Call a tool until it completes or the caller cancels the request."""
     return _call_mcp_client_function_sync(
         _call_mcp_tool(tool_name, arguments),
         server_url,
         connection_headers,
         transport,
         auth,
+        cancellation=cancellation,
     )
 
 

@@ -370,6 +370,7 @@ class TestMCPPassThroughOAuth:
             connection_headers: dict[str, str],
             transport: MCPTransport,  # noqa: ARG001
             auth: Any = None,  # noqa: ARG001
+            cancellation: CancellationSignal | None = None,  # noqa: ARG001
         ) -> CallToolResult:
             captured_headers.update(connection_headers)
             return CallToolResult(

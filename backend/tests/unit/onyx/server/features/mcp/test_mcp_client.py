@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from collections.abc import Coroutine
 from typing import Any
 from unittest.mock import AsyncMock
@@ -7,6 +8,7 @@ import pytest
 from mcp import ClientSession
 from mcp.types import CallToolResult, TextContent
 
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp import client
 from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 
@@ -133,3 +135,68 @@ def test_call_tool_preserves_server_error_flag() -> None:
     assert received is result
     session.initialize.assert_awaited_once()
     session.call_tool.assert_awaited_once_with("lookup", {"id": 1})
+
+
+def test_cancellation_stops_a_running_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    cancellation = CancellationSignal()
+    stopped = threading.Event()
+
+    async def slow_call() -> None:
+        try:
+            # Cancel from the worker thread while the request is running.
+            asyncio.get_running_loop().call_soon(cancellation.cancel)
+            await asyncio.sleep(30)
+        finally:
+            stopped.set()
+
+    async def operation(_session: ClientSession) -> None:
+        raise AssertionError("the runner is replaced")
+
+    monkeypatch.setattr(
+        client,
+        "_create_mcp_client_function_runner",
+        lambda *_args, **_kwargs: slow_call,
+    )
+    with pytest.raises(AgentCancelled):
+        client._call_mcp_client_function_sync(
+            operation, "https://mcp.example.com/mcp", cancellation=cancellation
+        )
+    assert stopped.is_set()
+
+
+def test_already_cancelled_call_does_not_start() -> None:
+    cancellation = CancellationSignal()
+    cancellation.cancel()
+
+    async def operation() -> None:
+        pytest.fail("A cancelled request must not start")
+
+    with pytest.raises(AgentCancelled):
+        client._run_until_cancelled(operation(), cancellation)
+
+
+@pytest.mark.parametrize("cancel_on_completion", [False, True])
+def test_completed_call_keeps_its_result(cancel_on_completion: bool) -> None:
+    cancellation = CancellationSignal()
+
+    async def operation() -> str:
+        if cancel_on_completion:
+            cancellation.cancel()
+        return "completed"
+
+    assert client._run_until_cancelled(operation(), cancellation) == "completed"
+    # Completing removes the cancellation callback from the closed event loop.
+    cancellation.cancel()
+
+
+def test_failed_call_keeps_its_error() -> None:
+    cancellation = CancellationSignal()
+    failure = ValueError("server failed")
+
+    async def operation() -> None:
+        raise failure
+
+    with pytest.raises(ValueError) as error:
+        client._run_until_cancelled(operation(), cancellation)
+    assert error.value is failure
+    cancellation.cancel()

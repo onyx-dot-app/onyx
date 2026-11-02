@@ -242,6 +242,14 @@ Policy precedence is in [[craft-external-apps]].
     set afterwards. The reload only restamps `mcp_config_hash`; it does not push
     skill files.
 
+14. `cancel-in-flight-request` **Chat cancellation stops an active MCP request.**
+    `MCPTool._run` passes its invocation signal to `client.call_mcp_tool`.
+    The synchronous client cancels and drains the request coroutine before
+    raising `AgentCancelled`. This bypasses ordinary tool error recovery.
+    A result that already completed wins a concurrent cancellation. Discovery
+    calls that have no signal keep the existing synchronous behavior. Stopping
+    the local request cannot undo work already performed by the remote server.
+
 `Tool.enabled` gates MCP tools everywhere and OpenAPI tools only in Default
 Chat: see [[plugins#openapi-enabled-default-chat-only]].
 
