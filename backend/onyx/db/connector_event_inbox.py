@@ -132,30 +132,33 @@ def superseded_by_newer_events(
 ) -> set[int]:
     """Of these, the ids a newer change to the same document has overtaken.
 
-    The drain compares a batch against itself, which is not enough: id is
-    arrival order, not event time, so a late or out-of-order delivery puts
-    an older change in a later batch than the newer one it must not replace.
+    The drain compares a batch against itself, which is not enough: a change
+    can arrive late, or fail and wait out a retry while a newer one is
+    indexed. Only IN_PROGRESS and COMPLETED rows count as taken; the batch's
+    own rows are excluded, since the claim has already marked them
+    IN_PROGRESS and the caller compares those itself.
 
-    Only IN_PROGRESS and COMPLETED rows count: a PENDING one is not indexed
-    yet. The batch's own rows are excluded -- the claim has already marked
-    them IN_PROGRESS, so counting them would let a row the caller discarded
-    suppress the one it kept.
+    Event time decides only when every taken row for the document carries
+    one, as within a batch: a missing timestamp means the provider sent
+    none, not that the change is old. Otherwise arrival order decides.
     """
-    documents = {event.document_id for event in events if event.occurred_at}
+    documents = {event.document_id for event in events}
     if not documents:
         return set()
 
     claimed_here = [event.id for event in events]
-
     taken = (
         select(
             ConnectorEventInbox.document_id,
             func.max(ConnectorEventInbox.occurred_at).label("newest"),
+            func.max(ConnectorEventInbox.id).label("latest_id"),
+            func.count()
+            .filter(ConnectorEventInbox.occurred_at.is_(None))
+            .label("undated"),
         )
         .where(
             ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
             ConnectorEventInbox.document_id.in_(documents),
-            ConnectorEventInbox.occurred_at.is_not(None),
             ConnectorEventInbox.status.in_(
                 [ConnectorEventStatus.IN_PROGRESS, ConnectorEventStatus.COMPLETED]
             ),
@@ -164,14 +167,18 @@ def superseded_by_newer_events(
         .group_by(ConnectorEventInbox.document_id)
     )
 
-    newest = {row.document_id: row.newest for row in db_session.execute(taken)}
-    return {
-        event.id
-        for event in events
-        if event.occurred_at is not None
-        and (seen := newest.get(event.document_id)) is not None
-        and seen > event.occurred_at
-    }
+    superseded: set[int] = set()
+    by_document = {row.document_id: row for row in db_session.execute(taken)}
+    for event in events:
+        row = by_document.get(event.document_id)
+        if row is None:
+            continue
+        if event.occurred_at is not None and not row.undated and row.newest:
+            if row.newest > event.occurred_at:
+                superseded.add(event.id)
+        elif row.latest_id > event.id:
+            superseded.add(event.id)
+    return superseded
 
 
 def claim_events(

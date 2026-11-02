@@ -670,3 +670,55 @@ def test_a_row_that_keeps_failing_eventually_settles(
     assert count_events_by_status(db_session, pair_id) == {
         ConnectorEventStatus.FAILED: 1
     }
+
+
+def test_a_retried_untimestamped_change_does_not_overwrite_a_newer_one(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """An untimestamped change can fail, wait out its backoff while a later
+    change to the same document is indexed, and come back. Comparing only
+    timestamps could not discard it, so it would restore the old body."""
+    pair_id, attempt_id = pair_and_attempt
+    unregister_event_handler(SOURCE)
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-old")],
+    )
+    db_session.commit()
+
+    # It fails and returns to the queue.
+    _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+    register_event_handler(SOURCE, _handler)
+
+    # A later change is indexed while the first waits out its backoff.
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-new")],
+    )
+    db_session.commit()
+    newer, _failures, _ = _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+    assert [document.id for document in newer] == ["doc-1"]
+
+    # The retry comes due. It must not be indexed over the newer change.
+    db_session.query(ConnectorEventInbox).filter_by(
+        connector_credential_pair_id=pair_id,
+        status=ConnectorEventStatus.PENDING,
+    ).update({"available_at": datetime(2020, 1, 1, tzinfo=timezone.utc)})
+    db_session.commit()
+
+    retried, _failures_2, _ = _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    assert retried == []
