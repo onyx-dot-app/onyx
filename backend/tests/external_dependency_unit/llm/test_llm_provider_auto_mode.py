@@ -22,6 +22,7 @@ from onyx.db.llm import (
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.auto_update_service import (
+    reset_seen_catalog,
     sync_auto_update_providers,
 )
 from onyx.server.manage.llm.api import put_llm_provider
@@ -34,6 +35,7 @@ from onyx.server.manage.llm.models import (
 def _cleanup_provider(db_session: Session, name: str) -> None:
     provider = fetch_existing_llm_provider(name=name, db_session=db_session)
     if provider:
+        reset_seen_catalog(provider.id)
         remove_llm_provider(db_session, provider.id)
 
 

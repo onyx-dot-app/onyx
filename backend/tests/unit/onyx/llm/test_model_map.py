@@ -625,7 +625,14 @@ def test_latest_models_read_the_remote_supplement() -> None:
     gives no list when either one can't be read."""
     files: dict[str, dict[str, Any]] = {
         "openai": {"models": {"gpt-new": {"mode": "chat"}}},
-        "_supplement": {"openai": {"models": {"gpt-alias": {"mode": "chat"}}}},
+        "_supplement": {
+            "openai": {
+                "models": {
+                    "gpt-alias": {"mode": "chat"},
+                    "gpt-retired": {"status": "deprecated"},
+                }
+            }
+        },
     }
 
     def fake_get(name: str) -> Any:
@@ -647,6 +654,14 @@ def test_latest_models_read_the_remote_supplement() -> None:
         return _remote_response(files[name])
 
     with patch.object(model_catalog, "_fetch_provider_file", side_effect=no_supplement):
+        model_catalog.reset_remote_cache()
+        try:
+            assert model_catalog.iter_latest_models("openai", mode="chat") is None
+        finally:
+            model_catalog.reset_remote_cache()
+
+    files["openai"] = {"models": {"gpt-new": {"mode": "chat"}, "gpt-broken": "x"}}
+    with patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get):
         model_catalog.reset_remote_cache()
         try:
             assert model_catalog.iter_latest_models("openai", mode="chat") is None

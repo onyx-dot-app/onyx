@@ -492,21 +492,24 @@ def iter_latest_models(provider: str, mode: str | None = None) -> list[str] | No
     supplement = _remote_supplement()
     if supplement is None:
         return None
-    provider_supplement: Any = supplement.get(provider)
+    provider_supplement: Any = supplement.get(provider) or {}
     supplement_models: Any = (
-        provider_supplement.get("models")
+        provider_supplement.get("models") or {}
         if isinstance(provider_supplement, dict)
         else None
     )
-    models: dict[str, Any] = {
-        model_id: entry
-        for source in (
-            supplement_models if isinstance(supplement_models, dict) else {},
-            section["models"],
-        )
+    # A partial list would read as retirements, so reject malformed files.
+    if not isinstance(supplement_models, dict) or not all(
+        isinstance(model_id, str) and isinstance(entry, dict)
+        for source in (section["models"], supplement_models)
         for model_id, entry in source.items()
-        if isinstance(model_id, str) and isinstance(entry, dict)
-    }
+    ):
+        logger.warning("Remote catalog for %s is malformed", provider)
+        return None
+    models: dict[str, Any] = dict(section["models"])
+    for model_id, entry in supplement_models.items():
+        if model_id not in models and not set(entry) <= set(_SUPPLEMENT_OVERRIDE_KEYS):
+            models[model_id] = entry
     return sorted(
         model_id
         for model_id, entry in models.items()

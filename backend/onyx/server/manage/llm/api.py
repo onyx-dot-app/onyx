@@ -1049,6 +1049,7 @@ def _initial_auto_update_models(
     provider_name: str,
 ) -> list[ModelConfigurationUpsertRequest]:
     from onyx.llm.well_known_providers.llm_provider_options import (
+        fetch_latest_models_for_provider,
         fetch_models_for_provider,
         get_recommendations,
     )
@@ -1056,7 +1057,10 @@ def _initial_auto_update_models(
     recommended = [
         model.name for model in get_recommendations().get_visible_models(provider_name)
     ]
-    catalog = fetch_models_for_provider(provider_name)
+    # The first sync baselines the latest catalog, so start from it too.
+    catalog = fetch_latest_models_for_provider(provider_name)
+    if catalog is None:
+        catalog = fetch_models_for_provider(provider_name)
     return [
         ModelConfigurationUpsertRequest(name=name, is_visible=name in recommended)
         for name in catalog + [name for name in recommended if name not in catalog]
