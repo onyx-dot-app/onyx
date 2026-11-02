@@ -29,7 +29,8 @@ type agentContextSkill struct {
 // discoverAgentContextSkills reads the enforced/ and skills/ tiers of the
 // agent-context/ directory of an internal infra repo checkout. A source with no
 // agent-context/ directory is treated as the root of an old onyx-llm-context
-// checkout. A missing tier directory is not an error.
+// checkout. A missing tier directory is not an error. Sources with a workspace
+// installer must use that entry point so the skill links and hooks stay aligned.
 func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 	// The Claude installer builds symlinks and @imports from these paths, so a
 	// relative --source must not leak into them.
@@ -37,9 +38,22 @@ func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve source path: %w", err)
 	}
-	if info, err := os.Stat(filepath.Join(source, agentContextDir)); err == nil && info.IsDir() {
+	info, err := os.Stat(filepath.Join(source, agentContextDir))
+	nested := err == nil && info.IsDir()
+	if nested {
 		source = filepath.Join(source, agentContextDir)
-	} else if !hasSkillTier(source) {
+	}
+	setup := filepath.Join(source, "scripts", "setup_agents.py")
+	if info, err := os.Stat(setup); err == nil && !info.IsDir() {
+		return nil, fmt.Errorf(
+			"this source uses workspace setup; ods install-skill cannot install it\n"+
+				"  Follow %s and use its setup entry point: %s",
+			filepath.Join(source, "README.md"), setup,
+		)
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("could not inspect setup entry point %s: %w", setup, err)
+	}
+	if !nested && !hasSkillTier(source) {
 		return nil, fmt.Errorf(
 			"no %s/ directory found in %s\n  Update the checkout (git pull) or re-run with --clone",
 			agentContextDir, source,
