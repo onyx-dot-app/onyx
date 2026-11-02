@@ -138,7 +138,11 @@ parser, a signature verifier, and an optional handshake responder. Deliveries
 become rows in `connector_event_inbox` (`onyx/db/connector_event_inbox.py`),
 keyed `(pair, event_key)` so a redelivery writes nothing, and
 `EventInboxConnector` (`onyx/connectors/event_inbox/connector.py`) drains them
-inside an ordinary docfetching run. The factory returns that drain for an
+inside an ordinary docfetching run. A claim takes every due row of each
+document it touches, not a flat row count: the drain keeps only the newest
+change per document, and two changes split across batches would instead
+become two docprocessing tasks racing to write one document, which nothing
+orders. The factory returns that drain for an
 `EVENT` pair, so the source's own connector class is never loaded, and the run
 injects the pair and attempt ids because neither is stored config. One
 consequence: the probes dispatch on the connector class
