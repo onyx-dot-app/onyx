@@ -849,7 +849,8 @@ class IndexingConnectorRow(BaseModel):
     docs_indexed: int
     last_success: datetime | None
     latest_index_attempt: IndexAttemptSnapshot | None
-    # The latest attempt's open errors, whole entities included.
+    # The latest attempt's open errors, whole entities included, plus the open
+    # prune and check runs.
     open_error_count: int
     # The groups that read the pair's documents and the caller can see, sorted by name. Empty for public and synced pairs.
     group_count: int
