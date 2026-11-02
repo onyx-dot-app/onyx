@@ -24,9 +24,7 @@ from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessage
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
-from tests.external_dependency_unit.conftest import (
-    create_test_user,
-)
+from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 FAST_TASK = "Research the alpha market"
@@ -128,11 +126,12 @@ class DeepResearchScriptLLM(FakeModelClient):
 
 def test_timed_out_research_agent_is_a_failed_call(
     db_session: Session,
+    make_test_user: MakeTestUser,
     full_deployment_setup: None,  # noqa: ARG001
     default_llm_provider: None,  # noqa: ARG001
     mock_external_deps: None,  # noqa: ARG001
 ) -> None:
-    user = create_test_user(db_session, email_prefix="dr_research_agent_timeout")
+    user = make_test_user("dr_research_agent_timeout")
     chat_session = create_chat_session(db_session=db_session, user=user)
 
     llm = DeepResearchScriptLLM()

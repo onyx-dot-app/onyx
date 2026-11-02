@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import create_engine, delete, or_, select
+from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -24,15 +24,18 @@ from onyx.db.llm import (
 from onyx.db.models import (
     ChatSession,
     MCPServer,
+    MCPServer__UserGroup,
     Persona,
     Persona__DocumentSet,
     Persona__PersonaLabel,
     Persona__User,
     Persona__UserGroup,
+    Project__UserFile,
     Tool,
     User,
     User__UserGroup,
     UserFile,
+    UserProject,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
@@ -216,8 +219,7 @@ class MakeTestUser(Protocol):
 def delete_test_users_and_owned_rows(
     db_session: Session, user_ids: Sequence[UUID], emails: Sequence[str]
 ) -> None:
-    """Delete test users with their chat sessions, personas, MCP servers and
-    tools. MCP tools and chat messages go by cascade."""
+    """Delete test-owned chat resources and their non-cascading links."""
     db_session.rollback()
     persona_ids = select(Persona.id).where(Persona.user_id.in_(user_ids))
     persona_id_list = list(db_session.scalars(persona_ids))
@@ -246,8 +248,31 @@ def delete_test_users_and_owned_rows(
             delete(association).where(association.persona_id.in_(persona_id_list))
         )
     db_session.execute(delete(Persona).where(Persona.id.in_(persona_id_list)))
+    server_ids = select(MCPServer.id).where(MCPServer.owner.in_(emails))
+    db_session.execute(
+        delete(MCPServer__UserGroup).where(
+            MCPServer__UserGroup.mcp_server_id.in_(server_ids)
+        )
+    )
     db_session.execute(delete(MCPServer).where(MCPServer.owner.in_(emails)))
     db_session.execute(delete(Tool).where(Tool.user_id.in_(user_ids)))
+    project_ids = select(UserProject.id).where(UserProject.user_id.in_(user_ids))
+    file_ids = select(UserFile.id).where(UserFile.user_id.in_(user_ids))
+    db_session.execute(
+        update(ChatSession)
+        .where(ChatSession.project_id.in_(project_ids))
+        .values(project_id=None)
+    )
+    db_session.execute(
+        delete(Project__UserFile).where(
+            or_(
+                Project__UserFile.project_id.in_(project_ids),
+                Project__UserFile.user_file_id.in_(file_ids),
+            )
+        )
+    )
+    db_session.execute(delete(UserFile).where(UserFile.user_id.in_(user_ids)))
+    db_session.execute(delete(UserProject).where(UserProject.user_id.in_(user_ids)))
     _delete_users(db_session, user_ids)
     db_session.commit()
 
