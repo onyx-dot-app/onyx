@@ -72,7 +72,23 @@ export default function AgentCard({ agent, onView }: AgentCardProps) {
         <ShareAgentModal agentId={agent.id} />
       </shareAgentModal.Provider>
 
-      <Interactive.Simple onClick={onView} group="group/AgentCard">
+      <Interactive.Simple
+        onClick={onView}
+        group="group/AgentCard"
+        // Lets the catalog's arrow keys find the cards. A tab stop that
+        // opens on Enter or Space, without a role, as SelectCard does: a
+        // role would fold the card's buttons into its name.
+        data-agent-card=""
+        tabIndex={0}
+        aria-label={agent.name}
+        onKeyDown={(event) => {
+          // Keys pressed on a nested control belong to that control.
+          if (event.target !== event.currentTarget) return;
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.currentTarget.click();
+        }}
+      >
         <Hoverable.Root group="AgentCard" height="full">
           <Card
             padding={0}

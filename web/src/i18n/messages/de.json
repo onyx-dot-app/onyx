@@ -11588,7 +11588,8 @@
         "label": "{count, plural, one {Agent} other {Agenten}}"
       },
       "empty": {
-        "description": "Keine Agenten gefunden"
+        "description": "Agenten, die du erstellst oder die mit dir geteilt werden, erscheinen hier.",
+        "item": "Agenten"
       },
       "header": {
         "description": "Passen Sie das Verhalten und Wissen der KI für Ihre Anwendungsfälle und die Ihres Teams an.",
@@ -11602,9 +11603,6 @@
       },
       "page": {
         "ariaLabel": "Agenten-Seite"
-      },
-      "search": {
-        "placeholder": "Agenten suchen..."
       },
       "sections": {
         "all": {
@@ -14295,6 +14293,21 @@
     },
     "appFooter": {
       "slogan": "Open-Source-KI-Plattform"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "Keine {item}",
+        "title": "Keine Elemente"
+      },
+      "noResults": {
+        "description": "Es wurden keine Ergebnisse gefunden, die zu diesem Suchbegriff passen.",
+        "itemTitle": "Keine {item} gefunden",
+        "title": "Keine Ergebnisse gefunden"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "{item} durchsuchen oder \"/\" drücken, um zu fokussieren...",
+      "placeholder": "Suchen oder \"/\" drücken, um zu fokussieren..."
     }
   },
   "craft": {

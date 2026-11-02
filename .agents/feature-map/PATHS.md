@@ -269,7 +269,7 @@ covers new files that match it.
 | `web/src/lib/tools/` | plugins |
 | `web/src/lib/tools/components/ToolsPopover.tsx` | plugins, chat-frontend |
 | `web/src/lib/onboarding/` | chat-frontend |
-| `web/src/views/AgentEditorPage.tsx`, `web/src/views/AgentsNavigationPage.tsx`, `web/src/sections/agents/` | agents-personas |
+| `web/src/views/AgentEditorPage.tsx`, `web/src/views/AgentsCatalogPage/`, `web/src/sections/agents/` | agents-personas |
 | `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/lib/app/components/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
@@ -373,6 +373,7 @@ the admin routes and check that each has a row above, run
 | `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | Reverse-proxy templates. The `cli/` copies are generated: run `ods generate-compose --write` after you change `deployment/data/nginx/`. |
 | `cli/` | The Onyx CLI client. Only its packet parser has an owner (streaming-protocol). |
 | `tools/`, `backend/scripts/`, `backend/requirements/` | Developer tooling and dependency files. |
+| `web/src/lib/common/` | App components every feature shares, such as the list states `NoResults` and `NoItems`. Check the callers. |
 | `web/.oxlintrc.json` | Lint config for `web/`, with the design-system and layout baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
 | `.github/` | CI. Read the workflow. |

@@ -11588,7 +11588,8 @@
         "label": "{count, plural, one {Agent} other {Agents}}"
       },
       "empty": {
-        "description": "No Agents found"
+        "description": "Agents you create, and agents shared with you, appear here.",
+        "item": "agents"
       },
       "header": {
         "description": "Customize AI behavior and knowledge for you and your team's use cases.",
@@ -11602,9 +11603,6 @@
       },
       "page": {
         "ariaLabel": "Agents Page"
-      },
-      "search": {
-        "placeholder": "Search agents..."
       },
       "sections": {
         "all": {
@@ -14295,6 +14293,21 @@
     },
     "appFooter": {
       "slogan": "Open Source AI Platform"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "No {item}",
+        "title": "No items"
+      },
+      "noResults": {
+        "description": "No results matching that search term were found.",
+        "itemTitle": "No {item} found",
+        "title": "No results found"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "Search {item} or press \"/\" to focus...",
+      "placeholder": "Search or press \"/\" to focus..."
     }
   },
   "craft": {

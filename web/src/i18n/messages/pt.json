@@ -11588,7 +11588,8 @@
         "label": "{count, plural, one {Agente} other {Agentes}}"
       },
       "empty": {
-        "description": "Nenhum agente encontrado"
+        "description": "Os agentes que você cria e os compartilhados com você aparecem aqui.",
+        "item": "agentes"
       },
       "header": {
         "description": "Personalize o comportamento e o conhecimento da IA para os casos de uso seus e da sua equipe.",
@@ -11602,9 +11603,6 @@
       },
       "page": {
         "ariaLabel": "Página de agentes"
-      },
-      "search": {
-        "placeholder": "Pesquisar agentes..."
       },
       "sections": {
         "all": {
@@ -14295,6 +14293,21 @@
     },
     "appFooter": {
       "slogan": "Plataforma de IA de código aberto"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "Nenhum(a) {item}",
+        "title": "Nenhum item"
+      },
+      "noResults": {
+        "description": "Nenhum resultado correspondente a esse termo de pesquisa foi encontrado.",
+        "itemTitle": "Nenhum(a) {item} encontrado(a)",
+        "title": "Nenhum resultado encontrado"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "Pesquise {item} ou pressione \"/\" para focar...",
+      "placeholder": "Pesquise ou pressione \"/\" para focar..."
     }
   },
   "craft": {

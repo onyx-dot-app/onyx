@@ -11588,7 +11588,8 @@
         "label": "{count, plural, one {에이전트} other {에이전트}}"
       },
       "empty": {
-        "description": "에이전트를 찾을 수 없음"
+        "description": "직접 만든 에이전트와 공유받은 에이전트가 여기에 표시됩니다.",
+        "item": "에이전트"
       },
       "header": {
         "description": "나와 팀의 사용 사례에 맞게 AI의 동작과 지식을 맞춤 설정하세요.",
@@ -11602,9 +11603,6 @@
       },
       "page": {
         "ariaLabel": "에이전트 페이지"
-      },
-      "search": {
-        "placeholder": "에이전트 검색..."
       },
       "sections": {
         "all": {
@@ -14295,6 +14293,21 @@
     },
     "appFooter": {
       "slogan": "오픈 소스 AI 플랫폼"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "{item}이(가) 없습니다",
+        "title": "항목이 없습니다"
+      },
+      "noResults": {
+        "description": "해당 검색어와 일치하는 결과를 찾을 수 없습니다.",
+        "itemTitle": "{item}을(를) 찾을 수 없습니다",
+        "title": "결과가 없습니다"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "{item} 검색 또는 \"/\"를 눌러 포커스...",
+      "placeholder": "검색하거나 \"/\"를 눌러 포커스..."
     }
   },
   "craft": {

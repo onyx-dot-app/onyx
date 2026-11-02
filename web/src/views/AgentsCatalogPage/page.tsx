@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import AgentCard from "@/sections/agents/AgentCard";
 import { AgentViewer } from "@/lib/agents/components";
@@ -10,11 +10,12 @@ import { Permission } from "@/lib/types";
 import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
-import { Section, SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts } from "@opal/layouts";
+import { GridSearchInput, NoItems, NoResults } from "@/lib/common/components";
+import { useSearchableGrid } from "@/lib/common/hooks";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { Button, InputTypeIn, Tabs, Text } from "@opal/components";
+import { Button, Tabs, Text } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
-import useOnMount from "@/hooks/useOnMount";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 
 interface AgentsSectionProps {
@@ -60,9 +61,9 @@ function AgentsSection({
 // e2e locator, not user copy.
 const NEW_AGENT_BUTTON_ARIA_LABEL = "AgentsPage/new-agent-button";
 
-export default function AgentsNavigationPage() {
+export default function AgentsCatalogPage() {
   const t = useTranslations("agents");
-  const { agents } = useAgents();
+  const { agents, isLoading, error } = useAgents();
   const { user, permissions } = useUser();
   const canCreateAgent = hasPermission(permissions, Permission.ADD_AGENTS);
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,11 +71,6 @@ export default function AgentsNavigationPage() {
   // card happened to be clicked.
   const [viewedAgentId, setViewedAgentId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "your">("all");
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useOnMount(() => {
-    searchInputRef.current?.focus();
-  });
 
   const nonBuiltinAgents = useMemo(
     () => agents.filter((a) => !a.builtin_persona),
@@ -109,8 +105,16 @@ export default function AgentsNavigationPage() {
 
   const agentCount = featuredAgents.length + allAgents.length;
 
+  const search = useSearchableGrid({
+    query: searchQuery,
+    setQuery: setSearchQuery,
+    itemSelector: "[data-agent-card]",
+  });
+
   return (
     <SettingsLayouts.Root
+      loading={isLoading}
+      error={!!error}
       data-testid="AgentsPage/container"
       aria-label={t("navigation.page.ariaLabel")}
     >
@@ -142,12 +146,11 @@ export default function AgentsNavigationPage() {
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
             <div className="flex-2">
-              <InputTypeIn
-                ref={searchInputRef}
-                placeholder={t("navigation.search.placeholder")}
+              <GridSearchInput
+                search={search}
+                item={t("navigation.empty.item")}
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                searchIcon
+                onChange={setSearchQuery}
               />
             </div>
             <div className="flex-1">
@@ -172,16 +175,18 @@ export default function AgentsNavigationPage() {
 
       {/* Agents List */}
       <SettingsLayouts.Body>
-        {agentCount === 0 ? (
-          <div className="w-full h-full py-12">
-            <Section>
-              <Text as="p" color="text-03">
-                {t("navigation.empty.description")}
-              </Text>
-            </Section>
-          </div>
+        {/* A typed search reads as "nothing matched" even when there are no
+            agents at all: that is what the user just asked. */}
+        {nonBuiltinAgents.length === 0 && searchQuery.trim() === "" ? (
+          <NoItems
+            item={t("navigation.empty.item")}
+            description={t("navigation.empty.description")}
+          />
+        ) : agentCount === 0 ? (
+          <NoResults item={t("navigation.empty.item")} />
         ) : (
-          <>
+          // `contents`: a box for the grid navigation that adds no layout.
+          <div ref={search.gridRef} className="contents">
             <AgentsSection
               title={t("navigation.sections.featured.title")}
               description={t("navigation.sections.featured.description")}
@@ -199,7 +204,7 @@ export default function AgentsNavigationPage() {
                 count: agentCount,
               })}
             />
-          </>
+          </div>
         )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

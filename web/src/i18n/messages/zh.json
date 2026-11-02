@@ -11588,7 +11588,8 @@
         "label": "{count, plural, one {智能体} other {智能体}}"
       },
       "empty": {
-        "description": "未找到智能体"
+        "description": "你创建的智能体以及与你共享的智能体会显示在这里。",
+        "item": "智能体"
       },
       "header": {
         "description": "为您和团队的使用场景定制 AI 的行为和知识。",
@@ -11602,9 +11603,6 @@
       },
       "page": {
         "ariaLabel": "智能体页面"
-      },
-      "search": {
-        "placeholder": "搜索智能体..."
       },
       "sections": {
         "all": {
@@ -14295,6 +14293,21 @@
     },
     "appFooter": {
       "slogan": "开源 AI 平台"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "没有{item}",
+        "title": "没有项目"
+      },
+      "noResults": {
+        "description": "未找到与该搜索词匹配的结果。",
+        "itemTitle": "未找到{item}",
+        "title": "未找到结果"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "搜索{item}，或按“/”聚焦...",
+      "placeholder": "搜索，或按“/”聚焦..."
     }
   },
   "craft": {

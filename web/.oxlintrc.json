@@ -607,7 +607,7 @@
         "src/sections/usage/SpendByUserTable.tsx",
         "src/sections/usage/UserUsageDetailModal.tsx",
         "src/views/AgentEditorPage.tsx",
-        "src/views/AgentsNavigationPage.tsx",
+        "src/views/AgentsCatalogPage/page.tsx",
         "src/views/AppPage.tsx",
         "src/views/SettingsPage.tsx",
         "src/views/SkillEditorPage.tsx",

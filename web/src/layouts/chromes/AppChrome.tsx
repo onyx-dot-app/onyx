@@ -31,10 +31,8 @@ import {
 } from "@/lib/chat/exportChatSession";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
-import {
-  AgentsPageLoader,
-  MoveCustomAgentChatModal,
-} from "@/lib/agents/components";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
+import AgentsCatalogLoading from "@/views/AgentsCatalogPage/loading";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
@@ -641,7 +639,7 @@ interface NavigationTargetLoaderProps {
 
 /** The loading screen of the page a navigation in flight is going to. */
 function NavigationTargetLoader({ target }: NavigationTargetLoaderProps) {
-  if (target.isMoreAgents()) return <AgentsPageLoader />;
+  if (target.isMoreAgents()) return <AgentsCatalogLoading />;
   // A view of /app shows its own loading state once it mounts. Other pages
   // have no loader here yet.
   return null;

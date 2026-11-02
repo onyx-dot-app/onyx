@@ -66,7 +66,10 @@ export {
 
 /* SettingsLayouts */
 export * as SettingsLayouts from "@opal/layouts/settings/components";
-export type { SettingsHeaderProps } from "@opal/layouts/settings/components";
+export type {
+  SettingsHeaderProps,
+  SettingsLoadingProps,
+} from "@opal/layouts/settings/components";
 
 /* RootLayout */
 export * as RootLayout from "@opal/layouts/root/components";
@@ -96,6 +99,12 @@ export type {
 
 /* TagList */
 export { TagList, type TagListProps } from "@opal/layouts/tag-list/components";
+
+/* States: a body that failed to load */
+export {
+  ErrorState,
+  type ErrorStateProps,
+} from "@opal/layouts/states/components";
 
 /* KeyValue */
 export {
