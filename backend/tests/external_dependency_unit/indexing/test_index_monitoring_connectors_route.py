@@ -12,13 +12,18 @@ from onyx.connectors.models import InputType
 from onyx.db.cc_pair_run_resolution import resolve_runs__no_commit
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckRunStatus,
+    CapabilityCheckTrigger,
     CCPairRunKind,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     IndexingStatus,
     PermissionSyncStatus,
+    SyncStatus,
+    SyncType,
 )
 from onyx.db.models import (
+    CapabilityCheckRun,
     Connector,
     ConnectorCredentialPair,
     Credential,
@@ -26,6 +31,7 @@ from onyx.db.models import (
     ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
     IndexAttemptError,
+    SyncRecord,
     UserGroup,
     UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
@@ -174,6 +180,40 @@ def _share_with_groups(
             UserGroup__CCPairDataAccess(user_group_id=group.id, cc_pair_id=cc_pair.id)
         )
     db_session.commit()
+
+
+def _prune(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    status: SyncStatus,
+    started: datetime,
+) -> None:
+    db_session.add(
+        SyncRecord(
+            entity_id=cc_pair.id,
+            sync_type=SyncType.PRUNING,
+            sync_status=status,
+            num_docs_synced=0,
+            sync_start_time=started,
+            sync_end_time=started + timedelta(minutes=1),
+        )
+    )
+    db_session.commit()
+
+
+def _failed_check(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> CapabilityCheckRun:
+    run = CapabilityCheckRun(
+        credential_id=cc_pair.credential_id,
+        connector_id=cc_pair.connector_id,
+        run_id=uuid4(),
+        trigger=CapabilityCheckTrigger.SCHEDULED,
+        status=CapabilityCheckRunStatus.FAILED_TO_RUN,
+    )
+    db_session.add(run)
+    db_session.commit()
+    return run
 
 
 def _connectors(
@@ -607,3 +647,56 @@ def test_ac7_the_syncing_filter_returns_only_syncing_rows_and_keeps_every_count(
     assert filtered.status_counts[IndexingConnectorStatus.SYNCING] == 1
     assert filtered.status_counts[IndexingConnectorStatus.INDEXED] == 1
     assert filtered.status_counts[IndexingConnectorStatus.PAUSED] == 1
+
+
+def test_a_failed_prune_or_check_ranks_a_connector_third(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    running = _create_cc_pair(db_session, prefix, "b running")
+    prune_failed = _create_cc_pair(db_session, prefix, "z prune failed")
+    check_failed = _create_cc_pair(db_session, prefix, "y check failed")
+    indexed = _create_cc_pair(db_session, prefix, "a indexed")
+    prune_fixed = _create_cc_pair(db_session, prefix, "x prune fixed")
+    check_resolved = _create_cc_pair(db_session, prefix, "w check resolved")
+    _index_attempt(db_session, running, IndexingStatus.IN_PROGRESS, now)
+    for cc_pair in (prune_failed, check_failed, indexed, prune_fixed, check_resolved):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+    # A running pair with a failed prune keeps rank 1.
+    _prune(db_session, running, SyncStatus.FAILED, now)
+    _prune(db_session, prune_failed, SyncStatus.FAILED, now)
+    _failed_check(db_session, check_failed)
+    # A newer prune that succeeded closes the failure.
+    _prune(db_session, prune_fixed, SyncStatus.FAILED, now - timedelta(hours=2))
+    _prune(db_session, prune_fixed, SyncStatus.SUCCESS, now - timedelta(hours=1))
+    resolved_check = _failed_check(db_session, check_resolved)
+    resolve_runs__no_commit(
+        db_session, {(CCPairRunKind.CHECKS, resolved_check.id): check_resolved.id}, None
+    )
+    db_session.commit()
+
+    response = _connectors(db_session, prefix)
+
+    assert [row.name for row in response.items] == [
+        running.name,
+        check_failed.name,
+        prune_failed.name,
+        indexed.name,
+        check_resolved.name,
+        prune_fixed.name,
+    ]
+    rows = {row.name: row for row in response.items}
+    # Pruning and checks never set the state.
+    assert rows[prune_failed.name].status == IndexingConnectorStatus.INDEXED
+    assert rows[check_failed.name].status == IndexingConnectorStatus.INDEXED
+    assert rows[running.name].status == IndexingConnectorStatus.INDEXING
+    open_counts = {name: row.open_error_count for name, row in rows.items()}
+    assert open_counts == {
+        running.name: 1,
+        check_failed.name: 1,
+        prune_failed.name: 1,
+        indexed.name: 0,
+        check_resolved.name: 0,
+        prune_fixed.name: 0,
+    }
