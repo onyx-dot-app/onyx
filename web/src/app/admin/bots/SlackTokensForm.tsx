@@ -10,6 +10,8 @@ import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { toast } from "@opal/layouts";
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import type { SlackBot } from "@/lib/types";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -27,6 +29,7 @@ export const SlackTokensForm = ({
   onValuesChange?: (values: any) => void;
 }) => {
   const t = useTranslations("admin.slackBots");
+  const tCommon = useTranslations("common");
 
   useEffect(() => {
     if (onValuesChange) {
@@ -59,7 +62,7 @@ export const SlackTokensForm = ({
           if (refreshSlackBot) {
             refreshSlackBot();
           }
-          const responseJson = await response.json();
+          const responseJson: SlackBot = await response.json();
           const botId = isUpdate ? existingSlackBotId : responseJson.id;
           toast.success(
             isUpdate
@@ -68,12 +71,21 @@ export const SlackTokensForm = ({
           );
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
-          const responseJson = await response.json();
-          let errorMsg = responseJson.detail || responseJson.message;
+          const responseJson: ErrorResponseBody = await response
+            .json()
+            .catch(() => ({}));
+          const rawError =
+            typeof responseJson.detail === "string"
+              ? responseJson.detail
+              : typeof responseJson.message === "string"
+              ? responseJson.message
+              : undefined;
 
-          if (errorMsg.includes("Invalid bot token:")) {
+          let errorMsg = rawError ?? tCommon("errors.unknown.message");
+
+          if (rawError?.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");
-          } else if (errorMsg.includes("Invalid app token:")) {
+          } else if (rawError?.includes("Invalid app token:")) {
             errorMsg = t("tokensForm.invalidAppToken.message");
           }
           toast.error(
