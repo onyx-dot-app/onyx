@@ -254,3 +254,64 @@ def test_import_applies_shared_access_before_publication(
     assert stored.public_permission == SkillSharePermission.VIEWER
     assert stored.bundle_file_id is not None
     get_default_file_store().delete_file(stored.bundle_file_id, error_on_missing=False)
+
+
+def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
+    db_session: Session,
+    test_user: User,
+    initialize_file_store: None,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.db.enums import SkillInstallationPolicy
+    from onyx.server.features.skill.models import SkillShareRequest
+
+    name = f"policy-dup-{uuid4().hex[:8]}"
+    paths = [f"first/{name}", f"second/{name}"]
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.fetch_github_skill_bundles",
+        lambda *_args, **_kwargs: (
+            GitHubRepository(owner="owner", repo="repository", revision=_REVISION),
+            [
+                GitHubSkillBundle(
+                    path=path, name=name, description=path, bundle_bytes=_bundle(name)
+                )
+                for path in paths
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api._github_authorization_header",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.has_global_permission",
+        lambda *_args, **_kwargs: True,
+    )
+
+    response = import_github_skills(
+        GitHubSkillsImportRequest(
+            repository="owner/repository",
+            revision=_REVISION,
+            paths=paths,
+            sharing=SkillShareRequest(
+                installation_policy=SkillInstallationPolicy.DEFAULT
+            ),
+        ),
+        user=test_user,
+        db_session=db_session,
+    )
+
+    assert [result.skill.name for result in response.imported] == [name]
+    assert response.imported[0].skill.installation_policy == (
+        SkillInstallationPolicy.DEFAULT
+    )
+    assert [item.path for item in response.not_imported] == [paths[1]]
+    rows = db_session.scalars(select(Skill).where(Skill.name == name)).all()
+    assert len(rows) == 1
+    bundle_file_id = rows[0].bundle_file_id
+    assert bundle_file_id is not None
+    get_default_file_store().delete_file(bundle_file_id, error_on_missing=False)

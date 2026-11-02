@@ -1,6 +1,6 @@
 import io
 import zipfile
-from contextlib import ExitStack
+from contextlib import AbstractContextManager, ExitStack
 from typing import Annotated
 from uuid import UUID
 
@@ -143,6 +143,27 @@ def _create_skill_from_bundle__no_commit(
     if enabled:
         affected.add(user.id)
     return skill, enabled, affected
+
+
+def _import_bundle__no_commit(
+    ingest: AbstractContextManager[IngestedBundle],
+    sharing: SkillShareRequest | None,
+    auto_enable: bool,
+    user: User,
+    db_session: Session,
+    successful_bundles: ExitStack,
+) -> tuple[Skill, bool, set[UUID]]:
+    """Create one skill in its own savepoint, so one bad bundle or a name
+    conflict does not undo the other skills of the same import. A failure
+    rolls back the savepoint and deletes the bundle file; a success keeps the
+    file until successful_bundles closes."""
+    with ExitStack() as bundle_context, db_session.begin_nested():
+        ingested = bundle_context.enter_context(ingest)
+        result = _create_skill_from_bundle__no_commit(
+            ingested, sharing, auto_enable, user, db_session
+        )
+        successful_bundles.enter_context(bundle_context.pop_all())
+    return result
 
 
 def _import_response(
@@ -497,18 +518,16 @@ def create_custom_skills_batch(
     with ExitStack() as successful_bundles:
         for bundle in bundles:
             try:
-                with ExitStack() as bundle_context, db_session.begin_nested():
-                    ingested = bundle_context.enter_context(
-                        ingested_skill_bundle(
-                            read_bundle_file(bundle.file), bundle.filename, file_store
-                        )
-                    )
-                    skill, enabled, item_affected = (
-                        _create_skill_from_bundle__no_commit(
-                            ingested, share_request, auto_enable, user, db_session
-                        )
-                    )
-                    successful_bundles.enter_context(bundle_context.pop_all())
+                skill, enabled, item_affected = _import_bundle__no_commit(
+                    ingested_skill_bundle(
+                        read_bundle_file(bundle.file), bundle.filename, file_store
+                    ),
+                    share_request,
+                    auto_enable,
+                    user,
+                    db_session,
+                    successful_bundles,
+                )
                 created.append((skill, enabled))
                 affected |= item_affected
             except OnyxError as exc:
@@ -571,7 +590,7 @@ def import_github_skills(
     affected: set[UUID] = set()
 
     file_store = get_default_file_store()
-    with ExitStack() as ingested_bundles:
+    with ExitStack() as successful_bundles:
         for path in selected_paths:
             selected_skill = skills_by_path.get(path)
             if selected_skill is None:
@@ -597,19 +616,28 @@ def import_github_skills(
                 )
                 continue
 
-            ingested = ingested_bundles.enter_context(
-                ingested_skill_bundle(
-                    selected_skill.bundle_bytes,
-                    f"{selected_skill.name}.zip",
-                    file_store,
-                    expected_name=selected_skill.name,
+            try:
+                skill, enabled, item_affected = _import_bundle__no_commit(
+                    ingested_skill_bundle(
+                        selected_skill.bundle_bytes,
+                        f"{selected_skill.name}.zip",
+                        file_store,
+                        expected_name=selected_skill.name,
+                    ),
+                    request.sharing,
+                    True,
+                    user,
+                    db_session,
+                    successful_bundles,
                 )
-            )
-            skill, enabled, item_affected = _create_skill_from_bundle__no_commit(
-                ingested, request.sharing, True, user, db_session
-            )
-            created.append((skill, enabled))
-            affected |= item_affected
+                created.append((skill, enabled))
+                affected |= item_affected
+            except OnyxError as exc:
+                not_imported.append(
+                    GitHubSkillNotImported(
+                        path=path, name=selected_skill.name, reason=exc.detail
+                    )
+                )
         db_session.commit()
 
     if affected:
