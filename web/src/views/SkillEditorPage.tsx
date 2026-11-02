@@ -53,6 +53,7 @@ import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
 import {
   emptySkillSharingDraft,
   serializeSkillSharing,
@@ -578,40 +579,14 @@ export default function SkillEditorPage({
               )}
 
               {isCreating && (
-                <Card border="solid" padding={2}>
-                  <Section gap={2} height="auto" alignItems="stretch">
-                    <Section
-                      flexDirection="row"
-                      height="auto"
-                      justifyContent="between"
-                    >
-                      <Text font="main-ui-action">
-                        {t("editor.creationAccess.title")}
-                      </Text>
-                      <Button
-                        prominence="secondary"
-                        size="sm"
-                        icon={SvgShare}
-                        disabled={fieldsLocked}
-                        onClick={() => setShareOpen(true)}
-                      >
-                        {t("editor.management.sharing.edit.label")}
-                      </Button>
-                    </Section>
-                    <Text font="secondary-body" color="text-03">
-                      {sharingDraft.public_permission !== null
-                        ? t("editor.creationAccess.organizationSummary")
-                        : sharingDraft.user_shares.length +
-                              sharingDraft.group_shares.length >
-                            0
-                          ? t("editor.creationAccess.selectedSummary", {
-                              users: sharingDraft.user_shares.length,
-                              groups: sharingDraft.group_shares.length,
-                            })
-                          : t("editor.creationAccess.privateSummary")}
-                    </Text>
-                  </Section>
-                </Card>
+                <SkillSharingSummary
+                  title={t("editor.creationAccess.title")}
+                  draft={sharingDraft}
+                  count={1}
+                  configureLabel={t("editor.management.sharing.edit.label")}
+                  disabled={fieldsLocked}
+                  onConfigure={() => setShareOpen(true)}
+                />
               )}
 
               <Section alignItems="stretch">

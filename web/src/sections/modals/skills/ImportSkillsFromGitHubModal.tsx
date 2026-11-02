@@ -13,9 +13,10 @@ import {
   Tag,
   Text,
 } from "@opal/components";
-import { SvgArrowRight, SvgShare } from "@opal/icons";
+import { SvgArrowRight } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
 import {
   emptySkillSharingDraft,
   serializeSkillSharing,
@@ -444,52 +445,27 @@ export function ImportSkillsFromGitHubModalView({
               )}
 
               {preview && (
-                <Card border="solid" padding={2}>
-                  <Section gap={2} height="auto" alignItems="stretch">
-                    <Section
-                      flexDirection="row"
-                      justifyContent="between"
-                      height="auto"
-                    >
-                      <Text font="main-ui-action">
-                        {t("importGithub.sharing.title")}
-                      </Text>
-                      <Button
-                        size="sm"
-                        prominence="secondary"
-                        icon={SvgShare}
-                        disabled={loading}
-                        onClick={onConfigureSharing}
-                      >
-                        {t("importGithub.sharing.configureButton")}
-                      </Button>
-                    </Section>
+                <SkillSharingSummary
+                  title={t("importGithub.sharing.title")}
+                  draft={sharing}
+                  count={selectedPaths.length}
+                  configureLabel={t("importGithub.sharing.configureButton")}
+                  disabled={loading}
+                  onConfigure={onConfigureSharing}
+                >
+                  {isAdmin && (
                     <Text font="secondary-body" color="text-03">
-                      {sharing.public_permission !== null
-                        ? t("importGithub.sharing.organizationSummary")
-                        : sharing.user_shares.length +
-                              sharing.group_shares.length >
-                            0
-                          ? t("importGithub.sharing.selectedSummary", {
-                              users: sharing.user_shares.length,
-                              groups: sharing.group_shares.length,
-                            })
-                          : t("importGithub.sharing.privateSummary")}
+                      {t(
+                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`
+                      )}
                     </Text>
-                    {isAdmin && (
-                      <Text font="secondary-body" color="text-03">
-                        {t(
-                          `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`
-                        )}
-                      </Text>
-                    )}
-                    <Text font="secondary-body" color="text-03">
-                      {t("importGithub.sharing.description", {
-                        count: selectedPaths.length,
-                      })}
-                    </Text>
-                  </Section>
-                </Card>
+                  )}
+                  <Text font="secondary-body" color="text-03">
+                    {t("importGithub.sharing.description", {
+                      count: selectedPaths.length,
+                    })}
+                  </Text>
+                </SkillSharingSummary>
               )}
               {preview && (
                 <Section

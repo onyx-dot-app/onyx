@@ -17061,10 +17061,7 @@
         "saved": "\"{name}\"을(를) 저장했습니다"
       },
       "creationAccess": {
-        "title": "액세스",
-        "organizationSummary": "조직의 모든 사용자가 이 스킬에 액세스할 수 있습니다.",
-        "selectedSummary": "{users, plural, one {#명} other {#명}} 및 {groups, plural, one {#개 그룹} other {#개 그룹}}과 공유되었습니다.",
-        "privateSummary": "나만 이 스킬에 액세스할 수 있습니다. 공유 편집에서 사용자, 그룹 또는 조직을 추가하세요."
+        "title": "액세스"
       }
     },
     "modals": {
@@ -17190,9 +17187,6 @@
         "sharing": {
           "title": "가져올 스킬의 액세스",
           "configureButton": "액세스 설정",
-          "organizationSummary": "조직의 모든 사용자가 이 스킬들에 액세스할 수 있습니다.",
-          "selectedSummary": "{users, plural, one {#명} other {#명}} 및 {groups, plural, one {#개 그룹} other {#개 그룹}}과 공유되었습니다.",
-          "privateSummary": "나만 이 스킬들에 액세스할 수 있습니다.",
           "description": "이 액세스 설정은 선택한 {count, plural, one {스킬 #개} other {스킬 #개}} 모두에 적용됩니다."
         }
       },
@@ -17434,6 +17428,11 @@
           "readFailed": "업로드한 파일을 읽지 못했습니다."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {조직의 모든 사용자가 이 스킬에 액세스할 수 있습니다.} other {조직의 모든 사용자가 이 스킬들에 액세스할 수 있습니다.}}",
+      "selected": "{users, plural, one {#명} other {#명}} 및 {groups, plural, one {#개 그룹} other {#개 그룹}}과 공유되었습니다.",
+      "private": "{count, plural, one {나만 이 스킬에 액세스할 수 있습니다.} other {나만 이 스킬들에 액세스할 수 있습니다.}}"
     },
     "bulk": {
       "adminDescription": "조직 전체의 스킬과 액세스를 관리합니다.",

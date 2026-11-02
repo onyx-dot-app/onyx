@@ -17061,10 +17061,7 @@
         "saved": "\"{name}\" salva"
       },
       "creationAccess": {
-        "title": "Acesso",
-        "organizationSummary": "Todos na organização podem acessar esta habilidade.",
-        "selectedSummary": "Compartilhado com {users, plural, one {# pessoa} other {# pessoas}} e {groups, plural, one {# grupo} other {# grupos}}.",
-        "privateSummary": "Somente você pode acessar esta habilidade. Use Editar compartilhamento para adicionar pessoas, grupos ou a organização."
+        "title": "Acesso"
       }
     },
     "modals": {
@@ -17190,9 +17187,6 @@
         "sharing": {
           "title": "Acesso às habilidades importadas",
           "configureButton": "Configurar acesso",
-          "organizationSummary": "Todos na organização podem acessar estas habilidades.",
-          "selectedSummary": "Compartilhado com {users, plural, one {# pessoa} other {# pessoas}} e {groups, plural, one {# grupo} other {# grupos}}.",
-          "privateSummary": "Somente você pode acessar estas habilidades.",
           "description": "Estas configurações de acesso se aplicam a {count, plural, one {# habilidade selecionada} other {todas as # habilidades selecionadas}}."
         }
       },
@@ -17434,6 +17428,11 @@
           "readFailed": "Não foi possível ler o envio."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Todos na organização podem acessar esta habilidade.} other {Todos na organização podem acessar estas habilidades.}}",
+      "selected": "Compartilhado com {users, plural, one {# pessoa} other {# pessoas}} e {groups, plural, one {# grupo} other {# grupos}}.",
+      "private": "{count, plural, one {Somente você pode acessar esta habilidade.} other {Somente você pode acessar estas habilidades.}}"
     },
     "bulk": {
       "adminDescription": "Gerencie habilidades e acesso em toda a organização.",

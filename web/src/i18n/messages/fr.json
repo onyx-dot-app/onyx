@@ -17061,10 +17061,7 @@
         "saved": "« {name} » enregistrée"
       },
       "creationAccess": {
-        "title": "Accès",
-        "organizationSummary": "Tout le monde dans l’organisation peut accéder à cette compétence.",
-        "selectedSummary": "Partagée avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
-        "privateSummary": "Vous seul pouvez accéder à cette compétence. Utilisez Modifier le partage pour ajouter des personnes, des groupes ou l’organisation."
+        "title": "Accès"
       }
     },
     "modals": {
@@ -17190,9 +17187,6 @@
         "sharing": {
           "title": "Accès aux compétences importées",
           "configureButton": "Configurer l’accès",
-          "organizationSummary": "Tout le monde dans l’organisation peut accéder à ces compétences.",
-          "selectedSummary": "Partagée avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
-          "privateSummary": "Vous seul pouvez accéder à ces compétences.",
           "description": "Ces paramètres d’accès s’appliquent à {count, plural, one {la compétence sélectionnée} other {toutes les # compétences sélectionnées}}."
         }
       },
@@ -17434,6 +17428,11 @@
           "readFailed": "Impossible de lire le fichier téléversé."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Tout le monde dans l’organisation peut accéder à cette compétence.} other {Tout le monde dans l’organisation peut accéder à ces compétences.}}",
+      "selected": "Partagée avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
+      "private": "{count, plural, one {Vous seul pouvez accéder à cette compétence.} other {Vous seul pouvez accéder à ces compétences.}}"
     },
     "bulk": {
       "adminDescription": "Gérez les compétences et les accès dans votre organisation.",

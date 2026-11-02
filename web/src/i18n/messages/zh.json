@@ -17061,10 +17061,7 @@
         "saved": "已保存“{name}”"
       },
       "creationAccess": {
-        "title": "访问权限",
-        "organizationSummary": "组织中的所有人都可以访问此技能。",
-        "selectedSummary": "已与 {users, plural, one {# 人} other {# 人}}和 {groups, plural, one {# 个群组} other {# 个群组}}共享。",
-        "privateSummary": "只有你可以访问此技能。使用“编辑共享”添加人员、群组或组织。"
+        "title": "访问权限"
       }
     },
     "modals": {
@@ -17190,9 +17187,6 @@
         "sharing": {
           "title": "导入技能的访问权限",
           "configureButton": "配置访问权限",
-          "organizationSummary": "组织中的所有人都可以访问这些技能。",
-          "selectedSummary": "已与 {users, plural, one {# 人} other {# 人}}和 {groups, plural, one {# 个群组} other {# 个群组}}共享。",
-          "privateSummary": "只有你可以访问这些技能。",
           "description": "这些访问设置适用于全部 {count, plural, one {# 个所选技能} other {# 个所选技能}}。"
         }
       },
@@ -17434,6 +17428,11 @@
           "readFailed": "无法读取上传的内容。"
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {组织中的所有人都可以访问此技能。} other {组织中的所有人都可以访问这些技能。}}",
+      "selected": "已与 {users, plural, one {# 人} other {# 人}}和 {groups, plural, one {# 个群组} other {# 个群组}}共享。",
+      "private": "{count, plural, one {只有你可以访问此技能。} other {只有你可以访问这些技能。}}"
     },
     "bulk": {
       "adminDescription": "管理整个组织的技能和访问权限。",

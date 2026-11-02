@@ -17061,10 +17061,7 @@
         "saved": "「{name}」を保存しました"
       },
       "creationAccess": {
-        "title": "アクセス権",
-        "organizationSummary": "組織内の全員がこのスキルにアクセスできます。",
-        "selectedSummary": "{users, plural, one {# 人のユーザー} other {# 人のユーザー}}と{groups, plural, one {# 個のグループ} other {# 個のグループ}}に共有されています。",
-        "privateSummary": "このスキルにアクセスできるのは自分だけです。「共有を編集」でユーザー、グループ、または組織を追加できます。"
+        "title": "アクセス権"
       }
     },
     "modals": {
@@ -17190,9 +17187,6 @@
         "sharing": {
           "title": "インポートするスキルのアクセス権",
           "configureButton": "アクセス権を設定",
-          "organizationSummary": "組織内の全員がこれらのスキルにアクセスできます。",
-          "selectedSummary": "{users, plural, one {# 人のユーザー} other {# 人のユーザー}}と{groups, plural, one {# 個のグループ} other {# 個のグループ}}に共有されています。",
-          "privateSummary": "これらのスキルにアクセスできるのは自分だけです。",
           "description": "これらのアクセス設定は、選択した{count, plural, one {# 件のスキル} other {# 件のスキル}}すべてに適用されます。"
         }
       },
@@ -17434,6 +17428,11 @@
           "readFailed": "アップロードされたファイルを読み込めませんでした。"
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {組織内の全員がこのスキルにアクセスできます。} other {組織内の全員がこれらのスキルにアクセスできます。}}",
+      "selected": "{users, plural, one {# 人のユーザー} other {# 人のユーザー}}と{groups, plural, one {# 個のグループ} other {# 個のグループ}}に共有されています。",
+      "private": "{count, plural, one {このスキルにアクセスできるのは自分だけです。} other {これらのスキルにアクセスできるのは自分だけです。}}"
     },
     "bulk": {
       "adminDescription": "組織全体のスキルとアクセス権を管理します。",

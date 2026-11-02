@@ -17061,10 +17061,7 @@
         "saved": "Saved \"{name}\""
       },
       "creationAccess": {
-        "title": "Access",
-        "organizationSummary": "Everyone in the organization can access this skill.",
-        "selectedSummary": "Shared with {users, plural, one {# person} other {# people}} and {groups, plural, one {# group} other {# groups}}.",
-        "privateSummary": "Only you can access this skill. Use Edit sharing to add people, groups, or the organization."
+        "title": "Access"
       }
     },
     "modals": {
@@ -17190,9 +17187,6 @@
         "sharing": {
           "title": "Access for Imported Skills",
           "configureButton": "Configure access",
-          "organizationSummary": "Everyone in the organization can access these skills.",
-          "selectedSummary": "Shared with {users, plural, one {# person} other {# people}} and {groups, plural, one {# group} other {# groups}}.",
-          "privateSummary": "Only you can access these skills.",
           "description": "These access settings apply to all {count, plural, one {# selected skill} other {# selected skills}}."
         }
       },
@@ -17434,6 +17428,11 @@
           "readFailed": "Could not read the upload."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Everyone in the organization can access this skill.} other {Everyone in the organization can access these skills.}}",
+      "selected": "Shared with {users, plural, one {# person} other {# people}} and {groups, plural, one {# group} other {# groups}}.",
+      "private": "{count, plural, one {Only you can access this skill.} other {Only you can access these skills.}}"
     },
     "bulk": {
       "adminDescription": "Manage skills and access across your organization.",

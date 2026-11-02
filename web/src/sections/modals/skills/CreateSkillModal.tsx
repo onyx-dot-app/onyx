@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Card, MessageCard, Modal, Text } from "@opal/components";
-import { SvgShare, SvgUploadCloud } from "@opal/icons";
+import { Button, MessageCard, Modal, Text } from "@opal/components";
+import { SvgUploadCloud } from "@opal/icons";
 import { inspectSkillBundle, uploadSkillBundles } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import type { SkillCreationDraft } from "@/lib/skills/creationDraft";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 import { Section } from "@opal/layouts";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
 import {
   emptySkillSharingDraft,
   serializeSkillSharing,
@@ -177,39 +178,20 @@ export function CreateSkillModalContent({
           />
         )}
         {!result && batchFiles.length > 0 && (
-          <Card border="solid" padding={2}>
-            <Section gap={2} height="auto" alignItems="stretch">
-              <Text font="main-ui-action">
-                {t("create.batch.selected", { count: batchFiles.length })}
-              </Text>
-              <Section height="auto" className="max-h-24 overflow-y-auto">
-                <Text font="secondary-body" color="text-03">
-                  {batchFiles.map((file) => file.name).join(", ")}
-                </Text>
-              </Section>
+          <SkillSharingSummary
+            title={t("create.batch.selected", { count: batchFiles.length })}
+            draft={sharingDraft}
+            count={batchFiles.length}
+            configureLabel={t("importGithub.sharing.configureButton")}
+            disabled={busy}
+            onConfigure={() => setSharingOpen(true)}
+          >
+            <Section height="auto" className="max-h-24 overflow-y-auto">
               <Text font="secondary-body" color="text-03">
-                {sharingDraft.public_permission !== null
-                  ? t("importGithub.sharing.organizationSummary")
-                  : sharingDraft.user_shares.length +
-                        sharingDraft.group_shares.length >
-                      0
-                    ? t("importGithub.sharing.selectedSummary", {
-                        users: sharingDraft.user_shares.length,
-                        groups: sharingDraft.group_shares.length,
-                      })
-                    : t("importGithub.sharing.privateSummary")}
+                {batchFiles.map((file) => file.name).join(", ")}
               </Text>
-              <Button
-                prominence="secondary"
-                size="sm"
-                icon={SvgShare}
-                disabled={busy}
-                onClick={() => setSharingOpen(true)}
-              >
-                {t("importGithub.sharing.configureButton")}
-              </Button>
             </Section>
-          </Card>
+          </SkillSharingSummary>
         )}
         {result && (
           <Section gap={2} height="auto" alignItems="stretch">

@@ -17061,10 +17061,7 @@
         "saved": "„{name}“ gespeichert"
       },
       "creationAccess": {
-        "title": "Zugriff",
-        "organizationSummary": "Alle in der Organisation können auf diesen Skill zugreifen.",
-        "selectedSummary": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
-        "privateSummary": "Nur Sie können auf diesen Skill zugreifen. Mit „Freigabe bearbeiten“ können Sie Personen, Gruppen oder die Organisation hinzufügen."
+        "title": "Zugriff"
       }
     },
     "modals": {
@@ -17190,9 +17187,6 @@
         "sharing": {
           "title": "Zugriff auf importierte Skills",
           "configureButton": "Zugriff konfigurieren",
-          "organizationSummary": "Alle in der Organisation können auf diese Skills zugreifen.",
-          "selectedSummary": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
-          "privateSummary": "Nur Sie können auf diese Skills zugreifen.",
           "description": "Diese Zugriffseinstellungen gelten für {count, plural, one {den ausgewählten Skill} other {alle # ausgewählten Skills}}."
         }
       },
@@ -17434,6 +17428,11 @@
           "readFailed": "Der Upload konnte nicht gelesen werden."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Alle in der Organisation können auf diesen Skill zugreifen.} other {Alle in der Organisation können auf diese Skills zugreifen.}}",
+      "selected": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
+      "private": "{count, plural, one {Nur Sie können auf diesen Skill zugreifen.} other {Nur Sie können auf diese Skills zugreifen.}}"
     },
     "bulk": {
       "adminDescription": "Skills und Zugriff in Ihrer Organisation verwalten.",
