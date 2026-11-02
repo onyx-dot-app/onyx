@@ -254,7 +254,6 @@ function useAboutView(): DropdownView {
         kind: "custom",
         id: "about-details",
         keepOpen: true,
-        selectableText: true,
         onSecondary: focusDetails,
         render: ({ props }) => (
           <div {...props} ref={detailsRef}>

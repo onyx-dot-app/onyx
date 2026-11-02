@@ -12,18 +12,21 @@ import type {
 } from "@opal/components/dropdown/types";
 
 /**
- * Whether a mousedown must keep its default: the target is a control that
- * needs focus to work (an input inside a custom row), or text a custom row
- * lets the pointer select. Anything else keeps focus on the trigger, so a
- * pick never blurs it.
+ * Whether the pointer's target is a control that needs focus to work (an
+ * input inside a custom row, or the search field). Focus stays there;
+ * anywhere else a press gives focus back to where it was.
  */
 export function targetTakesFocus(event: React.MouseEvent): boolean {
   return (
     event.target instanceof Element &&
-    event.target.closest(
-      "input, textarea, select, [contenteditable], [data-selectable-text]"
-    ) !== null
+    event.target.closest("input, textarea, select, [contenteditable]") !== null
   );
+}
+
+/** Whether the user has text selected: a drag or a double-click on text. */
+export function selectsText(): boolean {
+  const selection = window.getSelection();
+  return selection !== null && !selection.isCollapsed;
 }
 
 interface RowProps {
@@ -61,12 +64,9 @@ export const Row = React.memo(function Row({
   const interaction = isHighlighted ? "hover" : "rest";
   const onClick = (event: React.MouseEvent) => {
     event.stopPropagation();
+    // A drag that selected text is not a pick.
+    if (selectsText()) return;
     if (!row.disabled) onActivate(row);
-  };
-  // Keep focus on the trigger: the pick must not blur it. A control inside
-  // a custom row that needs focus keeps the default.
-  const onMouseDown = (event: React.MouseEvent) => {
-    if (!targetTakesFocus(event)) event.preventDefault();
   };
 
   if (row.kind === "custom") {
@@ -76,10 +76,8 @@ export const Row = React.memo(function Row({
       ...(mode === "picker" && { "aria-selected": false }),
       ...(row.disabled && { "aria-disabled": true }),
       "data-index": index,
-      ...(row.selectableText && { "data-selectable-text": true as const }),
       tabIndex: -1,
       onClick,
-      onMouseDown,
     };
     return <>{row.render({ highlighted: isHighlighted, props })}</>;
   }
@@ -113,7 +111,6 @@ export const Row = React.memo(function Row({
           : { "aria-checked": row.checked })}
         tabIndex={-1}
         onClick={onClick}
-        onMouseDown={onMouseDown}
       />
     );
   }
@@ -150,7 +147,6 @@ export const Row = React.memo(function Row({
     ...(mode === "picker" && { "aria-selected": isSelected }),
     tabIndex: -1,
     onClick,
-    onMouseDown,
   } as const;
 
   if (row.kind === "action" && row.href !== undefined) {
