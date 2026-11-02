@@ -349,6 +349,11 @@ def settle_events_from_finished_attempts(
     failed, was canceled or was interrupted returns them to the queue. Rows
     of an attempt still running belong to it and are left alone.
 
+    A row whose attempt no longer exists is released too. The column is
+    `ON DELETE SET NULL`, and deleting a search setting deletes its attempts,
+    so a claim can lose its owner; nothing would ever settle it and
+    `claim_events` reads only PENDING rows.
+
     Returns (completed, released). Does not commit.
     """
     # Locked, and skipping what another sweep holds: two runs reading the
@@ -356,7 +361,9 @@ def settle_events_from_finished_attempts(
     # the first had already made and handed to its handler.
     claimed = (
         select(ConnectorEventInbox.id, IndexAttempt.status)
-        .join(IndexAttempt, ConnectorEventInbox.index_attempt_id == IndexAttempt.id)
+        .outerjoin(
+            IndexAttempt, ConnectorEventInbox.index_attempt_id == IndexAttempt.id
+        )
         .where(
             ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
             ConnectorEventInbox.status == ConnectorEventStatus.IN_PROGRESS,
@@ -366,8 +373,11 @@ def settle_events_from_finished_attempts(
 
     to_complete: list[int] = []
     to_release: list[int] = []
+    orphaned: list[int] = []
     for event_id, attempt_status in db_session.execute(claimed).tuples().all():
-        if attempt_status == IndexingStatus.SUCCESS:
+        if attempt_status is None:
+            orphaned.append(event_id)
+        elif attempt_status == IndexingStatus.SUCCESS:
             to_complete.append(event_id)
         elif attempt_status.is_terminal():
             to_release.append(event_id)
@@ -376,7 +386,10 @@ def settle_events_from_finished_attempts(
     release_events_to_pending(
         db_session, to_release, error="the claiming attempt did not finish"
     )
-    return len(to_complete), len(to_release)
+    release_events_to_pending(
+        db_session, orphaned, error="the claiming attempt no longer exists"
+    )
+    return len(to_complete), len(to_release) + len(orphaned)
 
 
 def get_active_event_cc_pairs(

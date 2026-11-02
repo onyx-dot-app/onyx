@@ -31,6 +31,7 @@ from onyx.db.connector_event_inbox import (
     MAX_EVENT_ATTEMPTS,
     count_events_by_status,
     record_events,
+    settle_events_from_finished_attempts,
 )
 from onyx.db.enums import (
     AccessType,
@@ -751,4 +752,41 @@ def test_a_batch_boundary_does_not_split_one_document(
     assert [document.id for document in documents] == ["doc-1"]
     assert count_events_by_status(db_session, pair_id) == {
         ConnectorEventStatus.IN_PROGRESS: 2
+    }
+
+
+def test_a_claim_whose_attempt_was_deleted_returns_to_the_queue(
+    db_session: Session,
+    pair_and_attempt: tuple[int, int],
+    registered_handler: None,  # noqa: ARG001
+) -> None:
+    """`index_attempt_id` is ON DELETE SET NULL, and deleting a search
+    setting deletes its attempts. A claim that loses its owner would never
+    be settled and never be claimed again."""
+    pair_id, attempt_id = pair_and_attempt
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-1")],
+    )
+    db_session.commit()
+    _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.IN_PROGRESS: 1
+    }
+
+    db_session.query(ConnectorEventInbox).filter_by(
+        connector_credential_pair_id=pair_id
+    ).update({"index_attempt_id": None})
+    db_session.commit()
+
+    settle_events_from_finished_attempts(db_session, pair_id)
+    db_session.commit()
+
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.PENDING: 1
     }
