@@ -187,6 +187,18 @@ def test_jsm_load_from_state_filters_internal_comments_and_indexes_sla(
     assert len(batches) == 1
     assert len(batches[0]) == 1
 
+    mock_get.assert_any_call(
+        "https://acme.atlassian.net/rest/servicedeskapi/request",
+        auth=("bot@example.com", "secret"),
+        params={
+            "expand": "sla,comment",
+            "requestOwnership": "ALL_REQUESTS",
+            "serviceDeskId": "1",
+            "start": 0,
+            "limit": 50,
+        },
+    )
+
     doc = batches[0][0]
     assert isinstance(doc, Document)
     assert doc.id == "jsm:https://acme.atlassian.net:SD-101"
@@ -380,17 +392,25 @@ def test_jsm_comment_fetch_failure_propagates(mock_get: MagicMock) -> None:
 
 
 @patch("onyx.connectors.jira_service_management.connector._jsm_get")
-def test_jsm_future_sla_breach_deadline_does_not_future_date_doc(
+def test_jsm_sla_breach_time_recorded_only_when_breached(
     mock_get: MagicMock,
 ) -> None:
+    unbreached_req = _sample_request(issue_key="SD-101", epoch_ms=1730000000000)
+    unbreached_req["comments"] = {"isLastPage": True, "values": []}
+
+    breached_req = _sample_request(issue_key="SD-102", epoch_ms=1730000000000)
+    breached_req["sla"]["values"][0]["ongoingCycle"]["breachTime"] = {
+        "epochMillis": 1730000040000
+    }
+    breached_req["sla"]["values"][0]["ongoingCycle"]["breached"] = True
+    breached_req["comments"] = {"isLastPage": True, "values": []}
+
     req_resp = MagicMock()
     req_resp.json.return_value = {
-        "values": [_sample_request(issue_key="SD-101", epoch_ms=1730000000000)],
+        "values": [unbreached_req, breached_req],
         "isLastPage": True,
     }
-    comment_resp = MagicMock()
-    comment_resp.json.return_value = {"values": [], "isLastPage": True}
-    mock_get.side_effect = [req_resp, comment_resp]
+    mock_get.side_effect = [req_resp]
 
     connector = JiraServiceManagementConnector(
         jsm_base_url="https://acme.atlassian.net"
@@ -403,8 +423,12 @@ def test_jsm_future_sla_breach_deadline_does_not_future_date_doc(
         connector.poll_source(start=1729999900.0, end=1730000050.0)
     )
     assert len(batches) == 1
-    assert len(batches[0]) == 1
-    doc = batches[0][0]
-    assert doc.id == "jsm:https://acme.atlassian.net:SD-101"
-    assert doc.doc_updated_at is not None
-    assert doc.doc_updated_at.timestamp() == 1730000000.0
+    assert len(batches[0]) == 2
+    doc_unbreached, doc_breached = batches[0]
+    assert doc_unbreached.id == "jsm:https://acme.atlassian.net:SD-101"
+    assert doc_unbreached.doc_updated_at is not None
+    assert doc_unbreached.doc_updated_at.timestamp() == 1730000000.0
+
+    assert doc_breached.id == "jsm:https://acme.atlassian.net:SD-102"
+    assert doc_breached.doc_updated_at is not None
+    assert doc_breached.doc_updated_at.timestamp() == 1730000040.0
