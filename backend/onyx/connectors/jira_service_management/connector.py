@@ -1,0 +1,183 @@
+"""Jira Service Management (JSM) connector.
+
+JSM service projects are Jira projects with the ``service_desk`` project type,
+so requests are read through the Jira REST API that the Jira connector already
+uses. This connector reuses that indexing, checkpointing, slim listing and
+permission logic, scopes it to a single service project, tags documents with
+their own source, and adds JSM-specific metadata (request type, customer
+facing status and SLAs) to each request.
+"""
+
+from typing import Any, ClassVar
+
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.source_operations import JiraApiError
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+SERVICE_DESK_PROJECT_TYPE = "service_desk"
+HTTP_NOT_FOUND = 404
+
+# Metadata keys added to JSM request documents.
+METADATA_REQUEST_TYPE = "request_type"
+METADATA_REQUEST_STATUS = "request_status"
+METADATA_SLA_BREACHED = "sla_breached"
+METADATA_SLA_PREFIX = "sla"
+
+_FIELDS = "fields"
+_REQUEST_TYPE = "requestType"
+_CURRENT_STATUS = "currentStatus"
+_STATUS = "status"
+_NAME = "name"
+_ONGOING_CYCLE = "ongoingCycle"
+_COMPLETED_CYCLES = "completedCycles"
+_BREACHED = "breached"
+_REMAINING_TIME = "remainingTime"
+_FRIENDLY = "friendly"
+
+_SLA_BREACHED = "breached"
+_SLA_MET = "met"
+_SLA_ONGOING = "ongoing"
+
+
+def _is_request_type_value(value: Any) -> bool:
+    """The "Customer Request Type" custom field (``com.atlassian.servicedesk:
+    vp-origin``) holds an object with a ``requestType`` entry."""
+    return isinstance(value, dict) and isinstance(value.get(_REQUEST_TYPE), dict)
+
+
+def _is_sla_value(value: Any) -> bool:
+    """SLA custom fields (``com.atlassian.servicedesk:sla-field``) hold an
+    object with a name and ongoing and/or completed cycles."""
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get(_NAME), str)
+        and (_ONGOING_CYCLE in value or _COMPLETED_CYCLES in value)
+    )
+
+
+def _sla_summary(sla: dict[str, Any]) -> tuple[str, bool]:
+    """A readable state for one SLA and whether it is breached.
+
+    JSM custom field ids differ per site, so SLAs are found by value shape
+    rather than by field id.
+    """
+    ongoing: Any = sla.get(_ONGOING_CYCLE)
+    if isinstance(ongoing, dict):
+        if ongoing.get(_BREACHED):
+            return _SLA_BREACHED, True
+        remaining: Any = ongoing.get(_REMAINING_TIME)
+        friendly: Any = (
+            remaining.get(_FRIENDLY) if isinstance(remaining, dict) else None
+        )
+        return (
+            f"{_SLA_ONGOING} ({friendly} remaining)" if friendly else _SLA_ONGOING
+        ), False
+
+    completed: Any = sla.get(_COMPLETED_CYCLES) or []
+    if isinstance(completed, list) and completed:
+        last: Any = completed[-1]
+        if isinstance(last, dict) and last.get(_BREACHED):
+            return _SLA_BREACHED, True
+        return _SLA_MET, False
+    return _SLA_ONGOING, False
+
+
+def _sla_metadata_key(sla_name: str) -> str:
+    slug = "_".join(sla_name.lower().split())
+    return f"{METADATA_SLA_PREFIX}_{slug}"
+
+
+def extract_jsm_metadata(issue: dict[str, Any]) -> dict[str, str | list[str]]:
+    """JSM-specific metadata from a raw issue as the Jira REST API returns it."""
+    metadata: dict[str, str | list[str]] = {}
+    fields: Any = issue.get(_FIELDS) or {}
+    if not isinstance(fields, dict):
+        return metadata
+
+    breached_slas: list[str] = []
+    for value in fields.values():
+        if _is_request_type_value(value):
+            request_type_name: Any = value[_REQUEST_TYPE].get(_NAME)
+            if request_type_name:
+                metadata[METADATA_REQUEST_TYPE] = str(request_type_name)
+            current_status: Any = value.get(_CURRENT_STATUS)
+            if isinstance(current_status, dict) and current_status.get(_STATUS):
+                metadata[METADATA_REQUEST_STATUS] = str(current_status[_STATUS])
+        elif _is_sla_value(value):
+            state, breached = _sla_summary(value)
+            metadata[_sla_metadata_key(value[_NAME])] = state
+            if breached:
+                breached_slas.append(value[_NAME])
+
+    if breached_slas:
+        metadata[METADATA_SLA_BREACHED] = breached_slas
+    return metadata
+
+
+class JiraServiceManagementConnector(JiraConnector):
+    """Indexes the requests of one Jira Service Management project."""
+
+    document_source: ClassVar[DocumentSource] = DocumentSource.JIRA_SERVICE_MANAGEMENT
+
+    def __init__(
+        self,
+        jira_base_url: str,
+        project_key: str,
+        comment_email_blacklist: list[str] | None = None,
+        batch_size: int = INDEX_BATCH_SIZE,
+        labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
+        scoped_token: bool = False,
+    ) -> None:
+        if not (project_key or "").strip():
+            raise ConnectorValidationError(
+                "Jira Service Management connector requires a project key."
+            )
+        super().__init__(
+            jira_base_url=jira_base_url,
+            project_key=project_key,
+            comment_email_blacklist=comment_email_blacklist,
+            batch_size=batch_size,
+            labels_to_skip=labels_to_skip,
+            jql_query=None,
+            scoped_token=scoped_token,
+        )
+
+    def _extra_issue_metadata(
+        self, issue: dict[str, Any]
+    ) -> dict[str, str | list[str]]:
+        return extract_jsm_metadata(issue)
+
+    def validate_connector_settings(self) -> None:
+        if self._source_operations is None:
+            raise ConnectorMissingCredentialError("Jira Service Management")
+
+        project_key: str = self.jira_project or ""
+        try:
+            project: dict[str, Any] = self.source_operations.get_project(
+                project_key=project_key
+            )
+        except JiraApiError as e:
+            if e.status_code == HTTP_NOT_FOUND:
+                raise ConnectorValidationError(
+                    f"Jira Service Management project '{project_key}' does not "
+                    "exist or the credential cannot browse it."
+                ) from e
+            self._handle_jira_connector_settings_error(e)
+            return
+        except Exception as e:
+            self._handle_jira_connector_settings_error(e)
+            return
+
+        project_type: Any = project.get("projectTypeKey")
+        if project_type != SERVICE_DESK_PROJECT_TYPE:
+            raise ConnectorValidationError(
+                f"Project '{project_key}' is not a Jira Service Management "
+                f"project (project type: '{project_type}'). Use the Jira "
+                "connector for software and business projects."
+            )
