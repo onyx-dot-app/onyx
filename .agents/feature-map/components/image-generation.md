@@ -133,12 +133,12 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    `image_gen/generation.py:is_image_generation_configured` calls `validate_credentials`, which checks
    only that the fields are present. It does not call the provider. A wrong key
    shows the tool and fails at run time.
-3. `image-keeps-tools-available` **Image generation does not end the tool phase.**
+3. `image-ends-tool-phase` **Image generation does not end the tool phase.**
    `chat/agent.py:ChatAgent._prepare_step` keeps tools available after successful
    or failed image calls. The final cycle still offers no tools. When reminders
    are on, a result with generated images adds `IMAGE_GEN_REMINDER` without
    replacing the agent's task prompt. The reminder allows continued work and
-   tells the model not to link or embed images that the client already displays.
+   tells the model not to link or embed the generated images.
 4. `response-format-per-model` **`response_format` depends on the model.**
    `image_gen/generation.py:response_format_for_model` leaves it out for
    `gpt-image-*` models, which reject it, and asks for `b64_json` for the rest.

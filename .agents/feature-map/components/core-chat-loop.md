@@ -282,10 +282,10 @@ termination grace period is much shorter, so it ends running turns first
     does stream resume. Code that assumes a real user breaks public agents.
     `stop_chat_session` does not allow anonymous users, so their Stop fails
     authentication (see Known issues).
-16. `last-step-stops-tools` **The step cap removes tools.**
+16. `stopping-tools` **The step cap removes tools.**
     `chat/agent.py:ChatAgent._prepare_step` offers no tools at the step cap.
     Image generation does not remove tools, even when the image call fails.
-    The default cap stays at six cycles, including the final answer cycle.
+    The default cap is six cycles, including the final answer cycle.
 
 
 ---

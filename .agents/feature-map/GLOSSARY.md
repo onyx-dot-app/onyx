@@ -181,7 +181,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
 | Custom agent prompt | The agent's instructions, sent as a user message near the newest user message. See [[context-assembly]]. |
 | Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission and the live stream ID after `ChatTurnAdmission.publish`. The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
-| Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#last-step-stops-tools]]. |
+| Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#stopping-tools]]. |
 | `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
 | Message types | `ChatMessage` (the row), `ChatResponseItem` (the saved steps of a response), `llm/models.py:Message` (the conversation type the runtime uses) and `llm/model_request.py:ChatCompletionMessage` (the provider wire form). See [[core-chat-loop#three-message-types]]. |
 | Active branch | The chain of `latest_child_message_id` pointers from a session's root message. See [[chat-persistence]]. |

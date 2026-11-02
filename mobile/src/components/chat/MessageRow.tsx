@@ -156,8 +156,7 @@ function AssistantMessage({
         streamingStartTime={node.streamingStartedAt}
       />
       {/* Images from every image generation step lead the answer. */}
-      {(pacedFinalAnswerComing || stopPacketSeen) &&
-      generatedImages.length > 0 ? (
+      {generatedImages.length > 0 ? (
         <View className="flex-row flex-wrap gap-8 px-12">
           {generatedImages.map((image) => (
             <AttachmentImage

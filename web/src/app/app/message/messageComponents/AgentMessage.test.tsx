@@ -605,8 +605,8 @@ test.each([
     const view = render(renderMessage(initialPackets));
     try {
       expect(
-        screen.queryByRole("img", { name: "Chat attachment" })
-      ).not.toBeInTheDocument();
+        await screen.findByRole("img", { name: "Chat attachment" })
+      ).toHaveAttribute("src", "/api/chat/file/first-image");
       expect(renderComplete()).toBe(false);
       const finalPackets: Packet[] = cancelled
         ? [
@@ -659,3 +659,55 @@ test.each([
     }
   }
 );
+
+test("generated images remain visible when another tool follows answer text", async () => {
+  seedSessionAwaitingAnswer();
+  const initialPackets = generatedImageStep(0, "retained-image");
+  const renderMessage = (packets: Packet[]) => (
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  const view = render(renderMessage(initialPackets));
+  try {
+    const image = await screen.findByRole("img", { name: "Chat attachment" });
+    const withAnswer = [
+      ...initialPackets,
+      ...answerPackets.slice(0, 2).map((packet) => ({
+        ...packet,
+        placement: { turn_index: 1 },
+      })),
+    ];
+    view.rerender(renderMessage(withAnswer));
+    await screen.findByText("A quick answer.");
+    expect(image).toBeVisible();
+
+    const withLaterTool: Packet[] = [
+      ...withAnswer,
+      {
+        placement: { turn_index: 2 },
+        obj: { type: PacketType.SEARCH_TOOL_START },
+      },
+    ];
+    view.rerender(renderMessage(withLaterTool));
+    await waitFor(() => {
+      expect(screen.getAllByRole("img", { name: "Chat attachment" })).toEqual([
+        image,
+      ]);
+      expect(image).toBeVisible();
+    });
+    expect(renderComplete()).toBe(false);
+  } finally {
+    view.unmount();
+    useChatSessionStore.setState({
+      currentSessionId: null,
+      sessions: new Map(),
+    });
+  }
+});

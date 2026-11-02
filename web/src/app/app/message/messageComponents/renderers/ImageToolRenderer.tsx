@@ -53,6 +53,9 @@ export const ImageToolRenderer: MessageRenderer<
       )
     ).values()
   );
+  const hasResult = packets.some(
+    (packet) => packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
+  );
   const isComplete = packets.some(
     (packet) =>
       packet.obj.type === PacketType.SECTION_END ||
@@ -61,15 +64,16 @@ export const ImageToolRenderer: MessageRenderer<
   const failed = packets.some((p) => p.obj.type === PacketType.ERROR);
   const isRunning = !isComplete && !stopPacketSeen;
 
-  // A call that ends without images or an error was stopped before any image
-  // arrived, such as when the user stops the response.
+  // A final result can be empty. A stopped call has no result packet.
   const status = failed
     ? t("imageTool.failedStatus.text")
     : isRunning
       ? t("imageTool.generatingStatus.text")
       : images.length > 0
         ? t("imageTool.generatedStatus.text", { count: images.length })
-        : t("imageTool.stoppedStatus.text");
+        : hasResult
+          ? t("imageTool.emptyState.text")
+          : t("imageTool.stoppedStatus.text");
 
   const revisedPrompts = Array.from(
     new Set(images.map((image) => image.revised_prompt).filter(Boolean))

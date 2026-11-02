@@ -425,12 +425,11 @@ const AgentMessage = React.memo(function AgentMessage({
         }}
       >
         {/* Images from every image generation step lead the answer */}
-        {(pacedFinalAnswerComing || stopPacketSeen) &&
-          generatedImages.length > 0 && (
-            <div className="mb-3">
-              <GeneratedImageGrid images={generatedImages} />
-            </div>
-          )}
+        {generatedImages.length > 0 && (
+          <div className="mb-3">
+            <GeneratedImageGrid images={generatedImages} />
+          </div>
+        )}
         {pacedDisplayGroups.length > 0 && (
           <div ref={finalAnswerRef} className="flex flex-col gap-3">
             {authErrors.map((authError, i) => (

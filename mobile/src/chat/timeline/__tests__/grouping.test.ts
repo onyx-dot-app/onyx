@@ -194,7 +194,7 @@ describe("grouping engine", () => {
     const state = run([
       makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
       makePlacedPacket(
-        { type: "image_generation_final", images: [image, image] },
+        { type: "image_generation_final", images: [image, { ...image }] },
         { turn_index: 0 },
       ),
       sectionEnd(0),
@@ -219,7 +219,7 @@ describe("grouping engine", () => {
       sectionEnd(0),
       makePlacedPacket({ type: "image_generation_start" }, { turn_index: 1 }),
       makePlacedPacket(
-        { type: "image_generation_final", images: [first, second] },
+        { type: "image_generation_final", images: [{ ...first }, second] },
         { turn_index: 1 },
       ),
       sectionEnd(1),
