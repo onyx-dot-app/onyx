@@ -9,11 +9,47 @@ from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
     ANSWER_COVERAGE_GUIDANCE,
     IMAGE_GEN_REMINDER,
+    LAST_CYCLE_CITATION_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
 )
+from onyx.tools.models import GeneratedImage
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+
+IMAGES = FinalImageGenerationResponse(
+    generated_images=[
+        GeneratedImage(file_id="image-1", url="/api/file/image-1", revised_prompt="a")
+    ]
+)
+
+
+def _context(
+    *,
+    task_prompt: str | None = None,
+    open_url: bool = False,
+    context_documents: bool = False,
+    out_of_cycles: bool = False,
+) -> ChatReminderContext:
+    return ChatReminderContext(
+        has_open_url_tool=open_url,
+        out_of_cycles=out_of_cycles,
+        persona_task_prompt=task_prompt,
+        has_context_documents=context_documents,
+    )
+
+
+def _direct_image() -> ToolResultMessage:
+    return ToolResultMessage(
+        tool_call_id="image",
+        tool_name=ImageGenerationTool.NAME,
+        content="[]",
+        details=IMAGES,
+    )
 
 
 def test_search_reminder_can_be_removed_without_changing_tool_results() -> None:
@@ -21,13 +57,7 @@ def test_search_reminder_can_be_removed_without_changing_tool_results() -> None:
         content="Search results", tool_name=SearchTool.NAME, tool_call_id="search"
     )
     original = response.model_copy(deep=True)
-    context = ChatReminderContext(
-        ran_image_gen=False,
-        has_open_url_tool=False,
-        out_of_cycles=False,
-        persona_task_prompt="User instructions",
-        has_context_documents=False,
-    )
+    context = _context(task_prompt="User instructions")
     enabled = build_chat_reminder(context, [response], [response], enabled=True)
     disabled = build_chat_reminder(context, [response], [response], enabled=False)
     assert enabled != disabled
@@ -56,13 +86,7 @@ def test_web_search_reminder_requires_available_open_url_tool() -> None:
             search_docs=[document], citation_mapping={1: "web-result"}
         ),
     )
-    context = ChatReminderContext(
-        ran_image_gen=False,
-        has_open_url_tool=True,
-        out_of_cycles=False,
-        persona_task_prompt=None,
-        has_context_documents=False,
-    )
+    context = _context(open_url=True)
     assert build_chat_reminder(context, [], [result], enabled=True) == OPEN_URL_REMINDER
     cited = build_chat_reminder(context, [result], [result], enabled=True)
     assert cited is not None
@@ -72,12 +96,29 @@ def test_web_search_reminder_requires_available_open_url_tool() -> None:
     assert build_chat_reminder(context, [], [result], enabled=True) is None
     context.has_open_url_tool = True
     context.out_of_cycles = True
-    assert build_chat_reminder(context, [], [result], enabled=True) != OPEN_URL_REMINDER
-    context.out_of_cycles = False
-    context.ran_image_gen = True
     assert (
-        build_chat_reminder(context, [], [result], enabled=True) == IMAGE_GEN_REMINDER
+        build_chat_reminder(context, [], [result], enabled=True)
+        == LAST_CYCLE_CITATION_REMINDER
     )
+
+
+def test_generated_images_add_a_reminder_after_the_task_prompt() -> None:
+    result = _direct_image()
+    context = _context(task_prompt="Answer in French.")
+    reminder = build_chat_reminder(context, [result], [result], enabled=True)
+    assert reminder == f"Answer in French.\n\n{IMAGE_GEN_REMINDER}"
+    assert build_chat_reminder(context, [], [], enabled=True) == "Answer in French."
+
+
+def test_image_without_generated_files_adds_no_reminder() -> None:
+    failed = ToolResultMessage(
+        tool_call_id="image",
+        tool_name=ImageGenerationTool.NAME,
+        content="failed",
+        details=FinalImageGenerationResponse(generated_images=[]),
+        is_error=True,
+    )
+    assert build_chat_reminder(_context(), [failed], [failed], enabled=True) is None
 
 
 @pytest.mark.parametrize("image_generated", [False, True])
@@ -85,17 +126,14 @@ def test_web_search_reminder_requires_available_open_url_tool() -> None:
 def test_reminder_retains_citation_guidance(
     image_generated: bool, authored_guidance: bool
 ) -> None:
-    context = ChatReminderContext(
-        ran_image_gen=image_generated,
-        has_open_url_tool=False,
-        out_of_cycles=False,
-        persona_task_prompt=REQUIRE_CITATION_GUIDANCE if authored_guidance else "Task",
-        has_context_documents=True,
+    context = _context(
+        task_prompt=REQUIRE_CITATION_GUIDANCE if authored_guidance else "Task",
+        context_documents=True,
     )
-    reminder = build_chat_reminder(context, [], [], enabled=True)
+    results = [_direct_image()] if image_generated else []
+    reminder = build_chat_reminder(context, results, results, enabled=True)
     assert reminder is not None
     assert reminder.count(REQUIRE_CITATION_GUIDANCE.strip()) == 1
     assert ANSWER_COVERAGE_GUIDANCE.strip() in reminder
     assert ANSWER_COMPLETENESS_REMINDER in reminder
-    if image_generated:
-        assert IMAGE_GEN_REMINDER in reminder
+    assert (IMAGE_GEN_REMINDER in reminder) == image_generated

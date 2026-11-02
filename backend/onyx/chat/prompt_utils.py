@@ -84,6 +84,7 @@ from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
@@ -105,10 +106,8 @@ def build_chat_reminder(
     if not enabled:
         return context.persona_task_prompt
     reminder_text = context.persona_task_prompt
-    if context.ran_image_gen:
-        reminder_text = IMAGE_GEN_REMINDER
     # Only suggest opening URLs when this agent has the tool.
-    elif (
+    if (
         context.has_open_url_tool
         and not context.out_of_cycles
         and any(
@@ -131,6 +130,11 @@ def build_chat_reminder(
             and result.details.generated_files
             for result in results
         ),
+        include_image_reminder=any(
+            isinstance(result.details, FinalImageGenerationResponse)
+            and result.details.generated_images
+            for result in results
+        ),
         is_last_cycle=context.out_of_cycles,
     )
 
@@ -148,7 +152,6 @@ def build_chat_prompt(
     results: Sequence[ToolResultMessage],
     previous_results: Sequence[ToolResultMessage],
     is_last_step: bool,
-    ran_image_gen: bool,
 ) -> ChatPrompt:
     """Select instructions and reminders before assembling conversation history."""
     values = memory.user_info.placeholder_values if memory else {}
@@ -200,7 +203,6 @@ def build_chat_prompt(
         custom = None
     reminder = build_chat_reminder(
         ChatReminderContext(
-            ran_image_gen=ran_image_gen,
             has_open_url_tool=any(isinstance(tool, OpenURLTool) for tool in tools),
             out_of_cycles=is_last_step,
             persona_task_prompt=render(persona_task, citations=cite),
@@ -302,6 +304,7 @@ def build_reminder_message(
     reminder_text: str | None,
     include_citation_reminder: bool,
     include_file_reminder: bool,
+    include_image_reminder: bool,
     is_last_cycle: bool,
 ) -> str | None:
     reminder = reminder_text.strip() if reminder_text else ""
@@ -322,6 +325,8 @@ def build_reminder_message(
         reminder += "\n\n" + ANSWER_COMPLETENESS_REMINDER
     if include_file_reminder:
         reminder += "\n\n" + FILE_REMINDER
+    if include_image_reminder:
+        reminder += "\n\n" + IMAGE_GEN_REMINDER
     reminder = reminder.strip()
     return reminder or None
 

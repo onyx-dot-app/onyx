@@ -817,7 +817,6 @@ def test_project_instructions_supplement_agent_prompt(
         results=[],
         previous_results=[],
         is_last_step=False,
-        ran_image_gen=False,
     )
     history = prepare_prompt(
         [UserMessage(content="Question")],

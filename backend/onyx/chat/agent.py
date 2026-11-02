@@ -280,7 +280,6 @@ class ChatAgent(Agent, RestorableFeature):
             results=results,
             previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
-            ran_image_gen=self.ran_image_gen,
         )
         available_tool_names = {tool.name for tool in tools}
         return PreparedStep(

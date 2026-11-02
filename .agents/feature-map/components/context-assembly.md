@@ -133,15 +133,16 @@ system message, and the custom agent prompt holds only project instructions. If
 the default base prompt is empty, the custom agent prompt becomes the system
 message and stops moving (`build_chat_prompt`).
 
-**Reminder.** `chat/prompt_utils.py:build_chat_reminder` starts from the image
-generation reminder, the open-URL nudge (after a web search in the previous step
-that found results, when the agent has the open-URL tool and steps remain) or
-the persona task prompt. Only one of the three is used, so the task prompt is
-left out of a step that gets the image or open-URL reminder.
+**Reminder.** `chat/prompt_utils.py:build_chat_reminder` starts from the persona
+task prompt, or the open-URL nudge after a web search that found results when
+the agent has the open-URL tool and steps remain. The open-URL nudge replaces
+the task prompt. Image generation does not replace the task prompt.
 `chat/prompt_utils.py:build_reminder_message` then adds the last-step reminder,
 the citation guidance once a citeable tool has run in this turn or the turn has
-project files (inline or searched), and the file reminder after the Python tool
-makes a file. `chat/prompt_formatting.py:prepare_model_messages` wraps it in
+project files (inline or searched), the file reminder after Python makes a file,
+and the image reminder when this turn has a result with generated images.
+Failed image calls without images do not add the image reminder.
+`chat/prompt_formatting.py:prepare_model_messages` wraps it in
 `<system-reminder>` tags.
 
 **Budget.** In setup, `calculate_reserved_tokens` reserves a worst-case system
