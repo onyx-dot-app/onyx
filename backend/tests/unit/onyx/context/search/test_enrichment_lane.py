@@ -5,6 +5,7 @@ return the source, whatever happens to the lane that serves it; and that
 lane must return nothing the provider did not clear.
 """
 
+import sys
 from collections.abc import Generator, Mapping, Sequence
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -437,3 +438,29 @@ def test_no_lane_is_resolved_for_a_source_with_no_filter(
 
     assert WITHHELD in enrichment_source_types()
     assert get_enrichment_filter(WITHHELD) is None
+
+
+def test_a_source_in_the_floor_still_rolls_back_a_failed_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The floor is not a registration. A source listed there is already
+    "withheld" before its module runs, so a rollback that diffed the
+    withheld set would miss the handler a failed import left behind."""
+    from onyx.connectors.event_inbox import sources as sources_module
+    from onyx.connectors.event_inbox.handlers import get_event_handler
+
+    monkeypatch.setattr(
+        "onyx.context.search.enrichment.registry.WITHHELD_FROM_DEFAULT_SEARCH",
+        frozenset({WITHHELD}),
+    )
+    unregister_enrichment_source(WITHHELD)
+    half = "tests.unit.onyx.context.search.half_registering_withheld_source"
+    monkeypatch.setattr(sources_module, "_loaded", False)
+    monkeypatch.setattr(sources_module, "EVENT_SOURCE_MODULES", (half,))
+    try:
+        sources_module.load_event_sources()
+
+        assert get_event_handler(WITHHELD) is None
+        assert get_enrichment_filter(WITHHELD) is None
+    finally:
+        sys.modules.pop(half, None)

@@ -108,9 +108,9 @@ def get_enrichment_contexts(
     """The withheld sources this user can be served right now.
 
     Anonymous users get none: the provider answers about a named user, and
-    there is nobody to name.
+    the anonymous identity is one shared address, not a person.
     """
-    if user is None or not user.email:
+    if user is None or user.is_anonymous or not user.email:
         return []
 
     load_event_sources()

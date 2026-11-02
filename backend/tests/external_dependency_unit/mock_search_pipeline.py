@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.enrichment.retrieval import EnrichmentContext
 from onyx.context.search.models import (
     ChunkSearchRequest,
     InferenceChunk,
@@ -150,6 +151,9 @@ def use_mock_search_pipeline(
         embedding_model: EmbeddingModel | None = None,  # noqa: ARG001
         prefetched_federated_retrieval_infos: (  # noqa: ARG001
             list[FederatedRetrievalInfo] | None
+        ) = None,
+        prefetched_enrichment_contexts: (  # noqa: ARG001
+            list[EnrichmentContext] | None
         ) = None,
     ) -> list[InferenceChunk]:
         return controller.get_search_results(chunk_search_request.query)

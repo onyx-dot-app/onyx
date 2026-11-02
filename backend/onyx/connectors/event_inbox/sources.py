@@ -17,7 +17,7 @@ from onyx.connectors.event_inbox.source_registry import (
     webhook_source_for,
 )
 from onyx.context.search.enrichment.registry import (
-    enrichment_source_types,
+    registered_enrichment_sources,
     unregister_enrichment_source,
 )
 from onyx.utils.logger import setup_logger
@@ -34,7 +34,7 @@ def _claimed_sources() -> set[DocumentSource]:
     """Every source that holds a registration of any kind."""
     return (
         {spec.source for spec in registered_webhook_sources()}
-        | set(enrichment_source_types())
+        | registered_enrichment_sources()
         | event_handler_sources()
     )
 

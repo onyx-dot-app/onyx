@@ -72,6 +72,16 @@ def get_enrichment_filter(source: DocumentSource) -> ChunkPermissionFilter | Non
     return _FILTERS.get(source)
 
 
+def registered_enrichment_sources() -> set[DocumentSource]:
+    """Only the sources that registered a filter.
+
+    Distinct from `enrichment_source_types`, which adds the static floor: a
+    caller asking what has been registered must not be told about a source
+    that merely must not be searched.
+    """
+    return set(_FILTERS)
+
+
 def enrichment_source_types() -> list[DocumentSource]:
     """What the default lane must not return.
 
