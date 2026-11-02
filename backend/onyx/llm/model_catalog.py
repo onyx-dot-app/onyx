@@ -454,6 +454,27 @@ def find_remote_model_obj(
     return None
 
 
+def iter_latest_models(provider: str, mode: str | None = None) -> list[str] | None:
+    """Like ``iter_models``, but from the provider's catalog on main, so it
+    includes models released after this deployment. Air-gapped deployments
+    use the vendored catalog. None when the remote catalog can't be read."""
+    if ONYX_AIRGAPPED:
+        return iter_models(provider, mode)
+    section = _remote_section(provider)
+    if section is None:
+        return None
+    vendored = _catalog().get(provider, {}).get("models", {})
+    models: dict[str, Any] = dict(section["models"])
+    for model_id in _supplement_only_model_ids().get(provider, frozenset()):
+        if model_id in vendored:
+            models.setdefault(model_id, vendored[model_id])
+    return sorted(
+        model_id
+        for model_id, entry in models.items()
+        if mode is None or _catalog_mode(entry, model_id) == mode
+    )
+
+
 def reset_remote_cache() -> None:
     """Testing hook: forget fetched sections."""
     _remote_sections.clear()

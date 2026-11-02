@@ -126,6 +126,7 @@ from onyx.server.manage.llm.models import (
     LMStudioFinalModelResponse,
     LMStudioModelsRequest,
     ModelConfigurationPage,
+    ModelConfigurationUpsertRequest,
     ModelRoutingUpdateRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
@@ -1044,6 +1045,23 @@ def test_decision_provider(
         ) from error
 
 
+def _initial_auto_update_models(
+    provider_name: str,
+) -> list[ModelConfigurationUpsertRequest]:
+    from onyx.llm.well_known_providers.llm_provider_options import (
+        fetch_models_for_provider,
+        get_recommendations,
+    )
+
+    recommended = {
+        model.name for model in get_recommendations().get_visible_models(provider_name)
+    }
+    return [
+        ModelConfigurationUpsertRequest(name=name, is_visible=name in recommended)
+        for name in fetch_models_for_provider(provider_name)
+    ]
+
+
 @admin_router.put("/provider")
 def put_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
@@ -1162,6 +1180,17 @@ def put_llm_provider(
     enabling_auto_update = llm_provider_upsert_request.is_auto_mode and not (
         existing_provider and existing_provider.is_auto_mode
     )
+    # API clients may leave the model list to auto-update.
+    if (
+        llm_provider_upsert_request.is_auto_mode
+        and not llm_provider_upsert_request.model_configurations
+    ):
+        if existing_provider:
+            llm_provider_upsert_request.keep_existing_models = True
+        else:
+            llm_provider_upsert_request.model_configurations = (
+                _initial_auto_update_models(llm_provider_upsert_request.provider)
+            )
 
     try:
         result = upsert_llm_provider(

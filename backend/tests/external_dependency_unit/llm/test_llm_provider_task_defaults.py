@@ -65,6 +65,8 @@ def test_schema_engine() -> Generator[Engine, None, None]:
                     "llm_provider__persona",
                     "llm_provider__user_group",
                     "persona",
+                    "embedding_provider",
+                    "search_settings",
                     "user_group",
                     "user",
                 )

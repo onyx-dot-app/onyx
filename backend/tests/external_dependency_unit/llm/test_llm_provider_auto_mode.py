@@ -81,9 +81,7 @@ def provider_name(db_session: Session) -> Generator[str, None, None]:
     _cleanup_provider(db_session, name)
 
 
-_CATALOG_PATH = (
-    "onyx.llm.well_known_providers.llm_provider_options.fetch_models_for_provider"
-)
+_CATALOG_PATH = "onyx.llm.well_known_providers.llm_provider_options.fetch_latest_models_for_provider"
 
 
 def _sync_with_catalog(db_session: Session, catalog: list[str]) -> dict[str, int]:
@@ -229,6 +227,33 @@ def test_toggling_auto_update_keeps_the_saved_models(
         "gpt-b": False,
         "my-finetune": True,
     }
+
+
+def test_auto_update_request_without_models_keeps_the_saved_models(
+    db_session: Session, provider_name: str
+) -> None:
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=False,
+        models={"gpt-a": True, "gpt-b": False},
+    )
+
+    put_llm_provider(
+        llm_provider_upsert_request=LLMProviderUpsertRequest(
+            id=provider.id,
+            name=provider_name,
+            provider=LlmProviderNames.OPENAI,
+            is_auto_mode=True,
+            model_configurations=[],
+        ),
+        is_creation=False,
+        user=MagicMock(),
+        db_session=db_session,
+    )
+
+    assert _visibility(db_session, provider_name) == {"gpt-a": True, "gpt-b": False}
 
 
 def test_aggregators_do_not_get_auto_update(

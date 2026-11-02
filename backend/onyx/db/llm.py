@@ -1742,7 +1742,8 @@ def sync_auto_mode_models(
 
     Released models the provider does not have yet are added and selected.
     Retired models are removed, unless they hold a default or back an image
-    generation config. The admin's selection of every other model and all
+    generation config. A retired model an agent or contextual RAG uses is
+    hidden instead. The admin's selection of every other model and all
     defaults stay as they are.
 
     Returns the number of changes made.
@@ -1790,14 +1791,38 @@ def sync_auto_mode_models(
             )
             .exists()
         )
+        chosen_elsewhere = or_(
+            select(Persona.id)
+            .where(Persona.default_model_configuration_id == ModelConfiguration.id)
+            .exists(),
+            select(SearchSettings.id)
+            .where(
+                SearchSettings.contextual_rag_model_configuration_id
+                == ModelConfiguration.id
+            )
+            .exists(),
+        )
+        retired = (
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.in_(retired_names),
+            ~holds_a_default,
+            ~backs_image_generation,
+        )
+        # A model an agent or contextual RAG still uses is hidden, not removed.
+        hidden = db_session.execute(
+            update(ModelConfiguration)
+            .where(
+                *retired,
+                chosen_elsewhere,
+                ModelConfiguration.is_visible == True,  # noqa: E712
+            )
+            .values(is_visible=False)
+            .execution_options(synchronize_session="fetch")
+        )
+        changes += int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
         removed = db_session.execute(
             delete(ModelConfiguration)
-            .where(
-                ModelConfiguration.llm_provider_id == provider.id,
-                ModelConfiguration.name.in_(retired_names),
-                ~holds_a_default,
-                ~backs_image_generation,
-            )
+            .where(*retired, ~chosen_elsewhere)
             .execution_options(synchronize_session="fetch")
         )
         changes += int(removed.rowcount)  # ty: ignore[unresolved-attribute]

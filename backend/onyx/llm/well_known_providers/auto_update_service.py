@@ -78,7 +78,7 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
     Returns a dict of provider id -> number of changes made.
     """
     from onyx.llm.well_known_providers.llm_provider_options import (
-        fetch_models_for_provider,
+        fetch_latest_models_for_provider,
         get_recommendations,
     )
 
@@ -94,7 +94,7 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
     kv_store = get_kv_store()
     results: dict[str, int] = {}
     for provider in providers:
-        catalog = fetch_models_for_provider(provider.provider)
+        catalog = fetch_latest_models_for_provider(provider.provider)
         if not catalog:
             continue
         seen = _load_seen_catalog(provider)
