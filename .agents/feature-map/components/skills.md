@@ -184,8 +184,9 @@ The library preview of an external-app skill calls the same renderer
     the hash of a failed sandbox is not written.
 12. `sharing-single-entry` **Sharing and policy writes go through
     `db/skill.py:share_skill__no_commit`.** The share route, the editor create
-    route, bulk sharing and imports with access settings all call it with a
-    `SkillSharingChange` (`SkillShareRequest.to_change()` builds one). A change
+    route, the patch route's visibility change, bulk sharing and imports with
+    access settings all call it with a `SkillSharingChange`
+    (`SkillShareRequest.to_change()` builds one). A change
     to `installation_policy` needs `FULL_ADMIN_PANEL_ACCESS`, and
     `db/skill.py:set_skill_installation_policy` refuses a built-in. EDIT on a
     skill is not enough to change its groups:

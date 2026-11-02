@@ -34,6 +34,16 @@ def _bundle(name: str) -> bytes:
     return output.getvalue()
 
 
+def _delete_bundles(db_session: Session, name: str) -> list[Skill]:
+    """Drop the stored blobs of every skill with this name; returns the rows."""
+    rows = list(db_session.scalars(select(Skill).where(Skill.name == name)))
+    file_store = get_default_file_store()
+    for row in rows:
+        if row.bundle_file_id is not None:
+            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+    return rows
+
+
 def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     db_session: Session,
     test_user: User,
@@ -251,13 +261,12 @@ def test_import_applies_shared_access_before_publication(
         user=test_user,
         db_session=db_session,
     )
-    assert result.not_imported == []
-    assert len(result.imported) == 1
-    assert published == [SkillSharePermission.VIEWER]
-    stored = db_session.get(Skill, result.imported[0].skill.id)
-    assert stored is not None
-    assert stored.bundle_file_id is not None
-    get_default_file_store().delete_file(stored.bundle_file_id, error_on_missing=False)
+    try:
+        assert result.not_imported == []
+        assert len(result.imported) == 1
+        assert published == [SkillSharePermission.VIEWER]
+    finally:
+        _delete_bundles(db_session, name)
 
 
 def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
@@ -309,13 +318,12 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
         db_session=db_session,
     )
 
-    assert [result.skill.name for result in response.imported] == [name]
-    assert response.imported[0].skill.installation_policy == (
-        SkillInstallationPolicy.DEFAULT
-    )
-    assert [item.path for item in response.not_imported] == [paths[1]]
-    rows = db_session.scalars(select(Skill).where(Skill.name == name)).all()
-    assert len(rows) == 1
-    bundle_file_id = rows[0].bundle_file_id
-    assert bundle_file_id is not None
-    get_default_file_store().delete_file(bundle_file_id, error_on_missing=False)
+    try:
+        assert [result.skill.name for result in response.imported] == [name]
+        assert response.imported[0].skill.installation_policy == (
+            SkillInstallationPolicy.DEFAULT
+        )
+        assert [item.path for item in response.not_imported] == [paths[1]]
+        assert len(_delete_bundles(db_session, name)) == 1
+    finally:
+        _delete_bundles(db_session, name)

@@ -1,6 +1,7 @@
 import io
 import zipfile
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, NamedTuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
@@ -37,7 +38,6 @@ from onyx.db.skill import (
     list_skills,
     replace_skill_bundle,
     set_skill_enabled_for_user,
-    set_skill_public_permission,
     share_skill__no_commit,
     transfer_skill_ownership,
 )
@@ -113,35 +113,65 @@ def _parse_skill_sharing(sharing: str | None) -> SkillShareRequest | None:
         ) from exc
 
 
-def _create_imported_skill(
-    ingested: IngestedBundle,
+class _BundleSource(NamedTuple):
+    path: str
+    name: str
+    ingest: Callable[[FileStore], IngestedBundle]
+
+
+def _import_skill_bundles(
+    sources: list[_BundleSource],
+    not_imported: list[GitHubSkillNotImported],
     change: SkillSharingChange | None,
     auto_enable: bool,
     user: User,
     db_session: Session,
-    file_store: FileStore,
-) -> tuple[Skill, bool, set[UUID]]:
-    """Create the skill for a stored bundle; drop the blob when the skill is
-    rejected, since nothing references it then."""
-    try:
-        return create_skill_from_bundle__no_commit(
-            ingested, change, auto_enable, user, db_session
-        )
-    except OnyxError:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
-
-
-def _commit_import(
-    db_session: Session, file_store: FileStore, bundle_file_ids: list[str]
-) -> None:
-    """Commit the import; on failure the stored blobs are orphans, so drop them."""
+) -> GitHubSkillsImportResponse:
+    """Store each bundle and create its skill in its own savepoint, commit once,
+    then push to the affected sandboxes. A rejected skill drops its blob and
+    lands in not_imported; a failed commit drops every blob."""
+    file_store = get_default_file_store()
+    created: list[tuple[Skill, bool]] = []
+    affected: set[UUID] = set()
+    bundle_file_ids: list[str] = []
+    for source in sources:
+        try:
+            ingested = source.ingest(file_store)
+        except OnyxError as exc:
+            not_imported.append(
+                GitHubSkillNotImported(
+                    path=source.path, name=source.name, reason=exc.detail
+                )
+            )
+            continue
+        try:
+            skill, enabled, item_affected = create_skill_from_bundle__no_commit(
+                ingested, change, auto_enable, user, db_session
+            )
+        except OnyxError as exc:
+            delete_bundle_blob(file_store, ingested.bundle_file_id)
+            not_imported.append(
+                GitHubSkillNotImported(
+                    path=source.path, name=source.name, reason=exc.detail
+                )
+            )
+            continue
+        except Exception:
+            delete_bundle_blob(file_store, ingested.bundle_file_id)
+            raise
+        bundle_file_ids.append(ingested.bundle_file_id)
+        created.append((skill, enabled))
+        affected |= item_affected
     try:
         db_session.commit()
     except Exception:
         for file_id in bundle_file_ids:
             delete_bundle_blob(file_store, file_id)
         raise
+    if affected:
+        push_skills_for_users(affected, db_session)
+        db_session.commit()
+    return _import_response(created, not_imported, auto_enable, user, db_session)
 
 
 def _import_response(
@@ -401,37 +431,24 @@ def create_custom_skills_batch(
             f"Upload between 1 and {GITHUB_SKILL_MAX_COUNT} skill bundles.",
         )
     share_request = _parse_skill_sharing(sharing)
-    change = share_request.to_change() if share_request is not None else None
-    file_store = get_default_file_store()
-    created: list[tuple[Skill, bool]] = []
-    not_imported: list[GitHubSkillNotImported] = []
-    affected: set[UUID] = set()
-    bundle_file_ids: list[str] = []
-    for bundle in bundles:
-        try:
-            ingested = ingest_skill_bundle(
+    sources = [
+        _BundleSource(
+            path=bundle.filename or SKILL_MD_NAME,
+            name=bundle.filename or SKILL_MD_NAME,
+            ingest=lambda file_store, bundle=bundle: ingest_skill_bundle(
                 read_bundle_file(bundle.file), bundle.filename, file_store
-            )
-            skill, enabled, item_affected = _create_imported_skill(
-                ingested, change, auto_enable, user, db_session, file_store
-            )
-        except OnyxError as exc:
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=bundle.filename or "SKILL.md",
-                    name=bundle.filename or "SKILL.md",
-                    reason=exc.detail,
-                )
-            )
-            continue
-        bundle_file_ids.append(ingested.bundle_file_id)
-        created.append((skill, enabled))
-        affected |= item_affected
-    _commit_import(db_session, file_store, bundle_file_ids)
-    if affected:
-        push_skills_for_users(affected, db_session)
-        db_session.commit()
-    return _import_response(created, not_imported, auto_enable, user, db_session)
+            ),
+        )
+        for bundle in bundles
+    ]
+    return _import_skill_bundles(
+        sources,
+        [],
+        share_request.to_change() if share_request is not None else None,
+        auto_enable,
+        user,
+        db_session,
+    )
 
 
 @user_router.post("/github/preview")
@@ -473,15 +490,9 @@ def import_github_skills(
         selected_paths=set(request.paths),
     )
     skills_by_path = {skill.path: skill for skill in discovered_skills}
-    selected_paths = list(dict.fromkeys(request.paths))
     not_imported: list[GitHubSkillNotImported] = []
-    created: list[tuple[Skill, bool]] = []
-    affected: set[UUID] = set()
-
-    change = request.sharing.to_change() if request.sharing is not None else None
-    file_store = get_default_file_store()
-    bundle_file_ids: list[str] = []
-    for path in selected_paths:
+    sources: list[_BundleSource] = []
+    for path in dict.fromkeys(request.paths):
         selected_skill = skills_by_path.get(path)
         if selected_skill is None:
             not_imported.append(
@@ -505,33 +516,26 @@ def import_github_skills(
                 )
             )
             continue
-        try:
-            ingested = ingest_skill_bundle(
-                selected_skill.bundle_bytes,
-                f"{selected_skill.name}.zip",
-                file_store,
-                expected_name=selected_skill.name,
+        sources.append(
+            _BundleSource(
+                path=path,
+                name=selected_skill.name,
+                ingest=lambda file_store, skill=selected_skill: ingest_skill_bundle(
+                    skill.bundle_bytes or b"",
+                    f"{skill.name}.zip",
+                    file_store,
+                    expected_name=skill.name,
+                ),
             )
-            skill, enabled, item_affected = _create_imported_skill(
-                ingested, change, True, user, db_session, file_store
-            )
-        except OnyxError as exc:
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=path, name=selected_skill.name, reason=exc.detail
-                )
-            )
-            continue
-        bundle_file_ids.append(ingested.bundle_file_id)
-        created.append((skill, enabled))
-        affected |= item_affected
-    _commit_import(db_session, file_store, bundle_file_ids)
-
-    if affected:
-        push_skills_for_users(affected, db_session)
-        db_session.commit()
-
-    return _import_response(created, not_imported, True, user, db_session)
+        )
+    return _import_skill_bundles(
+        sources,
+        not_imported,
+        request.sharing.to_change() if request.sharing is not None else None,
+        True,
+        user,
+        db_session,
+    )
 
 
 @user_router.post("/custom/editor")
@@ -848,15 +852,14 @@ def patch_current_user_skill(
             )
 
         if patch_req.has_db_field_update:
-            public_permission = (
-                patch_req.public_permission
-                if "public_permission" in patch_req.model_fields_set
-                else None
-            )
-            set_skill_public_permission(
-                skill=skill,
-                public_permission=public_permission,
-                db_session=db_session,
+            share_skill__no_commit(
+                skill,
+                SkillSharingChange(
+                    public_permission=patch_req.public_permission,
+                    set_public_permission=True,
+                ),
+                user,
+                db_session,
             )
 
         db_session.commit()
