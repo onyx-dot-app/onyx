@@ -185,7 +185,7 @@ function modelConfigurationId(
  * decision-model path; language models keep LLM selection. A model that is
  * both is listed in each section.
  */
-export function SearchSelectionModelSetting() {
+export function SearchDecisionModelSetting() {
   const t = useTranslations("admin.chatPreferences");
   const settings = useSettings();
   const [isPending, setIsPending] = useState(false);
@@ -257,7 +257,7 @@ export function SearchSelectionModelSetting() {
       toast.error(
         error instanceof Error && error.message
           ? error.message
-          : t("toasts.searchSelectionUpdateFailed")
+          : t("toasts.searchDecisionUpdateFailed")
       );
       // An earlier write may have succeeded; show what is stored.
       await Promise.allSettled([refetch(), decision.refetch()]);
@@ -267,7 +267,7 @@ export function SearchSelectionModelSetting() {
   }
 
   useErrorToast(loadError, {
-    id: "search-selection-model-load-failed",
+    id: "search-decision-model-load-failed",
     message: t("taskModels.loadFailed"),
     retry: {
       label: t("taskModels.retry.label"),
@@ -291,7 +291,7 @@ export function SearchSelectionModelSetting() {
         globalDefault={{ label: t("taskModels.chatDefault.label") }}
         providers={languageProviders}
         decisionSection={{
-          title: t("searchSelectionModel.decisionSection"),
+          title: t("searchDecisionModel.decisionSection"),
           providers: decision.providers ?? [],
           selected: decisionValue !== null,
           onChange: (modelId) => void handleChange(modelId, true),
@@ -308,8 +308,8 @@ export function SearchSelectionModelSetting() {
 
   return (
     <InputHorizontal
-      title={t("searchSelectionModel.title")}
-      description={t("searchSelectionModel.description")}
+      title={t("searchDecisionModel.title")}
+      description={t("searchDecisionModel.description")}
       withLabel
       fillInput
     >

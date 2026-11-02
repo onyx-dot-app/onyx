@@ -387,9 +387,9 @@ class SearchTool(Tool):
 
     def _resolve_decision_client(self) -> DecisionClient | None:
         """The decision model client when a default decision model is
-        configured (a decision model in Search Selection Model on Chat
-        Preferences), the turn persists content, and, where PostHog is
-        available, the rollout flag is on; otherwise None."""
+        configured (the Search Decision Model on Chat Preferences), the turn
+        persists content, and, where PostHog is available, the rollout flag is
+        on; otherwise None."""
         flag_provider = get_default_feature_flag_provider()
         enabled = isinstance(
             flag_provider, NoOpFeatureFlagProvider

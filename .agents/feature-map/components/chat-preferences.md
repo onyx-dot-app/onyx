@@ -29,7 +29,7 @@ chat retention needs Enterprise. The settings API enforces these tiers.
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
   chat naming and search models. A change applies to every user on their next
-  request. The Search Selection Model row lists decision models first, then
+  request. The Search Decision Model row lists decision models first, then
   language models. A decision model makes internal search rank and expand
   with it; a language model keeps LLM selection with that model; Chat Default
   uses the chat's own model. A model that is both is listed in each section,
@@ -205,9 +205,9 @@ paths read it; find them with `git grep -n load_settings backend`.
     `opensearch_indexing_enabled`. The model keeps both, unused, so that those
     clients keep working. Remove such a field only after a provider release
     without it.
-12. `search-model-one-default` **The Search Selection Model row keeps at most
+12. `search-model-one-default` **The Search Decision Model row keeps at most
     one of DECISION and SEARCH_SELECTION set, but only on the client.**
-    `web/src/views/admin/ChatTaskModelSettings.tsx:SearchSelectionModelSetting`
+    `web/src/views/admin/ChatTaskModelSettings.tsx:SearchDecisionModelSetting`
     sets one default and then clears the other, in two API calls. A model
     that is both a chat and a decision model has a row in each section, so
     the row picked decides the default. The

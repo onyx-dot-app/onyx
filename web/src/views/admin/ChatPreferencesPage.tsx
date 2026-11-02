@@ -76,7 +76,7 @@ import { Disabled, Hoverable } from "@opal/core";
 import { Tier } from "@/lib/tiers/types";
 import {
   ChatNamingModelSetting,
-  SearchSelectionModelSetting,
+  SearchDecisionModelSetting,
 } from "@/views/admin/ChatTaskModelSettings";
 
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
@@ -846,7 +846,7 @@ export default function ChatPreferencesPage() {
           {/* Search */}
           <Card border="solid" rounding={4}>
             <Section alignItems="stretch">
-              <SearchSelectionModelSetting />
+              <SearchDecisionModelSetting />
             </Section>
           </Card>
 

@@ -9,7 +9,7 @@ import {
 import { toast } from "@opal/layouts";
 import {
   ChatNamingModelSetting,
-  SearchSelectionModelSetting,
+  SearchDecisionModelSetting,
 } from "@/views/admin/ChatTaskModelSettings";
 import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import type { DefaultModel, LLMProviderView } from "@/lib/languageModels/types";
@@ -103,7 +103,7 @@ function TaskModels() {
   return (
     <>
       <ChatNamingModelSetting />
-      <SearchSelectionModelSetting />
+      <SearchDecisionModelSetting />
     </>
   );
 }
@@ -113,7 +113,7 @@ async function renderTaskModels(): Promise<void> {
   await screen.findByText("Chat Naming Model");
 }
 
-// Rows render in order: chat naming, then search selection model.
+// Rows render in order: chat naming, then search decision model.
 function taskSelector(row: 0 | 1): HTMLElement {
   const selector = screen.getAllByRole("combobox")[row];
   if (!selector) throw new Error(`Missing task model selector ${row}`);
@@ -287,7 +287,7 @@ describe("ChatTaskModelSettings", () => {
     await renderTaskModels();
 
     expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
-    expect(screen.getByText("Search Selection Model")).toBeInTheDocument();
+    expect(screen.getByText("Search Decision Model")).toBeInTheDocument();
     expect(taskSelector(0)).toHaveValue("Chat Default");
     expect(taskSelector(1)).toHaveValue("Chat Default");
     expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
