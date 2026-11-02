@@ -224,7 +224,10 @@ The library preview of an external-app skill calls the same renderer
     `POST /skills/bulk` applies each item in a savepoint, reports expected
     business errors per skill, and pushes the combined affected audience after
     commit. Bulk enable and disable change only the caller's preference.
-    `POST /skills/custom/batch` validates each uploaded bundle separately.
+    `POST /skills/custom/batch` and GitHub import create each bundle through
+    `_import_bundle__no_commit`, one savepoint per skill, so a bad bundle or
+    a name conflict under a DEFAULT or REQUIRED policy lands in
+    `not_imported` and the other skills still import.
 13. `pptx-scripts-serve-previews` **The `pptx` skill's preview scripts also
     render Craft output previews.**
     `server/features/build/sandbox/base.py:document_preview_command` runs
