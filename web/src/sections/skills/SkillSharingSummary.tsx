@@ -5,13 +5,14 @@ import { useTranslations } from "next-intl";
 import { Button, Card, Text } from "@opal/components";
 import { SvgShare } from "@opal/icons";
 import { Section } from "@opal/layouts";
+import type { RichStr } from "@opal/types";
 import type { SkillSharingDraft } from "@/lib/skills/sharing";
 
 interface SkillSharingSummaryProps {
-  title: string;
+  title: string | RichStr;
   draft: SkillSharingDraft;
   count: number;
-  configureLabel: string;
+  configureLabel: string | RichStr;
   disabled?: boolean;
   onConfigure: () => void;
   children?: ReactNode;
