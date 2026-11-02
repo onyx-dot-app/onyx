@@ -183,19 +183,23 @@ The library preview of an external-app skill calls the same renderer
     failed push never fails the API call. The next push repairs it, because
     the hash of a failed sandbox is not written.
 12. `sharing-single-entry` **Sharing and policy writes go through
-    `server/features/skill/api.py:_apply_skill_sharing__no_commit`.** The share route and the editor create
-    route both call it. A change to `installation_policy` needs
-    `FULL_ADMIN_PANEL_ACCESS`, and `db/skill.py:set_skill_installation_policy` refuses a
-    built-in. EDIT on a skill is not enough to change its groups:
-    `server/features/skill/api.py:_assert_group_share_within_scope` treats any
-    change to the group set or levels as a `MANAGE_SKILLS` action within scope
+    `db/skill.py:share_skill__no_commit`.** The share route, the editor create
+    route, the patch route's visibility change, bulk sharing and imports with
+    access settings all call it with a `SkillSharingChange`
+    (`SkillShareRequest.to_change()` builds one). A change
+    to `installation_policy` needs `FULL_ADMIN_PANEL_ACCESS`, and
+    `db/skill.py:set_skill_installation_policy` refuses a built-in. EDIT on a
+    skill is not enough to change its groups:
+    `db/skill.py:_assert_group_share_within_scope` treats any change to the
+    group set or levels as a `MANAGE_SKILLS` action within scope
     ([[authorization]]). Without it, an owner could push a skill into any
     group manager's scope. It compares against the stored shares, and the
     privacy check uses the stored visibility and the request, so a
     public-to-private change in the same request cannot get past it. A
     `public_permission` change needs the author or global `MANAGE_SKILLS`
-    (`_ensure_can_edit_org_visibility`; the patch route calls it too). A new
-    sharing entry point must call this function, not `db/skill.py:replace_skill_shares`.
+    (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
+    too). A new sharing entry point must call `share_skill__no_commit`, not
+    `db/skill.py:replace_skill_shares`.
     Agents apply a looser form of the rule
     ([[agents-personas#group-share-needs-manage-agents]]).
 13. `pptx-scripts-serve-previews` **The `pptx` skill's preview scripts also
