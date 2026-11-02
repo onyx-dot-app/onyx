@@ -5,6 +5,7 @@ groups, and the row's open error count, whole entities included."""
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -32,6 +33,8 @@ from onyx.db.models import (
     IndexAttempt,
     IndexAttemptError,
     SyncRecord,
+    User,
+    User__UserGroup,
     UserGroup,
     UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
@@ -39,6 +42,7 @@ from onyx.db.models import (
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.index_monitoring import get_indexing_connectors
 from onyx.server.documents.models import (
+    IndexingConnectorRow,
     IndexingConnectorsResponse,
     IndexingConnectorStatus,
 )
@@ -700,3 +704,63 @@ def test_a_failed_prune_or_check_ranks_a_connector_third(
         check_resolved.name: 0,
         prune_fixed.name: 0,
     }
+
+
+def test_a_scoped_reader_sees_only_the_shared_groups_they_can_see(
+    db_session: Session,
+) -> None:
+    prefix = _prefix()
+    private = _create_cc_pair(
+        db_session, prefix, "private", access_type=AccessType.PRIVATE
+    )
+    restricted = _create_cc_pair(
+        db_session, prefix, "restricted", access_type=AccessType.SYNC_RESTRICTED
+    )
+    group_names = [f"{prefix} group {index}" for index in range(3)]
+    _share_with_groups(db_session, private, group_names)
+    _share_with_groups(db_session, restricted, [f"{prefix} restricted group"])
+    groups = {
+        group.name: group
+        for group in db_session.scalars(
+            select(UserGroup).where(UserGroup.name.in_(group_names))
+        )
+    }
+    manager = create_test_user(db_session, "monitor_list_manager")
+    member = create_test_user(db_session, "monitor_list_member")
+    for name in group_names[:2]:
+        db_session.add(
+            User__UserGroup(
+                user_id=manager.id, user_group_id=groups[name].id, is_manager=True
+            )
+        )
+    db_session.add(
+        User__UserGroup(
+            user_id=member.id, user_group_id=groups[group_names[2]].id, is_manager=False
+        )
+    )
+    manager.is_group_manager = True
+    db_session.commit()
+
+    def private_row(user: User) -> IndexingConnectorRow:
+        response = get_indexing_connectors(
+            page_num=0,
+            page_size=20,
+            q=prefix,
+            status=None,
+            user=user,
+            db_session=db_session,
+        )
+        return next(row for row in response.items if row.name == private.name)
+
+    admin_rows = {row.name: row for row in _connectors(db_session, prefix).items}
+    assert admin_rows[private.name].group_names == group_names
+    # A sync-restricted pair's data-access groups gate its documents too.
+    assert admin_rows[restricted.name].group_names == [f"{prefix} restricted group"]
+    # A scoped manager sees the groups they manage, as the pair's own data-access route lists them.
+    managed = private_row(manager)
+    assert managed.group_names == group_names[:2]
+    assert managed.group_count == 2
+    # A member who reads the pair through a group sees no group names.
+    read_only = private_row(member)
+    assert read_only.group_names == []
+    assert read_only.group_count == 0
