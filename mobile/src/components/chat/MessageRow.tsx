@@ -164,6 +164,7 @@ function AssistantMessage({
               key={image.file_id}
               fileId={image.file_id}
               size={GENERATED_IMAGE_SIZE}
+              contentFit="contain"
             />
           ))}
         </View>
