@@ -206,13 +206,13 @@ def _ported_doc_hashes(
     docs_already_in_target: set[str],
 ) -> dict[str, str | None]:
     """What this copy put in the target, per doc: the hash read before the copy, or
-    None for a doc the scan found no chunks for (the target does not have it).
+    None when the target's version is unknown, because the scan found no chunks for
+    the doc (the target does not have it) or the source hash changed during the
+    copy (the scan may have seen either version). The dedup gate reads None as "not
+    in the index" and re-indexes the doc.
 
-    Left out: a doc deleted mid-batch, a doc the create-only write found already in
-    the target (secondary indexing or an earlier copy owns it), and a doc whose
-    source hash changed during the copy, since the scan may have seen either
-    version. That write recorded its own hash, which the dedup gate reads as "not in
-    the new index" after the swap.
+    Left out: a doc deleted mid-batch and a doc the create-only write found already
+    in the target (secondary indexing or an earlier copy owns it).
     """
     current = get_port_source_content_hashes(
         db_session, list(surviving_doc_ids), source_search_settings_id
@@ -220,9 +220,8 @@ def _ported_doc_hashes(
     hashes: dict[str, str | None] = {}
     for doc_id in surviving_doc_ids - docs_already_in_target:
         snapshot = snapshot_hashes.get(doc_id)
-        if current.get(doc_id) != snapshot:
-            continue
-        hashes[doc_id] = snapshot if doc_id in docs_written else None
+        unchanged = current.get(doc_id) == snapshot
+        hashes[doc_id] = snapshot if unchanged and doc_id in docs_written else None
     return hashes
 
 

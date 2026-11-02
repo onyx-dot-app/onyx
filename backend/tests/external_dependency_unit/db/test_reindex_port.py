@@ -771,10 +771,10 @@ def test_run_port_attempt_records_ported_content_hash(
 ) -> None:
     """For each doc its copy put in the target, the port records the version the
     source index holds, copying the PRESENT hash into content_hash first. A doc the scan
-    found no chunks for is recorded as absent from the target. It records nothing for
-    a doc the create-only write found already there (secondary indexing or an earlier
-    copy wrote it), a doc deleted mid-batch, or a doc re-indexed into PRESENT during
-    the copy, and it keeps the record secondary indexing already made for the target."""
+    found no chunks for, or re-indexed into PRESENT during the copy, is recorded as
+    absent from the target. It records nothing for a doc the create-only write found
+    already there (secondary indexing or an earlier copy wrote it) or a doc deleted
+    mid-batch, and it keeps the record secondary indexing already made for the target."""
     cc_pair, future_id = cc_pair_and_port_future
     present = get_current_search_settings(db_session)
     present_ref = PresentSearchSettingsRef.from_settings(present)
@@ -814,7 +814,7 @@ def test_run_port_attempt_records_ported_content_hash(
         # `missing` survives but the scan found no chunks for it.
         on_docs_written({no_hash, copied, stale, changed})
         # `changed` is re-indexed into PRESENT mid-copy: the scan may have seen either
-        # version, so that write's own record must stand.
+        # version, so the target's version is unknown.
         record_present_index_write__no_commit(
             db_session, {changed: "newer"}, present.id, present.id
         )
@@ -862,7 +862,7 @@ def test_run_port_attempt_records_ported_content_hash(
             copied: (f"hash-{copied}", f"hash-{copied}", future_id),
             stale: ("present-v", "present-v", future_id),
             missing: (f"hash-{missing}", None, future_id),
-            changed: ("newer", "newer", present.id),
+            changed: ("newer", None, future_id),
         }
     finally:
         # Unlinked, so the fixture cleanup (cc_pair-linked docs only) misses it.
