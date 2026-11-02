@@ -762,6 +762,18 @@ export function ModelSelectionField({
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const models = formikProps.values.model_configurations;
+  // Models selected when the modal opened stay on top, so the folded list
+  // shows them and rows don't move while the admin edits the selection.
+  const [openedSelection, setOpenedSelection] = useState<Set<string> | null>(
+    null
+  );
+  useEffect(() => {
+    if (openedSelection === null && models.length > 0) {
+      setOpenedSelection(
+        new Set(models.filter((m) => m.is_visible).map((m) => m.name))
+      );
+    }
+  }, [models, openedSelection]);
 
   useEffect(() => {
     const testModel = models.find((model) => model.is_visible)?.name;
@@ -843,9 +855,15 @@ export function ModelSelectionField({
               // Sort alphabetically by id for providers that ship rich model
               // metadata (Nebius TokenFactory) so the order is stable across
               // refetches; otherwise keep the given order.
-              const displayModels = models.some((m) => hasModelMetadata(m))
-                ? [...models].sort((a, b) => a.name.localeCompare(b.name))
-                : models;
+              const displayModels = (
+                models.some((m) => hasModelMetadata(m))
+                  ? [...models].sort((a, b) => a.name.localeCompare(b.name))
+                  : [...models]
+              ).sort(
+                (a, b) =>
+                  Number(openedSelection?.has(b.name) ?? b.is_visible) -
+                  Number(openedSelection?.has(a.name) ?? a.is_visible)
+              );
               const isFoldable = displayModels.length > FOLD_THRESHOLD;
               const shownModels =
                 isFoldable && !isExpanded
