@@ -18,6 +18,7 @@ from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
 from onyx.db.cc_pair_runs import (
     count_matching_runs,
     count_pairs_indexing,
+    count_runs_by_pair,
     resolve_matching_runs__no_commit,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
@@ -103,6 +104,11 @@ _STATUS_RANK: dict[IndexingConnectorStatus, int] = {
     IndexingConnectorStatus.PAUSED: 7,
 }
 _OPEN_ERRORS_RANK: int = 3
+# Kinds whose open runs add to a row's open errors. Index attempts add theirs as error rows.
+_OPEN_ERROR_RUN_KINDS: list[CCPairRunKind] = [
+    CCPairRunKind.PRUNING,
+    CCPairRunKind.CHECKS,
+]
 
 
 def _readable_cc_pairs(
@@ -256,6 +262,39 @@ def _rank(status: IndexingConnectorStatus, open_error_count: int) -> int:
     return min(rank, _OPEN_ERRORS_RANK) if open_error_count > 0 else rank
 
 
+def _open_error_counts(
+    db_session: Session,
+    latest: dict[int, IndexAttempt],
+    cc_pairs: list[ConnectorCredentialPair],
+) -> dict[int, tuple[OpenErrorCounts, int]]:
+    """Per pair, its latest attempt's open errors and the row's total, which
+    adds the prune and check runs the activity panel lists as open."""
+    attempt_counts = get_open_error_counts_for_index_attempts(
+        db_session,
+        [latest[cc_pair.id].id for cc_pair in cc_pairs if cc_pair.id in latest],
+    )
+    open_runs = count_runs_by_pair(
+        db_session,
+        _OPEN_ERROR_RUN_KINDS,
+        open_level_filters(
+            CCPairRunsResolveMatchingRequest(),
+            [cc_pair.id for cc_pair in cc_pairs],
+            None,
+            set(),
+        ),
+    )
+    counts: dict[int, tuple[OpenErrorCounts, int]] = {}
+    for cc_pair in cc_pairs:
+        attempt = latest.get(cc_pair.id)
+        open_errors = (
+            OpenErrorCounts()
+            if attempt is None
+            else attempt_counts.get(attempt.id, OpenErrorCounts())
+        )
+        counts[cc_pair.id] = (open_errors, open_errors.total + open_runs[cc_pair.id])
+    return counts
+
+
 def _queue_positions(db_session: Session) -> dict[int, int]:
     """Each pair's first queued attempt's place in line, from 1. Every attempt
     handed to the queue counts, other pairs' and other search settings' too,
@@ -321,22 +360,12 @@ def get_indexing_connectors(
         if status is None or statuses[cc_pair.id] == status
     ]
     # Over every matching pair, not the page, since the open-errors rank sorts across pages.
-    open_counts = get_open_error_counts_for_index_attempts(
-        db_session,
-        [latest[cc_pair.id].id for cc_pair in filtered if cc_pair.id in latest],
-    )
-
-    def open_errors_of(cc_pair: ConnectorCredentialPair) -> OpenErrorCounts:
-        attempt = latest.get(cc_pair.id)
-        if attempt is None:
-            return OpenErrorCounts()
-        return open_counts.get(attempt.id, OpenErrorCounts())
-
+    open_error_counts = _open_error_counts(db_session, latest, filtered)
     matching = sorted(
         filtered,
         # The id breaks name ties, so a page boundary splits same-named pairs the same way every request.
         key=lambda cc_pair: (
-            _rank(statuses[cc_pair.id], open_errors_of(cc_pair).total),
+            _rank(statuses[cc_pair.id], open_error_counts[cc_pair.id][1]),
             cc_pair.name.lower(),
             cc_pair.id,
         ),
@@ -372,7 +401,7 @@ def get_indexing_connectors(
 
     def row(cc_pair: ConnectorCredentialPair) -> IndexingConnectorRow:
         attempt = latest.get(cc_pair.id)
-        open_errors = open_errors_of(cc_pair)
+        open_errors, open_error_count = open_error_counts[cc_pair.id]
         names = group_names.get(cc_pair.id, [])
         return IndexingConnectorRow(
             cc_pair_id=cc_pair.id,
@@ -395,7 +424,7 @@ def get_indexing_connectors(
                     open_doc_error_count=open_errors.docs,
                 )
             ),
-            open_error_count=open_errors.total,
+            open_error_count=open_error_count,
             group_count=len(names),
             group_names=names,
             queue_position=queue_positions.get(cc_pair.id),

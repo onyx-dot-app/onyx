@@ -707,6 +707,30 @@ def get_resolvable_runs(
     return found
 
 
+def count_runs_by_pair(
+    db_session: Session,
+    kinds: list[CCPairRunKind],
+    run_filters: list[CCPairRunFilter],
+) -> Counter[int]:
+    """Per pair, how many runs of ``kinds`` the filters keep. The filters are
+    one per level, so no run counts twice."""
+    counts: Counter[int] = Counter()
+    for run_filter in run_filters:
+        if not run_filter.cc_pair_ids:
+            continue
+        for kind in kinds:
+            _, pair_id = _id_and_pair_columns(kind)
+            stmt = (
+                _runs_of_kind(kind, run_filter, True)
+                .with_only_columns(pair_id, func.count())
+                .group_by(pair_id)
+            )
+            for cc_pair_id, count in db_session.execute(stmt).all():
+                if cc_pair_id is not None:
+                    counts[cc_pair_id] += count
+    return counts
+
+
 def get_superseded_runs(
     db_session: Session,
     run_filter: CCPairRunFilter,
