@@ -5,7 +5,8 @@ groups, and the row's open error count, whole entities included."""
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import select
+import pytest
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -40,6 +41,7 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.search_settings import get_current_search_settings
+from onyx.server.documents import index_monitoring
 from onyx.server.documents.index_monitoring import get_indexing_connectors
 from onyx.server.documents.models import (
     IndexingConnectorRow,
@@ -764,3 +766,53 @@ def test_a_scoped_reader_sees_only_the_shared_groups_they_can_see(
     read_only = private_row(member)
     assert read_only.group_names == []
     assert read_only.group_count == 0
+
+
+def test_a_running_shared_group_sync_marks_every_pair_of_its_source_syncing(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The EE lookup is a noop in CE, so the test names the shared source itself.
+    monkeypatch.setattr(
+        index_monitoring,
+        "_shared_group_sync_sources",
+        lambda: {DocumentSource.CONFLUENCE},
+    )
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    recorder = _create_cc_pair(
+        db_session, prefix, "confluence a", source=DocumentSource.CONFLUENCE
+    )
+    sibling = _create_cc_pair(
+        db_session, prefix, "confluence b", source=DocumentSource.CONFLUENCE
+    )
+    drive_recorder = _create_cc_pair(db_session, prefix, "drive a")
+    drive_sibling = _create_cc_pair(db_session, prefix, "drive b")
+    for cc_pair in (recorder, sibling, drive_recorder, drive_sibling):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+    _group_sync(db_session, recorder)
+    # A source whose group sync runs per pair marks only that pair.
+    _group_sync(db_session, drive_recorder)
+
+    try:
+        statuses = {
+            row.name: row.status for row in _connectors(db_session, prefix).items
+        }
+    finally:
+        # A running shared sync left behind marks every later test's pair of the source syncing.
+        db_session.rollback()
+        db_session.execute(
+            update(ExternalGroupPermissionSyncAttempt)
+            .where(
+                ExternalGroupPermissionSyncAttempt.connector_credential_pair_id
+                == recorder.id
+            )
+            .values(status=PermissionSyncStatus.SUCCESS)
+        )
+        db_session.commit()
+
+    assert statuses == {
+        recorder.name: IndexingConnectorStatus.SYNCING,
+        sibling.name: IndexingConnectorStatus.SYNCING,
+        drive_recorder.name: IndexingConnectorStatus.SYNCING,
+        drive_sibling.name: IndexingConnectorStatus.INDEXED,
+    }
