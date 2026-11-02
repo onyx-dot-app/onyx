@@ -177,3 +177,49 @@ def test_a_source_that_registers_then_fails_leaves_nothing_behind(
         assert get_webhook_source("registering-source") is not None
     finally:
         sys.modules.pop(half, None)
+
+
+def test_a_source_can_answer_on_several_endpoints() -> None:
+    """A provider that posts different kinds of event to different URLs
+    declares one entry each, and the parser tells them apart."""
+    spec = WebhookSourceSpec(
+        source=SOURCE,
+        slug="zoom",
+        endpoints=("/summary", "/transcript"),
+        parser=_parser,
+        verifier=_verifier,
+    )
+
+    assert spec.endpoints == ("/summary", "/transcript")
+    assert webhook_callback_url("zoom", "/summary").endswith("/webhook/zoom/summary")
+
+
+def test_one_endpoint_is_the_slug_itself() -> None:
+    spec = WebhookSourceSpec(
+        source=SOURCE, slug="s", parser=_parser, verifier=_verifier
+    )
+
+    assert spec.endpoints == ("",)
+    assert webhook_callback_url("s").endswith("/webhook/s")
+
+
+@pytest.mark.parametrize(
+    "endpoints",
+    [
+        (),
+        ("/a", "/a"),
+        ("summary",),
+        ("/summary/",),
+    ],
+)
+def test_an_endpoint_that_is_not_a_path_is_refused(endpoints: tuple[str, ...]) -> None:
+    """Each would serve a URL other than the one an admin pastes into the
+    provider, or shadow another route."""
+    with pytest.raises(ValidationError):
+        WebhookSourceSpec(
+            source=SOURCE,
+            slug="s",
+            endpoints=endpoints,
+            parser=_parser,
+            verifier=_verifier,
+        )

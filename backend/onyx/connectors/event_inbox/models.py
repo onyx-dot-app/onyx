@@ -26,6 +26,9 @@ class WebhookRequest(BaseModel):
 
     raw_body: bytes
     headers: Mapping[str, str]
+    # Which of the source's endpoints the delivery arrived on, as the spec
+    # spells it. "" for a source that declares one endpoint.
+    endpoint: str = ""
 
 
 # runtime_checkable so the spec below can hold these as Pydantic fields.
@@ -75,6 +78,10 @@ class WebhookSourceSpec(BaseModel):
     # reached at /webhook/zoom. Keep it stable: it is in the URL an admin
     # pastes into the provider's console.
     slug: str
+    # The sub-paths this source answers on, under its slug. A provider that
+    # posts different kinds of event to different URLs declares one entry
+    # each, and the parser reads `request.endpoint` to tell them apart.
+    endpoints: tuple[str, ...] = ("",)
     parser: EventParser
     # No default: an endpoint that takes unauthenticated writes must be a
     # decision somebody made, not one a source reached by omission.
@@ -83,6 +90,32 @@ class WebhookSourceSpec(BaseModel):
     # it to find every endpoint the internet can write to.
     allow_unsigned: bool = False
     challenge_responder: ChallengeResponder | None = None
+
+    @model_validator(mode="after")
+    def _endpoints_are_paths(self) -> "WebhookSourceSpec":
+        if not self.endpoints:
+            raise ValueError(
+                f"Webhook source {self.slug} declares no endpoints. Leave the "
+                'default ("",) to serve the slug itself.'
+            )
+        if len(set(self.endpoints)) != len(self.endpoints):
+            raise ValueError(
+                f"Webhook source {self.slug} repeats an endpoint. Two routes "
+                "on one path would shadow each other."
+            )
+        for endpoint in self.endpoints:
+            if endpoint and not endpoint.startswith("/"):
+                raise ValueError(
+                    f"Webhook endpoint {endpoint!r} of {self.slug} must start "
+                    'with "/" or be "".'
+                )
+            if endpoint.endswith("/"):
+                raise ValueError(
+                    f"Webhook endpoint {endpoint!r} of {self.slug} ends with "
+                    '"/", which serves a different URL than the one an admin '
+                    "pastes into the provider."
+                )
+        return self
 
     @model_validator(mode="after")
     def _signing_is_decided(self) -> "WebhookSourceSpec":
