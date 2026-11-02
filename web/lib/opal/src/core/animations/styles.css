@@ -196,3 +196,10 @@
   outline-offset: 2px;
   border-radius: 0.25rem;
 }
+
+/* Revealed — `revealed` shows the item whatever the hover state. Last, and
+   specific enough to win over every variant's hiding rule. */
+.hoverable-item[data-hoverable-variant][data-hoverable-revealed] {
+  opacity: 1;
+  pointer-events: auto;
+}

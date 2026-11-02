@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -17,14 +17,15 @@ import {
   SvgBubbleText,
   SvgEdit,
   SvgPin,
-  SvgPinned,
   SvgShare,
   SvgUser,
 } from "@opal/icons";
 import { useAppPosition } from "@/lib/position/hooks";
-import { ShareAgentModal } from "@/lib/agents/components";
+import { ShareAgentModal } from "@/lib/agents/components/ShareAgentModal";
 import { Content, ContentAction, Section } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
+import { cn } from "@opal/utils";
+import type { IconProps } from "@opal/types";
 
 export interface AgentCardProps {
   agent: MinimalAgent;
@@ -32,7 +33,27 @@ export interface AgentCardProps {
   onView: () => void;
 }
 
-export default function AgentCard({ agent, onView }: AgentCardProps) {
+// Whether the pin icon below shows the pinned pose. A context, so the icon
+// stays one component across both states and its rotation can animate: a
+// component per state would remount on every toggle.
+const PinnedContext = createContext(false);
+
+/** The slanted pin, turned 45° counter-clockwise (upright) while pinned. */
+function RotatingPinIcon({ className, ...props }: IconProps) {
+  const pinned = useContext(PinnedContext);
+  return (
+    <SvgPin
+      {...props}
+      className={cn(
+        className,
+        "transition-transform duration-200 ease-out motion-reduce:transition-none",
+        pinned && "-rotate-45"
+      )}
+    />
+  );
+}
+
+export function AgentCard({ agent, onView }: AgentCardProps) {
   const t = useTranslations("agents");
   const appPosition = useAppPosition();
   const router = useRouter();
@@ -52,15 +73,16 @@ export default function AgentCard({ agent, onView }: AgentCardProps) {
     appPosition.openAgent(agent.id);
   }, [pinned, togglePinnedAgent, agent, appPosition]);
 
-  // Declared once because it renders both bare and wrapped, depending on `pinned`.
   const pinButton = (
-    <Button
-      icon={pinned ? SvgPinned : SvgPin}
-      prominence="tertiary"
-      size="md"
-      onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-      tooltip={pinned ? t("card.unpin.tooltip") : t("card.pin.tooltip")}
-    />
+    <PinnedContext.Provider value={pinned}>
+      <Button
+        icon={RotatingPinIcon}
+        prominence="tertiary"
+        size="md"
+        onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+        tooltip={pinned ? t("card.unpin.tooltip") : t("card.pin.tooltip")}
+      />
+    </PinnedContext.Provider>
   );
 
   return (
@@ -136,15 +158,12 @@ export default function AgentCard({ agent, onView }: AgentCardProps) {
                         />
                       </Hoverable.Item>
                     )}
-                    {/* A pinned agent shows its pin at rest; an unpinned one
-                          only offers the action on hover. */}
-                    {pinned ? (
-                      pinButton
-                    ) : (
-                      <Hoverable.Item group="AgentCard">
-                        {pinButton}
-                      </Hoverable.Item>
-                    )}
+                    {/* A pinned agent shows its pin at rest; an unpinned one only
+                        offers the action on hover. One wrapper either way, so the pin
+                        keeps its element and its rotation animates. */}
+                    <Hoverable.Item group="AgentCard" revealed={pinned}>
+                      {pinButton}
+                    </Hoverable.Item>
                   </Section>
                 }
               />

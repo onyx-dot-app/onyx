@@ -8,23 +8,6 @@ agents page, agent viewer modal, etc.) belongs here.
 
 ## Components
 
-### `AgentCard`
-
-A card component that displays a single agent with its avatar, name,
-description, and quick actions (pin, share, edit, stats, try).
-
-```tsx
-import AgentCard from "@/sections/agents/AgentCard";
-
-<AgentCard agent={agent} />;
-```
-
-**Props:**
-
-- `agent: MinimalPersonaSnapshot` — the agent to display.
-
----
-
 ### `AgentsFilters` (`useAgentsFilters`)
 
 A hook that provides a shared filter bar for agent lists. Returns the
@@ -42,7 +25,8 @@ function MyAgentsPage() {
     <>
       <div className="flex flex-row gap-2">{filterBar}</div>
       {filtered.map((agent) => (
-        <AgentCard key={agent.id} agent={agent} />
+        // `AgentCard` lives in `@/lib/agents/components`.
+        <AgentCard key={agent.id} agent={agent} onView={() => view(agent.id)} />
       ))}
     </>
   );

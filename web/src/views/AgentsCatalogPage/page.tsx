@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import AgentCard from "@/sections/agents/AgentCard";
-import { AgentViewer } from "@/lib/agents/components";
+import { AgentCard, AgentViewer } from "@/lib/agents/components";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";

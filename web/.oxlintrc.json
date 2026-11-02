@@ -541,7 +541,6 @@
         "src/sections/actions/oauth/OAuthConnectionCheck.tsx",
         "src/sections/actions/oauth/OAuthTestCallback.tsx",
         "src/sections/admin/AdminListHeader.tsx",
-        "src/sections/agents/AgentCard.tsx",
         "src/sections/banners/OpenSearchResourceWarning.tsx",
         "src/sections/cards/FileCard.tsx",
         "src/sections/cards/SkillCard.tsx",
