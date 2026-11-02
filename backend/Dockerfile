@@ -212,6 +212,13 @@ ENV PYTHONPATH=/app
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
+# Git details of the build, set by GitHub Actions. Empty for local builds.
+ARG ONYX_COMMIT_SHA=
+ARG ONYX_COMMIT_DATE=
+ARG ONYX_GIT_REF=
+ENV ONYX_COMMIT_SHA=${ONYX_COMMIT_SHA} \
+    ONYX_COMMIT_DATE=${ONYX_COMMIT_DATE} \
+    ONYX_GIT_REF=${ONYX_GIT_REF}
 
 # Use jemalloc instead of glibc malloc to reduce memory fragmentation
 # in long-running Python processes (API server, Celery workers).

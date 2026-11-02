@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "커밋"
+      },
+      "commitDate": {
+        "label": "커밋 날짜"
+      },
+      "instanceUrl": {
+        "label": "인스턴스 URL"
+      },
+      "label": "정보",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "사용할 수 없음",
+      "version": {
+        "label": "버전"
+      }
+    },
     "accountFallback": {
       "label": "계정"
     },

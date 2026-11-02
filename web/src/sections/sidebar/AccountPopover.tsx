@@ -24,24 +24,30 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
+  SvgChevronLeft,
   SvgExternalLink,
   SvgHelpCircle,
+  SvgInfo,
   SvgLogOut,
   SvgSliders,
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content, toast, useSidebarFolded } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import {
+  Content,
+  KeyValue,
+  Section,
+  toast,
+  useSidebarFolded,
+} from "@opal/layouts";
 import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
-import { SvgOnyxLogo } from "@opal/logos";
 import { SidebarLoader } from "@opal/loaders";
-import { markdown } from "@opal/utils";
-import { useTranslations } from "next-intl";
+import { escapeMarkdown, markdown } from "@opal/utils";
+import { useFormatter, useTranslations } from "next-intl";
 
 interface SettingsItemsProps {
   undismissedCount: number;
@@ -164,58 +170,115 @@ function useSettingsItems({
               },
             ]
           : []),
-        ...(showLogin
-          ? [
-              {
-                kind: "action" as const,
-                id: "log-in",
-                icon: SvgUser,
-                title: t("logIn.label"),
-                onSelect: handleLogin,
-              },
-            ]
-          : []),
-        ...(showLogout
-          ? [
-              {
-                kind: "action" as const,
-                id: "log-out",
-                icon: SvgLogOut,
-                danger: true,
-                title: t("signOut.label"),
-                onSelect: handleLogout,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      kind: "group",
-      items: [
         {
-          kind: "custom",
-          id: "version",
-          disabled: true,
-          render: ({ props }) => (
-            <div {...props} className="p-2">
-              <Content
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
-                orientation="reverse"
-                icon={SvgOnyxLogo}
-                title={markdown(
-                  `[Onyx ${
-                    settings.version ?? "dev"
-                  }](https://docs.onyx.app/changelog)`
-                )}
-              />
-            </div>
-          ),
+          kind: "action",
+          id: "about",
+          icon: SvgInfo,
+          title: t("about.label"),
+          onSelect: (views) => views.push("about"),
         },
       ],
     },
+    ...(showLogin || showLogout
+      ? [
+          {
+            kind: "group" as const,
+            items: [
+              ...(showLogin
+                ? [
+                    {
+                      kind: "action" as const,
+                      id: "log-in",
+                      icon: SvgUser,
+                      title: t("logIn.label"),
+                      onSelect: handleLogin,
+                    },
+                  ]
+                : []),
+              ...(showLogout
+                ? [
+                    {
+                      kind: "action" as const,
+                      id: "log-out",
+                      icon: SvgLogOut,
+                      danger: true,
+                      title: t("signOut.label"),
+                      onSelect: handleLogout,
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
   ];
+}
+
+/** The about page: the app's version, the git details of the server's build, and this instance's URL. */
+function useAboutView(): DropdownView {
+  const t = useTranslations("accountPopover");
+  const format = useFormatter();
+  const { version, commit, commit_date, git_ref } = useSettings();
+  const unavailable = t("about.unavailable");
+  return {
+    items: [
+      {
+        kind: "action",
+        id: "about-back",
+        icon: SvgChevronLeft,
+        title: t("about.label"),
+        onSelect: (views) => views.pop(),
+      },
+      {
+        kind: "custom",
+        id: "about-details",
+        disabled: true,
+        render: ({ props }) => (
+          <div {...props}>
+            <Section gap={0.5} padding={0.5} alignItems="stretch">
+              <KeyValue
+                label={t("about.version.label")}
+                value={markdown(
+                  `[${escapeMarkdown(version ?? "dev")}](https://docs.onyx.app/changelog)`
+                )}
+              />
+              <KeyValue
+                label={t("about.ref.label")}
+                value={git_ref ?? unavailable}
+                mono={!!git_ref}
+              />
+              <KeyValue
+                label={t("about.commit.label")}
+                value={
+                  commit
+                    ? markdown(
+                        `[${commit.slice(0, 7)}](https://github.com/onyx-dot-app/onyx/commit/${commit})`
+                      )
+                    : unavailable
+                }
+                mono={!!commit}
+              />
+              <KeyValue
+                label={t("about.commitDate.label")}
+                value={
+                  commit_date
+                    ? format.dateTime(new Date(commit_date), {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : unavailable
+                }
+              />
+              <KeyValue
+                label={t("about.instanceUrl.label")}
+                value={window.location.origin}
+              />
+            </Section>
+          </div>
+        ),
+      },
+    ],
+  };
 }
 
 interface NotificationsPageProps {
@@ -268,6 +331,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
     setMenuOpen(state);
   };
   const items = useSettingsItems({ undismissedCount });
+  const aboutView = useAboutView();
   // ArrowRight on the page row moves focus into it; Tab then walks its
   // controls. Not on activation: a click on a control inside the page
   // bubbles to the row, and must not pull focus off that control.
@@ -334,7 +398,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
         // list must not add a second cap around it.
         maxHeight="none"
         items={items}
-        views={{ notifications: notificationsView }}
+        views={{ notifications: notificationsView, about: aboutView }}
       />
     </Dropdown>
   );

@@ -59,6 +59,7 @@ from onyx.utils.audit import (
     actor_from_user,
     emit_audit_event,
 )
+from onyx.utils.build_info import BUILD_INFO
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.variable_functionality import (
@@ -257,6 +258,9 @@ def fetch_settings(
         and tier_at_least(resolved_tier, Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
         version=onyx_version,
+        commit=BUILD_INFO.commit,
+        commit_date=BUILD_INFO.commit_date,
+        git_ref=BUILD_INFO.ref,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,
         default_user_file_max_upload_size_mb=min(
             DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
