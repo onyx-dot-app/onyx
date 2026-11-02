@@ -121,14 +121,22 @@ func TestStackProvider_composeUpWritesPortsAndExcludesLocalModel(t *testing.T) {
 			t.Errorf("compose .env lacks %q:\n%s", want, composeEnv)
 		}
 	}
-	var up []string
+	var up, pull []string
 	for _, c := range devtoolCalls(t, calls["docker"]) {
 		if len(c.Args) > 1 && c.Args[0] == "compose" && slices.Contains(c.Args, "up") {
 			up = c.Args
 		}
+		if len(c.Args) > 1 && c.Args[0] == "compose" && slices.Contains(c.Args, "pull") && up == nil {
+			pull = c.Args
+		}
 	}
 	if up == nil {
 		t.Fatal("docker compose up was not run")
+	}
+	for _, want := range []string{"--ignore-pull-failures", "inference_model_server", "indexing_model_server"} {
+		if !slices.Contains(pull, want) {
+			t.Errorf("model server pull before up lacks %q: %v", want, pull)
+		}
 	}
 	for _, want := range []string{"-p", stack.Project, "--wait", "relational_db", "cache"} {
 		if !slices.Contains(up, want) {

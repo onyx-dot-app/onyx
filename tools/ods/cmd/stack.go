@@ -428,6 +428,15 @@ func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opt
 	}
 	composeOpts := &ComposeOptions{Wait: true, Infra: true, Ports: composePorts, Output: os.Stderr}
 	composeOpts.Env = modelServerImageEnv(os.Getenv)
+	if composeOpts.Env != nil {
+		// edge is a moving tag and compose reuses a cached image, so refresh
+		// it first. A failed pull (offline) keeps the cached image.
+		pull := append(baseArgs("dev", p.stack.Project), "pull", "--ignore-pull-failures",
+			"inference_model_server", "indexing_model_server")
+		if err := execDockerComposeOutput(pull, composeOpts.Env, os.Stderr); err != nil {
+			return err
+		}
+	}
 	if opts.LocalModelServer {
 		composeOpts.ExcludeServices = []string{"inference_model_server"}
 		ids, err := exec.CommandContext(ctx, "docker", "ps",
