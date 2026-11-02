@@ -58,11 +58,13 @@ function LoadedAuthentication({
   onPublished,
   onComplete,
   onBusyChange,
+  onAuthorize,
 }: {
   serverId: number;
   onPublished: (serverId: number) => Promise<void>;
   onComplete: () => void;
   onBusyChange: (busy: boolean) => void;
+  onAuthorize?: (url: string) => void;
 }) {
   const { data, isValidating } = useSWR<MCPServer>(
     SWR_KEYS.adminMcpServer(serverId),
@@ -77,6 +79,7 @@ function LoadedAuthentication({
       onSaved={async (saved) => onPublished(saved.id)}
       onBusyChange={onBusyChange}
       onComplete={onComplete}
+      onAuthorize={onAuthorize}
     />
   ) : null;
 }
@@ -84,9 +87,11 @@ function LoadedAuthentication({
 function Harness({
   configuredServer,
   onPublished,
+  onAuthorize,
 }: {
   configuredServer: MCPServer;
   onPublished: (serverId: number) => Promise<void>;
+  onAuthorize?: (url: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -111,6 +116,7 @@ function Harness({
                 onPublished={onPublished}
                 onComplete={() => setOpen(false)}
                 onBusyChange={setBusy}
+                onAuthorize={onAuthorize}
               />
             )}
           </Modal.Body>
@@ -151,6 +157,7 @@ function mockNetwork(
           options.discovery ?? {
             status: "metadata_found",
             supports_automatic_registration: true,
+            supports_client_metadata: null,
             authorization_endpoint: "https://identity.example.com/authorize",
             token_endpoint: "https://identity.example.com/token",
           }
@@ -998,6 +1005,7 @@ test.each(["registered-client", ""])(
       discovery: {
         status: "metadata_found",
         supports_automatic_registration: false,
+        supports_client_metadata: null,
         authorization_endpoint: "https://identity.example.com/authorize",
         token_endpoint: "https://identity.example.com/token",
       },
@@ -1042,6 +1050,7 @@ test("missing metadata offers manual endpoints and retains the existing client",
     discovery: {
       status: "metadata_missing",
       supports_automatic_registration: null,
+      supports_client_metadata: null,
       authorization_endpoint: null,
       token_endpoint: null,
     },
@@ -1102,17 +1111,50 @@ test("registration failures show a clear recovery action instead of provider HTM
   ).toBeVisible();
 });
 
-test("rejected client metadata documents offer to turn off the switch", async () => {
+test("rejected client metadata documents fall back to automatic registration", async () => {
   const configuredServer: MCPServer = {
     ...server,
     admin_credentials: {},
   };
-  mockNetwork(configuredServer, "Invalid client_id", false, {
-    oauthReason: "client_metadata_rejected",
+  const authorizationUrl = "https://identity.example.com/authorize?client=dcr";
+  let finishRetry: () => void = () => {};
+  const retryResponse = new Promise<Response>((resolve) => {
+    finishRetry = () =>
+      resolve(
+        new Response(
+          JSON.stringify({
+            status: "authorization_required",
+            authorization_url: authorizationUrl,
+          })
+        )
+      );
   });
+  const network = mockNetwork(configuredServer);
+  const fallback = network.getMockImplementation();
+  network.mockImplementation(async (input, init) => {
+    if (String(input) === "/api/admin/mcp/setup") {
+      return JSON.parse(String(init?.body)).oauth_cimd_enabled
+        ? new Response(
+            JSON.stringify({
+              detail: "Invalid client_id",
+              oauth_error: "client_metadata_rejected",
+            }),
+            { status: 400 }
+          )
+        : retryResponse;
+    }
+    if (!fallback) throw new Error("Missing network fixture");
+    return fallback(input, init);
+  });
+  const onPublished = jest.fn();
+  const onAuthorize = jest.fn();
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} onPublished={jest.fn()} />
+    <Harness
+      configuredServer={configuredServer}
+      onPublished={onPublished}
+      onAuthorize={onAuthorize}
+    />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByRole("radio", { name: copy.oauthSetup.automatic.label });
@@ -1120,19 +1162,21 @@ test("rejected client metadata documents offer to turn off the switch", async ()
     name: new RegExp(`^${copy.cimd.label}`),
   });
   expect(cimdSwitch).toBeChecked();
-  await user.click(
-    screen.getByRole("button", {
-      name: copy.submitButton.label,
-    })
-  );
-  const recovery = await screen.findByRole("button", {
-    name: copy.cimd.turnOff,
+  const connect = screen.getByRole("button", {
+    name: copy.submitButton.label,
   });
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    copy.errors.clientMetadataRejected
+  await user.click(connect);
+  const submissions = () =>
+    network.mock.calls
+      .filter(([url]) => url === "/api/admin/mcp/setup")
+      .map(([, init]) => JSON.parse(String(init?.body)).oauth_cimd_enabled);
+  await waitFor(() => expect(submissions()).toEqual([true, false]));
+  expect(connect).toBeDisabled();
+  finishRetry();
+  await waitFor(() =>
+    expect(onAuthorize).toHaveBeenCalledWith(authorizationUrl)
   );
-  await user.click(recovery);
-  expect(cimdSwitch).not.toBeChecked();
+  expect(onPublished).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
@@ -1141,6 +1185,7 @@ test("retrying unavailable discovery refreshes support while preserving automati
     discovery: {
       status: "unreachable",
       supports_automatic_registration: null,
+      supports_client_metadata: null,
       authorization_endpoint: null,
       token_endpoint: null,
     },
@@ -1157,6 +1202,7 @@ test("retrying unavailable discovery refreshes support while preserving automati
     ...options.discovery,
     status: "metadata_found",
     supports_automatic_registration: true,
+    supports_client_metadata: null,
   };
   await user.click(screen.getByRole("button", { name: copy.discovery.retry }));
   expect(
@@ -1170,6 +1216,39 @@ test("retrying unavailable discovery refreshes support while preserving automati
       ([url]) => url === "/api/admin/mcp/oauth/discover"
     )
   ).toHaveLength(2);
+});
+
+test("a provider that cannot use client metadata starts with automatic registration", async () => {
+  const configuredServer = { ...server, admin_credentials: {} };
+  const network = mockNetwork(configuredServer, undefined, false, {
+    discovery: {
+      status: "metadata_found",
+      supports_automatic_registration: true,
+      supports_client_metadata: false,
+      authorization_endpoint: "https://example.com/authorize",
+      token_endpoint: "https://example.com/token",
+    },
+  });
+  const onPublished = jest.fn();
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  render(
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
+  );
+  await user.click(screen.getByRole("button", { name: "Open setup" }));
+  await screen.findByRole("radio", { name: copy.oauthSetup.automatic.label });
+  await waitFor(() =>
+    expect(
+      screen.getByRole("switch", { name: new RegExp(`^${copy.cimd.label}`) })
+    ).not.toBeChecked()
+  );
+  await user.click(
+    screen.getByRole("button", { name: copy.submitButton.label })
+  );
+  await waitFor(() => expect(onPublished).toHaveBeenCalled());
+  const submissions = network.mock.calls
+    .filter(([url]) => url === "/api/admin/mcp/setup")
+    .map(([, init]) => JSON.parse(String(init?.body)).oauth_cimd_enabled);
+  expect(submissions).toEqual([false]);
 });
 
 test("preserves freshly loaded server metadata when saving authentication", async () => {
@@ -1214,6 +1293,7 @@ test("keeps an explicit automatic choice when discovery finishes late", async ()
         JSON.stringify({
           status: "metadata_found",
           supports_automatic_registration: false,
+          supports_client_metadata: null,
           authorization_endpoint: "https://example.com/authorize",
           token_endpoint: "https://example.com/token",
         })
@@ -1296,6 +1376,7 @@ describe("inline authentication", () => {
           JSON.stringify({
             status: "metadata_found",
             supports_automatic_registration: false,
+            supports_client_metadata: null,
             authorization_endpoint: "https://identity.example.com/authorize",
             token_endpoint: "https://identity.example.com/token",
           })
@@ -1329,6 +1410,7 @@ describe("inline authentication", () => {
           discovery: {
             status: "metadata_found",
             supports_automatic_registration: false,
+            supports_client_metadata: null,
             authorization_endpoint: "https://identity.example.com/authorize",
             token_endpoint: "https://identity.example.com/token",
           },
@@ -1467,6 +1549,7 @@ describe("inline authentication", () => {
           discovery: {
             status: "metadata_found",
             supports_automatic_registration: true,
+            supports_client_metadata: null,
             authorization_endpoint: "https://example.com/authorize",
             token_endpoint: "https://example.com/token",
           },

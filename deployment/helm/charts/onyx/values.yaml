@@ -443,7 +443,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "10"
+      onyx.app/nginx-config-version: "11"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1247,6 +1247,59 @@ mcpServer:
   tolerations: []
   affinity: {}
 
+webhookServer:
+  extraEnv: []
+  # Runs the webhook server. It serves health and metrics only; the route that
+  # receives connector events comes later. Creates the deployment; the service
+  # always exists so nginx can name it. The ingress and servicemonitor also
+  # need `ingress.enabled` and `monitoring.serviceMonitors.enabled`. With
+  # ingress.enabled=false the bundled nginx routes /webhook instead.
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  # Prefix the ingress routes here, stripped before the app sees it.
+  ingressPath: /webhook
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+  deploymentLabels:
+    app: webhook-server
+  service:
+    type: ClusterIP
+    servicePort: 8091
+    targetPort: webhook-port
+    portName: webhook-port
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
@@ -1844,6 +1897,9 @@ configMap:
   LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_ACL_READ_CONCURRENCY: ""
   HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
@@ -1869,6 +1925,10 @@ configMap:
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
+  # Slack cloud for all Slack features: the bot, the connector, federated
+  # search, Slack OAuth and the Craft Slack app. Default
+  # https://slack.com/api/. Set to https://slack-gov.com/api/ for GovSlack.
+  SLACK_API_URL: ""
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging

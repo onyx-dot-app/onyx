@@ -16,7 +16,7 @@ from onyx.connectors.microsoft_utils.config import (
 )
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
-    acquire_graph_token,
+    acquire_app_token,
     build_msal_app,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
@@ -489,7 +489,7 @@ def build_fixture_reader(config: FixtureConfig) -> OneDriveFixtureReader:
     )
 
     def get_access_token() -> str:
-        response = acquire_graph_token(auth.app, config.graph_api_host)
+        response = acquire_app_token(auth.app, config.graph_api_host)
         access_token = response.get("access_token")
         if not isinstance(access_token, str) or not access_token:
             error = response.get("error", "unknown")

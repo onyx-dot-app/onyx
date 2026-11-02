@@ -86,7 +86,6 @@ function transformValues(
 
   return {
     modelName: imageProvider.model_name,
-    imageProviderId: imageProvider.image_provider_id,
     provider: VERTEXAI_PROVIDER_NAME,
     customConfig,
   };

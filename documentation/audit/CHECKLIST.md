@@ -2,7 +2,7 @@
 
 Review unit: one MDX page (plus the images it references). Compare against the current Onyx app (running dev stack)
 and the feature map in the onyx repo (`.agents/feature-map/components/<component>.md`,
-listed per page in `audit/manifest.json`).
+or `components/connectors/<component>.md` for a connector source, listed per page in `audit/manifest.json`).
 
 Audience rule: customer-facing. Describe what a user or admin can do and how.
 No internal implementation detail (module names, Celery queues, DB tables)
@@ -14,9 +14,9 @@ unless an admin needs it to operate the product. Never document Knowledge Graph 
 - [ ] Every UI label, menu path, button, and setting name exists verbatim in the
       current app (check the running stack, then `web/src`).
 - [ ] Every step in a flow is still the real order of operations.
-- [ ] Every claim about behaviour matches the feature-map component (sections
-      1, 4, 5, 7). Flag edition/tier gating (CE / Business / Enterprise / Cloud) where it applies,
-      using the snippet `snippets/enterprise-edition.mdx`.
+- [ ] Every claim about behaviour matches the feature-map component (User
+      experience, Architecture, Contracts and traps). Flag edition/tier gating (CE / Business / Enterprise / Cloud)
+      where it applies, using the snippet `snippets/enterprise-edition.mdx`.
 - [ ] Removed, renamed, or newly added capabilities are reflected
       (e.g. Actions -> Plugins, Assistants -> Agents, Vespa -> OpenSearch).
 - [ ] Env vars / config keys exist in `backend/onyx/configs/app_configs.py` (or

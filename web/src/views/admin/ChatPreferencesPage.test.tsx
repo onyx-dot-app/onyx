@@ -123,8 +123,9 @@ describe("ChatPreferencesPage", () => {
       "Default Language",
       "Chat Naming Model",
       "Multi-Model Generation",
-      "Search Selection Model",
       "Search Mode",
+      "Auto-Detect Search Filters",
+      "Search Decision Model",
       "Team Name",
     ].map((text) => screen.getByText(text));
     ordered.slice(1).forEach((node, i) => {

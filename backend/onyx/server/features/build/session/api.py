@@ -963,6 +963,8 @@ class ScheduledRunContextResponse(BaseModel):
     status: ScheduledTaskRunStatus
     started_at: datetime
     finished_at: datetime | None
+    revision: int
+    viewed_revision: int | None
 
 
 @router.get("/{session_id}/scheduled-run-context")
@@ -991,6 +993,8 @@ def get_session_scheduled_run_context(
         status=context["status"],
         started_at=context["started_at"],
         finished_at=context["finished_at"],
+        revision=context["revision"],
+        viewed_revision=context["viewed_revision"],
     )
 
 

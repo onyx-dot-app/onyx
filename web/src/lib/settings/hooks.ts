@@ -1,7 +1,6 @@
 "use client";
 
 import useSWR from "swr";
-import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import useCCPairs from "@/hooks/useCCPairs";
 import { errorHandlingFetcher, isNotFoundError } from "@/lib/fetcher";
@@ -47,6 +46,20 @@ const isEnterpriseSettingsMissing = isNotFoundError;
  * Derived fields (`appName`, `vectorDbEnabled`) are pre-computed so callers
  * never have to re-derive them or fetch enterprise settings separately.
  */
+// One cache-buster per enterprise settings response, shared by every caller.
+// SWR hands every caller the same data object until it fetches new settings,
+// so a component that mounts later (e.g. the sidebar after a page switch)
+// gets the same logo URL, and the browser shows the image it already has.
+const logoBusters = new WeakMap<EnterpriseSettings, number>();
+
+function logoBusterFor(settings: EnterpriseSettings): number {
+  const existing = logoBusters.get(settings);
+  if (existing !== undefined) return existing;
+  const buster = Date.now();
+  logoBusters.set(settings, buster);
+  return buster;
+}
+
 export function useSettings(): AppSettings {
   // Skip core settings on /auth/* routes: unauthenticated callers 403 there, and
   // the login shell only needs enterprise-derived `appName` (fetched below).
@@ -96,12 +109,11 @@ export function useSettings(): AppSettings {
     }
   );
 
-  // Cache-buster: the logo endpoint URL never changes, so the browser serves
-  // a cached image even after an admin uploads a new logo. Regenerating this
-  // timestamp whenever the enterprise settings reference changes forces a
-  // re-fetch. We use referential equality on the SWR data (compare: a===b),
-  // so this only fires when SWR actually receives new enterprise data.
-  const logoBuster = useMemo(() => Date.now(), [enterprise]);
+  // Cache-buster: the logo endpoint URL never changes, so the browser would
+  // serve a cached image even after an admin uploads a new logo. A new
+  // timestamp per settings response forces a re-fetch. SWR compares the data
+  // by reference (compare: a===b), so a new response is a new object.
+  const logoBuster = enterprise ? logoBusterFor(enterprise) : 0;
 
   return {
     ...core,

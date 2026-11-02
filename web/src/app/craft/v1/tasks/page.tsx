@@ -18,6 +18,7 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
+import UnseenMarker from "@/app/craft/components/UnseenMarker";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
@@ -50,7 +51,8 @@ interface RowActionHandlers {
 
 function buildColumns(
   handlers: RowActionHandlers,
-  t: TasksListTranslate
+  t: TasksListTranslate,
+  unviewedLabel: string
 ): TableColumn<ScheduledTaskListItem>[] {
   return [
     {
@@ -59,10 +61,25 @@ function buildColumns(
       title: t("columns.name"),
       weight: 25,
       sortable: false,
-      cell: (value) => (
-        <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
-          {value}
-        </Text>
+      cell: (value, row) => (
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          gap={2}
+          width="fit"
+          height="fit"
+        >
+          {row.unviewed_run_count > 0 && (
+            <UnseenMarker label={unviewedLabel} className="shrink-0" />
+          )}
+          <Text
+            font="main-ui-body"
+            color="text-05"
+            wordWrap="whitespace-nowrap"
+          >
+            {value}
+          </Text>
+        </Section>
       ),
     },
     {
@@ -189,6 +206,8 @@ export default function ScheduledTasksListPage() {
     }
   }, [pendingDelete, refresh, t]);
 
+  const tTasks = useTranslations("craft.tasks");
+  const unviewedLabel = tTasks("unviewedResults");
   const columns = useMemo(
     () =>
       buildColumns(
@@ -196,9 +215,10 @@ export default function ScheduledTasksListPage() {
           busyTaskId,
           onDelete: (task) => setPendingDelete(task),
         },
-        t
+        t,
+        unviewedLabel
       ),
-    [busyTaskId, t]
+    [busyTaskId, t, unviewedLabel]
   );
 
   const headerActions = useMemo(

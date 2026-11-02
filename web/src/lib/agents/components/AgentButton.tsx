@@ -73,7 +73,10 @@ export function AgentButton({ agent }: AgentButtonProps) {
   const isCurrentAgent = activeAgent?.id === agent.id;
   const appPosition = useAppPosition();
 
-  async function handleClick() {
+  const agentLink = appPosition.linkToAgent(agent.id);
+
+  async function handleClick(event: React.MouseEvent<HTMLElement>) {
+    agentLink.onClick(event);
     if (isActuallyPinned) return;
     await togglePinnedAgent(agent, true);
   }
@@ -84,7 +87,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
         <SidebarTab
           key={agent.id}
           icon={() => <AgentAvatar agent={agent} />}
-          href={`/app?agentId=${agent.id}`}
+          href={agentLink.href}
           onClick={handleClick}
           selected={appPosition.isAgentTabHighlightable() && isCurrentAgent}
           rightChildren={

@@ -1,272 +1,202 @@
 # Discord Bot
 
-> A `discord.py` client that answers messages in registered Discord servers. It is
-> a separate implementation from the Slack bot, not a reuse of it, and it does not
-> map a Discord user to an individual Onyx identity: every message in a tenant is
-> answered as one shared service account.
+> A `discord.py` client that answers messages in registered Discord servers by
+> calling the public chat API over HTTP. It uses one service API key per tenant,
+> so every Discord member in a tenant is answered as the same Onyx identity.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** integrations
-**Edition:** CE
-**Owns:**
-`backend/onyx/onyxbot/discord/` (`client.py`, `handle_message.py`, `handle_commands.py`,
-`cache.py`, `api_client.py`, `constants.py`, `exceptions.py`, `utils.py`),
-`backend/onyx/db/discord_bot.py`, `backend/onyx/server/manage/discord_bot/`
-(`api.py`, `models.py`, `utils.py`), `web/src/app/admin/discord-bot/`
+**Verified against:** `73e0ae3c31` (2026-10-28)
+**Edition:** CE. On cloud, Onyx manages the bot token.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-An admin configures a Discord bot token once per deployment (self-hosted) or gets
-one managed by Onyx on Cloud, then creates a guild registration at
-`/admin/discord-bot` (`web/src/app/admin/discord-bot/page.tsx`). This produces a
-one-time registration key. A Discord server admin runs `!register <key>` in any
-channel of their server, which links that Discord guild to the tenant
-(`handle_commands.py:handle_registration_command`). The Onyx admin then configures
-the guild at `/admin/discord-bot/[guild-id]`. Guild configs are enabled by default and
-channel configs are disabled by default, so the admin enables the channels the bot
-must answer in. The admin also chooses a default persona per guild and optionally
-overrides it per channel
-(`web/src/app/admin/discord-bot/[guild-id]/page.tsx`). In an enabled channel, the
-bot answers when @mentioned, or always if `require_bot_invocation` is off, or
-implicitly when a user replies to the bot or posts in a bot-owned thread
-(`handle_message.py:check_implicit_invocation`). Answers
-reply to the message by default. With `thread_only_mode` on, the bot makes a
-dedicated thread and answers there. Inside an existing thread it answers in
-that thread (`handle_message.py:send_response`).
-
----
-
-## 2. Surfaces
-
-| Surface | Where |
-|---|---|
-| `/admin/discord-bot` | `web/src/app/admin/discord-bot/page.tsx`, guild list and bot config card |
-| `/admin/discord-bot/[guild-id]` | `web/src/app/admin/discord-bot/[guild-id]/page.tsx`, channel table and persona overrides |
-| `GET/POST/DELETE /manage/admin/discord-bot/config` | `discord_bot/api.py`, self-hosted-only bot token management |
-| `GET/POST/PATCH/DELETE /manage/admin/discord-bot/guilds` (and `/guilds/{id}`) | `discord_bot/api.py` |
-| `GET /manage/admin/discord-bot/guilds/{config_id}/channels` | `discord_bot/api.py` |
-| `PATCH /manage/admin/discord-bot/guilds/{guild_config_id}/channels/{channel_config_id}` | `discord_bot/api.py` |
-| `DELETE /manage/admin/discord-bot/service-api-key` | `discord_bot/api.py` |
-| `!register <key>` Discord command | `handle_commands.py:handle_registration_command` |
-| `!sync-channels` Discord command | `handle_commands.py:handle_sync_channels_command` |
-| `DISCORD_BOT_TOKEN`, `DISCORD_BOT_INVOKE_CHAR` env vars | `backend/onyx/configs/app_configs.py` (`DISCORD_BOT_TOKEN`, `DISCORD_BOT_INVOKE_CHAR`) |
-
-Bot config API access is refused with 403 on Cloud (`MULTI_TENANT`) or when
-`DISCORD_BOT_TOKEN` is set, since both mean the token is managed outside the
-admin panel (`discord_bot/api.py:_check_bot_config_api_access`).
+- **An Onyx admin** with the manage-bots permission sets the bot token on the
+  Discord Bot admin page. Only self-hosted admins can, because cloud and the
+  `DISCORD_BOT_TOKEN` env var manage the token elsewhere. The admin creates a
+  server registration and gets a one-time key. The customer guide is
+  `documentation/admins/miscellaneous/discord_bot.mdx`.
+- **A Discord server admin** (Administrator or Manage Server) runs
+  `!register <key>` in any channel. The bot links the server to the tenant and
+  lists its text and forum channels. A failed registration is reported by DM
+  and the command message is deleted.
+- **The Onyx admin then enables channels.** A registered server is on, but
+  every channel starts off. The admin picks a default agent for the server and
+  can override it per channel. `!sync-channels` adds new channels (off) and
+  removes deleted ones.
+- **A Discord member** in an enabled channel @mentions the bot, replies to the
+  bot, or posts in a thread the bot started. A channel can also answer every
+  message. The bot reacts while it works, then replies with the answer and up
+  to five sources, split into 2000-character messages. In thread-only mode it
+  answers in a new thread.
+- **Every member gets the same document access.** Answers use the service
+  account's access, not the member's. A DM to the bot gets a fixed "I can't
+  respond to DMs" reply. A failed answer gets an apology in a thread.
 
 ---
 
-## 3. Data model
+## Scope
 
-`DiscordBotConfig` (`backend/onyx/db/models.py:DiscordBotConfig`): one row per tenant, fixed
-`id='SINGLETON'`, holds the encrypted bot token when not set via env var.
+This component owns the bot process, its guild-to-tenant cache, the
+registration and sync commands, the guild and channel config records with their
+admin API and admin pages, and the per-tenant service API key that the bot
+creates.
 
-`DiscordGuildConfig` (`models.py:DiscordGuildConfig`): one row per Discord server in that tenant. `guild_id` is
-`NULL` until the `!register` command completes it; `registration_key` is the
-one-time key embedding the tenant id (`discord_bot/utils.py:generate_discord_registration_key`).
-Holds `default_persona_id` and `enabled`.
+Its neighbours own:
+- [[onyx-api]]: the chat route the bot calls.
+- [[core-chat-loop]]: the turn behind that route.
+- [[auth-and-identity]]: API-key authentication.
+- [[rate-and-usage-limits]]: budgets and the API-call cap.
+- CROSS-CUTTING.md: the acting-user rules for Discord and the other surfaces.
 
-`DiscordChannelConfig` (`models.py:DiscordChannelConfig`): one row per channel, foreign-keyed to a
-guild config with `ondelete="CASCADE"`. Holds `require_bot_invocation`,
-`thread_only_mode`, `persona_override_id`, `enabled`, and Discord-derived
-`channel_type`/`is_private` metadata.
-
-The Discord service API key is a regular `ApiKey` row named
-`DISCORD_SERVICE_API_KEY_NAME` (`configs/constants.py`, value `discord-bot-service`), one per tenant,
-created lazily by `db/discord_bot.py:get_or_create_discord_service_api_key`.
+The Discord bot has no standard answers ([[standard-answers]] is Slack only).
+The Discord connector is a separate feature that indexes Discord messages.
 
 ---
 
-## 4. How it works
+## Architecture
 
 ```
-OnyxDiscordClient.on_message                                    client.py
-  ├─ handle_registration_command / handle_sync_channels_command  handle_commands.py
-  ├─ cache.get_tenant(guild_id) -> tenant_id                     cache.py
-  ├─ cache.get_api_key(tenant_id) -> service API key             cache.py
-  ├─ should_respond(message, tenant_id, bot_user)                handle_message.py
-  │     -> loads DiscordGuildConfig + DiscordChannelConfig by Discord ids
-  └─ process_chat_message(...)                                   handle_message.py
-        ├─ builds thread/reply-chain context
-        └─ OnyxAPIClient.send_chat_message(message, api_key, persona_id)  api_client.py
-              -> POST {api_server}/chat/send-chat-message, Bearer <service API key>
+client.py:OnyxDiscordClient.on_message
+  ignore bots and DMs (handle_dm)
+  handle_registration_command / handle_sync_channels_command
+  cache.get_tenant(guild_id) -> tenant_id              in-memory, refreshed every 60 s
+  cache.get_api_key(tenant_id) -> raw service key
+  should_respond                                       reads guild + channel config from the DB;
+                                                       threads use the parent channel's config
+  process_chat_message
+    thread history or reply chain -> one message text
+    OnyxAPIClient.send_chat_message                    POST /chat/send-chat-message,
+                                                       Bearer <service key>, stream=False
+    _append_citations, send_response
 ```
 
-1. `DiscordCacheManager` (`cache.py`) refreshes every `CACHE_REFRESH_INTERVAL`
-   (60s, `constants.py`), loading every tenant's enabled guild ids and
-   provisioning a service API key only for a tenant that has at least one
-   enabled, registered guild and no cached key
-   (`cache.py:_load_tenant_data`).
-2. `on_message` (`client.py:OnyxDiscordClient.on_message`) resolves the guild's
-   tenant purely from this in-memory cache, not a per-request DB lookup.
-3. `should_respond` (`handle_message.py:should_respond`) looks up the
-   `DiscordGuildConfig` and `DiscordChannelConfig` for the message's guild and
-   channel (threads resolve to their parent channel's config), then decides
-   whether to respond and which `persona_id` to use: channel override, else
-   guild default.
-4. `process_chat_message` (`handle_message.py:process_chat_message`) builds
-   conversation context from thread history or the reply chain
-   (`_build_thread_context`, `_build_reply_chain_context`), then calls
-   `OnyxAPIClient.send_chat_message` with the **tenant's shared service API
-   key**, never anything derived from the Discord message author.
-5. The API client authenticates as that key's own Onyx user (see §5) and sends a
-   non-streaming `SendMessageRequest` with `origin=MessageOrigin.DISCORDBOT`
-   to `/chat/send-chat-message` (`api_client.py:send_chat_message`).
-6. The answer is formatted with citations and chunked to Discord's 2000-character
-   limit before being sent (`handle_message.py:_split_message`, `send_response`).
+**One client, many tenants.** One process serves every tenant.
+`onyxbot/discord/cache.py:DiscordCacheManager` maps each enabled, registered
+guild to its tenant, and each tenant to its service API key. The registration
+key carries the tenant id (`parse_discord_registration_key`), which is how
+`!register` finds the tenant before any cache entry exists.
+`backend/onyx/onyxbot/discord/DISCORD_MULTITENANT_README.md` explains the
+design.
+
+**The service API key.** `db/discord_bot.py:get_or_create_discord_service_api_key`
+creates an `ApiKey` named `DISCORD_SERVICE_API_KEY_NAME`. The database keeps
+only the hash, so when the cache has no raw key the function regenerates the
+key and overwrites the stored hash.
+
+**Context.** The bot puts up to `MAX_CONTEXT_MESSAGES` earlier messages and the
+author's display name into the message text itself. Each Discord message
+starts a new chat session, so the API sees no history.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-1. **No Discord user maps to an Onyx user.** Every message in a tenant's
-   registered guilds is answered using one shared `DiscordBotConfig`-adjacent
-   service API key, whose owning `User` row is a synthetic API-key user created
-   by `insert_api_key` (`backend/onyx/db/api_key.py`), not the message author.
-   Document-level ACL, group membership, and permission-synced access are all
-   evaluated against that single service identity for every Discord user in the
-   server. **This is the security-relevant fact**: a channel-scoped persona
-   restricts which agent responds, but it does not scope which documents that
-   persona's searches can see per-Discord-user, because there is no per-user
-   identity to scope against.
-2. **Rate limiting and usage are tenant-wide, not per-Discord-user.** Because
-   every request authenticates as the same API-key user,
-   `check_token_rate_limits`/`check_api_key_usage` on
-   `chat_backend.py:handle_send_chat_message` throttle all of the tenant's Discord guilds together (one service key per tenant,
-   `cache.py:DiscordCacheManager._api_keys`).
-   The EE token check holds an API-key user to GLOBAL budgets only
-   (`ee/onyx/server/query_and_chat/token_limit.py:_check_token_rate_limits`), so a
-   per-user or per-group budget never applies to Discord answers.
-   Contrast [[slack-bot]], where each Slack sender is provisioned as their own
-   Onyx user (`onyx/db/users.py:add_slack_user_if_not_exists`), so rate limits
-   and document ACLs apply per person. See [[rate-and-usage-limits]].
-3. **`origin=MessageOrigin.DISCORDBOT` never survives API-key auth.**
-   `chat_backend.py:handle_send_chat_message` overrides `origin` to
-   `MessageOrigin.API` whenever the request carries a hashed API key or PAT
-   (`chat_backend.py:handle_send_chat_message`), which every Discord bot request does. The
-   `DISCORDBOT` enum value is set client-side but is unobservable server-side.
-4. **A registration key is single-use and tenant-bound.** `register_guild`
-   requires the guild's `guild_id` to still be `NULL`
-   (`handle_commands.py:_register_guild`); a second `!register` with the same
-   key is refused. The cache keeps one tenant per `guild_id`
-   (`cache.py:DiscordCacheManager._guild_tenants`), and `_register_guild`
-   refuses a guild that the cache already maps to a tenant. The database does
-   not enforce this across tenants, because each tenant has its own
-   `DiscordGuildConfig` table. Two tenants can register the same guild if the
-   cache is stale or not shared. The last cache refresh decides the routing.
-5. **New channels are disabled by default.** `create_channel_config` and
-   `bulk_create_channel_configs` (`db/discord_bot.py`) never set `enabled=True`;
-   an admin must opt a channel in explicitly after `!sync-channels` or initial
-   registration.
-6. **Deleting all guild configs on Cloud deletes the service API key.**
-   `discord_bot/api.py:delete_guild_request` checks `MULTI_TENANT` and calls
-   `delete_discord_service_api_key` once no guilds remain, which also deletes
-   the key's synthetic user (`db/discord_bot.py:delete_discord_service_api_key`).
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[core-chat-loop]]: every Discord answer is one `/chat/send-chat-message` call
-  (`api_client.py:send_chat_message`); the Discord bot does not touch the loop
-  internals directly.
-- [[access-control]]: document visibility for every Discord answer is whatever
-  the service API key's synthetic user can see, not the Discord author's
-  permissions; see §5.1.
-- [[agents-personas]]: `default_persona_id` / `persona_override_id` select the
-  persona; there is no per-user persona choice.
-- [[editions-and-gating]]: bot config API access is refused outright on Cloud
-  (`_check_bot_config_api_access`), where the bot token is managed externally.
-
-**Depended on by**
-- Nothing in the codebase reads Discord-specific state back out; it is a
-  terminal integration.
-
-**Compare to** [[slack-bot]]: the Slack bot resolves a real Onyx user per Slack
-sender via email (`add_slack_user_if_not_exists`, `get_user_by_email`) and
-evaluates per-channel standard answers (see [[standard-answers]]) before falling
-back to the LLM. Discord has neither: no per-user identity, and no standard-answer
-integration in `handle_message.py`.
+1. `single-bot-process` **Run exactly one bot process.** The Helm template
+   (`deployment/helm/charts/onyx/templates/discordbot.yaml`) pins
+   `replicas: 1`. A second process starts with an empty cache, so it
+   regenerates each tenant's service key. The first process keeps its cached
+   key and gets 401s until its next restart.
+2. `no-member-identity` **No Discord member maps to an Onyx user.** Document
+   ACLs, groups and budgets all apply to the service key's user. A channel
+   agent chooses which agent answers. It does not limit which documents each
+   member can reach. Enabling a private Discord channel does not make its
+   answers private to its members.
+3. `tenant-shared-budget` **Budgets throttle the whole tenant together.** Every
+   request carries the same key, so `check_token_rate_limits` and
+   `check_api_key_usage` on
+   `server/query_and_chat/chat_backend.py:handle_send_chat_message` count all
+   guilds as one caller. Per-user and per-group budgets do not apply to API-key
+   users ([[rate-and-usage-limits#shared-principals-global-only]]).
+4. `discordbot-origin-overwritten` **`MessageOrigin.DISCORDBOT` does not reach
+   the server.** `handle_send_chat_message` sets the origin to
+   `MessageOrigin.API` for any request with an API key or PAT. Do not branch on
+   `DISCORDBOT` server-side.
+5. `routing-depends-on-cache` **Routing depends on the cache.**
+   `onyxbot/discord/client.py:OnyxDiscordClient.on_message` finds the tenant
+   only in `DiscordCacheManager`, which holds enabled guilds of
+   tenants that are not gated
+   (`onyxbot/discord/cache.py:DiscordCacheManager.refresh_all`). A gated
+   tenant's guilds get no reply. Registration calls `refresh_guild` at once.
+   Enabling a guild through the admin API waits for the next refresh. Disabling
+   takes effect at once, because
+   `onyxbot/discord/handle_message.py:should_respond` reads `enabled` from the
+   database on each message.
+6. `registration-key-single-use` **A registration key is single-use, and a
+   guild maps to one tenant only through the cache.**
+   `onyxbot/discord/handle_commands.py:_register_guild` refuses
+   a key whose `guild_id` is set, and a guild that the cache already maps. Each
+   tenant has its own `DiscordGuildConfig` table, so no database constraint
+   stops two tenants from registering one guild while the cache does not hold
+   it, for example when the guild is disabled.
+7. `channels-start-disabled` **New channels start disabled, and sync never
+   enables.** `db/discord_bot.py:create_channel_config`,
+   `bulk_create_channel_configs` and `sync_channel_configs` rely on the `enabled` server default of false.
+8. `cloud-last-guild-deletes-key` **On cloud, deleting the last guild deletes
+   the service key and its user.**
+   `server/manage/discord_bot/api.py:delete_guild_request` calls
+   `delete_discord_service_api_key` when no guilds remain.
+9. `cached-key-trusted` **The bot never checks its cached key against the
+   database.** `DiscordCacheManager._load_tenant_data` returns the cached raw
+   key whenever one exists, and creates a key only when the cache has none. A
+   key deleted or replaced outside this process
+   (`server/manage/discord_bot/api.py:delete_service_api_key_endpoint`,
+   `delete_bot_config_endpoint`, a second process, or a cloud guild deletion
+   followed by a new registration before the next refresh) gives 401s until
+   the bot restarts or the tenant has no enabled guild at a refresh.
 
 ---
 
-## 7. Blast radius
+## Known issues
 
-| If your change... | Also check |
-|---|---|
-| adds a new field to `DiscordChannelConfig` or `DiscordGuildConfig` | the corresponding Pydantic model in `server/manage/discord_bot/models.py` and the admin frontend forms in `web/src/app/admin/discord-bot/` |
-| changes how `should_respond` resolves persona or mention rules | `backend/tests/unit/onyx/onyxbot/discord/test_should_respond.py` |
-| changes the service API key lifecycle | `backend/tests/integration/tests/discord_bot/test_discord_bot_api.py`, `test_discord_bot_db.py`; whether Cloud's guild-delete-deletes-key invariant (§5.6) still holds |
-| adds any per-Discord-user identity resolution | re-verify §5.1 and §5.2 top to bottom; this changes the document's central security claim |
-| changes registration key format or parsing | `discord_bot/utils.py:parse_discord_registration_key`, `backend/tests/integration/multitenant_tests/discord_bot/test_discord_bot_multitenant.py` |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-cd backend && uv run pytest tests/unit/onyx/onyxbot/discord/
-cd backend && uv run pytest tests/integration/tests/discord_bot/
-cd backend && uv run pytest tests/integration/multitenant_tests/discord_bot/
-cd backend && uv run pytest tests/external_dependency_unit/discord_bot/
-```
-
-Playwright coverage exists at `web/tests/e2e/admin/discord-bot/` (`bot-config.spec.ts`,
-`guilds-list.spec.ts`, `channel-config.spec.ts`, `admin-workflows.spec.ts`); it
-covers the admin panel, not live Discord message handling (the bot client itself
-has no e2e coverage since it requires a live Discord connection).
-
-### Manual reproduction
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Set `DISCORD_BOT_TOKEN` or create a bot config via `/admin/discord-bot`.
-3. Create a guild registration, run `!register <key>` in the target Discord
-   server, then enable at least one channel (the guild is enabled by default).
-4. @mention the bot in an enabled channel and confirm a response with citations.
-5. Grep `backend/log/api_server_debug.log` for `discordbot` or the tenant id to
-   confirm the request authenticated with the service API key.
-
-### What "working" looks like
-
-- A registered, enabled channel responds to mentions (or all messages, if
-  `require_bot_invocation` is off) with a chunked, citation-annotated answer.
-- A disabled channel or unregistered guild never responds.
-- The service API key is created once per tenant and reused, not regenerated on
-  every message.
+- **A bot token change needs a process restart.**
+  `onyxbot/discord/client.py:main` reads the token with
+  `onyxbot/discord/utils.py:get_bot_token` once, before `bot.run`. It does not
+  poll for a new token while the bot runs.
+- **The whole thread is sent as one user message.** Context is pasted into the
+  message text, so it is saved in chat history and counts against token
+  budgets on each turn.
 
 ---
 
-## 9. Footguns
+## Dependencies
 
-- **The persona is per-channel, not per-user.** Two different Discord members in
-  the same channel always get answers from the same persona and the same
-  document-access scope. There is no way, today, to give one Discord user
-  broader document access than another within a channel.
-- **`MessageOrigin.DISCORDBOT` is effectively dead on the server side.** It gets
-  overwritten to `MessageOrigin.API` before any handler sees it (§5.3); do not
-  rely on it for telemetry or behavior branching in `chat_backend.py`.
-- **The cache decides which guilds route to a tenant at message time.** A guild
-  enabled in the database will not answer until `DiscordCacheManager.refresh_all`
-  or `refresh_guild` picks it up; registration calls `refresh_guild` immediately,
-  but enabling a guild via the admin API does not proactively refresh the bot's
-  cache; it waits for the next periodic refresh (up to 60s). Disabling takes
-  effect on the next message, because `handle_message.py:should_respond` reads
-  `guild_config.enabled` from the database each time.
-- **DMs are explicitly unsupported.** `handle_commands.py:handle_dm` always
-  replies that it cannot respond in DMs and points to the public Onyx Discord.
-- **`!sync-channels` never re-enables anything.** It adds new channels
-  (always disabled), removes deleted channels, and refreshes the stored name,
-  `channel_type`, and `is_private` of existing channels. It does not change
-  `enabled` (`db/discord_bot.py:sync_channel_configs`).
+- [[onyx-api]]: the bot is a client of `POST /chat/send-chat-message`.
+- [[core-chat-loop]]: runs each answer.
+- [[access-control]]: document scope is the service key user's scope.
+- [[agents-personas]]: the guild default and the channel override select the agent.
+- [[multi-tenancy]]: the cache maps guilds to tenants and sets the tenant context for each load.
+- [[auth-and-identity]]: the service API key and its user.
+- [[fleet-telemetry]]: Discord queries report channel `api`
+  ([[fleet-telemetry#discord-reports-api-channel]]).
 
 ---
 
-Cross-links: [[slack-bot]], [[core-chat-loop]], [[access-control]],
-[[editions-and-gating]], [[rate-and-usage-limits]], [[agents-personas]],
-[[chat-persistence]]
+## Recipes
+
+- `run-bot-locally` **Run the bot locally.** Use the "Discord Bot" entry in
+  `.vscode/launch.json`, or run `onyx/onyxbot/discord/client.py` from
+  `backend/`. Set the token on the admin page or in `DISCORD_BOT_TOKEN`; with
+  no token the process waits and polls. Create a registration on the admin
+  page, run `!register <key>` in a test server, then enable one channel.
+- `investigate-no-reply` **Investigate "the bot does not reply".** Read the `discord_bot` process log.
+  A DM always gets the fixed reply. In a server, check in order: the guild is
+  in the cache ([[#routing-depends-on-cache]]; wait one refresh after an admin
+  enable), the tenant has a cached API key (a "No API key cached" warning), the
+  channel is enabled ([[#channels-start-disabled]]; threads use the parent
+  channel), and the message mentions the bot or replies to it when the channel
+  requires an invocation. A run of 401s after a deploy means two bot processes
+  ([[#single-bot-process]]). A run of 401s after an admin deleted the service
+  key needs a bot restart ([[#cached-key-trusted]]).
+
+---
+
+## Verification
+
+- Unit: `backend/tests/unit/onyx/onyxbot/discord/`.
+- External dependency: `backend/tests/external_dependency_unit/discord_bot/`.
+- Integration: `backend/tests/integration/tests/discord_bot/` and
+  `backend/tests/integration/multitenant_tests/discord_bot/`.
+- Playwright covers the admin pages only: `web/tests/e2e/admin/discord-bot/`.
+  Message handling needs a live Discord server: register, enable one channel,
+  mention the bot, and confirm a cited answer.

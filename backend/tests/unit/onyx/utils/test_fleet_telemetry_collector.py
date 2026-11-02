@@ -103,6 +103,7 @@ def _job_row(**overrides: Any) -> dict[str, Any]:
         "groups_processed": 0,
         "memberships_synced": 0,
         "error_count": 0,
+        "error_sample": None,
         "last_progress_at": None,
         "last_heartbeat_at": None,
     }
@@ -350,6 +351,33 @@ def test_job_data_reports_duration_and_failure() -> None:
     assert "last_progress_at" not in unlinked
 
 
+def test_job_data_reports_an_error_category_for_failed_runs_only() -> None:
+    failed: dict[str, Any] = collector.job_data(
+        _job_row(
+            state="failed",
+            ended_at=_NOW,
+            error_sample="HTTP 401 Unauthorized for PRIVATE-SITE",
+        )
+    )
+    assert failed["error_code"] == "auth"
+    assert "PRIVATE" not in json.dumps(failed) and "error_sample" not in failed
+    assert fleet.sanitize_data("job", failed) == failed
+    # A canceled run's message names an internal cause, not why a sync failed.
+    canceled: dict[str, Any] = collector.job_data(
+        _job_row(
+            state="canceled",
+            ended_at=_NOW,
+            error_sample="Canceled: the connector is being deleted",
+        )
+    )
+    # A partial doc sync counts its documents with errors and has no message.
+    partial: dict[str, Any] = collector.job_data(
+        _job_row(state="completed_with_errors", ended_at=_NOW, error_count=3)
+    )
+    assert "error_code" not in canceled and "error_code" not in partial
+    assert partial["error_count"] == 3
+
+
 def test_job_data_reports_sync_attempt_progress() -> None:
     running: dict[str, Any] = collector.job_data(
         _job_row(
@@ -585,10 +613,10 @@ def test_a_finished_attempt_is_sent_at_its_end_and_again_only_for_late_batches(
     assert late["occurred_at"] == failed["occurred_at"]
 
 
-def test_a_finished_attempt_past_the_horizon_is_not_sent(
+def test_finished_work_past_the_horizon_is_not_sent(
     source: _Source, sender: fleet.BoundedTelemetry
 ) -> None:
-    # A bulk update touches finished attempts, one of them from long ago.
+    # A later update touches finished rows, some of them from long ago.
     now: datetime = datetime.now(timezone.utc)
     source.attempts = [
         _attempt_row(
@@ -599,17 +627,27 @@ def test_a_finished_attempt_past_the_horizon_is_not_sent(
         )
         for attempt_id, days in ((1, 200), (2, 170))
     ]
+    source.jobs = [
+        _job_row(
+            job_id=f"port:{job_id}",
+            job_type="migration",
+            state="failed",
+            ended_at=now - timedelta(days=days),
+            revision_at=now,
+        )
+        for job_id, days in ((1, 200), (2, 170))
+    ]
     source.stages = []
     collector.collect_snapshots("public")
-    sent: list[int] = [
-        event["data"]["attempt_id"]
+    sent: list[int | str] = [
+        event["data"].get("attempt_id") or event["data"]["job_id"]
         for event in sender._take_batch()
-        if event["event_type"] == "attempt"
+        if event["event_type"] in ("attempt", "job")
     ]
-    assert sent == [2]
+    assert sent == [2, "port:2"]
 
 
-def test_a_finished_job_replaces_its_running_state(
+def test_a_finished_job_is_sent_once_at_its_end(
     source: _Source, sender: fleet.BoundedTelemetry
 ) -> None:
     collector.collect_snapshots("public")
@@ -617,11 +655,28 @@ def test_a_finished_job_replaces_its_running_state(
     running_at: datetime = datetime.fromisoformat(running["occurred_at"])
     # The job ended before that pass started, but its transaction committed late.
     ended: datetime = running_at - timedelta(seconds=1)
-    source.jobs = [_job_row(state="success", ended_at=ended, revision_at=ended)]
+
+    def finished(end: datetime) -> list[dict[str, Any]]:
+        return [_job_row(state="success", ended_at=end, revision_at=end)]
+
+    source.jobs = finished(ended)
     collector.collect_snapshots("public")
-    finished: dict[str, Any] = _only_event(sender, "job")
-    assert finished["data"]["state"] == "success"
-    assert datetime.fromisoformat(finished["occurred_at"]) > running_at
+    done: dict[str, Any] = _only_event(sender, "job")
+    assert done["data"]["state"] == "success"
+    assert done["occurred_at"] == ended.isoformat()
+    # The service compares revisions before times.
+    assert done["revision"] > running["revision"]
+    # Later passes repeat the finished state's event ID.
+    collector.collect_snapshots("public")
+    assert _only_event(sender, "job")["event_id"] == done["event_id"]
+    # A later write of a final status stamps a new end.
+    later: datetime = ended + timedelta(minutes=1)
+    source.jobs = finished(later)
+    collector.collect_snapshots("public")
+    rewritten: dict[str, Any] = _only_event(sender, "job")
+    assert rewritten["event_id"] != done["event_id"]
+    assert rewritten["occurred_at"] == later.isoformat()
+    assert rewritten["revision"] == done["revision"]
 
 
 def test_a_failed_read_counts_a_source_error_and_keeps_the_cursor(

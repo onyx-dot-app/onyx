@@ -15,7 +15,6 @@ import {
 import { InputVertical, Section } from "@opal/layouts";
 import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
-import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
@@ -70,6 +69,56 @@ function endpoint(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+interface ProbeStageProps {
+  stage: string;
+  state: "idle" | MCPProbeProgress["state"];
+  label: string | RichStr;
+  value?: string | RichStr;
+}
+
+function ProbeStage({ stage, state, label, value }: ProbeStageProps) {
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      height="auto"
+      gap={3}
+      className={styles.stage}
+      data-stage={stage}
+      data-state={state}
+    >
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        width="auto"
+        height="auto"
+        gap={3}
+      >
+        <span aria-hidden="true" className={styles.statusIcon}>
+          <span data-icon="idle">
+            <SvgMinus className="size-4 text-text-02" />
+          </span>
+          <span data-icon="pending">
+            <IconLoader size={16} />
+          </span>
+          <span data-icon="success">
+            <SvgCheck className="size-4 text-status-success-05" />
+          </span>
+          <span data-icon="error">
+            <SvgX className="size-4 text-status-error-05" />
+          </span>
+        </span>
+        <Text font="secondary-body" color="text-04">
+          {label}
+        </Text>
+      </Section>
+      <Text font="secondary-body" color="text-03">
+        {value}
+      </Text>
+    </Section>
+  );
 }
 
 interface MCPPluginSetupModalProps {
@@ -442,9 +491,51 @@ function MCPSetupSession({
                             className="flex flex-col gap-3"
                           >
                             {(
-                              ["authentication", "contacting_server"] as const
+                              [
+                                "authentication",
+                                "contacting_server",
+                                "client_metadata",
+                              ] as const
                             ).map((stage) => {
-                              let state =
+                              if (stage === "client_metadata") {
+                                const supported =
+                                  checked?.kind === "oauth"
+                                    ? checked.discovery.supports_client_metadata
+                                    : undefined;
+                                const state: ProbeStageProps["state"] =
+                                  probe.kind === "idle" ||
+                                  probe.url !== normalizedUrl
+                                    ? "idle"
+                                    : !checked
+                                      ? "pending"
+                                      : typeof supported === "boolean"
+                                        ? "success"
+                                        : "idle";
+                                return (
+                                  <ProbeStage
+                                    key={stage}
+                                    stage={stage}
+                                    state={state}
+                                    label={t("mcpSetup.clientMetadata")}
+                                    value={
+                                      supported === true
+                                        ? t("mcpSetup.clientMetadataSupported")
+                                        : supported === false
+                                          ? t(
+                                              "mcpSetup.clientMetadataUnsupported"
+                                            )
+                                          : supported === null
+                                            ? t(
+                                                "mcpSetup.clientMetadataUnknown"
+                                              )
+                                            : state === "pending"
+                                              ? t("mcpSetup.stagePending")
+                                              : undefined
+                                    }
+                                  />
+                                );
+                              }
+                              let state: ProbeStageProps["state"] =
                                 probe.kind === "idle" ||
                                 probe.url !== normalizedUrl
                                   ? "idle"
@@ -459,41 +550,17 @@ function MCPSetupSession({
                                 state = "error";
                               }
                               return (
-                                <div
+                                <ProbeStage
                                   key={stage}
-                                  className={cn(
-                                    "grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3",
-                                    styles.stage
+                                  stage={stage}
+                                  state={state}
+                                  label={t(
+                                    stage === "authentication"
+                                      ? "mcpAuthModal.authType.label"
+                                      : "mcpAuthModal.transport.label"
                                   )}
-                                  data-stage={stage}
-                                  data-state={state}
-                                >
-                                  <span
-                                    aria-hidden="true"
-                                    className={styles.statusIcon}
-                                  >
-                                    <span data-icon="idle">
-                                      <SvgMinus className="size-4 text-text-02" />
-                                    </span>
-                                    <span data-icon="pending">
-                                      <IconLoader size={16} />
-                                    </span>
-                                    <span data-icon="success">
-                                      <SvgCheck className="size-4 text-status-success-05" />
-                                    </span>
-                                    <span data-icon="error">
-                                      <SvgX className="size-4 text-status-error-05" />
-                                    </span>
-                                  </span>
-                                  <Text font="secondary-body" color="text-04">
-                                    {t(
-                                      stage === "authentication"
-                                        ? "mcpAuthModal.authType.label"
-                                        : "mcpAuthModal.transport.label"
-                                    )}
-                                  </Text>
-                                  <Text font="secondary-body" color="text-03">
-                                    {checked && checked.kind !== "unreachable"
+                                  value={
+                                    checked && checked.kind !== "unreachable"
                                       ? stage === "authentication"
                                         ? t(
                                             checked.kind === "oauth"
@@ -516,9 +583,9 @@ function MCPSetupSession({
                                               : state === "success"
                                                 ? "mcpSetup.stageSuccess"
                                                 : "mcpSetup.stageError"
-                                          )}
-                                  </Text>
-                                </div>
+                                          )
+                                  }
+                                />
                               );
                             })}
                             {checked?.kind === "unreachable" && (

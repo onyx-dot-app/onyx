@@ -212,8 +212,8 @@ class ExternalAppProvider(ABC):
         org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
     ) -> dict[str, str]:
         """Values substituted into this provider's ``SKILL.md.template`` as
-        ``{{APP:<key>}}``. Empty unless the skill needs something only this
-        app's configuration knows (Zendesk's account base URL).
+        ``{{APP:<key>}}``. Empty unless the skill needs something only Onyx
+        knows (Zendesk's account base URL, the Slack cloud).
 
         The rendered SKILL.md ships to the sandbox, so never return a secret;
         ``org_credentials`` holds only the provider's non-secret fields. May

@@ -10,6 +10,7 @@ and [Outlook](/admins/connectors/official/microsoft-365/outlook).
 All four sign in to Microsoft Graph as an application registered in Microsoft Entra, not as a user,
 and they are set up the same way: register an application, grant it permissions, give Onyx a credential.
 Each connector's page says what it needs beyond them.
+The [Azure Data Lake Storage](/admins/connectors/official/azure_datalake) connector can use the same app registration.
 
 One app registration can serve every connector. Grant it the union of the permissions in the table below,
 or register one app per connector to keep the grants apart.
@@ -225,9 +226,9 @@ pick the tab for your authentication method, and enter the details from your app
 - **Certificate Authentication** tab: the two IDs, the `.pfx` in the **Private Key (PFX)** field and the export
   password you set in the **Certificate Password** field. Each field is labelled with the connector's name.
 
-An account created on the form of one Microsoft 365 connector is also listed on the forms of the other three,
-so one app registration needs only one credential. Grant the app the permissions of every connector that uses it:
-the connector checks report a missing permission.
+An account created on the form of one Microsoft 365 connector is also listed on the forms of the other three and on the
+Azure Data Lake Storage form, so one app registration needs only one credential.
+Grant the app the permissions of every connector that uses it: the connector checks report a missing permission.
 Credentials created before credential sharing existed stay on the form of their own connector.
 
 ## Limiting the app to specific sites

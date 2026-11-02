@@ -1,781 +1,323 @@
 # Access Control
 
-> Who can see which document. An access control list (ACL) is attached to every
-> indexed chunk at write time, compiled from the acting user at read time, and
-> checked at exactly one point before any chunk leaves the index.
+> Who can retrieve which document. Indexing stores an access control list (ACL)
+> on every chunk, and every query passes through one filter built from the
+> acting user's ACL.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** access-control
-**Edition:** CE for the ACL data model, individual and public access, and the single
-compile-time chokepoint. EE for group-derived ACL entries, curator scoping, and
-per-field post-query censoring.
-**Owns:**
-`backend/onyx/access/access.py`, `models.py`, `utils.py`, `hierarchy_access.py`,
-`backend/ee/onyx/access/access.py`, `hierarchy_access.py`,
-`backend/onyx/db/document_access.py`, `permissions.py`, `scoped_permissions.py`,
-`backend/onyx/db/document_set.py`, `user_group.py`, `hierarchy.py`,
-`backend/onyx/server/features/document_set/`, `backend/onyx/server/features/hierarchy/`,
-`backend/ee/onyx/server/user_group/`, `backend/ee/onyx/db/user_group.py`, `external_perm.py`,
-`backend/ee/onyx/external_permissions/post_query_censoring.py`, `perm_sync_types.py`,
-`utils.py`, `sync_params.py`,
-`backend/onyx/context/search/preprocessing/access_filters.py`,
-`backend/onyx/document_index/opensearch/search.py` (the `_get_search_filters` chokepoint),
-`backend/onyx/auth/schemas.py`, `permissions.py`, `backend/onyx/db/users.py`
-
-**Does not own:** how a source system's permissions get pulled into Onyx in the
-first place ([[permission-sync]] owns the crawl/sync jobs that populate
-`Document.external_access` and the `ExternalUserGroup` rows this component reads),
-or the chunk schema and query execution itself ([[document-index]] owns
-`_get_search_filters`'s home file and the OpenSearch mapping; this document
-describes only the ACL half of that function).
+**Verified against:** `a4e97fcea1` (2026-10-29)
+**Edition:** CE builds ACLs from user emails and public flags. EE adds Onyx
+user groups, synced external groups and permissions, per-connector group
+access, hierarchy filtering and post-query censoring.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-A user never manages access control directly. They only ever see, in chat and in
-search results, documents they already had access to in the connected source
-system (Google Drive, Confluence, Slack, and so on) or documents an admin marked
-public inside Onyx. There is no visible "permission" screen for a basic user; the
-absence of a document from search results *is* the permission system working.
-
-An admin (or a curator, a narrower role scoped to specific groups) manages three
-things that change what a user can see:
-
-- **User groups**: a named set of users, used to scope which connectors and
-  document sets a group of people can draw from.
-- **Document sets**: a named, curated subset of connectors' documents that a
-  persona (agent) can be restricted to search.
-- **Curator scoping**: a curator can manage document sets and connectors for
-  groups they were made a manager of, without full admin access.
-
-Both users and admins can also see identity-derived facts elsewhere in the
-product: a Slack federated search result is scoped to whatever channels the
-user's own Slack token can already read, not to an Onyx ACL at all (see §5.5
-and §9).
-
----
-
-## 2. Surfaces
-
-### Admin routes (frontend)
-
-| Path | Purpose |
-|---|---|
-| `web/src/app/admin/groups/`, `admin/groups2/` | User group management (create, rename, membership, agents). Two generations of the same UI coexist; both call the same backend. |
-| `web/src/app/admin/documents/sets` | Document set management. |
-| `web/src/app/admin/users/` | User list, role assignment. |
-| `web/src/views/admin/ScimPage/` | SCIM provisioning config (`ScimSyncCard.tsx`, `svc.ts`). |
-
-### Backend endpoints
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| GET/POST/PATCH/DELETE | `/admin/user-group[/{id}]` | `ee/onyx/server/user_group/api.py` | EE only. Gated by `Permission.MANAGE_USER_GROUPS` / `READ_USER_GROUPS`, several with `allow_scope=True` so a curator (group manager) can reach the handler; the handler itself must then re-check scope (GATE 2). |
-| GET | `/user-groups/minimal` | same file | `Permission.BASIC_ACCESS`; any authenticated user can list group names (not membership) for persona/document-set configuration UIs. |
-| PUT | `/admin/user-group/{id}/permissions` | same file | `Permission.MANAGE_USER_GROUPS` / `FULL_ADMIN_PANEL_ACCESS` depending on the specific route; sets what a group's members can do, not document access. |
-| CRUD | `/document-set*` | `backend/onyx/server/features/document_set/api.py` | Creating/editing a set with `is_public=False` requires naming the owning user or group(s); `filter_document_set_names_by_user_access`/`filter_document_set_ids_by_user_access` (`db/document_set.py`) are the read-side access check reused everywhere a caller supplies set names or IDs. |
-| GET/PUT | `/manage/admin/cc-pair/{id}/data-access`, `/manage/admin/cc-pair/{id}/manage-access` | `ee/onyx/server/documents/cc_pair.py` | EE only. Data-access groups decide who reads a connector's documents. Manage-access groups (with an `EDITOR` or `OPERATOR` role) decide who administers the connector. |
-| PUT | `/manage/admin/user-group/{id}/data-access-cc-pairs`, `/manage/admin/user-group/{id}/managed-cc-pairs` | `ee/onyx/server/user_group/api.py` | EE only. The same two relations, set from the group side. |
-| GET | `/hierarchy/*` | `backend/onyx/server/features/hierarchy/api.py` | Folder/space browsing scoped by `get_user_external_group_ids` and `get_accessible_hierarchy_nodes_for_source` (see §4). |
-| SCIM | `backend/ee/onyx/server/scim/*.py` | | Provisions users and groups from an external IdP; writes the same `UserGroup`/`User__UserGroup` rows the manual admin UI writes. |
-
-### The role/permission model
-
-`UserRole` (`backend/onyx/auth/schemas.py`) is an explicit **legacy tombstone**: it
-still exists as the type of the `User.role` column, but the column is never read
-or written, and the docstring says so. **Do not treat `UserRole.ADMIN` /
-`CURATOR` / `BASIC` as the live authorization mechanism.** The live mechanism is:
-
-- `Permission` (`backend/onyx/db/enums.py`), a flat set of capability tokens
-  (`BASIC_ACCESS`, `READ_DOCUMENT_SETS`, `MANAGE_USER_GROUPS`,
-  `FULL_ADMIN_PANEL_ACCESS`, `READ_CHAT`/`WRITE_CHAT`, and more). A user's
-  `effective_permissions` (a JSONB column, computed by
-  `db/permissions.py:recompute_user_permissions__no_commit`) is the union
-  of permissions granted to every group they belong to, plus any
-  `account_derived_permissions` from their `AccountType`.
-- `AccountType` (`db/enums.py`): `STANDARD`, `SERVICE_ACCOUNT`, and others,
-  independent of `Permission`.
-- `User.is_group_manager` (a cached boolean): whether the user manages at least
-  one non-default group. This is the closest live equivalent to the old
-  "curator" concept, and it grants scoped, not global, authority: see
-  `db/scoped_permissions.py:within_managed_scope_clause` and
-  `auth/permissions.py:has_permission`, which returns
-  `PermissionAuthority.GLOBAL` / `SCOPED` / `NONE`.
-- `auth/permissions.py:require_permission(required, allow_anonymous, allow_scope)`
-  is the FastAPI dependency every gated route uses. `allow_scope=True` is GATE 1:
-  it lets a scoped group manager *reach* the handler; the handler itself must
-  independently restrict the manager to their managed resources (GATE 2,
-  `within_managed_scope_clause` for reads, an `assert_within_scope` for writes).
-  A route with `allow_scope=True` and no GATE 2 check hands scoped managers
-  global access.
-
-#### Scoped group-manager rules
-
-A group manager holds the `SCOPED_MANAGER_PERMISSIONS` bundle
-(`auth/permissions.py`) only inside the groups they manage. The bundle is never
-written to `permission_grant` and never merged into `effective_permissions`,
-which stays global-only. The rules, as the code enforces them:
-
-- **Scope is live; only the "is a manager" flag is cached.** GATE 1 reads the
-  cached `User.is_group_manager` so the route check needs no query. GATE 2 reads
-  the managed group ids live (`get_scoped_groups`), so a group rename, move, or
-  delete cannot leave a stale scope.
-- **A scoped write stays private and inside the managed groups.**
-  `assert_within_scope` passes only when the union of the current and requested
-  group ids is a subset of the managed set and the resource is not public. On
-  update, pass the current groups read from the database, never from the client.
-  This stops a manager from moving a resource out of scope, or from capturing a
-  public resource into scope. Call it before any broad `try/except`, or its 403
-  becomes a 500.
-- **Only a global `MANAGE_USER_GROUPS` holder creates or deletes a group.** Those
-  routes omit `allow_scope`. A manager may assign or remove managers only in a
-  group they manage (`set_group_manager` → `assert_manages_group`).
-- **Delete and publish rights differ by resource type.** Managers edit, share,
-  and attach in their groups. Delete and publish follow these rules (`auth/permission_projection.py`):
-  - Agents: owner or global admin (`can_delete_persona`). Being a manager never
-    removes a right the user holds as an owner, so a manager may delete what
-    they created.
-  - Connectors: a manager whose group has `ConnectorManageRole.EDITOR` may
-    delete the connector (`/admin/deletion-attempt` needs
-    `CCPairAccessLevel.EDIT`). Publish is global `MANAGE_CONNECTORS` only.
-  - Document sets: delete is global `MANAGE_DOCUMENT_SETS`, or the creator of a
-    private set with no groups (`delete_document_set`). Publish is global only.
-- **Custom actions and MCP servers are owner-or-admin, not agent-scoped.**
-  A scoped `MANAGE_ACTIONS` holder may create actions and manage the ones they
-  created (`db/tools.py:can_manage_own_tool`,
-  `server/features/mcp/api.py:_ensure_mcp_server_owner_or_admin`). Agents that reference an action do not
-  widen this.
-- **Sharing an agent with a group requires `MANAGE_AGENTS` on that group.**
-  `ADD_AGENTS` alone lets a user create agents but not share them with a group
-  (`ee/onyx/db/persona.py`).
-- **Adding a member must not amplify the actor's own permissions.** A member
-  inherits the group's grants, so `_assert_no_privilege_amplification`
-  (`ee/onyx/db/user_group.py`) blocks a `MANAGE_USER_GROUPS` holder who would
-  otherwise join the seeded Admin group and become admin.
-
-This `Permission`/group-manager system governs **who can administer** groups,
-document sets, and connectors. It is a different axis from the document-level ACL
-this document otherwise describes, which governs **who can retrieve which
-document** in search regardless of admin role. A basic user with no admin
-permission at all still gets full document-level access to everything their
-source-system identity grants.
+- **An end user** never manages access. In chat, search, document previews and
+  citations, they see only documents that their source-system account can see,
+  documents shared with their Onyx groups, and documents marked public. A
+  missing document looks the same as a document that does not exist. No
+  message says "you cannot see this".
+- **An anonymous visitor** sees public documents only.
+- **An admin** controls visibility through connector access types (public,
+  private to groups, or synced from the source), user groups, and document
+  sets. A document set narrows what an agent searches. It never grants access
+  to a document the user could not already see.
+- **A user who asks for a document set they cannot access** gets a 403
+  `INSUFFICIENT_PERMISSIONS`, not an empty answer.
+- **When a permission changes in the source system,** Onyx reflects it after
+  the next permission sync and index metadata update. Until then the user can
+  see the old access. A change to a user's Onyx group membership applies on
+  the next query.
+- **A self-hosted admin** can switch query-time connector filtering between
+  off, shadow and enforce on the Index Settings page. On cloud, operators
+  control this.
 
 ---
 
-## 3. Data model
+## Scope
 
-```
-User ──┬──< User__UserGroup >──┬── UserGroup ──< PermissionGrant
-        │  (is_manager: bool)   │
-        │                       └──< UserGroup__ConnectorCredentialPair >── ConnectorCredentialPair
-        │                       │      (role: EDITOR | OPERATOR; who MANAGES the pair)
-        │                       └──< UserGroup__CCPairDataAccess >── ConnectorCredentialPair
-        │                              (who may READ the pair's documents)
-        │                       └──< document sets shared with the group (join table)
-        │
-        └──< DocumentSet (owned, is_public=False) >──< DocumentSet__ConnectorCredentialPair >── ConnectorCredentialPair
-                                                    >──< document set ⇄ user / group sharing
+This component owns the ACL model and its string format, the write path that
+computes a document's `DocumentAccess` for indexing, the read path that builds
+a user's ACL and cc-pair access sets, the ACL half of the index filter, the
+post-query censoring hook, and user groups and document sets as access
+objects.
 
-Document ── external_user_emails: str[]
-         ── external_user_group_ids: str[]
-         ── is_public: bool
-         (populated by permission sync; see [[permission-sync]])
-
-DocumentByConnectorCredentialPair ── connector_id, credential_id
-ConnectorCredentialPair ── access_type: PUBLIC | SYNC | SYNC_RESTRICTED | PRIVATE
-
-DocMetadataAwareIndexChunk (in-memory, indexing time)
-  .access: DocumentAccess              # computed from the rows above
-  .document_sets: set[str]
-  .ancestor_hierarchy_node_ids: list[int]
-
-OpenSearch chunk document
-  ACCESS_CONTROL_LIST_FIELD_NAME: str[]   # DocumentAccess.to_acl() minus PUBLIC_DOC_PAT
-  PUBLIC_FIELD_NAME: bool                 # PUBLIC_DOC_PAT split out of the list
-  CC_PAIR_IDS_FIELD_NAME: int[]           # cc-pairs the document belongs to (§4.3a)
-```
-
-- `UserGroup` (`onyx/db/models.py`, EE-managed via `ee/onyx/db/user_group.py`):
-  a named group. Two are seeded and protected as "default": Admin and Basic
-  (`onyx/db/user_group.py:assert_group_config_is_editable`,
-  `assert_not_shared_with_default_group`). The one write a default group takes
-  besides membership is the permission toggle on Basic, limited to
-  `auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`
-  (`onyx/db/user_group.py:assert_group_permissions_editable`). Sharing a resource with the Basic
-  default group is refused outright: use the resource's own `is_public` flag
-  instead, since Basic holds every user. The Community downgrade
-  (`ee/onyx/db/community_downgrade.py:remove_custom_user_groups__no_commit`,
-  [[billing]] §4.5) deletes every non-default group row directly. It does not
-  mark the group with `ee/onyx/db/user_group.py:prepare_user_group_for_deletion`
-  and wait for the Celery group sync
-  (`ee/onyx/background/celery/tasks/vespa/tasks.py:monitor_usergroup_taskset`)
-  to delete it. First it makes the resources shared with those groups public:
-  personas shared with or owned by a group (`public_permission` becomes
-  `VIEWER`, and their user files get `needs_persona_sync`), document sets, LLM
-  providers, MCP servers, and skills (`public_permission` becomes `VIEWER` when
-  unset). A standard user or service account in a group that grants
-  `FULL_ADMIN_PANEL_ACCESS` joins Admin. One left in no default group joins
-  Basic. It
-  deletes the group-scoped token rate limits and recomputes the members'
-  permissions.
-- `PermissionGrant`: `(group_id, permission)` rows; the source of
-  `User.effective_permissions`.
-- `DocumentSet` (`DocumentSetDBModel`, `db/document_set.py`): `is_public`,
-  `user_id` (owner for a private, groupless set), a join table to
-  `ConnectorCredentialPair` (which connectors feed it) and a join to users/groups
-  it is shared with. `_add_user_filters` is the one predicate every document-set
-  query applies. With `get_editable=False` (read, including search lookups), it
-  allows public sets, any set for a user with `READ_DOCUMENT_SETS` or
-  `MANAGE_DOCUMENT_SETS`, and sets shared with a group the user belongs to. With
-  `get_editable=True`, it allows sets inside the user's managed scope, plus a
-  private groupless set the user owns. Ownership of a private groupless set
-  applies only to editable lookups.
-- `Document.external_user_emails` / `external_user_group_ids` / `is_public`: the
-  raw permission-sync output, written by [[permission-sync]] connectors, read by
-  `access/access.py` to build the indexed ACL. `ExternalUserGroup`
-  (`ee/onyx/db/external_perm.py`) maps a synced external group ID to member
-  emails; `fetch_public_external_group_ids` marks certain external groups (for
-  example, a Google Drive domain-wide share) as effectively public.
-- `HierarchyNode` (`db/hierarchy.py`): folder/space-level access, with its own
-  `is_public` / `external_user_emails` / `external_user_group_ids` columns set
-  from `NodeExternalAccess`, separate from but structurally identical to
-  `Document`'s.
-- The Community downgrade
-  (`ee/onyx/db/community_downgrade.py:make_all_cc_pairs_public__no_commit`)
-  sets every cc-pair to `PUBLIC`. It clears `external_user_emails` and
-  `external_user_group_ids` on every `Document` and `HierarchyNode`, sets
-  `Document.is_public` to false, and deletes every `User__ExternalUserGroupId`
-  and `PublicExternalUserGroup` row. `HierarchyNode.is_public` stays. Access
-  then comes from the `PUBLIC` pair. The indexed chunk ACL stays as it was
-  until the metadata sync rewrites the marked documents.
-- `DocumentAccess` (`access/models.py`): the in-memory union of `user_emails`,
-  `user_groups`, `external_user_emails`, `external_user_group_ids`, `is_public`.
-  `DocumentAccess.to_acl()` formats the indexed ACL (write path). The read path
-  builds the user's entries separately in `_get_acl_for_user`. Both sides use the
-  prefix helpers in `access/utils.py`, so those helpers and `to_acl()` must agree.
+Neighbours own:
+- [[permission-sync]]: the jobs that fill `Document.external_user_emails`,
+  `external_user_group_ids`, `is_public` and the external group tables.
+- [[document-index]]: the OpenSearch schema, the rest of `_get_search_filters`,
+  and the metadata sync that rewrites a chunk's stored ACL.
+- [[auth-and-identity]]: the acting `User`.
+- [[authorization]]: who may administer groups, connectors and document sets.
+- [[cc-pairs-and-creds]]: the access level (READ, OPERATE, EDIT) that each
+  cc-pair route needs.
+- [[multi-tenancy]]: the tenant clause in the same filter.
+- [[billing]]: what the Community downgrade does to groups and connector access.
+- [[editions-and-gating]]: the CE fallbacks on a build without EE code, such
+  as the hierarchy access fallback ([[editions-and-gating#noop-not-only-security-control]]).
+- [[federated-search]]: the Slack lane, which uses the user's Slack token instead
+  of an ACL.
 
 ---
 
-## 4. How it works
+## Architecture
 
-### 4.1 ACL string format (`access/utils.py`)
+**ACL strings.** `access/utils.py` prefixes every entry: `user_email:`,
+`group:` (the Onyx group name) and `external_group:`. `DocumentAccess.to_acl()`
+adds the unprefixed `PUBLIC_DOC_PAT` (`"PUBLIC"`). The OpenSearch index removes
+it from the stored list and writes the separate public boolean field instead.
 
-Every ACL entry is a prefixed string, so a user email, a group name, and an
-external group ID can never collide in the same set:
-
-- `prefix_user_email(email)` → `"user_email:{email}"`
-- `prefix_user_group(name)` → `"group:{name}"`
-- `prefix_external_group(id)` → `"external_group:{id}"`
-- `PUBLIC_DOC_PAT = "PUBLIC"` (`configs/constants.py`), handled as a special case:
-  it is never stored in the ACL list field, only as the separate boolean
-  `PUBLIC_FIELD_NAME` (see §4.3).
-
-### 4.2 Write path: computing and attaching a document's ACL
+**Write path.**
 
 ```
-[[permission-sync]] connector crawl
-  └─ writes Document.external_user_emails / external_user_group_ids / is_public
-     and ExternalUserGroup rows                    ee/onyx/db/external_perm.py
-
-indexing/adapters/document_indexing_adapter.py:DocumentIndexingAdapter.prepare_enrichment
-  └─ get_access_for_documents(document_ids, db_session)      access/access.py
-       └─ fetch_versioned_implementation("onyx.access.access", "_get_access_for_documents")
-            CE: onyx.access.access._get_access_for_documents
-                 → DocumentAccess.build(user_emails=..., user_groups=[], is_public=Document.is_public)
-            EE: ee.onyx.access.access._get_access_for_documents
-                 → calls the CE function first, then adds:
-                    - user_groups from fetch_user_groups_for_documents (the data-access
-                      groups of the document's PRIVATE cc-pairs; PUBLIC cc-pairs give their
-                      manage groups, which changes nothing; perm-synced pairs give none)
-                    - only when a live (non-DELETING) cc-pair of the document is
-                      perm-synced (db/document.py:get_document_access_types):
-                      external_user_emails / external_user_group_ids from the Document
-                      row, and is_public widened to True if the document is public in
-                      the source system, or "censoring only" applies for this source
-                      (see §4.5), or one of its external groups is in
-                      fetch_public_external_group_ids. Otherwise the source columns
-                      are stale or connector-supplied and are ignored.
-
-DocMetadataAwareIndexChunk.from_index_chunk(access=<DocumentAccess>, ...)
-  └─ opensearch_document_index.py:generate_opensearch_filtered_access_control_list(access)
-       = access.to_acl() with PUBLIC_DOC_PAT discarded
-  └─ written into ACCESS_CONTROL_LIST_FIELD_NAME; access.is_public written into
-     PUBLIC_FIELD_NAME
+indexing -> access/access.py:get_access_for_documents
+  -> fetch_versioned_implementation("_get_access_for_documents")
+     CE: db/document.py:get_access_info_for_documents
+         user emails = credential owners of the document's non-synced cc-pairs
+         is_public   = any live cc-pair of the document is PUBLIC
+     EE: the CE result, plus
+         group names from the data-access groups of the document's PRIVATE
+         cc-pairs (synced pairs give no groups)
+         external emails and groups from the Document row, only when a live
+         cc-pair of the document is perm-synced
+         is_public widened, again only for a perm-synced document, when the
+         source says public, the source is censoring-only, or an external
+         group is marked public
+  -> DocumentAccess.to_acl() -> ACL list field + public field on each chunk
 ```
 
-A document with no permission-sync-capable connector and no explicit sharing gets
-`is_public=False`. Its ACL holds only the email of the credential owner, because
-`get_access_info_for_documents` adds that email for cc-pairs that are not
-permission-synced (the entry is `None` and dropped when the owner is unknown).
-Other users cannot retrieve it through ACL-filtered search until it is made public
-or granted a matching ACL entry. A document set
-does not grant access (see §4.4).
+The stored ACL is a snapshot. The metadata sync in [[document-index]] rewrites
+it when a document is marked for sync.
 
-### 4.3 Read path: from acting user to the query
+**Read path.**
 
 ```
-build_access_filters_for_user(user, db_session)     context/search/preprocessing/access_filters.py
-  └─ get_acl_for_user(user, db_session)              access/access.py
-       └─ fetch_versioned_implementation("onyx.access.access", "_get_acl_for_user")
-            CE: onyx.access.access._get_acl_for_user
-                 anonymous  → {PUBLIC_DOC_PAT}
-                 else       → {prefix_user_email(user.email),
-                                *prefix_user_email(e) for e in user.prior_emails,
-                                PUBLIC_DOC_PAT}
-            EE: ee.onyx.access.access._get_acl_for_user
-                 anonymous  → still calls the CE function underneath (same {PUBLIC_DOC_PAT}
-                              result, since fetch_user_groups_for_user /
-                              fetch_external_groups_for_user both short-circuit to [] for
-                              an anonymous user)
-                 else       → CE result UNION
-                                {prefix_user_group(g.name) for g in
-                                 fetch_user_groups_for_user(db_session, user.id)}
-                              UNION
-                                {prefix_external_group(g.external_user_group_id) for g in
-                                 fetch_external_groups_for_user(db_session, user.id)}
-  → UserAccessFilters: the list[str] becomes IndexFilters.access_control_list; the
-    cc-pair sets (§4.3a) become IndexFilters.cc_pair_access
-
-SearchTool.run / search_pipeline → _build_index_filters       context/search/pipeline.py
-  → IndexFilters(access_control_list=<the list above>, cc_pair_access=<§4.3a>, ...)
-
-document_index.hybrid_retrieval / keyword_retrieval / semantic_retrieval / random_retrieval
-  └─ DocumentQuery._get_search_filters(access_control_list=index_filters.access_control_list, ...)
-       document_index/opensearch/search.py
-       └─ _get_acl_visibility_filter(access_control_list)
-            {"bool": {"should": [
-                {"term": {PUBLIC_FIELD_NAME: true}},
-                {"terms": {ACCESS_CONTROL_LIST_FIELD_NAME: [...]}},
-              ], "minimum_should_match": 1}}
-       appended to filter_clauses (AND-ed with every other filter: source, tags,
-       document set, time range, hierarchy scope, tenant)
-
-  → chunks returned only if they satisfy this OR, AND everything else
-
-fetch_ee_implementation_or_noop("onyx.external_permissions.post_query_censoring",
-                                 "_post_query_chunk_censoring", noop)(chunks, user)
-       CE: no-op, returns chunks unchanged
-       EE: per-field censoring for sources where document-level access does not
-           imply field-level access (see §4.5)
+build_access_filters_for_user(user, db_session)
+  get_acl_for_user -> CE: {user_email:<email>, user_email:<prior emails>, PUBLIC}
+                      EE: CE + group:<name> + external_group:<id>
+                      anonymous: {PUBLIC} in both editions
+  cc-pair access sets and the access mode
+-> IndexFilters.access_control_list, IndexFilters.cc_pair_access
+-> document_index/opensearch/search.py:DocumentQuery._get_search_filters
+     public OR acl-match   (or the cc-pair filter in ENFORCE mode)
+     AND tenant, document set, hierarchy, source, time ... clauses
+-> access/access.py:censor_chunks_for_user   (EE censoring; CE no-op)
 ```
 
-`build_access_filters_for_user` is called exactly once per `SearchTool.run()`
-invocation, inside the single DB session opened at the top of `run()`
-(`search_tool.py`), before any parallel retrieval lane starts (§5.3). Anonymous users route through
-`current_chat_accessible_user`, never `current_user`, and get only
-`{PUBLIC_DOC_PAT}` from either the CE or the EE `_get_acl_for_user`.
+`user.prior_emails` keeps old addresses in the ACL, because indexed ACLs name
+the old address until the source re-syncs.
 
-### 4.3a Query-time cc-pair access filter
+**Query-time cc-pair filter.** A second filter works from the cc-pairs a chunk
+belongs to, not the ACL snapshot. `context/search/models.py:CCPairAccessFilter`
+holds three sets of pairs for the user. A chunk in an open pair is visible. A
+chunk in an ACL pair is visible when it is public or matches the user's
+`user_email:` or `external_group:` entries. Group access comes from open pairs,
+so this filter carries no `group:` entries. Hidden pairs grant nothing. Chunks
+with no cc-pair, such as user files, fall back to the ACL filter.
+`access/cc_pair_access.py:get_cc_pair_access_mode` picks the mode from two
+`OnyxRuntime` flags:
 
-A `SYNC_RESTRICTED` pair needs the workspace setting `allow_connector_group_restrictions`
-(`/admin/security`, default off, Business tier to turn on).
-`onyx/connectors/pairing_access.py:validate_pairing_access` rejects a pair that uses it
-while the setting is off. It also rejects a pair that becomes `SYNC_RESTRICTED` before
-the `cc_pair_ids` backfill of the current index is complete, because the guard below
-cannot hide chunks that do not have `cc_pair_ids` yet. A pair that is already
-`SYNC_RESTRICTED` can still change its groups while a new index runs its backfill.
-
-A second filter works from the cc-pair a chunk belongs to instead of from the
-ACL snapshot stored on the chunk. `onyx/db/connector_credential_pair.py:get_cc_pair_access_sets_for_user`
-sorts every live cc-pair into three sets for the acting user:
-
-- **Open** pairs: `PUBLIC` pairs, and non-synced pairs where the user owns the
-  credential or is in a data-access group. These need no ACL match.
-- **ACL** pairs: `SYNC` pairs, and `SYNC_RESTRICTED` pairs where the user is in
-  a data-access group. These need a public chunk or a `user_email:` or
-  `external_group:` match.
-- **Hidden restricted** pairs: guarded pairs that grant the user nothing
-  (`connector_credential_pair.py:_guarded_cc_pair_clause`). A guarded pair is a
-  `SYNC_RESTRICTED` pair, or a pair marked as awaiting its first permission
-  sync (`ConnectorCredentialPair.perm_sync_pending_since`). A marked pair is
-  in neither the open nor the ACL set for any user
-  (`connector_credential_pair.py:_granting_cc_pair_clause`), because its chunks
-  can still carry the access of its previous access type, such as
-  `public=true`.
-
-`connector_edit_requests.py:apply_access_change__no_commit` sets the mark when
-a pair enters `SYNC` or `SYNC_RESTRICTED` from `PUBLIC` or `PRIVATE`, and only
-for a source with a doc permission sync
-(`ee/onyx/external_permissions/sync_params.py:source_requires_doc_sync`).
-Salesforce checks access after search (§4.5) and gets no mark. The
-doc-permission-sync beat clears the mark
-(`ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py:clear_caught_up_perm_sync_pending_marks`)
-once a doc permission sync and, for a source with one, an external group sync
-that started after the mark succeed, and no indexed document of the pair waits
-for metadata sync (`db/document.py:build_cc_pair_has_unsynced_documents_clause`).
-It clears a mark on a source with no doc permission sync at once.
-
-`access_filters.py:build_access_filters_for_user` returns these sets as
-`CCPairAccessFilter` on `UserAccessFilters`. `onyx/access/cc_pair_access.py:get_cc_pair_access_mode`
-picks the `CCPairAccessMode`:
-
-- `OFF`: the filter is not used. It is built only to hide guarded pairs
-  (`SYNC_RESTRICTED` and marked pairs) from the ACL filter.
-- `SHADOW`: results use the ACL filter. The cc-pair filter is only compared and
-  logged. This is the mode when `ENABLE_CC_PAIR_ACCESS_FILTER` (or the Redis
-  override `cc_pair_access_filter` / `enabled`) is on and the `ENFORCE`
-  conditions below are not both met.
-- `ENFORCE`: results use the cc-pair filter. This needs the `enabled` flag,
-  the Redis-only flag `cc_pair_access_filter` / `enforce`, and a finished `cc_pair_ids` backfill
+- off: only the guard that hides restricted pairs runs;
+- `SHADOW`: results use the ACL filter, and the cc-pair filter is compared and
+  logged;
+- `ENFORCE`: the cc-pair filter replaces the ACL clause. It needs the enforce
+  flag and a complete `cc_pair_ids` backfill
   (`document_index/opensearch/cc_pair_ids_backfill.py:is_cc_pair_ids_backfill_complete`).
 
-Both flags live in the cache (`OnyxRuntime`). On a self-hosted deployment, an
-admin sets them with the mode dropdown on Index Settings
-(`PUT /search-settings/cc-pair-access-mode`). That route refuses `ENFORCE` before
-the backfill is complete. It refuses every change in a multi-tenant deployment,
-because there the flags are shared by all tenants and operators own them.
+`server/manage/search_settings.py:update_cc_pair_access_mode` refuses `ENFORCE`
+before the backfill ends, and refuses every change on multi-tenant
+deployments, because all tenants share the flags.
 
-In `_get_search_filters`, `_get_cc_pair_access_visibility_filter` replaces the
-ACL clause only in `ENFORCE` mode. In every other mode the ACL clause stays,
-plus `_get_restricted_cc_pair_guard`, which removes chunks of hidden guarded
-pairs unless another pair of the chunk grants access. Chunks with no cc-pair
-(user files) fall back to the ACL filter. `user_can_access_chat_file` applies the
-same rule in Python.
+**Hidden pairs.** A `SYNC_RESTRICTED` pair grants nothing to a user outside its
+data-access groups. A pair that moves from `PUBLIC` or `PRIVATE` to a synced type
+gets `perm_sync_pending_since` when its source needs a doc sync
+(`db/connector_edit_requests.py:apply_access_change__no_commit`), because its
+chunks still carry the old access, such as public. Both are hidden in every
+mode unless another pair of the same chunk grants access. The doc permission
+sync beat clears the mark when the syncs have caught up
+(`ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py:clear_caught_up_perm_sync_pending_marks`).
+`connectors/pairing_access.py:validate_pairing_access` refuses
+`SYNC_RESTRICTED` while `allow_connector_group_restrictions` is off, or before
+the backfill.
 
-### 4.4 Document sets and hierarchy scope: an additive, not alternative, filter
-
-A document set or hierarchy scope narrows *which* documents are searched; it does
-not replace ACL enforcement. `_build_index_filters`
-(`context/search/pipeline.py`) resolves `document_set` names against
-`persona_document_sets` or user-supplied names, and separately resolves
-`attached_document_ids` / `hierarchy_node_ids` for assistant-knowledge scoping.
-All of these become additional AND-ed clauses inside `_get_search_filters`
-alongside, never instead of, the active visibility filter (ACL, or cc-pair in
-`ENFORCE` mode). A user who can see a
-document set's *name* is not thereby granted access to documents inside it that
-their own ACL would otherwise exclude; the ACL clause still applies to every
-result.
-
-`filter_document_set_names_by_user_access` / `filter_document_set_ids_by_user_access`
-(`db/document_set.py`) are the DB-level check on whether a user may reference a
-document set by name/ID at all (§5.2); they are unrelated to whether a specific
-document inside an authorized set passes the ACL clause.
-
-Hierarchy node (folder) browsing is a parallel, DB-level ACL check, not the
-index-query one: `db/hierarchy.py:get_accessible_hierarchy_nodes_for_source` /
-`filter_accessible_hierarchy_node_ids` dispatch through
-`fetch_versioned_implementation("onyx.db.hierarchy", ...)`. The CE
-implementation is explicitly unfiltered by design
-(`onyx/db/hierarchy.py`, comment: "MIT hierarchy queries intentionally omit
-permission filters... Supported Community connectors are public"); the EE
-implementation (`ee/onyx/db/hierarchy.py`) applies the real per-node ACL, keyed
-by `get_user_external_group_ids` (`access/hierarchy_access.py`, dispatched the
-same CE/EE way as `get_acl_for_user`). This governs the folder-browse UI
-(`server/features/hierarchy/api.py`), not chunk retrieval.
-
-### 4.5 EE post-query field censoring
-
-Some connectors (Salesforce is the concrete example in
-`ee/onyx/external_permissions/sync_params.py`) can only sync document-level
-access, not field-level access, at index time; a user may be allowed to see a
-record but not every field on it. For these sources,
-`_get_access_for_documents` marks the document `is_public` at the index level
-("is_only_censored" in the EE `_get_access_for_documents`, when a source's
-`perm_sync_config.censoring_config` is set but `doc_sync_config` is not, and
-the document is indexed under a perm-synced cc-pair per
-`db/document.py:get_document_access_types`) so it passes the ACL clause for
-everyone, then narrows the actual field content after retrieval. A document
-the same source indexes under only private or public cc-pairs keeps those
-ACLs:
-
+**EE censoring.** A censoring-only source, such as Salesforce, has a
+censoring function and no doc permission sync. It checks access at query time,
+so its perm-synced documents are indexed as public. After retrieval,
 `ee/onyx/external_permissions/post_query_censoring.py:_post_query_chunk_censoring`
-selects the retrieved chunks whose document is not under a public cc-pair and
-is under a perm-synced one, has no cc-pair left, or is under only private
-cc-pairs of a source whose `CensoringConfig.censors_private_connectors` is set
-(`_get_censored_document_ids`, fail closed), groups them by source,
-and for each source calls that source's `censor_chunks_for_source` function
-(`CensoringFuncType`, `perm_sync_types.py`) with the user's email. Every other
-chunk passes through untouched. A chunk missing from the censoring function's
-output is dropped, not degraded; a censoring function that raises drops every
-censored chunk for that source rather than leaking anything. Anonymous users
-get every censored chunk dropped outright, without calling the censoring
-function at all. A document under both a public and a perm-synced cc-pair is
-public at the index level and is not censored, since the public cc-pair
-already grants everyone the whole record. One under both a private and a
-perm-synced cc-pair is public at the index level and censored, so the source's
-own check decides. Salesforce sets `censors_private_connectors`, so its
-private-only documents are censored as well: indexes built before the ACL was
-keyed on access type still hold the open ACL for them.
+sends a chunk to the censoring function, with the user's email, when no
+`PUBLIC` pair holds its document and a perm-synced pair does, or no pair is
+left. When the source sets `censors_private_connectors`, as Salesforce does,
+documents under only private pairs are censored too, because older indexes
+hold an open ACL for them. A chunk missing from the output is dropped. If
+the function raises, every chunk of that source is dropped. Anonymous users get
+none of them.
 
-`access/access.py:censor_chunks_for_user` wraps the EE hook via
-`fetch_ee_implementation_or_noop`, so it is a genuine no-op in CE, not a
-degraded check. Every path that hands chunk content to a user runs it, since
-the index ACL alone lets censoring-only chunks through: `search_pipeline`
-(`context/search/pipeline.py`, after the index query returns and before rank
-fusion), the `/document/document-size-info` and `/document/chunk-info` reads
-(`server/documents/document.py`), and the Open URL tool's indexed-document
-fetch (`tools/tool_implementations/open_url/open_url_tool.py`).
+**Hierarchy browsing** (`server/features/hierarchy/`) uses a database check,
+not the index filter. The CE implementation in `db/hierarchy.py` returns every
+non-stub node of the source. EE (`ee/onyx/db/hierarchy.py`) filters nodes by
+their own ACL columns or the user's connector access.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-These are the rules whose violation is silent: nothing crashes, a user just sees
-(or does not see) the wrong documents.
-
-1. **`_get_search_filters` (`document_index/opensearch/search.py`) is the single
-   chokepoint for every ACL-enforced query.** Verified: every call site that
-   passes a real, non-`None` `access_control_list` (the four hybrid/keyword/
-   semantic/random query builders and the ID-based retrieval builder, all in
-   `search.py`) routes through this one function, and it is the only place
-   `_get_acl_visibility_filter`, `_get_cc_pair_access_visibility_filter`, and
-   `_get_restricted_cc_pair_guard` are invoked. No other function in the codebase
-   builds an OpenSearch `filter` clause referencing
-   `ACCESS_CONTROL_LIST_FIELD_NAME` or `PUBLIC_FIELD_NAME`. A new retrieval
-   entry point that hand-builds a query instead of going through
-   `DocumentQuery._get_search_filters` bypasses ACL enforcement entirely.
-2. **`access_control_list=None` means "no ACL restriction applied", not "public
-   only".** This is deliberate at exactly four call sites, each with an
-   established, narrow justification: `_retrieve_adjacent_chunks`
-   (`tools/tool_implementations/search/search_utils.py`) and
-   `inference_sections_from_ids` (`context/search/retrieval/search_runner.py`) fetch chunks of a document
-   the caller already retrieved through an ACL-filtered search moments earlier;
-   `_run_slack_search` (`search_tool.py`) relies on Slack's own token scope
-   (§5.5); and `delete_from_document_id_query`
-   (`document_index/opensearch/search.py`) is a background maintenance
-   operation, not a user-facing read. **Any new call site passing
-   `access_control_list=None` is a security review, not a refactor**: it must
-   justify, in the same way as one of these, why the caller already enforced
-   access some other way.
-3. **There is no ACL bypass flag.** `bypass_acl` does not exist anywhere in
-   the codebase (`grep -rn "bypass_acl" backend/` is empty). Every search
-   path builds its filters through `_build_index_filters`
-   (`context/search/pipeline.py`) and `_get_search_filters`
-   (`document_index/opensearch/search.py`, item 1), with no parameter that
-   disables ACL enforcement for an entire search. A change that reintroduces
-   a bypass parameter on `ChunkSearchRequest`, `SearchToolConfig`, or
-   `SearchTool` is a security review, not a refactor.
-4. **User-supplied document-set names are always re-checked server side**, in
-   two independent places that must both stay in place:
-   `filter_document_set_names_by_user_access` inside `_build_index_filters`,
-   and the equivalent check in `SearchTool.run` before that. Unauthorized names
-   raise `OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)`. Both checks are
-   skipped when the user is anonymous or (for `_build_index_filters`) no
-   `db_session` is available.
-5. **The Slack federated lane carries no ACL and is a deliberate exception.**
-   `_run_slack_search` builds its request with
-   `IndexFilters(access_control_list=None)`; access is enforced entirely by the
-   scope of the pre-fetched Slack OAuth or bot token, which Slack itself
-   restricts to channels that token can read. This is safe only as long as
-   (a) the token is fetched fresh per user/session rather than shared, and
-   (b) Slack results never merge into the same OpenSearch-backed ACL machinery
-   the rest of the pipeline uses. Verify both hold before trusting this lane
-   for a new federated source; do not assume a new federated connector gets
-   the same exemption without the same reasoning.
-6. **The ACL is always computed from the acting `User` object passed into
-   `get_acl_for_user`/`build_access_filters_for_user`, never from a
-   client-supplied value.** There is no HTTP parameter anywhere in this
-   component that lets a caller specify whose ACL to use; the user comes from
-   the authenticated dependency chain (`current_user` /
-   `current_chat_accessible_user`) established before this component runs.
-7. **Anonymous users get public documents only**, in both CE and EE
-   (`_get_acl_for_user` returns `{PUBLIC_DOC_PAT}` for `user.is_anonymous` in
-   both, since the EE group-lookup functions themselves short-circuit to `[]`
-   for an anonymous user). A change that adds a new ACL source but forgets to
-   gate it on `is_anonymous` widens anonymous access silently.
-8. **The read path and the write path must agree on the ACL string format.**
-   Both derive from `access/utils.py`'s three prefix functions and from
-   `DocumentAccess.to_acl()`. If either side changes a prefix, a separator, or
-   how `PUBLIC_DOC_PAT` is split out of the list, the mismatch fails silently:
-   either every document looks inaccessible (fails closed, an availability bug)
-   or every ACL entry stops matching and only public documents remain visible
-   (also fails closed). If instead the two sides drift to independently valid
-   but different formats that happen to still intersect on some strings, it
-   can fail open. Treat any change to prefixing or to `DocumentAccess.to_acl()` as
-   requiring a full reindex (§7) and an explicit read/write parity check, not
-   just a unit test of one side.
-9. **EE dispatch should degrade safely in CE; the hierarchy dispatch points are
-   an exception.** Every dispatch point here
-   (`_get_acl_for_user`, `_get_access_for_documents`,
-   `_get_user_external_group_ids`,
-   `_get_accessible_hierarchy_nodes_for_source`/`_filter_accessible_hierarchy_node_ids`)
-   goes through `fetch_versioned_implementation`, which falls back to the CE
-   module only on `ModuleNotFoundError` naming `ee.onyx`
-   (`utils/variable_functionality.py`). For the ACL dispatch points, the CE
-   fallback is a subset of what EE would compute (fewer ACL entries, an empty
-   group list), so it narrows access. The hierarchy fallbacks are the
-   exception. CE `_get_accessible_hierarchy_nodes_for_source` returns every
-   non-stub node for the source, and CE `_filter_accessible_hierarchy_node_ids`
-   passes every requested id (`db/hierarchy.py`). EE filters both by access.
-   A missing EE implementation there can expose nodes EE would hide. A new
-   dispatched function should return the more restrictive answer when CE
-   cannot compute the real one.
-10. **`_get_acl_visibility_filter`'s output is deliberately cacheable in
-    isolation from the rest of `_get_search_filters`'s clauses** (per its own
-    docstring). A change that folds ACL logic into a combined clause with
-    other filters should re-verify this caching assumption still holds; see
-    [[document-index]] for the OpenSearch filter-cache mechanics.
+1. `one-acl-filter-point` **`_get_search_filters` is the only place an index
+   query gets its ACL clause, and the ACL comes from the authenticated `User`
+   only.** `_get_acl_visibility_filter`, `_get_cc_pair_access_visibility_filter`
+   and `_get_restricted_cc_pair_guard` are called only there
+   (`document_index/opensearch/search.py:DocumentQuery._get_search_filters`). A retrieval that
+   builds its own OpenSearch query bypasses access control. No request field
+   may name whose ACL to use.
+2. `none-acl-means-unrestricted` **`access_control_list=None` means no
+   restriction, not public only.** Each call site must justify why access was
+   already enforced: adjacent-chunk and by-ID expansion of documents the user
+   just retrieved, the Slack lane, deletes, and a background re-chunk that
+   reads for no user. Find them with `git grep -n "access_control_list=None"`.
+   A new one needs a security review.
+3. `acl-format-read-write-agree` **Read and write must agree on the ACL
+   format.** `access/utils.py`, `onyx/access/access.py:_get_acl_for_user`,
+   `ee/onyx/access/access.py:_get_acl_for_user` and the two
+   `_get_access_for_documents` in the same files must change together. A change to
+   a prefix or to the public split needs a full reindex. A mismatch usually
+   hides documents, but two formats that overlap can expose them.
+4. `write-side-snapshot-lag` **Write-side fixes do not reach indexed chunks.**
+   `_get_acl_for_user` runs on every query, so read-side changes apply at once.
+   `onyx/access/access.py:_get_access_for_documents` output is stored on chunks. A write-side fix
+   leaks or hides documents until a metadata sync or reindex rewrites them.
+5. `group-acl-uses-name` **Group ACL entries use the group name.**
+   `ee/onyx/db/user_group.py:rename_user_group` marks the group's documents and
+   its data-access pairs for re-sync. While a group syncs, edits to it fail
+   with `RESOURCE_SYNCING`. A new path that changes a group name must do the
+   same.
+6. `new-acl-source-rules` **A new ACL source must prefix its entries and skip
+   anonymous users.** `PUBLIC` is the one unprefixed entry, so a prefix keeps a
+   value from equalling `PUBLIC` or another kind of entry. Both editions return
+   only `PUBLIC` for `user.is_anonymous`, and the EE group lookups skip
+   anonymous users.
+7. `ce-fallback-narrows` **CE fallbacks narrow access, except for hierarchy.**
+   If EE code is missing, the CE ACL functions return fewer entries. The CE
+   hierarchy functions return every non-stub node, because the connectors that
+   Community supports are public; private and synced pairs are paid features
+   (`onyx/db/hierarchy.py:_get_accessible_hierarchy_nodes_for_source`). A new dispatched access
+   function must return the more restrictive answer in CE
+   ([[editions-and-gating]]).
+8. `document-set-names-checked` **Document set names from a caller are checked
+   on the server.** `onyx/db/document_set.py:filter_document_set_names_by_user_access`
+   runs in `SearchTool.run`, in `context/search/pipeline.py` and in
+   `chat/process_message.py`. All raise `INSUFFICIENT_PERMISSIONS` and skip
+   anonymous users. Keep each check, and do not turn a refusal into an empty
+   filter. Trap: `onyx/db/document_set.py:_add_user_filters` counts ownership only
+   in edit mode. The creator of a private set with no groups can edit it, but
+   chat and search do not return it unless they hold `READ_DOCUMENT_SETS`.
+9. `censor-every-chunk-reader` **Every path that returns chunk content must
+   call `onyx/access/access.py:censor_chunks_for_user`.** Censoring-only documents are public in the
+   index. Callers are the search pipeline, the document chunk-info and
+   size-info routes (`server/documents/document.py`), and the Open URL tool. A
+   new reader of indexed chunk text that skips it leaks Salesforce fields in
+   EE.
+10. `acl-clause-size-limit` **The ACL clause is a separate `bool` clause** so
+    OpenSearch can cache it apart from the other filters (see the
+    `_get_acl_visibility_filter` docstring). An ACL above
+    `document_index/opensearch/search.py:MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY`
+    entries raises.
+11. `manager-scope-not-doc-access` **Manage access is not document access.**
+    A group's manage rows on a pair (role Editor or Operator) and a group
+    manager's scope decide who administers the pair ([[authorization]]). Only the
+    data-access groups of a `PRIVATE` pair enter its documents' `group:` ACL
+    (`ee/onyx/db/user_group.py:fetch_user_groups_for_documents`). For that
+    reason a manage-row change needs no document sync, and a data-access change
+    does. A manager is a member of their group, so they read what its
+    data-access grants give, nothing more.
+12. `non-synced-private-to-owner` **A non-synced document with no explicit
+    sharing is private to the credential owner.**
+    `onyx/db/document.py:get_access_info_for_documents` adds only the owner's email. Other users
+    need public access, a group, or a sync.
+13. `no-default-group-shares` **Do not share a resource with a default group
+    (Basic or Admin).** `onyx/db/user_group.py:assert_not_shared_with_default_group`
+    refuses it, because Basic holds every user and Admin every admin. Use the
+    resource's public flag.
 
 ---
 
-## 6. Relationships
+## Decisions
 
-**Depends on**
-- [[permission-sync]]: populates `Document.external_user_emails`,
-  `external_user_group_ids`, `is_public`, and `ExternalUserGroup` rows that
-  `_get_access_for_documents` (EE) and `_get_acl_for_user` (EE) read. This
-  component computes and enforces the ACL; permission-sync is where the
-  ACL's raw material comes from.
-- [[auth-and-identity]]: supplies the authenticated `User` object
-  (`current_user`/`current_chat_accessible_user`) that every ACL computation in
-  this component keys on, and the `Permission`/`AccountType` model this
-  document's §2 describes.
-- [[editions-and-gating]]: `global_version.is_ee_version()` and
-  `fetch_versioned_implementation` are how every CE/EE split in this document
-  is decided at runtime.
-
-**Depended on by**
-- [[internal-search]]: `build_access_filters_for_user` is called once per
-  `SearchTool.run()`, and its output flows into every non-bypassed,
-  non-Slack retrieval lane's `IndexFilters`.
-- [[document-index]]: `_get_acl_visibility_filter` lives inside that
-  component's `_get_search_filters`, which this document treats as the shared
-  chokepoint; see that document's §4.3 and §5.2 for the query-construction side
-  of the same contract.
-- [[core-chat-loop]]: every chat turn's search tool call carries the acting
-  user's ACL through this component; a chat turn never queries the index
-  without it (outside the exceptions in §5).
-- [[agents-personas]]: a persona's configured document sets and hierarchy
-  scope are resolved through `_build_index_filters`, which layers on top of,
-  never replaces, this component's ACL clause.
-- [[multi-tenancy]]: tenant isolation (`TENANT_ID_FIELD_NAME`) is a separate
-  filter clause inside the same `_get_search_filters`, AND-ed alongside the ACL
-  clause; this document does not cover tenant isolation itself, only that it
-  composes with ACL rather than substituting for it.
-- The onyx-cli/programmatic `/search` endpoint and the EE Search UI backend
-  (see [[internal-search]] §2) reuse `build_access_filters_for_user` the same
-  way chat does.
+- **One filter point.** Every query path shares `_get_search_filters`, so a
+  fix there covers chat, search, the API and the Open URL tool together.
+- **Store the ACL on chunks.** The index filters without a lookup in Postgres.
+  The cost is the snapshot lag in [[#write-side-snapshot-lag]]. The cc-pair
+  filter reads connector-level access at query time, so a change to a pair's
+  groups does not wait for every chunk to be rewritten.
+- **Fail closed in censoring.** A censoring error drops chunks rather than
+  showing fields the user may not see.
 
 ---
 
-## 7. Blast radius
+## Known issues
 
-| If your change… | Also check |
-|---|---|
-| changes an ACL string prefix or `DocumentAccess.to_acl()` | requires a full reindex; read (`_get_acl_for_user`) and write (`_get_access_for_documents`) must change in the same PR, never one ahead of the other (§5.8) |
-| adds a new ACL source (a new kind of group, a new external-permission concept) | both `_get_acl_for_user` (read) and `_get_access_for_documents` (write) in **both** CE and EE, or CE's fallback silently drifts from what EE now computes; add it to `DocumentAccess` first, not as a parallel field |
-| adds a new filter to `IndexFilters`/`BaseFilters` | [[document-index]]'s `_get_search_filters`; confirm it AND-composes with the ACL clause rather than replacing it; the two document-set access checks in `SearchTool.run` and `_build_index_filters` |
-| adds a new retrieval lane or federated source | does it carry `access_control_list`, or is it claiming the same exemption as Slack (§5.5)? That claim needs its own justification, not a copy-paste of the Slack comment |
-| adds a new search entry point (a new endpoint, a new tool, a new background job that queries the index) | it must call `build_access_filters_for_user` (or explicitly justify why not, per §5.2) before building `IndexFilters`; it must not construct a query outside `DocumentQuery._get_search_filters` |
-| touches `fetch_versioned_implementation` dispatch or `global_version` | every CE/EE pair in this document; verify the CE fallback still narrows rather than widens (§5.9) |
-| changes group membership resolution (`fetch_user_groups_for_user`, `fetch_external_groups_for_user`) | re-run the two-user integration test (§8); a stale cache or a membership write that doesn't invalidate it is a data-exposure bug, not a performance bug |
-| changes curator/group-manager scoping (`is_group_manager`, `within_managed_scope_clause`, `allow_scope`) | every route using `require_permission(..., allow_scope=True)` has a real GATE 2 check; this governs admin capability, not document ACL, but a bug here can let a curator manage a document set outside their scope, which does affect who a persona can search |
-| adds a resource that can be shared with a user group (a `*__UserGroup` link table) | the Community downgrade in `ee/onyx/db/community_downgrade.py`: `_make_group_shared_resources_public__no_commit` must make the resource public, and `_UNCASCADED_GROUP_LINKS` must list the link table if the group row's delete does not cascade to it |
-| adds an ACL bypass parameter anywhere in the search chain | re-verify §5.3 still holds: there is no such flag today. Adding one is a security review |
+- **CE tests do not cover EE ACLs.** A change verified only in the default CE
+  dev setup has not tested group and external-group entries.
+- **Admin search does not censor.**
+  `onyx/server/query_and_chat/query_backend.py:admin_search` builds the admin's ACL
+  filter but returns chunk blurbs without `censor_chunks_for_user`
+  ([[#censor-every-chunk-reader]]). It needs full admin. The code does not say
+  whether censoring-only sources should apply to admins.
+- **The Slack federated lane has no ACL.** It is safe only while each search
+  uses that user's own Slack token ([[federated-search]]). A new federated
+  source needs its own reason, not a copy of that exception.
 
 ---
 
-## 8. How to verify a change
+## Dependencies
 
-### Tests
-
-```bash
-# The preferred level for this component: integration tests exercise the whole
-# read path, not just one function.
-cd backend && uv run pytest tests/integration/tests/permissions_access -k "not scim"
-cd backend && uv run pytest tests/integration/tests/permissions_membership
-cd backend && uv run pytest tests/integration/tests/permissions_resources
-cd backend && uv run pytest tests/integration/tests/usergroup
-cd backend && uv run pytest tests/integration/tests/chat/test_chat_document_set_access.py
-cd backend && uv run pytest tests/integration/tests/indexing/test_initial_permission_sync.py
-cd backend && uv run pytest tests/external_dependency_unit/permission_sync
-cd backend && uv run pytest tests/unit -k "access or acl or user_group or document_set"
-```
-
-`tests/integration/common_utils/document_acl.py` (`get_user_acl`,
-`get_user_document_access_via_acl`) is a reusable test helper that recomputes a
-user's expected ACL independently of search ranking, specifically so a
-permission test does not depend on retrieval relevance to prove a document was
-or was not reachable.
-
-See `backend/AGENTS.md` for authoritative commands and required secrets/env.
-
-### Manual reproduction: the two-user test
-
-This is the load-bearing manual check for this component. A change here is not
-verified by "it still returns documents"; it is verified by a second user
-*not* getting a document the first user can see.
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. As `admin_user@example.com` / `TestPassword123!`, index or upload a document
-   visible only to a specific user or group (for example, a File connector
-   upload shared with one user, or a document set restricted to one group).
-3. Register or use a second user (User B) who is **not** in that group and was
-   not granted direct access.
-4. As User B, confirm the document does not appear:
-   - **Through chat**: ask a question that should surface the document if
-     visible; confirm no citation to it and no mention in the search tool's
-     document cards.
-   - **Through `/api/search`** (via the frontend, per this repo's `CLAUDE.md`
-     rule: call `http://localhost:3000/api/search`, not the backend port
-     directly): confirm the document is absent from the ranked sections.
-   - **Through any other entry point your change touches** (the EE Search UI,
-     the onyx-cli query path, a federated lane): the same absence must hold.
-5. As User A (or a member of the granted group), confirm the same document
-   **does** appear through the same entry points.
-6. If your change touches document sets or groups specifically, also run
-   `filter_document_set_names_by_user_access` end to end: request a search
-   naming a document set User B has no access to and confirm
-   `OnyxErrorCode.INSUFFICIENT_PERMISSIONS`, not an empty result (an empty
-   result would mask a broken check as an unrelated ranking miss).
-
-### What "working" looks like
-
-- A document restricted to User A never appears in any of User B's search
-  surfaces, not just chat.
-- A document set name User B cannot access raises
-  `INSUFFICIENT_PERMISSIONS`, not a silent empty scope.
-- An anonymous session sees only documents where `is_public=True`.
-- Revoking a user's group membership removes their access to that group's
-  documents on the **next** ACL computation (this reads live from
-  `fetch_user_groups_for_user`; there is no separate cache to invalidate in
-  the read path itself, though `User.effective_permissions`, the *admin
-  permission* cache, is recomputed explicitly by
-  `recompute_permissions_for_group__no_commit` and is a different mechanism
-  from document ACL, see §2).
+- [[permission-sync]]: external emails, groups and public flags on documents.
+- [[auth-and-identity]]: the acting `User`.
+- [[editions-and-gating]]: `fetch_versioned_implementation` and
+  `fetch_ee_implementation_or_noop` choose CE or EE code.
+- [[document-index]]: stores the ACL fields and runs the filter.
 
 ---
 
-## 9. Footguns
+## Recipes
 
-- **The Slack federated lane is not ACL-filtered like everything else.** Its
-  `IndexFilters.access_control_list` is `None` by construction; access is
-  whatever the pre-fetched Slack token can see. Do not assume every lane in a
-  fan-out search carries the same protection, and do not copy this pattern to
-  a new federated source without independently justifying it the way §5.5
-  requires.
-- **CE and EE genuinely differ in what a user can see, not just in what an
-  admin can configure.** The EE `_get_acl_for_user` adds every internal user
-  group and every synced external group the user belongs to; CE never does.
-  Testing a permission change only in CE (the default local dev setup) proves
-  nothing about whether the EE group-derived ACL entries still compose
-  correctly, and vice versa. Verify both editions before trusting a fix.
-- **The cc-pair filter has three modes and only `ENFORCE` changes results.**
-  `SHADOW` logs disagreements and still returns ACL-filtered results. `ENFORCE`
-  needs the Redis flag and a complete `cc_pair_ids` backfill, so a tenant can
-  have the master flag on and still run the ACL filter. A `SYNC_RESTRICTED`
-  pair, and a pair awaiting its first permission sync, is hidden in every
-  mode, because the ACL alone cannot express it.
-- **Read-side and write-side ACL changes roll out differently.**
-  `_get_acl_for_user` runs on each query, so a change takes effect on the next
-  request. `_get_access_for_documents` computes the ACL stored on each indexed
-  chunk. That ACL is a snapshot from whenever it was last written or updated
-  (`Updatable.update`, see [[document-index]]). A change to that logic affects
-  only *future* writes, not what is already in the index. A write-side
-  permission fix can look "fixed" in code review and still leak or hide
-  documents in production until a resync or reindex runs.
-- **`PUBLIC_DOC_PAT` is a bare string convention (`"PUBLIC"`), not a typed
-  sentinel.** Nothing stops a future ACL source from independently producing
-  the literal string `"PUBLIC"` as a legitimate group or email-derived entry
-  and accidentally granting public visibility. `prefix_user_email`/
-  `prefix_user_group`/`prefix_external_group` avoid this for their own
-  categories by prefixing, but `PUBLIC_DOC_PAT` itself is unprefixed by
-  design (§4.1) precisely so it can be split into its own index field; treat
-  it as reserved.
-- **A curator's `is_group_manager` scope is about admin capability
-  (managing connectors, document sets, groups), not about which documents
-  they personally can search.** A curator's own document-level ACL is
-  computed the same way as any other user's, through `_get_acl_for_user`;
-  being a group manager does not add that group's documents to their personal
-  ACL unless they are also a member.
+- `new-search-entry-point` **Add a search entry point.** Copy the Open URL tool
+  (`tools/tool_implementations/open_url/open_url_tool.py`): call
+  `build_access_filters_for_user`, pass both results into `IndexFilters`, query
+  through the document index, and run `censor_chunks_for_user` on the chunks.
+  List the current readers with `git grep -n censor_chunks_for_user`.
+- `new-acl-source` **Add an ACL source.** Copy `external_group:`: `prefix_external_group` in
+  `access/utils.py`, its field on `DocumentAccess` (`access/models.py`), the
+  write side in both `_get_access_for_documents` and the read side in both
+  `_get_acl_for_user`. Follow [[#new-acl-source-rules]] and plan a reindex.
+- `group-shareable-resource` **Add a resource that can be shared with a group.** Copy an entry of
+  `ee/onyx/db/community_downgrade.py:_UNCASCADED_GROUP_LINKS`, such as
+  `DocumentSet__UserGroup`. List the link tables there when a group delete
+  does not cascade to yours, or the delete fails on the foreign key.
+  `_make_group_shared_resources_public__no_commit` must make the resource
+  public on downgrade, or it stays private with no groups ([[billing]]). Its
+  manager rules go in [[authorization#scoped-manager-rights]].
+- `investigate-acl-mismatch` **Investigate "a user sees a document they should not", or the reverse.**
+  Compare the user's ACL with the document's stored access:
+  `backend/tests/integration/common_utils/document_acl.py:get_user_acl` and
+  `get_user_document_access_via_acl` do this without relying on search
+  ranking. `get_user_acl` rebuilds only the `user_email:`, `external_group:`
+  and `PUBLIC` entries; add `group:` entries and prior emails by hand for an
+  EE group case. If the `Document` row is right but chunks are wrong, the metadata
+  sync has not run ([[#write-side-snapshot-lag]]). If the access mode is
+  `SHADOW`, the API server log shows the disagreements from
+  `document_index/opensearch/opensearch_document_index.py`. On EE, check
+  whether the source is censoring-only.
+
+---
+
+## Verification
+
+- Integration suites under `backend/tests/integration/tests/`:
+  `permissions_access/`, `permissions_membership/`, `permissions_resources/`
+  and `usergroup/`. The helper
+  `backend/tests/integration/common_utils/document_acl.py` checks a user's ACL
+  without relying on search ranking.
+- The two-user test: index a document that only user A can see. As user B,
+  confirm it is absent from chat citations, `/api/search` and every other entry
+  point your change touches. As user A, confirm it is present. Run it on an EE
+  build when groups are involved.

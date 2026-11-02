@@ -36,11 +36,10 @@ jest.mock("@/providers/UnsavedChangesNavigationProvider", () => ({
 jest.mock("@/lib/sidebar/hooks", () => ({
   useShowLogoWhenFolded: () => false,
 }));
-jest.mock("@/lib/sidebar/utils", () => ({
-  renderSidebarLogo: () =>
-    function Logo() {
-      return null;
-    },
+jest.mock("@/lib/app/components", () => ({
+  ...jest.requireActual("@/lib/app/components"),
+  SidebarLogoMark: () => null,
+  SidebarWordmark: () => null,
 }));
 jest.mock("@/sections/sidebar/AccountPopover", () => ({
   __esModule: true,

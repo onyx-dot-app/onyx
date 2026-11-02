@@ -688,6 +688,7 @@ class LLMModelFlowType(str, PyEnum):
     SEARCH_SELECTION = "search_selection"
     DECISION = "decision"
     CRAFT = "craft"
+    IMAGE_GENERATION = "image_generation"
 
 
 class HookPoint(str, PyEnum):

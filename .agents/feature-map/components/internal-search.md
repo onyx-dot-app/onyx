@@ -1,500 +1,343 @@
 # Internal Search
 
-> The `internal_search` tool. It turns a chat query into a set of expanded search
-> lanes, runs them in parallel against the index and any federated sources, fuses
-> the results, has an LLM pick and expand the best sections, and returns a
-> citation-ready string plus a rich response for the UI.
+> The `internal_search` tool: it expands a query into parallel lanes over the
+> document index and federated sources, fuses them, and has an LLM or a
+> decision model select and expand the best sections. The `/search` API and the EE Search page reuse it.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** search
-**Edition:** CE, with EE field censoring hooked in via `fetch_ee_implementation_or_noop`
-**Owns:**
-`backend/onyx/tools/tool_implementations/search/search_tool.py`, `search_utils.py`,
-`constants.py`,
-`backend/onyx/context/search/pipeline.py`, `retrieval/search_runner.py`, `models.py`,
-`federated/slack_search.py`, `preprocessing/access_filters.py`, `forced_document_set.py`,
-`backend/onyx/secondary_llm_flows/query_expansion.py`, `source_filter.py`, `time_filter.py`,
-`document_filter.py`
-
-**Read first:** the module docstring at the top of
-`backend/onyx/tools/tool_implementations/search/search_tool.py`. It is a five-step
-summary of this component written by the people who built it. This document maps
-it to code and adds verification guidance.
+**Verified against:** `6bac4e012f` (2026-10-29)
+**Edition:** CE. EE adds post-query chunk censoring and the Search page.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-The user asks a question. The assistant decides to search, and the UI shows the
-queries it actually ran (which may differ from what the user typed, since they
-are expanded), then a row of source cards for the documents it found, then a
-streamed answer with numbered citations that open those same documents.
-
-If the user's question implies a source ("in Zendesk...") or a time window
-("...from last quarter"), the search narrows to that automatically, and the UI
-shows a small filter note. If the user has selected filters by hand (source
-type, document set, date range) in the chat settings, those apply on top.
-Nothing about reranking is visible to the user because there is no reranking
-step; what the user sees as "the model chose these documents" is an LLM
-selection stage, not a scoring model.
-
----
-
-## 2. Surfaces
-
-### The tool itself
-
-`SearchTool.NAME = "internal_search"` (`search_tool.py`). The LLM-visible tool
-schema (`SearchTool.tool_definition`) has one required field, `queries: string[]`.
-Its description tells the LLM that query expansion and filter extraction happen
-downstream, so it should not hand-craft time or source scoping into the query text.
-
-### HTTP endpoints
-
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.search()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. Opens its own `search_api` trace and `internal_search` function span, because it does not pass through the chat runtime or `tools/interface.py`; see [[observability]]. |
-| POST | `/admin/search` | `admin_search` (`server/query_and_chat/query_backend.py`) | Admin-only. Calls `document_index.keyword_retrieval` or `random_retrieval` directly, bypassing this whole pipeline. Used for admin document inspection, not for chat. |
-| GET | `/query/valid-tags` | `get_tags` (`server/query_and_chat/query_backend.py`) | Tag autocomplete for the filter UI. |
-
-The EE Search UI backend (`ee/onyx/server/query_and_chat/search_backend.py`,
-`ee/onyx/search/process_search_query.py`) is a **separate, lighter pipeline**. It
-calls `search_pipeline()` directly with its own query expansion
-(`ee/onyx/secondary_llm_flows/query_expansion.py:expand_keywords`) and its own
-constant `TARGET_NUM_SECTIONS_FOR_LLM_SELECTION`. It shares `search_pipeline`,
-`merge_individual_chunks`, `weighted_reciprocal_rank_fusion`, and
-`select_sections_for_expansion` with this component, but is not the
-`internal_search` tool and has no query-scope or time-filter auto-detection.
-
-### Environment configuration
-
-| Variable | Effect |
-|---|---|
-| `DISABLE_VECTOR_DB` (`configs/app_configs.py`) | When true, `SearchTool.is_available` returns `False` unconditionally: the tool cannot function without a vector DB. |
-| `FORCED_DOCUMENT_SET_NAMES` (`configs/app_configs.py`, read by `forced_document_set.py:get_forced_document_set_names`) | Search UI only (`force_configured_document_set_scope=True` in `_build_index_filters`); hard-restricts retrieval to the named document sets. Disabled under `MULTI_TENANT`. Not applied to chat's `internal_search` calls. |
-| `MAX_CHUNKS_FED_TO_CHAT` (`configs/chat_configs.py`) | Default for `SearchToolOverrideKwargs.max_llm_chunks`, the token-approximate cap on the final LLM string. |
-| `HYBRID_ALPHA`, `NUM_RETURNED_HITS` (`configs/chat_configs.py`) | Default hybrid weighting and hit count when a lane doesn't override them. |
-| `ENABLE_CC_PAIR_ACCESS_FILTER` (`configs/app_configs.py`, read by `OnyxRuntime.get_cc_pair_access_filter_enabled`) | Turns on the query-time cc-pair access filter in shadow mode. Results still use the old ACL filter, and disagreements are logged. The `enforce` flag is cache-only (default off) and only applies after the cc-pair ID backfill is complete (`access/cc_pair_access.py:get_cc_pair_access_mode`). |
+- **A chat user** asks a question and the assistant decides to search. The UI
+  shows the queries that ran, which can differ from what the user typed. It then
+  shows document cards and a streamed answer with numbered citations that open
+  those documents.
+- When the question names a source ("in Zendesk") or a time ("last quarter"),
+  the search narrows to it and the UI shows a filter note. An admin can turn
+  this detection off in the chat preferences; the search then uses only the
+  filters that were picked. Filters the user picks in chat apply as an outer
+  limit. A user who deselects every source gets
+  an empty result, not an unfiltered one.
+- A user who asks for a document set they cannot see gets an
+  insufficient-permissions error, not a silent fallback.
+- **An API caller** sends `POST /search` and gets the selected, expanded
+  sections with no LLM answer. It is for programmatic callers such as the
+  onyx-cli and the Craft sandbox.
+- **An EE user** on the Search page gets ranked documents and the LLM's picks.
+  If selection fails, the page still shows the documents.
+- When no connector, federated connector or user file exists, or the vector DB
+  is off, the model is not offered the tool.
 
 ---
 
-## 3. Data model
+## Scope
 
-This component reads document-set, ACL, and federated-connector state; it does
-not own any tables. What it produces is written by [[core-chat-loop]]'s
-`save_chat_turn`: `SearchDoc` rows (persisted `rich_response.search_docs`) and the
-citation mapping on `ChatMessage`. See [[chat-persistence]] for those tables.
+This component owns `SearchTool`, the retrieval pipeline that turns filters
+into one index query per lane, the secondary LLM flows for query expansion,
+source and time scope, selection and relevance, the `/search` API, the admin
+document search, and the EE Search page backend.
 
-No new tables belong to this component. `PersonaSearchInfo`
-(`context/search/models.py`) is a plain snapshot, not a table: it is built once
-from the ORM `Persona` in `tool_constructor.py:_build_search_tool` before the DB
-session that loaded it closes, so downstream code never lazy-loads a persona
-relationship after the session is gone.
+Its neighbours own:
+- [[document-index]]: the index queries (`hybrid_retrieval`,
+  `keyword_retrieval`, `id_based_retrieval`) and how `IndexFilters` compiles.
+- [[access-control]]: how the ACL and the cc-pair access filter are built,
+  and what EE censoring removes.
+- [[federated-search]]: the Slack lane's token and gate rules, and the
+  federated registry.
+- [[citations]]: numbering and the document JSON format.
+- [[tools-framework]]: tool construction, the `ToolContext` and citation
+  ranges.
+- [[core-chat-loop]]: the chat agent keeps the turn's search planning state
+  between steps.
+- [[projects]]: which project and agent files go inline and which go through
+  this search.
 
 ---
 
-## 4. How it works
-
-### 4.1 The nine stages, in order, inside `SearchTool.run`
+## Architecture
 
 ```
-run()                                              search_tool.py
- 1. _expand_queries_and_decide_scope                search_tool.py
-      ├─ semantic_query_rephrase                    secondary_llm_flows/query_expansion.py
-      ├─ keyword_query_expansion                     secondary_llm_flows/query_expansion.py
-      ├─ decide_search_scope                          secondary_llm_flows/source_filter.py
-      └─ decide_time_filter                            secondary_llm_flows/time_filter.py
-      (all four run in one run_functions_tuples_in_parallel batch)
-
- 2. one lane per query, in parallel               ┐
-      _run_search_for_query → search_pipeline      │  threadpool_concurrency.
-      (+ optional _run_slack_search lane)          ┘  run_functions_tuples_in_parallel
-        search_pipeline                              context/search/pipeline.py
-          ├─ _build_index_filters                     context/search/pipeline.py
-          └─ search_chunks                            context/search/retrieval/search_runner.py
-
- 3. (no separate filtering stage; filters are compiled into the index query in step 2, except for the Slack lane, which gets none)
-
- 4. weighted_reciprocal_rank_fusion                 tools/tool_implementations/search/search_utils.py
- 5. merge_individual_chunks                          context/search/pipeline.py
- 6. _trim_sections_by_tokens                          search_tool.py
-    select_sections_for_expansion                     secondary_llm_flows/document_filter.py
- 7. expand_section_with_context (parallel per doc)    search_utils.py
-      └─ _retrieve_adjacent_chunks → document_index.id_based_retrieval
- 8. merge_overlapping_sections                        search_utils.py
- 9. convert_inference_sections_to_llm_string           tools/tool_implementations/utils.py
+SearchTool._run -> SearchTool.search
+  one DB session: ACL filters, document-set check, search settings,
+  federated registry, Slack token prefetch            no DB use after this
+  -> _expand_queries_and_decide_scope (parallel)
+       semantic_query_rephrase, keyword_query_expansion   query_expansion.py
+       decide_search_scope                                source_filter.py
+       decide_time_filter                                 time_filter.py
+  -> lanes in parallel, one per deduplicated query:
+       _run_search_for_query -> search_pipeline -> search_chunks
+       + at most one _run_slack_search lane              [[federated-search]]
+  -> weighted_reciprocal_rank_fusion -> merge_individual_chunks (num_hits cap)
+  -> _resolve_decision_client
+     decision client: _select_with_decision_model
+                      (rank_sections_listwise, one decision request)
+     else or on failure: _trim_sections_by_tokens
+                      -> select_sections_for_expansion (one LLM call)
+  -> expand_section_with_context per section (parallel)
+  -> merge_overlapping_sections -> convert_inference_sections_to_llm_string
 ```
 
-Lane fan-out and fusion, visually:
+The module docstring of `SearchTool` gives the authors' five-step design. Read
+it first.
 
-```
-semantic query ──┐
-LLM query(ies) ──┼─► search_pipeline lane ──► InferenceChunk[] ──┐
-keyword query(s)─┘                                                │
-                                                                    ├─► weighted_reciprocal_rank_fusion
-Slack (optional) ─► _run_slack_search ────────────────────────────┘        (RRF_K_VALUE=50)
-                                                                             │
-                                                            merge_individual_chunks
-                                                                             │
-                                                             top_sections (num_hits cap)
-```
+**Prefetch, then parallel work.** `search` reads everything it needs from the
+database in one short session. The lane workers use plain objects. This keeps
+parallel lanes from holding connections. Do not pass an ORM object or a session
+into a lane. `PersonaSearchInfo`
+(`context/search/models.py`) is the detached snapshot of the agent's document
+sets, start date, attached documents and hierarchy nodes. Chat builds it in
+`db/tools.py:capture_persona_tool_configuration`, and the `/search` API builds
+its own.
 
-### 4.2 Query expansion and scope (`_expand_queries_and_decide_scope`)
+**Lanes and weights.** The rephrased semantic query, the model's own queries,
+the user's original message and the keyword queries each get a lane and an RRF
+weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a
+low `hybrid_alpha`. A `hybrid_alpha` of exactly 0 skips embedding and runs pure
+keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.
 
-Runs, in one parallel batch, whichever of these apply:
-- `semantic_query_rephrase` and `keyword_query_expansion` (`secondary_llm_flows/query_expansion.py`),
-  unless `ToolContext.skip_search_query_expansion` is set (a repeat search within the
-  same turn defers entirely to the LLM's own query).
-- `decide_search_scope` (`secondary_llm_flows/source_filter.py`), gated by
-  `auto_detect_filters` and skipped once `SearchContext.scope_decision_settled` latches to
-  `True` for the rest of the turn (a "no source directive" result cannot flip
-  back mid-turn).
-- `decide_time_filter` (`secondary_llm_flows/time_filter.py`), computed while the
-  prior context lacks a time decision. The completed step retains the first decision
-  in `SearchContext.time_filter`/`time_filter_computed`, including a decision with no filter.
+**Filters live in the index query.** For index lanes, source, document set,
+time, ACL, cc-pair access and project or agent scope compile into one
+`IndexFilters` in `context/search/pipeline.py:_build_index_filters`. Nothing
+filters results afterwards except EE censoring
+(`backend/onyx/access/access.py:censor_chunks_for_user`). The
+Slack lane gets none of these filters.
 
-`decide_search_scope` returns a `list[DocumentSource] | None`, restricted to
-`connected_sources` (`db/connector.py:fetch_unique_document_sources`) intersected
-with any user/persona source restriction. `decide_time_filter` returns a
-`TimeFilter` (`context/search/models.py`) whose `apply_to` intersects
-the inferred window with any caller-selected range, so an inferred window can
-only narrow, never widen, an explicit one; a disjoint inferred window is dropped
-rather than applied.
+**No cross-encoder.** The selection step replaces one. One LLM call, or one
+decision request, sees all candidate sections together, so it can compare
+across documents. `RerankingModel` exists in
+`natural_language_processing/search_nlp_models.py`, but only the unused
+`warm_up_cross_encoder` builds one.
 
-When the scope narrows to a subset of sources, `run` appends a note to the
-response (`_build_scope_note`) that names the sources covered and the queries run, so a repeat
-call can vary its terms. Each completed retrieval returns planning metadata. Chat and research fold that metadata into
-`SearchContext` after the step. `decide_search_scope` reads its `SearchCycle` records on later steps. It also passes the
-deduplicated `searched_sources` of those cycles as a separate prompt field, so a
-BACKOFF directive ("check A first, then B") advances to the next unsearched source
-while the subject stays the same.
+**Decision-model rerank and expansion.** When
+`tools/tool_implementations/search/search_tool.py:SearchTool._resolve_decision_client`
+returns a client ([[#decision-path-gate]]), the decision model replaces LLM
+selection. `SearchTool._select_with_decision_model` ranks a wider pool than
+the `num_hits` cap (`RERANK_POOL_SIZE` merged sections, trimmed by tokens) in
+one request ([[#rerank-one-request]]) and keeps the most probable sections.
+Ties keep fusion order. A pick from beyond the top hits gets a search doc.
+While the ranking call runs, the first sections in fusion order expand in the
+background with the decision model only, and search waits only for the
+selected ones. Expansion then asks
+`secondary_llm_flows/decision_rerank_expansion.py:decide_context_expansion`
+first, and `classify_section_relevance` when that call fails or the model
+refuses. Any failure of the rerank falls back to LLM selection in the same
+search ([[#decision-falls-back-to-llm]]).
 
-Chat and research own this context. A fresh run resets it; a resumed run restores it from the checkpoint.
-Sibling searches read the same prior-step context. Their completion order does not change later planning.
-The first new time decision and last new expansion in model-call order are retained.
-A completed retrieval with no hits still records a cycle. Errors and explicit empty source selections do not.
-The selection client resolves only when results need selection. Each invocation tracks its own primary-model cost check, shared by Slack retrieval and selection fallback.
+**Three model clients.** Query expansion, scope and time decisions, and Slack
+query processing use the agent's primary model. LLM selection and relevance
+classification use `selection_llm`, which resolves lazily from the
+SEARCH_SELECTION default after retrieval returns sections. If that fails or
+is unset, it uses the primary model. The decision client comes from the
+DECISION default ([[llm-providers]]). Chat checks the primary provider's cost
+limit at turn start (`chat/process_message.py`). The tool checks it itself,
+once per call, only when a `/search` caller skipped that check
+(`primary_llm_cost_checked`). The Slack lane shares that check, and a failure
+skips only that lane. When a separate selection
+model is in use, `secondary_llm_flows/search_prompt_budget.py` trims candidates
+until the prompt fits that model's limits ([[llm-providers]]).
 
-### 4.3 Parallel retrieval lanes
+**Scope within a turn.** The workspace setting `auto_detect_search_filters`
+gates both the scope and the time decision. Chat and the `/search` API read it
+and pass it to `SearchTool` as `auto_detect_filters`. The tool keeps no state
+between calls. It reads the turn's planning state from
+`ToolContext.search_context`
+(`tools/tool_implementations/search/models.py:SearchContext`) and returns its
+new decisions as `SearchPlanningResult` in the result metadata. After each step,
+`chat/agent.py:ChatAgent._after_step` and the research agent fold them with
+`tools/tool_implementations/search/search_tool.py:update_search_context`, in
+model-call order. Each completed search adds a `SearchCycle`, also one with no
+hits; an error or an empty source selection adds none. The next call's scope
+decision reads those cycles, so a "check A, then B" request advances to the next
+unsearched source. `_build_scope_note` tells the model which sources and queries
+ran. In chat only, after a step that called `internal_search` (also one that
+failed), `ChatAgent._tool_context` sets `skip_search_query_expansion`. A repeat
+search then makes no rephrase or keyword-expansion LLM call and uses the
+model's own queries. The one exception: when the call advances to a source not
+yet searched, it reuses the turn's `SearchContext.cached_expansion`. The
+research agent never sets the flag, so each of its searches expands. Selection
+and expansion run whatever the flag's value. A change to this flag changes the
+LLM cost of every multi-search chat turn.
 
-One lane per deduplicated semantic-style query (`deduplicate_queries`, weight
-`LLM_SEMANTIC_QUERY_WEIGHT = 1.3` for the rephrased query,
-`LLM_NON_CUSTOM_QUERY_WEIGHT = 0.7` for the LLM's own queries,
-`ORIGINAL_QUERY_WEIGHT = 0.5` for the literal user message), one lane per
-deduplicated keyword query (`LLM_KEYWORD_QUERY_WEIGHT = 1.0`,
-`hybrid_alpha = KEYWORD_QUERY_HYBRID_ALPHA = 0.2`), plus at most one Slack lane
-(`_run_slack_search`, weight `ORIGINAL_QUERY_WEIGHT`) when a Slack access token
-was pre-fetched and an `original_query` is available. All lanes are dispatched in
-one `run_functions_tuples_in_parallel` call.
-
-Each non-Slack lane calls `_run_search_for_query`, which calls `search_pipeline`
-(`context/search/pipeline.py`). `search_pipeline`:
-1. builds `IndexFilters` via `_build_index_filters`, which validates any
-   caller-supplied `document_set` names against `filter_document_set_names_by_user_access`
-   (`db/document_set.py`), floors `updated_at_range` at the persona's
-   `search_start_date` (never loosens it), and attaches the pre-fetched
-   `access_control_list`, `cc_pair_access`, `attached_document_ids`, and `hierarchy_node_ids`;
-2. calls `search_chunks` (`context/search/retrieval/search_runner.py`), which
-   fans out to `get_federated_retrieval_functions`
-   (`federated_connectors/federated_retrieval.py`) for any non-Slack federated
-   source, and to `_embed_and_hybrid_search` (or, only when
-   `hybrid_alpha == 0.0`, `_keyword_search`) for the indexed sources, then merges
-   with `combine_retrieval_results`;
-3. runs EE per-field censoring via `fetch_ee_implementation_or_noop("onyx.external_permissions.post_query_censoring", "_post_query_chunk_censoring", ...)`.
-
-There is **no separate filtering stage**. For the `search_pipeline` lanes, source,
-document-set, time, ACL, and project/persona scope are all compiled into the
-`IndexFilters` object that goes into the index query itself. Nothing is filtered
-out of those results after the fact except the EE field censoring above. The
-dedicated Slack lane receives none of these filters, only the pre-fetched Slack
-token and entity config (§5.8).
-
-When combined project and custom-agent files overflow the prompt budget,
-`SearchTool` passes both file scopes to the index. They join the agent's other
-knowledge scopes with OR; ACL checks still apply. These searches retain the
-agent's user-selected source, time, and tag filters. Automatically inferred
-source limits retain `USER_FILE` when project or agent files need retrieval,
-unless the user explicitly excludes that source. Queries, filter packets, and
-search-cycle history share this resolved scope. Only project-only searches
-ignore user-selected filters. File selection and instruction rules belong to
-[[projects]] §4.4-4.5.
-
-There is **no reranking model in this path**. `RerankingModel`
-(`natural_language_processing/search_nlp_models.py:RerankingModel`) exists, but
-its only instantiation in the codebase is inside `warm_up_cross_encoder`, itself
-marked `# No longer used` and called from nowhere
-(`grep -rn "warm_up_cross_encoder" backend/` returns only its own definition).
-The functional replacement for a reranker is the LLM selection stage in 4.5.
-
-### 4.4 Rank fusion and chunk merge
-
-`weighted_reciprocal_rank_fusion` (`search_utils.py`) combines the per-lane
-ranked chunk lists: `score(item) = sum(weight / (RRF_K_VALUE + rank))` across
-lanes, `RRF_K_VALUE = 50`, deduped by `f"{document_id}_{chunk_id}"`. Ties break
-by rank-within-source, then by the index of the source list where the item
-first appeared (fixed first-seen order, not round-robin).
-
-`merge_individual_chunks` (`context/search/pipeline.py`) then joins chunks from
-the same document whose `chunk_id`s differ by exactly 1 into one
-`InferenceSection`, keeping the position of the section's earliest-ranked chunk.
-The merged list is capped to `override_kwargs.num_hits`.
-
-### 4.5 LLM selection
-
-Chat constructs search tools with the session client and a lazy
-SEARCH_SELECTION resolver. Query rewrites, source/time filters, and Slack query
-processing keep the session client. Selection resolves only after retrieval
-returns sections, so offering search or finding no results never checks the
-selection provider. An unset SEARCH_SELECTION returns the same session client,
-never CHAT_NAMING. The public Search API honors explicit provider/model requests for
-both clients; otherwise only selection uses SEARCH_SELECTION. The EE Search UI
-likewise keeps rewrites on the default chat client and resolves selection lazily.
-If EE selection resolution fails, for example on a cost limit, the endpoint still
-returns the documents with `llm_selected_doc_ids` unset.
-If the chat or API selection factory fails, `SearchTool` logs a warning and selects
-with the primary client. Chat checks the primary provider's cost limit at turn
-start. The public Search API skips that check when query expansion and automatic
-filters are off and passes `primary_llm_cost_checked=False`. The tool then checks
-the primary provider before the first Slack lane or selection call that uses it.
-If the check fails before a Slack lane, search skips only that lane.
-
-`_trim_sections_by_tokens` (`search_tool.py`) first drops sections once a token
-budget (`max_llm_chunks * DOC_EMBEDDING_CONTEXT_SIZE * SELECTION_TOKEN_BUDGET_MULTIPLIER`,
-`SELECTION_TOKEN_BUDGET_MULTIPLIER = 2`) is exhausted, counting at most
-`MAX_CHUNKS_FOR_RELEVANCE = 3` chunks per section so one chunk-heavy section
-cannot starve the budget. `select_sections_for_expansion`
-(`secondary_llm_flows/document_filter.py`) then makes one LLM call over all
-surviving sections together (so the model can compare across documents, not just
-within one) and returns the sections it picked plus any `best_doc_ids` it flagged.
-
-When SEARCH_SELECTION is configured, `backend/onyx/secondary_llm_flows/search_prompt_budget.py` also
-bounds serialized prompts against the selection model's input and context limits,
-with an output allowance and safety margin. Selection drops trailing candidates
-until the actual prompt fits. Expansion classification bounds its own input
-without changing the original evidence. Rewrites retain their primary-model limits.
-An oversized fixed prompt takes the flow's local fallback without a provider
-call. The final answer's evidence allowance remains independent.
-
-### 4.6 Context expansion
-
-For each selected section, `expand_section_with_context` (`search_utils.py`) runs
-in parallel (again via `run_functions_tuples_in_parallel`, wrapped in
-`expand_section_safe` so one failure falls back to the unexpanded section). Unless
-the section is in `best_doc_ids` (`expand_override=True`, which skips straight to
-`FULL_DOCUMENT`), it first asks `classify_section_relevance`
-(`secondary_llm_flows/document_filter.py`) whether to keep it as-is, pull the
-immediately adjacent chunks, or pull the full surrounding window. A `NOT_RELEVANT`
-result makes `expand_section_with_context` return `None`, but `expand_section_safe`
-then keeps the original section. This stage never drops a selected section. `FULL_DOCUMENT` fetches `FULL_DOC_NUM_CHUNKS_AROUND = 5`
-chunks on each side via `_retrieve_adjacent_chunks`, which calls
-`document_index.id_based_retrieval`.
-
-### 4.7 Final merge and serialization
-
-`merge_overlapping_sections` (`search_utils.py`) merges expanded sections from
-the same document whose chunk ranges now overlap or touch, since context
-expansion can make previously separate sections adjacent.
-`convert_inference_sections_to_llm_string`
-(`tools/tool_implementations/utils.py`) then builds the JSON string returned to
-the LLM, assigning one citation number per unique `document_id` starting at
-`override_kwargs.starting_citation_num`, and the parallel `citation_mapping`
-(`citation_id -> document_id`).
+**Other entry points.** `server/features/search/api.py` builds a `SearchTool`
+and calls `SearchTool.search` outside the chat runtime, with its own trace and
+tool span. `ee/onyx/search/process_search_query.py`
+calls `search_pipeline` directly, with its own expansion and section target,
+and is the only caller of `FORCED_DOCUMENT_SET_NAMES` scope
+(`context/search/forced_document_set.py`). `backend/onyx/server/query_and_chat/query_backend.py:admin_search`
+calls the index directly for admin document inspection.
 
 ---
 
-## 5. Contracts and invariants
+## Contracts and traps
 
-1. **ACL prefetch happens once per `run()`, before any parallel work, and is not
-   optional.** `build_access_filters_for_user(self.user, db_session)` runs inside
-   the single DB session opened at the top of `run()`. It returns a `UserAccessFilters`
-   object: the ACL list plus an optional `CCPairAccessFilter` (`cc_pair_access`).
-   The filter is set when the cc-pair flag is on. It is also set in `OFF` mode when
-   a guarded pair exists (a `SYNC_RESTRICTED` pair, or a pair awaiting its first
-   permission sync), so a guarded pair that grants the user nothing stays hidden
-   (`_build_cc_pair_access_filter`). There is no flag that skips
-   it: the only input that decides document access is the `user` the caller passes
-   to `SearchTool`. A caller that wants a narrower scope passes a narrower user (the
-   Slack bot passes the anonymous user in shared channels). Do not add a skip flag;
-   see [[access-control]] §5.3.
-2. **Document-set names supplied by authenticated users are access-checked in `SearchTool.run`**
-   with `filter_document_set_names_by_user_access`. `SearchTool` calls
-   `search_pipeline` with prefetched `acl_filters` and no `db_session`, so the
-   matching check in `_build_index_filters` is skipped on this path. That second
-   check applies only to callers that pass a session. Both checks must stay in
-   place; removing either reopens the bypass where a user overrides the persona's
-   configured document sets with arbitrary names. Unauthorized names raise
-   `OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)`. Both checks skip anonymous users (`user.is_anonymous`).
-3. **`llm_facing_response` and `rich_response` serve different audiences.**
-   `llm_facing_response` is the compact, trimmed, citation-tagged string the
-   model reads. `rich_response` (`SearchDocsResponse`) carries `search_docs` (all
-   top sections before LLM selection), `displayed_docs` (only the LLM-selected
-   ones; `None` means all retrieved documents, an empty list means none), and
-   `citation_mapping`. Do not feed
-   `rich_response` fields back into the prompt, and do not trim
-   `llm_facing_response` content out of `rich_response`.
-4. **Citation numbering ranges are per tool call, not per turn.**
-   `ToolBatch` supplies each call index. Search tools add
-   `CITATIONS_PER_TOOL_CALL * invocation.call_index` to the base to avoid collisions between concurrent
-   `SearchTool`/`WebSearchTool`/`OpenURLTool` calls. A change that shares one
-   counter across calls will silently collide citations.
-5. **The tool must keep working with `DISABLE_VECTOR_DB=true` meaning
-   unavailable, not degraded.** `SearchTool.is_available` returns `False`
-   outright in that case; it does not fall back to a reduced pipeline.
-6. **The persona's `search_start_date` is a floor, never negotiable downward.**
-   `_build_index_filters` takes the `max()` of it and any caller-supplied
-   `updated_at_range.start`. A change here must preserve that direction.
-7. **`PersonaSearchInfo` must stay a detached snapshot.** It is built before the
-   DB session that loaded the persona closes (`tool_constructor.py`). Passing a
-   live ORM `Persona` into a parallel search worker is the same class of bug as
-   in [[core-chat-loop]]'s `ChatTurnSetup`.
-8. **The Slack federated lane carries no `access_control_list`.**
-   `_run_slack_search` builds its `ChunkIndexRequest` with
-   `IndexFilters(access_control_list=None)`; access is enforced entirely by the
-   scope of the OAuth or bot token that was pre-fetched, not by the standard ACL
-   list. `_run_slack_search` also receives no `effective_filters`, so inferred
-   time, document-set, and persona filters do not constrain Slack results. Do not
-   assume every lane in the fan-out is filtered the same way.
-
----
-
-## 6. Relationships
-
-**Depends on**
-- [[document-index]]: `document_index.hybrid_retrieval`, `keyword_retrieval`, and
-  `id_based_retrieval` are the actual index calls; this component only decides
-  what to ask for and how to combine the answers.
-- [[access-control]]: `build_access_filters_for_user` / `get_acl_for_user`
-  produce the ACL list this component compiles into every non-bypassed,
-  non-Slack lane.
-- [[federated-search]]: `get_federated_retrieval_functions` supplies non-Slack
-  federated lanes; Slack is handled as a dedicated lane inside this component
-  rather than through that mechanism.
-- [[citations]]: `convert_inference_sections_to_llm_string` produces the
-  citation-tagged string and mapping this component hands back.
-- [[tools-framework]]: `SearchTool` implements `Tool`; `backend/onyx/agents/tool_execution.py:ToolBatch` merges
-  repeated calls and allocates the citation range.
-- [[llm-providers]]: section selection and relevance classification use the
-  optional SEARCH_SELECTION default, falling back directly to the persona's
-  resolved `LLM`. Rewrites and filters keep that primary client. CHAT_NAMING is separate.
-
-**Depended on by**
-- [[core-chat-loop]]: `construct_tools` attaches `SearchTool` per turn; the loop
-  executes it like any other tool and folds its `ToolResponse` into history.
-- [[web-search]]: a separate tool (`WebSearchTool`), not part of this component,
-  but merged alongside it by the same `backend/onyx/agents/tool_execution.py:ToolBatch` citation-range logic.
-- The onyx-cli/programmatic `/search` endpoint (`server/features/search/api.py`)
-  and the EE Search UI backend both reuse pieces of this pipeline outside the
-  chat loop; see §2.
-
----
-
-## 7. Blast radius
-
-| If your change... | Also check |
-|---|---|
-| changes a lane weight or the RRF formula | run a retrieval eval before merging; a weight swing changes which documents survive to LLM selection, which is invisible in a unit test |
-| adds a retrieval lane | keep `search_weights` parallel to `search_functions`; both lists feed the RRF call |
-| adds a filter field to `BaseFilters`/`IndexFilters` | `_build_index_filters`, the two document-set access checks, [[document-index]]'s query builder, and the Search UI filter form |
-| changes the LLM-facing string format in `convert_inference_sections_to_llm_string` | [[citations]]; this breaks citation parsing everywhere the string is consumed, not just here |
-| changes `SearchDocsResponse` fields | the UI renderer for `SearchToolDocumentsDelta`/search cards, and [[chat-persistence]]'s `SearchDoc` persistence, both of which read this shape |
-| touches query expansion prompts (`query_expansion.py`, `source_filter.py`, `time_filter.py`, `document_filter.py`) | needs an eval; see `backend/onyx/evals/` |
-| changes which `user` a caller passes to `SearchTool`, or adds any way to skip `build_access_filters_for_user` | [[access-control]] §5.3 and the Slack bot's identity choice ([[slack-bot]] §5.1); a wrong user is a data-exposure bug |
-| changes Slack lane token pre-fetch or scoping | [[federated-search]] and the Slack bot's own ACL model, since this lane does not use `access_control_list` |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-cd backend && uv run pytest tests/integration -k search
-cd backend && uv run pytest tests/unit -k "search_tool or search_utils or query_expansion or document_filter or source_filter or time_filter"
-```
-
-See `backend/AGENTS.md` for the authoritative commands and required env, and
-`backend/tests/README.md` for shared fixtures.
-
-### Manual reproduction
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Open `http://localhost:3000`, sign in as `admin_user@example.com` /
-   `TestPassword123!`.
-3. Ask a question that forces a search across a connected source, for example
-   "what does our onboarding doc say".
-4. Watch for, in order: the queries-run block (`SearchToolQueriesDelta`), any
-   filter note (`SearchToolFilterDelta`) if the question implied a source or
-   time window, the document cards (`SearchToolDocumentsDelta`), then the
-   streamed answer with numbered citations that open the right documents.
-5. Ask a follow-up naming a specific connector by name (for example "search only
-   in Zendesk") and confirm the filter note reflects that scope.
-6. Hit `POST /api/search` directly with a query and confirm it returns the same
-   shape of the selected sections without an LLM answer.
-
-Drive the browser with `claude-in-chrome` against the user's real Chrome rather
-than launching Playwright ad hoc.
-
-### What "working" looks like
-
-- Citation numbers in the streamed answer resolve to real documents in
-  `displayed_docs`, never to `search_docs` entries that were not selected.
-- A scoped search ("only Zendesk") never returns documents from other sources.
-- Two `internal_search` calls in the same parallel tool batch never collide on
-  citation numbers.
+1. `access-from-user-only` **Document access depends only on the `user` passed
+   to `SearchTool`.** `tools/tool_implementations/search/search_tool.py:SearchTool.search` always calls
+   `context/search/preprocessing/access_filters.py:build_access_filters_for_user`. No
+   flag skips it. A caller that needs a narrower scope passes a narrower user.
+   The Slack bot passes the anonymous user for replies that are not a DM or
+   ephemeral (`onyxbot/slack/handlers/handle_regular_answer.py`). Do not add a
+   skip flag ([[access-control]], [[slack-bot]]).
+2. `document-set-access-checks` **Three document-set access checks exist.** Each
+   calls `backend/onyx/db/document_set.py:filter_document_set_names_by_user_access` on
+   user-supplied names, and
+   each skips anonymous users. `chat/process_message.py:_load_session` rejects
+   a chat turn before it starts. `SearchTool.search` makes the same check for
+   every caller of the tool; in chat, its error becomes a tool result, not a
+   user error ([[tools-framework#run-errors-become-results]]).
+   `SearchTool` calls `search_pipeline` with prefetched ACL filters and no
+   `db_session`, so the check in `context/search/pipeline.py:_build_index_filters`
+   does not run on that
+   path. It covers callers that pass a session, such as the EE Search page. Keep
+   the last two. Removing either lets a user replace the agent's document sets
+   with any name.
+3. `slack-lane-unfiltered` **The Slack lane gets none of the index filters.**
+   `tools/tool_implementations/search/search_tool.py:SearchTool._run_slack_search` gets no `effective_filters`, so time,
+   document-set and agent filters do not limit Slack results. The token decides
+   what comes back ([[federated-search#slack-results-have-no-acl]]).
+4. `llm-and-rich-responses-differ` **The result `content` and `details` serve
+   different readers.** The model reads the trimmed, cited string in `content`.
+   `SearchDocsResponse.search_docs` holds every top section before selection,
+   plus any decision-model pick from beyond the top hits.
+   `displayed_docs` holds only the selected ones; `None` means all, and an empty
+   list means none. Do not feed `details` fields back into the prompt. In chat,
+   `ChatAgent._finalize_tool` stages the connector files of all `search_docs`
+   for the Python tool by `SearchDoc.file_id`, which
+   `populate_file_ids_on_sections` fills ([[code-execution]]). The saved result
+   (`chat/response.py:_saved_message`) drops `search_docs` and the planning
+   metadata. The `ToolCall` row keeps the selected documents, so replay and
+   later turns cannot see the candidates before selection.
+5. `empty-source-list-searches-nothing` **An empty source list means "search
+   nothing".** `tools/tool_implementations/search/search_tool.py:SearchTool.search` returns an empty response when
+   `user_selected_filters.source_type == []`, outside project-only search.
+   `None` means no source filter. Do not normalize one into the other.
+6. `start-date-is-a-floor` **The agent's `search_start_date` is a floor.**
+   `context/search/pipeline.py:_build_index_filters` takes the later of it and any caller start date. An
+   inferred time window (`context/search/models.py:TimeFilter.apply_to`) can
+   only narrow a selected range. When the inferred window does not overlap the
+   selected range, it is dropped and the selected range applies unchanged. Do
+   not change this to an empty result.
+7. `scope-and-time-cache-differently` **Scope and time decisions cache
+   differently, and only between steps.** In
+   `tools/tool_implementations/search/search_tool.py:SearchTool._expand_queries_and_decide_scope`,
+   the time decision runs until a step records one
+   (`SearchContext.time_filter_computed`). The scope decision latches only when
+   it finds no source directive (`SearchContext.scope_decision_settled`). A
+   source list makes the next call decide again. Parallel searches in one step
+   read the same state and each decide; `update_search_context` keeps the first
+   time decision and the last new `cached_expansion` in model-call order, and
+   counts merged calls once.
+8. `weights-parallel-to-lanes` **Keep `search_weights` parallel to
+   `search_functions`.** A new lane must append to both lists in the same order.
+   `tools/tool_implementations/search/search_utils.py:weighted_reciprocal_rank_fusion`
+   pairs them by position. A missing weight raises, and a weight in the wrong
+   position gives that weight to another lane.
+9. `ranking-changes-need-eval` **Lane weights, prompts and RRF need an eval, not
+   only a unit test.** A weight change alters which documents reach selection.
+   Prompts in `secondary_llm_flows/` change quality silently. The load-test
+   mock (`tools/loadtest/mock_llm/search_workload.py:helper_kind`) recognizes
+   the selection, classification, scope and time prompts by their first words,
+   and the expansion prompts by phrases in their system prompts. A change to
+   those words breaks the mock; `tools/loadtest/tests/test_mock_llm.py` checks
+   it.
+10. `inferred-scope-keeps-user-files` **Inferred scope keeps user files.** When
+    project or agent files need retrieval, an inferred source scope adds
+    `USER_FILE` unless the user's own filter excludes it
+    (`tools/tool_implementations/search/search_tool.py:SearchTool.search`). Project-only searches
+    ignore user filters.
+11. `decision-path-gate` **The decision path needs a configured model, a turn
+    that persists content and, on cloud, a flag.**
+    `tools/tool_implementations/search/search_tool.py:SearchTool._resolve_decision_client`
+    runs once per search call. It returns a client only when the DECISION
+    default exists, `chat/incognito.py:current_turn_persists_content` is true,
+    and the PostHog flag `onyx-search-decision-rerank-expansion` is on for the
+    tenant. With the NoOp flag provider (self-hosted) the flag counts as on.
+    The decision client carries no incognito request policy, so content-free
+    turns must keep LLM selection. There is no env var.
+12. `rerank-one-request` **One ranking is one decision request.**
+    `secondary_llm_flows/decision_rerank_expansion.py:rank_sections_listwise`
+    asks one comparative yes/no question per section. Predicate probabilities
+    compare only within one request, so never split the pool across requests
+    or merge scores from two calls. Keep the pool below
+    `MAX_DECISION_QUESTIONS`; the function raises above it. A refused question
+    ranks its section last.
+13. `decision-falls-back-to-llm` **Every decision-path failure falls back to
+    LLM selection in the same search.** A client that cannot be built (such as
+    on a cost limit), a failed or timed-out ranking call, or a refusal of
+    every question makes `SearchTool.search` run `select_sections_for_expansion`
+    and expand with the LLM. Background expansions call the decision model
+    only, with `llm_fallback=False`, because most of those sections are not
+    selected; a failed one expands again in the normal pass if it is selected.
+14. `decision-client-before-cost-check` **The decision client resolves before
+    the primary cost check.** When selection uses the primary model and its
+    budget is exhausted, search still ranks and expands with the decision
+    model, with no LLM fallback. A failed rerank then raises the primary
+    model's budget error. Keep `_resolve_decision_client` ahead of
+    `check_primary_llm_cost` in `SearchTool.search`.
 
 ---
 
-## 9. Footguns
+## Known issues
 
-- **There is no reranker**, despite `RerankingModel` existing in
-  `natural_language_processing/search_nlp_models.py`. It is only ever
-  constructed inside dead code (`warm_up_cross_encoder`). Anyone reading
-  `search_nlp_models.py` and assuming a cross-encoder scores results is wrong;
-  the LLM selection stage (4.5) is what actually narrows the result set.
-- **Chat history keeps the LLM's original query arguments.** `SearchTool.run`
-  emits the expanded queries in `SearchToolQueriesDelta` for the UI. It does not
-  replace `tool_call.tool_args`, so history shows what the model wrote. See also
-  [[core-chat-loop]] §9.
-- **The time decision is cached per turn. The scope decision is cached only when
-  it finds no source directive.** `SearchContext.time_filter_computed` latches after the first
-  completed step with a time decision. `scope_decision_settled` latches only when
-  `decide_search_scope` returns `None`. If it returns a source list, the next
-  `internal_search` call in the same turn runs the decision again.
-- **`hybrid_alpha == 0.0` short-circuits to pure keyword retrieval**
-  (`_keyword_search` in `search_runner.py`), skipping the embedding call
-  entirely.
-  See [[document-index]].
-- **An explicitly empty `source_type` list is a real answer, not a missing
-  filter.** `SearchTool.run` treats `user_selected_filters.source_type == []`
-  (outside project mode, which ignores user filters)
-  as "search nothing" and returns an empty response immediately, while `None`
-  means "no source filter at all". Do not normalize one into the other.
-- **The Slack lane is not ACL-filtered the same way as every other lane.** Its
-  `IndexFilters.access_control_list` is `None` by construction; access is
-  whatever the pre-fetched Slack token can see. See §5.8.
+- **Saved tool-call arguments keep the model's original queries.** The UI, also
+  after a reload, shows the expanded queries from the saved result. The
+  `ToolCall` row arguments and the model's history keep what the model wrote.
+- **Context expansion never drops a selected section.** A `NOT_RELEVANT`
+  classification makes `expand_section_with_context` return `None`, and
+  `expand_section_safe` then keeps the original section.
+- **The EE Search page has no automatic scope or time detection.** It also
+  returns no Slack results ([[federated-search]]).
 
-### Synthetic load-test helper responses
+---
 
-`tools/loadtest/mock_llm/search_workload.py` supplies valid selection, classification,
-and neutral scope responses. Its sanitized `search_calibration.json` records weighted
-selection ranks and classification labels from a single ERAG sample. It models
-application work, not answer quality. `tools/loadtest/tests/test_mock_llm.py` reads
-production prompt constants without importing backend runtime dependencies.
-See `tools/loadtest/README.md` for calibration limits and explicit stress knobs.
+## Dependencies
 
+- [[document-index]]: runs the queries this component builds.
+- [[access-control]]: builds the ACL that every index lane uses.
+- [[federated-search]]: supplies the Slack lane rules and the registry.
+- [[tools-framework]]: constructs `SearchTool` and supplies the `ToolContext`
+  with the planning state and citation start.
+- [[agent-runtime]]: merges repeated calls in one step into one search.
+- [[llm-providers]]: resolves the SEARCH_SELECTION default and the decision
+  client.
+- [[editions-and-gating]]: the PostHog flag provider for the decision path.
+- [[chat-persistence]]: the record mode that decides whether a turn persists
+  content.
+- [[projects]]: decides when project and agent files go through search.
+- [[observability]]: the `/search` API opens its own trace and tool span,
+  because it does not pass through the chat loop.
 
-The representative load profiles in `tools/loadtest/mock_llm/profiles.py` add a
-seeded mix of search rounds, query counts, answer sizes, and reasoning. The mock
-uses current-turn result document numbers for citations. Helpers retain valid
-selection/classification responses. `tools/loadtest/mock_llm/response_plan.py` owns
-content, tool selection, timing, and usage; the HTTP handler delivers its plan. Shared response deadlines and tokenizer-based
-usage keep streaming and non-streaming workloads consistent. These are synthetic
-capacity profiles, not answer-quality evaluation. The default search scenario uses
-`mock-profile-search-v1`; explicit numeric stress models remain available.
+---
 
-`tools/loadtest/workload_manifest.py` records the input hash and planned mix.
-`tools/loadtest/capacity_report.py` evaluates one measured plateau against explicit
-latency and failure thresholds. The load client supports ERAG question JSONL,
-seeded question order, startup staggering, and think-time jitter. Workload metrics
-report active turns and actual stream/search event counts. See the load-test README
-for calibration assumptions, distributed reproducibility limits, and fault modes.
+## Recipes
+
+- `new-filter-field` **Add a filter field.** Copy how `document_set` flows: add the field to
+  `BaseFilters` and `IndexFilters` (`context/search/models.py`), compile it in
+  `_build_index_filters`. List the current fields with
+  `git grep -n "class BaseFilters" -A30 backend/onyx/context/search/models.py`.
+  Decide whether the Slack lane should honour it ([[#slack-lane-unfiltered]]).
+- `new-lane` **Add a lane.** Copy the keyword lane in `SearchTool.search`: append to
+  `search_functions` and `search_weights` together
+  ([[#weights-parallel-to-lanes]]), add its weight to
+  `tools/tool_implementations/search/constants.py`, and run a retrieval eval.
+- `document-not-found` **Investigate "search did not find my document".** Ask the same question and
+  read the filter note: a source or time scope the model inferred can exclude
+  the document. Then search for it in the admin document search. It runs one
+  keyword query with the admin's ACL, no LLM step, and shows hidden documents. If it shows there, the cause is scope, selection or the user's
+  ACL ([[access-control]]). If not, check that its pair indexed it
+  ([[cc-pairs-and-creds]]).
+
+---
+
+## Verification
+
+- Unit tests: `backend/tests/unit/onyx/tools/tool_implementations/search/` and
+  the search tool tests in `backend/tests/unit/onyx/tools/`.
+- Integration: `backend/tests/integration/tests/search/`.
+- Load-test mock: `tools/loadtest/tests/` checks that the mock still
+  recognizes the search prompts.
+- By hand, ask a question that forces a search. Then ask for one source by
+  name. The filter note must show that source, and no document from another
+  source may appear.
