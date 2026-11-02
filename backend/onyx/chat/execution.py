@@ -4,11 +4,18 @@ import threading
 import time
 from concurrent.futures import Future
 from contextlib import ExitStack
+from datetime import datetime, timedelta, timezone
 from functools import partial
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import WorkTracker
-from onyx.agents.models import AgentInfo, RunState
+from onyx.agents.models import (
+    AgentInfo,
+    RunFailure,
+    RunFailureKind,
+    RunState,
+    RunStatus,
+)
 from onyx.agents.runtime import Run
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
@@ -23,7 +30,7 @@ from onyx.chat.incognito import incognito_llm_request_policy
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup, CreateChatSessionID
 from onyx.chat.persistence import ChatResponsePersistence
-from onyx.chat.presentation import ResponsePresenter
+from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.restoration import restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
@@ -74,6 +81,9 @@ from shared_configs.contextvars import (
 
 logger = setup_logger()
 _CANCEL_POLL_INTERVAL_S = 0.25
+# Each response run ends itself at the turn deadline. The turn cancels later only
+# when work outlives that, e.g. preparation that never started a run.
+_DEADLINE_BACKSTOP = timedelta(seconds=30)
 # Count work across tenants without retaining their turns or request data.
 chat_turn_work = WorkTracker()
 
@@ -198,7 +208,13 @@ class ChatTurnExecution:
         )
         self._auto_filters = False
         self._stopped_by_user = False
+        # Each model gets one stop, including models still preparing at cancellation.
+        self._stopped_models: set[int] = set()
         self._last_refresh = self._last_stop_check = time.monotonic()
+        # Each response run cancels itself at this time and records a DEADLINE failure.
+        self._deadline_at = datetime.now(timezone.utc) + timedelta(
+            seconds=CHAT_EXECUTION_TIMEOUT_S
+        )
 
     def reject(self, error: BaseException) -> None:
         if self._query_observation is not None:
@@ -233,6 +249,9 @@ class ChatTurnExecution:
     def _publish(self, packet: Packet) -> None:
         if not self.cancellation.cancelled:
             self.delivery.publish(packet)
+            if isinstance(packet.obj, OverallStop):
+                with self._lock:
+                    self._stopped_models.add(packet.placement.model_index or 0)
 
     def run(self, *, startup_error: BaseException | None = None) -> None:
         try:
@@ -288,8 +307,6 @@ class ChatTurnExecution:
             self._response_workers[worker] = persistence
             worker.add_done_callback(lambda _future: self._completion_changed.set())
 
-        deadline = time.monotonic() + CHAT_EXECUTION_TIMEOUT_S
-        timed_out = False
         while True:
             # Clear before checking state so a concurrent completion cannot be lost.
             self._completion_changed.clear()
@@ -303,23 +320,28 @@ class ChatTurnExecution:
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat response polling failed; draining active work")
-            if not timed_out and time.monotonic() >= deadline:
-                timed_out = True
-                logger.error("Chat turn exceeded its execution deadline")
-                self.cancellation.cancel()
             with self._lock:
                 stores = tuple(self._stores)
             if not self._response_workers and not any(
                 store.has_owned_work for store in stores
             ):
                 if not self.delivery.is_closing:
-                    if self._stopped_by_user:
-                        self.delivery.publish(
-                            Packet(
-                                placement=Placement(turn_index=0),
-                                obj=OverallStop(stop_reason="user_cancelled"),
+                    stop = self._turn_stop()
+                    if stop is not None:
+                        with self._lock:
+                            pending = (
+                                set(range(len(self.setup.responses)))
+                                - self._stopped_models
                             )
-                        )
+                        for index in sorted(pending):
+                            self.delivery.publish(
+                                Packet(
+                                    placement=Placement(
+                                        turn_index=0, model_index=index
+                                    ),
+                                    obj=stop,
+                                )
+                            )
                     self.delivery.finish()
                 if self.delivery.finished.done() and self._clear_processing_status():
                     return
@@ -386,7 +408,11 @@ class ChatTurnExecution:
         index = persistence.model_index
         cancellation = CancellationSignal()
         links = ExitStack()
-        links.enter_context(self.cancellation.on_cancel(cancellation.cancel))
+        links.enter_context(
+            self.cancellation.on_cancel(
+                lambda: cancellation.cancel(self.cancellation.reason or "requested")
+            )
+        )
         observation_token = CURRENT_QUERY_OBSERVATION.set(self._query_observation)
         try:
             if startup_error is not None:
@@ -487,6 +513,7 @@ class ChatTurnExecution:
                     messages=self.setup.input_messages,
                     max_steps=chat_agent.max_steps,
                     cancellation=cancellation,
+                    deadline_at=self._deadline_at,
                     coordinator=coordinator,
                     event_dispatcher=self.delivery.events,
                     on_event=ResponsePresenter(
@@ -513,7 +540,7 @@ class ChatTurnExecution:
             return run
         except BaseException as failure:
             try:
-                persistence.save_failure(failure)
+                persistence.save_failure(failure, cancellation.reason)
             except Exception:
                 logger.exception(
                     "Response startup finalization failed for model %d", index
@@ -524,6 +551,20 @@ class ChatTurnExecution:
         finally:
             CURRENT_QUERY_OBSERVATION.reset(observation_token)
 
+    def _turn_stop(self) -> OverallStop | None:
+        """The stop packet the turn sends when it, not a response run, ended the work."""
+        if self.cancellation.reason == "deadline":
+            return overall_stop(
+                RunStatus.CANCELLED,
+                RunFailure(
+                    kind=RunFailureKind.DEADLINE,
+                    message="The chat turn reached its time limit.",
+                ),
+            )
+        if self._stopped_by_user:
+            return overall_stop(RunStatus.CANCELLED, None)
+        return None
+
     def _poll_control(self) -> None:
         with self._lock:
             stores = tuple(self._stores)
@@ -533,6 +574,13 @@ class ChatTurnExecution:
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat ownership control failed; will retry")
+
+        if (
+            not self.cancellation.cancelled
+            and datetime.now(timezone.utc) >= self._deadline_at + _DEADLINE_BACKSTOP
+        ):
+            logger.warning("Chat turn passed its deadline; cancelling remaining work")
+            self.cancellation.cancel("deadline")
 
         now = time.monotonic()
         if (

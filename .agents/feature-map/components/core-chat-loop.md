@@ -158,7 +158,9 @@ cancel the turn. A normal end sends one `OverallStop(finished)` per model from
 events, and at least every 250 ms. It checks Stop on each wake while the turn is
 not cancelled, refreshes the admission lease every 5 s, and lets each
 `ChatRunStore` renew its owner leases every 10 s. After
-`CHAT_EXECUTION_TIMEOUT_S` it cancels the turn. When no response worker and no
+`CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
+`DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
+preparation that has not started a run. When no response worker and no
 owned run remains, it finishes delivery and then releases the admission. A child
 run's owner lease also keeps the turn and its admission alive. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
@@ -226,15 +228,14 @@ termination grace period is much shorter, so it ends running turns first
    the web client does. Without `stream_id`, Stop targets the stream in flight
    at request time. Replay shows `user_cancelled` from the saved
    `RunStatus.CANCELLED`; only legacy rows match the stop sentence by text
-   ([[chat-persistence]]).
-9. `non-user-cancel` **Only a user Stop sends a final stop packet.** The control
-   thread publishes `OverallStop(stop_reason="user_cancelled")` after all work
-   drains only when the user's stop key cancelled the turn. The presenter's own
-   `OverallStop` is dropped after any cancel, and `AgentCancelled` publishes no
-   error. So a deadline, a lost admission or a control failure ends the live
-   stream with no stop packet and no error, but the saved row still ends with
-   "Generation was stopped by the user." and replays as `user_cancelled`. A new
-   cancellation cause must decide what the user sees.
+   ([[chat-persistence]]), except a saved `DEADLINE` failure replays as `timed_out`.
+9. `non-user-cancel` **Deadlines have their own stop reason.** Response runs
+   cancel themselves at the turn deadline and save `RunFailureKind.DEADLINE`.
+   `chat/presentation.py:overall_stop` maps that failure to `timed_out` for live
+   and replayed responses. The turn sends a fallback stop after draining when
+   preparation times out or the user stops, only for models without a delivered stop.
+   The first cancellation reason wins. Lost admission and control failures still
+   end without a live stop packet; they are not classified as deadlines.
 10. `stop-before-launch` **Stop does nothing before launch.** During setup the
     fence holds no stream ID, and launch clears any earlier stop key for the
     stream ID. A client must wait for the message-ID packet before it sends
@@ -365,8 +366,8 @@ termination grace period is much shorter, so it ends running turns first
   completion failed", "Chat session admission was lost", "Chat ownership control
   failed", "Response ownership renewal failed", "Failed to read agent Stop
   request", "Response persistence exceeded its wait bound" and "Chat turn
-  exceeded its execution deadline". A deadline or a lost admission ends the
-  stream with no stop packet ([[#non-user-cancel]]). In the tenant's cache, the
+  passed its deadline". A deadline sends `timed_out`; lost admission can end
+  the stream with no stop packet ([[#non-user-cancel]]). In the tenant's cache, the
   session owner key is `chatprocessing_owner_<session_id>`, the processing fence
   is `chatprocessing_fence_<session_id>` (it holds the stream ID), and the stop
   key is `chatsessionstop_fence_<session_id>_<stream_id>`. Each owned run also

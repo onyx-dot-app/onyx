@@ -192,6 +192,13 @@ function AssistantMessage({
           </Text>
         </View>
       ) : null}
+      {stopPacketSeen && stopReason === StopReason.TIMED_OUT ? (
+        <View className="px-12">
+          <Text font="secondary-body" color="text-04">
+            The response stopped because it reached its time limit.
+          </Text>
+        </View>
+      ) : null}
       {sources && sources.hasSources ? (
         <View className="px-12">
           <CitedSourcesBar

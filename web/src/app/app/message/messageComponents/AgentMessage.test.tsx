@@ -428,3 +428,33 @@ test("a failed streaming answer stops its existing autoplay session", async () =
   );
   expect(mockStopTTS).toHaveBeenCalledTimes(1);
 });
+
+test("a timed out answer explains its deadline without claiming the user stopped it", async () => {
+  seedSessionAwaitingAnswer();
+  const packets: Packet[] = [
+    ...answerPackets.slice(0, -1),
+    {
+      placement,
+      obj: { type: PacketType.STOP, stop_reason: StopReason.TIMED_OUT },
+    },
+  ];
+  render(
+    <AgentMessage
+      rawPackets={packets}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  expect(
+    await screen.findByText(
+      "The response stopped because it reached its time limit."
+    )
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText("User has stopped generation")
+  ).not.toBeInTheDocument();
+  await waitFor(() => expect(renderComplete()).toBe(true));
+});

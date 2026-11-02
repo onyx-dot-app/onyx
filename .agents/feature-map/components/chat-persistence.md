@@ -313,11 +313,11 @@ Community downgrade clears it ([[billing]]).
 8. `replay-matches-live-stream` **Replay must match the live stream.** Runtime
    replay and the live stream share `chat/renderer.py:MessageRenderer` and
    `chat/renderer.py:ToolRenderer`, so change rendering there, not in one
-   caller. Runtime replay sets `stop_reason=user_cancelled` from a `CANCELLED`
-   status. `CANCELLED` does not mean the user pressed Stop: a turn timeout,
-   lost admission, lost ownership lease or control failure cancels the run too,
-   and it is saved and replayed like Stop, with "Generation was stopped by the
-   user." and no error. Legacy replay has its own builders in
+   caller. Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
+   response with a `DEADLINE` failure gets `timed_out`; other cancellations get
+   `user_cancelled`. Lost admission, lost ownership lease and control failures
+   still cancel without a classified failure and replay like Stop. Legacy replay
+   has its own builders in
    `server/query_and_chat/session_loading.py`; check every `in_code_tool_id`
    branch when a legacy display changes. It finds a stopped answer by the text
    "generation was stopped", which

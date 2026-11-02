@@ -2,6 +2,7 @@
 
 import threading
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 from threading import Event
 from unittest.mock import patch
 
@@ -24,7 +25,12 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ChildRunCancelled, ToolInvocation, ToolProgress
-from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
+from onyx.llm.cancellation import (
+    AgentCancelled,
+    CancellationSignal,
+    CancelReason,
+    cancellation_scope,
+)
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -665,3 +671,31 @@ def test_agent_remains_reserved_until_model_read_returns(
     assert agent.state.messages[-1].text == "New answer"
     if coordinator is not None:
         assert coordinator.close(timeout=2)
+
+
+@pytest.mark.parametrize("reason", ["requested", "deadline"])
+def test_first_cancellation_reason_survives_an_expired_run_deadline(
+    reason: CancelReason,
+) -> None:
+    external = CancellationSignal()
+    external.cancel(reason)
+    external.cancel("deadline" if reason == "requested" else "requested")
+    agent = Agent(
+        FakeModelClient(lambda *_: pytest.fail("Cancelled work must not generate")),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    run = agent.start(
+        background=False,
+        max_steps=1,
+        cancellation=external,
+        deadline_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+    state = run.snapshot()
+    assert state.status == RunStatus.CANCELLED
+    assert run.cancellation_signal.reason == reason
+    if reason == "deadline":
+        assert state.failure is not None
+        assert state.failure.kind == RunFailureKind.DEADLINE
+    else:
+        assert state.failure is None
+    assert run.wait_for_idle(5)

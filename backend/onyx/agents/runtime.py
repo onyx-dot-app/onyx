@@ -79,6 +79,7 @@ from onyx.agents.tools import (
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
+    CancelReason,
     cancellation_scope,
     current_cancellation,
 )
@@ -301,9 +302,12 @@ class Agent:
         on_event: Callable[[AgentEvent], None] | None = None,
         event_dispatcher: EventDispatcher | None = None,
         _snapshot: RunState | None = None,
-        _deadline_at: datetime | None = None,
+        deadline_at: datetime | None = None,
     ) -> "Run":
-        """Start a worker, or execute here until suspension or completion with background=False."""
+        """Start a worker, or execute here until suspension or completion with background=False.
+
+        At `deadline_at` the run is cancelled and records a `DEADLINE` failure.
+        """
         AgentStep(index=0, limit=max_steps)
         with self._lock:
             previous = self._latest_run
@@ -345,7 +349,7 @@ class Agent:
                     if _snapshot is not None
                     else RunState(
                         progress=RunProgress(
-                            step_limit=max_steps, deadline_at=_deadline_at
+                            step_limit=max_steps, deadline_at=deadline_at
                         ),
                         run_id=run_id,
                         agent_id=self.id,
@@ -548,11 +552,11 @@ class Run:
                 state = state.model_copy(update={"child_runs": []})
             return state.model_copy(deep=True)
 
-    def cancel(self) -> None:
+    def cancel(self, reason: CancelReason = "requested") -> None:
         with self.execution_lock:
             if self._released or self._completed.done():
                 return
-        self.cancellation_signal.cancel()
+        self.cancellation_signal.cancel(reason)
         self._wake_execution()
 
     def suspend(self) -> None:
@@ -860,7 +864,11 @@ class Run:
         try:
             if external_cancellation is not None:
                 self._cancellation_link.enter_context(
-                    external_cancellation.on_cancel(self.cancellation_signal.cancel)
+                    external_cancellation.on_cancel(
+                        lambda: self.cancellation_signal.cancel(
+                            external_cancellation.reason or "requested"
+                        )
+                    )
                 )
             if state.progress is not None:
                 feature_state = state.progress.feature_state
@@ -906,9 +914,9 @@ class Run:
             if deadline_at is not None:
                 remaining = (deadline_at - datetime.now(timezone.utc)).total_seconds()
                 if remaining <= 0:
-                    self.cancel()
+                    self.cancel("deadline")
                 else:
-                    timer = threading.Timer(remaining, self.cancel)
+                    timer = threading.Timer(remaining, self.cancel, ("deadline",))
                     timer.daemon = True
                     self._cancellation_link.callback(timer.cancel)
                     timer.start()
@@ -1157,12 +1165,23 @@ class Run:
                 for execution in step.tools.values():
                     if execution.status == ExecutionStatus.RUNNING:
                         execution.status = ExecutionStatus(outcome.value)
+            if (
+                outcome == RunStatus.CANCELLED
+                and self._state.failure is None
+                and self.cancellation_signal.reason == "deadline"
+            ):
+                logger.warning("Agent run %s was stopped at its deadline", self.id)
+                self._state.failure = RunFailure(
+                    kind=RunFailureKind.DEADLINE,
+                    message="The run was stopped at its deadline.",
+                )
             self._state.status = outcome
             if self.event_delivery:
                 self.event_delivery.publish(
                     AgentEndEvent(
                         **self.event_context,
                         outcome=outcome,
+                        failure=self._state.failure,
                     )
                 )
             self._state.revision += 1

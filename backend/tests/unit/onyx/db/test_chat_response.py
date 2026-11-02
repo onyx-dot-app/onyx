@@ -1,5 +1,6 @@
 """Chat response persistence: referenced files and text sanitization."""
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -10,6 +11,7 @@ from pytest import MonkeyPatch
 
 from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.chat.errors import chat_error
+from onyx.chat.models import ChatResponseSnapshot, ResponseRecord
 from onyx.configs.constants import MessageType
 from onyx.db import chat_response
 from onyx.db.chat import translate_db_message_to_chat_message_detail
@@ -371,3 +373,50 @@ def test_message_detail_exposes_saved_response_status(status: RunStatus | None) 
     detail = translate_db_message_to_chat_message_detail(response)
     assert detail.response_status == status
     assert detail.model_dump()["response_status"] == status
+
+
+@pytest.mark.parametrize("deadline", [False, True])
+def test_saved_cancelled_answer_preserves_the_stop_reason(
+    monkeypatch: MonkeyPatch, deadline: bool
+) -> None:
+    session_id = uuid4()
+    session = MagicMock()
+    session.get.return_value.chat_session_id = session_id
+    monkeypatch.setattr(
+        chat_response, "get_session_with_current_tenant", lambda: nullcontext(session)
+    )
+    monkeypatch.setattr(chat_response, "record_mode_persists_content", lambda _: True)
+    monkeypatch.setattr(chat_response, "finish_checkpoint__no_commit", lambda *_: None)
+    save = MagicMock()
+    monkeypatch.setattr(chat_response, "save_chat_turn", save)
+    response = ChatResponseSnapshot(
+        answer="Partial answer",
+        reasoning=None,
+        request_params=None,
+        citation_to_doc={},
+        tool_calls=[],
+        is_clarification=False,
+        all_search_docs={},
+        pre_answer_processing_time=None,
+        cancelled=True,
+        response=ResponseRecord(
+            run_id="1",
+            status=RunStatus.CANCELLED,
+            failure=RunFailure(kind=RunFailureKind.DEADLINE, message="deadline")
+            if deadline
+            else None,
+        ),
+    )
+    answer = chat_response.save_chat_response_to_db(
+        message_id=1,
+        chat_session_id=session_id,
+        expected_persist_content=True,
+        response=response,
+    )
+    reason = (
+        "The response stopped because it reached its time limit."
+        if deadline
+        else "Generation was stopped by the user."
+    )
+    assert answer == "Partial answer ... \n\n" + reason
+    assert save.call_args.kwargs["message_text"] == answer

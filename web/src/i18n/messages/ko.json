@@ -12639,6 +12639,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "사용자가 생성을 중지했습니다"
+        },
+        "timedOut": {
+          "text": "응답이 시간 제한에 도달하여 중지되었습니다."
         }
       },
       "codeBlock": {

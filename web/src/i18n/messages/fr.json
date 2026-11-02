@@ -12639,6 +12639,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "L'utilisateur a arrêté la génération"
+        },
+        "timedOut": {
+          "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
         }
       },
       "codeBlock": {
