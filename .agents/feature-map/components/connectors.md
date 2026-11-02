@@ -151,6 +151,15 @@ event pair runs neither the source's `validate_perm_sync` nor its
 `validate_connector_settings`. Both pass silently rather than failing. Single
 tenant only; the webhook server refuses to start under `MULTI_TENANT`.
 
+A handler is given the pair's decrypted credential JSON alongside the row
+(`onyx/connectors/event_inbox/credentials.py:pair_secrets`), so a provider
+that pushes a link rather than a body can fetch it. That fetch is why the
+claim session closes before any handler runs, and why a failed handler
+returns to the queue with backoff rather than settling: a timeout is not a
+payload the next run will also reject. A claim whose index attempt was
+deleted is released for the same reason -- nothing else would ever settle
+it, and `claim_events` reads only PENDING rows.
+
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
 EE permission sync and capability checks all call. To list them, run
