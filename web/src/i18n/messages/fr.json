@@ -12003,9 +12003,6 @@
         "builtin": {
           "label": "Intégrée"
         },
-        "custom": {
-          "label": "Personnalisée"
-        },
         "invalid": {
           "label": "Non valide"
         },
@@ -12017,6 +12014,12 @@
         },
         "unavailable": {
           "label": "Indisponible - cliquez pour en savoir plus"
+        },
+        "shared": {
+          "label": "Partagée"
+        },
+        "organization": {
+          "label": "Organisation"
         }
       },
       "toggle": {
@@ -16631,6 +16634,9 @@
         },
         "webSearch": {
           "label": "Recherche web"
+        },
+        "skills": {
+          "label": "Compétences"
         }
       },
       "sections": {
@@ -16944,6 +16950,9 @@
         "inspectFailed": "Échec de l'inspection du paquet de compétence",
         "saveFailed": "Échec de l'enregistrement de la compétence",
         "saved": "« {name} » enregistrée"
+      },
+      "creationAccess": {
+        "title": "Accès"
       }
     },
     "modals": {
@@ -16982,6 +16991,13 @@
           "singleSkill": "Téléversez une seule compétence à la fois.",
           "title": "Exigences pour les fichiers",
           "zip": "Les fichiers ZIP doivent contenir un fichier SKILL.md."
+        },
+        "batch": {
+          "title": "Accès aux compétences téléversées",
+          "selected": "{count, plural, one {# paquet de compétence sélectionné} other {# paquets de compétences sélectionnés}}",
+          "result": "{imported, plural, one {# compétence importée} other {# compétences importées}}. {failed, plural, one {# échec} other {# échecs}}.",
+          "failure": "{name} : {reason}",
+          "requirement": "Sélectionnez plusieurs fichiers ZIP pour importer des compétences ensemble. Chaque ZIP doit contenir une compétence."
         }
       },
       "importGithub": {
@@ -17058,6 +17074,11 @@
         "unavailableFallback": "Cette compétence ne peut pas être importée.",
         "unavailableTag": {
           "label": "Importation impossible"
+        },
+        "sharing": {
+          "title": "Accès aux compétences importées",
+          "configureButton": "Configurer l’accès",
+          "description": "Ces paramètres d’accès s’appliquent à {count, plural, one {la compétence sélectionnée} other {toutes les # compétences sélectionnées}}."
         }
       },
       "nameConflict": {
@@ -17166,11 +17187,15 @@
       },
       "placeholders": {
         "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
+      },
+      "tabs": {
+        "details": "Détails",
+        "sharing": "Partage"
       }
     },
     "page": {
       "browse": {
-        "title": "Parcourir les compétences"
+        "title": "Sélectionner des compétences"
       },
       "countSeparator": {
         "label": "{count, plural, one {Compétence} other {Compétences}}"
@@ -17198,8 +17223,8 @@
           "title": "Aucune compétence correspondante"
         },
         "noSkills": {
-          "description": "Aucune compétence personnalisée n'a encore été partagée avec vous et aucune compétence intégrée n'est configurée.",
-          "title": "Aucune compétence disponible"
+          "title": "Aucune compétence personnalisée pour le moment",
+          "description": "Créez ou importez une compétence pour l’ajouter à votre bibliothèque."
         }
       },
       "focusedApp": {
@@ -17236,6 +17261,9 @@
         "disableFailed": "Échec de la désactivation de {name}",
         "enableFailed": "Échec de l'activation de {name}",
         "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée."
+      },
+      "builtins": {
+        "title": "Compétences intégrées ({count, number})"
       }
     },
     "sections": {
@@ -17291,6 +17319,34 @@
           "readFailed": "Impossible de lire le fichier téléversé."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Tout le monde dans l’organisation peut accéder à cette compétence.} other {Tout le monde dans l’organisation peut accéder à ces compétences.}}",
+      "selected": "Partagée avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
+      "private": "{count, plural, one {Vous seul pouvez accéder à cette compétence.} other {Vous seul pouvez accéder à ces compétences.}}"
+    },
+    "bulk": {
+      "adminDescription": "Gérez les compétences et les accès dans votre organisation.",
+      "selectAll": "Sélectionner toutes les compétences personnalisées visibles",
+      "selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
+      "share": "Partager",
+      "enable": "Activer pour moi",
+      "disable": "Désactiver pour moi",
+      "delete": "Supprimer",
+      "selectSkill": "Sélectionner {name}",
+      "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
+      "failed": "Impossible de mettre à jour les compétences. Réessayez.",
+      "partialFailure": "{count, plural, one {# compétence n’a pas pu être mise à jour} other {# compétences n’ont pas pu être mises à jour}}",
+      "deleteTitle": "{count, plural, one {Supprimer # compétence ?} other {Supprimer # compétences ?}}",
+      "deleteDescription": "{count, plural, one {La compétence sélectionnée sera supprimée pour toutes les personnes qui y ont accès. Cette action est irréversible.} other {Les # compétences sélectionnées seront supprimées pour toutes les personnes qui y ont accès. Cette action est irréversible.}}",
+      "shareTitle": "{count, plural, one {Mettre à jour l’accès à # compétence} other {Mettre à jour l’accès à # compétences}}",
+      "shareDescription": "Appliquez ces modifications à chaque compétence sélectionnée. Les paramètres non modifiés conservent leurs valeurs actuelles.",
+      "unchanged": "Ne pas modifier",
+      "everyone": "Tout le monde dans l’organisation",
+      "invitedOnly": "Personnes et groupes invités",
+      "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
+      "apply": "{count, plural, one {Appliquer à # compétence} other {Appliquer à # compétences}}",
+      "moreActions": "Plus d’actions"
     }
   },
   "opensearchHealth": {

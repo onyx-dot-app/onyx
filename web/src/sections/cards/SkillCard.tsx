@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   InputSwitch,
+  InputCheckbox,
   Tag,
   Text,
   Tooltip,
@@ -66,6 +67,11 @@ export interface SkillCardProps {
   onDelete?: (item: CustomSkillCardItem) => void;
   onEnabledChange?: (item: SkillCardItem, enabled: boolean) => void;
   enablementPending?: boolean;
+  selection?: {
+    checked: boolean;
+    disabled: boolean;
+    onCheckedChange: (checked: boolean) => void;
+  };
 }
 
 export default function SkillCard({
@@ -77,6 +83,7 @@ export default function SkillCard({
   onDelete,
   onEnabledChange,
   enablementPending = false,
+  selection,
 }: SkillCardProps) {
   const t = useTranslations("cards");
   const skillCopy = useTranslations("skills");
@@ -185,18 +192,43 @@ export default function SkillCard({
             height="auto"
             gap={1}
           >
-            <Button
-              prominence="internal"
-              icon={SvgBlocks}
-              aria-label={item.name}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleClick();
-              }}
+            <Section
+              flexDirection="row"
+              height="auto"
+              justifyContent="start"
+              gap={0}
+              width="auto"
             >
-              {item.name}
-            </Button>
-            {item.source === "custom" && canEdit ? (
+              {selection && (
+                <Section
+                  width="auto"
+                  height="auto"
+                  padding={2}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <InputCheckbox
+                    checked={selection.checked}
+                    disabled={selection.disabled}
+                    onCheckedChange={selection.onCheckedChange}
+                    aria-label={skillCopy("bulk.selectSkill", {
+                      name: item.name,
+                    })}
+                  />
+                </Section>
+              )}
+              <Button
+                prominence="internal"
+                icon={selection ? undefined : SvgBlocks}
+                aria-label={item.name}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleClick();
+                }}
+              >
+                {item.name}
+              </Button>
+            </Section>
+            {item.source === "custom" && canEdit && !selection?.checked ? (
               <Section
                 flexDirection="row"
                 justifyContent="start"
@@ -257,8 +289,20 @@ export default function SkillCard({
           </Section>
         </Section>
 
-        <div className="bg-background-tint-01 p-1 flex flex-row items-center justify-between w-full">
-          <div className="py-1 px-2 min-w-0 flex-1">
+        <Section
+          flexDirection="row"
+          height="auto"
+          justifyContent="between"
+          padding={1}
+          gap={0}
+          className="bg-background-tint-01"
+        >
+          <Section
+            height="auto"
+            width="auto"
+            padding={1}
+            className="min-w-0 flex-1"
+          >
             <Content
               icon={dependency ? SvgPlug : SvgUser}
               title={dependencyStatus ?? authorTitle}
@@ -266,8 +310,15 @@ export default function SkillCard({
               variant="body"
               color="muted"
             />
-          </div>
-          <div className="p-0.5 pe-1.5 flex items-center gap-1">
+          </Section>
+          <Section
+            flexDirection="row"
+            height="auto"
+            width="auto"
+            padding={0.5}
+            gap={1}
+            className="me-1"
+          >
             {isRequired && (
               <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
                 <Tag
@@ -277,7 +328,9 @@ export default function SkillCard({
               </Tooltip>
             )}
             {item.can_toggle && (
-              <div
+              <Section
+                width="auto"
+                height="auto"
                 role="presentation"
                 onClick={(event) => event.stopPropagation()}
               >
@@ -287,7 +340,7 @@ export default function SkillCard({
                   disabled={enablementPending || isInvalid}
                   aria-label={toggleAriaLabel}
                 />
-              </div>
+              </Section>
             )}
             {item.source === "builtin" ? (
               item.is_available ? (
@@ -299,13 +352,21 @@ export default function SkillCard({
               <Tag title={t("skill.tags.invalid.label")} color="amber" />
             ) : dependency ? (
               <Tag title={t("skill.tags.appSkill.label")} color="blue" />
-            ) : item.is_personal ? (
-              <Tag title={t("skill.tags.personal.label")} color="purple" />
-            ) : (
-              <Tag title={t("skill.tags.custom.label")} color="gray" />
+            ) : null}
+            {item.source === "custom" && (
+              <Tag
+                title={t(
+                  item.skill.public_permission !== null
+                    ? "skill.tags.organization.label"
+                    : item.skill.is_personal
+                      ? "skill.tags.personal.label"
+                      : "skill.tags.shared.label"
+                )}
+                color={item.skill.is_personal ? "purple" : "blue"}
+              />
             )}
-          </div>
-        </div>
+          </Section>
+        </Section>
       </Card>
     </Tooltip>
   );
