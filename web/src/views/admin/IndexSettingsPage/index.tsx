@@ -889,9 +889,10 @@ export default function IndexSettingsPage() {
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
   // current index. The reindex-progress endpoint still reports that active port target,
   // so treat it as reindexing too; otherwise the banner never shows for INSTANT.
-  const { data: vectorQuantizationSupport } = useVectorQuantizationSupport({
-    enabled: !NEXT_PUBLIC_CLOUD_ENABLED,
-  });
+  const {
+    data: vectorQuantizationSupport,
+    isLoading: vectorQuantizationSupportLoading,
+  } = useVectorQuantizationSupport({ enabled: !NEXT_PUBLIC_CLOUD_ENABLED });
   // A level the cluster cannot index stays visible but disabled, with the
   // OpenSearch version it needs.
   const quantizationOption = (
@@ -2230,6 +2231,9 @@ export default function IndexSettingsPage() {
                           >
                             <InputSingleSelectField
                               name="vector_quantization"
+                              // Wait for the cluster's support so an
+                              // unsupported level cannot be picked first.
+                              disabled={vectorQuantizationSupportLoading}
                               defaultOption={VectorQuantization.NONE}
                               placeholder={tInputSelect("placeholder.fallback")}
                               options={[

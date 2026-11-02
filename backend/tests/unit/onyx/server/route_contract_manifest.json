@@ -349,6 +349,7 @@
   "GET /search-settings/reindex-errors": "admin",
   "GET /search-settings/reindex-progress": "admin",
   "GET /search-settings/unstructured-api-key-set": "admin",
+  "GET /search-settings/vector-quantization-support": "admin",
   "GET /search/search-history": "read:search",
   "GET /settings": "basic +anonymous",
   "GET /skills": "basic",
