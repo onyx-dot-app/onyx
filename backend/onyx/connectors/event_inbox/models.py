@@ -1,9 +1,4 @@
-"""What a source declares to receive pushed events.
-
-A source supplies one `WebhookSourceSpec`; the registry in
-`source_registry.py` holds them and the webhook server builds a route per
-spec.
-"""
+"""What a source declares to receive pushed events."""
 
 from collections.abc import Mapping
 from typing import Protocol, runtime_checkable
@@ -15,19 +10,14 @@ from onyx.connectors.event_models import EventParseResult
 
 
 class WebhookRequest(BaseModel):
-    """One inbound delivery, decoupled from FastAPI.
-
-    Carries the raw body as well as the decoded one: a signature covers the
-    exact bytes the provider sent, and re-serializing the parsed JSON can
-    change them.
-    """
+    """One inbound delivery, decoupled from FastAPI. Raw bytes, because a
+    signature covers exactly what the provider sent."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     raw_body: bytes
     headers: Mapping[str, str]
-    # Which of the source's endpoints the delivery arrived on, as the spec
-    # spells it. "" for a source that declares one endpoint.
+    # Which of the source's endpoints it arrived on, as the spec spells it.
     endpoint: str = ""
 
 
@@ -53,18 +43,13 @@ class ChallengeResponder(Protocol):
     def __call__(
         self, request: WebhookRequest, secrets: Mapping[str, str]
     ) -> dict[str, object] | None:
-        """Answer a provider's endpoint-validation handshake.
+        """Answer a provider's endpoint-validation handshake, or None when
+        the delivery is an ordinary event.
 
-        Several providers (Zoom among them) prove an endpoint is theirs by
-        POSTing a challenge to it before they will save it. Returning a body
-        answers the handshake; returning None means this delivery is an
-        ordinary event.
-
-        Always runs after the signature check. A responder usually answers
-        with a value derived from the shared secret, so running it on an
-        unverified request would hand an attacker a signing oracle: they
-        choose the challenge, read back the secret applied to it, and forge
-        any event they like.
+        Always runs after the signature check. A responder answers with the
+        shared secret applied to input the caller chose, so on an unverified
+        request it is a signing oracle: ask for the secret over the message
+        a verifier would check, then replay the answer.
         """
 
 
@@ -74,20 +59,17 @@ class WebhookSourceSpec(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     source: DocumentSource
-    # The path segment under /webhook, so a Zoom spec with slug "zoom" is
-    # reached at /webhook/zoom. Keep it stable: it is in the URL an admin
-    # pastes into the provider's console.
+    # The path segment under /webhook. Keep it stable: it is in the URL an
+    # admin pastes into the provider's console.
     slug: str
-    # The sub-paths this source answers on, under its slug. A provider that
-    # posts different kinds of event to different URLs declares one entry
-    # each, and the parser reads `request.endpoint` to tell them apart.
+    # Sub-paths under the slug, one per URL the provider posts to. The
+    # parser reads `request.endpoint` to tell them apart.
     endpoints: tuple[str, ...] = ("",)
     parser: EventParser
-    # No default: an endpoint that takes unauthenticated writes must be a
-    # decision somebody made, not one a source reached by omission.
+    # No default: unauthenticated writes must be somebody's decision, not a
+    # source's omission.
     verifier: SignatureVerifier | None
-    # The deliberate escape hatch for a provider that signs nothing. Grep for
-    # it to find every endpoint the internet can write to.
+    # Grep for it to find every endpoint the internet can write to.
     allow_unsigned: bool = False
     challenge_responder: ChallengeResponder | None = None
 
