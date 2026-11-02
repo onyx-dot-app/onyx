@@ -179,11 +179,13 @@ ever settle it, and `claim_events` reads only PENDING rows. An attempt that
 ends `COMPLETED_WITH_ERRORS` completes the rows whose documents stored and
 retries the rest the same bounded way, by its `IndexAttemptError` rows.
 
-Creating a connector for a registered event source stores `input_type` as
-`EVENT` whatever the caller sent (`server/documents/connector.py`), because
-the registry settles it and a client cannot know. A pair created as `poll`
-for such a source would never drain its queue, and would look healthy doing
-it.
+Every write of a connector for a registered event source stores `input_type`
+as `EVENT` whatever the caller sent
+(`onyx/db/connector.py:_settle_event_input_type`, called from both
+`create_connector` and `update_connector`), because the registry settles it
+and a client cannot know. A pair stored as `poll` would never drain its
+queue, and would look healthy doing it, whether it was created that way or
+edited into it.
 
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
