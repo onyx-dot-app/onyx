@@ -13203,14 +13203,14 @@
           "title": "所属組織"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "編集"
+          "canEdit": {
+            "label": "編集可能"
+          },
+          "canUse": {
+            "label": "使用可能"
           },
           "removeAccess": {
             "label": "アクセス権を削除"
-          },
-          "viewAndChat": {
-            "label": "閲覧とチャット"
           }
         },
         "privateOption": {
@@ -17143,9 +17143,7 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "{name} のアクセス権を更新",
-          "canUse": "使用可能",
-          "canEdit": "編集可能"
+          "ariaLabel": "{name} のアクセス権を更新"
         },
         "saveButton": {
           "label": "保存"

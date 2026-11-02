@@ -55,10 +55,7 @@ export default function BulkSkillSharingModal({
   const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
     []
   );
-  const permissionOptions = useSharePermissionOptions({
-    VIEWER: shareCopy("permissionMenu.canUse"),
-    EDITOR: shareCopy("permissionMenu.canEdit"),
-  });
+  const permissionOptions = useSharePermissionOptions();
   const changed =
     scope !== "KEEP" ||
     policy !== "KEEP" ||
