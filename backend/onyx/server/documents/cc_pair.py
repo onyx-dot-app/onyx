@@ -1,5 +1,6 @@
 from datetime import datetime
 from http import HTTPStatus
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -108,7 +109,12 @@ from onyx.server.documents.cc_pair_runs_feed import (
     fetch_run_feed,
     open_level_filters,
 )
-from onyx.server.documents.cc_pair_throughput import throughput_of
+from onyx.server.documents.cc_pair_throughput import (
+    MAX_THROUGHPUT_BINS,
+    MAX_TZ_OFFSET_MINUTES,
+    MIN_THROUGHPUT_BINS,
+    throughput_of,
+)
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
@@ -492,14 +498,26 @@ def resolve_matching_cc_pair_runs(
 def get_cc_pair_throughput(
     cc_pair_id: int,
     window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_24),
+    bins: Annotated[
+        int | None, Query(ge=MIN_THROUGHPUT_BINS, le=MAX_THROUGHPUT_BINS)
+    ] = None,
+    tz_offset_minutes: Annotated[
+        int,
+        Query(
+            ge=-MAX_TZ_OFFSET_MINUTES,
+            le=MAX_TZ_OFFSET_MINUTES,
+            description="The caller's UTC offset in minutes, east positive.",
+        ),
+    ] = 0,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> CCPairThroughputResponse:
-    """Estimates the documents the pair indexed in each equal slice of the
-    window (see ``docs_indexed_per_slice``), and lists the runs that overlap
-    it."""
+    """Estimates the documents the pair indexed in each of ``bins`` equal
+    slices of the window (the window's default count without it, see
+    ``docs_indexed_per_slice``), and lists the runs that overlap it, also per
+    slice."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     if (
         get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
@@ -509,7 +527,7 @@ def get_cc_pair_throughput(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "CC Pair not found for current user permissions",
         )
-    return throughput_of(db_session, [cc_pair_id], window)
+    return throughput_of(db_session, [cc_pair_id], window, bins, tz_offset_minutes)
 
 
 def _cancel_index_attempt__no_commit(
