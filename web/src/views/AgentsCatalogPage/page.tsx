@@ -12,8 +12,7 @@ import { MinimalAgent } from "@/lib/agents/types";
 import { SettingsLayouts } from "@opal/layouts";
 import { GridSearchInput, NoItems, NoResults } from "@/lib/common/components";
 import { useSearchableGrid } from "@/lib/common/hooks";
-import TextSeparator from "@/refresh-components/TextSeparator";
-import { Button, Tabs, Text } from "@opal/components";
+import { Button, EndOfList, Tabs, Text } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 
@@ -216,9 +215,8 @@ export default function AgentsCatalogPage() {
               viewedAgentId={viewedAgentId}
               onView={openViewer}
             />
-            <TextSeparator
-              count={agentCount}
-              text={t("navigation.countSeparator.label", {
+            <EndOfList
+              title={t("navigation.countSeparator.label", {
                 count: agentCount,
               })}
             />
