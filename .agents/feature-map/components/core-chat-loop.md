@@ -217,13 +217,15 @@ termination grace period is much shorter, so it ends running turns first
    the session keeps content. Do not move reservation later.
 8. `disconnect-is-not-stop` **Disconnect is not stop.** A disconnect never
    cancels. The turn's `CancellationSignal` is cancelled by the user's stop key
-   (`chat/stop_signal_checker.py:request_stop`), the execution deadline, a lost
+   (`chat/stop_signal_checker.py:request_stop`), the deadline backstop, a lost
    admission, a control or response-polling failure, or a failed worker.
+   The execution deadline cancels each response run first. The turn cancels
+   remaining work 30 seconds later.
    `ChatRunStore.poll_control` cancels one run when its owner lease is lost or
    its `chat_response_stop:<id>` key is set. Cancellation reaches every run,
    child and tool, and `ChatTurnExecution._publish` drops packets after it. It
-   does not interrupt a blocked provider read or a running tool; the turn keeps
-   its admission until they return. The stop key is per stream ID, so a late
+   does not forcibly interrupt blocked provider reads or tools that ignore their
+   cancellation signal; the turn keeps its admission until owned work drains. The stop key is per stream ID, so a late
    stop cannot cancel the next message when the caller passes `stream_id`, as
    the web client does. Without `stream_id`, Stop targets the stream in flight
    at request time. Replay shows `user_cancelled` from the saved
@@ -309,7 +311,8 @@ termination grace period is much shorter, so it ends running turns first
   in tools" (`chat/execution.py:create_chat_agent`). See the "Force a tool call"
   recipe in [[tools-framework]].
 - **Stop waits for blocked work.** Cancellation takes effect when a provider
-  read returns or times out, and a running tool keeps going until it returns.
+  read returns or times out. Tools that honor `ToolInvocation.cancellation` can
+  stop earlier; tools that ignore it keep running until they return.
   Slow cache calls on the control thread also delay the next Stop check.
 - **Anonymous users cannot stop.** `stop_chat_session` uses
   `require_permission(Permission.WRITE_CHAT)` without `allow_anonymous`, so an

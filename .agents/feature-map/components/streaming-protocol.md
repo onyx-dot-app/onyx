@@ -203,15 +203,17 @@ its background task end ([[#pure-asgi-middleware]]).
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's
    presenter sends one `OverallStop` with `stop_reason` `finished`, tagged with
    its `model_index`. `OverallStop` does not mean success: response errors
-   arrive as `StreamingError`. After any cancellation,
-   `ChatTurnExecution._publish` drops all producer packets, including that
-   stop and the `SectionEnd` of open sections. A user Stop then ends with one
-   `OverallStop` with `user_cancelled` for each model without a delivered stop,
-   sent after the saves report.
-   A response deadline sends `timed_out` before the turn cancels remaining
-   work. Preparation that never starts a run gets a fallback `timed_out` after
-   draining, only for models without a delivered stop. Lost admission or a control
-   failure can still end the body with no `OverallStop` and no error. Clients must treat the end of
+   arrive as `StreamingError`. After cancellation of the turn,
+   `ChatTurnExecution._publish` drops producer packets, including stops and
+   `SectionEnd`. Each response run first cancels itself at its deadline while
+   turn delivery stays open. Its presenter can still send `timed_out`.
+   A user Stop or deadline backstop cancels the turn. After all work drains,
+   the control thread sends one tagged fallback for each model without a delivered
+   stop. It uses the saved response outcome when available, including `finished`
+   for a completed response. Otherwise it uses the turn's reason: `user_cancelled`
+   for Stop or `timed_out` for the deadline backstop. This includes preparation
+   and runs that finish after the backstop. Lost admission or a control failure
+   can still end the body with no stop and no error. Clients must treat the end of
    the body as the end of rendering and close open sections there. A tool
    failure sends
    `backend/onyx/server/query_and_chat/streaming_models.py:PacketException` in
