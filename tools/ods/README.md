@@ -351,10 +351,11 @@ forgets a service. `down` also stops the Compose containers; volumes are kept.
 The model server comes from Compose and runs the `edge` image, which is built
 from `main` and bundles the checkout's default embedding model. The release
 image (`latest`) can lack that model, and the model server then downloads it
-from Hugging Face on the first embed. Set `ONYX_MODEL_SERVER_IMAGE` or
-`IMAGE_TAG` in your shell to run another image. `--local-model-server` runs it
-from the checkout instead, on its own leased port, and leaves the Compose
-inference server down. The Slack bot (`full` only) binds its metrics server to port 8000;
+from Hugging Face on the first embed. `up` applies the image when it creates
+or recreates the Compose containers; `start` and `restart` do not touch them.
+Set `ONYX_MODEL_SERVER_IMAGE` or `IMAGE_TAG` in your shell to run another
+image. `--local-model-server` runs it from the checkout instead, on its own
+leased port, and leaves the Compose inference server down. The Slack bot (`full` only) binds its metrics server to port 8000;
 the stack never leases 8000 and skips the bot when the port is taken.
 
 **Flags** (`up`, `start`, `restart`):
