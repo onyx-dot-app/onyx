@@ -86,7 +86,7 @@ makes a live check, and every live check refreshes that cache.
 `ToolContext.chat_files`. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`, connector-origin
-files only), only when Python is configured. Files already in
+files only), only when the chat offers the Python tool. Files already in
 `ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
 and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into
 `chat_files` after the step and skips a filename already present, so the code in
