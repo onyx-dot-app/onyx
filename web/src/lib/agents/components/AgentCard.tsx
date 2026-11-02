@@ -16,7 +16,7 @@ import {
   SvgBarChart,
   SvgBubbleText,
   SvgEdit,
-  SvgPin,
+  SvgPinned,
   SvgShare,
   SvgUser,
 } from "@opal/icons";
@@ -40,16 +40,16 @@ export interface AgentCardProps {
 // component per state would remount on every toggle.
 const PinnedContext = createContext(false);
 
-/** The slanted pin, turned 45° counter-clockwise (upright) while pinned. */
+/** The upright pin, turned 45° clockwise (slanted) while unpinned. */
 function RotatingPinIcon({ className, ...props }: IconProps) {
   const pinned = useContext(PinnedContext);
   return (
-    <SvgPin
+    <SvgPinned
       {...props}
       className={cn(
         className,
         "transition-transform duration-200 ease-out motion-reduce:transition-none",
-        pinned && "-rotate-45"
+        !pinned && "rotate-45"
       )}
     />
   );
