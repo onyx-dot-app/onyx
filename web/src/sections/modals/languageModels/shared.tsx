@@ -562,7 +562,6 @@ function modelRightChildren(
 
 interface ModelRowProps {
   model: ModelConfiguration;
-  isAutoMode: boolean;
   isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | undefined) => void;
@@ -584,7 +583,6 @@ interface ModelRowProps {
  */
 function ModelRow({
   model,
-  isAutoMode,
   isDefaultModel,
   onToggleVisibility,
   onRename,
@@ -597,28 +595,22 @@ function ModelRow({
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const displayName = modelDisplayName(model);
-  // In auto mode every model is shown, so the row is always "selected" and the
-  // visibility toggle is disabled.
-  const isSelected = isAutoMode || model.is_visible;
-  const toggleVisibility = isAutoMode
-    ? undefined
-    : () => onToggleVisibility(!model.is_visible);
+  const isSelected = model.is_visible;
+  const toggleVisibility = () => onToggleVisibility(!model.is_visible);
   // A click that blurs and commits an inline rename reaches the row after the
   // edit input unmounts, so the input's presence is sampled at pointerdown.
   const renamingAtPointerDown = useRef(false);
   // The row is clickable, but it also hosts real buttons (rename, settings).
   // Their clicks, including ones the browser synthesizes from Enter, must not
   // toggle the model.
-  const toggleFromRow = toggleVisibility
-    ? (e: React.MouseEvent) => {
-        if (renamingAtPointerDown.current) return;
-        const interactive = (e.target as HTMLElement).closest(
-          'button, input, textarea, [contenteditable="true"]'
-        );
-        if (interactive) return;
-        toggleVisibility();
-      }
-    : undefined;
+  const toggleFromRow = (e: React.MouseEvent) => {
+    if (renamingAtPointerDown.current) return;
+    const interactive = (e.target as HTMLElement).closest(
+      'button, input, textarea, [contenteditable="true"]'
+    );
+    if (interactive) return;
+    toggleVisibility();
+  };
 
   return (
     <Hoverable.Root
@@ -636,22 +628,18 @@ function ModelRow({
             null;
         }}
         onClick={toggleFromRow}
-        role={toggleVisibility ? "button" : undefined}
-        tabIndex={toggleVisibility ? 0 : undefined}
-        onKeyDown={
-          toggleVisibility
-            ? (e: React.KeyboardEvent) => {
-                // Only the row itself. React bubbles events from portaled
-                // children too, so a key inside the settings popover would
-                // otherwise toggle the model.
-                if (e.target !== e.currentTarget) return;
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  toggleVisibility();
-                }
-              }
-            : undefined
-        }
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          // Only the row itself. React bubbles events from portaled
+          // children too, so a key inside the settings popover would
+          // otherwise toggle the model.
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleVisibility();
+          }
+        }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
           <div className="w-full p-1.5">
@@ -773,20 +761,7 @@ export function ModelSelectionField({
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
-  // When the auto-update toggle is hidden, auto mode should have no effect —
-  // otherwise models can't be deselected and "Select All" stays disabled.
-  const isAutoMode =
-    shouldShowAutoUpdateToggle && formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
-
-  // Snapshot the original model visibility so we can restore it when
-  // toggling auto mode back on.
-  const originalModelsRef = useRef(models);
-  useEffect(() => {
-    if (originalModelsRef.current.length === 0 && models.length > 0) {
-      originalModelsRef.current = models;
-    }
-  }, [models]);
 
   useEffect(() => {
     const testModel = models.find((model) => model.is_visible)?.name;
@@ -823,26 +798,6 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
-  function handleToggleAutoMode(nextIsAutoMode: boolean) {
-    formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
-    if (nextIsAutoMode) {
-      // Auto mode restores only the snapshot's visibility. Unsaved edits and
-      // models discovered after mount survive the toggle.
-      const originalByName = new Map(
-        originalModelsRef.current.map((m) => [m.name, m])
-      );
-      formikProps.setFieldValue(
-        "model_configurations",
-        models.map((current) => {
-          const original = originalByName.get(current.name);
-          return original
-            ? { ...current, is_visible: original.is_visible }
-            : current;
-        })
-      );
-    }
-  }
-
   const allSelected = models.length > 0 && models.every((m) => m.is_visible);
 
   function handleToggleSelectAll() {
@@ -854,8 +809,6 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
-  const visibleModels = models.filter((m) => m.is_visible);
-
   return (
     <Card color="background-tint-00" border="none" padding={2}>
       <Section gap={2}>
@@ -866,7 +819,7 @@ export function ModelSelectionField({
         >
           <Section flexDirection="row" gap={0}>
             <Button
-              disabled={isAutoMode || models.length === 0}
+              disabled={models.length === 0}
               prominence="tertiary"
               size="md"
               onClick={handleToggleSelectAll}
@@ -887,13 +840,12 @@ export function ModelSelectionField({
         ) : (
           <Section gap={1} alignItems="stretch">
             {(() => {
-              const baseModels = isAutoMode ? visibleModels : models;
               // Sort alphabetically by id for providers that ship rich model
               // metadata (Nebius TokenFactory) so the order is stable across
               // refetches; otherwise keep the given order.
-              const displayModels = baseModels.some((m) => hasModelMetadata(m))
-                ? [...baseModels].sort((a, b) => a.name.localeCompare(b.name))
-                : baseModels;
+              const displayModels = models.some((m) => hasModelMetadata(m))
+                ? [...models].sort((a, b) => a.name.localeCompare(b.name))
+                : models;
               const isFoldable = displayModels.length > FOLD_THRESHOLD;
               const shownModels =
                 isFoldable && !isExpanded
@@ -910,7 +862,6 @@ export function ModelSelectionField({
                     <ModelRow
                       key={model.name}
                       model={model}
-                      isAutoMode={isAutoMode}
                       onToggleVisibility={(visible) =>
                         setVisibility(model.name, visible)
                       }
@@ -963,7 +914,7 @@ export function ModelSelectionField({
           </Section>
         )}
 
-        {onAddModel && !isAutoMode && (
+        {onAddModel && (
           <Section flexDirection="row" gap={2}>
             <div className="flex-1">
               <InputTypeIn
@@ -1010,8 +961,10 @@ export function ModelSelectionField({
             withLabel
           >
             <InputSwitch
-              checked={isAutoMode}
-              onCheckedChange={handleToggleAutoMode}
+              checked={formikProps.values.is_auto_mode}
+              onCheckedChange={(checked) =>
+                formikProps.setFieldValue("is_auto_mode", checked)
+              }
             />
           </InputHorizontal>
         )}

@@ -185,6 +185,16 @@ AGGREGATOR_PROVIDERS: set[str] = {
 }
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM).
+# Model labs whose own catalog lists the models they release. Only these
+# providers offer auto-update; aggregators and proxies have no set list.
+AUTO_UPDATE_PROVIDERS: frozenset[str] = frozenset(
+    {
+        LlmProviderNames.OPENAI,
+        LlmProviderNames.ANTHROPIC,
+        LlmProviderNames.VERTEX_AI,
+    }
+)
+
 # A subset of AGGREGATOR_PROVIDERS.
 DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
     {

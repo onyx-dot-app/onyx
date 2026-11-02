@@ -51,6 +51,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import (
+    AUTO_UPDATE_PROVIDERS,
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
     LlmProviderNames,
@@ -82,6 +83,7 @@ from onyx.llm.utils import (
 )
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
+    reset_seen_catalog,
 )
 from onyx.llm.well_known_providers.constants import (
     AWS_EXTERNAL_ID_KWARG,
@@ -124,7 +126,6 @@ from onyx.server.manage.llm.models import (
     LMStudioFinalModelResponse,
     LMStudioModelsRequest,
     ModelConfigurationPage,
-    ModelConfigurationUpsertRequest,
     ModelRoutingUpdateRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
@@ -1156,46 +1157,19 @@ def put_llm_provider(
             OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI requires an API key"
         )
 
-    # Check if we're transitioning to Auto mode
-    transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
-        not existing_provider or not existing_provider.is_auto_mode
+    if llm_provider_upsert_request.provider not in AUTO_UPDATE_PROVIDERS:
+        llm_provider_upsert_request.is_auto_mode = False
+    enabling_auto_update = llm_provider_upsert_request.is_auto_mode and not (
+        existing_provider and existing_provider.is_auto_mode
     )
-
-    # When transitioning to auto mode, preserve existing model configurations
-    # so the upsert doesn't try to delete them (which would trip the default
-    # model protection guard). sync_auto_mode_models will handle the model
-    # lifecycle afterward — adding new models, hiding removed ones, and
-    # updating the default. This is safe even if sync fails: the provider
-    # keeps its old models and default rather than losing them.
-    if transitioning_to_auto_mode and existing_provider:
-        llm_provider_upsert_request.model_configurations = [
-            ModelConfigurationUpsertRequest.from_model(mc)
-            for mc in existing_provider.model_configurations
-        ]
 
     try:
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
         )
-
-        # If newly enabling Auto mode, sync models immediately from GitHub config
-        if transitioning_to_auto_mode:
-            from onyx.db.llm import sync_auto_mode_models
-
-            config = fetch_llm_recommendations_from_github()
-            if config and llm_provider_upsert_request.provider in config.providers:
-                updated_provider = fetch_existing_llm_provider_by_id(
-                    id=result.id, db_session=db_session
-                )
-                if updated_provider:
-                    sync_auto_mode_models(
-                        db_session,
-                        updated_provider,
-                        config,
-                    )
-                    # Refresh result with synced models
-                    result = LLMProviderView.from_model(updated_provider)
+        if enabling_auto_update:
+            reset_seen_catalog(result.id)
 
         _mask_provider_credentials(result)
         emit_audit_event(
@@ -1213,8 +1187,8 @@ def put_llm_provider(
         logger.exception("Failed to upsert LLM Provider")
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     finally:
-        # upsert_llm_provider and sync_auto_mode_models commit internally, so a
-        # post-commit failure must still drop cached listings
+        # upsert_llm_provider commits internally, so a post-commit failure
+        # must still drop cached listings
         invalidate_provider_listing_cache()
 
 
