@@ -7,12 +7,15 @@ lost. These tests pin that no path leaves one behind.
 """
 
 from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.event_inbox import connector as connector_module
 from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
@@ -469,3 +472,89 @@ def test_an_untimestamped_change_can_still_be_the_newest(
     )
 
     assert [document.semantic_identifier for document in documents] == ["arrived later"]
+
+
+def test_a_rejected_row_settles_even_if_the_run_is_abandoned(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """Docfetching stops reading this generator once enough documents fail.
+    A row settled only after the loop would stay claimed, be released by a
+    later run, fail again, and keep blocking the queue."""
+    pair_id, attempt_id = pair_and_attempt
+    unregister_event_handler(SOURCE)
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [
+            ParsedEvent(document_id="doc-1", event_key="k-1"),
+            ParsedEvent(document_id="doc-2", event_key="k-2"),
+        ],
+    )
+    db_session.commit()
+
+    generator = _connector(pair_id, attempt_id, batch_size=10).load_from_checkpoint(
+        0, 0, EventInboxCheckpoint(has_more=True)
+    )
+    first = next(generator)
+    assert isinstance(first, ConnectorFailure)
+    # Abandon it here, the way docfetching does once the failure ratio trips.
+    generator.close()
+
+    assert count_events_by_status(db_session, pair_id)[ConnectorEventStatus.FAILED] == 1
+
+
+def test_the_claim_session_is_closed_before_a_handler_runs(
+    db_session: Session,
+    pair_and_attempt: tuple[int, int],
+    registered_handler: None,  # noqa: ARG001
+) -> None:
+    """A handler can fetch a body over the network, and the generator
+    suspends at every yield while the runner stores documents. Holding the
+    claim session across either keeps a pooled connection for the whole
+    batch."""
+    pair_id, attempt_id = pair_and_attempt
+    open_sessions = 0
+    peak_during_handler: list[int] = []
+    peak_overall = 0
+
+    real = connector_module.get_session_with_current_tenant
+
+    @contextmanager
+    def _counting() -> Generator[Session, None, None]:
+        nonlocal open_sessions
+        nonlocal peak_overall
+        with real() as session:
+            open_sessions += 1
+            peak_overall = max(peak_overall, open_sessions)
+            try:
+                yield session
+            finally:
+                open_sessions -= 1
+
+    def _watching(
+        event: ConnectorEventInbox,
+        secrets: Mapping[str, str],
+    ) -> Document | None:
+        peak_during_handler.append(open_sessions)
+        return _handler(event, secrets)
+
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-1")],
+    )
+    db_session.commit()
+    register_event_handler(SOURCE, _watching)
+
+    with patch.object(connector_module, "get_session_with_current_tenant", _counting):
+        _drain(
+            _connector(pair_id, attempt_id, batch_size=10),
+            EventInboxCheckpoint(has_more=True),
+        )
+
+    # The instrument works -- the claim did open one -- so observing none
+    # during dispatch is a real measurement rather than a broken counter.
+    assert peak_overall >= 1
+    assert peak_during_handler == [0]

@@ -83,6 +83,20 @@ def _secrets_for(db_session: Session, cc_pair_id: int) -> Mapping[str, str]:
     return pair_secrets(pair)
 
 
+def _settle_failure(event_id: int, message: str) -> None:
+    """Record one rejected row in its own short session.
+
+    Not batched until the end of the drain: docfetching abandons this
+    generator once enough documents have failed, so a row settled only
+    afterwards would stay claimed, be released by a later run, fail again,
+    and keep blocking the queue. There is no document to store for a
+    rejection, so nothing later can change its outcome.
+    """
+    with get_session_with_current_tenant() as db_session:
+        mark_events_failed(db_session, [(event_id, message)])
+        db_session.commit()
+
+
 class EventInboxCheckpoint(ConnectorCheckpoint):
     """How many rows the run has drained.
 
@@ -150,8 +164,13 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             )
 
         drained = checkpoint.drained
-        failed: list[tuple[int, str]] = []
 
+        # The session closes before any handler runs. A handler can fetch a
+        # body over the network, and the generator suspends at every yield
+        # while the runner stores documents, so holding the session across
+        # either would keep a pooled connection for the whole batch.
+        # `expire_on_commit` is false on these sessions, so the claimed rows
+        # keep their values once detached.
         with get_session_with_current_tenant() as db_session:
             settle_events_from_finished_attempts(db_session, self._cc_pair_id)
             events = claim_events(
@@ -166,51 +185,44 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
 
             secrets = _secrets_for(db_session, self._cc_pair_id) if events else {}
 
-            superseded = _superseded(events)
+        superseded = _superseded(events)
 
-            for event in events:
-                # A later change to this document is in the same batch, and
-                # the first entry would win. Its row still settles with the
-                # attempt: the document is indexed from the newer event.
-                if event.id in superseded:
-                    continue
+        for event in events:
+            # A later change to this document is in the same batch, and
+            # the first entry would win. Its row still settles with the
+            # attempt: the document is indexed from the newer event.
+            if event.id in superseded:
+                continue
 
-                handler = get_event_handler(event.source)
-                if handler is None:
-                    message = f"No event handler registered for {event.source.value}"
-                    failed.append((event.id, message))
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(document_id=event.document_id),
-                        failure_message=message,
-                    )
-                    continue
+            handler = get_event_handler(event.source)
+            if handler is None:
+                message = f"No event handler registered for {event.source.value}"
+                _settle_failure(event.id, message)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=event.document_id),
+                    failure_message=message,
+                )
+                continue
 
-                try:
-                    document = handler(event, secrets)
-                except Exception as e:
-                    logger.exception(
-                        "Event %s for document %s could not be handled",
-                        event.id,
-                        event.document_id,
-                    )
-                    failed.append((event.id, str(e)))
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(document_id=event.document_id),
-                        failure_message=str(e),
-                        exception=e,
-                    )
-                    continue
+            try:
+                document = handler(event, secrets)
+            except Exception as e:
+                logger.exception(
+                    "Event %s for document %s could not be handled",
+                    event.id,
+                    event.document_id,
+                )
+                _settle_failure(event.id, str(e))
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=event.document_id),
+                    failure_message=str(e),
+                    exception=e,
+                )
+                continue
 
-                # None means nothing to index, such as a delete.
-                if document is not None:
-                    yield document
-
-            # Rejected rows settle now: there is no document to store, so
-            # nothing later can change the outcome. The indexed ones stay
-            # claimed until this attempt's own outcome is known, because the
-            # runner has not stored their documents yet.
-            mark_events_failed(db_session, failed)
-            db_session.commit()
+            # None means nothing to index, such as a delete.
+            if document is not None:
+                yield document
 
         drained += len(events)
         return EventInboxCheckpoint(
