@@ -235,6 +235,7 @@ class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
     revision: str = Field(pattern=GITHUB_COMMIT_SHA_PATTERN)
     subpath: str | None = None
     paths: list[str] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
+    sharing: "SkillShareRequest | None" = None
 
 
 class GitHubImportedSkill(BaseModel):
@@ -339,3 +340,28 @@ class SkillShareRequest(BaseModel):
 
 class TransferSkillOwnershipRequest(BaseModel):
     new_owner_user_id: UUID
+
+
+class SkillBulkShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    skill_ids: list[UUID] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
+    action: Literal["share"]
+    sharing: SkillShareRequest
+
+
+class SkillBulkActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    skill_ids: list[UUID] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
+    action: Literal["enable", "disable", "delete"]
+
+
+class SkillBulkFailure(BaseModel):
+    skill_id: UUID
+    detail: str
+
+
+class SkillBulkResponse(BaseModel):
+    succeeded: list[UUID]
+    failed: list[SkillBulkFailure]

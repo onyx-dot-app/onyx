@@ -155,6 +155,8 @@ def skills_list_response_for_user(
     rows: list[Skill],
     user: User,
     db_session: Session,
+    *,
+    include_share_details: bool = False,
 ) -> SkillsList:
     builtins: list[SkillResponse] = []
     customs: list[SkillResponse] = []
@@ -184,6 +186,7 @@ def skills_list_response_for_user(
             state=states[skill.id],
             user_group_ids=user_group_ids,
             managed_user_group_ids=managed_user_group_ids,
+            include_share_details=include_share_details,
         )
         (customs if skill.is_custom else builtins).append(response)
 

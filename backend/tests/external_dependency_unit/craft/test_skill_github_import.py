@@ -204,3 +204,53 @@ def test_import_enables_only_first_new_skill_with_each_name(
         row = db_session.get(Skill, result.skill.id)
         if row is not None and row.bundle_file_id is not None:
             file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+
+
+def test_import_applies_shared_access_before_publication(
+    db_session: Session,
+    test_user: User,
+    initialize_file_store: None,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.db.enums import SkillSharePermission
+    from onyx.server.features.skill.models import SkillShareRequest
+
+    name = f"shared-import-{uuid4().hex[:8]}"
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.fetch_github_skill_bundles",
+        lambda *_args, **_kwargs: (
+            GitHubRepository(owner="owner", repo="repository", revision=_REVISION),
+            [
+                GitHubSkillBundle(
+                    path=name, name=name, description=name, bundle_bytes=_bundle(name)
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api._github_authorization_header",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
+    )
+    result = import_github_skills(
+        GitHubSkillsImportRequest(
+            repository="owner/repository",
+            revision=_REVISION,
+            paths=[name],
+            sharing=SkillShareRequest(public_permission=SkillSharePermission.VIEWER),
+        ),
+        user=test_user,
+        db_session=db_session,
+    )
+    assert result.not_imported == []
+    assert len(result.imported) == 1
+    imported = result.imported[0].skill
+    assert imported.public_permission == SkillSharePermission.VIEWER
+    stored = db_session.get(Skill, imported.id)
+    assert stored is not None
+    assert stored.public_permission == SkillSharePermission.VIEWER
+    assert stored.bundle_file_id is not None
+    get_default_file_store().delete_file(stored.bundle_file_id, error_on_missing=False)
