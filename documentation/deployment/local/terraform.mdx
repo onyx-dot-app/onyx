@@ -272,6 +272,17 @@ Set `vespa_node_enabled = false` to skip the dedicated in-cluster index node gro
   Provision an Amazon OpenSearch domain inside the VPC.
 </ParamField>
 
+<ParamField path="opensearch_engine_version" type="string" default="3.6">
+  OpenSearch version of the Amazon OpenSearch domain. 1-bit vector quantization needs version 3.6 or later.
+</ParamField>
+
+<Warning>
+  If you do not set `opensearch_engine_version`, your domain uses the module default. When the default changes,
+  the next `terraform apply` upgrades the domain in place.
+  Amazon OpenSearch Service cannot downgrade a domain after an upgrade. To keep your current version,
+  set `opensearch_engine_version` to that version, for example `"3.3"`.
+</Warning>
+
 <ParamField path="opensearch_instance_type" type="string" default="r8g.large.search" />
 <ParamField path="opensearch_instance_count" type="number" default="3" />
 <ParamField path="opensearch_master_user_name" type="string" />
