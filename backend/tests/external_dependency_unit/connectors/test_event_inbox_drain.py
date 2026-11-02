@@ -558,3 +558,44 @@ def test_the_claim_session_is_closed_before_a_handler_runs(
     # during dispatch is a real measurement rather than a broken counter.
     assert peak_overall >= 1
     assert peak_during_handler == [0]
+
+
+def test_an_older_change_in_a_later_batch_does_not_overwrite_a_newer_one(
+    db_session: Session,
+    pair_and_attempt: tuple[int, int],
+    registered_handler: None,  # noqa: ARG001
+) -> None:
+    """Rows are claimed in id order, which is arrival order rather than event
+    time. A provider that redelivers late puts an older change in a later
+    batch than the newer one it must not replace, and indexing both would
+    store the older body last."""
+    pair_id, attempt_id = pair_and_attempt
+    newer = datetime(2026, 11, 2, 15, 45, tzinfo=timezone.utc)
+    older = datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)
+
+    # The newer change arrives first, so it gets the lower row id.
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-new", occurred_at=newer)],
+    )
+    db_session.commit()
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-old", occurred_at=older)],
+    )
+    db_session.commit()
+
+    connector = _connector(pair_id, attempt_id, batch_size=1)
+    first, _failures, checkpoint = _drain(
+        connector, EventInboxCheckpoint(has_more=True)
+    )
+    second, _failures_2, _checkpoint_2 = _drain(connector, checkpoint)
+
+    assert [document.id for document in first] == ["doc-1"]
+    # The second batch holds the older change. It settles, but it must not
+    # be indexed on top of the newer one.
+    assert second == []

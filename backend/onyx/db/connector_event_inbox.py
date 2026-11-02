@@ -9,8 +9,18 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_models import ParsedEvent
-from onyx.db.enums import ConnectorEventStatus, IndexingStatus
-from onyx.db.models import ConnectorEventInbox, IndexAttempt
+from onyx.connectors.models import InputType
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    ConnectorEventStatus,
+    IndexingStatus,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    ConnectorEventInbox,
+    IndexAttempt,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -108,6 +118,52 @@ def get_pending_events(
             .limit(limit)
         )
     )
+
+
+def superseded_by_newer_events(
+    db_session: Session,
+    cc_pair_id: int,
+    events: Sequence[ConnectorEventInbox],
+) -> set[int]:
+    """Of these, the ids a newer change to the same document has overtaken.
+
+    `_superseded` in the drain compares a batch against itself, which is not
+    enough: rows are claimed in id order, and id is arrival order rather than
+    event time. A provider that redelivers late, or delivers out of order,
+    puts an older change in a later batch -- or a later run -- than the newer
+    one it should not replace. Indexing both would store the older body last.
+
+    Only rows the pipeline has already taken count as newer: a PENDING row is
+    not indexed yet, and the batch that claims it will compare it itself.
+    """
+    documents = {event.document_id for event in events if event.occurred_at}
+    if not documents:
+        return set()
+
+    taken = (
+        select(
+            ConnectorEventInbox.document_id,
+            func.max(ConnectorEventInbox.occurred_at).label("newest"),
+        )
+        .where(
+            ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
+            ConnectorEventInbox.document_id.in_(documents),
+            ConnectorEventInbox.occurred_at.is_not(None),
+            ConnectorEventInbox.status.in_(
+                [ConnectorEventStatus.IN_PROGRESS, ConnectorEventStatus.COMPLETED]
+            ),
+        )
+        .group_by(ConnectorEventInbox.document_id)
+    )
+
+    newest = {row.document_id: row.newest for row in db_session.execute(taken)}
+    return {
+        event.id
+        for event in events
+        if event.occurred_at is not None
+        and (seen := newest.get(event.document_id)) is not None
+        and seen > event.occurred_at
+    }
 
 
 def claim_events(
@@ -252,3 +308,32 @@ def settle_events_from_finished_attempts(
         db_session, to_release, error="the claiming attempt did not finish"
     )
     return len(to_complete), len(to_release)
+
+
+def get_active_event_cc_pairs(
+    db_session: Session, source: DocumentSource
+) -> list[ConnectorCredentialPair]:
+    """The pairs that may receive pushed events for one source.
+
+    This is what makes a source's endpoint live: with no active EVENT pair,
+    the webhook server has nowhere to attribute a delivery, so setting the
+    connector up is what opens the endpoint and pausing or deleting it is
+    what closes it again.
+    """
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair)
+            .join(Connector, ConnectorCredentialPair.connector_id == Connector.id)
+            .where(
+                Connector.source == source,
+                Connector.input_type == InputType.EVENT,
+                # Not just ACTIVE: a pair is SCHEDULED until its first run
+                # finishes, and a provider validates the callback URL during
+                # setup, before any run has happened.
+                ConnectorCredentialPair.status.in_(
+                    ConnectorCredentialPairStatus.active_statuses()
+                ),
+            )
+            .order_by(ConnectorCredentialPair.id)
+        )
+    )

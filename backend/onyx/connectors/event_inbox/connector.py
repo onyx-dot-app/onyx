@@ -31,6 +31,7 @@ from onyx.db.connector_event_inbox import (
     claim_events,
     mark_events_failed,
     settle_events_from_finished_attempts,
+    superseded_by_newer_events,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorEventInbox
@@ -184,8 +185,11 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             db_session.commit()
 
             secrets = _secrets_for(db_session, self._cc_pair_id) if events else {}
-
-        superseded = _superseded(events)
+            # Within the batch, and against whatever earlier batches and runs
+            # already took: id order is arrival order, not event time.
+            superseded = _superseded(events) | superseded_by_newer_events(
+                db_session, self._cc_pair_id, events
+            )
 
         for event in events:
             # A later change to this document is in the same batch, and
