@@ -205,7 +205,7 @@ def test_the_overview_has_no_all_time_window(db_session: Session) -> None:
     assert refused.value.error_code == OnyxErrorCode.INVALID_INPUT
 
 
-def test_ac6_the_overview_counts_paused_pairs(db_session: Session) -> None:
+def test_the_overview_counts_paused_pairs(db_session: Session) -> None:
     admin = create_test_user(db_session, "overview_admin", is_admin=True)
     now = datetime.now(timezone.utc)
     with _clock_at(now):
@@ -229,7 +229,7 @@ def test_ac6_the_overview_counts_paused_pairs(db_session: Session) -> None:
     assert response.total_docs_indexed == before.total_docs_indexed
 
 
-def test_ac5_a_reader_counts_only_readable_paused_pairs(db_session: Session) -> None:
+def test_a_reader_counts_only_readable_paused_pairs(db_session: Session) -> None:
     reader = create_test_user(db_session, "overview_reader")
     now = datetime.now(timezone.utc)
     with _clock_at(now):
