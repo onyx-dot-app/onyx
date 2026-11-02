@@ -596,7 +596,6 @@ class ChatFeatureState(BaseModel):
     gathered_documents: list[SearchDoc]
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
-    ran_image_gen: bool
     search_context: SearchContext
 
 

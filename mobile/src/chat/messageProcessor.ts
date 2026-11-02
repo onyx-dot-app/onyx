@@ -11,6 +11,7 @@ import {
   CitationInfo,
   CODE_INTERPRETER_TOOL_TYPES,
   FetchToolDocuments,
+  GeneratedImage,
   ImageGenerationToolDelta,
   MessageStart,
   Packet,
@@ -43,8 +44,7 @@ export interface ProcessedMessageState {
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
-  isGeneratingImage: boolean;
-  generatedImageCount: number;
+  generatedImages: GeneratedImage[];
 
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
@@ -75,8 +75,7 @@ export function createInitialState(nodeId: number): ProcessedMessageState {
     groupKeysWithSectionEnd: new Set(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
-    isGeneratingImage: false,
-    generatedImageCount: 0,
+    generatedImages: [],
     finalAnswerComing: false,
     stopPacketSeen: false,
     isComplete: false,
@@ -149,8 +148,6 @@ function hasContentPackets(packets: Packet[]): boolean {
 const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
   PacketType.MESSAGE_DELTA,
-  PacketType.IMAGE_GENERATION_TOOL_START,
-  PacketType.IMAGE_GENERATION_TOOL_DELTA,
 ]);
 
 // A new turn_index closes every prior open group (a new tab_index within a seen turn does not).
@@ -217,6 +214,21 @@ function handleDocumentPacket(
     upsertDocuments(state, (packet.obj as FetchToolDocuments).documents);
   } else if (packet.obj.type === PacketType.MESSAGE_START) {
     upsertDocuments(state, (packet.obj as MessageStart).final_documents);
+  }
+}
+
+function handleImagePacket(state: ProcessedMessageState, packet: Packet): void {
+  if (packet.obj.type !== PacketType.IMAGE_GENERATION_TOOL_DELTA) return;
+  const seenFileIds = new Set(state.generatedImages.map((i) => i.file_id));
+  const newImages: GeneratedImage[] = [];
+  for (const image of (packet.obj as ImageGenerationToolDelta).images ?? []) {
+    if (seenFileIds.has(image.file_id)) continue;
+    seenFileIds.add(image.file_id);
+    newImages.push(image);
+  }
+  if (newImages.length > 0) {
+    // A new array, so memoized consumers see the change
+    state.generatedImages = [...state.generatedImages, ...newImages];
   }
 }
 
@@ -312,13 +324,7 @@ function processPacket(state: ProcessedMessageState, packet: Packet): void {
     }
   }
 
-  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
-    state.isGeneratingImage = true;
-  }
-  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA) {
-    const delta = packet.obj as ImageGenerationToolDelta;
-    state.generatedImageCount += delta.images?.length ?? 0;
-  }
+  handleImagePacket(state, packet);
 
   if (packet.obj.type === PacketType.MESSAGE_END) {
     state.isComplete = true;

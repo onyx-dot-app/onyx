@@ -90,7 +90,7 @@ If you do have enough to answer, remember to provide INLINE citations using the 
 
 
 IMAGE_GEN_REMINDER = """
-Very briefly describe the image(s) generated. Do not include any links or attachments.
+The user already sees the generated image(s). Do not link or embed them. Continue the task if needed; otherwise briefly describe them.
 """.strip()
 
 

@@ -11,6 +11,7 @@ import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
 import { openSource } from "@/chat/openSource";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
+import { AttachmentImage } from "@/components/chat/AttachmentImage";
 import {
   CitedSourcesBar,
   CitedSourcesSheet,
@@ -27,6 +28,7 @@ import { usePacketProcessor } from "@/hooks/timeline/usePacketProcessor";
 
 // Non-final display groups don't complete the message.
 const NOOP = (): void => {};
+const GENERATED_IMAGE_SIZE = 160;
 
 function UserMessage({ node }: { node: Message }) {
   const files = node.files.map(fileDescriptorToDisplayFile);
@@ -89,8 +91,7 @@ function AssistantMessage({
     hasSteps,
     stopPacketSeen,
     stopReason,
-    isGeneratingImage,
-    generatedImageCount,
+    generatedImages,
     finalAnswerComing,
     toolProcessingDuration,
     onRenderComplete,
@@ -150,11 +151,23 @@ function AssistantMessage({
         hasDisplayContent={hasDisplayContent}
         finalAnswerComing={pacedFinalAnswerComing}
         processingDurationSeconds={node.processingDurationSeconds ?? undefined}
-        isGeneratingImage={isGeneratingImage}
-        generatedImageCount={generatedImageCount}
+        generatedImageCount={generatedImages.length}
         toolProcessingDuration={toolProcessingDuration}
         streamingStartTime={node.streamingStartedAt}
       />
+      {/* Images from every image generation step lead the answer. */}
+      {(pacedFinalAnswerComing || stopPacketSeen) &&
+      generatedImages.length > 0 ? (
+        <View className="flex-row flex-wrap gap-8 px-12">
+          {generatedImages.map((image) => (
+            <AttachmentImage
+              key={image.file_id}
+              fileId={image.file_id}
+              size={GENERATED_IMAGE_SIZE}
+            />
+          ))}
+        </View>
+      ) : null}
       {hasDisplayContent ? (
         // px-12 aligns the answer under the avatar rail (web's px-3).
         <View className="gap-12 px-12">

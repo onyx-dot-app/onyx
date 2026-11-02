@@ -485,3 +485,61 @@ test.each([
     await waitFor(() => expect(renderComplete()).toBe(true));
   }
 );
+
+test("generated images from earlier tool steps lead the answer once", async () => {
+  seedSessionAwaitingAnswer();
+  const image = {
+    file_id: "generated-1",
+    url: "/api/chat/file/generated-1",
+    revised_prompt: "An onyx stone",
+  };
+  const packets: Packet[] = [
+    {
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.IMAGE_GENERATION_TOOL_START },
+    },
+    {
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.IMAGE_GENERATION_TOOL_DELTA,
+        images: [image, image],
+      },
+    },
+    { placement: { turn_index: 0 }, obj: { type: PacketType.SECTION_END } },
+    {
+      placement: { turn_index: 1 },
+      obj: { type: PacketType.SEARCH_TOOL_START },
+    },
+    { placement: { turn_index: 1 }, obj: { type: PacketType.SECTION_END } },
+    ...answerPackets.map((packet) => ({
+      ...packet,
+      placement: { turn_index: 2 },
+    })),
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    const answer = await screen.findByText("A quick answer.");
+    const images = screen.getAllByRole("img", { name: "Chat attachment" });
+    expect(images).toHaveLength(1);
+    expect(images[0]).toHaveAttribute("src", image.url);
+    expect(images[0]?.compareDocumentPosition(answer)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    await waitFor(() => expect(renderComplete()).toBe(true));
+  } finally {
+    view.unmount();
+    useChatSessionStore.setState({
+      currentSessionId: null,
+      sessions: new Map(),
+    });
+  }
+});

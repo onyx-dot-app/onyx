@@ -142,12 +142,13 @@ failure becomes an `error` node with `errorMessage`, `errorCode` and
 **Packet processing.** `processPackets` is incremental. It processes only
 packets past `nextPacketIndex` and keeps its state in a ref. It decides each
 group's kind from the group's first tool or display packet, and keeps it: a
-tool packet (`isToolPacket`) makes a timeline step, and `MESSAGE_START` or
-`IMAGE_GENERATION_TOOL_START` makes an answer group. Debug and control packets
+tool packet (`isToolPacket`), including image generation, makes a timeline
+step. `MESSAGE_START` makes an answer group. Debug and control packets
 that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group with no packet in
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
-making their own step. A group that mixes answer text and generated images
-renders through `MixedContentHandler`.
+making their own step. Generated images accumulate across tool steps, unique
+by file ID, and render once above the answer. An image call does not mark the
+answer as final; later search or image calls can continue the timeline.
 
 A group closes on its own `SECTION_END` or `ERROR`; a new `turn_index` or a
 stop packet adds a `SECTION_END` to each open group. Parallel tools share a

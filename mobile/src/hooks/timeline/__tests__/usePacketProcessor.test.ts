@@ -279,10 +279,11 @@ describe("usePacketProcessor", () => {
           1,
         ),
       );
-      expect(result.current.isGeneratingImage).toBe(true);
-      expect(result.current.generatedImageCount).toBe(1);
-      expect(result.current.finalAnswerComing).toBe(true);
-      expect(result.current.displayGroups.length).toBe(1);
+      expect(result.current.generatedImages.length).toBe(1);
+      expect(result.current.finalAnswerComing).toBe(false);
+      expect(result.current.displayGroups.length).toBe(0);
+      expect(result.current.toolGroups.length).toBe(1);
+      expect(result.current.isComplete).toBe(true);
     });
   });
 });

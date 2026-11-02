@@ -18,7 +18,7 @@ import {
   createInitialState,
   processPackets,
 } from "@/chat/messageProcessor";
-import { Packet, StopReason } from "@/chat/streamingModels";
+import { GeneratedImage, Packet, StopReason } from "@/chat/streamingModels";
 import {
   TurnGroup,
   groupStepsByTurn,
@@ -39,8 +39,7 @@ export interface UsePacketProcessorResult {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
   hasSteps: boolean;
-  isGeneratingImage: boolean;
-  generatedImageCount: number;
+  generatedImages: GeneratedImage[];
   finalAnswerComing: boolean;
   toolProcessingDuration: number | undefined;
 
@@ -122,12 +121,13 @@ export function usePacketProcessor(
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
-    isGeneratingImage: state.isGeneratingImage,
-    generatedImageCount: state.generatedImageCount,
+    generatedImages: state.generatedImages,
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
 
-    isComplete: state.stopPacketSeen && renderComplete,
+    isComplete:
+      state.stopPacketSeen &&
+      (renderComplete || state.potentialDisplayGroups.length === 0),
 
     onRenderComplete,
     markAllToolsDisplayed,

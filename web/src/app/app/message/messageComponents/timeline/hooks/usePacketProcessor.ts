@@ -3,6 +3,7 @@
    replays idempotent and consumers need the state in the same commit. */
 import { useRef, useState, useMemo, useCallback } from "react";
 import {
+  GeneratedImage,
   Packet,
   StreamingCitation,
   StopReason,
@@ -34,8 +35,7 @@ export interface UsePacketProcessorResult {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
   hasSteps: boolean;
-  isGeneratingImage: boolean;
-  generatedImageCount: number;
+  generatedImages: GeneratedImage[];
   // Whether final answer is coming (MESSAGE_START seen)
   finalAnswerComing: boolean;
   // Tool processing duration from backend (via MESSAGE_START packet)
@@ -147,14 +147,15 @@ export function usePacketProcessor(
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
-    isGeneratingImage: state.isGeneratingImage,
-    generatedImageCount: state.generatedImageCount,
+    generatedImages: state.generatedImages,
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
 
     // A stopped response with no answer has nothing left to render.
     isComplete:
-      state.stopPacketSeen && (renderComplete || displayGroups.length === 0),
+      state.stopPacketSeen &&
+      (renderComplete || state.potentialDisplayGroups.length === 0),
+
 
     // Callbacks
     onRenderComplete,

@@ -299,6 +299,7 @@ describe("packetProcessor", () => {
     test.each([
       [PacketType.SEARCH_TOOL_START, "SEARCH_TOOL_START"],
       [PacketType.PYTHON_TOOL_START, "PYTHON_TOOL_START"],
+      [PacketType.IMAGE_GENERATION_TOOL_START, "IMAGE_GENERATION_TOOL_START"],
       [PacketType.FETCH_TOOL_START, "FETCH_TOOL_START"],
       [PacketType.CUSTOM_TOOL_START, "CUSTOM_TOOL_START"],
       [PacketType.FILE_READER_START, "FILE_READER_START"],
@@ -314,16 +315,16 @@ describe("packetProcessor", () => {
     });
 
     // Parameterized tests for display packet types
-    test.each([
-      [PacketType.MESSAGE_START, "MESSAGE_START"],
-      [PacketType.IMAGE_GENERATION_TOOL_START, "IMAGE_GENERATION_TOOL_START"],
-    ])("%s categorizes as display group", (packetType) => {
-      const state = createInitialState(1);
-      const packets = [createPacket(packetType, { turn_index: 0 })];
-      const result = processPackets(state, packets);
+    test.each([[PacketType.MESSAGE_START, "MESSAGE_START"]])(
+      "%s categorizes as display group",
+      (packetType) => {
+        const state = createInitialState(1);
+        const packets = [createPacket(packetType, { turn_index: 0 })];
+        const result = processPackets(state, packets);
 
-      expect(result.displayGroupKeys.has("0-0")).toBe(true);
-    });
+        expect(result.displayGroupKeys.has("0-0")).toBe(true);
+      }
+    );
   });
 
   describe("SECTION_END and ERROR tracking", () => {
@@ -816,14 +817,14 @@ describe("packetProcessor", () => {
       expect(result.finalAnswerComing).toBe(true);
     });
 
-    test("sets finalAnswerComing on IMAGE_GENERATION_TOOL_START", () => {
+    test("does not start the answer on IMAGE_GENERATION_TOOL_START", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
       ];
       const result = processPackets(state, packets);
 
-      expect(result.finalAnswerComing).toBe(true);
+      expect(result.finalAnswerComing).toBe(false);
     });
 
     test("captures toolProcessingDuration from MESSAGE_START", () => {
@@ -931,14 +932,13 @@ describe("packetProcessor", () => {
   });
 
   describe("image generation counting", () => {
-    test("sets isGeneratingImage on IMAGE_GENERATION_TOOL_START", () => {
+    test("categorizes image generation as a tool step", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
       ];
       const result = processPackets(state, packets);
-
-      expect(result.isGeneratingImage).toBe(true);
+      expect(result.toolGroupKeys.has("0-0")).toBe(true);
     });
 
     test("counts images from IMAGE_GENERATION_TOOL_DELTA", () => {
@@ -949,10 +949,10 @@ describe("packetProcessor", () => {
       ];
       const result = processPackets(state, packets);
 
-      expect(result.generatedImageCount).toBe(2);
+      expect(result.generatedImages.length).toBe(2);
     });
 
-    test("accumulates image count from multiple DELTA packets", () => {
+    test("deduplicates images from repeated DELTA packets", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
@@ -962,7 +962,7 @@ describe("packetProcessor", () => {
       ];
       const result = processPackets(state, packets);
 
-      expect(result.generatedImageCount).toBe(4);
+      expect(result.generatedImages.length).toBe(2);
     });
   });
 
@@ -1143,10 +1143,9 @@ describe("packetProcessor", () => {
       ];
       const result = processPackets(state, packets);
 
-      expect(result.isGeneratingImage).toBe(true);
-      expect(result.generatedImageCount).toBe(1);
-      expect(result.finalAnswerComing).toBe(true);
-      expect(result.displayGroupKeys.has("0-0")).toBe(true);
+      expect(result.generatedImages.length).toBe(1);
+      expect(result.finalAnswerComing).toBe(false);
+      expect(result.toolGroupKeys.has("0-0")).toBe(true);
     });
 
     test("deep research with sub-agents", () => {

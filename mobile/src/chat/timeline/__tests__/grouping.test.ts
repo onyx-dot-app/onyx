@@ -172,7 +172,7 @@ describe("grouping engine", () => {
     expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]);
   });
 
-  it("counts generated images and flags image generation", () => {
+  it("collects generated images", () => {
     const state = run([
       makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
       makePlacedPacket(
@@ -186,8 +186,25 @@ describe("grouping engine", () => {
         { turn_index: 0 },
       ),
     ]);
-    expect(state.isGeneratingImage).toBe(true);
-    expect(state.generatedImageCount).toBe(2);
+    expect(state.generatedImages.length).toBe(2);
+  });
+
+  it("keeps earlier images once when another tool precedes the answer", () => {
+    const image = { file_id: "a", url: "u", revised_prompt: "p" };
+    const state = run([
+      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
+      makePlacedPacket(
+        { type: "image_generation_final", images: [image, image] },
+        { turn_index: 0 },
+      ),
+      sectionEnd(0),
+      searchStart(1),
+      sectionEnd(1),
+      messageStart(2),
+    ]);
+    expect(state.toolGroups.map(keyOf)).toEqual(["0-0", "1-0"]);
+    expect(state.potentialDisplayGroups.map(keyOf)).toEqual(["2-0"]);
+    expect(state.generatedImages).toEqual([image]);
   });
 
   it("groups incrementally across flushes (cursor advances, prior turns survive)", () => {
