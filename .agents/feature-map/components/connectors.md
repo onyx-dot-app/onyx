@@ -132,9 +132,16 @@ writes the state and the steps in one transaction, and beat tasks run the
 steps. A stored plan applies only to the pair state it was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
-**Pushed events.** A source that pushes instead of being polled declares one
-`WebhookSourceSpec` (`onyx/connectors/event_inbox/source_registry.py`): a
-parser, a signature verifier, and an optional handshake responder. Deliveries
+**Pushed events.** A source that pushes instead of being polled makes one
+call, `onyx/connectors/event_inbox/registration.py:register_event_source`,
+with a `WebhookSourceSpec` (a parser, a signature verifier, and an optional
+handshake responder), the handler that turns a stored event into a document,
+and optionally a permission filter that withholds it from ordinary search
+([[withheld-sources]]). That call is the extension point: a source installed
+beside Onyx rather than shipped in it registers through the same one, and
+`EXTRA_EVENT_SOURCE_MODULES` names its module, so nothing in this repository
+changes for it except the `DocumentSource` member and the frontend catalog
+entry, which are identifiers rather than behaviour. Deliveries
 become rows in `connector_event_inbox` (`onyx/db/connector_event_inbox.py`),
 keyed `(pair, event_key)` so a redelivery writes nothing, and
 `EventInboxConnector` (`onyx/connectors/event_inbox/connector.py`) drains them
@@ -156,8 +163,11 @@ consequence: the probes dispatch on the connector class
 event pair runs neither the source's `validate_perm_sync` nor its
 `validate_connector_settings`. Both pass silently rather than failing.
 
-A spec gets one `POST /webhook/<slug>` on the webhook server
-(`onyx/webhook_server/routes.py`), built at startup. The route exists whether
+A spec gets one `POST /webhook/<slug><endpoint>` per entry in its `endpoints`
+tuple on the webhook server (`onyx/webhook_server/routes.py`), built at
+startup; the default `("",)` serves the slug itself, and a provider that posts
+different kinds of event to different URLs declares one entry each and reads
+`request.endpoint` in its parser. The route exists whether
 or not the source is set up; what opens it is an active `EVENT` pair, because
 without one there is no ACL to attribute a document to
 ([[#handshake-after-verification]] governs the order within it). A source's
@@ -311,6 +321,30 @@ downloaded file with
     to reverse the order, and `onyx/webhook_server/routes.py` calls the
     responder after `spec.verifier`. A provider that signs challenges
     differently needs its own challenge verifier, not an earlier responder.
+14. `drain-before-route` **A source's handler is registered before its
+    webhook route.** `register_event_source` claims the drain and the search
+    behaviour first and opens the endpoint last. The route is the part the
+    internet can reach, so a half-registered source must not be one that
+    accepts deliveries with nothing to drain them.
+15. `event-source-catalog-entry-is-unconditional` **The Add Connector page
+    offers every source in its static map, whether or not an implementation
+    is registered.** `web/src/lib/connectors/utils.ts:listSourceMetadata`
+    filters a hard-coded exclusion list, so a source whose module is not
+    installed still appears, and creating it fails at
+    `connectors/factory.py:identify_connector_class`. The registered set is
+    already served by `GET /admin/connector/event-sources`; a page that reads
+    it would stop offering what a deployment cannot run.
+16. `pushed-url-is-not-a-fetch-instruction` **A URL inside a delivery names
+    where the handler may fetch, not what it must connect to.** A signature
+    proves who sent the body, not that every field in it is safe: a handler
+    that fetches the URL as given turns the docfetching worker into an SSRF
+    tool against everything the cluster can reach, and indexes the answer.
+    A handler that follows a pushed URL must pin it to the provider's own
+    https host, drop the credential before any redirect to another host, and
+    fetch every hop through `onyx/utils/url.py:ssrf_safe_get` so none of them
+    can resolve to a private address.
+    `connectors/zoom/client.py` does this for its transcript download; copy
+    it.
 
 ---
 
@@ -374,6 +408,26 @@ downloaded file with
   permission sync, implement the permission interfaces (Architecture,
   Permission fetching). Add daily tests and a docs page
   (`documentation/AGENTS.md`).
+- `new-event-source` **An event-based connector.** List the existing ones
+  with `git grep -l register_event_source backend/onyx`.
+  1. Write the parser, the signature verifier and the handler. All three are
+     given the pair's decrypted credential JSON, and none of them may trust a
+     field in the body ([[#pushed-url-is-not-a-fetch-instruction]]).
+  2. Make one `register_event_source` call in the source's own module, with a
+     `WebhookSourceSpec` naming the slug and one endpoint per URL the provider
+     posts to. Add `permission_filter` only if the provider owns read access
+     ([[withheld-sources#new-withheld-source]]).
+  3. Name the module in `_BUILT_IN_EVENT_SOURCE_MODULES` when it ships here,
+     or let the deployment name it in `EXTRA_EVENT_SOURCE_MODULES` when it
+     does not. Everything else a source needs is behaviour, so a source can
+     live in its own repository.
+  4. Add the `DocumentSource` member and the frontend catalog entry here even
+     for an out-of-repo source: an enum member and UI copy are identifiers,
+     not behaviour, and nothing can supply them from outside. A deployment
+     without the package installed still offers the connector in the Add
+     Connector page, and creating it fails
+     ([[#event-source-catalog-entry-is-unconditional]]).
+
 - `source-gateway` **A source gateway.** Copy
   `connectors/youtrack/source_operations.py:YouTrackSourceOperations`; list the gateways with
   `git ls-files 'backend/onyx/connectors/*/source_operations.py'`. Subclass
