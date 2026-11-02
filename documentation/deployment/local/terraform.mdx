@@ -277,10 +277,10 @@ Set `vespa_node_enabled = false` to skip the dedicated in-cluster index node gro
 </ParamField>
 
 <Warning>
-  If you do not set `opensearch_engine_version`, your domain uses the module default. When the default changes,
-  the next `terraform apply` upgrades the domain in place.
-  Amazon OpenSearch Service cannot downgrade a domain after an upgrade. To keep your current version,
-  set `opensearch_engine_version` to that version, for example `"3.3"`.
+  The module default is OpenSearch 3.6. If you do not set `opensearch_engine_version`,
+  the next `terraform apply` upgrades an existing domain that runs an earlier version to 3.6.
+  To keep your current version, set `opensearch_engine_version` to that version, for example `"3.3"`. Before you apply,
+  run `aws opensearch list-versions` to confirm that your AWS account and Region offer OpenSearch 3.6.
 </Warning>
 
 <ParamField path="opensearch_instance_type" type="string" default="r8g.large.search" />
