@@ -211,6 +211,11 @@ function useSettingsItems({
 /** The about page: a back row, then the build's details. */
 function useAboutView(): DropdownView {
   const t = useTranslations("accountPopover");
+  const detailsRef = useRef<HTMLDivElement>(null);
+  // ArrowRight on the details row moves focus to its first link; Tab then
+  // walks the rest, as on the notifications page.
+  const focusDetails = () =>
+    detailsRef.current?.querySelector<HTMLElement>("a")?.focus();
   return {
     // Wider than the menu, so long values (a URL, a ref) fit on one line.
     width: 80,
@@ -225,9 +230,10 @@ function useAboutView(): DropdownView {
       {
         kind: "custom",
         id: "about-details",
-        disabled: true,
+        keepOpen: true,
+        onSecondary: focusDetails,
         render: ({ props }) => (
-          <div {...props}>
+          <div {...props} ref={detailsRef}>
             <AboutDetails />
           </div>
         ),

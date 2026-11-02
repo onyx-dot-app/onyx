@@ -42,6 +42,16 @@ class Tier(str, Enum):
     ENTERPRISE = "enterprise"
 
 
+class BuildInfo(BaseModel):
+    """Git details of the running build, shown on the app's About page."""
+
+    commit: str | None = None
+    # ISO 8601 committer date.
+    commit_date: str | None = None
+    # The tag or branch the build came from.
+    ref: str | None = None
+
+
 class Settings(BaseModel):
     """General settings"""
 

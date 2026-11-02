@@ -2,17 +2,22 @@
 
 import os
 import subprocess
+from functools import cache
 from pathlib import Path
 
-from pydantic import BaseModel
+from onyx.server.settings.models import BuildInfo
 
-
-class BuildInfo(BaseModel):
-    commit: str | None = None
-    # ISO 8601 committer date.
-    commit_date: str | None = None
-    # The tag or branch the build came from.
-    ref: str | None = None
+# Release images get these env vars at build time.
+_ENV_COMMIT = os.environ.get("ONYX_COMMIT_SHA") or None
+_ENV_BUILD_INFO = (
+    BuildInfo(
+        commit=_ENV_COMMIT,
+        commit_date=os.environ.get("ONYX_COMMIT_DATE") or None,
+        ref=os.environ.get("ONYX_GIT_REF") or None,
+    )
+    if _ENV_COMMIT
+    else None
+)
 
 
 def _git(*args: str) -> str | None:
@@ -30,21 +35,24 @@ def _git(*args: str) -> str | None:
     return result.stdout.strip() or None
 
 
-def _load_build_info() -> BuildInfo:
-    # Release images get these env vars at build time. A server run from a
-    # checkout (local dev) reads the same details from git.
-    commit = os.environ.get("ONYX_COMMIT_SHA") or None
-    if commit:
-        return BuildInfo(
-            commit=commit,
-            commit_date=os.environ.get("ONYX_COMMIT_DATE") or None,
-            ref=os.environ.get("ONYX_GIT_REF") or None,
-        )
+def _git_ref() -> str | None:
+    tag = _git("describe", "--tags", "--exact-match")
+    if tag:
+        return tag
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    # A detached checkout reports "HEAD", which names no ref.
+    return branch if branch != "HEAD" else None
+
+
+@cache
+def get_build_info() -> BuildInfo:
+    """The env vars of a release image, or else the details of the checkout
+    the server runs from (local dev). Git runs on the first call, not on
+    import, and the result is kept."""
+    if _ENV_BUILD_INFO:
+        return _ENV_BUILD_INFO
     return BuildInfo(
         commit=_git("rev-parse", "HEAD"),
         commit_date=_git("log", "-1", "--format=%cI"),
-        ref=_git("rev-parse", "--abbrev-ref", "HEAD"),
+        ref=_git_ref(),
     )
-
-
-BUILD_INFO = _load_build_info()
