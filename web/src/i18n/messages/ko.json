@@ -17193,9 +17193,9 @@
         "sharing": {
           "title": "가져올 스킬의 액세스",
           "configureButton": "액세스 설정",
-          "organizationSummary": "조직의 모든 사용자가 이 스킬에 액세스할 수 있습니다.",
+          "organizationSummary": "조직의 모든 사용자가 이 스킬들에 액세스할 수 있습니다.",
           "selectedSummary": "{users, plural, one {#명} other {#명}} 및 {groups, plural, one {#개 그룹} other {#개 그룹}}과 공유되었습니다.",
-          "privateSummary": "나만 이 스킬에 액세스할 수 있습니다.",
+          "privateSummary": "나만 이 스킬들에 액세스할 수 있습니다.",
           "description": "이 액세스 설정은 선택한 {count, plural, one {스킬 #개} other {스킬 #개}} 모두에 적용됩니다."
         }
       },
@@ -17441,10 +17441,10 @@
     "bulk": {
       "adminDescription": "조직 전체의 스킬과 액세스를 관리합니다.",
       "selectAll": "표시된 모든 사용자 지정 스킬 선택",
-      "selected": "{count, number}개 선택됨",
+      "selected": "{count, plural, one {#개 선택됨} other {#개 선택됨}}",
       "share": "공유",
-      "enable": "나에게 활성화",
-      "disable": "나에게 비활성화",
+      "enable": "내 스킬 활성화",
+      "disable": "내 스킬 비활성화",
       "delete": "삭제",
       "personalEnablement": "활성화와 비활성화는 내 스킬에 적용됩니다. 직원에게 스킬을 배포하려면 설치 정책을 사용하세요.",
       "selectSkill": "{name} 선택",

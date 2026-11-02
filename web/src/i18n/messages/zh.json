@@ -17441,7 +17441,7 @@
     "bulk": {
       "adminDescription": "管理整个组织的技能和访问权限。",
       "selectAll": "选择所有可见的自定义技能",
-      "selected": "已选择 {count, number} 项",
+      "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
       "share": "分享",
       "enable": "为我启用",
       "disable": "为我禁用",

@@ -768,7 +768,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 hidden={tab !== "details"}
               >
                 {detailsVisited && (
-                  <SkillPreviewDetails skillId={props.skillId} />
+                  <SkillPreviewDetails
+                    skillId={props.skillId}
+                    unavailableReason={loadedSkill?.unavailable_reason}
+                  />
                 )}
               </Tabs.Content>
               <Tabs.Content

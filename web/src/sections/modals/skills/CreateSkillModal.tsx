@@ -214,7 +214,13 @@ export function CreateSkillModalContent({
         {result && (
           <Section gap={2} height="auto" alignItems="stretch">
             <MessageCard
-              variant={result.not_imported.length > 0 ? "warning" : "success"}
+              variant={
+                result.imported.length === 0
+                  ? "error"
+                  : result.not_imported.length > 0
+                    ? "warning"
+                    : "success"
+              }
               title={t("create.batch.result", {
                 imported: result.imported.length,
                 failed: result.not_imported.length,

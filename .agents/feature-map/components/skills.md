@@ -11,10 +11,8 @@
 
 - **A Craft user** opens the skills library and sees built-in skills and the
   custom skills they can see: their own, shared with them, or published to the
-  organization. Custom skills appear first. Built-ins sit in a collapsed
-  section at the bottom; matching searches expand it, and clearing search
-  collapses it. The Admin Panel shows custom skills only. They preview a skill's instructions, and turn custom skills
-  on or off.
+  organization. The Admin Panel lists custom skills only. They preview a
+  skill's instructions, and turn custom skills on or off.
 - **Built-in skills** are always on. A built-in that depends on an unavailable
   service, such as image generation with no provider or the browser with
   `ENABLE_BROWSER` off, is hidden. A skill for an external app is ready only

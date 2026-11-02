@@ -22,6 +22,7 @@ import { useSharePermissionOptions } from "@/sections/modals/shareAccessConstant
 
 interface BulkSkillSharingModalProps {
   count: number;
+  open: boolean;
   saving: boolean;
   onClose: () => void;
   onSave: (sharing: SkillShareUpdatePayload) => Promise<void>;
@@ -29,6 +30,7 @@ interface BulkSkillSharingModalProps {
 
 export default function BulkSkillSharingModal({
   count,
+  open,
   saving,
   onClose,
   onSave,
@@ -59,7 +61,18 @@ export default function BulkSkillSharingModal({
     stagedUsers.length > 0 ||
     stagedGroups.length > 0;
 
-  function save() {
+  // The parent keeps this modal mounted, so a generic close (X, backdrop)
+  // keeps the staged edits. Cancel and a submitted save discard them.
+  function reset() {
+    setScope("KEEP");
+    setPolicy("KEEP");
+    setPermission("VIEWER");
+    setPublicPermission("VIEWER");
+    setStagedUsers([]);
+    setStagedGroups([]);
+  }
+
+  async function save() {
     const sharing: SkillShareUpdatePayload = {};
     if (scope !== "KEEP")
       sharing.public_permission = scope === "PUBLIC" ? publicPermission : null;
@@ -74,14 +87,15 @@ export default function BulkSkillSharingModal({
         group_id: group.id,
         permission,
       }));
-    void onSave(sharing);
+    await onSave(sharing);
+    reset();
   }
 
   return (
     <Modal
-      open
-      onOpenChange={(open) => {
-        if (!open && !saving) onClose();
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !saving) onClose();
       }}
     >
       <Modal.Content width="md" height="fit">
@@ -198,10 +212,17 @@ export default function BulkSkillSharingModal({
           </Section>
         </Modal.Body>
         <Modal.Footer>
-          <Button prominence="secondary" disabled={saving} onClick={onClose}>
+          <Button
+            prominence="secondary"
+            disabled={saving}
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+          >
             {shareCopy("cancelButton.label")}
           </Button>
-          <Button disabled={!changed || saving} onClick={save}>
+          <Button disabled={!changed || saving} onClick={() => void save()}>
             {t("apply", { count })}
           </Button>
         </Modal.Footer>

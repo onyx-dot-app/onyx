@@ -12110,7 +12110,7 @@
           "label": "Indisponível - clique para saber mais"
         },
         "shared": {
-          "label": "Compartilhado"
+          "label": "Compartilhada"
         },
         "organization": {
           "label": "Organização"
@@ -17441,12 +17441,12 @@
     "bulk": {
       "adminDescription": "Gerencie habilidades e acesso em toda a organização.",
       "selectAll": "Selecionar todas as habilidades personalizadas visíveis",
-      "selected": "{count, number} selecionadas",
+      "selected": "{count, plural, one {# selecionada} other {# selecionadas}}",
       "share": "Compartilhar",
       "enable": "Ativar para mim",
       "disable": "Desativar para mim",
       "delete": "Excluir",
-      "personalEnablement": "Ativar e desativar altera suas próprias habilidades. Use a política de instalação para disponibilizar habilidades aos funcionários.",
+      "personalEnablement": "Ativar e desativar alteram suas próprias habilidades. Use a política de instalação para disponibilizar habilidades aos funcionários.",
       "selectSkill": "Selecionar {name}",
       "updated": "{count, plural, one {# habilidade atualizada} other {# habilidades atualizadas}}",
       "failed": "Não foi possível atualizar as habilidades. Tente novamente.",

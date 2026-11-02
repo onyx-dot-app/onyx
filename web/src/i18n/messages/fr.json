@@ -17441,7 +17441,7 @@
     "bulk": {
       "adminDescription": "Gérez les compétences et les accès dans votre organisation.",
       "selectAll": "Sélectionner toutes les compétences personnalisées visibles",
-      "selected": "{count, number} sélectionnées",
+      "selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
       "share": "Partager",
       "enable": "Activer pour moi",
       "disable": "Désactiver pour moi",

@@ -17441,7 +17441,7 @@
     "bulk": {
       "adminDescription": "Fähigkeiten und Zugriff in Ihrer Organisation verwalten.",
       "selectAll": "Alle sichtbaren benutzerdefinierten Fähigkeiten auswählen",
-      "selected": "{count, number} ausgewählt",
+      "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
       "share": "Teilen",
       "enable": "Für mich aktivieren",
       "disable": "Für mich deaktivieren",

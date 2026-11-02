@@ -17441,7 +17441,7 @@
     "bulk": {
       "adminDescription": "Gestiona las habilidades y el acceso en toda tu organización.",
       "selectAll": "Seleccionar todas las habilidades personalizadas visibles",
-      "selected": "{count, number} seleccionadas",
+      "selected": "{count, plural, one {# seleccionada} other {# seleccionadas}}",
       "share": "Compartir",
       "enable": "Activar para mí",
       "disable": "Desactivar para mí",

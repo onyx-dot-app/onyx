@@ -770,14 +770,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         )}
       </SettingsLayouts.Body>
 
-      {bulkSharingOpen && (
-        <BulkSkillSharingModal
-          count={selectedItems.length}
-          saving={bulkBusy}
-          onClose={() => setBulkSharingOpen(false)}
-          onSave={(sharing) => runBulk("share", sharing)}
-        />
-      )}
+      <BulkSkillSharingModal
+        count={selectedItems.length}
+        open={bulkSharingOpen}
+        saving={bulkBusy}
+        onClose={() => setBulkSharingOpen(false)}
+        onSave={(sharing) => runBulk("share", sharing)}
+      />
       {bulkDeleteOpen && (
         <ConfirmationModalLayout
           icon={SvgAlertTriangle}

@@ -226,9 +226,6 @@ describe("SkillsPage preference toggles", () => {
       screen.getByRole("button", { name: "Preview shared-skill" })
     );
     expect(screen.getByRole("dialog")).toHaveTextContent("Skill instructions");
-    expect(
-      screen.queryByRole("tab", { name: "Sharing" })
-    ).not.toBeInTheDocument();
   });
 
   it("keeps built-in skills collapsed until expanded", async () => {

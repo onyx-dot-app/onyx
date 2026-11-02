@@ -17441,7 +17441,7 @@
     "bulk": {
       "adminDescription": "Manage skills and access across your organization.",
       "selectAll": "Select all visible custom skills",
-      "selected": "{count, number} selected",
+      "selected": "{count, plural, one {# selected} other {# selected}}",
       "share": "Share",
       "enable": "Enable for me",
       "disable": "Disable for me",

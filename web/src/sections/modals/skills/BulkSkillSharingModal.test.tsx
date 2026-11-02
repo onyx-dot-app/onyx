@@ -26,6 +26,7 @@ describe("BulkSkillSharingModal", () => {
     render(
       <BulkSkillSharingModal
         count={80}
+        open
         saving={false}
         onClose={jest.fn()}
         onSave={onSave}
@@ -44,5 +45,30 @@ describe("BulkSkillSharingModal", () => {
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith({ public_permission: "VIEWER" })
     );
+  });
+  it("keeps staged edits across a generic close and drops them on Cancel", async () => {
+    const user = setupUser();
+    const onClose = jest.fn();
+    const props = { count: 2, saving: false, onClose, onSave: jest.fn() };
+    const { rerender } = render(<BulkSkillSharingModal open {...props} />);
+    await user.click(screen.getByRole("button", { name: "Who can access" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "Everyone in the organization" })
+    );
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
+    onClose.mockClear();
+    rerender(<BulkSkillSharingModal open={false} {...props} />);
+    rerender(<BulkSkillSharingModal open {...props} />);
+    expect(
+      screen.getByRole("button", { name: "Apply to 2 skills" })
+    ).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalled();
+    rerender(<BulkSkillSharingModal open={false} {...props} />);
+    rerender(<BulkSkillSharingModal open {...props} />);
+    expect(
+      screen.getByRole("button", { name: "Apply to 2 skills" })
+    ).toBeDisabled();
   });
 });
