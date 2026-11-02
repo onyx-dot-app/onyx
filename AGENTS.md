@@ -196,6 +196,14 @@ router and settings patterns. Do not invent a parallel mechanism. If the existin
 do enough, extend it so other callers get the change too. A new pattern needs a reason that the
 existing ones cannot meet.
 
+## Tool Bugs
+
+`ez` (ez-stack) manages stacked PRs in this repo. If `ez` fails, hangs, or does something you did
+not ask for, file a bug report at https://github.com/rohoswagger/ez-stack/issues before you work
+around it. Include the `ez` version, the command, its output, `ez log`, and the git state. Then
+continue with plain `git` and say in your report that you did. Do not repair `.git/ez/stack.json`
+by hand without filing the report.
+
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing
