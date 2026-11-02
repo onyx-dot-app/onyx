@@ -1,0 +1,22 @@
+---
+title: "Set User Admin Access"
+openapi: "PATCH /manage/admin/users/admin-access"
+---
+
+<Info>
+  **Required permission:** Admin (`admin`).
+</Info>
+
+Admin access is membership in the **Admin** group, so this endpoint adds the user to that group or removes them from it.
+
+<Note>
+  This endpoint applies to Onyx **v4.7 and later**. It replaces `PATCH /manage/set-user-role`,
+  which was removed with the role model in v4.7. To grant any other permission, add the user to a group that grants it.
+</Note>
+
+Onyx rejects the request when it would lock you out of the admin panel or when the account cannot hold admin access:
+
+- You cannot remove yourself from the Admin group. Ask another admin to do it.
+- You cannot remove the last admin. Grant another user admin access first.
+- This endpoint cannot change admin access for service accounts, bot accounts, external permission accounts,
+  or anonymous accounts. To grant an API key admin access, assign its service account to the Admin group.

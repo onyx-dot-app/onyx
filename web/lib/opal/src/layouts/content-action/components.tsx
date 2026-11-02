@@ -1,6 +1,7 @@
 import "@opal/layouts/content-action/styles.css";
 import { Content, type ContentProps } from "@opal/layouts/content/components";
 import { spacingToRem } from "@opal/shared";
+import type { Spacing } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,7 +21,15 @@ type ContentActionProps = ContentProps & {
    *
    * @default 2
    */
-  padding?: 0 | 0.5 | 1 | 2;
+  padding?: 0 | 0.5 | 1 | 1.5 | 2;
+
+  /**
+   * The gap between the `Content` area and `rightChildren`, as a spacing
+   * step (`N / 4` rem). Ignored in the `responsive` branch.
+   *
+   * @default 4
+   */
+  gapping?: Spacing;
 
   /**
    * When true, vertically centers the Content and rightChildren.
@@ -46,7 +55,9 @@ type ContentActionProps = ContentProps & {
    * When true, the `rightChildren` column grows to fill the row (capped at
    * `--block-width-form-input-column-max`) instead of hugging its content.
    * Intended for full-width form inputs; leave off for compact controls like
-   * toggles/buttons. Ignored in the `responsive` branch.
+   * toggles/buttons. In the `responsive` branch it applies on desktop, where
+   * the control sits beside the title; stacked on narrow viewports, the
+   * control always spans the full width.
    *
    * @default false
    */
@@ -99,6 +110,7 @@ function routesToContentMd(props: {
 function ContentAction({
   rightChildren,
   padding = 2,
+  gapping = 4,
   center = false,
   responsive = false,
   fillRight = false,
@@ -113,14 +125,22 @@ function ContentAction({
     // Section) a wrapper without w-full shrinks to content width, so the input
     // wouldn't fill the row.
     return (
-      <div className="w-full min-w-0" style={paddingStyle}>
+      <div
+        className="opal-content-action-responsive w-full min-w-0"
+        data-fill={fillRight || undefined}
+        style={paddingStyle}
+      >
         <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
       </div>
     );
   }
 
   return (
-    <div className="opal-content-action" data-centered={center || undefined}>
+    <div
+      className="opal-content-action"
+      data-centered={center || undefined}
+      style={{ gap: spacingToRem(gapping) }}
+    >
       <div className="opal-content-action-content" style={paddingStyle}>
         <Content {...contentProps} />
       </div>

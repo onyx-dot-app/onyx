@@ -1,0 +1,167 @@
+---
+title: "External Services"
+description: "Run Onyx on Kubernetes with managed PostgreSQL, Redis, OpenSearch, and object storage"
+icon: "database"
+---
+
+By default, the Onyx Helm chart installs PostgreSQL, Redis, OpenSearch, the object store, Code Interpreter, and NGINX.
+For production, you can turn off each bundled service and connect Onyx to a managed service.
+
+<Note>
+  MinIO is deprecated. The chart keeps `minio.enabled:
+  true` for now so that installs from before v5.0 can [move their files to
+  SeaweedFS](/admins/advanced_configs/object_store_migration). A future release changes the default to `false`.
+  New installs, and installs that finished the move, set `minio.enabled: false`.
+</Note>
+
+## Chart toggles
+
+| Key | Default | When you set it to `false` |
+| --- | --- | --- |
+| `postgresql.enabled` | `true` | The chart does not create the CloudNativePG (CNPG) `Cluster`, operator, or CRDs. |
+| `postgresqlOperator.enabled` | Follows `postgresql.enabled` | The chart keeps its `Cluster`, but an existing CNPG operator must reconcile it. |
+| `postgresql.installCRDs` | Follows the operator toggle | The chart does not install the CNPG CRDs. Use this to control the CRDs separately. |
+| `redis.enabled` | `true` | The chart does not create Redis or the Redis operator. |
+| `redisOperator.enabled` | Follows `redis.enabled` | The chart keeps its Redis, but an existing operator must reconcile it. |
+| `opensearch.enabled` | `true` | The chart does not create OpenSearch. |
+| `objectStore.enabled` | Follows `minio.enabled` | The chart does not create the object store. |
+| `minio.enabled` | `true` | The chart does not create the deprecated MinIO store. Set this to `false` on new installs and after the [move to SeaweedFS](/admins/advanced_configs/object_store_migration). A future release changes the default to `false`. |
+| `codeInterpreter.enabled` | `true` | The chart does not create Code Interpreter. |
+| `nginx.enabled` | `true` | The chart does not create the ingress-nginx controller. |
+
+`postgresqlOperator` and `redisOperator` are not in the default `values.yaml`.
+Add them to your values file when you need them.
+An existing Redis operator must provide the `redis.redis.opstreelabs.in/v1beta2` CRDs.
+
+<Warning>
+  Do not set `vectorDB.enabled: false` only to use an external OpenSearch. That key turns off indexing, connectors,
+  the indexing model server, and all Celery workers.
+  Use it only for [Onyx Lite](/deployment/configuration/configuration#onyx-lite).
+</Warning>
+
+## Application-only example
+
+This example runs only the Onyx application in Kubernetes. It assumes:
+
+- Managed PostgreSQL, Redis, OpenSearch, and S3 exist and pods can reach them.
+- The Secrets named in `auth` exist in the release namespace.
+- Your own ingress controller sends traffic to Onyx.
+
+```yaml values.yaml
+postgresql:
+  enabled: false
+redis:
+  enabled: false
+opensearch:
+  enabled: false
+objectStore:
+  enabled: false
+minio:
+  enabled: false
+nginx:
+  enabled: false
+
+configMap:
+  POSTGRES_HOST: "onyx-db.example.internal"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "onyx"
+  REDIS_HOST: "onyx-cache.example.internal"  # No underscores; they are not valid in DNS names
+  REDIS_PORT: "6379"
+  OPENSEARCH_HOST: "onyx-search.example.internal"  # Host name only, no https://
+  OPENSEARCH_REST_API_PORT: "443"
+  S3_FILE_STORE_BUCKET_NAME: "onyx-files"
+  AWS_REGION_NAME: "us-east-1"
+
+auth:
+  postgresql:
+    existingSecret: "onyx-postgres"     # Keys: username, password
+  redis:
+    existingSecret: "onyx-redis"        # Key: redis_password
+  opensearch:
+    existingSecret: "onyx-opensearch"   # Keys: opensearch_admin_username, opensearch_admin_password
+  objectstorage:
+    existingSecret: "onyx-s3"           # Keys: s3_aws_access_key_id, s3_aws_secret_access_key
+```
+
+The chart sets `POSTGRES_HOST`, `REDIS_HOST`, `OPENSEARCH_HOST`, and `S3_ENDPOINT_URL` only for bundled services.
+When you turn a service off, you must set its connection values in `configMap`. Put passwords in Secrets,
+not in `configMap`. See [Security Hardening](/deployment/production/security#credentials).
+
+### Per-service notes
+
+<AccordionGroup>
+  <Accordion title="PostgreSQL">
+    - The database user must be able to create tables. The API server runs database migrations when it starts.
+    - For TLS with certificate verification, set `postgresTls.enabled: true` and give the CA in
+    `postgresTls.caSecretName` or `postgresTls.caConfigMapName`.
+    - For Amazon RDS, see the [RDS guide](/deployment/cloud/aws/rds).
+    - For Cloud SQL for PostgreSQL, set `POSTGRES_DB` to the database you created. If you do not,
+    Onyx uses the `postgres` database. See the [GCP guide](/deployment/cloud/gcp#gke-with-terraform).
+  </Accordion>
+
+  <Accordion title="Redis">
+    - For TLS with certificate verification, set `redisTls.enabled: true` and give the CA in
+    `redisTls.caSecretName` or `redisTls.caConfigMapName`. The bundled Redis does not support TLS.
+    - If the managed Redis has no password, set `auth.redis.enabled: false`.
+    - Onyx uses Redis databases 0, 14, and 15. Use a Redis service with one primary endpoint and the default
+    16 databases, such as Memorystore for Redis or ElastiCache for Redis with cluster mode off.
+    Redis Cluster services shard keys, and Celery then fails with `CROSSSLOT` errors.
+    - Memorystore for Redis with transit encryption serves TLS on port `6378`. Set `REDIS_PORT: "6378"` and turn on
+    `redisTls` with the Memorystore CA.
+  </Accordion>
+
+  <Accordion title="OpenSearch">
+    - For Amazon OpenSearch Service and other managed settings,
+    see the [OpenSearch guide](/deployment/local/opensearch).
+  </Accordion>
+
+  <Accordion title="Object storage">
+    - For S3-compatible storage that is not AWS, also set `configMap.S3_ENDPOINT_URL`.
+    - If the pods use a cloud IAM role for S3, set `auth.objectstorage.enabled: false` and do not set access keys.
+    - To use Azure Blob Storage, set `configMap.FILE_STORE_BACKEND: "azure"` and the `AZURE_*` keys in `configMap`.
+    - To use Google Cloud Storage, set `configMap.FILE_STORE_BACKEND: "gcs"`, `configMap.GCS_FILE_STORE_BUCKET_NAME`,
+    and `configMap.GCS_PROJECT_ID`. With GKE Workload Identity,
+    set `serviceAccount.name` to a Kubernetes service account that has `roles/storage.objectAdmin` and
+    `roles/storage.legacyBucketReader` on the bucket. Onyx reads the bucket when it starts, so it needs both roles.
+    See the [GCP guide](/deployment/cloud/gcp#gke-with-terraform).
+    - For all file store variables, see
+    [File Storage Configuration](/deployment/configuration/configuration#onyx-environment-variables).
+  </Accordion>
+
+  <Accordion title="Code Interpreter">
+    - To run Code Interpreter as a separate release, set `codeInterpreter.enabled: false` and set
+    `configMap.CODE_INTERPRETER_BASE_URL` to its Service URL.
+    See [Code Interpreter](/deployment/production/code_interpreter#install-the-code-interpreter-chart-directly).
+  </Accordion>
+
+  <Accordion title="NGINX">
+    - With `nginx.enabled: false`, your ingress must remove the `/api` prefix before requests reach the API Service.
+    The bundled NGINX does this.
+    - `ingress.enabled: true` creates Ingress objects that use ingress-nginx annotations and cert-manager.
+    - The bundled NGINX also routes SAML and MCP paths. Read `templates/nginx-conf.yaml` in the chart before you
+    replace it.
+  </Accordion>
+</AccordionGroup>
+
+## Who owns what
+
+The chart does not configure backups for any bundled service.
+
+| Service | Bundled in the chart | External (managed) |
+| --- | --- | --- |
+| PostgreSQL | You own backups, restore, storage growth, and CNPG and PostgreSQL upgrades. | The provider owns backups and patch upgrades. You own restore tests and major upgrades. |
+| Redis | No persistence. Data is cache and task queues. A restart loses queued tasks. | The provider owns availability and upgrades. |
+| OpenSearch | You own snapshots, disk growth, and upgrades. You can rebuild the index from sources, but it is slow. | The provider owns snapshots and upgrades. |
+| Object store or external object storage (S3, Cloud Storage, Azure Blob Storage) | You own backups of uploaded files. You cannot rebuild these files from sources. | The provider owns durability. You own versioning and backup policy. |
+
+## Uninstall
+
+<Warning>
+  With bundled PostgreSQL or Redis, `helm uninstall` runs a cleanup hook.
+  The hook deletes **every** CNPG `Cluster` and every Redis resource in the release namespace,
+  not only those of this release. CNPG then deletes the PostgreSQL volumes, so the database is lost.
+
+  - Back up the database before you uninstall.
+  - Install Onyx in its own namespace.
+  - Use external PostgreSQL if the data must outlive the release.
+</Warning>

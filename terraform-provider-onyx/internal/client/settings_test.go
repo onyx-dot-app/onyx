@@ -27,7 +27,6 @@ const userSettingsJSON = `{
 	"query_history_type": "normal",
 	"hide_query_history_from_admin_panel": false,
 	"image_extraction_and_analysis_enabled": true,
-	"image_analysis_max_size_mb": 20,
 	"user_knowledge_enabled": true,
 	"user_file_max_upload_size_mb": 200,
 	"file_token_count_threshold_k": null,

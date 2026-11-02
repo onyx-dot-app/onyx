@@ -1,8 +1,8 @@
 """Constants for release notes functionality."""
 
-# GitHub source
+# GitHub source: docs/live holds the docs of the latest stable release (docs-publish.yml)
 GITHUB_RAW_BASE_URL = (
-    "https://raw.githubusercontent.com/onyx-dot-app/documentation/main"
+    "https://raw.githubusercontent.com/onyx-dot-app/onyx/docs/live/documentation"
 )
 GITHUB_CHANGELOG_RAW_URL = f"{GITHUB_RAW_BASE_URL}/changelog.mdx"
 

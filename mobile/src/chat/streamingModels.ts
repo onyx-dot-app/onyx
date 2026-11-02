@@ -189,7 +189,7 @@ export interface FetchToolDocuments extends BaseObj {
 
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
-  status_code: number;
+  status_code: number | null;
   message: string;
 }
 

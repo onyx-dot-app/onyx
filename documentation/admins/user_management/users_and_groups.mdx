@@ -1,0 +1,122 @@
+---
+title: "Users and Groups"
+description: "Manage users, account types, groups, and invitations in Onyx"
+icon: "users"
+---
+
+## Overview
+
+<Info>
+  This page applies to Onyx **v4.7 and later**. For older versions,
+  see [Users and Groups before v4.7](/admins/user_management/users_and_groups_legacy).
+</Info>
+
+The **Users** and **Groups** pages are under **Permissions** in the Admin Panel.
+
+### Users
+
+As users join your workspace, they appear on the Users page.
+
+| Status | Meaning |
+|---|---|
+| Active | The user can sign in. |
+| Inactive | An admin deactivated the user. The user cannot sign in, but their chats and agents are kept. |
+| Invite Pending | You invited the user, and they have not signed in yet. |
+| Request to Join | The user asked to join the workspace and needs approval. |
+
+Open the menu on a row to act on that user:
+
+| Action | What it does |
+|---|---|
+| Groups & Roles | Adds the user to groups or removes them from groups. |
+| Make Admin / Remove Admin Access | Adds the user to the **Admin** group or removes them from it. |
+| Deactivate User / Activate User | Blocks or restores sign-in. Deactivating a user frees their license seat. |
+| Reset Password | Generates a new random password and signs the user out of all sessions. Available for password sign-in only. |
+| Delete User | Removes the user and their chat history. This cannot be undone. |
+
+<Tip>
+  Unable to delete a user? They may have a Document Set or Agent still associated with their profile.
+</Tip>
+
+<img className="rounded-image" src="/assets/admins/user_management/manage_users.webp" alt="Users page listing accounts with their groups, account type, and status"/>
+
+### Account Types
+
+Account type tells you what kind of account Onyx is showing. It is different from permissions:
+permissions come from group membership, while account type explains whether the account is a normal user,
+service account, or system-managed account.
+
+| Account type | Meaning |
+|---|---|
+| Standard | A normal user account. Standard users can be assigned to groups and receive group permissions. |
+| Service Account | An API key or service account. Service accounts get their access from the groups you pick when creating the key, exactly like a user. |
+| Slack Bot | A bot-created account used for Slack interactions. These accounts are system-managed. |
+| External User | A placeholder account discovered through external permission sync before the person logs in. These accounts are system-managed. |
+| Anonymous | A temporary anonymous account when anonymous access is enabled. These accounts are system-managed. |
+
+Because all access comes from groups, an account that belongs to no group has no permissions.
+A service account with no group is the one exception: it can still post to chat, but it cannot search.
+See [Understanding Permissions](/admins/permissions/understanding_permissions) for the full model.
+
+### Inviting Users
+
+Use the **Invite Users** button to send an email invitation to join your workspace.
+Inviting someone does not by itself change who is allowed to join.
+
+### Restricting Who Can Join
+
+By default, anyone who can reach your Onyx deployment can create an account.
+Sign-up controls are on the **Security & Hardening** page under **Organization**, in the **Authentication** section:
+
+| Setting | Effect |
+|---|---|
+| **Restrict Open Sign-Up** | Only people you have invited can join. Self-hosted deployments only. |
+| **Restrict Email Domains** | Only emails in the **Allowed Email Domains** list can register. |
+| **Disable Password Login & Signup** | Everyone signs in through SSO. Requires at least one enabled SSO provider. |
+
+<Note>
+  If you turn on [SCIM](/deployment/authentication/scim), your identity provider controls membership instead.
+  The Users page then shows a **SCIM Sync** card, and SCIM-synced users are marked as managed by your identity provider.
+</Note>
+
+## Groups
+
+You can organize users and service accounts into groups to manage access at the same time.
+
+Specifically, you can attach private Connectors, Document Sets, and Agents to a Group,
+granting all users in the Group access to these resources.
+
+Groups also power Onyx's permission system. To learn how group permissions and Group Managers work,
+see [Understanding Permissions](/admins/permissions/understanding_permissions).
+
+<Info>
+  Custom groups require a **Business** or **Enterprise** plan, or Onyx Cloud.
+  Community Edition has the default **Admin** and **Basic** groups only.
+</Info>
+
+<img className="rounded-image" src="/assets/admins/user_management/manage_groups.webp" alt="Groups page showing the default Admin and Basic groups alongside a custom group"/>
+
+Selecting a group opens its **Edit Group** page:
+
+| Section | What you manage |
+|---|---|
+| Members | Add or remove users and service accounts. Use **Make manager** to promote a member to Group Manager. |
+| Group Permissions | The organization-wide permissions every member receives. |
+| Shared with This Group | The connectors, document sets, and agents shared with the group. |
+| Incognito Chats | Lets members of this group start incognito chats, when incognito access is set to designated groups on **Security & Hardening**. |
+| Token Rate Limit | Limits the tokens or cost the group can use in a time window. Requires an **Enterprise** plan. |
+
+The **Admin** and **Basic** groups are system groups. You can change only their members.
+The **Basic** group also shows the one permission you can toggle for every user, **Create User Access Token**.
+
+<img className="rounded-image" src="/assets/admins/user_management/group_detail.webp" alt="Edit Group page showing members, group permissions, shared resources, and token rate limits"/>
+
+<Warning>
+  Deleting a group removes its members' access to every resource shared with it.
+  A member whose only group is the one you delete must be added to another group first.
+</Warning>
+
+<Tip>
+  Want to automate user and group provisioning? Set up [SCIM](/deployment/authentication/scim)
+  to sync directly from your identity provider.
+</Tip>

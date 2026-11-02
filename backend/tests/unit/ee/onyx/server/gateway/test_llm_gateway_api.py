@@ -21,15 +21,16 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
+    RequestFunctionCall,
     SystemMessage,
     ToolCall,
     UserMessage,
 )
-from onyx.llm.model_request import RequestFunctionCall as ToolFunctionCall
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     ChatCompletionMessageToolCall,
@@ -51,17 +52,21 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
 )
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.craft_session import CRAFT_SESSION_ID_CONTEXTVAR
 from onyx.server.gateway.models import (
+    AnthropicCountTokensRequest,
+    AnthropicMessagesRequest,
     ChatCompletionRequest,
     ChatCompletionResponse,
     ResponsesRequest,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.settings.models import Settings
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import get_current_trace
 
@@ -131,6 +136,7 @@ def _provider(
 
 class _ConfigOnlyLLM(LitellmLLM):
     def __init__(self, config: LLMConfig) -> None:
+        self._config = config
         super().__init__(
             model_provider=config.model_provider,
             model_name=config.model_name,
@@ -138,7 +144,6 @@ class _ConfigOnlyLLM(LitellmLLM):
             max_input_tokens=config.max_input_tokens,
             custom_config=config.custom_config,
         )
-        self._config = config
 
     @property
     def config(self) -> LLMConfig:
@@ -162,6 +167,31 @@ class _ChunkStreamLLM(_ConfigOnlyLLM):
     def stream_raw(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
         del args, kwargs
         yield from self._chunks
+
+
+@pytest.mark.parametrize("supports_chat", [False, True])
+def test_resolve_decision_model_requires_chat_capability(supports_chat: bool) -> None:
+    model = ModelConfigurationView(
+        name="gpt-6-luna",
+        supports_chat=supports_chat,
+        supports_decisions=True,
+        is_visible=True,
+        supports_image_input=False,
+    )
+    provider = _provider(23, "openai", [model])
+    db_session = cast(Session, MagicMock(spec=Session))
+    user = cast(User, MagicMock(spec=User))
+    with patch.object(
+        gateway_api, "fetch_accessible_llm_provider_by_id", return_value=provider
+    ):
+        if supports_chat:
+            assert gateway_api.resolve_gateway_model(
+                db_session, user, "23/gpt-6-luna"
+            ) == (provider, model)
+        else:
+            with pytest.raises(OnyxError) as exc_info:
+                gateway_api.resolve_gateway_model(db_session, user, "23/gpt-6-luna")
+            assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
 
 
 def test_resolve_model_preserves_slashes_after_provider_id() -> None:
@@ -246,7 +276,7 @@ class _StreamingLLM(_ConfigOnlyLLM):
             self._closed.set()
 
 
-class _RaisingCloseStream:
+class _RaisingCloseStream(stream_bridge._ClosableStream):
     def __init__(self) -> None:
         self._remaining = 1
 
@@ -407,7 +437,7 @@ def test_prepare_messages_marks_stable_prefix_for_prompt_cache() -> None:
 def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
     config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-sol",
         temperature=0,
         max_input_tokens=128_000,
     )
@@ -429,7 +459,7 @@ def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
 
 def test_drop_empty_text() -> None:
     tool_call = ToolCall(
-        id="call_1", function=ToolFunctionCall(name="bash", arguments="{}")
+        id="call_1", function=RequestFunctionCall(name="bash", arguments="{}")
     )
     image_part = ImageContentPart(image_url=ImageUrlDetail(url="https://x/y.png"))
     messages: list[ChatCompletionMessage] = [
@@ -516,12 +546,12 @@ def test_completion_payload_serializes_openai_shape() -> None:
     )
 
     payload = ChatCompletionResponse.from_model_response(
-        response, "3/gpt-5-mini"
+        response, "3/gpt-6-sol"
     ).to_wire()
 
     assert payload["object"] == "chat.completion"
     assert payload["created"] == 1784577906
-    assert payload["model"] == "3/gpt-5-mini"
+    assert payload["model"] == "3/gpt-6-sol"
     choice = payload["choices"][0]
     assert choice["finish_reason"] == "tool_calls"
     assert choice["message"]["role"] == "assistant"
@@ -661,6 +691,21 @@ def _assert_gateway_trace(active: Any) -> None:
         "flow": LLMFlow.CRAFT_LLM_GENERATION.value,
         "model": "test",
     }
+
+
+def test_stream_worker_trace_sees_bound_craft_session() -> None:
+    """The worker runs on its own thread; the bound session must follow it."""
+    traces: list[Any] = []
+    token = CRAFT_SESSION_ID_CONTEXTVAR.set("sess-1")
+    try:
+        with _capture_trace_at_generation_span(traces):
+            frames = list(_gateway_stream(_reasoning_stream_llm()))
+    finally:
+        CRAFT_SESSION_ID_CONTEXTVAR.reset(token)
+
+    assert frames[-1] == "data: [DONE]\n\n"
+    (active,) = traces
+    assert (active.export() or {})["metadata"]["craft_session_id"] == "sess-1"
 
 
 def test_stream_worker_opens_trace_before_generation_span() -> None:
@@ -1154,7 +1199,7 @@ def _catalog_provider() -> LLMProviderView:
     return _provider(
         7,
         "openai",
-        [_model("gpt-5-mini"), _model("hidden", is_visible=False)],
+        [_model("gpt-6-sol"), _model("hidden", is_visible=False)],
     )
 
 
@@ -1181,7 +1226,7 @@ def test_list_models_returns_openai_shape_excluding_hidden_models() -> None:
 
     payload = json.loads(bytes(response.body))
     assert payload["object"] == "list"
-    assert [m["id"] for m in payload["data"]] == ["7/gpt-5-mini"]
+    assert [m["id"] for m in payload["data"]] == ["7/gpt-6-sol"]
     assert payload["data"][0]["object"] == "model"
     assert payload["data"][0]["owned_by"] == "openai"
 
@@ -1215,7 +1260,7 @@ def test_list_models_ids_round_trip_through_resolve_gateway_model() -> None:
         )
 
     assert resolved_provider is provider
-    assert resolved_model.name == "gpt-5-mini"
+    assert resolved_model.name == "gpt-6-sol"
 
 
 def test_list_models_rejects_non_gateway_credentials() -> None:
@@ -1229,6 +1274,121 @@ def test_list_models_rejects_non_gateway_credentials() -> None:
             db_session=cast(Session, MagicMock(spec=Session)),
         )
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_authorize_rejects_pat_flow_when_gateway_disabled() -> None:
+    """The workspace switch rejects PAT traffic even when the credential
+    would otherwise authorize."""
+    with (
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=False)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_DISABLED
+
+
+def test_authorize_allows_craft_flow_when_gateway_disabled() -> None:
+    """Craft sandbox traffic is governed by the Craft setting, not the
+    gateway switch."""
+    with (
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=False)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.CRAFT_LLM_GENERATION),
+        ),
+    ):
+        flow = gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    assert flow is LLMFlow.CRAFT_LLM_GENERATION
+
+
+@pytest.mark.parametrize(
+    "endpoint,kwargs",
+    [
+        ("gateway_list_models", {}),
+        (
+            "gateway_chat_completions",
+            {
+                "request": ChatCompletionRequest(
+                    model="1/test",
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+            },
+        ),
+        (
+            "gateway_responses",
+            {
+                "request": ResponsesRequest(
+                    model="1/test",
+                    input=[{"type": "message", "role": "user", "content": "hi"}],
+                )
+            },
+        ),
+        (
+            "gateway_anthropic_messages",
+            {
+                "request": AnthropicMessagesRequest(
+                    model="1/test",
+                    max_tokens=1,
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+            },
+        ),
+        (
+            "gateway_anthropic_count_tokens",
+            {
+                "request": AnthropicCountTokensRequest(
+                    model="1/test",
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+            },
+        ),
+    ],
+)
+def test_every_route_rejects_when_gateway_disabled(
+    endpoint: str, kwargs: dict[str, Any]
+) -> None:
+    with (
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=False)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        getattr(  # ods: ignore[getattr] — parametrized endpoint dispatch
+            gateway_api, endpoint
+        )(
+            http_request=cast(Request, MagicMock(spec=Request)),
+            user=cast(User, MagicMock(spec=User)),
+            db_session=cast(Session, MagicMock(spec=Session)),
+            **kwargs,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_DISABLED
 
 
 def test_responses_input_instructions_become_system_message() -> None:
@@ -1358,7 +1518,7 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
 
 def test_handle_responses_request_forwards_named_tool_choice() -> None:
     """The Responses request must survive the litellm tools transform plus
-    _require_named_tool and reach the LLM as a NamedToolChoice."""
+    _require_named_tool and reach the LitellmLLM as a NamedToolChoice."""
     request = ResponsesRequest(
         model="1/test",
         input="hi",
@@ -1793,7 +1953,9 @@ async def test_handle_responses_request_streaming_returns_event_stream() -> None
 
     with (
         patch.object(
-            gateway_api, "llm_from_provider", return_value=_ChunkStreamLLM(_TEXT_CHUNKS)
+            gateway_api,
+            "llm_from_provider",
+            return_value=_ChunkStreamLLM(_TEXT_CHUNKS),
         ),
         patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()),
     ):

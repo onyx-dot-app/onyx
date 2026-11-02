@@ -1,6 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { AdminConnectorDetailPage } from "@tests/e2e/pages/AdminConnectorDetailPage";
 
 /** Upload a file through the inline manager, retrying on transient failures. */
 async function uploadTestFile(
@@ -72,15 +73,29 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
+    const detailPage = new AdminConnectorDetailPage(page);
+    await detailPage.expandIndexConfigurations();
     await expect(page.getByText(/Files \(/)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole("button", { name: /edit/i })).toBeVisible();
+    await expect(detailPage.filesEditButton).toBeVisible();
+  });
+
+  test("should not show an account or checks for a credential-less source", async ({
+    page,
+  }) => {
+    await page.goto(`/admin/connector/${testCcPairId}`);
+
+    const detailPage = new AdminConnectorDetailPage(page);
+    await detailPage.expectLoaded();
+    await expect(detailPage.indexConfigurationsToggle).toBeVisible();
+    await expect(detailPage.authenticationAccountTitle).toHaveCount(0);
+    await expect(detailPage.rerunChecksButton).toHaveCount(0);
   });
 
   test("should enter and exit edit mode", async ({ page }) => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await expect(page.getByRole("button", { name: /cancel/i })).toBeVisible();
     await expect(
       page.getByRole("button", { name: /save changes/i })
@@ -89,14 +104,16 @@ test.describe("InlineFileManagement", () => {
       page.getByRole("button", { name: /add files/i })
     ).toBeVisible();
     await page.getByRole("button", { name: /cancel/i }).click();
-    await expect(page.getByRole("button", { name: /edit/i })).toBeVisible();
+    await expect(
+      new AdminConnectorDetailPage(page).filesEditButton
+    ).toBeVisible();
   });
 
   test("should add files and show them as pending", async ({ page }) => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -112,7 +129,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -128,7 +145,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -157,7 +174,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: /edit/i }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -165,7 +182,9 @@ test.describe("InlineFileManagement", () => {
       "This file should be discarded"
     );
     await page.getByRole("button", { name: /cancel/i }).click();
-    await expect(page.getByRole("button", { name: /edit/i })).toBeVisible();
+    await expect(
+      new AdminConnectorDetailPage(page).filesEditButton
+    ).toBeVisible();
     await expect(page.getByText("discard-test.txt")).not.toBeVisible();
   });
 });

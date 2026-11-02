@@ -2,14 +2,17 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
@@ -21,8 +24,13 @@ type ComposeOptions struct {
 	Down          bool
 	Wait          bool
 	ForceRecreate bool
-	NoEE          bool
 	Infra         bool
+	// Ports, when set, are the compose host port variables to write instead
+	// of scanning for free ports.
+	Ports map[string]string
+	// ExcludeServices are infra services left out of an --infra start.
+	ExcludeServices []string
+	Output          io.Writer
 }
 
 // NewComposeCommand creates a new compose command for launching docker
@@ -36,14 +44,16 @@ func NewComposeCommand() *cobra.Command {
 		Long: `Launch Onyx docker containers using docker compose.
 
 By default, this runs docker compose up -d with the standard docker-compose.yml.
-Enterprise Edition features are enabled by default for development.
+Paid features need a license in the database. When ONYX_DEV_LICENSE is set in
+the shell, it is seeded into the api_server once the stack is healthy. The seed
+is skipped with --infra, with --wait=false, and for the multitenant profile.
 
 Available profiles:
   dev          Use dev configuration (exposes service ports for development)
   multitenant  Dev configuration plus multi-tenant (Onyx Cloud) mode
 
 Examples:
-  # Start containers with default configuration (EE enabled)
+  # Start containers with default configuration
   ods compose
 
   # Start containers with dev configuration (exposes service ports)
@@ -52,10 +62,6 @@ Examples:
   # Start containers in multi-tenant mode (dev configuration plus the
   # docker-compose.multitenant.yml overlay)
   ods compose multitenant
-
-  # Start containers without Enterprise Edition features (not available with
-  # the multitenant profile, which requires them)
-  ods compose --no-ee
 
   # Stop running containers
   ods compose --down
@@ -89,7 +95,6 @@ Examples:
 	cmd.Flags().BoolVar(&opts.Wait, "wait", true, "Wait for services to be healthy before returning")
 	cmd.Flags().BoolVar(&opts.ForceRecreate, "force-recreate", false, "Force recreate containers even if unchanged")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Set the IMAGE_TAG for docker compose (e.g. edge, v2.10.4)")
-	cmd.Flags().BoolVar(&opts.NoEE, "no-ee", false, "Disable Enterprise Edition features (enabled by default)")
 	cmd.Flags().BoolVar(&opts.Infra, "infra", false, "Start only infrastructure containers (db, cache, search, model servers)")
 
 	return cmd
@@ -99,16 +104,6 @@ Examples:
 func validateProfile(profile string) error {
 	if profile != "" && profile != "dev" && profile != "multitenant" {
 		return fatalErrorf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
-	}
-	return nil
-}
-
-// checkComposeOptions rejects flag combinations the compose files cannot
-// honor. The multitenant overlay pins Enterprise Edition features on because
-// tenant provisioning is EE code, so --no-ee would be silently ignored.
-func checkComposeOptions(profile string, opts *ComposeOptions) error {
-	if profile == "multitenant" && opts.NoEE {
-		return fmt.Errorf("--no-ee cannot be used with the multitenant profile: multi-tenant mode requires Enterprise Edition features")
 	}
 	return nil
 }
@@ -141,8 +136,8 @@ func composeProfiles(profile string) []string {
 
 // baseArgs builds the common "docker compose -p <project> -f ... -f ...
 // --profile ..." argument prefix.
-func baseArgs(profile string) []string {
-	args := []string{"compose", "-p", docker.ProjectName()}
+func baseArgs(profile, project string) []string {
+	args := []string{"compose", "-p", project}
 	for _, f := range composeFiles(profile) {
 		args = append(args, "-f", f)
 	}
@@ -163,6 +158,10 @@ func profileLabel(profile string) string {
 // execDockerCompose runs a docker compose command in the correct directory with
 // optional extra environment variables.
 func execDockerCompose(args []string, extraEnv []string) error {
+	return execDockerComposeOutput(args, extraEnv, os.Stdout)
+}
+
+func execDockerComposeOutput(args []string, extraEnv []string, output io.Writer) error {
 	log.Debugf("Running: docker %v", args)
 
 	dir, err := composeDir()
@@ -171,7 +170,7 @@ func execDockerCompose(args []string, extraEnv []string) error {
 	}
 	dockerCmd := exec.Command("docker", args...)
 	dockerCmd.Dir = dir
-	dockerCmd.Stdout = os.Stdout
+	dockerCmd.Stdout = output
 	dockerCmd.Stderr = os.Stderr
 	dockerCmd.Stdin = os.Stdin
 	if len(extraEnv) > 0 {
@@ -188,12 +187,16 @@ func execDockerCompose(args []string, extraEnv []string) error {
 // compose project by running "docker compose -p onyx ps --services".
 // On any error it returns nil (completions will just be empty).
 func runningServiceNames() []string {
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return nil
+	}
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
 		return nil
 	}
 
-	args := []string{"compose", "-p", docker.ProjectName(), "ps", "--services"}
+	args := []string{"compose", "-p", target.Project, "ps", "--services"}
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = filepath.Join(gitRoot, "deployment", "docker_compose")
@@ -283,29 +286,38 @@ func setEnvValue(key, value string) error {
 // runCompose starts or stops Docker Compose containers for the current docker.
 // For profiles that expose host ports ("dev", "multitenant"), it scans for
 // available ports and writes them to the compose .env file before starting
-// containers. EE licensing env vars are also written on startup.
+// containers.
 func runCompose(profile string, opts *ComposeOptions) error {
 	if err := validateProfile(profile); err != nil {
 		return err
 	}
-	if err := checkComposeOptions(profile, opts); err != nil {
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockRuntimeTarget(target, true)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if target.Managed {
+		st, err := stackForTarget(target).ReadState()
+		if err != nil {
+			return err
+		}
+		if st != nil && len(st.Services) > 0 {
+			return fmt.Errorf("project %s has managed application services; use 'ods stack stop' before changing containers", target.Project)
+		}
+	}
+	return runComposeTarget(profile, opts, target)
+}
+
+func runComposeTarget(profile string, opts *ComposeOptions, target devstack.Target) error {
+	if err := validateProfile(profile); err != nil {
 		return err
 	}
 
 	if !opts.Down {
-		eeValue := "true"
-		if opts.NoEE {
-			eeValue = "false"
-		}
-		if err := setEnvValue("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", eeValue); err != nil {
-			return err
-		}
-		if !opts.NoEE {
-			if err := setEnvValue("LICENSE_ENFORCEMENT_ENABLED", "false"); err != nil {
-				return err
-			}
-		}
-
 		if profile == "dev" || profile == "multitenant" {
 			// Dev runs the object store only; `ods object-store migrate` is
 			// the one command that starts MinIO. The compose files still
@@ -315,11 +327,15 @@ func runCompose(profile string, opts *ComposeOptions) error {
 					return err
 				}
 			}
-			ports, err := docker.FindAvailablePorts()
-			if err != nil {
-				return fatalErrorf("Failed to find available ports: %w", err)
+			composeEnv := opts.Ports
+			if composeEnv == nil {
+				ports, err := docker.FindAvailablePorts(target.Project)
+				if err != nil {
+					return fatalErrorf("Failed to find available ports: %w", err)
+				}
+				composeEnv = ports.ComposeEnv()
 			}
-			for k, v := range ports.ComposeEnv() {
+			for k, v := range composeEnv {
 				if err := setEnvValue(k, v); err != nil {
 					return err
 				}
@@ -327,7 +343,7 @@ func runCompose(profile string, opts *ComposeOptions) error {
 		}
 	}
 
-	args := baseArgs(profile)
+	args := baseArgs(profile, target.Project)
 
 	if opts.Down {
 		args = append(args, "down")
@@ -344,27 +360,54 @@ func runCompose(profile string, opts *ComposeOptions) error {
 			args = append(args, "--force-recreate")
 		}
 		if opts.Infra {
-			args = append(args, docker.InfraServiceNames()...)
+			for _, name := range docker.InfraServiceNames() {
+				if !slices.Contains(opts.ExcludeServices, name) {
+					args = append(args, name)
+				}
+			}
 		}
 	}
 
-	projName := docker.ProjectName()
+	projName := target.Project
 	action := "Starting"
 	if opts.Down {
 		action = "Stopping"
 	}
 	log.Infof("%s containers for project %q with %s configuration...", action, projName, profileLabel(profile))
-	if !opts.Down && !opts.NoEE {
-		log.Info("Enterprise Edition features enabled (use --no-ee to disable)")
+	output := opts.Output
+	if output == nil {
+		output = os.Stdout
 	}
-	if err := execDockerCompose(args, envForTag(opts.Tag)); err != nil {
+	if err := execDockerComposeOutput(args, envForTag(opts.Tag), output); err != nil {
 		return err
 	}
 
 	if opts.Down {
 		log.Info("Containers stopped successfully")
-	} else {
-		log.Info("Containers started successfully")
+		return nil
+	}
+	log.Info("Containers started successfully")
+	return seedComposeDevLicense(profile, opts, target.Project)
+}
+
+// seedComposeDevLicense installs the dev license in the running api_server so
+// paid features unlock. The seed needs the migrations a healthy api_server has
+// run, and multi-tenant mode takes its tier from the control plane instead.
+func seedComposeDevLicense(profile string, opts *ComposeOptions, project string) error {
+	if os.Getenv(devLicenseEnv) == "" {
+		return nil
+	}
+	if opts.Infra || !opts.Wait || profile == "multitenant" {
+		log.Infof("Not seeding the dev license from %s for this configuration", devLicenseEnv)
+		return nil
+	}
+
+	log.Infof("Seeding the dev license from %s...", devLicenseEnv)
+	// A bare -e passes the value through from this process, off the argv.
+	args := append(baseArgs(profile, project), "exec", "-T", "-e", devLicenseEnv, "api_server",
+		"python", "-m", "scripts.seed_dev_license")
+	if err := execDockerCompose(args, nil); err != nil {
+		return fatalErrorf("Failed to seed the dev license: %v", err)
 	}
 	return nil
 }

@@ -40,7 +40,7 @@ describe("findProviderOwningModelConfig", () => {
         makeModelConfiguration(295, "mistral-large-3"),
       ]),
       makeProvider(54, "Daily", "azure", [
-        makeModelConfiguration(306, "gpt-5.6-luna"),
+        makeModelConfiguration(306, "gpt-6-luna"),
       ]),
     ];
 
@@ -51,7 +51,7 @@ describe("findProviderOwningModelConfig", () => {
   it("distinguishes same-named providers of different types", () => {
     const providers = [
       makeProvider(48, "Advanced", "azure", [
-        makeModelConfiguration(300, "gpt-5.6-terra"),
+        makeModelConfiguration(300, "gpt-6.1-sol"),
       ]),
       makeProvider(49, "Advanced", "azure_ai", [
         makeModelConfiguration(301, "claude-sonnet-5"),
@@ -65,8 +65,12 @@ describe("findProviderOwningModelConfig", () => {
     // Well-known providers are frequently saved with a null name, so matching on
     // provider type plus a null name matched every one of them.
     const providers = [
-      makeProvider(1, null, "openai", [makeModelConfiguration(11, "gpt-4o")]),
-      makeProvider(2, null, "openai", [makeModelConfiguration(22, "gpt-4o")]),
+      makeProvider(1, null, "openai", [
+        makeModelConfiguration(11, "gpt-6-sol"),
+      ]),
+      makeProvider(2, null, "openai", [
+        makeModelConfiguration(22, "gpt-6-sol"),
+      ]),
     ];
 
     expect(findProviderOwningModelConfig(providers, 22)?.id).toBe(2);
@@ -75,7 +79,7 @@ describe("findProviderOwningModelConfig", () => {
   it("returns undefined when no provider owns the model configuration", () => {
     const providers = [
       makeProvider(1, "OpenAI", "openai", [
-        makeModelConfiguration(11, "gpt-4o"),
+        makeModelConfiguration(11, "gpt-6-sol"),
       ]),
     ];
 
@@ -85,7 +89,7 @@ describe("findProviderOwningModelConfig", () => {
   it("returns undefined for a missing model configuration id", () => {
     const providers = [
       makeProvider(1, "OpenAI", "openai", [
-        makeModelConfiguration(11, "gpt-4o"),
+        makeModelConfiguration(11, "gpt-6-sol"),
       ]),
     ];
 
@@ -101,9 +105,11 @@ describe("findProviderOwningModelConfig with nameless providers", () => {
     // resolution path that requires one drops a valid configured default.
     const providers = [
       makeProvider(1, "Named", "openai", [
-        makeModelConfiguration(11, "gpt-4o"),
+        makeModelConfiguration(11, "gpt-6-sol"),
       ]),
-      makeProvider(2, null, "openai", [makeModelConfiguration(22, "gpt-4o")]),
+      makeProvider(2, null, "openai", [
+        makeModelConfiguration(22, "gpt-6-sol"),
+      ]),
     ];
 
     expect(findProviderOwningModelConfig(providers, 22)?.id).toBe(2);

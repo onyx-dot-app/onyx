@@ -4,8 +4,14 @@ Single import point for the typed events Onyx's sandbox layer emits and
 consumes. Currently re-exports from the `agent-client-protocol` PyPI
 package; the wrapper exists so consumers don't need to know that, and so
 a future inlining of these types (or swap to a different upstream)
-touches only this file. See docs/craft/drop-acp-layer.md.
+touches only this file.
+
+If you replace the re-exports with local models, keep the
+``model_dump(by_alias=True)`` output byte-identical. ``BuildMessage.message_metadata``
+stores tool-call and plan events in that shape, and saved rows are not migrated.
 """
+
+from typing import NotRequired, TypedDict
 
 from acp.schema import (
     AgentMessageChunk,
@@ -18,6 +24,14 @@ from acp.schema import (
     ToolCallProgress,
     ToolCallStart,
 )
+
+
+class TextPartMetadata(TypedDict):
+    """Live part identity and authoritative text from OpenCode part updates."""
+
+    partId: str
+    snapshotText: NotRequired[str]
+
 
 # Onyx-synthesized ``Error.code`` sentinels for turn-terminating failures.
 # Negative so they never collide with opencode / JSON-RPC error codes.
@@ -45,6 +59,7 @@ __all__ = [
     "RequestPermissionRequest",
     "ToolCallProgress",
     "ToolCallStart",
+    "TextPartMetadata",
     "TURN_ERROR_CODE_SESSION",
     "TURN_ERROR_CODE_TIMEOUT",
     "TURN_ERROR_CODE_TRANSPORT",

@@ -1,0 +1,249 @@
+---
+title: "Skills"
+description: "Review, publish, share, and maintain reusable Craft instructions"
+icon: "wand-magic-sparkles"
+---
+
+Skills package reusable instructions and supporting files that teach Craft how to perform a kind of work.
+Open **Craft → Skills** to review, upload, share, and manage Skills.
+
+<Note>
+  Anyone with Craft access can create a Skill and manage the Skills they own or can edit.
+  Admins can inspect and manage all custom Skills, including private personal Skills.
+  Only Admins set installation policies. Craft needs a Business or Enterprise plan, or Onyx Cloud.
+</Note>
+
+## Understand the Skills library
+
+| Type         | Where it comes from            | What an admin can do                                                                    |
+| ------------ | ------------------------------ | --------------------------------------------------------------------------------------- |
+| **Built-in** | Shipped and maintained by Onyx | Preview its instructions and identify missing dependencies. Built-ins are not editable. |
+| **Custom**   | Created by an admin or user    | Edit, share, set installation policy, manage files, enable or disable, transfer ownership, or delete. |
+
+New custom Skills start private. Share a Skill with people, groups, or the organization when others should use it.
+
+### Built-in Skills
+
+| Skill                | Availability                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| **Presentations**    | Available with Craft and provides the workflow for creating and validating `.pptx` files.        |
+| **Company search**   | Available with Craft and searches Onyx knowledge using the current user's document permissions.  |
+| **Browser**          | Available when the deployment's browser runtime is enabled.                                      |
+| **Image generation** | Available after an admin configures a supported [image model](/admins/actions/image_generation). |
+| **Craft documentation** | Available with Craft and helps Craft answer questions about itself. |
+| **App Skills**       | One per App, such as Slack, Gmail, Google Drive, GitHub, Linear, Notion, HubSpot, or Zendesk. Available after the user connects the [App](/admins/plugins/craft_apps). |
+
+An unavailable built-in remains visible to Admins with the reason it cannot be used.
+Configure the missing dependency rather than uploading a custom Skill with the same slug.
+
+## Prepare a custom Skill
+
+You can write a Skill in Onyx, upload a Skill, or import Skills from a GitHub repository.
+Upload `SKILL.md` directly when the Skill does not need supporting files. For a Skill with scripts, examples,
+or other supporting files, create a folder with `SKILL.md` at its top level. Drag the folder into Onyx,
+or upload it as a ZIP.
+
+<Info>
+  For a standalone `SKILL.md`, Onyx creates the slug from the frontmatter `name`. For a folder,
+  the folder name becomes the slug. For a ZIP, the filename without `.zip` becomes the slug.
+  Folder and ZIP names must start with a lowercase letter, contain only lowercase letters, numbers, and hyphens,
+  and be no more than 64 characters. Slugs must be unique. If an existing Skill already uses the slug,
+  update that Skill or change the source name before uploading.
+</Info>
+
+```text
+weekly-customer-update/
+├── SKILL.md
+├── examples/
+│   └── finished-update.md
+├── templates/
+│   └── update-template.md
+└── scripts/
+    └── validate.py
+```
+
+For a ZIP upload, put `SKILL.md` at the archive root or directly inside one enclosing folder.
+When you use an enclosing folder, keep every Skill file inside it.
+
+`SKILL.md` must begin with YAML frontmatter containing a non-empty name and description.
+The description should state when Craft should choose the Skill.
+
+```md
+---
+name: weekly-customer-update
+description: Create a weekly customer update from account activity and meeting notes.
+---
+
+# Weekly customer update
+
+1. Summarize material changes since the previous update.
+2. Separate decisions, risks, and next steps.
+3. Name an owner and due date for each next step.
+4. Follow `templates/update-template.md`.
+5. Run `scripts/validate.py` before returning the final file.
+```
+
+### Bundle requirements
+
+| Requirement         | Default                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Slug                | Generated from the Skill name when written in Onyx or uploaded as `SKILL.md`; otherwise, the folder name or ZIP filename without `.zip`.     |
+| Root instructions   | One UTF-8 `SKILL.md` with valid YAML frontmatter at the Skill root.                                                                         |
+| Skills per upload   | One.                                                                                                                                        |
+| Maximum file size   | 25 MB per file in the extracted bundle.                                                                                                     |
+| Maximum bundle size | 100 MB total.                                                                                                                               |
+
+Self-hosted operators can change the size limits with `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and
+`SKILL_BUNDLE_TOTAL_MAX_BYTES`.
+
+The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
+missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
+or a slug reserved by a built-in Skill or App.
+
+## Review a Skill before publishing
+
+Treat a Skill bundle as code and policy, not only as prompt text.
+Craft can follow scripts and commands included in the archive.
+
+| Review area                | What to check                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Purpose and selection**  | The name and description clearly identify when the Skill should and should not be used.                            |
+| **Instructions**           | The workflow is bounded, internally consistent, and does not tell Craft to evade approvals or organization policy. |
+| **Scripts**                | Every executable file is expected, readable, and safe to run on user-provided or company data.                     |
+| **External access**        | The bundle contains no embedded tokens and uses a configured App for authenticated services.                       |
+| **Examples and templates** | Included files contain no confidential data and represent the quality users should expect.                         |
+| **Output handling**        | The Skill names the expected format and writes finished deliverables to a clear location such as `outputs/`.       |
+
+<Warning>
+  Never publish a bundle containing passwords, API keys, OAuth tokens, private certificates, or production credentials.
+  Skill files are copied into the sandboxes of users who can access the Skill. Use [Apps](/admins/plugins/craft_apps)
+  for authenticated external access.
+</Warning>
+
+## Publish a Skill
+
+Admins create Skills through the same personal creation flow as other users.
+Publishing means reviewing that Skill and then sharing it with the intended audience.
+
+<Note>
+  Sharing a Skill with the whole organization requires being its author or an Admin.
+  You can delete any Skill you own or can edit, and Admins can delete any custom Skill.
+</Note>
+
+<Steps>
+  <Step title="Create the personal Skill">
+    Open **Craft → Skills** and select **Create skill**. Choose **Start from scratch** to write the Skill in Onyx,
+    **Upload a skill** to import `SKILL.md`, a ZIP, or a Skill folder,
+    or **Import from GitHub** to import one or more Skills from a repository. You can set sharing in the same editor.
+  </Step>
+
+  <Step title="Review the Skill">
+    Review the name, description, rendered instructions, and supporting-file tree.
+  </Step>
+
+  <Step title="Choose who can use it">
+    Select **Edit sharing**. Under **Who can access**,
+    share with the organization or use **Manage individual access** to grant **Can use** to specific users or groups.
+    Grant **Can edit** only to people who maintain the Skill. Under **Installation**,
+    choose how the Skill is installed for everyone with access.
+  </Step>
+
+  <Step title="Test with the intended audience">
+    Start a Craft session as a user in the target audience, select the Skill, and test representative inputs,
+    missing-data cases, and the final output.
+  </Step>
+</Steps>
+
+## Choose sharing permissions
+
+| Scope               | Can use                                                   | Can edit                                                                                 |
+| ------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Specific people** | Selected users can use and preview the Skill.             | Selected users can also modify and manage the Skill.                                     |
+| **Groups**          | Members of selected groups can use and preview the Skill. | Members can also modify and manage the Skill.                                            |
+| **Organization**    | Everyone can use and preview the Skill.                   | Everyone can modify and manage it. Use this only for intentionally collaborative Skills. |
+
+Users with **Can edit** can change instructions and files, update sharing within their permissions,
+enable or disable the Skill, and delete it.
+
+<Tip>
+  Prefer organization-wide **Can use** access with a small maintainer group that has **Can edit**.
+  This keeps the Skill broadly usable without making its behavior broadly editable.
+</Tip>
+
+A Skill that is associated with an App stays visible to the organization. You cannot make it private.
+
+## Choose an installation policy
+
+Admins set how a shared Skill is installed for everyone with access:
+
+| Policy | Effect |
+| --- | --- |
+| **Available to install** | Users can install or uninstall the Skill at any time. |
+| **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
+| **Required** | Onyx installs it automatically. Users cannot disable or uninstall it. Only Admins can delete it. |
+
+The policy follows the current audience; changing who can access the Skill does not reset it.
+
+## Maintain a Skill
+
+Open a custom Skill to manage its lifecycle:
+
+| Action                 | Effect                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Edit details**       | Updates the name, description, or Markdown instructions and rewrites `SKILL.md` in the stored bundle.                              |
+| **Add files**          | Adds files, folders, or unpacked ZIP contents. A file at an existing path replaces the stored file.                              |
+| **Remove files**       | Removes a supporting file from the bundle. `SKILL.md` cannot be removed.                                                          |
+| **Replace content**    | Uploading content with `SKILL.md` replaces the name, description, instructions, and complete bundle after confirmation.           |
+| **Disable**            | Prevents Craft from using the Skill without deleting its configuration or sharing.                                                 |
+| **Edit sharing**       | Changes who can use or edit the Skill and how it is installed.                                                                     |
+| **Transfer ownership** | Assigns responsibility to another active standard user.                                                                            |
+| **Delete**             | Permanently removes the Skill and its stored bundle.                                                                               |
+
+Changes are synchronized to affected running sandboxes.
+A turn already in progress may have loaded the previous instructions,
+so validate important changes in a new turn or session before announcing them.
+
+### Ownership
+
+Every custom Skill has one owner. The owner can transfer it to another active standard user.
+If ownership becomes vacant because the owner is inactive, an Admin can open the Skill and transfer it.
+
+Do not transfer ownership to bots, service accounts, limited accounts, or inactive users.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="A Skill bundle will not upload">
+    Confirm that the upload contains one Skill. `SKILL.md` must be at the top level of a folder. In a ZIP,
+    place it at the archive root or directly inside one enclosing folder.
+    Check that it uses UTF-8 and begins with valid YAML containing non-empty `name` and `description` fields.
+    For a standalone `SKILL.md`, make sure `name` contains at least one letter or number. Otherwise,
+    check the folder or ZIP name. Check the bundle limits, and remove symbolic links or unsafe paths.
+  </Accordion>
+
+<Accordion title="A built-in Skill is unavailable">
+  Open its preview to read the unavailable reason. Configure Image Generation for the image Skill,
+  or ask the deployment operator to verify the browser runtime for the Browser Skill.
+  Built-in Skills cannot be replaced or enabled from the Skills editor.
+</Accordion>
+
+<Accordion title="Users cannot find a shared Skill">
+  Confirm that the Skill is enabled and that the user or one of their groups has **Can use** or **Can edit** access.
+  If it was shared during an active session, start a new turn or session and check the picker again.
+</Accordion>
+
+<Accordion title="Craft does not choose the Skill automatically">
+  Rewrite its description to name the covered tasks and outputs more concretely. Test again,
+  and have users select it explicitly when the workflow must be followed.
+</Accordion>
+</AccordionGroup>
+
+<CardGroup cols={2}>
+  <Card title="Skills for users" icon="wand-magic-sparkles" href="/overview/core_features/craft_skills">
+    Show users how to find, select, create, and refine Skills.
+  </Card>
+
+  <Card title="Managing Apps" icon="plug" href="/admins/plugins/craft_apps">
+    Configure authenticated access and action policies for external services.
+  </Card>
+</CardGroup>

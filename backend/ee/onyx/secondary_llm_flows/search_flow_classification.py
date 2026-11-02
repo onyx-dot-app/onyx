@@ -18,7 +18,7 @@ from onyx.utils.timing import log_function_time
 logger = setup_logger()
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def classify_is_search_flow(
     query: str,
     llm: LLM,
@@ -30,16 +30,12 @@ def classify_is_search_flow(
         GenerationRequest(
             messages=messages,
             options=GenerationOptions(
-                reasoning_effort=ReasoningEffort.OFF,
-                # Well more than necessary but just to ensure completion and in case it succeeds with classifying but
-                # ends up rambling
-                max_tokens=20,
+                reasoning_effort=ReasoningEffort.OFF, max_tokens=20
             ),
         ),
+        # Classification blocks the next UI action, so keep the timeout short.
         context=GenerationContext(
-            # Nothing can happen in the UI until this call finishes so we need to be aggressive with the timeout
-            total_timeout_s=2,
-            flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION,
+            total_timeout_s=2, flow=LLMFlow.SEARCH_FLOW_CLASSIFICATION
         ),
     )
 

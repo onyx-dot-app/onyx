@@ -1,0 +1,117 @@
+.rounded-image {
+  border-radius: 1rem;
+  margin: 8px auto;
+  display: block;
+}
+
+.prose table,
+table {
+  display: table;
+  width: 100%;
+  max-width: 100%;
+  table-layout: auto;
+}
+
+/* Table header cells */
+.prose table th {
+  text-align: left !important; /* horizontal left */
+}
+
+/* Apply to Cards with file-path SVG icons to fix dark-mode background
+   box and invert the icon to white */
+.icon-dark-invert [data-component-part="card-icon"] img {
+  background: transparent !important;
+}
+.dark .icon-dark-invert [data-component-part="card-icon"] img {
+  filter: invert(1) !important;
+}
+
+.docs-image-placeholder {
+  align-items: center;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(0, 105, 237, 0.08),
+    rgba(0, 105, 237, 0.08) 12px,
+    rgba(0, 105, 237, 0.14) 12px,
+    rgba(0, 105, 237, 0.14) 24px
+  );
+  border: 1px dashed rgba(0, 105, 237, 0.55);
+  border-radius: 0.75rem;
+  color: #0050b4;
+  display: flex;
+  font-weight: 600;
+  justify-content: center;
+  margin: 1rem 0;
+  min-height: 220px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.dark .docs-image-placeholder {
+  color: #9ec8ff;
+}
+
+.permission-pyramid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1.5rem auto;
+  max-width: 760px;
+}
+
+.permission-pyramid-layer {
+  align-items: center;
+  border: 1px solid rgba(0, 105, 237, 0.18);
+  border-radius: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0 auto;
+  padding: 0.85rem 1rem;
+  text-align: center;
+}
+
+.permission-pyramid-layer span {
+  font-size: 0.9rem;
+}
+
+.permission-pyramid-admin {
+  background: #0b1f3a;
+  color: #ffffff;
+  width: 100%;
+}
+
+.permission-pyramid-org {
+  background: #0050b4;
+  color: #ffffff;
+  width: 82%;
+}
+
+.permission-pyramid-scoped {
+  background: #4d9cff;
+  color: #07172b;
+  width: 62%;
+}
+
+.permission-pyramid-basic {
+  background: #eaf4ff;
+  color: #07172b;
+  width: 42%;
+}
+
+.permission-pyramid-limited {
+  background: #f5f8fc;
+  border-style: dashed;
+  color: #37536f;
+  width: 26%;
+}
+
+@media (max-width: 640px) {
+  .permission-pyramid-admin,
+  .permission-pyramid-org,
+  .permission-pyramid-scoped,
+  .permission-pyramid-basic,
+  .permission-pyramid-limited {
+    width: 100%;
+  }
+}

@@ -9,9 +9,12 @@ import {
   useLayoutEffect,
 } from "react";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
-import { Tooltip as OpalTooltip } from "@opal/components";
+import {
+  OverflowText,
+  Text,
+  Tooltip as OpalTooltip,
+  type TextFont,
+} from "@opal/components";
 import {
   Tooltip,
   TooltipContent,
@@ -180,16 +183,12 @@ const IconStack = ({
 );
 
 /**
- * Shared text styling props passed to Text and Truncated components.
- * Computed based on `inlineCitation` and `isOpen` state.
+ * Shared text styling, computed from `inlineCitation` and `isOpen`. The color
+ * is a class on a wrapper so that hover classes on the wrapper can override it.
  */
-interface TextStyleProps {
-  figureSmallValue?: boolean;
-  secondaryBody?: boolean;
-  text05?: boolean;
-  text03?: boolean;
-  text04?: boolean;
-  inverted?: boolean;
+interface TextStyle {
+  font: TextFont;
+  colorClass: string;
 }
 
 /**
@@ -201,7 +200,7 @@ interface QueryTextProps {
   tooltipText?: string;
   isTruncated: boolean;
   textRef: React.RefObject<HTMLSpanElement | null>;
-  textStyleProps: TextStyleProps;
+  textStyle: TextStyle;
 }
 
 /**
@@ -213,7 +212,7 @@ interface QueryTextProps {
  * - Clicking expands to full width
  *
  * **Expanded mode**:
- * - Text displays at full width using `Truncated` component
+ * - Text displays at full width using `OverflowText`
  * - Provides its own overflow handling with tooltip
  *
  * @param props.expanded - Whether text is in expanded (full-width) mode
@@ -221,7 +220,7 @@ interface QueryTextProps {
  * @param props.tooltipText - Custom tooltip text (defaults to displayName)
  * @param props.isTruncated - Whether the collapsed text is currently truncated
  * @param props.textRef - Ref for measuring text truncation in collapsed mode
- * @param props.textStyleProps - Shared text styling props (colors, typography)
+ * @param props.textStyle - Shared text styling (font and color class)
  */
 const QueryText = ({
   expanded,
@@ -229,16 +228,22 @@ const QueryText = ({
   tooltipText,
   isTruncated,
   textRef,
-  textStyleProps,
+  textStyle,
 }: QueryTextProps) => {
+  const { font, colorClass } = textStyle;
+
   if (expanded) {
     return (
-      <Truncated
-        {...textStyleProps}
-        className="max-w-full transition-colors duration-150"
+      <div
+        className={cn(
+          "grow overflow-hidden w-full max-w-full min-w-0 transition-colors duration-150",
+          colorClass
+        )}
       >
-        {displayName}
-      </Truncated>
+        <OverflowText as="p" font={font} color="inherit">
+          {displayName}
+        </OverflowText>
+      </div>
     );
   }
 
@@ -248,12 +253,14 @@ const QueryText = ({
       side="top"
       delayDuration={300}
     >
-      <span ref={textRef} className="max-w-40 truncate block">
-        <Text
-          as="span"
-          {...textStyleProps}
-          className="transition-colors duration-150"
-        >
+      <span
+        ref={textRef}
+        className={cn(
+          "max-w-40 truncate block transition-colors duration-150",
+          colorClass
+        )}
+      >
+        <Text as="span" font={font} color="inherit">
           {displayName}
         </Text>
       </span>
@@ -286,7 +293,7 @@ export interface SourceTagProps {
   /** Additional CSS classes */
   className?: string;
 
-  /** When true, removes icon background and wraps displayName with Truncated */
+  /** When true, removes icon background and wraps displayName with OverflowText */
   isQuery?: boolean;
 
   /** When true, hides icon, removes background, shows bg-background-tint-02 on hover */
@@ -383,14 +390,14 @@ const SourceTagInner = ({
   const styles = sizeClasses[size];
 
   // Shared text styling props
-  const textStyleProps = useMemo<TextStyleProps>(
+  const textStyle = useMemo<TextStyle>(
     () => ({
-      figureSmallValue: inlineCitation,
-      secondaryBody: !inlineCitation,
-      text05: isOpen,
-      text03: !isOpen && inlineCitation,
-      text04: !isOpen && !inlineCitation,
-      inverted: isOpen,
+      font: inlineCitation ? "figure-small-value" : "secondary-body",
+      colorClass: isOpen
+        ? "text-text-inverted-05"
+        : inlineCitation
+          ? "text-text-03"
+          : "text-text-04",
     }),
     [inlineCitation, isOpen]
   );
@@ -444,7 +451,7 @@ const SourceTagInner = ({
         backgroundClass,
         styles.container,
         isQuery && "gap-0",
-        isQuery && expanded && "w-fit",
+        isQuery && expanded && "w-full max-w-full min-w-0",
         cursorClass,
         className
       )}
@@ -464,7 +471,7 @@ const SourceTagInner = ({
         className={cn(
           "flex items-baseline",
           !inlineCitation && "pe-0.5",
-          isQuery && expanded && "w-fit"
+          isQuery && expanded && "w-full max-w-full min-w-0"
         )}
       >
         {isQuery ? (
@@ -474,56 +481,56 @@ const SourceTagInner = ({
             tooltipText={tooltipText}
             isTruncated={isTruncated}
             textRef={textRef}
-            textStyleProps={textStyleProps}
+            textStyle={textStyle}
           />
         ) : (
-          <Text
-            {...textStyleProps}
+          <span
             className={cn(
               "max-w-40 truncate transition-colors duration-150",
+              textStyle.colorClass,
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
             )}
           >
-            {displayName}
-          </Text>
+            <Text font={textStyle.font} color="inherit">
+              {displayName}
+            </Text>
+          </span>
         )}
 
         {/* Count - for inline citation */}
         {inlineCitation && sources.length > 1 && (
-          <Text
-            figureSmallValue
-            text05={isOpen}
-            text03={!isOpen}
-            inverted={isOpen}
+          <span
             className={cn(
               "transition-colors duration-150",
+              isOpen ? "text-text-inverted-05" : "text-text-03",
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
             )}
           >
-            +{extraCount}
-          </Text>
+            <Text font="figure-small-value" color="inherit">
+              {`+${extraCount}`}
+            </Text>
+          </span>
         )}
 
         {/* URL - for tag variant */}
         {!inlineCitation && displayUrl && (
-          <Text
-            figureSmallValue
-            text05={isOpen}
-            text02={!isOpen}
-            inverted={isOpen}
+          <span
             className={cn(
               "max-w-40 truncate transition-colors duration-150",
+              isOpen ? "text-text-inverted-05" : "text-text-02",
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
             )}
           >
-            {displayUrl}
-          </Text>
+            <Text font="figure-small-value" color="inherit">
+              {displayUrl}
+            </Text>
+          </span>
         )}
       </div>
     </button>

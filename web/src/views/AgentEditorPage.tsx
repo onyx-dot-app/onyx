@@ -9,13 +9,11 @@ import {
   Button,
   Card,
   Divider,
-  LineItemButton,
+  Dropdown,
+  InputTypeInTag,
   MessageCard,
-  Popover,
-  PopoverMenu,
   Tooltip,
   useCreateModal,
-  InputTypeInTag,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -50,14 +48,13 @@ import {
   OPEN_URL_TOOL_ID,
   CODING_AGENT_TOOL_ID,
 } from "@/lib/tools/constants";
-import Text from "@/refresh-components/texts/Text";
-import { Collapsible } from "@opal/components";
-import SwitchField from "@/refresh-components/form/SwitchField";
+import { Collapsible, Text } from "@opal/components";
+import { InputSwitchField } from "@opal/form";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { ChatFileType } from "@/app/app/interfaces";
+import { ChatFileType } from "@/app/app/types";
 import {
   SvgActions,
   SvgEye,
@@ -93,8 +90,8 @@ import {
   toggleAgentListed,
   updateAgentShares,
 } from "@/lib/agents/svc";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
@@ -102,7 +99,7 @@ import { Permission } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import type { Agent } from "@/lib/agents/types";
@@ -145,6 +142,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
     string | null
   >(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const iconGridRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -224,8 +222,8 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         className="hidden"
       />
 
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <Popover.Trigger asChild>
+      <Dropdown open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <Dropdown.Trigger asChild>
           <Hoverable.Root group="inputAvatar" width="fit">
             <InputAvatar className="relative flex flex-col items-center justify-center h-30 w-30">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
@@ -245,44 +243,68 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               </div>
             </InputAvatar>
           </Hoverable.Root>
-        </Popover.Trigger>
-        <Popover.Content>
-          <PopoverMenu>
-            {[
-              <LineItemButton
-                sizePreset="main-ui"
-                rounding={2}
-                key="upload-image"
-                icon={SvgImage}
-                onClick={() => fileInputRef.current?.click()}
-                selectVariant="select-heavy"
-                title={t("editor.avatar.uploadImage.label")}
-              />,
-              null,
-              <div key="icon-grid" className="grid grid-cols-4 gap-1">
-                <SquareButton
-                  key="default-icon"
-                  icon={() => (
-                    <CustomAgentAvatar name={values.name} size={30} />
-                  )}
-                  onClick={() => handleIconClick(null)}
-                  transient={!imageSrc && values.icon_name === null}
-                />
-                {Object.keys(agentAvatarIconMap).map((iconName) => (
-                  <SquareButton
-                    key={iconName}
-                    onClick={() => handleIconClick(iconName)}
-                    icon={() => (
-                      <CustomAgentAvatar iconName={iconName} size={30} />
-                    )}
-                    transient={values.icon_name === iconName}
-                  />
-                ))}
-              </div>,
-            ]}
-          </PopoverMenu>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("editor.avatar.edit.label")}
+          items={[
+            {
+              kind: "action",
+              id: "upload-image",
+              icon: SvgImage,
+              title: t("editor.avatar.uploadImage.label"),
+              onSelect: () => fileInputRef.current?.click(),
+            },
+            {
+              kind: "group",
+              items: [
+                // The icon grid is one row with its own controls; a pick
+                // closes the list itself.
+                {
+                  kind: "custom",
+                  id: "icon-grid",
+                  keepOpen: true,
+                  // ArrowRight steps into the grid; its buttons take the
+                  // keyboard from there.
+                  onSecondary: () =>
+                    iconGridRef.current?.querySelector("button")?.focus(),
+                  render: ({ props }) => (
+                    <div
+                      {...props}
+                      role="menuitem"
+                      tabIndex={-1}
+                      ref={iconGridRef}
+                      className="grid grid-cols-4 gap-1"
+                      // Escape from a focused icon closes the list.
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setPopoverOpen(false);
+                      }}
+                    >
+                      <SquareButton
+                        key="default-icon"
+                        icon={() => (
+                          <CustomAgentAvatar name={values.name} size={30} />
+                        )}
+                        onClick={() => handleIconClick(null)}
+                        transient={!imageSrc && values.icon_name === null}
+                      />
+                      {Object.keys(agentAvatarIconMap).map((iconName) => (
+                        <SquareButton
+                          key={iconName}
+                          onClick={() => handleIconClick(iconName)}
+                          icon={() => (
+                            <CustomAgentAvatar iconName={iconName} size={30} />
+                          )}
+                          transient={values.icon_name === iconName}
+                        />
+                      ))}
+                    </div>
+                  ),
+                },
+              ],
+            },
+          ]}
+        />
+      </Dropdown>
     </>
   );
 }
@@ -302,7 +324,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
         description={tool.description}
         withLabel={toolFieldName}
       >
-        <SwitchField name={toolFieldName} />
+        <InputSwitchField name={toolFieldName} />
       </InputHorizontal>
     </Card>
   );
@@ -1219,8 +1241,12 @@ export default function AgentEditorPage({
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
                       <GeneralLayouts.Section alignItems="start" gap={2}>
-                        <Text>{t("editor.deleteModal.body.warning")}</Text>
-                        <Text>{t("editor.deleteModal.body.confirm")}</Text>
+                        <Text color="text-05">
+                          {t("editor.deleteModal.body.warning")}
+                        </Text>
+                        <Text color="text-05">
+                          {t("editor.deleteModal.body.confirm")}
+                        </Text>
                       </GeneralLayouts.Section>
                     </ConfirmationModalLayout>
                   )}
@@ -1437,7 +1463,7 @@ export default function AgentEditorPage({
                                     "editor.share.feature.description"
                                   )}
                                 >
-                                  <SwitchField name="is_featured" />
+                                  <InputSwitchField name="is_featured" />
                                 </InputHorizontal>
                                 {values.is_featured &&
                                   sharingStatus === "PRIVATE" && (
@@ -1494,7 +1520,7 @@ export default function AgentEditorPage({
                                 )}
                                 icon={SvgTag}
                               />
-                              <Text text03 secondaryBody>
+                              <Text font="secondary-body" color="text-03">
                                 {t("editor.share.labels.description")}
                               </Text>
                             </GeneralLayouts.Section>
@@ -1524,7 +1550,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!isImageGenerationAvailable}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="image_generation"
                                   disabled={!isImageGenerationAvailable}
                                 />
@@ -1542,7 +1568,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!webSearchTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="web_search"
                                   disabled={!webSearchTool}
                                 />
@@ -1560,7 +1586,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!openURLTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="open_url"
                                   disabled={!openURLTool}
                                 />
@@ -1580,7 +1606,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!codeInterpreterTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="code_interpreter"
                                   disabled={!codeInterpreterTool}
                                 />
@@ -1598,7 +1624,7 @@ export default function AgentEditorPage({
                                 )}
                                 disabled={!codingAgentTool}
                               >
-                                <SwitchField
+                                <InputSwitchField
                                   name="coding_agent"
                                   disabled={!codingAgentTool}
                                 />
@@ -1721,7 +1747,7 @@ export default function AgentEditorPage({
                                   "modals.viewer.overwritePrompts.description"
                                 )}
                               >
-                                <SwitchField name="replace_base_system_prompt" />
+                                <InputSwitchField name="replace_base_system_prompt" />
                               </InputHorizontal>
                             </GeneralLayouts.Section>
                           </Card>
@@ -1742,7 +1768,7 @@ export default function AgentEditorPage({
                                 }
                               />
                             </InputVertical>
-                            <Text text03 secondaryBody>
+                            <Text font="secondary-body" color="text-03">
                               {t("editor.advanced.reminders.description")}
                             </Text>
                           </GeneralLayouts.Section>

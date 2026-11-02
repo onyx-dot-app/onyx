@@ -13,6 +13,7 @@ import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { isAuthPath } from "@/lib/auth/paths";
+import { sessionEndReasonFromErrorCode } from "@/lib/auth/utils";
 import { fetchAuthTypeMetadata } from "@/lib/auth/svc";
 
 const REFRESH_INTERVAL = 600000;
@@ -45,10 +46,7 @@ function computeSecondsUntilExpiration(user: User): number | null {
 
 function parseSessionEndReason(error: unknown): SessionEndReason | null {
   if (!(error instanceof FetchError)) return null;
-  const errorCode: unknown = error.info?.error_code;
-  return (Object.values(SessionEndReason) as unknown[]).includes(errorCode)
-    ? (errorCode as SessionEndReason)
-    : null;
+  return sessionEndReasonFromErrorCode(error.info?.error_code);
 }
 
 export interface SessionWatcherResult {

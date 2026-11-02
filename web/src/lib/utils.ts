@@ -1,12 +1,14 @@
-import type { ComponentType } from "react";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgImage,
-  SvgFileChartPie,
-  SvgFileBraces,
+  SvgSpreadsheetFile,
+  SvgAudioFile,
+  SvgVideoFile,
+  SvgPowerpointFile,
+  SvgCodeFile,
   SvgFileText,
 } from "@opal/icons";
-import { ALLOWED_URL_PROTOCOLS } from "./constants";
+import { ALLOWED_URL_PROTOCOLS } from "@/lib/constants";
 import { DEFAULT_LOCALE } from "@/i18n/config";
 
 const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
@@ -252,12 +254,18 @@ export function isCodeFile(fileName: string | null | undefined): boolean {
  */
 export function getFileIcon(
   fileName: string | null | undefined
-): ComponentType<IconProps> {
+): IconFunctionComponent {
   if (!fileName) return SvgFileText;
+  if (/\.(xlsx?|xlsm|xlsb|ods|csv|tsv|numbers)$/i.test(fileName))
+    return SvgSpreadsheetFile;
+  if (/\.(mp3|wav|m4a|ogg|flac|aac|aiff?|opus|wma)$/i.test(fileName))
+    return SvgAudioFile;
+  if (/\.(mp4|webm|mov|m4v|avi|mkv|wmv|mpeg|mpg)$/i.test(fileName))
+    return SvgVideoFile;
   if (isImageFile(fileName)) return SvgImage;
-  if (/\.pptx?$/i.test(fileName)) return SvgFileChartPie;
+  if (/\.pptx?$/i.test(fileName)) return SvgPowerpointFile;
   if (/\.pdf$/i.test(fileName)) return SvgFileText;
-  if (isCodeFile(fileName)) return SvgFileBraces;
+  if (isCodeFile(fileName)) return SvgCodeFile;
   return SvgFileText;
 }
 

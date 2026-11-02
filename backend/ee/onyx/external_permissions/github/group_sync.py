@@ -1,7 +1,5 @@
 from collections.abc import Generator
 
-from github import Repository
-
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.github.utils import (
     GitHubGroupSyncCache,
@@ -10,6 +8,7 @@ from ee.onyx.external_permissions.github.utils import (
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.models import GitHubRepository
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -26,26 +25,14 @@ def github_group_sync(
         )
     )
     github_connector.load_credentials(credential_json(cc_pair))
-    if not github_connector.github_client:
-        raise ValueError("github_client is required")
 
     logger.info("Starting GitHub group sync...")
-    repos: list[Repository.Repository] = []
-    if github_connector.repositories:
-        if "," in github_connector.repositories:
-            # Multiple repositories specified
-            repos = github_connector.get_github_repos(github_connector.github_client)
-        else:
-            # Single repository (backward compatibility)
-            repos = [github_connector.get_github_repo(github_connector.github_client)]
-    else:
-        # All repositories
-        repos = github_connector.get_all_repos(github_connector.github_client)
+    repos: list[GitHubRepository] = github_connector.fetch_configured_repos()
 
     cache = GitHubGroupSyncCache()
     for repo in repos:
         for external_group in get_external_user_group(
-            repo, github_connector.github_client, cache
+            repo, github_connector.source_operations, cache
         ):
             logger.info("External group: %s", external_group)
             yield external_group

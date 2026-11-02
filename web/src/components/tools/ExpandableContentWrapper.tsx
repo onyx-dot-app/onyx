@@ -3,9 +3,8 @@ import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
-import { FileDescriptor } from "@/app/app/interfaces";
+import { Button, Text } from "@opal/components";
+import { FileDescriptor } from "@/app/app/types";
 import { cn } from "@opal/utils";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/types";
@@ -45,7 +44,7 @@ export default function ExpandableContentWrapper({
     <div className="w-message-default max-w-full rounded-lg! overflow-y-hidden h-full">
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
         <div className="flex justify-between items-center">
-          <Text className="text-ellipsis line-clamp-1" text03 mainUiAction>
+          <Text font="main-ui-action" color="text-03" maxLines={1}>
             {fileDescriptor.name || t("file.untitledFallback")}
           </Text>
           <div className="flex flex-row items-center justify-end gap-1">

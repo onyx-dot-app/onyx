@@ -1,4 +1,4 @@
-// Render-prop renderer contract, ported from web `messageComponents/interfaces.ts` (docs 9b-timeline/03
+// Render-prop renderer contract, ported from web `messageComponents/types.ts` (docs 9b-timeline/03
 // §4). A renderer is headless: it computes a `RendererResult[]` and hands it to `children(results)`; the
 // parent owns the tree. Mobile drops web's `isHover` and the dead `expandedText`, and narrows
 // `FullChatState` to the fields mobile renderers read.

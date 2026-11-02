@@ -3,14 +3,18 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Callable
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
+from ee.onyx.external_permissions.models import DocSyncResume
+from ee.onyx.external_permissions.perm_sync_types import DocSyncCheckpointer
 from onyx.access.models import DocExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -47,6 +51,22 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     load_connector_outputs,
 )
 from tests.utils.secret_names import TestSecret
+
+
+class _FreshCrawlCheckpointer(DocSyncCheckpointer):
+    """Never resumes and keeps nothing, so the sync crawls the whole scope."""
+
+    @property
+    def resume(self) -> DocSyncResume | None:
+        return None
+
+    def save(
+        self,
+        checkpoint: ConnectorCheckpoint,  # noqa: ARG002
+        poll_range_start: datetime | None,  # noqa: ARG002
+        poll_range_end: datetime,  # noqa: ARG002
+    ) -> None:
+        return None
 
 
 def _build_connector(
@@ -126,6 +146,7 @@ def test_gdrive_perm_sync_with_real_data(
             mock_fetch_all_docs_fn,
             mock_fetch_all_docs_ids_fn,
             mock_heartbeat,
+            _FreshCrawlCheckpointer(),
         )
         doc_access_list = list(doc_access_generator)
 

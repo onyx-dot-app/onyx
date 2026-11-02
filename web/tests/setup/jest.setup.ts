@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom";
+import type { RenderOptions } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
 import { TextEncoder, TextDecoder } from "util";
 
 // Tell React 18+ this is a test environment where act() is available
@@ -9,6 +11,31 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 // Polyfill TextEncoder/TextDecoder (required for some libraries)
 global.TextEncoder = TextEncoder as any;
 global.TextDecoder = TextDecoder as any;
+
+// Radix tooltips need a TooltipProvider, which the app mounts once at its
+// root. Every render gets one here; a test's own provider (e.g. with
+// delayDuration={0}) sits inside it and takes precedence.
+jest.mock("@testing-library/react", () => {
+  const actual = jest.requireActual<typeof import("@testing-library/react")>(
+    "@testing-library/react"
+  );
+  const { createElement } = jest.requireActual<typeof import("react")>("react");
+  const { Provider } = jest.requireActual<
+    typeof import("@radix-ui/react-tooltip")
+  >("@radix-ui/react-tooltip");
+  function render(ui: ReactElement, options?: RenderOptions) {
+    const Inner = options?.wrapper;
+    function Wrapper({ children }: { children: ReactNode }) {
+      return createElement(
+        Provider,
+        null,
+        Inner ? createElement(Inner, null, children) : children
+      );
+    }
+    return actual.render(ui, { ...options, wrapper: Wrapper });
+  }
+  return { ...actual, render };
+});
 
 // Only set up browser-specific mocks if we're in a jsdom environment
 if (typeof window !== "undefined") {

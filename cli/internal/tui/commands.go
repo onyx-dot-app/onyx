@@ -92,6 +92,7 @@ func cmdOpenWebPage(m Model, path string) Model {
 func cmdNew(m Model) (Model, tea.Cmd) {
 	if m.isStreaming {
 		m, _ = m.cancelStream()
+		m, _ = m.finishStream(nil)
 	}
 	m.chatSessionID = nil
 	parentID := -1

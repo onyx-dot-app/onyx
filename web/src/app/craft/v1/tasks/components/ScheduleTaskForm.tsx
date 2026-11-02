@@ -16,7 +16,8 @@ import { SettingsLayouts, InputVertical, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
-import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
+import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
+import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
@@ -38,7 +39,7 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskDetail,
   ScheduledTaskPatchBody,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 import {
   createScheduledTask,
   updateScheduledTask,
@@ -53,8 +54,6 @@ export interface ScheduleTaskFormInitial {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
-  preApprovedAppIds: number[];
-  preApprovedMcpServerIds: number[];
 }
 
 interface ScheduleTaskFormProps {
@@ -77,18 +76,16 @@ export default function ScheduleTaskForm({
   onBack,
 }: ScheduleTaskFormProps) {
   const t = useTranslations("craft.tasks.form");
+  const tActionPolicies = useTranslations("craft.actionPolicies");
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
-    initial.preApprovedAppIds
-  );
-  const [preApprovedMcpServerIds, setPreApprovedMcpServerIds] = useState<
-    number[]
-  >(initial.preApprovedMcpServerIds);
+  const [actionPolicies, setActionPolicies] = useState<
+    TaskAppActionPolicies[] | null
+  >(null);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
@@ -194,18 +191,26 @@ export default function ScheduleTaskForm({
   const shownNameError = nameTouched ? nameError : null;
   const shownPromptError = promptTouched ? promptError : null;
 
-  const canSubmit = !nameError && !promptError && !scheduleError && !saving;
+  const canSubmit =
+    !nameError &&
+    !promptError &&
+    !scheduleError &&
+    !saving &&
+    actionPolicies !== null;
 
   // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
   // tooltip. A natively-disabled <button> is inert and never fires hover
   // events, so the tooltip must live on the (interactive) wrapper instead.
   const disabledReason = saving
     ? t("savingLabel")
-    : (nameError ?? promptError ?? scheduleError ?? undefined);
+    : (nameError ??
+      promptError ??
+      scheduleError ??
+      (actionPolicies === null ? tActionPolicies("loading") : undefined));
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
-      if (!compiled.ok) return; // validation should already block, but typescript needs this
+      if (!compiled.ok || actionPolicies === null) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
         const storagePayload = localPayloadToUtcPayload(mode, payload);
@@ -215,8 +220,7 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
-            pre_approved_app_ids: preApprovedAppIds,
-            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
+            action_policies: actionPolicies,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -225,6 +229,7 @@ export default function ScheduleTaskForm({
           await mutate(SWR_KEYS.scheduledTask(updated.id), updated, {
             revalidate: false,
           });
+          await mutate(SWR_KEYS.taskActionPolicies(updated.id));
           await mutate(SWR_KEYS.scheduledTasks);
           toast.success(t("toasts.updated"));
           router.push(taskDetailPath(updated.id));
@@ -235,8 +240,7 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
-            pre_approved_app_ids: preApprovedAppIds,
-            pre_approved_mcp_server_ids: preApprovedMcpServerIds,
+            action_policies: actionPolicies,
           };
           await createScheduledTask(body);
           await mutate(SWR_KEYS.scheduledTasks);
@@ -260,8 +264,7 @@ export default function ScheduleTaskForm({
       mode,
       mutate,
       payload,
-      preApprovedAppIds,
-      preApprovedMcpServerIds,
+      actionPolicies,
       router,
       trimmedName,
       trimmedPrompt,
@@ -388,18 +391,12 @@ export default function ScheduleTaskForm({
 
         <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-        <GeneralLayouts.Section>
-          <InputVertical
-            title={t("fields.preApproval.label")}
-            description={t("fields.preApproval.description")}
-          >
-            <PreApprovalPicker
-              selectedAppIds={preApprovedAppIds}
-              selectedMcpServerIds={preApprovedMcpServerIds}
-              onAppChange={setPreApprovedAppIds}
-              onMcpServerChange={setPreApprovedMcpServerIds}
-            />
-          </InputVertical>
+        <GeneralLayouts.Section alignItems="stretch">
+          <TaskActionPolicies
+            taskId={initial.taskId}
+            value={actionPolicies}
+            onChange={setActionPolicies}
+          />
         </GeneralLayouts.Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
@@ -413,7 +410,5 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     prompt: "",
     mode: "interval",
     payload: { unit: "hours", every: 1 },
-    preApprovedAppIds: [],
-    preApprovedMcpServerIds: [],
   };
 }

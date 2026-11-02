@@ -380,6 +380,18 @@ variable "enable_cloud_armor" {
   default     = true
 }
 
+variable "cloud_armor_extra_uninspected_fields" {
+  type        = list(string)
+  description = "Field names whose values the WAF content rule sets do not read, on top of the cloud-armor module default list of Onyx fields that carry free text, URLs and secrets. Add a field when the load balancer log shows a signature denying it."
+  default     = []
+}
+
+variable "cloud_armor_extra_uninspected_field_prefixes" {
+  type        = list(string)
+  description = "Prefixes of field names whose values the WAF content rule sets do not read, for whole free-form objects, on top of the cloud-armor module default list."
+  default     = []
+}
+
 variable "cloud_armor_preview" {
   type        = bool
   description = "Log what the WAF and rate limit rules match instead of acting on it"

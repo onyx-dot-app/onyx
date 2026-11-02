@@ -5,6 +5,8 @@ session token as a Bearer (Authorization header) instead of the web cookie,
 and that the web cookie flow is unaffected.
 """
 
+import httpx
+
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -74,4 +76,25 @@ def test_web_cookie_login_still_works(admin_user: DATestUser) -> None:
     )
     resp.raise_for_status()
     assert resp.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    client.cookies.clear()
+
+
+def test_mobile_refresh_rejects_web_cookie(admin_user: DATestUser) -> None:
+    # A same-origin script holds only the HttpOnly cookie. The bearer refresh
+    # must not turn that cookie into a token in a readable JSON body.
+    client.cookies.clear()
+    resp: httpx.Response = client.post(
+        url=f"{API_SERVER_URL}/auth/mobile/refresh", headers=admin_user.headers
+    )
+    assert resp.status_code in (401, 403), resp.text
+    assert "access_token" not in resp.text
+
+
+def test_web_cookie_refresh_still_works(admin_user: DATestUser) -> None:
+    client.cookies.clear()
+    resp: httpx.Response = client.post(
+        url=f"{API_SERVER_URL}/auth/refresh", headers=admin_user.headers
+    )
+    resp.raise_for_status()
+    assert "access_token" not in resp.text
     client.cookies.clear()

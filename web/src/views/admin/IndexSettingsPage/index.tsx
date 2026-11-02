@@ -7,7 +7,6 @@ import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { PageLoader } from "@opal/loaders";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
@@ -21,6 +20,7 @@ import { InputHorizontal } from "@opal/layouts";
 import {
   Button,
   Card,
+  Collapsible,
   Divider,
   InputTypeIn,
   LinkButton,
@@ -51,9 +51,8 @@ import {
   SvgUnplug,
   SvgVector,
 } from "@opal/icons";
-import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputSingleSelect } from "@opal/components";
-import { InputSingleSelectField } from "@opal/form";
+import { InputSingleSelectField, InputSwitchField } from "@opal/form";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -63,6 +62,7 @@ import {
   VectorQuantization,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
+  type EmbeddingModelRef,
   type EmbeddingModelRequest,
   type EmbeddingModelSelection,
   type EmbeddingModelState,
@@ -71,16 +71,16 @@ import {
 import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
-  DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
-  MAX_IMAGE_SIZE_OPTIONS,
   SELF_HOSTED_PROVIDERS,
 } from "@/lib/searchSettings/constants";
 import {
   embeddingModelDescription,
   findProvider,
-  findRegistryModel,
+  findProviderModel,
+  isBringYourOwnProvider,
   isCloudBased,
   resolveProviderName,
+  visibleEmbeddingProviders,
 } from "@/lib/searchSettings";
 import {
   isSameModelSelection,
@@ -108,7 +108,6 @@ import {
   useSecondarySearchSettings,
 } from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
-import useFilter from "@/hooks/useFilter";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import {
   filterModelConfigurations,
@@ -117,6 +116,8 @@ import {
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
+import CCPairIdsBackfillCard from "@/views/admin/IndexSettingsPage/CCPairIdsBackfillCard";
+import EmbeddingRateLimitCard from "@/views/admin/IndexSettingsPage/EmbeddingRateLimitCard";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -124,7 +125,8 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 // Developer-facing log label only; the user-visible copy comes from `t`.
-const CONTEXTUAL_MODEL_UPDATE_LOG = "Failed to update Contextual Retrieval LLM";
+const CONTEXTUAL_FORWARD_APPLY_LOG =
+  "Failed to apply the Contextual Retrieval change";
 
 // Mirrors the backend's compute_wont_port_cc_pair_ids, so the modal shows the admin the
 // same set the server will delete. The two have to be changed together.
@@ -165,7 +167,7 @@ function CloudDisabled({
     : tooltipProp;
 
   return (
-    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="right">
+    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="end">
       {children}
     </Disabled>
   );
@@ -223,8 +225,10 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
 
 interface ProviderGroupProps {
   provider: EmbeddingProvider;
-  currentModelName?: string;
-  selectedModelName?: string;
+  /** The active embedding model, in this group or another one. */
+  current: EmbeddingModelRef | null;
+  /** The staged model, in this group or another one. */
+  staged: EmbeddingModelRef | null;
   isCloud?: boolean;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
@@ -233,9 +237,12 @@ interface ProviderGroupProps {
    * `LiteLLMProviderModal` can preload its model-spec fields on edit.
    */
   existingModel?: EmbeddingModel;
+  /** Spec of the staged model when it belongs to THIS provider. */
+  stagedModel?: EmbeddingModel;
   /**
    * `customModel` is set only for providers with no pre-registered models
-   * (LiteLLM / Azure), where the user defines the spec in the connect modal.
+   * (LiteLLM / Azure / Bifrost), where the user defines the spec in the
+   * connect modal.
    */
   onSelectModel: (
     modelName: string,
@@ -246,16 +253,28 @@ interface ProviderGroupProps {
 
 function ProviderGroup({
   provider,
-  currentModelName,
-  selectedModelName,
+  current,
+  staged,
   isCloud = false,
   existingCredentials,
   existingModel,
+  stagedModel,
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
   const t = useTranslations("admin.indexSettings");
-  const models = provider.embeddingModels;
+  // Bring-your-own models are not in the registry, so list the current and
+  // staged specs too. The first entry for a name wins, so a staged spec
+  // replaces the current spec of the same name.
+  const models = [
+    ...provider.embeddingModels,
+    ...(stagedModel ? [stagedModel] : []),
+    ...(existingModel ? [existingModel] : []),
+  ].filter(
+    (model, index, all) =>
+      all.findIndex((m) => m.modelName === model.modelName) === index
+  );
+  const isBringYourOwn = isBringYourOwnProvider(provider.providerName);
   const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
   const connectModal = useCreateModal();
@@ -263,9 +282,14 @@ function ProviderGroup({
   const providerCreationModal = useCreateModal();
   const [pendingConnectModel, setPendingConnectModel] =
     useState<EmbeddingModel | null>(null);
-  const providerGroupContainsCurrentModelName = models.some(
-    (m) => m.modelName === currentModelName
-  );
+  // The current model uses this provider's credentials, whether or not it is
+  // a registry model, so they cannot be disconnected.
+  const isCurrentProvider = current?.providerName === provider.providerName;
+  const currentModelName = isCurrentProvider ? current?.modelName : undefined;
+  const selectedModelName =
+    staged?.providerName === provider.providerName
+      ? staged.modelName
+      : undefined;
 
   const handleDisconnect = useCallback(async () => {
     if (!isCloud) return;
@@ -297,9 +321,11 @@ function ProviderGroup({
 
   const getModelState = useCallback(
     (model: EmbeddingModel): EmbeddingModelState => {
-      if (isCloud && !isConfigured) return "unconnected";
+      // Before the credential check: a model just staged from the connect
+      // modal can render before the refreshed provider list arrives.
       if (model.modelName === selectedModelName) return "selected";
       if (model.modelName === currentModelName) return "current";
+      if (isCloud && !isConfigured) return "unconnected";
       return "connected";
     },
     [isCloud, isConfigured, selectedModelName, currentModelName]
@@ -307,13 +333,16 @@ function ProviderGroup({
 
   const handleModelSelect = useCallback(
     (model: EmbeddingModel) => {
-      if (provider.deprecated) return;
       const state = getModelState(model);
 
       if (state === "selected" || state === "current") {
         onDeselectModel();
         return;
       }
+
+      // A legacy model is listed only while it is current; it is never a new
+      // target.
+      if (model.legacy) return;
 
       if (state === "unconnected" && isCloud) {
         setPendingConnectModel(model);
@@ -328,11 +357,27 @@ function ProviderGroup({
       onSelectModel,
       onDeselectModel,
       connectModal,
-      provider.deprecated,
       isCloud,
       setPendingConnectModel,
     ]
   );
+
+  function renderModelCard(model: EmbeddingModel) {
+    const state = getModelState(model);
+    // The current card loses its highlight to a staged model in any group.
+    const isPrioritized =
+      state === "selected" || (state === "current" && staged === null);
+    return (
+      <EmbeddingModelCard
+        key={model.modelName}
+        model={model}
+        provider={provider}
+        modelState={state}
+        cardState={isPrioritized ? "selected" : "filled"}
+        onSelect={() => handleModelSelect(model)}
+      />
+    );
+  }
 
   return (
     <>
@@ -423,11 +468,6 @@ function ProviderGroup({
                       )
                     : provider.displayName
                 }
-                suffix={
-                  provider.deprecated
-                    ? t("providerGroup.deprecated.suffix")
-                    : undefined
-                }
                 sizePreset="secondary"
               />
 
@@ -437,9 +477,9 @@ function ProviderGroup({
                     icon={SvgUnplug}
                     prominence="tertiary"
                     size="sm"
-                    disabled={providerGroupContainsCurrentModelName}
+                    disabled={isCurrentProvider}
                     tooltip={
-                      providerGroupContainsCurrentModelName
+                      isCurrentProvider
                         ? t("providerGroup.disconnectButton.disabledTooltip")
                         : undefined
                     }
@@ -460,7 +500,8 @@ function ProviderGroup({
           </GeneralLayouts.Section>
         </div>
 
-        {models.length === 0 ? (
+        {models.map(renderModelCard)}
+        {isBringYourOwn && (
           <SelectCard
             state="filled"
             rounding={3}
@@ -487,23 +528,6 @@ function ProviderGroup({
               center
             />
           </SelectCard>
-        ) : (
-          models.map((model) => {
-            const state = getModelState(model);
-            const isPrioritized =
-              state === "selected" ||
-              (state === "current" && !selectedModelName);
-            return (
-              <EmbeddingModelCard
-                key={model.modelName}
-                model={model}
-                provider={provider}
-                modelState={state}
-                cardState={isPrioritized ? "selected" : "filled"}
-                onSelect={() => handleModelSelect(model)}
-              />
-            );
-          })
         )}
       </GeneralLayouts.Section>
     </>
@@ -535,28 +559,13 @@ function EmbeddingModelCard({
             prominence="tertiary"
             rightIcon={SvgArrowExchange}
             onClick={onSelect}
-            disabled={provider.deprecated}
-            tooltip={
-              provider.deprecated
-                ? t("modelCard.deprecated.connectTooltip")
-                : undefined
-            }
           >
             {t("modelCard.connectButton.label")}
           </Button>
         );
       case "connected":
         return (
-          <Button
-            prominence="tertiary"
-            onClick={onSelect}
-            disabled={provider.deprecated}
-            tooltip={
-              provider.deprecated
-                ? t("modelCard.deprecated.selectTooltip")
-                : undefined
-            }
-          >
+          <Button prominence="tertiary" onClick={onSelect}>
             {t("modelCard.selectButton.label")}
           </Button>
         );
@@ -585,19 +594,13 @@ function EmbeddingModelCard({
     }
   })();
 
-  const isClickable =
-    !provider.deprecated &&
-    (modelState === "unconnected" ||
-      modelState === "connected" ||
-      modelState === "current" ||
-      modelState === "selected");
-
   return (
     <SelectCard
       state={cardState}
       rounding={3}
       padding={1}
-      onClick={isClickable ? onSelect : undefined}
+      onClick={onSelect}
+      data-testid={`embedding-model-card:${provider.providerName}:${model.modelName}`}
     >
       <GeneralLayouts.Section flexDirection="row" alignItems="start">
         <GeneralLayouts.Section gap={0} padding={2} alignItems="start">
@@ -605,6 +608,17 @@ function EmbeddingModelCard({
             icon={provider.icon}
             title={model.modelName}
             description={embeddingModelDescription(model, t, appName)}
+            tag={
+              model.legacy
+                ? {
+                    title: t("modelCard.legacy.tag"),
+                    color: "amber",
+                    tooltip: t("modelCard.legacy.tooltip"),
+                  }
+                : model.gpuRecommended
+                  ? { title: t("modelCard.gpuRecommended.tag"), color: "gray" }
+                  : undefined
+            }
             sizePreset="main-ui"
             variant="section"
           />
@@ -618,13 +632,71 @@ function EmbeddingModelCard({
   );
 }
 
+interface CustomModelGroupProps {
+  onAddCustomModel: () => void;
+}
+
+/** Self-hosted models entered by hand ("Add Custom Model"). */
+function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
+  const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
+  return (
+    <GeneralLayouts.Section gap={1}>
+      <GeneralLayouts.Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        padding={1}
+        height="fit"
+        className="mt-1"
+      >
+        <Spacer orientation="horizontal" rem={0.675} />
+        <Content
+          icon={CUSTOM_PROVIDER.icon}
+          title={t("modelPicker.customModels.title")}
+          sizePreset="secondary"
+        />
+      </GeneralLayouts.Section>
+
+      <SelectCard
+        state="filled"
+        rounding={3}
+        padding={2}
+        onClick={onAddCustomModel}
+      >
+        <ContentAction
+          title={t("modelPicker.customModel.title")}
+          sizePreset="secondary"
+          variant="body"
+          color="muted"
+          padding={1}
+          rightChildren={
+            <Button
+              prominence="tertiary"
+              rightIcon={SvgPlusCircle}
+              onClick={onAddCustomModel}
+            >
+              {t("modelPicker.addCustomModel.label")}
+            </Button>
+          }
+          center
+        />
+      </SelectCard>
+      <div className="px-3 pt-1 pb-2">
+        <Text font="secondary-body" color="text-03" as="p">
+          {markdown(t("modelPicker.customModels.hint", { appName }))}
+        </Text>
+      </div>
+    </GeneralLayouts.Section>
+  );
+}
+
 interface IndexSettingsFormValues extends EmbeddingModelSelection {
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
   vector_quantization: VectorQuantization;
   image_processing_enabled: boolean;
   image_processing_model_configuration_id: number | null;
-  image_processing_max_size_mb: number;
 }
 
 /**
@@ -652,6 +724,10 @@ function toSwitchoverType(strategy: ApplyStrategy): SwitchoverType {
 interface IndexSettingsChanges {
   embeddingChanged: boolean;
   contextualToggleChanged: boolean;
+  /** Contextual Retrieval goes from on to off. */
+  contextualDisabled: boolean;
+  /** Contextual Retrieval goes from off to on with a model picked. */
+  contextualEnabled: boolean;
   /** Contextual Retrieval stays on and points at a different model. */
   contextualModelChanged: boolean;
   /** Part of the index mapping, so it always needs a re-index. */
@@ -665,20 +741,24 @@ function classifyChanges(
   values: IndexSettingsFormValues,
   initialValues: IndexSettingsFormValues
 ): IndexSettingsChanges {
-  // The model and the size only matter while the feature is on, so switching
-  // on, picking a model and switching back off stages nothing, and the pick
-  // survives in the form for a later re-enable.
+  // The model only matters while the feature is on, so switching on, picking
+  // a model and switching back off stages nothing, and the pick survives in
+  // the form for a later re-enable.
   const imageChanged =
     values.image_processing_enabled !==
       initialValues.image_processing_enabled ||
     (values.image_processing_enabled &&
-      (values.image_processing_model_configuration_id !==
-        initialValues.image_processing_model_configuration_id ||
-        values.image_processing_max_size_mb !==
-          initialValues.image_processing_max_size_mb));
+      values.image_processing_model_configuration_id !==
+        initialValues.image_processing_model_configuration_id);
   const embeddingChanged = !isSameModelSelection(values, initialValues);
   const contextualToggleChanged =
     values.enable_contextual_rag !== initialValues.enable_contextual_rag;
+  const contextualDisabled: boolean =
+    initialValues.enable_contextual_rag && !values.enable_contextual_rag;
+  const contextualEnabled: boolean =
+    !initialValues.enable_contextual_rag &&
+    values.enable_contextual_rag &&
+    values.contextual_rag_model_configuration_id !== null;
   const contextualModelChanged =
     values.enable_contextual_rag &&
     initialValues.enable_contextual_rag &&
@@ -690,6 +770,8 @@ function classifyChanges(
   return {
     embeddingChanged,
     contextualToggleChanged,
+    contextualDisabled,
+    contextualEnabled,
     contextualModelChanged,
     quantizationChanged,
     imageChanged,
@@ -703,20 +785,42 @@ function classifyChanges(
 }
 
 /**
- * Which banner the staged changes get. An embedding or contextual-toggle
- * change needs a re-index; a contextual model change on its own offers the
- * forward-only pair; image processing on its own may skip re-indexing.
+ * Which banner the staged changes get. Contextual Retrieval switched off or
+ * on, or given a different model, can apply forward only. Image processing
+ * may skip the re-index. Everything else needs one.
  */
-type BannerMode = "reindex" | "contextualModelOnly" | "imageOnly";
+type ContextualForwardMode =
+  | "contextualDisableOnly"
+  | "contextualEnableOnly"
+  | "contextualModelOnly";
+type BannerMode = "reindex" | ContextualForwardMode | "imageOnly";
+
+type ForwardModalKey =
+  | "disableForwardModal"
+  | "enableForwardModal"
+  | "forwardOnlyModal";
+
+/** The confirmation each forward-only mode opens. */
+const FORWARD_MODAL_KEYS: Record<ContextualForwardMode, ForwardModalKey> = {
+  contextualDisableOnly: "disableForwardModal",
+  contextualEnableOnly: "enableForwardModal",
+  contextualModelOnly: "forwardOnlyModal",
+};
+
+function isContextualForwardMode(
+  mode: BannerMode
+): mode is ContextualForwardMode {
+  return mode in FORWARD_MODAL_KEYS;
+}
 
 function bannerModeFor(changes: IndexSettingsChanges): BannerMode {
-  if (
-    changes.embeddingChanged ||
-    changes.contextualToggleChanged ||
-    changes.quantizationChanged
-  ) {
+  if (changes.embeddingChanged || changes.quantizationChanged) {
     return "reindex";
   }
+  if (changes.contextualDisabled) return "contextualDisableOnly";
+  if (changes.contextualEnabled) return "contextualEnableOnly";
+  // Switched on with no model yet: the banner asks for one.
+  if (changes.contextualToggleChanged) return "reindex";
   if (changes.contextualModelChanged) return "contextualModelOnly";
   if (changes.imageChanged) return "imageOnly";
   return "reindex";
@@ -737,6 +841,31 @@ function resolveApplyStrategy(
     : stored;
 }
 
+type BannerCopy =
+  | "contextualModelMissing"
+  | ContextualForwardMode
+  | "doNotReindex"
+  | "quantizationOnly"
+  | "reindex"
+  | "default";
+
+/** The `changesBanner.*` copy for the staged changes. Forward-only modes name their own copy. */
+function bannerCopyFor(
+  contextualRagModelMissing: boolean,
+  mode: BannerMode,
+  strategyCopy: "doNotReindex" | "reindex" | null,
+  quantizationOnly: boolean
+): BannerCopy {
+  if (contextualRagModelMissing) return "contextualModelMissing";
+  if (isContextualForwardMode(mode)) return mode;
+  // A quantization-only change copies the stored vectors instead of
+  // re-embedding, so it gets its own, faster wording.
+  if (strategyCopy === "reindex" && quantizationOnly) {
+    return "quantizationOnly";
+  }
+  return strategyCopy ?? "default";
+}
+
 type ImagePersistResult = "skipped" | "saved" | "failed";
 
 export default function IndexSettingsPage() {
@@ -752,36 +881,6 @@ export default function IndexSettingsPage() {
   const [applyStrategy, setApplyStrategy] = useState<ApplyStrategy | null>(
     null
   );
-
-  const allModels = useMemo(
-    () => [...CLOUD_BASED_PROVIDERS, ...SELF_HOSTED_PROVIDERS],
-    []
-  );
-
-  const {
-    query,
-    setQuery,
-    filtered: filteredProviders,
-  } = useFilter(
-    allModels,
-    (embeddingProvider) =>
-      `${embeddingProvider.displayName} ${embeddingProvider.embeddingModels
-        .map((embeddingModel) => embeddingModel.modelName)
-        .join(" ")}`
-  );
-
-  const { filteredCloudProviders, filteredSelfHostedProviders } =
-    useMemo(() => {
-      const matched = new Set(filteredProviders);
-      return {
-        filteredCloudProviders: CLOUD_BASED_PROVIDERS.filter((p) =>
-          matched.has(p)
-        ),
-        filteredSelfHostedProviders: SELF_HOSTED_PROVIDERS.filter((p) =>
-          matched.has(p)
-        ),
-      };
-    }, [filteredProviders]);
 
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
@@ -822,30 +921,88 @@ export default function IndexSettingsPage() {
       normalize: currentEmbeddingModel.normalize,
       queryPrefix: currentEmbeddingModel.query_prefix,
       passagePrefix: currentEmbeddingModel.passage_prefix,
+      reducedDimension: currentEmbeddingModel.reduced_dimension,
     };
   }, [currentEmbeddingModel]);
 
-  const currentProviderName = currentEmbeddingModel
-    ? resolveProviderName(
-        currentEmbeddingModel.model_name,
-        currentEmbeddingModel.provider_type
-      )
-    : null;
+  const currentModelName = currentEmbeddingModel?.model_name;
+  const currentProviderType = currentEmbeddingModel?.provider_type ?? null;
+  const currentModelRef: EmbeddingModelRef | null = useMemo(
+    () =>
+      currentModelName === undefined
+        ? null
+        : {
+            modelName: currentModelName,
+            providerName: resolveProviderName(
+              currentModelName,
+              currentProviderType
+            ),
+          },
+    [currentModelName, currentProviderType]
+  );
+  const currentProviderName = currentModelRef?.providerName ?? null;
   const currentProvider = currentProviderName
     ? findProvider(currentProviderName)
     : null;
   const isCurrentCloudBased = currentProviderName
     ? isCloudBased(currentProviderName)
     : false;
+  // Matched on provider AND name: an Azure deployment labelled like an OpenAI
+  // model must not borrow that model's registry entry.
+  const currentRegistryModel = currentModelRef
+    ? findProviderModel(currentModelRef.providerName, currentModelRef.modelName)
+    : null;
 
-  const { data: searchSettings, isLoading: isLoadingSearchSettings } =
-    useCurrentSearchSettings({ pollIntervalMs: isReindexing ? 5000 : 0 });
   const { data: configuredProvidersList } = useConfiguredEmbeddingProviders();
   const configuredProviders = useMemo(
     () =>
       new Map((configuredProvidersList ?? []).map((p) => [p.provider_type, p])),
     [configuredProvidersList]
   );
+  const visibleCloudProviders = useMemo(
+    () =>
+      visibleEmbeddingProviders(
+        CLOUD_BASED_PROVIDERS,
+        currentModelRef,
+        configuredProviders
+      ),
+    [currentModelRef, configuredProviders]
+  );
+  const visibleSelfHostedProviders = useMemo(
+    () => visibleEmbeddingProviders(SELF_HOSTED_PROVIDERS, currentModelRef),
+    [currentModelRef]
+  );
+  const [query, setQuery] = useState("");
+  // The search runs over the visible groups, so it cannot find a hidden
+  // legacy model.
+  const { matchesQuery, filteredSelfHostedProviders, customModelMatched } =
+    useMemo(() => {
+      const needle = query.trim().toLowerCase();
+      // `extraModelNames` covers the current and staged bring-your-own
+      // models, which are not in the registry.
+      const matches = (
+        provider: EmbeddingProvider,
+        extraModelNames: string[] = []
+      ) =>
+        [
+          provider.displayName,
+          ...provider.embeddingModels.map((model) => model.modelName),
+          ...extraModelNames,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
+      return {
+        matchesQuery: matches,
+        filteredSelfHostedProviders: visibleSelfHostedProviders.filter((p) =>
+          matches(p)
+        ),
+        customModelMatched: matches(CUSTOM_PROVIDER),
+      };
+    }, [query, visibleSelfHostedProviders]);
+
+  const { data: searchSettings, isLoading: isLoadingSearchSettings } =
+    useCurrentSearchSettings({ pollIntervalMs: isReindexing ? 5000 : 0 });
   const cancelReindexModal = useCreateModal();
   const forwardOnlyModal = useCreateModal();
   const customModelModal = useCreateModal();
@@ -914,9 +1071,12 @@ export default function IndexSettingsPage() {
     () =>
       savedModelSelection(
         currentEmbeddingModelSpec,
-        currentEmbeddingModel?.provider_type ?? null
+        // Custom models are staged as CUSTOM, so the saved one must match.
+        currentProviderName === EmbeddingProviderName.CUSTOM
+          ? EmbeddingProviderName.CUSTOM
+          : (currentEmbeddingModel?.provider_type ?? null)
       ),
-    [currentEmbeddingModelSpec, currentEmbeddingModel]
+    [currentEmbeddingModelSpec, currentEmbeddingModel, currentProviderName]
   );
 
   const initialFormValues: IndexSettingsFormValues = useMemo(
@@ -930,23 +1090,19 @@ export default function IndexSettingsPage() {
       image_processing_enabled:
         settings.image_extraction_and_analysis_enabled ?? false,
       image_processing_model_configuration_id: captioningModelConfigId,
-      image_processing_max_size_mb:
-        settings.image_analysis_max_size_mb ??
-        DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB,
     }),
     [
       savedSelection,
       searchSettings,
       settings.image_extraction_and_analysis_enabled,
-      settings.image_analysis_max_size_mb,
       captioningModelConfigId,
     ]
   );
 
   /**
    * Save the staged image processing settings, if any changed. The model
-   * goes first, through the vision default, then the toggle and the size
-   * through the admin settings: a failed settings write then leaves the
+   * goes first, through the vision default, then the toggle through the
+   * admin settings: a failed settings write then leaves the
    * feature as it was, never on with a stale model. Leaves every cache
    * alone; the caller commits once the whole apply has succeeded, so
    * `enableReinitialize` sees the final form once instead of a mix.
@@ -987,17 +1143,14 @@ export default function IndexSettingsPage() {
             return "failed";
           }
         }
-        const toggleOrSizeChanged =
+        if (
           values.image_processing_enabled !==
-            initialFormValues.image_processing_enabled ||
-          values.image_processing_max_size_mb !==
-            initialFormValues.image_processing_max_size_mb;
-        if (toggleOrSizeChanged) {
+          initialFormValues.image_processing_enabled
+        ) {
           await saveAdminSettings({
             ...toSettings(settings),
             image_extraction_and_analysis_enabled:
               values.image_processing_enabled,
-            image_analysis_max_size_mb: values.image_processing_max_size_mb,
           });
         }
         return "saved";
@@ -1024,37 +1177,54 @@ export default function IndexSettingsPage() {
     [router]
   );
 
-  const applyContextualModelForward = useCallback(
+  // Applies to documents indexed from now on, without a re-index.
+  const applyContextualForward = useCallback(
     async (values: IndexSettingsFormValues): Promise<boolean> => {
+      const disabling: boolean = !values.enable_contextual_rag;
       const modelConfigurationId = values.contextual_rag_model_configuration_id;
-      if (!searchSettings || modelConfigurationId === null) return false;
+      if (!searchSettings) return false;
+      if (!disabling && modelConfigurationId === null) return false;
+      const enabling: boolean =
+        !disabling && !searchSettings.enable_contextual_rag;
       // Image settings first: a failed save aborts before anything else moves.
       const image = await persistImageProcessing(values);
       if (image === "failed") return false;
 
+      const failedToast = disabling
+        ? t("toasts.contextualRetrievalDisableFailed")
+        : enabling
+          ? t("toasts.contextualRetrievalEnableFailed")
+          : t("toasts.contextualModelUpdateFailed");
       try {
-        const response = await updateInferenceSettings({
-          ...searchSettings,
-          contextual_rag_model_configuration_id: modelConfigurationId,
-        });
+        // Off keeps the stored model so turning it back on can reuse it.
+        const response = await updateInferenceSettings(
+          disabling
+            ? { ...searchSettings, enable_contextual_rag: false }
+            : {
+                ...searchSettings,
+                enable_contextual_rag: true,
+                contextual_rag_model_configuration_id: modelConfigurationId,
+              }
+        );
         if (!response.ok) {
-          toast.error(
-            await parseErrorDetail(
-              response,
-              t("toasts.contextualModelUpdateFailed")
-            )
-          );
+          toast.error(await parseErrorDetail(response, failedToast));
           return false;
         }
 
         await mutate(SWR_KEYS.currentSearchSettings);
         commitImageProcessing(image);
         forwardOnlyModal.toggle(false);
-        toast.success(t("toasts.contextualModelUpdated"));
+        toast.success(
+          disabling
+            ? t("toasts.contextualRetrievalDisabled")
+            : enabling
+              ? t("toasts.contextualRetrievalEnabled")
+              : t("toasts.contextualModelUpdated")
+        );
         return true;
       } catch (error) {
-        console.error(CONTEXTUAL_MODEL_UPDATE_LOG, error);
-        toast.error(t("toasts.contextualModelUpdateFailed"));
+        console.error(CONTEXTUAL_FORWARD_APPLY_LOG, error);
+        toast.error(failedToast);
         return false;
       }
     },
@@ -1083,24 +1253,6 @@ export default function IndexSettingsPage() {
       mutate(SWR_KEYS.reindexErrors),
     ]);
   }, [cancelReindexModal, t]);
-
-  if (
-    isLoadingCurrentModel ||
-    isLoadingSearchSettings ||
-    isLoadingLlmProviders
-  ) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={adminRouteTitle(route)}
-        />
-        <SettingsLayouts.Body>
-          <PageLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
 
   return (
     <>
@@ -1136,14 +1288,20 @@ export default function IndexSettingsPage() {
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
 
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root
+        loading={
+          isLoadingCurrentModel ||
+          isLoadingSearchSettings ||
+          isLoadingLlmProviders
+        }
+      >
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
           description={t("header.description")}
         />
 
-        <SettingsLayouts.Body>
+        <SettingsLayouts.Body gap={6}>
           <Formik<IndexSettingsFormValues>
             enableReinitialize
             initialValues={initialFormValues}
@@ -1232,10 +1390,75 @@ export default function IndexSettingsPage() {
                 void setFieldValue("model_spec", selection.model_spec);
                 void setFieldValue("model_provider", selection.model_provider);
               };
+              // Compares the provider and the spec too, like classifyChanges:
+              // an OpenAI model with the name of the current Azure deployment
+              // is a staged change.
               const isModelStaged =
-                values.model_name !== initialFormValues.model_name &&
-                !!values.model_name;
-              const stagedModelName = isModelStaged ? values.model_name : null;
+                !!values.model_name &&
+                !isSameModelSelection(values, initialFormValues);
+              // Registry picks carry no provider; their name resolves it.
+              // Custom models carry CUSTOM, even with a registry name.
+              const stagedModelRef: EmbeddingModelRef | null = isModelStaged
+                ? {
+                    modelName: values.model_name,
+                    providerName:
+                      values.model_provider ??
+                      resolveProviderName(values.model_name, null),
+                  }
+                : null;
+              const existingModelFor = (provider: EmbeddingProvider) =>
+                currentEmbeddingModel?.provider_type === provider.providerName
+                  ? (currentEmbeddingModelSpec ?? undefined)
+                  : undefined;
+              const stagedModelFor = (provider: EmbeddingProvider) =>
+                isModelStaged && values.model_provider === provider.providerName
+                  ? (values.model_spec ?? undefined)
+                  : undefined;
+              const filteredCloud = visibleCloudProviders.filter((provider) =>
+                matchesQuery(
+                  provider,
+                  [existingModelFor(provider), stagedModelFor(provider)]
+                    .filter((model) => model !== undefined)
+                    .map((model) => model.modelName)
+                )
+              );
+              // Registry providers first, bring-your-own options after them.
+              const filteredCloudProviders = [
+                ...filteredCloud.filter(
+                  (p) => !isBringYourOwnProvider(p.providerName)
+                ),
+                ...filteredCloud.filter((p) =>
+                  isBringYourOwnProvider(p.providerName)
+                ),
+              ];
+              const renderCloudProviderGroup = (
+                provider: EmbeddingProvider
+              ) => (
+                <ProviderGroup
+                  key={provider.providerName}
+                  provider={provider}
+                  current={currentModelRef}
+                  staged={stagedModelRef}
+                  isCloud
+                  existingCredentials={configuredProviders?.get(
+                    provider.providerName
+                  )}
+                  existingModel={existingModelFor(provider)}
+                  stagedModel={stagedModelFor(provider)}
+                  onSelectModel={(name, customModel) =>
+                    applySelection({
+                      model_name: name,
+                      model_spec: customModel
+                        ? { ...customModel, modelName: name }
+                        : null,
+                      model_provider: customModel
+                        ? provider.providerName
+                        : null,
+                    })
+                  }
+                  onDeselectModel={() => applySelection(savedSelection)}
+                />
+              );
               // Block apply when Contextual Retrieval is on but no LLM is set.
               const contextualRagModelMissing =
                 values.enable_contextual_rag &&
@@ -1255,8 +1478,9 @@ export default function IndexSettingsPage() {
               // A change undone by hand leaves Formik dirty but stages nothing.
               const hasChanges = dirty && changes.any;
               const bannerMode = bannerModeFor(changes);
-              const contextualModelOnlyChange =
-                bannerMode === "contextualModelOnly";
+              // Forward-only modes offer the in-place apply beside the rebuild.
+              const contextualForwardChange =
+                isContextualForwardMode(bannerMode);
               const imageOnlyChange = bannerMode === "imageOnly";
               const effectiveStrategy = resolveApplyStrategy(
                 applyStrategy,
@@ -1274,6 +1498,31 @@ export default function IndexSettingsPage() {
               // them. Do Not Re-index touches no index, so it reads as info
               // rather than as the warning the re-index strategies carry.
               const stagedVariant = saveOnly ? "info" : "warning";
+              const quantizationOnlyChange: boolean =
+                changes.quantizationChanged &&
+                !changes.embeddingChanged &&
+                !changes.contextualToggleChanged &&
+                !changes.contextualModelChanged &&
+                !changes.imageChanged;
+              const bannerCopy = bannerCopyFor(
+                contextualRagModelMissing,
+                bannerMode,
+                strategyCopy,
+                quantizationOnlyChange
+              );
+              // A staged embedding model is named, so the admin can see which
+              // model the re-index uses.
+              const bannerTitle =
+                bannerCopy === "reindex" && stagedModelRef
+                  ? t("changesBanner.reindexModel.title", {
+                      provider: findProvider(stagedModelRef.providerName)
+                        .displayName,
+                      model: stagedModelRef.modelName,
+                    })
+                  : t(`changesBanner.${bannerCopy}.title`);
+              const forwardModalKey = isContextualForwardMode(bannerMode)
+                ? FORWARD_MODAL_KEYS[bannerMode]
+                : "forwardOnlyModal";
               // The banner is reserved for indexing prompts: staged changes
               // and the contextual model a re-index needs. A captioning
               // model missing is a card-level setting warning, not a banner.
@@ -1291,9 +1540,8 @@ export default function IndexSettingsPage() {
                 changes.contextualModelChanged
                   ? "warning"
                   : undefined;
-              const quantizationCardBorder = changes.quantizationChanged
-                ? "warning"
-                : undefined;
+              const quantizationCardBorder: "warning" | undefined =
+                changes.quantizationChanged ? "warning" : undefined;
               const imageCardBorder = captioningModelMissing
                 ? "warning"
                 : changes.imageChanged
@@ -1402,7 +1650,7 @@ export default function IndexSettingsPage() {
                       : undefined
                   }
                 >
-                  {contextualModelOnlyChange
+                  {contextualForwardChange
                     ? t("actions.rebuildAll.label")
                     : saveOnly
                       ? t("actions.applyWithoutReindex.label")
@@ -1415,13 +1663,13 @@ export default function IndexSettingsPage() {
                   <forwardOnlyModal.Provider>
                     <ConfirmationModalLayout
                       icon={SvgArrowExchange}
-                      title={t("forwardOnlyModal.title")}
+                      title={t(`${forwardModalKey}.title`)}
                       submit={
                         <Button
                           disabled={applyBlocked}
                           onClick={async () => {
                             const updated =
-                              await applyContextualModelForward(values);
+                              await applyContextualForward(values);
                             if (updated) {
                               resetForm({ values });
                               setApplyStrategy(null);
@@ -1433,7 +1681,7 @@ export default function IndexSettingsPage() {
                       }
                     >
                       <Text font="main-ui-body" color="text-03" as="p">
-                        {t("forwardOnlyModal.description")}
+                        {t(`${forwardModalKey}.description`)}
                       </Text>
                     </ConfirmationModalLayout>
                   </forwardOnlyModal.Provider>
@@ -1454,7 +1702,7 @@ export default function IndexSettingsPage() {
                               ...customModel,
                               modelName: customModel.modelName,
                             },
-                            model_provider: null,
+                            model_provider: EmbeddingProviderName.CUSTOM,
                           });
                         }
                         customModelModal.toggle(false);
@@ -1569,7 +1817,7 @@ export default function IndexSettingsPage() {
                       // Active (staged or blocked), the banner pins 8px below
                       // the top so its actions stay in reach while the page
                       // scrolls, and casts a shadow while pinned.
-                      <StickyBox
+                      <StickyBox.Item
                         stick="top"
                         inset={2}
                         active={bannerActive}
@@ -1577,35 +1825,13 @@ export default function IndexSettingsPage() {
                       >
                         <MessageCard
                           variant={bannerVariant}
-                          title={
-                            contextualRagModelMissing
-                              ? t("changesBanner.contextualModelMissing.title")
-                              : contextualModelOnlyChange
-                                ? t("changesBanner.contextualModelOnly.title")
-                                : strategyCopy === "doNotReindex"
-                                  ? t("changesBanner.doNotReindex.title")
-                                  : strategyCopy === "reindex"
-                                    ? t("changesBanner.reindex.title")
-                                    : t("changesBanner.default.title")
-                          }
+                          title={bannerTitle}
                           description={markdown(
-                            contextualRagModelMissing
-                              ? t(
-                                  "changesBanner.contextualModelMissing.description"
-                                )
-                              : contextualModelOnlyChange
-                                ? t(
-                                    "changesBanner.contextualModelOnly.description"
-                                  )
-                                : strategyCopy === "doNotReindex"
-                                  ? t("changesBanner.doNotReindex.description")
-                                  : strategyCopy === "reindex"
-                                    ? t("changesBanner.reindex.description")
-                                    : t("changesBanner.default.description")
+                            t(`changesBanner.${bannerCopy}.description`)
                           )}
                           bottomChildren={
                             bannerActive ? (
-                              contextualModelOnlyChange ? (
+                              contextualForwardChange ? (
                                 <GeneralLayouts.Section
                                   flexDirection="row"
                                   alignItems="center"
@@ -1670,663 +1896,571 @@ export default function IndexSettingsPage() {
                             ) : undefined
                           }
                         />
-                      </StickyBox>
+                      </StickyBox.Item>
                     )
                   )}
 
-                  {/* Inner Disabled/CloudDisabled wrappers AND !isReindexing so opal's
-                      disabled opacity doesn't compound to 25% under this one. */}
+                  {/* Each section takes the re-index lock on its own, so the
+                      sections stay top level. Inner Disabled/CloudDisabled
+                      wrappers AND !isReindexing so opal's disabled opacity
+                      doesn't compound to 25% under this one. */}
                   <Disabled
                     disabled={isReindexing}
                     tooltip={t("reindexing.disabledTooltip")}
                   >
-                    <GeneralLayouts.Section gap={6}>
-                      {/* ── Embedding Model ── */}
-                      <GeneralLayouts.Section
-                        gap={3}
-                        height="fit"
-                        alignItems="stretch"
-                        justifyContent="start"
-                      >
-                        <Content
-                          title={t("embeddingModel.title")}
-                          description={t("embeddingModel.description", {
-                            appName: settings.appName,
-                          })}
-                          sizePreset="main-content"
-                          variant="section"
-                        />
+                    {/* ── Embedding Model ── */}
+                    <GeneralLayouts.Section
+                      gap={3}
+                      height="fit"
+                      alignItems="stretch"
+                      justifyContent="start"
+                    >
+                      <Content
+                        title={t("embeddingModel.title")}
+                        description={t("embeddingModel.description", {
+                          appName: settings.appName,
+                        })}
+                        sizePreset="main-content"
+                        variant="section"
+                      />
 
-                        {NEXT_PUBLIC_CLOUD_ENABLED ? (
-                          <CloudDisabled>
-                            <Card border="solid" rounding={4} padding={2}>
-                              <GeneralLayouts.Section padding={2}>
-                                <Content
-                                  icon={SvgVector}
-                                  title={t("embeddingModel.cloudManaged.title")}
-                                  sizePreset="main-ui"
-                                  variant="section"
-                                />
-                              </GeneralLayouts.Section>
-                            </Card>
-                          </CloudDisabled>
-                        ) : (
-                          currentEmbeddingModel && (
-                            <Tabs
-                              value={activeModelTab}
-                              onValueChange={setActiveModelTab}
-                              variant="underline"
-                            >
-                              <Card
-                                expandable
-                                expanded={viewAllModelsOpen}
-                                expandableContentHeight="full"
-                                border="solid"
-                                borderColor={embeddingCardBorder}
-                                rounding={4}
-                                padding={viewAllModelsOpen ? 0 : 2}
-                                expandedContent={
-                                  <>
-                                    <Tabs.Content value={MODEL_TAB_CLOUD}>
-                                      {filteredCloudProviders.length > 0 ? (
-                                        <GeneralLayouts.Section
-                                          gap={2}
-                                          padding={2}
-                                        >
-                                          {filteredCloudProviders.map(
-                                            (provider) => (
-                                              <ProviderGroup
-                                                key={provider.providerName}
-                                                provider={provider}
-                                                currentModelName={
-                                                  currentEmbeddingModel?.model_name
-                                                }
-                                                selectedModelName={
-                                                  stagedModelName ?? undefined
-                                                }
-                                                isCloud
-                                                existingCredentials={configuredProviders?.get(
-                                                  provider.providerName
-                                                )}
-                                                existingModel={
-                                                  currentEmbeddingModel?.provider_type ===
-                                                  provider.providerName
-                                                    ? (currentEmbeddingModelSpec ??
-                                                      undefined)
-                                                    : undefined
-                                                }
-                                                onSelectModel={(
-                                                  name,
-                                                  customModel
-                                                ) =>
-                                                  applySelection({
-                                                    model_name: name,
-                                                    model_spec: customModel
-                                                      ? {
-                                                          ...customModel,
-                                                          modelName: name,
-                                                        }
-                                                      : null,
-                                                    model_provider: customModel
-                                                      ? provider.providerName
-                                                      : null,
-                                                  })
-                                                }
-                                                onDeselectModel={() =>
-                                                  applySelection(savedSelection)
-                                                }
-                                              />
-                                            )
-                                          )}
-                                        </GeneralLayouts.Section>
-                                      ) : (
-                                        <IllustrationContent
-                                          illustration={SvgNoResult}
-                                          title={t(
-                                            "modelPicker.noCloudResults.title"
-                                          )}
-                                          description={t(
-                                            "modelPicker.noResults.description"
-                                          )}
-                                        />
-                                      )}
-                                    </Tabs.Content>
-
-                                    <Tabs.Content value={MODEL_TAB_SELF}>
-                                      {filteredSelfHostedProviders.length >
-                                      0 ? (
-                                        <GeneralLayouts.Section
-                                          gap={2}
-                                          padding={2}
-                                        >
-                                          {filteredSelfHostedProviders.map(
-                                            (shProvider) => (
-                                              <ProviderGroup
-                                                key={shProvider.providerName}
-                                                provider={shProvider}
-                                                currentModelName={
-                                                  currentEmbeddingModel?.model_name
-                                                }
-                                                selectedModelName={
-                                                  stagedModelName ?? undefined
-                                                }
-                                                onSelectModel={(name) =>
-                                                  applySelection({
-                                                    model_name: name,
-                                                    model_spec: null,
-                                                    model_provider: null,
-                                                  })
-                                                }
-                                                onDeselectModel={() =>
-                                                  applySelection(savedSelection)
-                                                }
-                                              />
-                                            )
-                                          )}
-
-                                          <GeneralLayouts.Section gap={1}>
-                                            <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
-                                              <GeneralLayouts.Section
-                                                flexDirection="row"
-                                                gap={0}
-                                              >
-                                                <Spacer
-                                                  orientation="horizontal"
-                                                  rem={0.675}
-                                                />
-                                                <div className="flex flex-row justify-between items-center w-full py-1">
-                                                  <Content
-                                                    icon={CUSTOM_PROVIDER.icon}
-                                                    title={t(
-                                                      "modelPicker.customModels.title"
-                                                    )}
-                                                    sizePreset="secondary"
-                                                  />
-                                                </div>
-                                              </GeneralLayouts.Section>
-                                            </div>
-
-                                            <SelectCard
-                                              state="filled"
-                                              rounding={3}
-                                              padding={2}
-                                              onClick={() =>
-                                                customModelModal.toggle(true)
-                                              }
-                                            >
-                                              <ContentAction
-                                                title={t(
-                                                  "modelPicker.customModel.title"
-                                                )}
-                                                sizePreset="secondary"
-                                                variant="body"
-                                                color="muted"
-                                                padding={1}
-                                                rightChildren={
-                                                  <Button
-                                                    prominence="tertiary"
-                                                    rightIcon={SvgPlusCircle}
-                                                    onClick={() =>
-                                                      customModelModal.toggle(
-                                                        true
-                                                      )
-                                                    }
-                                                  >
-                                                    {t(
-                                                      "modelPicker.addCustomModel.label"
-                                                    )}
-                                                  </Button>
-                                                }
-                                                center
-                                              />
-                                            </SelectCard>
-                                          </GeneralLayouts.Section>
-                                        </GeneralLayouts.Section>
-                                      ) : (
-                                        <IllustrationContent
-                                          illustration={SvgNoResult}
-                                          title={t(
-                                            "modelPicker.noSelfHostedResults.title"
-                                          )}
-                                          description={t(
-                                            "modelPicker.noResults.description"
-                                          )}
-                                        />
-                                      )}
-                                    </Tabs.Content>
-                                  </>
-                                }
-                              >
-                                {viewAllModelsOpen ? (
-                                  <div className="pt-1 px-1">
-                                    <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
-                                      <InputTypeIn
-                                        placeholder={t(
-                                          "modelPicker.search.placeholder"
-                                        )}
-                                        variant="internal"
-                                        searchIcon
-                                        value={query}
-                                        onChange={(e) =>
-                                          setQuery(e.target.value)
-                                        }
-                                      />
-                                      <div className="flex flex-row">
-                                        {isModelStaged && (
-                                          <Button
-                                            icon={SvgRevert}
-                                            prominence="internal"
-                                            tooltip={t(
-                                              "modelPicker.revertSelection.tooltip"
-                                            )}
-                                            onClick={() =>
-                                              applySelection(savedSelection)
-                                            }
-                                          />
-                                        )}
-                                        <Button
-                                          prominence="internal"
-                                          onClick={() =>
-                                            setViewAllModelsOpen(false)
-                                          }
-                                          rightIcon={SvgFold}
-                                        >
-                                          {t("modelPicker.foldModels.label")}
-                                        </Button>
-                                      </div>
-                                    </div>
-
-                                    <div className="px-2">
-                                      <Tabs.List>
-                                        <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                                          {t("modelPicker.cloudTab.label")}
-                                        </Tabs.Trigger>
-                                        <Tabs.Trigger value={MODEL_TAB_SELF}>
-                                          {t("modelPicker.selfHostedTab.label")}
-                                        </Tabs.Trigger>
-                                      </Tabs.List>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-row items-start w-full">
-                                    <GeneralLayouts.Section
-                                      padding={2}
-                                      gap={0}
-                                      alignItems="start"
-                                    >
-                                      <Content
-                                        icon={
-                                          currentProvider?.icon ?? SvgServer
-                                        }
-                                        title={currentEmbeddingModel.model_name}
-                                        description={embeddingModelDescription(
-                                          findRegistryModel(
-                                            currentEmbeddingModel.model_name
-                                          ),
-                                          t,
-                                          settings.appName
-                                        )}
-                                        sizePreset="main-ui"
-                                        variant="section"
-                                      />
-                                      <div className="flex flex-row items-center gap-2 pt-2 px-6">
-                                        {currentProviderName && (
-                                          <EmbeddingProviderInfo
-                                            providerName={currentProviderName}
-                                          />
-                                        )}
-                                      </div>
-                                    </GeneralLayouts.Section>
-
-                                    <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
-                                      <Button
-                                        prominence="secondary"
-                                        onClick={() => {
-                                          const isStagedSelfHosted =
-                                            stagedModelName &&
-                                            SELF_HOSTED_PROVIDERS.some((p) =>
-                                              p.embeddingModels.some(
-                                                (m) =>
-                                                  m.modelName ===
-                                                  stagedModelName
-                                              )
-                                            );
-                                          setActiveModelTab(
-                                            isStagedSelfHosted
-                                              ? MODEL_TAB_SELF
-                                              : stagedModelName
-                                                ? MODEL_TAB_CLOUD
-                                                : currentEmbeddingModel?.provider_type
-                                                  ? MODEL_TAB_CLOUD
-                                                  : MODEL_TAB_SELF
-                                          );
-                                          setViewAllModelsOpen(true);
-                                        }}
+                      {NEXT_PUBLIC_CLOUD_ENABLED ? (
+                        <CloudDisabled>
+                          <Card border="solid" rounding={4} padding={2}>
+                            <GeneralLayouts.Section padding={2}>
+                              <Content
+                                icon={SvgVector}
+                                title={t("embeddingModel.cloudManaged.title")}
+                                sizePreset="main-ui"
+                                variant="section"
+                              />
+                            </GeneralLayouts.Section>
+                          </Card>
+                        </CloudDisabled>
+                      ) : (
+                        currentEmbeddingModel && (
+                          <Tabs
+                            value={activeModelTab}
+                            onValueChange={setActiveModelTab}
+                            variant="underline"
+                          >
+                            <Card
+                              expandable
+                              expanded={viewAllModelsOpen}
+                              expandableContentHeight="full"
+                              border="solid"
+                              borderColor={embeddingCardBorder}
+                              rounding={4}
+                              padding={viewAllModelsOpen ? 0 : 2}
+                              expandedContent={
+                                <>
+                                  <Tabs.Content value={MODEL_TAB_CLOUD}>
+                                    {filteredCloudProviders.length > 0 ? (
+                                      <GeneralLayouts.Section
+                                        gap={2}
+                                        padding={2}
                                       >
-                                        {t("modelPicker.viewAllModels.label")}
-                                      </Button>
-                                      {isCurrentCloudBased && (
-                                        <div className="p-1">
-                                          <Button
-                                            icon={SvgSettings}
-                                            prominence="tertiary"
-                                            size="md"
-                                            onClick={() =>
-                                              editModal.toggle(true)
+                                        {filteredCloudProviders.map(
+                                          renderCloudProviderGroup
+                                        )}
+                                      </GeneralLayouts.Section>
+                                    ) : (
+                                      <IllustrationContent
+                                        illustration={SvgNoResult}
+                                        title={t(
+                                          "modelPicker.noCloudResults.title"
+                                        )}
+                                        description={t(
+                                          "modelPicker.noResults.description"
+                                        )}
+                                      />
+                                    )}
+                                  </Tabs.Content>
+
+                                  <Tabs.Content value={MODEL_TAB_SELF}>
+                                    {filteredSelfHostedProviders.length > 0 ||
+                                    customModelMatched ? (
+                                      <GeneralLayouts.Section
+                                        gap={2}
+                                        padding={2}
+                                      >
+                                        <Text
+                                          font="secondary-body"
+                                          color="text-03"
+                                        >
+                                          {t("modelPicker.cpuEstimateHint")}
+                                        </Text>
+                                        {filteredSelfHostedProviders.map(
+                                          (shProvider) => (
+                                            <ProviderGroup
+                                              key={shProvider.providerName}
+                                              provider={shProvider}
+                                              current={currentModelRef}
+                                              staged={stagedModelRef}
+                                              onSelectModel={(name) =>
+                                                applySelection({
+                                                  model_name: name,
+                                                  model_spec: null,
+                                                  model_provider: null,
+                                                })
+                                              }
+                                              onDeselectModel={() =>
+                                                applySelection(savedSelection)
+                                              }
+                                            />
+                                          )
+                                        )}
+
+                                        {customModelMatched &&
+                                          filteredSelfHostedProviders.length >
+                                            0 && (
+                                            <Divider
+                                              paddingParallel={2}
+                                              paddingPerpendicular={1}
+                                            />
+                                          )}
+                                        {customModelMatched && (
+                                          <CustomModelGroup
+                                            onAddCustomModel={() =>
+                                              customModelModal.toggle(true)
                                             }
                                           />
-                                        </div>
+                                        )}
+                                      </GeneralLayouts.Section>
+                                    ) : (
+                                      <IllustrationContent
+                                        illustration={SvgNoResult}
+                                        title={t(
+                                          "modelPicker.noSelfHostedResults.title"
+                                        )}
+                                        description={t(
+                                          "modelPicker.noResults.description"
+                                        )}
+                                      />
+                                    )}
+                                  </Tabs.Content>
+                                </>
+                              }
+                            >
+                              {viewAllModelsOpen ? (
+                                <div className="pt-1 px-1">
+                                  <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
+                                    <InputTypeIn
+                                      placeholder={t(
+                                        "modelPicker.search.placeholder"
                                       )}
+                                      variant="internal"
+                                      searchIcon
+                                      value={query}
+                                      onChange={(e) => setQuery(e.target.value)}
+                                    />
+                                    <div className="flex flex-row">
+                                      {isModelStaged && (
+                                        <Button
+                                          icon={SvgRevert}
+                                          prominence="internal"
+                                          tooltip={t(
+                                            "modelPicker.revertSelection.tooltip"
+                                          )}
+                                          onClick={() =>
+                                            applySelection(savedSelection)
+                                          }
+                                        />
+                                      )}
+                                      <Button
+                                        prominence="internal"
+                                        onClick={() =>
+                                          setViewAllModelsOpen(false)
+                                        }
+                                        rightIcon={SvgFold}
+                                      >
+                                        {t("modelPicker.foldModels.label")}
+                                      </Button>
                                     </div>
                                   </div>
-                                )}
-                              </Card>
-                            </Tabs>
-                          )
-                        )}
 
-                        {!NEXT_PUBLIC_CLOUD_ENABLED && (
-                          <Card
-                            border="solid"
-                            borderColor={quantizationCardBorder}
-                            rounding={4}
-                          >
-                            <InputHorizontal
-                              title={t("vectorQuantization.title")}
-                              description={t("vectorQuantization.description")}
-                              withLabel
-                            >
-                              <InputSingleSelectField
-                                name="vector_quantization"
-                                defaultOption={VectorQuantization.NONE}
-                                placeholder={tInputSelect(
-                                  "placeholder.fallback"
-                                )}
-                                options={[
-                                  {
-                                    value: VectorQuantization.NONE,
-                                    title: t("vectorQuantization.none.label"),
-                                    description: t(
-                                      "vectorQuantization.none.description"
-                                    ),
-                                  },
-                                  {
-                                    value: VectorQuantization.SCALAR_7_BIT,
-                                    title: t(
-                                      "vectorQuantization.scalar7Bit.label"
-                                    ),
-                                    description: t(
-                                      "vectorQuantization.scalar7Bit.description"
-                                    ),
-                                  },
-                                  {
-                                    value: VectorQuantization.SCALAR_1_BIT,
-                                    title: t(
-                                      "vectorQuantization.scalar1Bit.label"
-                                    ),
-                                    description: t(
-                                      "vectorQuantization.scalar1Bit.description"
-                                    ),
-                                  },
-                                ]}
-                              />
-                            </InputHorizontal>
-                          </Card>
-                        )}
-                      </GeneralLayouts.Section>
-
-                      <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-                      {/* ── Retrieval Optimization ── */}
-                      <GeneralLayouts.Section
-                        gap={3}
-                        height="fit"
-                        alignItems="stretch"
-                        justifyContent="start"
-                      >
-                        <Content
-                          title={t("retrieval.title")}
-                          description={t("retrieval.description")}
-                          sizePreset="main-content"
-                          variant="section"
-                        />
-
-                        <CloudDisabled
-                          disabled={!isReindexing}
-                          tooltip={t("multipass.disabledTooltip")}
-                        >
-                          <Card border="solid" rounding={4}>
-                            <InputHorizontal
-                              title={t("multipass.title")}
-                              description={t("multipass.description")}
-                              tag={{
-                                title: t("multipass.tag.label"),
-                                color: "gray",
-                              }}
-                              withLabel
-                            >
-                              <InputSwitch
-                                checked={
-                                  searchSettings?.multipass_indexing ?? false
-                                }
-                                disabled
-                              />
-                            </InputHorizontal>
-                          </Card>
-                        </CloudDisabled>
-
-                        <CloudDisabled
-                          disabled={!hasAnyLlm && !isReindexing}
-                          tooltip={
-                            !hasAnyLlm
-                              ? markdown(
-                                  t("contextualRetrieval.noModelsTooltip", {
-                                    link: ADMIN_ROUTES.LLM_MODELS.path,
-                                  })
-                                )
-                              : undefined
-                          }
-                        >
-                          <Card
-                            border="solid"
-                            borderColor={contextualCardBorder}
-                            rounding={4}
-                          >
-                            <GeneralLayouts.Section
-                              width="full"
-                              alignItems="stretch"
-                            >
-                              <InputHorizontal
-                                title={t("contextualRetrieval.title")}
-                                description={t(
-                                  "contextualRetrieval.description"
-                                )}
-                                withLabel
-                              >
-                                <SwitchField name="enable_contextual_rag" />
-                              </InputHorizontal>
-
-                              <Disabled
-                                disabled={
-                                  !values.enable_contextual_rag && !isReindexing
-                                }
-                                tooltip={t("contextualModel.disabledTooltip")}
-                              >
-                                <InputHorizontal
-                                  title={t("contextualModel.title")}
-                                  description={t("contextualModel.description")}
-                                  disabled={!values.enable_contextual_rag}
-                                  withLabel
-                                >
-                                  <SimpleModelSelector
-                                    providers={filterModelConfigurations(
-                                      llmProviders ?? [],
-                                      {
-                                        keep: values.contextual_rag_model_configuration_id,
-                                      }
-                                    )}
-                                    value={
-                                      values.contextual_rag_model_configuration_id
-                                    }
-                                    disabled={!values.enable_contextual_rag}
-                                    grouped={!settings.hide_provider_grouping}
-                                    onChange={(modelConfigurationId) =>
-                                      void setFieldValue(
-                                        "contextual_rag_model_configuration_id",
-                                        modelConfigurationId
-                                      )
-                                    }
-                                  />
-                                </InputHorizontal>
-                              </Disabled>
-                            </GeneralLayouts.Section>
-                          </Card>
-                        </CloudDisabled>
-                      </GeneralLayouts.Section>
-
-                      <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-                      {/* ── Image Processing ── */}
-                      <GeneralLayouts.Section
-                        gap={3}
-                        height="fit"
-                        alignItems="stretch"
-                        justifyContent="start"
-                      >
-                        <Content
-                          title={t("imageProcessing.title")}
-                          description={t("imageProcessing.description")}
-                          sizePreset="main-content"
-                          variant="section"
-                        />
-
-                        <Disabled
-                          disabled={!hasAnyVisionLlm && !isReindexing}
-                          tooltip={
-                            !hasAnyVisionLlm
-                              ? markdown(
-                                  t("imageProcessing.noVisionModelsTooltip", {
-                                    link: ADMIN_ROUTES.LLM_MODELS.path,
-                                  })
-                                )
-                              : undefined
-                          }
-                        >
-                          <Card
-                            border="solid"
-                            borderColor={imageCardBorder}
-                            rounding={4}
-                          >
-                            <GeneralLayouts.Section
-                              width="full"
-                              alignItems="stretch"
-                            >
-                              <InputHorizontal
-                                title={t("imageExtraction.title")}
-                                description={t("imageExtraction.description")}
-                                withLabel
-                              >
-                                <div className="flex flex-col items-end">
-                                  <SwitchField name="image_processing_enabled" />
-                                  {captioningModelMissing && (
-                                    <Content
-                                      icon={SvgAlertTriangle}
-                                      title={t(
-                                        "imageProcessing.noModelSelected"
-                                      )}
-                                      sizePreset="secondary"
-                                      variant="body"
-                                      color="warning"
-                                    />
-                                  )}
+                                  <div className="px-2">
+                                    <Tabs.List>
+                                      <Tabs.Trigger value={MODEL_TAB_CLOUD}>
+                                        {t("modelPicker.cloudTab.label")}
+                                      </Tabs.Trigger>
+                                      <Tabs.Trigger value={MODEL_TAB_SELF}>
+                                        {t("modelPicker.selfHostedTab.label")}
+                                      </Tabs.Trigger>
+                                    </Tabs.List>
+                                  </div>
                                 </div>
-                              </InputHorizontal>
-
-                              <Disabled
-                                disabled={
-                                  !values.image_processing_enabled &&
-                                  !isReindexing
-                                }
-                                tooltip={t(
-                                  "imageProcessing.enableFirstTooltip"
-                                )}
-                              >
-                                <InputHorizontal
-                                  title={t("captioningModel.title")}
-                                  description={t("captioningModel.description")}
-                                  disabled={!values.image_processing_enabled}
-                                  withLabel
+                              ) : (
+                                <div
+                                  className="flex flex-row items-start w-full"
+                                  data-testid="current-embedding-model"
                                 >
-                                  <SimpleModelSelector
-                                    nullable
-                                    providers={filterModelConfigurations(
-                                      llmProviders ?? [],
-                                      {
-                                        imageInput: true,
-                                        keep: values.image_processing_model_configuration_id,
+                                  <GeneralLayouts.Section
+                                    padding={2}
+                                    gap={0}
+                                    alignItems="start"
+                                  >
+                                    <Content
+                                      icon={currentProvider?.icon ?? SvgServer}
+                                      title={currentEmbeddingModel.model_name}
+                                      description={embeddingModelDescription(
+                                        currentRegistryModel,
+                                        t,
+                                        settings.appName
+                                      )}
+                                      tag={
+                                        currentRegistryModel?.legacy
+                                          ? {
+                                              title: t("modelCard.legacy.tag"),
+                                              color: "amber",
+                                            }
+                                          : undefined
                                       }
+                                      sizePreset="main-ui"
+                                      variant="section"
+                                    />
+                                    <div className="flex flex-row items-center gap-2 pt-2 px-6">
+                                      {currentProviderName && (
+                                        <EmbeddingProviderInfo
+                                          providerName={currentProviderName}
+                                        />
+                                      )}
+                                    </div>
+                                    {currentRegistryModel?.legacy && (
+                                      <GeneralLayouts.Section
+                                        alignItems="start"
+                                        width="auto"
+                                        height="fit"
+                                        className="mt-2 mx-6"
+                                      >
+                                        <Text
+                                          font="secondary-body"
+                                          color="text-03"
+                                          as="p"
+                                        >
+                                          {t("currentModel.legacyHint")}
+                                        </Text>
+                                      </GeneralLayouts.Section>
                                     )}
-                                    value={
-                                      values.image_processing_model_configuration_id
-                                    }
-                                    disabled={!values.image_processing_enabled}
-                                    grouped={!settings.hide_provider_grouping}
-                                    onChange={(modelConfigurationId) =>
-                                      void setFieldValue(
-                                        "image_processing_model_configuration_id",
-                                        modelConfigurationId
-                                      )
-                                    }
-                                  />
-                                </InputHorizontal>
-                              </Disabled>
+                                  </GeneralLayouts.Section>
 
-                              <Disabled
-                                disabled={
-                                  !values.image_processing_enabled &&
-                                  !isReindexing
-                                }
-                                tooltip={t(
-                                  "imageProcessing.enableFirstTooltip"
-                                )}
-                              >
-                                <InputHorizontal
-                                  title={t("maxImageSize.title")}
-                                  suffix={t("maxImageSize.suffix")}
-                                  description={t("maxImageSize.description")}
-                                  disabled={!values.image_processing_enabled}
-                                  withLabel
-                                >
-                                  <InputSingleSelect
-                                    value={String(
-                                      values.image_processing_max_size_mb
+                                  <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
+                                    <Button
+                                      prominence="secondary"
+                                      onClick={() => {
+                                        // Open on the tab that holds the
+                                        // staged model, else the current one.
+                                        const focusProviderName =
+                                          stagedModelRef?.providerName ??
+                                          currentProviderName;
+                                        setActiveModelTab(
+                                          focusProviderName &&
+                                            isCloudBased(focusProviderName)
+                                            ? MODEL_TAB_CLOUD
+                                            : MODEL_TAB_SELF
+                                        );
+                                        setViewAllModelsOpen(true);
+                                      }}
+                                    >
+                                      {t("modelPicker.viewAllModels.label")}
+                                    </Button>
+                                    {isCurrentCloudBased && (
+                                      <div className="p-1">
+                                        <Button
+                                          icon={SvgSettings}
+                                          prominence="tertiary"
+                                          size="md"
+                                          onClick={() => editModal.toggle(true)}
+                                        />
+                                      </div>
                                     )}
-                                    onValueChange={(value) =>
-                                      void setFieldValue(
-                                        "image_processing_max_size_mb",
-                                        parseInt(value, 10)
-                                      )
-                                    }
-                                    disabled={!values.image_processing_enabled}
-                                    defaultOption="20"
-                                    placeholder={tInputSelect(
-                                      "placeholder.fallback"
-                                    )}
-                                    options={MAX_IMAGE_SIZE_OPTIONS.map(
-                                      (size) => ({
-                                        value: size,
-                                        title: size,
-                                      })
-                                    )}
-                                  />
-                                </InputHorizontal>
-                              </Disabled>
-                            </GeneralLayouts.Section>
-                          </Card>
-                        </Disabled>
-                      </GeneralLayouts.Section>
+                                  </div>
+                                </div>
+                              )}
+                            </Card>
+                          </Tabs>
+                        )
+                      )}
+
+                      {!NEXT_PUBLIC_CLOUD_ENABLED && (
+                        <Card
+                          border="solid"
+                          borderColor={quantizationCardBorder}
+                          rounding={4}
+                        >
+                          <InputHorizontal
+                            title={t("vectorQuantization.title")}
+                            description={t("vectorQuantization.description")}
+                            withLabel
+                            fillInput
+                          >
+                            <InputSingleSelectField
+                              name="vector_quantization"
+                              defaultOption={VectorQuantization.NONE}
+                              placeholder={tInputSelect("placeholder.fallback")}
+                              options={[
+                                {
+                                  value: VectorQuantization.NONE,
+                                  title: t("vectorQuantization.none.label"),
+                                  description: t(
+                                    "vectorQuantization.none.description"
+                                  ),
+                                },
+                                {
+                                  value: VectorQuantization.SCALAR_7_BIT,
+                                  title: t(
+                                    "vectorQuantization.scalar7Bit.label"
+                                  ),
+                                  description: t(
+                                    "vectorQuantization.scalar7Bit.description"
+                                  ),
+                                },
+                                {
+                                  value: VectorQuantization.SCALAR_1_BIT,
+                                  title: t(
+                                    "vectorQuantization.scalar1Bit.label"
+                                  ),
+                                  description: t(
+                                    "vectorQuantization.scalar1Bit.description"
+                                  ),
+                                },
+                              ]}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      )}
                     </GeneralLayouts.Section>
                   </Disabled>
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <Disabled
+                    disabled={isReindexing}
+                    tooltip={t("reindexing.disabledTooltip")}
+                  >
+                    {/* ── Retrieval Optimization ── */}
+                    <GeneralLayouts.Section
+                      gap={3}
+                      height="fit"
+                      alignItems="stretch"
+                      justifyContent="start"
+                    >
+                      <Content
+                        title={t("retrieval.title")}
+                        description={t("retrieval.description")}
+                        sizePreset="main-content"
+                        variant="section"
+                      />
+
+                      <CloudDisabled
+                        disabled={!isReindexing}
+                        tooltip={t("multipass.disabledTooltip")}
+                      >
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("multipass.title")}
+                            description={t("multipass.description")}
+                            tag={{
+                              title: t("multipass.tag.label"),
+                              color: "gray",
+                            }}
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={
+                                searchSettings?.multipass_indexing ?? false
+                              }
+                              disabled
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </CloudDisabled>
+
+                      <CloudDisabled
+                        disabled={!hasAnyLlm && !isReindexing}
+                        tooltip={
+                          !hasAnyLlm
+                            ? markdown(
+                                t("contextualRetrieval.noModelsTooltip", {
+                                  link: ADMIN_ROUTES.LLM_MODELS.path,
+                                })
+                              )
+                            : undefined
+                        }
+                      >
+                        <Card
+                          border="solid"
+                          borderColor={contextualCardBorder}
+                          rounding={4}
+                        >
+                          <GeneralLayouts.Section
+                            width="full"
+                            alignItems="stretch"
+                          >
+                            <InputHorizontal
+                              title={t("contextualRetrieval.title")}
+                              description={t("contextualRetrieval.description")}
+                              withLabel
+                            >
+                              <InputSwitchField name="enable_contextual_rag" />
+                            </InputHorizontal>
+
+                            <Disabled
+                              disabled={
+                                !values.enable_contextual_rag && !isReindexing
+                              }
+                              tooltip={t("contextualModel.disabledTooltip")}
+                            >
+                              <InputHorizontal
+                                title={t("contextualModel.title")}
+                                description={t("contextualModel.description")}
+                                disabled={!values.enable_contextual_rag}
+                                withLabel
+                                fillInput
+                              >
+                                <SimpleModelSelector
+                                  providers={filterModelConfigurations(
+                                    llmProviders ?? [],
+                                    {
+                                      keep: values.contextual_rag_model_configuration_id,
+                                    }
+                                  )}
+                                  value={
+                                    values.contextual_rag_model_configuration_id
+                                  }
+                                  disabled={!values.enable_contextual_rag}
+                                  grouped={!settings.hide_provider_grouping}
+                                  onChange={(modelConfigurationId) =>
+                                    void setFieldValue(
+                                      "contextual_rag_model_configuration_id",
+                                      modelConfigurationId
+                                    )
+                                  }
+                                />
+                              </InputHorizontal>
+                            </Disabled>
+                          </GeneralLayouts.Section>
+                        </Card>
+                      </CloudDisabled>
+                    </GeneralLayouts.Section>
+                  </Disabled>
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <Disabled
+                    disabled={isReindexing}
+                    tooltip={t("reindexing.disabledTooltip")}
+                  >
+                    {/* ── Image Processing ── */}
+                    <GeneralLayouts.Section
+                      gap={3}
+                      height="fit"
+                      alignItems="stretch"
+                      justifyContent="start"
+                    >
+                      <Content
+                        title={t("imageProcessing.title")}
+                        description={t("imageProcessing.description")}
+                        sizePreset="main-content"
+                        variant="section"
+                      />
+
+                      <Disabled
+                        disabled={!hasAnyVisionLlm && !isReindexing}
+                        tooltip={
+                          !hasAnyVisionLlm
+                            ? markdown(
+                                t("imageProcessing.noVisionModelsTooltip", {
+                                  link: ADMIN_ROUTES.LLM_MODELS.path,
+                                })
+                              )
+                            : undefined
+                        }
+                      >
+                        <Card
+                          border="solid"
+                          borderColor={imageCardBorder}
+                          rounding={4}
+                        >
+                          <GeneralLayouts.Section
+                            width="full"
+                            alignItems="stretch"
+                          >
+                            <InputHorizontal
+                              title={t("imageExtraction.title")}
+                              description={t("imageExtraction.description")}
+                              withLabel
+                            >
+                              <div className="flex flex-col items-end">
+                                <InputSwitchField name="image_processing_enabled" />
+                                {captioningModelMissing && (
+                                  <Content
+                                    icon={SvgAlertTriangle}
+                                    title={t("imageProcessing.noModelSelected")}
+                                    sizePreset="secondary"
+                                    variant="body"
+                                    color="warning"
+                                  />
+                                )}
+                              </div>
+                            </InputHorizontal>
+
+                            <Disabled
+                              disabled={
+                                !values.image_processing_enabled &&
+                                !isReindexing
+                              }
+                              tooltip={t("imageProcessing.enableFirstTooltip")}
+                            >
+                              <InputHorizontal
+                                title={t("captioningModel.title")}
+                                description={t("captioningModel.description")}
+                                disabled={!values.image_processing_enabled}
+                                withLabel
+                                fillInput
+                              >
+                                <SimpleModelSelector
+                                  nullable
+                                  providers={filterModelConfigurations(
+                                    llmProviders ?? [],
+                                    {
+                                      imageInput: true,
+                                      keep: values.image_processing_model_configuration_id,
+                                    }
+                                  )}
+                                  value={
+                                    values.image_processing_model_configuration_id
+                                  }
+                                  disabled={!values.image_processing_enabled}
+                                  grouped={!settings.hide_provider_grouping}
+                                  onChange={(modelConfigurationId) =>
+                                    void setFieldValue(
+                                      "image_processing_model_configuration_id",
+                                      modelConfigurationId
+                                    )
+                                  }
+                                />
+                              </InputHorizontal>
+                            </Disabled>
+                          </GeneralLayouts.Section>
+                        </Card>
+                      </Disabled>
+                    </GeneralLayouts.Section>
+                  </Disabled>
+
+                  {/* Outside the re-index lock: the limit matters most during a re-index. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <EmbeddingRateLimitCard />
+
+                  {/* The connector access update runs on its own and its mode is
+                      rarely changed, so it starts folded. Also outside the lock:
+                      the mode saves by itself, not through the banner. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <Collapsible
+                    defaultOpen={false}
+                    title={t("advanced.title")}
+                    description={t("advanced.description", {
+                      appName: settings.appName,
+                    })}
+                  >
+                    <CCPairIdsBackfillCard />
+                  </Collapsible>
                 </>
               );
             }}

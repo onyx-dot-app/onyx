@@ -115,7 +115,6 @@ def _make_chunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=None,
-        title_vector=None,
         content=content,
         content_vector=list(_PLACEHOLDER_VECTOR),
         source_type=DocumentSource.FILE.value,

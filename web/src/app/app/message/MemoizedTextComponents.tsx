@@ -3,11 +3,12 @@ import type { ExtraProps } from "react-markdown";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
-import { SubQuestionDetail, CitationMap } from "../interfaces";
+import { SubQuestionDetail, CitationMap } from "@/app/app/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { ProjectFile } from "@/lib/projects/types";
 import { BlinkingBar } from "./BlinkingBar";
-import Text from "@/refresh-components/texts/Text";
+import { Text, type TextColor, type TextFont } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import {
   documentToSourceInfo,
@@ -16,7 +17,24 @@ import {
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
+import { extractTextFromReactNode } from "@/app/app/message/codeUtils";
 import { useTranslations } from "next-intl";
+
+const CITATION_LABEL_PATTERN: RegExp = /^\[(D|Q)?\d+\]$/;
+
+// Returns the label only when it has no nested elements (e.g. bold).
+function getPlainLabel(children: React.ReactNode): string | null {
+  if (typeof children === "string" || typeof children === "number") {
+    return String(children);
+  }
+  if (
+    Array.isArray(children) &&
+    children.every((c) => typeof c === "string" || typeof c === "number")
+  ) {
+    return children.join("");
+  }
+  return null;
+}
 
 interface DocumentCardProps {
   document: OnyxDocument;
@@ -165,9 +183,17 @@ export const MemoizedLink = memo(
       }
     }, [document, updatePresentingDocument, question, openQuestion]);
 
+    const url: string | undefined = ensureHrefProtocol(href);
+    const isChatFile: boolean = !!url?.includes("/api/chat/file/");
+    const plainLabel: string | null = getPlainLabel(value);
+
     if (value?.toString().startsWith("*")) {
       return <BlinkingBar addMargin />;
-    } else if (value?.toString().startsWith("[")) {
+    } else if (
+      !isChatFile &&
+      plainLabel !== null &&
+      CITATION_LABEL_PATTERN.test(plainLabel)
+    ) {
       const sourceInfo = documentSourceInfo || questionSourceInfo;
       if (!sourceInfo) {
         return <>{rest.children}</>;
@@ -189,13 +215,11 @@ export const MemoizedLink = memo(
       );
     }
 
-    const url = ensureHrefProtocol(href);
-
-    // Check if the link is to a file on the backend
-    const isChatFile = url?.includes("/api/chat/file/");
     if (isChatFile && updatePresentingDocument) {
-      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
-      const filename = value?.toString() || "download";
+      const fileId: string =
+        url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename: string =
+        extractTextFromReactNode(value).trim() || "download";
       return (
         <button
           type="button"
@@ -207,7 +231,7 @@ export const MemoizedLink = memo(
           }
           // `inline`: a button is inline-block by default, which would break
           // the surrounding prose differently than the <a> it replaces.
-          className="inline cursor-pointer text-link hover:text-link-hover"
+          className="inline cursor-pointer underline underline-offset-2"
         >
           {rest.children}
         </button>
@@ -219,7 +243,7 @@ export const MemoizedLink = memo(
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="cursor-pointer text-link hover:text-link-hover"
+        className="cursor-pointer underline underline-offset-2"
       >
         {rest.children}
       </a>
@@ -228,7 +252,8 @@ export const MemoizedLink = memo(
 );
 
 interface MemoizedParagraphProps {
-  className?: string;
+  font?: TextFont;
+  color?: TextColor;
   // Stamped per-paragraph by the rehypeDirection plugin so RTL and LTR
   // paragraphs align independently. Unstamped paragraphs inherit their
   // container's direction.
@@ -237,13 +262,14 @@ interface MemoizedParagraphProps {
 }
 
 export const MemoizedParagraph = memo(function MemoizedParagraph({
-  className,
+  font = "main-content-body",
+  color = "text-04",
   dir,
   children,
 }: MemoizedParagraphProps) {
   return (
-    <Text as="p" dir={dir} mainContentBody text04 className={className}>
-      {children}
+    <Text as="p" dir={dir} font={font} color={color}>
+      {richNodes(children)}
     </Text>
   );
 });

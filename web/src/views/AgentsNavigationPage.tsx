@@ -5,15 +5,14 @@ import { useTranslations } from "next-intl";
 import AgentCard from "@/sections/agents/AgentCard";
 import { AgentViewer } from "@/lib/agents/components";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
-import Text from "@/refresh-components/texts/Text";
-import { SettingsLayouts } from "@opal/layouts";
+import { Section, SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { Button, InputTypeIn, Tabs } from "@opal/components";
+import { Button, InputTypeIn, Tabs, Text } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
@@ -36,11 +35,11 @@ function AgentsSection({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Text as="p" headingH3>
+        <Text as="p" font="heading-h3" color="text-05">
           {title}
         </Text>
-        <Text as="p" secondaryBody text03>
-          {description}
+        <Text as="p" font="secondary-body" color="text-03">
+          {description ?? ""}
         </Text>
       </div>
       <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -174,13 +173,13 @@ export default function AgentsNavigationPage() {
       {/* Agents List */}
       <SettingsLayouts.Body>
         {agentCount === 0 ? (
-          <Text
-            as="p"
-            className="w-full h-full flex flex-col items-center justify-center py-12"
-            text03
-          >
-            {t("navigation.empty.description")}
-          </Text>
+          <div className="w-full h-full py-12">
+            <Section>
+              <Text as="p" color="text-03">
+                {t("navigation.empty.description")}
+              </Text>
+            </Section>
+          </div>
         ) : (
           <>
             <AgentsSection

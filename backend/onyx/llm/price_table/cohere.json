@@ -3,6 +3,10 @@
   "models": {
     "c4ai-aya-expanse-32b": {
       "attachment": false,
+      "cost": {
+        "input": 0.5,
+        "output": 1.5
+      },
       "limit": {
         "context": 128000,
         "output": 4000
@@ -19,27 +23,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-10-24",
-      "temperature": true,
-      "tool_call": false
-    },
-    "c4ai-aya-expanse-8b": {
-      "attachment": false,
-      "limit": {
-        "context": 8000,
-        "output": 4000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Aya Expanse 8B",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2024-10-24",
+      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -62,28 +46,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-04",
-      "temperature": true,
-      "tool_call": false
-    },
-    "c4ai-aya-vision-8b": {
-      "attachment": true,
-      "limit": {
-        "context": 16000,
-        "output": 4000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Aya Vision 8B",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-03-04",
+      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -110,6 +73,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-13",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -164,6 +128,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-21",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -190,6 +155,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-08-28",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -217,6 +183,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-31",
+      "structured_output": true,
       "temperature": true,
       "tool_call": false
     },
@@ -243,6 +210,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-08-30",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -269,6 +237,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-08-30",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -294,7 +263,8 @@
       "name": "Command R7B",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2024-12-02",
+      "release_date": "2024-12-13",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -321,6 +291,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-02-27",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -380,6 +351,28 @@
       "mode": "embedding",
       "name": "embed-v4.0"
     },
+    "embed-v5.0-fast": {
+      "cost": {
+        "input": 0.08,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "embed-v5.0-fast"
+    },
+    "embed-v5.0-pro": {
+      "cost": {
+        "input": 0.12,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "embed-v5.0-pro"
+    },
     "north-mini-code-1-0": {
       "attachment": false,
       "cost": {
@@ -403,9 +396,36 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-09",
-      "structured_output": true,
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
+    },
+    "north-small-translate-09-2026": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "north",
+      "limit": {
+        "context": 32768,
+        "output": 16000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "North Small Translate",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-09-09",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": false
     },
     "parse-v5.0": {
       "mode": "ocr",
@@ -470,6 +490,94 @@
       },
       "mode": "rerank",
       "name": "rerank-v4.0-pro"
+    },
+    "tiny-aya-earth": {
+      "attachment": false,
+      "limit": {
+        "context": 8000,
+        "output": 8000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Tiny Aya Earth",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-02-17",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "tiny-aya-fire": {
+      "attachment": false,
+      "limit": {
+        "context": 8000,
+        "output": 8000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Tiny Aya Fire",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-02-17",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "tiny-aya-global": {
+      "attachment": false,
+      "limit": {
+        "context": 8000,
+        "output": 8000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Tiny Aya Global",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-02-17",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "tiny-aya-water": {
+      "attachment": false,
+      "limit": {
+        "context": 8000,
+        "output": 8000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Tiny Aya Water",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-02-17",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
     }
   },
   "models_dev_providers": [

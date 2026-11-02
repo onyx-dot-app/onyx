@@ -9,10 +9,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { InputSwitch } from "@opal/components";
+import { InputSwitch, Text } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import {
   DiscordChannelConfig,
@@ -99,7 +98,7 @@ export function DiscordChannelsTable({
                   width="fit"
                 >
                   <ChannelIcon width={16} height={16} />
-                  <Text text04 mainUiBody>
+                  <Text font="main-ui-body" color="text-04">
                     {channel.channel_name}
                   </Text>
                 </Section>

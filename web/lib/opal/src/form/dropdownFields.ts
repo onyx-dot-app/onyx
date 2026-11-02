@@ -2,10 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useField } from "formik";
-import {
-  flattenSections,
-  normalizeSections,
-} from "@opal/components/inputs/dropdowns/shared";
+import { flattenOptions } from "@opal/components/inputs/dropdowns/utils";
 import type {
   SelectOption,
   SelectOptions,
@@ -56,10 +53,7 @@ export function useMultiDropdownField(
   const selected = useMemo(() => field.value ?? [], [field.value]);
   const [filter, setFilter] = useState("");
 
-  const flatOptions = useMemo(
-    () => flattenSections(normalizeSections(options)),
-    [options]
-  );
+  const flatOptions = useMemo(() => flattenOptions(options), [options]);
   const tags = useMemo<TagItem[]>(
     () =>
       selected.map((value) => {

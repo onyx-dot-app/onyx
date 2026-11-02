@@ -46,7 +46,6 @@ def _make_chunk(
         chunk_context="",
         contextual_rag_reserved_tokens=0,
         embeddings=ChunkEmbedding(full_embedding=[0.1] * 10, mini_chunk_embeddings=[]),
-        title_embedding=[0.1] * 10,
         tenant_id="test_tenant",
         access=access,
         document_sets=set(),

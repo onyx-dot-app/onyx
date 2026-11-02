@@ -3,6 +3,7 @@ import { ProjectFilesSection } from "@tests/e2e/pages/ProjectFilesSection";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+import type { CategorizedFiles } from "@/lib/projects/types";
 
 const PROJECT_NAME = "E2E-PROJECT-FILES-VISUAL";
 const LONG_FILE_NAME =
@@ -27,7 +28,7 @@ async function uploadFileToProject(
   targetProjectId: number,
   fileName: string,
   content: string
-): Promise<void> {
+): Promise<string[]> {
   const response = await page.request.post("/api/user/projects/file/upload", {
     multipart: {
       project_id: String(targetProjectId),
@@ -40,6 +41,9 @@ async function uploadFileToProject(
   });
 
   expect(response.ok()).toBeTruthy();
+  const body: CategorizedFiles = await response.json();
+  expect(body.rejected_files).toEqual([]);
+  return body.user_files.map((file) => file.id);
 }
 
 async function getElementGeometryInCard(
@@ -98,7 +102,14 @@ test.describe("Project Files visual regression", () => {
     const client = new OnyxApiClient(page.request);
 
     projectId = await client.createProject(PROJECT_NAME);
-    await uploadFileToProject(page, projectId, LONG_FILE_NAME, FILE_CONTENT);
+    const fileIds = await uploadFileToProject(
+      page,
+      projectId,
+      LONG_FILE_NAME,
+      FILE_CONTENT
+    );
+    // the page never re-polls a file it did not upload, so it must load after processing
+    await client.waitForUserFilesCompleted(fileIds);
 
     await context.close();
   });

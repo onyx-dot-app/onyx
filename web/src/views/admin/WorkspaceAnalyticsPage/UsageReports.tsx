@@ -8,23 +8,24 @@ import useSWR from "swr";
 import {
   Button,
   Calendar,
-  LineItemButton,
+  Dropdown,
   MessageCard,
   Pagination,
-  Popover,
   Text,
+  type DropdownMenuItem,
+  type DropdownView,
 } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
 import {
   SvgCalendar,
+  SvgChevronLeft,
   SvgDownload,
   SvgDownloadCloud,
   SvgSpreadsheetFile,
   SvgX,
 } from "@opal/icons";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UsageReport } from "@/app/ee/admin/performance/usage/types";
@@ -137,28 +138,6 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
   );
 }
 
-interface PeriodMenuItemProps {
-  title: string | RichStr;
-  onClick: () => void;
-  icon?: IconFunctionComponent;
-}
-
-function PeriodMenuItem({ title, onClick, icon }: PeriodMenuItemProps) {
-  return (
-    <LineItemButton
-      title={title}
-      onClick={onClick}
-      {...(icon && { icon })}
-      rounding={3}
-      selectVariant="select-heavy"
-      sizePreset="main-ui"
-      state="empty"
-      variant="section"
-      width="full"
-    />
-  );
-}
-
 interface GenerateReportMenuProps {
   disabled: boolean;
   pending: boolean;
@@ -172,7 +151,7 @@ function GenerateReportMenu({
 }: GenerateReportMenuProps) {
   const t = useTranslations("admin.analytics");
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"presets" | "calendar">("presets");
+  const calendarRef = useRef<HTMLDivElement>(null);
   const [pendingStart, setPendingStart] = useState<Date | undefined>(undefined);
   const [draftRange, setDraftRange] = useState<
     { from: Date; to?: Date } | undefined
@@ -187,101 +166,138 @@ function GenerateReportMenu({
   ];
 
   function reset() {
-    setView("presets");
     setPendingStart(undefined);
     setDraftRange(undefined);
   }
 
+  // The custom page: a way back, then the calendar as one row of its own.
+  const calendarView: DropdownView = {
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        icon: SvgChevronLeft,
+        title: t("reports.period.custom.label"),
+        onSelect: (views) => {
+          reset();
+          views.pop();
+        },
+      },
+      {
+        kind: "custom",
+        id: "calendar",
+        keepOpen: true,
+        // ArrowRight steps into the calendar; its days take the keyboard
+        // from there.
+        onSecondary: () =>
+          calendarRef.current?.querySelector("button")?.focus(),
+        render: ({ props }) => (
+          <div
+            {...props}
+            role="menuitem"
+            tabIndex={-1}
+            ref={calendarRef}
+            // Escape from a focused day closes the list.
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setOpen(false);
+                reset();
+              }
+            }}
+          >
+            <Section
+              flexDirection="column"
+              justifyContent="start"
+              alignItems="stretch"
+              gap={0.25}
+              padding={0.5}
+              width="full"
+              height="fit"
+            >
+              <Text font="secondary-body" color="text-03">
+                {pendingStart
+                  ? t("reports.calendar.pickEnd.label")
+                  : t("reports.calendar.pickStart.label")}
+              </Text>
+              <Calendar
+                mode="range"
+                selected={draftRange}
+                onDayClick={(day) => {
+                  if (!pendingStart) {
+                    setDraftRange({ from: day });
+                    setPendingStart(day);
+                    return;
+                  }
+                  const from = day < pendingStart ? day : pendingStart;
+                  const to = day < pendingStart ? pendingStart : day;
+                  onGenerate({
+                    label: `${format(from, "MMM d, y")} – ${format(to, "MMM d, y")}`,
+                    range: { from, to },
+                  });
+                  setOpen(false);
+                  reset();
+                }}
+                numberOfMonths={1}
+                disabled={(date) => date > new Date()}
+              />
+            </Section>
+          </div>
+        ),
+      },
+    ],
+  };
+  const items: DropdownMenuItem[] = [
+    ...presetDays.map(
+      (preset): DropdownMenuItem => ({
+        kind: "action",
+        id: `preset-${preset.days}`,
+        title: preset.label,
+        onSelect: () => onGenerate(presetPeriod(preset.label, preset.days)),
+      })
+    ),
+    {
+      kind: "action",
+      id: "all-time",
+      title: allTimeLabel,
+      onSelect: () => onGenerate({ label: allTimeLabel }),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "custom",
+          icon: SvgCalendar,
+          title: t("reports.period.custom.label"),
+          onSelect: (views) => views.push("calendar"),
+        },
+      ],
+    },
+  ];
+
   return (
-    <Popover
+    <Dropdown
+      width={80}
+      align="end"
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
         if (!nextOpen) reset();
       }}
     >
-      <Popover.Trigger asChild>
+      <Dropdown.Trigger asChild>
         <Button icon={SvgDownloadCloud} disabled={disabled}>
           {pending
             ? t("reports.generateButton.pendingLabel")
             : t("reports.generateButton.label")}
         </Button>
-      </Popover.Trigger>
-      <Popover.Content
-        align="end"
-        side="bottom"
-        width={view === "presets" ? "lg" : "fit"}
-      >
-        {view === "presets" ? (
-          // Children must stay a flat array: Popover.Menu filters over it and
-          // renders each `null` as a divider.
-          <Popover.Menu>
-            {[
-              ...presetDays.map((preset) => (
-                <Popover.Close asChild key={preset.label}>
-                  <PeriodMenuItem
-                    title={preset.label}
-                    onClick={() =>
-                      onGenerate(presetPeriod(preset.label, preset.days))
-                    }
-                  />
-                </Popover.Close>
-              )),
-              <Popover.Close asChild key="all-time">
-                <PeriodMenuItem
-                  title={allTimeLabel}
-                  onClick={() => onGenerate({ label: allTimeLabel })}
-                />
-              </Popover.Close>,
-              null,
-              <PeriodMenuItem
-                key="custom"
-                icon={SvgCalendar}
-                title={t("reports.period.custom.label")}
-                onClick={() => setView("calendar")}
-              />,
-            ]}
-          </Popover.Menu>
-        ) : (
-          <Section
-            flexDirection="column"
-            justifyContent="start"
-            alignItems="stretch"
-            gap={0.25}
-            padding={0.5}
-            width="full"
-            height="fit"
-          >
-            <Text font="secondary-body" color="text-03">
-              {pendingStart
-                ? t("reports.calendar.pickEnd.label")
-                : t("reports.calendar.pickStart.label")}
-            </Text>
-            <Calendar
-              mode="range"
-              selected={draftRange}
-              onDayClick={(day) => {
-                if (!pendingStart) {
-                  setDraftRange({ from: day });
-                  setPendingStart(day);
-                  return;
-                }
-                const from = day < pendingStart ? day : pendingStart;
-                const to = day < pendingStart ? pendingStart : day;
-                onGenerate({
-                  label: `${format(from, "MMM d, y")} – ${format(to, "MMM d, y")}`,
-                  range: { from, to },
-                });
-                setOpen(false);
-                reset();
-              }}
-              numberOfMonths={1}
-              disabled={(date) => date > new Date()}
-            />
-          </Section>
-        )}
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={t("reports.generateButton.label")}
+        items={items}
+        views={{ calendar: calendarView }}
+      />
+    </Dropdown>
   );
 }
 

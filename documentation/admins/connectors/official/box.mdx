@@ -1,0 +1,206 @@
+---
+title: "Box"
+description: "Index files and web links from Box"
+---
+
+The Box connector indexes files that a Box service account or managed user can access.
+You can index everything visible to that identity or limit indexing to specific folders.
+
+## How it works
+
+| Content     | Behavior                                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------------- |
+| Files       | Onyx extracts and indexes supported document types, their Box links, owners, timestamps, and folder paths.          |
+| Folders     | Onyx preserves the folder hierarchy for browsing and filtering.                                                     |
+| Web links   | Optional. Onyx indexes the bookmark name, description, and destination URL; it does not crawl the destination page. |
+| Permissions | Optional on Onyx Cloud and Enterprise Edition. **Sync with Box** mirrors Box owners, collaborations, groups, and shared links. |
+
+On each refresh, the connector recursively lists every folder in its configured scope,
+then downloads and processes only files and web links modified during the indexing window. For a large Box tree,
+select specific folders and choose a refresh frequency that fits your Box API capacity.
+
+## Before you begin
+
+You need:
+
+- Access to the [Box Developer Console](https://app.box.com/developers/console)
+- A Box Admin or Co-Admin who can authorize a server-authenticated Platform App
+- An Onyx administrator account
+- The email address of a Box managed user if you plan to index as that user
+
+<Note>
+  A regular Box Individual account does not provide the enterprise features required for this setup.
+  Use a Box enterprise account, developer account, or developer sandbox.
+</Note>
+
+## Choose the Box content identity
+
+The connector can access Box content in either of these ways:
+
+| Identity                | When to use it                                                                | Box preparation                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Managed user**        | Index the files and folders visible in an existing user's **All Files** view. | Enter the user's email in Onyx and enable **Generate user access tokens** for the Box app.               |
+| **App service account** | Index only content deliberately shared with the integration.                  | Leave the user email blank and add the app's service account as a collaborator on every starting folder. |
+
+Folder ID `0` means the root folder of the selected content identity.
+It is not a global root containing every user's private Box files.
+
+## Configure Box
+
+<Steps>
+  <Step title="Create a Platform App">
+    In the [Box Developer Console](https://app.box.com/developers/console), select **Platform Apps → New App**.
+    Create a **Custom App** that uses **Server Authentication (Client Credentials Grant)**. Give it a recognizable name,
+    such as `Onyx Connector`.
+  </Step>
+
+  <Step title="Set the access level and scopes">
+    On the app's **Configuration** tab, set **App Access Level** to **App + Enterprise Access**.
+
+    Enable scopes according to the features you will use:
+
+    | Box setting | Required when |
+    | --- | --- |
+    | **Read all files and folders stored in Box** | Always |
+    | **Manage users** | Using a managed user email or **Sync with Box** |
+    | **Manage groups** | Using **Sync with Box** |
+
+    <Note>
+      These scopes allow the app to call the required APIs.
+      The selected service account or managed user still must be able to access each file and folder that you want Onyx
+      to index.
+    </Note>
+  </Step>
+
+  <Step title="Enable managed-user access">
+    If you will enter a managed user's email in Onyx,
+    enable **Generate user access tokens** under the app's advanced or additional configuration.
+    You can leave this disabled when using only the app service account.
+  </Step>
+
+  <Step title="Save and authorize the app">
+    Save the configuration. Authorize the app from the Developer Console,
+    or submit it for authorization to a Box Admin or Co-Admin.
+
+    An admin can also authorize it from **Admin Console → Integrations → Platform Apps Manager → Server Authentication
+    Apps** by adding the app's Client ID.
+
+    <Warning>
+      Box authorization captures the app configuration at that moment. If you later change its scopes or access level,
+      an admin must reauthorize the app before the changes take effect.
+    </Warning>
+  </Step>
+
+  <Step title="Copy the credentials">
+    From the app's settings, copy the **Client ID**, **Client Secret**, and **Enterprise ID**.
+
+    Box requires two-factor authentication on your account before it reveals the client secret.
+    Treat the secret as sensitive and do not place it in source control.
+  </Step>
+</Steps>
+
+For more detail on these Box settings,
+see Box's [Client Credentials Grant setup
+guide](https://developer.box.com/guides/authentication/client-credentials/client-credentials-setup/)
+and [Platform App approval guide](https://developer.box.com/guides/authorization/platform-app-approval/).
+
+## Configure Onyx
+
+<Steps>
+  <Step title="Connect a Box account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Box**. Under **Authentication Account**,
+    select **New Box Account** and enter the values copied from Box:
+
+    | Onyx field | Value |
+    | --- | --- |
+    | **Box Client ID** | The Platform App's Client ID |
+    | **Box Client Secret** | The Platform App's Client Secret |
+    | **Box Enterprise ID** | Your Box enterprise ID |
+    | **Box User Email** (optional) | The exact login email of a managed user to impersonate, or blank to use the app service account |
+  </Step>
+
+  <Step title="Choose the folders to index">
+    In **Folders**, enter one or more Box folder IDs or full folder URLs,
+    such as `https://app.box.com/folder/123456789`.
+
+    Leave **Folders** empty to index everything visible from the selected identity's root folder.
+    Every configured folder is indexed recursively.
+
+    Under **Advanced**, enable **Include Web Links** if you want Box bookmarks indexed as lightweight documents.
+  </Step>
+
+  <Step title="Choose who can see the files">
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with Box**.
+    **Specific Groups** and **Sync with Box** are available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create and verify">
+    Select **Create Connector**. Then open **Admin Panel → Indexing Status**, select the connector,
+    and confirm its first indexing attempt completes.
+  </Step>
+</Steps>
+
+## Sync with Box
+
+With **Sync with Box**, Onyx maps accepted, read-capable Box collaborations to matching Onyx user emails and Box groups.
+It also handles inherited folder access and shared links:
+
+- A non-password-protected **People with the link** link is treated as public.
+- A **People in your company** link is available to synced users in the Box enterprise.
+- An upload-only collaboration does not grant read access in Onyx.
+- Box login emails must match the users' email addresses in Onyx.
+
+The Box app must have **Manage users** and **Manage groups**,
+and an admin must reauthorize the app after adding those scopes.
+
+Permissions are attached during the first indexing attempt. After that,
+Onyx refreshes document permissions every 30 minutes and Box group membership every 5 minutes.
+Set `BOX_PERMISSION_DOC_SYNC_FREQUENCY` and `BOX_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds) to change them.
+
+<Warning>
+  Review the access type before connecting.
+  Choosing **Everyone in Your Organization** does not preserve Box permissions and can expose indexed content to every
+  Onyx user.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The app is unauthorized or the credentials are rejected">
+    An error such as `unauthorized_client:
+    The "box_subject_type" value is unauthorized for this client_id` means the app is not authorized for enterprise
+    access: set **App Access Level** to **App + Enterprise Access** and have a Box Admin or Co-Admin authorize the app.
+    Also confirm that the Client ID, Client Secret, and Enterprise ID belong to the same Platform App.
+    If any app setting changed, reauthorize it in the Box Admin Console.
+  </Accordion>
+
+  <Accordion title="The managed user cannot be found or authenticated">
+    Enter the user's exact Box login email. Confirm the user is managed by the same enterprise,
+    **App + Enterprise Access** and **Manage users** are enabled, and **Generate user access tokens** is enabled.
+    Reauthorize the app after correcting any setting.
+  </Accordion>
+
+  <Accordion title="A folder is not found or indexes no files">
+    Confirm the folder ID or URL and verify that the selected managed user can open the folder.
+    If you left the user email blank, add the app service account as a collaborator on the folder.
+    An empty service-account root does not include existing enterprise content automatically.
+  </Accordion>
+
+  <Accordion title="Permission sync fails">
+    Confirm **Manage users** and **Manage groups** are enabled and the app was reauthorized afterward.
+    Also confirm you are using Onyx Cloud or Enterprise Edition.
+  </Accordion>
+
+  <Accordion title="Refreshes are slow or use many Box API calls">
+    Each refresh walks the full configured folder tree, with folder contents listed in pages of up to 200 entries.
+    Permission sync makes additional calls for folder and file collaborations, users, and groups.
+    Limit **Folders** to the required subtrees or increase the refresh frequency for very large Box deployments.
+  </Accordion>
+
+  <Accordion title="A file or web link is missing">
+    Confirm the content identity can access the item.
+    Onyx skips unsupported file types and files larger than the configured Box connector size limit,
+    which defaults to 20 MB. Web links require **Include Web Links** and only their bookmark metadata is indexed;
+    the destination page is not fetched.
+  </Accordion>
+</AccordionGroup>

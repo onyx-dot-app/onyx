@@ -9,7 +9,12 @@ export interface ConnectorFileInfo {
 
 export interface ConnectorFilesResponse {
   files: ConnectorFileInfo[];
+  /** Every file of the connector, not just the ones in `files`. */
+  total_items: number;
 }
+
+/** Files per page wherever a connector's file list is listed. */
+export const CONNECTOR_FILES_PAGE_SIZE = 20;
 
 export interface FileUploadResponse {
   file_paths: string[];

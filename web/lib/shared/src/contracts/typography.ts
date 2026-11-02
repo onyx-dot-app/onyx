@@ -53,4 +53,6 @@ export type TextColor =
   | "status-error-05"
   | "status-success-01"
   | "status-success-02"
-  | "status-success-05";
+  | "status-success-05"
+  | "status-warning-05"
+  | "theme-amber-05";

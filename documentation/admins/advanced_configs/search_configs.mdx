@@ -1,0 +1,324 @@
+---
+title: "Index Settings"
+description: "Choose the embedding model and configure how Onyx indexes documents for search"
+icon: "database"
+---
+
+## Overview
+
+**Index Settings** controls how Onyx indexes your documents for search. To open the page,
+go to the **Admin Panel** and select **Index Settings** under **Documents & Knowledge**.
+You must be a member of the **Admin** group.
+
+<Note>
+  Index Settings is available on self-hosted deployments. On Onyx Cloud, Onyx manages the embedding model and the index,
+  and the Admin Panel does not show this page. [Onyx Lite](/deployment/configuration/configuration#onyx-lite)
+  has no search index, so it does not show this page.
+</Note>
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_overview.webp" alt="Top of the Index Settings page with the changes banner, the current embedding model, and vector quantization"/>
+
+## Applying Changes
+
+Onyx does not save a change when you make it. A card with a change gets a colored border,
+and the banner at the top of the page tells you what applying the change will do.
+The [embedding rate limit](#embedding-rate-limit) is an exception: it saves when you leave the field.
+
+<Steps>
+  <Step title="Choose a re-index option">
+    After you change one or more settings, select in the banner how Onyx re-indexes your documents.
+    The table below describes the options.
+  </Step>
+
+  <Step title="Apply the changes">
+    Click **Apply & Re-index**.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_reindex_options.webp" alt="Changes banner with the re-index options, the Revert button, and the Apply & Re-index button"/>
+
+A new embedding model, a new vector quantization, and turning on contextual retrieval need a re-index.
+A re-index builds a new index from the documents that are already in the index.
+Onyx does not fetch the documents from their sources again, but a re-index of a large index can take hours or days.
+
+During a re-index, OpenSearch stores the current index and the new index.
+Make sure that OpenSearch has enough disk space for both. By default,
+Onyx deletes the old index about 24 hours after the re-index is complete.
+
+| Option | What happens |
+| --- | --- |
+| **Re-index All Connectors Then Switch** (default) | Search uses the current index until the re-index is complete. Then Onyx switches to the new index. |
+| **Re-index Active Connectors Then Switch** | The same as the default, but Onyx re-indexes only active connectors. Paused connectors do not move to the new index. |
+| **Switch Before Re-index** | Search uses the new index immediately, so search results are incomplete until the re-index is complete. You cannot cancel a re-index that uses this option. |
+
+<Warning>
+  Onyx deletes the connectors that do not move to the new index, and the documents that they indexed.
+  These are the invalid connectors, and the paused connectors if you select **Re-index Active Connectors Then Switch**.
+  Before the re-index starts, Onyx shows these connectors and asks you to confirm. To continue,
+  click **Delete & Re-index**. To keep a connector, click **Cancel**, resume or fix the connector,
+  and then apply the changes again.
+</Warning>
+
+### Changes Without a Re-index
+
+Some changes do not need a re-index when they are the only change on the page:
+
+- **Image processing**: the banner selects **Do Not Re-index**, and the apply button changes to
+  **Apply without Re-index**. The new settings apply to the documents that Onyx indexes after you save.
+- **Contextual retrieval turned off, or a different Contextual Retrieval LLM**: click
+  **Apply to new and updated documents**. Existing documents keep the context that they have.
+  To rebuild all documents instead, select a re-index option and click **Rebuild all existing documents**.
+
+### Monitoring a Re-index
+
+While a re-index runs, the banner shows its progress. The re-index moves each connector, and the files of each user,
+to the new index. The counts show how many of these items are waiting, in progress, completed, failed, and paused.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_reindex_progress.webp" alt="Re-indexing in progress banner with the item counts, the progress bar, and the Cancel Re-index & Revert button"/>
+
+- Onyx tries a failed item again automatically. If an item fails again and again at the same point,
+  Onyx pauses it.
+- A paused item stops the switch to the new index. Search uses the current index until you resume the item
+  and it completes. With **Switch Before Re-index**,
+  search does not find all the documents of a paused item until you resume it and it completes.
+- If an item failed or paused, click the button next to the counts. **Re-index Attention** shows the items
+  and their errors. Fix the cause of the error, and then click **Resume** to try a paused item again.
+- To stop the re-index, click **Cancel Re-index & Revert**. Search continues to use the current index and its settings,
+  and Onyx discards the re-index progress. Image processing changes that you applied with the re-index stay saved.
+
+Only one re-index can run at a time. While it runs, you cannot change the embedding model, retrieval,
+or image processing settings. You can still change the embedding rate limit.
+
+## Embedding Model
+
+The embedding model converts documents and search queries into vectors.
+Onyx stores the vectors in OpenSearch and uses them for semantic search.
+A better model can make search results more accurate, but it can cost more or need more compute.
+
+The card shows the current model. New deployments start with a self-hosted model that ships with Onyx.
+To change the model:
+
+<Steps>
+  <Step title="Open the model list">
+    Click **View All Models**. The models are on two tabs, **Cloud-based** and **Self-hosted**.
+  </Step>
+
+  <Step title="Select a model">
+    Click **Select Model** on the model. If the model shows **Connect**, connect its provider first.
+    See [Cloud Models](#cloud-models).
+  </Step>
+
+  <Step title="Apply the change">
+    Click **Apply & Re-index** in the banner. See [Applying Changes](#applying-changes).
+  </Step>
+</Steps>
+
+### Cloud Models
+
+Cloud models run on the provider's servers: Cohere, OpenAI, Google, or Voyage.
+Onyx sends your document text and your search queries to the provider to embed them.
+
+To connect a provider, click **Connect** on one of its models, enter the provider's API key, and click **Connect**.
+Onyx tests the key with an embedding request before it saves the key. Then Onyx selects the model.
+
+You cannot disconnect the provider of the current model.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_cloud_models.webp" alt="Cloud-based tab of the model list with Cohere and OpenAI models and their Connect buttons"/>
+
+#### Google Embeddings
+
+Google embedding models use Vertex AI. Google supports two authentication methods:
+
+- **Service Account JSON**: upload the service account's JSON key. Existing Google embedding configurations
+  continue to use this method.
+- **Workload Identity (GKE)**: available on self-hosted Onyx. Onyx uses Application Default Credentials
+  from the pods that make embedding requests, so no JSON key is required.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/google-authentication-methods.jpg" alt="Google embedding authentication menu with Service Account JSON and Workload Identity (GKE) options"/>
+
+For Workload Identity, follow the [GKE deployment and IAM setup](/admins/ai_models/google_ai#workload-identity-gke).
+Grant `roles/aiplatform.user` in the Vertex AI project to every identity used by the API server and embedding workers,
+including document-processing and user-file processing workers.
+Those pods must run on node pools with the GKE Metadata Server enabled. Cloud embeddings are called from these services,
+rather than the self-hosted model server.
+
+In the Google connection form,
+select **Workload Identity (GKE)** and enter the **GCP Project ID** where Vertex AI is enabled.
+This project can differ from the GKE cluster's project.
+Set **Google Cloud Region Name** to a location supported by your embedding model; the default is `global`.
+The Vertex AI location is independent of the cluster's location.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/google-gke-configuration.jpg" alt="Google embedding form with Workload Identity (GKE), an example GCP Project ID, and the global region"/>
+
+Switching from Service Account JSON to Workload Identity removes the stored JSON key.
+
+A successful connection test verifies the API server's credentials;
+indexing also requires the workers to have Vertex AI access.
+
+If the connection or indexing fails, check the pod's Kubernetes service account, its node pool's metadata server,
+and the IAM grant in the configured Vertex AI project. For a linked Google Cloud service account,
+also check the `iam.gke.io/gcp-service-account` annotation and `roles/iam.workloadIdentityUser` binding.
+Ensure the Vertex AI API is enabled and allow time for new IAM grants to propagate.
+Do not set `GOOGLE_APPLICATION_CREDENTIALS` to a JSON key file when you intend to use the GKE pod identity:
+ADC checks that variable before the metadata server.
+
+### Self-hosted Models
+
+Self-hosted models run on Onyx's model servers, so your documents do not leave your deployment.
+Each model shows how many documents it can embed per minute on one CPU core, and how much memory it needs.
+
+<Note>
+  For large document sets, a GPU on the indexing model server makes indexing faster.
+  We recommend a GPU for the models with the **GPU recommended** tag.
+</Note>
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_self_hosted_models.webp" alt="Self-hosted tab of the model list with the current model and other self-hosted models"/>
+
+### Bring Your Own Model or Proxy
+
+To use a model that is not in the list, expand **Advanced: bring your own model or proxy** at the bottom of a tab.
+On the **Cloud-based** tab, click **Add Configuration** for LiteLLM, Azure, or Bifrost. On the **Self-hosted** tab,
+click **Add Custom Model**.
+
+| Option | Use it for | What you enter |
+| --- | --- | --- |
+| **LiteLLM** | A model behind a LiteLLM proxy | The API base URL, the API key, and the model details |
+| **Azure** | An Azure OpenAI deployment | The target URL, the API key, the API version, the deployment name, and the model details |
+| **Bifrost** | A model behind a Bifrost gateway | The base URL, the API key (optional), and the model name. Onyx embeds a test string to find the dimension. |
+| **Custom Model** | A Hugging Face embedding model that runs on Onyx's model servers | The model details |
+
+The model details are the model name, the model dimension, the query and passage prefixes, and normalization.
+Use the values from the model's documentation. Incorrect or missing prefixes make the embeddings less accurate.
+
+### Legacy Models
+
+Some older models have a **Legacy** tag. If the current model is a legacy model, it continues to work,
+and you can re-index with it, for example to change the vector quantization.
+You cannot select a legacy model for a new index.
+The model list shows a legacy model only while it is the current model.
+
+### Vector Quantization
+
+Vector quantization stores the document vectors in OpenSearch with fewer bits for each dimension.
+This decreases the memory that vector search uses. Fewer bits can decrease the search quality.
+
+To set it, use the **Vector Quantization** field in the **Embedding Model** section.
+
+| Option | Vector memory | OpenSearch version |
+| --- | --- | --- |
+| **None** (default) | Full 32-bit precision | Any |
+| **7-bit** | 4x less | 2.16 or later |
+| **1-bit** | 32x less | 3.6 or later |
+
+When the index is quantized, Onyx rescores the top search results with the full-precision vectors.
+OpenSearch keeps the full-precision vectors on disk for this, so the disk usage increases slightly.
+
+<Note>
+  The quantization is part of the index, so a change needs a re-index. If you change only the quantization,
+  Onyx copies the stored vectors to the new index and does not embed the documents again.
+</Note>
+
+<Note>
+  The OpenSearch that ships with Onyx (Docker Compose and Helm) is version 3.6.0.
+  If you connect Onyx to an external OpenSearch cluster that is older than 3.6, Onyx does not accept the 1-bit option.
+</Note>
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_vector_quantization.webp" alt="Vector Quantization options: None, 7-bit, and 1-bit"/>
+
+## Retrieval Optimization
+
+These settings change how Onyx chunks and enriches documents during indexing. They can increase the embedding cost.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_retrieval_optimization.webp" alt="Retrieval Optimization section with Multipass Indexing and Contextual Retrieval"/>
+
+### Multipass Indexing
+
+Multipass indexing indexes documents as chunks of different sizes. It is temporarily unavailable,
+so you cannot change it.
+
+### Contextual Retrieval
+
+Contextual retrieval adds document-level context to each chunk before Onyx embeds the chunk.
+This can make hybrid search more relevant.
+The **Contextual Retrieval LLM** writes a summary of each document and a short context for each chunk.
+
+<Warning>
+  Contextual retrieval sends each document and chunk to the **Contextual Retrieval LLM** during indexing.
+  This can increase the cost significantly.
+</Warning>
+
+To turn on contextual retrieval:
+
+<Steps>
+  <Step title="Set up a language model">
+    Contextual retrieval needs a [language model](/admins/ai_models/overview).
+  </Step>
+
+  <Step title="Turn it on">
+    Turn on **Contextual Retrieval** and select a **Contextual Retrieval LLM**.
+  </Step>
+
+  <Step title="Apply the change">
+    Click **Apply & Re-index**. The re-index adds context to the documents that are already indexed.
+  </Step>
+</Steps>
+
+To turn off contextual retrieval or change the **Contextual Retrieval LLM** without a re-index,
+see [Changes Without a Re-index](#changes-without-a-re-index).
+
+If the `ENABLE_CONTEXTUAL_RAG` environment variable is set to `true`, contextual retrieval stays on. To turn it off,
+unset the variable and restart Onyx.
+
+## Image Processing
+
+Image processing extracts the images in your documents during indexing.
+A vision-capable language model writes a description of each image,
+and Onyx indexes the descriptions so that search can find them.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_image_processing.webp" alt="Image Processing section with Extract & Caption Images turned on and a Captioning LLM"/>
+
+| Setting | Description |
+| --- | --- |
+| **Extract & Caption Images** | Turns image processing on or off. It is on by default. When it is off, connectors skip images. |
+| **Captioning LLM** | The vision-capable language model that describes the images. |
+
+If an image is larger than 3 MB,
+Onyx shrinks it to at most 1024 pixels on each side before the **Captioning LLM** describes it.
+This keeps every image within the size limits of model providers. Transparent areas become white,
+and photos keep their orientation. Connectors also skip very large files when they download them,
+so there's no size setting to manage.
+
+Onyx describes images only after you select a **Captioning LLM**. To change the settings in this section,
+you need a vision-capable [language model](/admins/ai_models/overview). Until you set one up,
+you cannot change **Extract & Caption Images**: connectors download images, but Onyx does not describe them.
+
+<Tip>
+  Select a **Captioning LLM** before you add connectors. Then Onyx describes the images when it first indexes them.
+</Tip>
+
+Image processing changes apply to the documents that Onyx indexes after you save them.
+A re-index from this page uses the content that is already in the index,
+so it does not describe the images in documents that are already indexed.
+A **Full Re-index** from a connector's page skips a document that did not change at its source,
+unless the document has images and **Extract & Caption Images** was off when Onyx indexed it.
+Images that Onyx extracted while no **Captioning LLM** was selected get descriptions when their documents change.
+
+## Embedding Rate Limit
+
+The embedding rate limit sets the maximum number of embedding requests that indexing sends in a time window.
+All indexing workers share the limit. It applies to cloud providers and to self-hosted models.
+Use it to stay below the rate limits of your embedding provider.
+
+| Setting | Description |
+| --- | --- |
+| **Requests per window** | Leave empty for no limit. Empty is the default. The maximum is 100,000. |
+| **Window length (seconds)** | The length of the time window. The default is 60, for a limit per minute. The maximum is 86,400 (one day). |
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/index_settings_embedding_rate_limit.webp" alt="Embedding rate limit section with the Requests per window and Window length fields"/>
+
+When indexing reaches the limit, it waits and tries again.
+It also waits and tries again when the provider sends a rate-limit error.
+A batch fails only if it waits for more than six hours. The limit does not apply to search queries.
+
+Each field saves when you leave it. The new limit applies to the next embedding batch and does not need a re-index.
+You can change the limit during a re-index.

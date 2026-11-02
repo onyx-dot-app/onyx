@@ -29,6 +29,7 @@ jobs:
       build-web-cloud: ${{ steps.check.outputs.build-web-cloud }}
       build-backend: ${{ steps.check.outputs.build-backend }}
       build-model-server: ${{ steps.check.outputs.build-model-server }}
+      build-sandbox: ${{ steps.check.outputs.build-sandbox }}
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
@@ -45,14 +46,18 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # Routing lives in tools/ods next to this workflow, so build ods from the
+      # same commit: a pinned release would lag behind the outputs used here.
+      # go.sum verifies every module. No cache, so a poisoned cache entry
+      # cannot reach a release build.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
         with:
-          version: "0.11.25"
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache: false
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Build ods
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
 
       - name: Check which components to build and version info
         id: check
@@ -63,7 +68,7 @@ jobs:
           # `ods release classify` owns the routing rules; see
           # tools/ods/internal/release/classify.go. The checkout above fetches
           # all tags, which the "latest" decision needs.
-          uv run --no-sync ods release classify \
+          "${RUNNER_TEMP}/ods" release classify \
             --ref "${GITHUB_REF_NAME}" \
             --sha "${GITHUB_SHA}" \
             --event "${EVENT_NAME}" >> "$GITHUB_OUTPUT"
@@ -133,19 +138,32 @@ jobs:
           docker-token: ${{ env.DOCKER_TOKEN }}
 
       # Everything a shipped image holds outside its lockfiles: the pinned
-      # runtime base for web and model-server, the backend's os stage built
-      # here. All three are scanned before the step fails, so one run shows
+      # runtime base for web and model-server, the backend's and the sandbox's
+      # os stage built here. All four are scanned before the step fails, so one run shows
       # every blocker, and --strict keeps an empty scan from passing.
       - name: Run base image audit
         run: |
           status=0
-          for component in web model-server backend; do
+          for component in web model-server backend sandbox; do
             image="$(.github/scripts/base-image-ref.sh "${component}")"
             uv run --no-sync ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
             if [ ! -s "image-audit-${component}.sarif" ]; then
               # $schema is a literal SARIF key, not a shell variable.
               # shellcheck disable=SC2016
               echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > "image-audit-${component}.sarif"
+            fi
+            # A stage built here is named "name:tag" with no registry path, which
+            # the Security tab reads as a URI scheme and rejects; point its
+            # findings at the Dockerfile the stage comes from.
+            case "${component}" in
+              backend) dockerfile=backend/Dockerfile ;;
+              sandbox) dockerfile=backend/onyx/server/features/build/sandbox/image/Dockerfile ;;
+              *) dockerfile="" ;;
+            esac
+            if [ -n "${dockerfile}" ]; then
+              jq --arg uri "${dockerfile}" '(.runs[]?.results[]?.locations[]?.physicalLocation.artifactLocation.uri) |= $uri' \
+                "image-audit-${component}.sarif" > "image-audit-${component}.sarif.tmp"
+              mv "image-audit-${component}.sarif.tmp" "image-audit-${component}.sarif"
             fi
           done
           exit "${status}"
@@ -154,6 +172,8 @@ jobs:
       # authoritative for main; test runs upload against their own ref. Release
       # tags sit on older commits, so they gate without uploading.
       - name: Upload the web image audit to the GitHub Security tab
+        id: upload-web
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
         if: >-
           always() &&
           ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
@@ -166,6 +186,8 @@ jobs:
           sha: ${{ github.sha }}
 
       - name: Upload the model-server image audit to the GitHub Security tab
+        id: upload-model-server
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
         if: >-
           always() &&
           ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
@@ -178,6 +200,8 @@ jobs:
           sha: ${{ github.sha }}
 
       - name: Upload the backend image audit to the GitHub Security tab
+        id: upload-backend
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
         if: >-
           always() &&
           ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
@@ -188,6 +212,38 @@ jobs:
           category: image-audit-backend
           ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
           sha: ${{ github.sha }}
+
+      - name: Upload the sandbox image audit to the GitHub Security tab
+        id: upload-sandbox
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-sandbox.sarif
+          category: image-audit-sandbox
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      # A rejected upload leaves the Security tab stale without failing the
+      # job, so it is called out where the run is read.
+      - name: Report failed uploads
+        if: always() && (steps.upload-web.outcome == 'failure' || steps.upload-model-server.outcome == 'failure' || steps.upload-backend.outcome == 'failure' || steps.upload-sandbox.outcome == 'failure')
+        env:
+          WEB: ${{ steps.upload-web.outcome }}
+          MODEL_SERVER: ${{ steps.upload-model-server.outcome }}
+          BACKEND: ${{ steps.upload-backend.outcome }}
+          SANDBOX: ${{ steps.upload-sandbox.outcome }}
+        run: |
+          failed=""
+          [ "${WEB}" = failure ] && failed="${failed} web"
+          [ "${MODEL_SERVER}" = failure ] && failed="${failed} model-server"
+          [ "${BACKEND}" = failure ] && failed="${failed} backend"
+          [ "${SANDBOX}" = failure ] && failed="${failed} sandbox"
+          echo "::warning::The Security tab upload failed for:${failed}. The tab is stale until the next nightly upload succeeds."
+          echo "Security tab upload failed for:${failed}" >> "${GITHUB_STEP_SUMMARY}"
 
   # Validate that a pushed release tag is versioned correctly, via
   # `ods release --check`. A cloud tag must be the tag `ods release cloud`
@@ -202,7 +258,7 @@ jobs:
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
+    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && !startsWith(github.ref_name, 'dev-build-') && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -210,19 +266,22 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # Routing lives in tools/ods next to this workflow, so build ods from the
+      # same commit: a pinned release would lag behind the outputs used here.
+      # go.sum verifies every module. No cache, so a poisoned cache entry
+      # cannot reach a release build.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
         with:
-          version: "0.11.25"
-          # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache: false
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Build ods
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
 
       - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync ods release --check --ref "$GITHUB_REF_NAME"
+          "${RUNNER_TEMP}/ods" release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
@@ -1569,7 +1628,7 @@ jobs:
     needs:
       - determine-builds
       - audit-gate
-    if: needs.determine-builds.outputs.is-test-run == 'true' || (needs.determine-builds.outputs.is-stable == 'true' || needs.determine-builds.outputs.is-beta-standalone == 'true' || needs.determine-builds.outputs.is-cloud-tag == 'true' || startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge')
+    if: needs.determine-builds.outputs.build-sandbox == 'true'
     runs-on: ubuntu-slim
     timeout-minutes: 10
     environment: release
@@ -1954,6 +2013,20 @@ jobs:
           gh api "repos/${CLOUD_DEPLOYMENT_REPO}/dispatches" \
             -f event_type=new-cloud-image \
             -F "client_payload[version]=${VERSION}"
+
+  # Production docs follow the latest stable release (see docs-publish.yml).
+  publish-docs:
+    needs: determine-builds
+    if: >-
+      needs.determine-builds.outputs.is-latest == 'true'
+      && needs.determine-builds.outputs.is-test-run != 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/docs-publish.yml
+    with:
+      tag: ${{ github.ref_name }}
+    # Environment secrets reach a reusable workflow only when the caller passes them.
+    secrets: inherit # zizmor: ignore[secrets-inherit] docs-publish.yml reads only its release-environment secrets
 
   # A failed audit usually means a new advisory, so the CVE Alerts run opens
   # its tracking issue, fix PR, and Slack post. Every release tag also gets a

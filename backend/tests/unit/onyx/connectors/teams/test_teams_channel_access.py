@@ -1,7 +1,11 @@
 """Channel readership: a thread names the group of its channel's members, and
 the group sync names the people in it."""
 
-from unittest.mock import MagicMock
+import threading
+import time
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -222,6 +226,76 @@ def test_an_id_graph_does_not_name_is_not_asked_for_again() -> None:
         assert _emails(client, directory) == []
 
     assert len(client.posted) == 1
+
+
+def test_the_directory_lookup_runs_with_the_lock_released() -> None:
+    """Workers share the directory, so a page of names must not stall the
+    others: only the cache is guarded, the lookup itself is not."""
+    client: MagicMock = graph_client(
+        {
+            MEMBERS_URL: {"value": [member("Ada", None, "u1")]},
+            USER_LOOKUP_URL: {"u1": "ada@example.com"},
+        }
+    )
+    directory: UserDirectory = UserDirectory(client)
+    original: Callable[[list[str]], dict[str, str | None]] = directory._lookup
+    locked_during_lookup: list[bool] = []
+
+    def observed(batch: list[str]) -> dict[str, str | None]:
+        locked_during_lookup.append(directory._lock.locked())
+        return original(batch)
+
+    with patch.object(directory, "_lookup", side_effect=observed):
+        assert _emails(client, directory) == ["ada@example.com"]
+    assert locked_during_lookup == [False]
+
+
+@pytest.mark.parametrize("name_first", [True, False])
+def test_a_name_graph_gave_survives_a_racing_lookup_that_omits_it(
+    name_first: bool,
+) -> None:
+    """Two workers may look up the same new id at once. The answer that names
+    the user wins in either order, so an omission on the other lookup does
+    not take access away."""
+    directory: UserDirectory = UserDirectory(graph_client({}))
+    named: dict[str, str | None] = {"u1": "ada@example.com"}
+    omitted: dict[str, str | None] = {"u1": None}
+    answers: Iterator[dict[str, str | None]] = iter(
+        [named, omitted] if name_first else [omitted, named]
+    )
+    both_asking: threading.Barrier = threading.Barrier(2, timeout=5)
+    answers_lock: threading.Lock = threading.Lock()
+    first_written: threading.Event = threading.Event()
+    asked: list[int] = []
+
+    def lookup(_batch: list[str]) -> dict[str, str | None]:
+        both_asking.wait()
+        with answers_lock:
+            answer = next(answers)
+            asked.append(len(asked))
+            is_second = len(asked) == 2
+        if is_second:
+            # Written after the first answer, so the order under test holds.
+            assert first_written.wait(timeout=5)
+        return answer
+
+    with (
+        patch.object(directory, "_lookup", side_effect=lookup),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        workers: list[Future[dict[str, str]]] = [
+            pool.submit(directory.principal_names, ["u1"]) for _ in range(2)
+        ]
+        deadline: float = time.monotonic() + 5
+        while "u1" not in directory._principal_names:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        first_written.set()
+        # Both finished, their raises included, before the cache is read.
+        for worker in workers:
+            worker.result(timeout=5)
+
+    assert directory.principal_names(["u1"]) == {"u1": "ada@example.com"}
 
 
 def test_a_channel_whose_members_all_carry_an_email_asks_for_no_names() -> None:

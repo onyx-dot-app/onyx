@@ -40,7 +40,7 @@ export default function SkillsStaleNotice({
 
   return (
     <MessageCard
-      variant="warning"
+      variant="info"
       title={t("notice.title")}
       description={t("notice.description")}
       rightChildren={

@@ -379,8 +379,16 @@ function PaginationCount({
 }: CountPaginationProps) {
   const strings = useOpalStrings();
   const handleChange = (page: number) => onChange?.(page);
-  const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const rangeEnd = Math.min(currentPage * pageSize, totalItems);
+  // An unbounded page (Infinity) holds every item; 0 * Infinity is NaN.
+  const rangeStart =
+    totalItems === 0
+      ? 0
+      : isFinite(pageSize)
+        ? (currentPage - 1) * pageSize + 1
+        : 1;
+  const rangeEnd = isFinite(pageSize)
+    ? Math.min(currentPage * pageSize, totalItems)
+    : totalItems;
   const monoFont = size === "sm" ? "secondary-mono" : "main-ui-mono";
   const mutedFont = size === "sm" ? "secondary-body" : "main-ui-muted";
   // The range is an LTR isolate so "1~10" keeps its digit order in RTL copy.

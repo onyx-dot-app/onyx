@@ -1,0 +1,99 @@
+---
+title: "Custom Agents"
+description: "Managing AI agents"
+icon: "robot"
+---
+
+Onyx Agents are customized AI assistants with their own instructions, knowledge, and Actions.
+Any user can create an Agent. Admins manage which Agents are featured and listed for the organization.
+
+<Note>
+  In older Onyx versions Agents were called **Assistants** or **Personas**. The product now uses **Agents** everywhere.
+</Note>
+
+## Managing Agents
+
+Open **Admin Panel > Agents** to see all Agents in your organization.
+
+From this page, you can:
+
+- **Set as Featured** or **Remove Featured**. Featured Agents appear at the top of the Explore Agents list.
+  Onyx also pins them to the sidebar for new users who have access.
+- **Unlist** or **Relist** an Agent. Unlisted Agents do not appear in Explore Agents,
+  but users who have the link can still use them.
+
+<img className="rounded-image" src="/assets/admins/agents/agents_dashboard.webp" alt="Onyx Agents Overview page showing available agents"/>
+
+<Tip>
+  Use **Admin Panel > Chat Preferences** to pick the default Agent for new chats,
+  or to require every chat to start in an Agent.
+</Tip>
+
+## Creating Agents
+
+<Steps>
+  <Step title="Name and Prompt your Agent">
+    In the chat sidebar, open **Agents** and click **New Agent**.
+    Write the Agent's **Instructions** and add **Conversation Starters** to show users example prompts for this Agent.
+
+    <img className="rounded-image" src="/assets/admins/agents/create_agent_1.webp" alt="Onyx Agent Configuration page"/>
+  </Step>
+
+  <Step title="Attach Knowledge to your Agent">
+    Use the **Knowledge** section to control what the Agent can search.
+
+    <img className="rounded-image" src="/assets/admins/agents/create_agent_2.webp" alt="Onyx Agent Knowledge configuration"/>
+
+    If knowledge is enabled but nothing is selected, the Agent searches everything the current user can access:
+
+    - Files the user uploaded to Onyx
+    - All documents from public connectors
+    - Documents the user can access in the source for permission-synced connectors
+
+    See the [Connectors](/admins/connectors/overview) page for details on access.
+
+    Select items under **Knowledge** to narrow the Agent to only that content.
+    A narrow scope often improves answer quality in large organizations.
+
+    You can select knowledge in two ways:
+
+    - Pick [Document Sets](/admins/managing_features/document_sets). Document Sets also let admins
+    grant an Agent access to private connectors.
+    - Pick a source type, then browse its folders and files. Selecting a folder includes all of its sub-folders.
+
+    <img className="rounded-image" src="/assets/admins/agents/agent_hierarchy_knowledge.webp" alt="Onyx Agent hierarchical knowledge selection showing folder and file browsing"/>
+
+    Sharing an Agent does not share its documents. Each user only sees search results they are allowed to see.
+  </Step>
+
+  <Step title="Give your Agent Actions">
+    Use **Actions & Tools** to let the Agent do work. Actions include built-in tools such as Web Search,
+    Image Generation, and Code Interpreter, plus the MCP, OpenAPI,
+    and Craft App plugins from [Plugins](/admins/plugins/overview).
+
+    <img className="rounded-image" src="/assets/admins/agents/agent_actions.webp" alt="Onyx Agent Configuration page"/>
+  </Step>
+
+  <Step title="Agent Configuration (Advanced)">
+    Set who can use the Agent. Make it available to **Anyone in your organization**,
+    or share it with specific users or groups. An Agent that is only shared with you is private.
+
+    Set the **Default Model** for the Agent.
+
+    In **More Info**, you can also set a **Knowledge Cutoff Date**, add **Prompt Reminders**,
+    or **Overwrite System Prompts** to remove the base Onyx system prompt.
+
+    <img className="rounded-image" src="/assets/admins/agents/agent_advanced.webp" alt="Onyx Agent advanced configuration options"/>
+  </Step>
+</Steps>
+
+After you save the Agent, users find it on the **Explore Agents** page in the chat sidebar. On Business, Enterprise,
+and Cloud, Agent owners and admins can open usage statistics for an Agent.
+
+<img className="rounded-image" src="/assets/admins/agents/explore_agents.webp" alt="Onyx Explore Agents page"/>
+
+## Who Can Create Agents
+
+- **Community Edition**: every user can create Agents.
+- **Business, Enterprise, and Cloud**: admins can limit Agent creation to specific users or groups with the
+  **Add Agents** permission. See [Users and Groups](/admins/user_management/users_and_groups).

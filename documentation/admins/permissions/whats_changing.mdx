@@ -1,0 +1,116 @@
+---
+title: "What's Changing in Permissions"
+description: "Migration guide for the move from Curator roles to group-based permissions in Onyx"
+icon: "arrow-right-arrow-left"
+---
+
+Onyx permissions now use groups instead of the old Curator role model.
+This page is for customers migrating from **Curator** and **Global Curator** roles.
+
+<Info>
+  These changes apply when upgrading to Onyx **v4.7 or later**. For older versions,
+  see [Users and Groups before v4.7](/admins/user_management/users_and_groups_legacy).
+</Info>
+
+For the day-to-day permission model, see [Understanding Permissions](/admins/permissions/understanding_permissions).
+
+## What's Being Removed
+
+The following legacy roles and settings are removed:
+
+- **Curator role**
+- **Global Curator role**
+- **`CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS`** environment variable
+
+## What Replaces Curators
+
+The new system uses two mechanisms:
+
+<Columns cols={2}>
+  <Card title="Group permissions" icon="users">
+    Permissions granted to a group. These apply organization-wide to every member of that group.
+  </Card>
+
+  <Card title="Group Managers" icon="user-shield">
+    Management access granted to a specific user from a group detail page. This is scoped to that one group.
+  </Card>
+</Columns>
+
+<Warning>
+  Group permissions are organization-wide. If you want one person to manage only one group's resources,
+  make that person a **Group Manager** on the group detail page instead of granting a group-wide manage permission.
+</Warning>
+
+## Before and After
+
+| Old system | New system |
+|---|---|
+| Admin role | Member of the **Admin** group. |
+| Basic role | Member of the **Basic** group. |
+| Curator role | **Group Manager** of the groups they curated. |
+| Global Curator role | **Group Manager** in each group they managed, or a group with organization-wide permissions if broad access is intended. |
+
+The only default groups are **Basic** and **Admin**.
+Custom groups can be created when you need additional permission sets.
+
+<Info>
+  Custom groups and configurable group permissions require a **Business** or **Enterprise** plan, or Onyx Cloud.
+</Info>
+
+## What Happens During Upgrade
+
+The migration handles the core role conversion automatically:
+
+<Steps>
+  <Step title="Admins move to the Admin group">
+    Users with the legacy **Admin** role are added to the **Admin** group and keep full workspace access.
+  </Step>
+
+  <Step title="Basic users move to Basic">
+    Users with the legacy **Basic** role are added to the **Basic** group and keep core workspace access.
+  </Step>
+
+  <Step title="Curators become Group Managers">
+    Existing **Curators** and **Global Curators** are converted to **Group Managers** for the groups they managed.
+    Their scoped management access carries over.
+  </Step>
+
+  <Step title="Existing groups are preserved">
+    Existing custom groups, group memberships, connectors, document sets, and agents are preserved.
+  </Step>
+
+  <Step title="Document access is unchanged">
+    Search visibility continues to follow connector access settings: **Private**, **Organization**, and **Auto-sync**.
+  </Step>
+</Steps>
+
+<Note>
+  The automatic Curator conversion applies to groups that exist at upgrade time. For groups created later,
+  assign Group Managers manually from the group detail page.
+</Note>
+
+## What You Need to Check
+
+After upgrading,
+the **Users** and **Groups** pages show a **Permissions have changed** notice with a link to this guide.
+Review the following:
+
+- Former Curators and Global Curators are Group Managers of the expected groups.
+- Users who need full administration are in **Admin**.
+- Regular users are in **Basic**.
+- Organization-wide permissions are granted only to groups that should have workspace-wide access.
+- New groups have Group Managers assigned manually when scoped management is needed.
+
+## Common Migration Questions
+
+<AccordionGroup>
+  <Accordion title="What if we were not using Curators?">
+    If you only used Admin and Basic roles, there is little to review. Admin users move to **Admin**,
+    and Basic users move to **Basic**.
+  </Accordion>
+
+  <Accordion title="What happens to API keys and service accounts?">
+    Existing Admin API keys move with Admin access, and Basic API keys move with Basic access. After upgrading,
+    you can assign service accounts to groups for more granular access.
+  </Accordion>
+</AccordionGroup>

@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { humanReadableFormat } from "@opal/time";
-import { BackendChatSession } from "@/app/app/interfaces";
+import { BackendChatSession } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import { ErrorBanner } from "@/app/app/message/Resubmit";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
@@ -15,11 +16,10 @@ import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 import { useLocale, useTranslations } from "next-intl";
@@ -102,17 +102,17 @@ export default function SharedChatDisplay({
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
           <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 px-8 py-4">
-            <Text as="p" text04 headingH2>
+            <Text as="p" font="heading-h2" color="text-04">
               {chatSession.description || t("header.untitledChat.title")}
             </Text>
             <div className="flex flex-col items-end">
-              <Text as="p" text03 secondaryBody>
+              <Text as="p" font="secondary-body" color="text-03">
                 {t("header.sharedOn.text", {
                   date: humanReadableFormat(chatSession.time_created, locale),
                 })}
               </Text>
               {chatSession.owner_name && (
-                <Text as="p" text03 secondaryBody>
+                <Text as="p" font="secondary-body" color="text-03">
                   {t("header.owner.text", { name: chatSession.owner_name })}
                 </Text>
               )}
@@ -177,49 +177,52 @@ export default function SharedChatDisplay({
                   return null;
                 }
 
-                if (message.type === "assistant") {
+                if (message.type === "assistant" || message.type === "error") {
                   return (
                     <div
                       key={message.messageId}
                       className="w-[min(50rem,100%)]"
                     >
-                      <AgentMessage
-                        rawPackets={message.packets}
-                        chatState={{
-                          agent: persona,
-                          docs: message.documents,
-                          citations: message.citations,
-                          setPresentingDocument: setPresentingDocument,
-                          // Shared payload carries the model as `modelDisplayName`,
-                          // not `overridden_model`. Surface it in the read-only footer.
-                          overriddenModel:
-                            message.modelDisplayName ?? undefined,
-                          overriddenModelProvider: message.modelDisplayName
-                            ? modelProviderLookup.get(message.modelDisplayName)
-                            : undefined,
-                        }}
-                        nodeId={message.nodeId}
-                        llmManager={null}
-                        otherMessagesCanSwitchTo={undefined}
-                        onMessageSelection={undefined}
-                      />
+                      {(message.type !== "error" ||
+                        message.packets.length > 0) && (
+                        <AgentMessage
+                          rawPackets={message.packets}
+                          chatState={{
+                            agent: persona,
+                            docs: message.documents,
+                            citations: message.citations,
+                            setPresentingDocument: setPresentingDocument,
+                            // Shared payload carries the model as `modelDisplayName`,
+                            // not `overridden_model`. Surface it in the read-only footer.
+                            overriddenModel:
+                              message.modelDisplayName ?? undefined,
+                            overriddenModelProvider: message.modelDisplayName
+                              ? modelProviderLookup.get(
+                                  message.modelDisplayName
+                                )
+                              : undefined,
+                          }}
+                          nodeId={message.nodeId}
+                          llmManager={null}
+                          otherMessagesCanSwitchTo={undefined}
+                          onMessageSelection={undefined}
+                          hideFooter={message.type === "error"}
+                          disableTTS={message.type === "error"}
+                        />
+                      )}
+                      {message.type === "error" && (
+                        <ErrorBanner
+                          error={message.errorMessage ?? ""}
+                          errorCode={message.errorCode ?? undefined}
+                          isRetryable={message.isRetryable}
+                          details={message.errorDetails ?? undefined}
+                        />
+                      )}
                     </div>
                   );
                 }
 
-                // Error message case
-                return (
-                  <div
-                    key={message.messageId}
-                    className="py-5 ms-4 lg:px-5 w-[min(50rem,100%)]"
-                  >
-                    <div className="mx-auto w-[90%] max-w-message-max">
-                      <p className="text-status-text-error-05 text-sm my-auto">
-                        {message.message}
-                      </p>
-                    </div>
-                  </div>
-                );
+                return null;
               })}
             </div>
           ) : (

@@ -38,7 +38,9 @@ export function isSameModelSelection(
     a.model_spec.normalize === b.model_spec.normalize &&
     (a.model_spec.queryPrefix ?? null) === (b.model_spec.queryPrefix ?? null) &&
     (a.model_spec.passagePrefix ?? null) ===
-      (b.model_spec.passagePrefix ?? null)
+      (b.model_spec.passagePrefix ?? null) &&
+    (a.model_spec.reducedDimension ?? null) ===
+      (b.model_spec.reducedDimension ?? null)
   );
 }
 

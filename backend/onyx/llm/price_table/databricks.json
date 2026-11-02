@@ -1,6 +1,16 @@
 {
   "aliases": {},
   "models": {
+    "ai_decide": {
+      "cost": {
+        "cache_read": 0.0,
+        "cache_write": 0.0,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "evaluation",
+      "name": "ai_decide"
+    },
     "databricks-bge-large-en": {
       "cost": {
         "cache_read": 0.10003000000000001,
@@ -42,6 +52,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-10-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -73,6 +84,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-08-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -104,6 +116,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-24",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -135,6 +148,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -166,6 +180,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-16",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },
@@ -193,10 +208,12 @@
         ]
       },
       "mode": "chat",
-      "name": "Claude Sonnet 4.5",
+      "name": "Claude Sonnet 4",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-09-29",
+      "release_date": "2025-05-22",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -228,6 +245,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-09-29",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -259,6 +277,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-17",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -293,6 +312,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -343,6 +363,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -393,6 +414,7 @@
           "output": 18
         },
         "input": 2,
+        "input_audio": 2,
         "output": 12,
         "tiers": [
           {
@@ -424,10 +446,44 @@
         ]
       },
       "mode": "chat",
-      "name": "Gemini 3.1 Pro Preview Custom Tools",
+      "name": "Gemini 3.1 Pro Preview",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-02-19",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "databricks-gemini-3-5-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "cache_write": 1.87502,
+        "input": 1.5,
+        "input_audio": 1.5,
+        "output": 9
+      },
+      "family": "gemini-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 3.5 Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-19",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -513,6 +569,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-11-18",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -808,20 +865,22 @@
     "databricks-gpt-5-6-luna": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.1,
-        "cache_write": 1.24999,
+        "cache_read": 0.02,
+        "cache_write": 0.25,
         "context_over_200k": {
-          "cache_read": 0.2,
-          "input": 2,
-          "output": 9
+          "cache_read": 0.04,
+          "cache_write": 0.5,
+          "input": 0.4,
+          "output": 1.8
         },
-        "input": 1,
-        "output": 6,
+        "input": 0.2,
+        "output": 1.2,
         "tiers": [
           {
-            "cache_read": 0.2,
-            "input": 2,
-            "output": 9,
+            "cache_read": 0.04,
+            "cache_write": 0.5,
+            "input": 0.4,
+            "output": 1.8,
             "tier": {
               "size": 272000,
               "type": "context"
@@ -831,8 +890,8 @@
       },
       "family": "gpt-luna",
       "limit": {
-        "context": 400000,
-        "input": 272000,
+        "context": 1050000,
+        "input": 922000,
         "output": 128000
       },
       "modalities": {
@@ -857,20 +916,22 @@
     "databricks-gpt-5-6-sol": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.5,
-        "cache_write": 5.00003,
+        "cache_read": 0.4,
+        "cache_write": 5,
         "context_over_200k": {
-          "cache_read": 1,
-          "input": 10,
-          "output": 45
+          "cache_read": 0.8,
+          "cache_write": 10,
+          "input": 8,
+          "output": 30
         },
-        "input": 5,
-        "output": 30,
+        "input": 4,
+        "output": 20,
         "tiers": [
           {
-            "cache_read": 1,
-            "input": 10,
-            "output": 45,
+            "cache_read": 0.8,
+            "cache_write": 10,
+            "input": 8,
+            "output": 30,
             "tier": {
               "size": 272000,
               "type": "context"
@@ -906,20 +967,22 @@
     "databricks-gpt-5-6-terra": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.25,
-        "cache_write": 3.12501,
+        "cache_read": 0.2,
+        "cache_write": 2.5,
         "context_over_200k": {
-          "cache_read": 0.5,
-          "input": 5,
-          "output": 22.5
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "input": 4,
+          "output": 18
         },
-        "input": 2.5,
-        "output": 15,
+        "input": 2,
+        "output": 12,
         "tiers": [
           {
-            "cache_read": 0.5,
-            "input": 5,
-            "output": 22.5,
+            "cache_read": 0.4,
+            "cache_write": 5,
+            "input": 4,
+            "output": 18,
             "tier": {
               "size": 272000,
               "type": "context"
@@ -1021,13 +1084,13 @@
       "cost": {
         "cache_read": 0.15001,
         "cache_write": 0.15001,
-        "input": 0.072,
-        "output": 0.28
+        "input": 0.15,
+        "output": 0.6
       },
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 32768
+        "output": 25000
       },
       "modalities": {
         "input": [
@@ -1051,13 +1114,13 @@
       "cost": {
         "cache_read": 0.07,
         "cache_write": 0.07,
-        "input": 0.05,
-        "output": 0.2
+        "input": 0.07,
+        "output": 0.3
       },
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 32768
+        "output": 25000
       },
       "modalities": {
         "input": [
@@ -1115,9 +1178,20 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
+    },
+    "databricks-openjev-qwen35-4b": {
+      "cost": {
+        "cache_read": 0.0,
+        "cache_write": 0.0,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "evaluation",
+      "name": "databricks-openjev-qwen35-4b"
     },
     "databricks-qwen3-embedding-0-6b": {
       "cost": {

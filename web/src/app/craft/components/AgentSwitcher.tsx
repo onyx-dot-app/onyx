@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Popover, PopoverMenu, Text, LineItemButton } from "@opal/components";
+import {
+  Dropdown,
+  LineItemButton,
+  Text,
+  type DropdownMenuItem,
+} from "@opal/components";
 import {
   SvgChevronDown,
   SvgCpu,
@@ -114,9 +119,59 @@ export default function AgentSwitcher() {
     return <span className="truncate px-1.5 py-1">{labelNode}</span>;
   }
 
+  // Custom rows: an option row has a text suffix only, and these carry a
+  // live status beside the title. Each row marks its own selection.
+  const items: DropdownMenuItem[] = [
+    {
+      kind: "custom",
+      id: "main",
+      keywords: [titleLabel ?? t("mainAgent.label")],
+      onActivate: selectMainAgent,
+      render: ({ highlighted, props }) => (
+        <LineItemButton
+          presentational
+          selectVariant="select-heavy"
+          interaction={highlighted ? "hover" : "rest"}
+          rounding={2}
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgSparkle}
+          state={!isViewingSubagent ? "selected" : "empty"}
+          title={titleLabel ?? t("mainAgent.label")}
+          {...props}
+        />
+      ),
+    },
+    ...sorted.map(
+      (s): DropdownMenuItem => ({
+        kind: "custom",
+        id: s.sessionId,
+        keywords: [s.name || s.subagentType || t("subagentFallback.label")],
+        onActivate: () => selectSubagent(s.sessionId),
+        render: ({ highlighted, props }) => (
+          <LineItemButton
+            presentational
+            selectVariant="select-heavy"
+            interaction={highlighted ? "hover" : "rest"}
+            rounding={2}
+            sizePreset="main-ui"
+            variant="section"
+            icon={SvgCpu}
+            state={
+              s.sessionId === viewedSubagentSessionId ? "selected" : "empty"
+            }
+            rightChildren={<SubagentStatus subagent={s} />}
+            title={s.name || s.subagentType || t("subagentFallback.label")}
+            {...props}
+          />
+        ),
+      })
+    ),
+  ];
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild>
         <button
           type="button"
           aria-label={t("switch.ariaLabel")}
@@ -129,36 +184,8 @@ export default function AgentSwitcher() {
           <span className="truncate">{labelNode}</span>
           <SvgChevronDown className="w-4 h-4 stroke-text-03 shrink-0" />
         </button>
-      </Popover.Trigger>
-      <Popover.Content side="bottom" align="start">
-        <PopoverMenu>
-          {[
-            <LineItemButton
-              key="main"
-              sizePreset="main-ui"
-              variant="section"
-              icon={SvgSparkle}
-              state={!isViewingSubagent ? "selected" : "empty"}
-              onClick={selectMainAgent}
-              title={titleLabel ?? t("mainAgent.label")}
-            />,
-            ...sorted.map((s) => (
-              <LineItemButton
-                key={s.sessionId}
-                sizePreset="main-ui"
-                variant="section"
-                icon={SvgCpu}
-                state={
-                  s.sessionId === viewedSubagentSessionId ? "selected" : "empty"
-                }
-                onClick={() => selectSubagent(s.sessionId)}
-                rightChildren={<SubagentStatus subagent={s} />}
-                title={s.name || s.subagentType || t("subagentFallback.label")}
-              />
-            )),
-          ]}
-        </PopoverMenu>
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data label={t("switch.ariaLabel")} items={items} />
+    </Dropdown>
   );
 }

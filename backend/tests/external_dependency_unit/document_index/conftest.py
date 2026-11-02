@@ -71,7 +71,6 @@ def make_chunk(
         aggregated_chunk_boost_factor=0,
         ancestor_hierarchy_node_ids=[],
         embeddings=embeddings,
-        title_embedding=[1.0] + [0.0] * (EMBEDDING_DIM - 1),
         source_document=source_document,
         title_prefix="",
         metadata_suffix_keyword="",

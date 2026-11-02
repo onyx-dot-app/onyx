@@ -1,7 +1,7 @@
 import React from "react";
 import type { IconProps } from "@opal/types";
 
-const SvgLmStudio = ({ size, ...props }: IconProps) => {
+const SvgLMStudio = ({ size, ...props }: IconProps) => {
   const gradientId = React.useId();
   return (
     <svg
@@ -138,4 +138,4 @@ const SvgLmStudio = ({ size, ...props }: IconProps) => {
   );
 };
 
-export default SvgLmStudio;
+export default SvgLMStudio;

@@ -38,6 +38,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from sqlalchemy import inspect
+
 from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
 from onyx.connectors.models import (
     Document,
@@ -75,6 +77,10 @@ class ReembedStrategy(enum.Enum):
     MODEL_ONLY = "model_only"
     # The contextual-RAG enrichment changed; rebuild the text, then re-embed.
     AUGMENTATION = "augmentation"
+    # No setting that shapes the content vector changed (e.g. only the vector
+    # quantization did): the stored vector is what re-embedding would produce,
+    # so copy it.
+    COPY_VECTORS = "copy_vectors"
 
 
 @dataclass
@@ -97,7 +103,9 @@ def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
     """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
-    text changes), otherwise MODEL_ONLY. A change in
+    text changes); COPY_VECTORS when the stored vector is still valid (e.g. only
+    the vector quantization differs, or a re-index applies a new mapping);
+    otherwise MODEL_ONLY. A change in
     `contextual_rag_model_configuration_id` only matters when contextual RAG is
     on in present or future — if it is off in both, no enrichment exists in
     either index, so a stale model-id difference must not force AUGMENTATION.
@@ -113,11 +121,69 @@ def select_reembed_strategy(
             != future_ss.contextual_rag_model_configuration_id
         )
     )
-    return (
-        ReembedStrategy.AUGMENTATION
-        if augmentation_changed
-        else ReembedStrategy.MODEL_ONLY
+    if augmentation_changed:
+        return ReembedStrategy.AUGMENTATION
+    if _stored_vectors_reusable(present_ss, future_ss):
+        return ReembedStrategy.COPY_VECTORS
+    return ReembedStrategy.MODEL_ONLY
+
+
+# SearchSettings columns that may differ without changing a stored content vector.
+# Every other column must match for COPY_VECTORS, so a newly added column forces a
+# re-embed until it is listed here. The contextual-RAG columns are listed because
+# select_reembed_strategy handles them before this check.
+VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS: frozenset[str] = frozenset(
+    {
+        "id",
+        "status",
+        "index_name",
+        "switchover_type",
+        "use_port_flow",
+        "port_backfill_source_id",
+        "reclaim_status",
+        "reclaim_stopped_reading_at",
+        "reclaim_attempts",
+        "reclaim_last_error",
+        "pending_cc_pair_deletions",
+        "vector_quantization",
+        "enable_contextual_rag",
+        "contextual_rag_model_configuration_id",
+    }
+)
+
+
+def _stored_vectors_reusable(
+    present_ss: SearchSettings, future_ss: SearchSettings
+) -> bool:
+    """True when every SearchSettings column outside
+    VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS is unchanged, so the PRESENT vector is
+    what re-embedding under FUTURE would produce."""
+    present_state = inspect(present_ss)
+    future_state = inspect(future_ss)
+    return all(
+        present_state.attrs[column.key].value == future_state.attrs[column.key].value
+        for column in inspect(SearchSettings).column_attrs
+        if column.key not in VECTOR_NEUTRAL_SEARCH_SETTINGS_COLUMNS
     )
+
+
+def split_copyable_chunks(
+    stored_chunks: list[DocumentChunk], strip_stored_context: bool
+) -> tuple[list[DocumentChunk], list[DocumentChunk]]:
+    """Splits COPY_VECTORS chunks into (copy as is, re-embed).
+
+    A chunk keeps its stored vector unless the FUTURE strips stored context
+    (contextual RAG off) and the chunk still holds some: then its vector encodes
+    text the FUTURE no longer has, so it must be re-embedded.
+    """
+    copy: list[DocumentChunk] = []
+    reembed: list[DocumentChunk] = []
+    for chunk in stored_chunks:
+        if strip_stored_context and (chunk.doc_summary or chunk.chunk_context):
+            reembed.append(chunk)
+        else:
+            copy.append(chunk)
+    return copy, reembed
 
 
 def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:
@@ -188,8 +254,7 @@ def _title_prefix(chunk: DocumentChunkWithoutVectors) -> str:
     """The title prefix the chunker prepends to content (`extract_blurb(title) +
     RETURN_SEPARATOR`). Approximated with the full stored title; for very long
     titles the chunker truncates to BLURB_SIZE tokens, so the rebuilt prefix can
-    be marginally longer — accepted imprecision (the title is also encoded
-    separately as `title_vector`)."""
+    be marginally longer — accepted imprecision."""
     return f"{chunk.title}{RETURN_SEPARATOR}" if chunk.title else ""
 
 
@@ -271,11 +336,12 @@ def re_embed_chunks(
     embedder: IndexingEmbedder,
     augmentation_ctx: AugmentationReembedContext | None = None,
     present_tokenizer: BaseTokenizer | None = None,
+    strip_stored_context: bool = False,
 ) -> list[DocumentChunk]:
     """Re-embed stored chunks under a prebuilt strategy + embedder (no DB access).
 
     Returns DocumentChunks ready to write to the FUTURE index. For MODEL_ONLY only
-    `content_vector`/`title_vector` change; every other field is copied through.
+    `content_vector` changes; every other field is copied through.
     For AUGMENTATION the stored `content`, `doc_summary` and `chunk_context` are
     also rebuilt under FUTURE settings (`augmentation_ctx` is required, and for
     FUTURE-RAG-on must carry the contextual LLM). Chunks may span documents; only
@@ -288,6 +354,11 @@ def re_embed_chunks(
     exactly. The FUTURE embedder's tokenizer must NOT be substituted: on a model
     change it can count the tail differently and flip the threshold, re-embedding
     text the PRESENT index never did.
+
+    `strip_stored_context` (the FUTURE has contextual RAG off) drops a chunk's
+    stored doc summary and chunk context from its content and fields before
+    the MODEL_ONLY re-embed: after a forward-only disable the PRESENT index
+    still holds them with the flag off.
     """
     if not stored_chunks:
         return []
@@ -300,6 +371,8 @@ def re_embed_chunks(
 
     if present_tokenizer is None:
         raise ValueError("MODEL_ONLY re-embed requires the PRESENT tokenizer")
+    if strip_stored_context:
+        stored_chunks = [_strip_stored_context(chunk) for chunk in stored_chunks]
     embed_inputs = [
         recover_embedding_input(chunk, present_tokenizer) for chunk in stored_chunks
     ]
@@ -310,15 +383,45 @@ def re_embed_chunks(
     embedded = embedder.embed_chunks(doc_aware_chunks)
     # Pair each stored chunk with its OWN vector by identity, not list position.
     matched = _match_embeddings_by_identity(stored_chunks, embedded)
-    # Whole stored chunk + the two new vectors; everything else copied through.
+    # Whole stored chunk + the new vector; everything else copied through.
     return [
         DocumentChunk(
             **dict(stored),
             content_vector=index_chunk.embeddings.full_embedding,
-            title_vector=index_chunk.title_embedding,
         )
         for stored, index_chunk in zip(stored_chunks, matched, strict=True)
     ]
+
+
+def _strip_stored_context(
+    chunk: DocumentChunkWithoutVectors,
+) -> DocumentChunkWithoutVectors:
+    """The chunk without the doc summary and chunk context indexing stored in
+    it, removed only where indexing put them: the summary right after the
+    title prefix, the context right before the metadata suffix. The title
+    prefix is kept as stored. A no-op for a chunk that holds neither."""
+    if not chunk.doc_summary and not chunk.chunk_context:
+        return chunk
+    content = chunk.content
+    suffix = chunk.metadata_suffix or ""
+    if suffix and content.endswith(suffix):
+        content = content.removesuffix(suffix)
+    else:
+        suffix = ""
+    if chunk.chunk_context and content.endswith(chunk.chunk_context):
+        content = content.removesuffix(chunk.chunk_context)
+    if chunk.doc_summary:
+        # The summary starts right after the title prefix, whose separator a
+        # title never contains, so the first separator marks that spot.
+        separator_at = content.find(RETURN_SEPARATOR) if chunk.title else -1
+        summary_at = separator_at + len(RETURN_SEPARATOR) if separator_at >= 0 else 0
+        if content.startswith(chunk.doc_summary, summary_at):
+            content = (
+                content[:summary_at] + content[summary_at + len(chunk.doc_summary) :]
+            )
+    return chunk.model_copy(
+        update={"content": content + suffix, "doc_summary": "", "chunk_context": ""}
+    )
 
 
 def _bare_contents(stored_chunks: list[DocumentChunkWithoutVectors]) -> list[str]:
@@ -463,7 +566,6 @@ def _augmentation_reembed(
             DocumentChunk(
                 **fields,
                 content_vector=index_chunk.embeddings.full_embedding,
-                title_vector=index_chunk.title_embedding,
             )
         )
     return results

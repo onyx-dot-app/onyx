@@ -28,7 +28,6 @@ export const ScoreSection = ({
       toast.error(errorMsg);
       return false;
     } else {
-      toast.success(t("score.updated.toast"));
       refresh();
     }
 

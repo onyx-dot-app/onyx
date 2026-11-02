@@ -3,6 +3,7 @@ import {
   buildModelSelectOptions,
   filterModelConfigurations,
   findDefaultModelDisplayName,
+  findLlmOptionById,
   fromSelectValue,
   llmOptionKey,
   toSelectValue,
@@ -45,10 +46,10 @@ describe("llmOptionKey", () => {
   it("gives distinct keys to same-named models from different providers", () => {
     const providers = [
       makeProvider(1, "OpenAI Main", "openai", [
-        makeModelConfiguration(11, "gpt-4o"),
+        makeModelConfiguration(11, "gpt-6-sol"),
       ]),
       makeProvider(2, "OpenAI Backup", "openai", [
-        makeModelConfiguration(22, "gpt-4o"),
+        makeModelConfiguration(22, "gpt-6-sol"),
       ]),
     ];
 
@@ -62,7 +63,7 @@ describe("llmOptionKey", () => {
     expect(
       llmOptionKey({
         provider: "openai",
-        modelName: "gpt-4o",
+        modelName: "gpt-6-sol",
         modelConfigurationId: 11,
       })
     ).toBe("mc:11");
@@ -72,12 +73,12 @@ describe("llmOptionKey", () => {
     expect(
       llmOptionKey({
         provider: "openai",
-        modelName: "gpt-4o",
+        modelName: "gpt-6-sol",
         modelConfigurationId: null,
       })
-    ).toBe("openai:gpt-4o");
-    expect(llmOptionKey({ provider: "openai", modelName: "gpt-4o" })).toBe(
-      "openai:gpt-4o"
+    ).toBe("openai:gpt-6-sol");
+    expect(llmOptionKey({ provider: "openai", modelName: "gpt-6-sol" })).toBe(
+      "openai:gpt-6-sol"
     );
   });
 });
@@ -98,6 +99,50 @@ describe("buildLlmOptions", () => {
 });
 
 describe("filterModelConfigurations", () => {
+  it("excludes decision-only models from chat while retaining dual-capability models", () => {
+    const providers = [
+      makeProvider(1, "OpenAI", "openai", [
+        {
+          ...makeModelConfiguration(1, "decisions"),
+          supports_chat: false,
+          supports_decisions: true,
+        },
+        {
+          ...makeModelConfiguration(2, "dual"),
+          supports_chat: true,
+          supports_decisions: true,
+        },
+        makeModelConfiguration(3, "chat"),
+      ]),
+    ];
+    expect(
+      filterModelConfigurations(providers, {
+        keep: 1,
+      })[0]?.model_configurations.map((model) => model.id)
+    ).toEqual([2, 3]);
+    expect(
+      buildLlmOptions(providers, "decisions", true).map(
+        (model) => model.modelConfigurationId
+      )
+    ).toEqual([2, 3]);
+    expect(
+      filterModelConfigurations(providers, {
+        includeDecisionOnly: true,
+      })[0]?.model_configurations.map((model) => model.id)
+    ).toEqual([1, 2, 3]);
+    expect(findLlmOptionById(providers, 1)?.modelName).toBe("decisions");
+    expect(
+      buildModelSelectOptions(providers, { grouped: false }).map((option) =>
+        "value" in option ? option.value : null
+      )
+    ).toEqual(["2", "3"]);
+    expect(
+      buildModelSelectOptions(providers, {
+        grouped: false,
+        includeDecisionOnly: true,
+      }).map((option) => ("value" in option ? option.value : null))
+    ).toEqual(["1", "2", "3"]);
+  });
   const providers: ModelOptionProvider[] = [
     {
       id: 1,
@@ -106,12 +151,12 @@ describe("filterModelConfigurations", () => {
       model_configurations: [
         {
           id: 11,
-          name: "gpt-4o",
+          name: "gpt-6-sol",
           is_visible: true,
           max_input_tokens: null,
           supports_image_input: true,
           supports_reasoning: false,
-          effectiveDisplayName: "GPT-4o",
+          effectiveDisplayName: "GPT-6 Sol",
         },
         {
           id: 12,
@@ -144,11 +189,8 @@ describe("filterModelConfigurations", () => {
   const ids = (list: ModelOptionProvider[]) =>
     list.flatMap((p) => p.model_configurations.map((mc) => mc.id));
 
-  test("drops hidden models by default and keeps them on request", () => {
+  test("drops hidden models", () => {
     expect(ids(filterModelConfigurations(providers))).toEqual([11, 21]);
-    expect(
-      ids(filterModelConfigurations(providers, { visibleOnly: false }))
-    ).toEqual([11, 12, 21]);
   });
 
   test("keeps only image-input models and drops providers left empty", () => {
@@ -173,12 +215,12 @@ describe("model select options", () => {
       model_configurations: [
         {
           id: 11,
-          name: "gpt-4o",
+          name: "gpt-6-sol",
           is_visible: true,
           max_input_tokens: null,
           supports_image_input: true,
           supports_reasoning: false,
-          effectiveDisplayName: "GPT-4o",
+          effectiveDisplayName: "GPT-6 Sol",
         },
         {
           id: 12,
@@ -232,13 +274,13 @@ describe("model select options", () => {
       expect(
         findDefaultModelDisplayName(providers, {
           provider_id: 9,
-          model_name: "gpt-4o",
+          model_name: "gpt-6-sol",
         })
       ).toBeNull();
       expect(
         findDefaultModelDisplayName(undefined, {
           provider_id: 1,
-          model_name: "gpt-4o",
+          model_name: "gpt-6-sol",
         })
       ).toBeNull();
     });
@@ -254,7 +296,7 @@ describe("model select options", () => {
       // A nameless provider groups under its product name.
       expect(dividers.map((d) => d.title)).toEqual(["Claude", "OpenAI"]);
       expect(rowsOf(dividers[1]!).map((o) => [o.value, o.title])).toEqual([
-        ["11", "GPT-4o"],
+        ["11", "GPT-6 Sol"],
         ["12", "o3-mini"],
       ]);
     });

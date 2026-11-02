@@ -5,6 +5,7 @@ Kept apart from chat_user so it imports without locust.
 
 from __future__ import annotations
 
+import json
 import os
 
 # Retrieval is only exercised when queries vary. A short list makes every
@@ -88,7 +89,17 @@ def load_messages() -> list[str]:
     if not path:
         return DEFAULT_MESSAGES
     with open(path, encoding="utf-8") as handle:
-        messages = [line.strip() for line in handle if line.strip()]
+        lines = [line.strip() for line in handle if line.strip()]
+    if path.endswith(".jsonl"):
+        messages = []
+        for index, line in enumerate(lines, 1):
+            row = json.loads(line)
+            question = row.get("question") if isinstance(row, dict) else None
+            if not isinstance(question, str) or not question.strip():
+                raise ValueError(f"{path}:{index}: expected a nonempty question string")
+            messages.append(question.strip())
+    else:
+        messages = lines
     if not messages:
         raise RuntimeError(f"ONYX_MESSAGES_FILE {path} has no questions")
     return messages

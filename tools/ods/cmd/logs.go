@@ -56,7 +56,11 @@ Examples:
 }
 
 func runComposeLogs(services []string, opts *LogsOptions) error {
-	args := baseArgs("")
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	args := baseArgs("", target.Project)
 	args = append(args, "logs")
 	if opts.Follow {
 		args = append(args, "-f")

@@ -7,14 +7,14 @@ from urllib.parse import unquote
 
 import pytest
 
-from ee.onyx.external_permissions.sharepoint.permission_utils import (
-    GET_SHAREPOINT_LIST_ITEM_ID_LABEL,
-)
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.microsoft_utils.drive_items import download_via_graph_api
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_client import sleep_and_retry
+from onyx.connectors.microsoft_utils.sharepoint_rest import (
+    GET_SHAREPOINT_LIST_ITEM_ID_LABEL,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -208,12 +208,18 @@ def find_hierarchy_node(
 
 
 @pytest.fixture
-def mock_store_image() -> MagicMock:
-    """Mock store_image_and_create_section to return a predefined ImageSection."""
+def mock_store_image(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Mock store_image_and_create_section to return a predefined ImageSection.
+
+    Images embedded in DOCX, PPTX and PDF files go through image_utils, not
+    drive_items, so that module is patched here too: CI has no file store."""
     mock = MagicMock()
     mock.return_value = (
         ImageSection(image_file_id="mocked-file-id", link="https://example.com/image"),
         "mocked-file-id",
+    )
+    monkeypatch.setattr(
+        "onyx.file_processing.image_utils.store_image_and_create_section", mock
     )
     return mock
 
@@ -646,7 +652,7 @@ def test_sharepoint_connector_hierarchy_node_permissions(
             mock_store_image,
         ),
         patch(
-            "ee.onyx.external_permissions.sharepoint.permission_utils.sleep_and_retry",
+            "onyx.connectors.microsoft_utils.sharepoint_rest.sleep_and_retry",
             wraps=sleep_and_retry,
         ) as mock_permission_retry,
         patch(
@@ -837,16 +843,17 @@ def test_resolve_tenant_domain_from_site_urls(
     site_url = os.environ["SHAREPOINT_SITE"]
     connector = SharepointConnector(sites=[site_url])
     connector.load_credentials(sharepoint_cert_credentials)
+    tenant_domain = connector.ops.resolve_tenant_domain()
 
-    assert connector.sp_tenant_domain is not None
-    assert len(connector.sp_tenant_domain) > 0
+    assert tenant_domain is not None
+    assert len(tenant_domain) > 0
     # The tenant domain should match the first label of the site URL hostname
     from urllib.parse import urlsplit
 
     hostname = urlsplit(site_url).hostname
     assert hostname is not None
     expected = hostname.split(".")[0]
-    assert connector.sp_tenant_domain == expected
+    assert tenant_domain == expected
 
 
 def test_resolve_tenant_domain_from_root_site(
@@ -856,9 +863,10 @@ def test_resolve_tenant_domain_from_root_site(
     site endpoint when no site URLs are configured."""
     connector = SharepointConnector(sites=[])
     connector.load_credentials(sharepoint_cert_credentials)
+    tenant_domain = connector.ops.resolve_tenant_domain()
 
-    assert connector.sp_tenant_domain is not None
-    assert len(connector.sp_tenant_domain) > 0
+    assert tenant_domain is not None
+    assert len(tenant_domain) > 0
 
 
 # ---------------------------------------------------------------------------

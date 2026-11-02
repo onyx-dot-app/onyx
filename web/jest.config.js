@@ -146,11 +146,7 @@ const sharedConfig = {
   cache: true,
   cacheDirectory: "<rootDir>/.jest-cache",
 
-  collectCoverageFrom: [
-    "src/**/*.{ts,tsx}",
-    "!src/**/*.d.ts",
-    "!src/**/*.stories.tsx",
-  ],
+  collectCoverageFrom: ["src/**/*.{ts,tsx}", "!src/**/*.d.ts"],
 
   coveragePathIgnorePatterns: ["/node_modules/", "/tests/", "/.next/"],
 

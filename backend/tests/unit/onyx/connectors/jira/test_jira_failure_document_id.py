@@ -16,12 +16,10 @@ of these lookups would ever match, so a failed issue would look indexed forever.
 
 import time
 from collections.abc import Callable
-from typing import cast
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from jira import JIRA
-from jira.resources import Issue
 
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.utils import build_jira_url
@@ -29,59 +27,11 @@ from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
-@pytest.fixture
-def create_mock_issue() -> Callable[..., MagicMock]:
-    """Minimal mock Issue builder, mirroring the fixture in test_jira_checkpointing.py
-    (not shared via conftest.py, so it is redefined here).
-    """
-
-    def _create_mock_issue(key: str) -> MagicMock:
-        mock_issue = MagicMock(spec=Issue)
-        mock_issue.fields = MagicMock()
-        mock_issue.key = key
-        mock_issue.fields.summary = "Test Issue"
-        mock_issue.fields.updated = "2023-01-01T12:00:00.000+0000"
-        mock_issue.fields.created = "2023-01-01T12:00:00.000+0000"
-        mock_issue.fields.description = "Test Description"
-        mock_issue.fields.labels = []
-
-        mock_issue.fields.reporter = MagicMock()
-        mock_issue.fields.reporter.displayName = "Test Creator"
-        mock_issue.fields.reporter.emailAddress = "creator@example.com"
-
-        mock_issue.fields.assignee = MagicMock()
-        mock_issue.fields.assignee.displayName = "Test Assignee"
-        mock_issue.fields.assignee.emailAddress = "assignee@example.com"
-
-        mock_issue.fields.priority = MagicMock()
-        mock_issue.fields.priority.name = "High"
-
-        mock_issue.fields.status = MagicMock()
-        mock_issue.fields.status.name = "In Progress"
-
-        mock_issue.fields.resolution = MagicMock()
-        mock_issue.fields.resolution.name = "Fixed"
-
-        mock_issue.fields.project = MagicMock()
-        mock_issue.fields.project.key = "TEST"
-        mock_issue.fields.project.name = "Test Project"
-
-        mock_issue.fields.issuetype = MagicMock()
-        mock_issue.fields.issuetype.name = "Story"
-
-        mock_issue.fields.parent = None
-
-        mock_issue.raw = {"fields": {"description": "Test Description"}}
-
-        return mock_issue
-
-    return _create_mock_issue
-
-
 def test_failure_document_id_matches_success_document_id(
     jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
     jira_base_url: str,
-    create_mock_issue: Callable[..., MagicMock],
+    create_mock_issue: Callable[..., dict[str, Any]],
 ) -> None:
     """Drive the connector twice for the same issue: once so it converts successfully,
     once with conversion patched to raise. The document_id captured from the failure path
@@ -90,9 +40,7 @@ def test_failure_document_id_matches_success_document_id(
     """
     issue_key = "PROJ-123"
 
-    jira_client = cast(JIRA, jira_connector._jira_client)
-    jira_client._options = {"rest_api_version": "2"}
-    search_issues_mock = cast(MagicMock, jira_client.search_issues)
+    search_issues_mock = mock_source_operations.search_issues
     search_issues_mock.side_effect = [
         [create_mock_issue(key=issue_key)],
         [],

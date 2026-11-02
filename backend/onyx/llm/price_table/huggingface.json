@@ -1,6 +1,32 @@
 {
   "aliases": {},
   "models": {
+    "MiniMaxAI/MiniMax-M1-80k": {
+      "attachment": false,
+      "cost": {
+        "input": 0.55,
+        "output": 2.2
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 1000000,
+        "output": 80000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax M1 80K",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-06-17",
+      "temperature": true,
+      "tool_call": true
+    },
     "MiniMaxAI/MiniMax-M2": {
       "attachment": false,
       "cost": {
@@ -185,7 +211,7 @@
       "name": "Qwen3 235B-A22B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-04",
+      "release_date": "2025-04-28",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -226,7 +252,7 @@
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 131072
+        "output": 81920
       },
       "modalities": {
         "input": [
@@ -292,7 +318,34 @@
       "name": "Qwen3 32B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-04",
+      "release_date": "2025-04-28",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "Qwen/Qwen3-8B": {
+      "attachment": false,
+      "cost": {
+        "input": 0.07,
+        "output": 0.18
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 40960,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 8B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-04-29",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -319,7 +372,7 @@
       "name": "Qwen3-Coder 30B-A3B Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-04",
+      "release_date": "2025-07-31",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -333,7 +386,7 @@
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 66536
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -346,7 +399,7 @@
       "name": "Qwen3-Coder-480B-A35B-Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-23",
+      "release_date": "2025-07-22",
       "temperature": true,
       "tool_call": true
     },
@@ -384,8 +437,8 @@
       },
       "family": "qwen",
       "limit": {
-        "context": 32000,
-        "output": 2048
+        "context": 32768,
+        "output": 0
       },
       "modalities": {
         "input": [
@@ -398,7 +451,7 @@
       "name": "Qwen 3 Embedding 4B",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-01-01",
+      "release_date": "2025-06-05",
       "temperature": false,
       "tool_call": false
     },
@@ -410,8 +463,8 @@
       },
       "family": "qwen",
       "limit": {
-        "context": 32000,
-        "output": 4096
+        "context": 32768,
+        "output": 0
       },
       "modalities": {
         "input": [
@@ -424,7 +477,7 @@
       "name": "Qwen 3 Embedding 8B",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-01-01",
+      "release_date": "2025-06-05",
       "temperature": false,
       "tool_call": false
     },
@@ -437,7 +490,7 @@
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 66536
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -450,33 +503,7 @@
       "name": "Qwen3-Next-80B-A3B-Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-09-11",
-      "temperature": true,
-      "tool_call": true
-    },
-    "Qwen/Qwen3-Next-80B-A3B-Thinking": {
-      "attachment": false,
-      "cost": {
-        "input": 0.3,
-        "output": 2
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 262144,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Qwen3-Next-80B-A3B-Thinking",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-09-11",
+      "release_date": "2025-09",
       "temperature": true,
       "tool_call": true
     },
@@ -532,6 +559,34 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-09-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "Qwen/Qwen3-VL-30B-A3B-Instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0.2,
+        "output": 0.7
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 VL 30B A3B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-10-04",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -643,7 +698,7 @@
       "name": "Qwen3.5-397B-A17B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-01",
+      "release_date": "2026-02-15",
       "temperature": true,
       "tool_call": true
     },
@@ -786,32 +841,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "XiaomiMiMo/MiMo-V2-Flash": {
-      "attachment": false,
-      "cost": {
-        "input": 0.1,
-        "output": 0.3
-      },
-      "family": "mimo",
-      "limit": {
-        "context": 262144,
-        "output": 4096
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "MiMo-V2-Flash",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-12-16",
-      "temperature": true,
-      "tool_call": true
-    },
     "XiaomiMiMo/MiMo-V2.5": {
       "attachment": false,
       "cost": {
@@ -902,7 +931,7 @@
       "family": "deepseek-thinking",
       "limit": {
         "context": 163840,
-        "output": 163840
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -1158,7 +1187,7 @@
       "name": "DeepSeek V4 Pro 0813",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-12",
+      "release_date": "2026-08-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1187,6 +1216,34 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+      "attachment": true,
+      "cost": {
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1385,6 +1442,33 @@
       "temperature": true,
       "tool_call": true
     },
+    "meta-llama/Llama-Guard-4-12B": {
+      "attachment": true,
+      "cost": {
+        "input": 0.18,
+        "output": 0.18
+      },
+      "family": "llama",
+      "limit": {
+        "context": 163840,
+        "output": 163840
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Llama Guard 4 12B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-29",
+      "temperature": true,
+      "tool_call": false
+    },
     "moonshotai/Kimi-K2-Instruct": {
       "attachment": false,
       "cost": {
@@ -1407,7 +1491,7 @@
       "name": "Kimi-K2-Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-14",
+      "release_date": "2025-07-11",
       "temperature": true,
       "tool_call": true
     },
@@ -1433,7 +1517,7 @@
       "name": "Kimi-K2-Instruct-0905",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-09-04",
+      "release_date": "2025-09-05",
       "temperature": true,
       "tool_call": true
     },
@@ -1489,7 +1573,7 @@
       "name": "Kimi-K2.5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-01-01",
+      "release_date": "2026-01-27",
       "temperature": true,
       "tool_call": true
     },
@@ -1638,6 +1722,7 @@
         "input": 0.1,
         "output": 0.3
       },
+      "family": "step",
       "limit": {
         "context": 262144,
         "output": 256000
@@ -1794,31 +1879,32 @@
       "temperature": true,
       "tool_call": true
     },
-    "zai-org/GLM-4.5": {
-      "attachment": false,
+    "zai-org/AutoGLM-Phone-9B-Multilingual": {
+      "attachment": true,
       "cost": {
-        "input": 0.6,
-        "output": 2.2
+        "input": 0.035,
+        "output": 0.138
       },
       "family": "glm",
       "limit": {
-        "context": 131072,
-        "output": 98304
+        "context": 65536,
+        "output": 65536
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "text"
         ]
       },
-      "name": "GLM-4.5",
+      "name": "AutoGLM Phone 9B Multilingual",
       "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-07-28",
+      "reasoning": false,
+      "release_date": "2025-12-10",
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
     "zai-org/GLM-4.5-Air": {
       "attachment": false,
@@ -1975,7 +2061,7 @@
       "name": "GLM-4.7-Flash",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-08-08",
+      "release_date": "2026-01-19",
       "temperature": true,
       "tool_call": true
     },
@@ -2002,7 +2088,7 @@
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-11",
+      "release_date": "2026-02-12",
       "temperature": true,
       "tool_call": true
     },
@@ -2029,7 +2115,7 @@
       "name": "GLM-5.1",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-03",
+      "release_date": "2026-04-07",
       "temperature": true,
       "tool_call": true
     },

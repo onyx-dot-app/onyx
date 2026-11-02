@@ -68,9 +68,6 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
         default_persona_id: guild.default_persona_id,
       });
       onRefresh();
-      toast.success(
-        !guild.enabled ? t("guilds.enabled.toast") : t("guilds.disabled.toast")
-      );
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("guilds.updateError.toast")

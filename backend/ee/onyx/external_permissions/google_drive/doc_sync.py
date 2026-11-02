@@ -1,7 +1,5 @@
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from datetime import datetime, timezone
-
-from google.auth.exceptions import RefreshError
 
 from ee.onyx.external_permissions.google_drive.models import (
     GoogleDrivePermission,
@@ -11,6 +9,7 @@ from ee.onyx.external_permissions.google_drive.permission_retrieval import (
     get_permissions_by_ids,
 )
 from ee.onyx.external_permissions.perm_sync_types import (
+    DocSyncCheckpointer,
     FetchAllDocumentsFunction,
     FetchAllDocumentsIdsFunction,
 )
@@ -26,7 +25,10 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveRefreshError,
+    GoogleDriveSourceOperations,
+)
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
@@ -67,19 +69,34 @@ def _domain_group_for_permission(
 def _get_slim_doc_generator(
     cc_pair: ConnectorCredentialPair,
     google_drive_connector: GoogleDriveConnector,
-    callback: IndexingHeartbeatInterface | None = None,
+    checkpointer: DocSyncCheckpointer,
+    callback: IndexingHeartbeatInterface | None,
 ) -> GenerateSlimDocumentOutput:
-    current_time = datetime.now(timezone.utc)
-    start_time = (
-        cc_pair.last_time_perm_sync.replace(tzinfo=timezone.utc).timestamp()
-        if cc_pair.last_time_perm_sync
-        else 0.0
-    )
+    resume = checkpointer.resume
+    if resume is not None:
+        # Keep the stopped attempt's window so its checkpoint stays valid
+        range_start = resume.poll_range_start
+        range_end = resume.poll_range_end
+        checkpoint = google_drive_connector.validate_checkpoint_json(
+            resume.checkpoint_json
+        )
+    else:
+        range_start = (
+            cc_pair.last_time_perm_sync.replace(tzinfo=timezone.utc)
+            if cc_pair.last_time_perm_sync
+            else None
+        )
+        range_end = datetime.now(timezone.utc)
+        checkpoint = None
 
     return google_drive_connector.retrieve_all_slim_docs_perm_sync(
-        start=start_time,
-        end=current_time.timestamp(),
+        start=range_start.timestamp() if range_start else 0.0,
+        end=range_end.timestamp(),
         callback=callback,
+        checkpoint=checkpoint,
+        on_checkpoint=lambda drive_checkpoint: checkpointer.save(
+            drive_checkpoint, range_start, range_end
+        ),
     )
 
 
@@ -103,18 +120,19 @@ def _merge_permissions_lists(
 def get_external_access_for_raw_gdrive_file(
     file: GoogleDriveFileType,
     company_domain: str,
-    retriever_drive_service: GoogleDriveService | None,
-    admin_drive_service: GoogleDriveService,
+    ops: GoogleDriveSourceOperations,
+    retriever_email: str | None,
+    admin_email: str,
     fallback_user_email: str,
     add_prefix: bool = False,
-    fallback_drive_service_factory: (
-        Callable[[], GoogleDriveService | None] | None
-    ) = None,
+    fallback_retriever_email: str | None = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
 
-    Assumes the file we retrieved has EITHER `permissions` or `permission_ids`
+    Assumes the file we retrieved has EITHER `permissions` or `permission_ids`.
+    Permissions listed by id are read as `retriever_email`, then as
+    `fallback_retriever_email`, then as `admin_email`, until all are found.
 
     add_prefix: When this method is called during the initial indexing via the connector,
                 set add_prefix to True so group IDs are prefixed with the source type.
@@ -141,22 +159,20 @@ def get_external_access_for_raw_gdrive_file(
         ]
     elif permission_ids:
 
-        def _get_permissions(
-            drive_service: GoogleDriveService,
-        ) -> list[GoogleDrivePermission]:
+        def _get_permissions(user_email: str) -> list[GoogleDrivePermission]:
             return get_permissions_by_ids(
-                drive_service=drive_service,
+                ops=ops,
+                user_email=user_email,
                 doc_id=doc_id,
                 permission_ids=permission_ids,
             )
 
         def _get_non_admin_permissions(
-            drive_service_factory: Callable[[], GoogleDriveService | None],
+            user_email: str,
         ) -> list[GoogleDrivePermission]:
             try:
-                drive_service = drive_service_factory()
-                return _get_permissions(drive_service) if drive_service else []
-            except RefreshError as error:
+                return _get_permissions(user_email)
+            except GoogleDriveRefreshError as error:
                 logger.warning(
                     "Could not impersonate non-admin user for document %s: %s",
                     doc_id,
@@ -164,25 +180,20 @@ def get_external_access_for_raw_gdrive_file(
                 )
                 return []
 
-        if retriever_drive_service:
-            permissions_list = _get_non_admin_permissions(
-                lambda: retriever_drive_service
-            )
+        if retriever_email:
+            permissions_list = _get_non_admin_permissions(retriever_email)
 
-        if (
-            len(permissions_list) != len(permission_ids)
-            and fallback_drive_service_factory
-        ):
+        if len(permissions_list) != len(permission_ids) and fallback_retriever_email:
             permissions_list = _merge_permissions_lists(
                 [
                     permissions_list,
-                    _get_non_admin_permissions(fallback_drive_service_factory),
+                    _get_non_admin_permissions(fallback_retriever_email),
                 ]
             )
 
         if len(permissions_list) != len(permission_ids):
             permissions_list = _merge_permissions_lists(
-                [permissions_list, _get_permissions(admin_drive_service)]
+                [permissions_list, _get_permissions(admin_email)]
             )
 
     # For externally-owned files, the Drive API may return no permissions
@@ -283,7 +294,8 @@ def get_external_access_for_raw_gdrive_file(
 def get_external_access_for_folder(
     folder: GoogleDriveFileType,
     google_domain: str,
-    drive_service: GoogleDriveService,
+    ops: GoogleDriveSourceOperations,
+    user_email: str,
     add_prefix: bool = False,
 ) -> ExternalAccess:
     """
@@ -295,7 +307,8 @@ def get_external_access_for_folder(
     Args:
         folder: The folder metadata from Google Drive API (must include permissionIds field)
         google_domain: The company's Google Workspace domain (e.g., "company.com")
-        drive_service: Google Drive service for fetching permission details
+        ops: The gateway that fetches the permission details
+        user_email: The user to read the permissions as
         add_prefix: When True, prefix group IDs with source type (for indexing path).
                    When False (default), leave unprefixed (for permission sync path).
 
@@ -323,7 +336,8 @@ def get_external_access_for_folder(
 
     # Fetch full permission objects using the permission IDs
     permissions_list = get_permissions_by_ids(
-        drive_service=drive_service,
+        ops=ops,
+        user_email=user_email,
         doc_id=folder_id,
         permission_ids=permission_ids,
     )
@@ -378,12 +392,13 @@ def gdrive_doc_sync(
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
+    checkpointer: DocSyncCheckpointer,
 ) -> Generator[ElementExternalAccess, None, None]:
     """
     Adds the external permissions to the documents and hierarchy nodes in postgres.
     If the document doesn't already exist in postgres, we create
     it in postgres so that when it gets created later, the permissions are
-    already populated.
+    already populated. The crawl resumes where a stopped attempt left off.
     """
     google_drive_connector = GoogleDriveConnector(
         **build_connector_kwargs(
@@ -392,7 +407,9 @@ def gdrive_doc_sync(
     )
     google_drive_connector.load_credentials(credential_json(cc_pair))
 
-    slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
+    slim_doc_generator = _get_slim_doc_generator(
+        cc_pair, google_drive_connector, checkpointer, callback
+    )
 
     total_processed = 0
     for slim_doc_batch in slim_doc_generator:

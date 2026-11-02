@@ -63,7 +63,7 @@ def test_required_failure_fails_the_capability() -> None:
         _result(CapabilityCheckStatus.PASSED),
         _result(CapabilityCheckStatus.FAILED, required=True),
         _result(CapabilityCheckStatus.FAILED, required=False),
-        _result(CapabilityCheckStatus.INDETERMINATE),
+        _result(CapabilityCheckStatus.INCOMPLETE),
     ]
 
     # Under test and postcondition.
@@ -85,7 +85,7 @@ def test_only_optional_failures_pass_with_warnings() -> None:
     )
 
 
-def test_required_indeterminate_outranks_optional_failure() -> None:
+def test_required_incomplete_outranks_optional_failure() -> None:
     """
     Verifies that an unverified required check blocks any PASSED claim, even
     when a non-required check produced a definite warning.
@@ -93,7 +93,7 @@ def test_required_indeterminate_outranks_optional_failure() -> None:
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.FAILED, required=False),
-        _result(CapabilityCheckStatus.INDETERMINATE, required=True),
+        _result(CapabilityCheckStatus.INCOMPLETE, required=True),
     ]
 
     # Under test and postcondition.
@@ -105,13 +105,13 @@ def test_required_indeterminate_outranks_optional_failure() -> None:
 def test_mixed_optional_degradations_pass_with_warnings() -> None:
     """
     Verifies that with the required core verified, non-required failures and
-    indeterminates together downgrade to a single warnings verdict.
+    incomplete checks together downgrade to a single warnings verdict.
     """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED, required=True),
         _result(CapabilityCheckStatus.FAILED, required=False),
-        _result(CapabilityCheckStatus.INDETERMINATE, required=False),
+        _result(CapabilityCheckStatus.INCOMPLETE, required=False),
     ]
 
     # Under test and postcondition.
@@ -121,14 +121,14 @@ def test_mixed_optional_degradations_pass_with_warnings() -> None:
     )
 
 
-def test_indeterminate_without_failures() -> None:
+def test_incomplete_without_failures() -> None:
     """
     Verifies that a transient error yields INDETERMINATE when nothing failed.
     """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED),
-        _result(CapabilityCheckStatus.INDETERMINATE),
+        _result(CapabilityCheckStatus.INCOMPLETE),
     ]
 
     # Under test and postcondition.
@@ -197,15 +197,15 @@ def test_optional_skip_does_not_downgrade() -> None:
     assert aggregate_capability_verdict(True, results) == CapabilityVerdict.PASSED
 
 
-def test_lone_optional_indeterminate_warns() -> None:
+def test_lone_optional_incomplete_warns() -> None:
     """
-    Verifies that a non-required indeterminate downgrades to warnings rather
+    Verifies that a non-required incomplete check downgrades to warnings rather
     than escalating to INDETERMINATE: the required core is verified.
     """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED),
-        _result(CapabilityCheckStatus.INDETERMINATE, required=False),
+        _result(CapabilityCheckStatus.INCOMPLETE, required=False),
     ]
 
     # Under test and postcondition.

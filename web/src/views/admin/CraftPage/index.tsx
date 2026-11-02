@@ -10,7 +10,8 @@ import {
   InputTypeIn,
   InputSwitch,
   Table,
-  createTableColumns,
+  Text,
+  type TableColumn,
 } from "@opal/components";
 import {
   Content,
@@ -22,7 +23,6 @@ import {
 
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -35,6 +35,7 @@ import type { User } from "@/lib/types";
 import type { UserRow } from "@/views/admin/UsersPage/types";
 import GroupsCell from "@/views/admin/UsersPage/GroupsCell";
 import AccessCell from "./AccessCell";
+import { useBetaTag } from "@/lib/tiers/hooks";
 
 const PAGE_SIZE = 10;
 
@@ -42,14 +43,13 @@ const PAGE_SIZE = 10;
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<UserRow>();
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function CraftPage() {
   const t = useTranslations("admin.craft");
+  const betaTag = useBetaTag();
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const defaultEnabled = settings?.craft_default_enabled !== false;
@@ -72,12 +72,13 @@ export default function CraftPage() {
     ? realUsers.length - explicitlyDisabled
     : explicitlyEnabled;
 
-  const columns = useMemo(
+  const columns = useMemo<TableColumn<UserRow>[]>(
     () => [
-      tc.qualifier({
+      {
+        kind: "qualifier",
         content: "icon",
-        iconSize: "lg",
-        getContent: (row) => {
+        avatar: true,
+        icon: (row) => {
           const user = {
             email: row.email,
             personalization: row.personal_name
@@ -86,9 +87,11 @@ export default function CraftPage() {
           } as User;
           return (props) => <UserAvatar user={user} size={props.size} />;
         },
-      }),
-      tc.column("email", {
-        header: t("table.userColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "email",
+        title: t("table.userColumn.header"),
         weight: 44,
         cell: (email, row) => (
           <Content
@@ -98,19 +101,23 @@ export default function CraftPage() {
             description={row.personal_name ? email : undefined}
           />
         ),
-      }),
-      tc.column("groups", {
-        header: t("table.groupsColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "groups",
+        title: t("table.groupsColumn.header"),
         weight: 24,
-        enableSorting: false,
+        sortable: false,
         cell: (value, row) => (
           <GroupsCell groups={value} user={row} onMutate={refresh} />
         ),
-      }),
-      tc.column("craft_enabled", {
-        header: t("table.accessColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "craft_enabled",
+        title: t("table.accessColumn.header"),
         weight: 16,
-        enableSorting: false,
+        sortable: false,
         cell: (_value, row) => (
           <AccessCell
             user={row}
@@ -118,7 +125,7 @@ export default function CraftPage() {
             onMutate={refresh}
           />
         ),
-      }),
+      },
     ],
     [defaultEnabled, refresh, t]
   );
@@ -156,26 +163,7 @@ export default function CraftPage() {
 
   // useSettings returns a default object while loading (and on error), which
   // lacks onyx_craft_available — don't misreport Craft as unavailable.
-  if (settings.isLoading || settings.error) {
-    return (
-      <SettingsLayouts.Root>
-        {header}
-        <SettingsLayouts.Body>
-          {settings.error ? (
-            <Text as="p" secondaryBody text03>
-              {t("settingsLoadError.description")}
-            </Text>
-          ) : (
-            <div className="flex justify-center py-12">
-              <IconLoader className="h-6 w-6" />
-            </div>
-          )}
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
-  if (!craftAvailable) {
+  if (!settings.isLoading && !settings.error && !craftAvailable) {
     return (
       <SettingsLayouts.Root>
         {header}
@@ -191,14 +179,17 @@ export default function CraftPage() {
   }
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root
+      loading={settings.isLoading}
+      error={settings.error ? t("settingsLoadError.description") : false}
+    >
       {header}
       <SettingsLayouts.Body>
         <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={2}>
             <InputHorizontal
               title={t("defaultToggle.title")}
-              tag={{ title: t("defaultToggle.betaTag.label"), color: "blue" }}
+              tag={betaTag}
               description={
                 defaultEnabled
                   ? t("defaultToggle.enabled.description")
@@ -212,7 +203,7 @@ export default function CraftPage() {
                 onCheckedChange={(checked) => setPendingDefault(checked)}
               />
             </InputHorizontal>
-            <Text as="p" secondaryBody text03>
+            <Text as="p" font="secondary-body" color="text-03">
               {isLoading
                 ? " "
                 : t("accessSummary.description", {
@@ -237,7 +228,7 @@ export default function CraftPage() {
             </div>
           )}
           {error ? (
-            <Text as="p" secondaryBody text03>
+            <Text as="p" font="secondary-body" color="text-03">
               {t("usersLoadError.description")}
             </Text>
           ) : null}
@@ -251,11 +242,11 @@ export default function CraftPage() {
                 searchIcon
               />
               <Table
-                data={realUsers}
+                items={realUsers}
                 columns={columns}
                 getRowId={(row) => row.id ?? row.email}
                 pageSize={PAGE_SIZE}
-                searchTerm={searchTerm}
+                query={searchTerm}
                 footer={{ units: t("table.footer.units") }}
                 emptyState={
                   <IllustrationContent
@@ -292,7 +283,7 @@ export default function CraftPage() {
             </Button>
           }
         >
-          <Text as="p" text03>
+          <Text as="p" color="text-03">
             {pendingDefault
               ? explicitlyDisabled > 0
                 ? t("confirmModal.enableBody.withExclusions.description", {

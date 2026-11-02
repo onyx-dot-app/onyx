@@ -55,7 +55,8 @@ func TestRunAudit_exitDecision(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bin := fakeBinDir(t)
-			chdirNewRepo(t)
+			root := chdirNewRepo(t)
+			writeFixture(t, root, "pyproject.toml", "")
 			fakeDependabot(t, bin, criticalAlert)
 			allowlist := writeFixture(t, t.TempDir(), "ignores.json", tc.allowlist)
 

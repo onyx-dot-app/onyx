@@ -76,7 +76,13 @@ function receiptLabel(
 ): string {
   switch (receipt.status) {
     case "uploaded":
-      return t("receipt.uploaded.label", { count: receipt.file_count });
+      // An uploaded piece can still be partial, e.g. when pods/log is denied.
+      return receipt.error
+        ? t("receipt.uploadedWithWarning.label", {
+            count: receipt.file_count,
+            error: receipt.error,
+          })
+        : t("receipt.uploaded.label", { count: receipt.file_count });
     case "duplicate_host":
       return t("receipt.duplicateHost.label");
     case "no_logs_found":

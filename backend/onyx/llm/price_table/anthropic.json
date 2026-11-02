@@ -133,6 +133,107 @@
       "temperature": true,
       "tool_call": true
     },
+    "claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "cache_write_above_1hr": 0.19999999999999998,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "claude-mythos-5": {
+      "cost": {
+        "cache_read": 1.0,
+        "cache_write": 12.5,
+        "cache_write_above_1hr": 20.0,
+        "input": 10.0,
+        "output": 50.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-mythos-5",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "claude-mythos-5-1": {
+      "cost": {
+        "cache_read": 0.25,
+        "cache_write": 12.5,
+        "cache_write_above_1hr": 20.0,
+        "input": 10.0,
+        "output": 50.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-mythos-5-1",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "claude-opus-4-5": {
       "attachment": true,
       "cost": {
@@ -232,6 +333,34 @@
       "temperature": true,
       "tool_call": true
     },
+    "claude-opus-4-6-20260205": {
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
+        "input": 5.0,
+        "output": 25.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-opus-4-6-20260205",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "claude-opus-4-7": {
       "attachment": true,
       "cost": {
@@ -263,6 +392,34 @@
       "release_date": "2026-04-14",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "claude-opus-4-7-20260416": {
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "cache_write_above_1hr": 10.0,
+        "input": 5.0,
+        "output": 25.0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "claude-opus-4-7-20260416",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "claude-opus-4-8": {
@@ -375,7 +532,7 @@
       },
       "family": "claude-sonnet",
       "limit": {
-        "context": 1000000,
+        "context": 200000,
         "output": 64000
       },
       "modalities": {
@@ -408,7 +565,7 @@
       },
       "family": "claude-sonnet",
       "limit": {
-        "context": 1000000,
+        "context": 200000,
         "output": 64000
       },
       "modalities": {
@@ -492,6 +649,39 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "cache_write_above_1hr": 4.0,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Sonnet 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
       "structured_output": true,
       "temperature": false,
       "tool_call": true

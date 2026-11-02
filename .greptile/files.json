@@ -53,5 +53,20 @@
     "scope": [],
     "path": "deployment/docker_compose/docker-compose.onyx-lite.yml",
     "description": "Lite deployment Docker Compose overlay and disabled service behavior"
+  },
+  {
+    "scope": [],
+    "path": ".agents/feature-map/PATHS.md",
+    "description": "Maps code paths to the feature-map component documents in .agents/feature-map/components/"
+  },
+  {
+    "scope": ["documentation/**"],
+    "path": "documentation/AGENTS.md",
+    "description": "Customer docs standards: what to document, generated assets, and release-pinned publishing"
+  },
+  {
+    "scope": ["documentation/**"],
+    "path": ".agents/skills/docs-writing/SKILL.md",
+    "description": "How to write and review a docs page, including screenshots"
   }
 ]

@@ -1,0 +1,187 @@
+---
+title: "Resourcing"
+description: "Resource requirements for deploying Onyx"
+icon: "microchip"
+---
+
+import ResourcingOverview from "/snippets/resourcing-overview.mdx"
+
+<ResourcingOverview />
+
+## Local Deployment (Docker)
+
+You can control the resources available to Docker in the **Resources** section of the Docker Desktop settings menu.
+
+<Info>
+  Often old, unused Docker images take up sizeable disk space. To clean up dangling images, run `docker image prune`.
+</Info>
+
+## Cloud Providers (AWS, GCP, etc.)
+
+For small to mid scale deployments, we recommend deploying Onyx to a single instance in your cloud provider of choice.
+
+### Onyx Lite
+
+| Provider | Recommended Instance Type |
+| --- | --- |
+| AWS | `t3.medium` |
+| GCP | `e2-medium` |
+| Azure | `B2s` |
+
+### Onyx Standard
+
+| Provider | Recommended Instance Type |
+| --- | --- |
+| AWS | `m7g.xlarge` |
+| GCP | `e2-standard-4` or `e2-standard-8` |
+| Azure | `D4s_v3` |
+| DigitalOcean | Meet the preferred resources in the table above |
+
+## Container-Specific Resourcing (Standard)
+
+For more efficient scaling, you can dedicate resources to each Onyx container using Kubernetes,
+such as AWS EKS or Google GKE. The [Terraform modules](/deployment/local/terraform) for AWS, GCP,
+and Azure include node pool sizes for small, medium, and large deployments.
+
+See the [Onyx Helm chart](https://github.com/onyx-dot-app/onyx/blob/main/deployment/helm/charts/onyx/values.yaml)
+`values.yaml` for our default requests and limits.
+The chart's [sizing guide](https://github.com/onyx-dot-app/onyx/blob/main/deployment/helm/charts/onyx/SIZING.md)
+has small, medium, and large values snippets.
+
+| Component | CPU | Memory |
+| --- | --- | --- |
+| `api_server` | 1 | 2 Gi |
+| Background workers (all `celery_*` workers) | 2 | 8 Gi |
+| `indexing_model_server` | 2 | 4 Gi |
+| `inference_model_server` | 2 | 4 Gi |
+| `postgres` | 2 | 2 Gi |
+| `opensearch` | 2 | 4 Gi |
+| `nginx` | 250m (1/4) | 128 Mi |
+
+<Info>
+  If you are using cloud-based embedding models (e.g. OpenAI, Cohere, etc.) instead of locally hosted ones,
+  the `indexing_model_server` and `inference_model_server` will use significantly less memory.
+</Info>
+
+All together, this comes out to a total available node size of at least ~12 CPU and ~24GB of Memory.
+
+## Container-Specific Resourcing (Lite)
+
+Docker Compose Lite starts six services. File storage, cache data, and sessions use PostgreSQL.
+
+| Component | CPU | Memory |
+| --- | --- | --- |
+| `api_server` | 1 | 1 Gi |
+| `web_server` | 250m (1/4) | 512 Mi |
+| `postgres` | 1 | 1 Gi |
+| `nginx` | 250m (1/4) | 128 Mi |
+| `code-interpreter` | 100m | 512 Mi |
+| `mcp_server` | 250m (1/4) | 256 Mi |
+
+<Info>
+  Memory usage in Lite mode scales with the number of user-uploaded files, since PostgreSQL handles file storage,
+  caching, and session management. The code interpreter can use additional resources when it runs code.
+  Helm Lite starts additional workloads unless you disable them explicitly;
+  see the [Helm Lite configuration](/deployment/configuration/configuration#deploying-onyx-lite-with-helm).
+</Info>
+
+## How Resource Requirements Scale
+
+The main driver of resource requirements for Standard mode is the number of indexed documents.
+This primarily affects the search index (OpenSearch),
+which is responsible for storing documents and handling search requests.
+
+### OpenSearch Memory
+
+OpenSearch memory is split roughly 50/50 between the JVM heap and the OS file system cache.
+Both halves are critical — the heap handles indexing and search operations while the file system cache keeps frequently
+accessed index segments in memory for fast reads.
+
+Key rules for JVM heap sizing:
+- Set `Xms` and `Xmx` to **50% of available RAM** (the other 50% goes to OS/file cache)
+- **Never exceed 32 GB heap** — beyond this, Java disables compressed ordinary object pointers, causing
+  significant performance degradation
+
+### Storage Overhead
+
+OpenSearch adds overhead on top of the raw source data. The formula for on-disk storage is:
+
+```
+Storage = Source data × (1 + replicas) × 1.45
+```
+
+The 1.45 multiplier accounts for indexing overhead (~10%), Linux reserved space (~5%),
+and OpenSearch internal overhead (~20%), plus a safety margin.
+
+<Note>
+  Onyx defaults to 0 replicas for single-node deployments, so storage is approximately **1.45× the source data size**.
+</Note>
+
+### Scaling Guidelines
+
+OpenSearch resource requirements scale linearly with the volume of indexed data.
+The exact ratio depends on deployment size — large distributed clusters are more efficient per GB than single-node
+deployments due to fixed per-node overhead (cluster management, garbage collection, segment merging).
+
+Industry guidelines for large clusters suggest a memory-to-data ratio of around 1:16 for search-heavy workloads.
+However, for the **single-node deployments typical of self-hosted Onyx**,
+the fixed overhead per node is a much larger fraction of total resources.
+
+Based on our experience, we recommend the following for single-node or small-cluster deployments:
+
+| Scale | Memory per 1 GB of source docs | CPU per 1 GB of source docs |
+| --- | --- | --- |
+| Small (< 5 GB) | ~2 GB | ~0.25 CPU |
+| Medium (5–50 GB) | ~1.5 GB | ~0.25 CPU |
+| Large (50+ GB) | ~1 GB | ~0.2 CPU |
+
+At very large scale, consider a dedicated OpenSearch cluster or a managed service.
+
+Other factors that may affect resource requirements include:
+- The embedding model and vector dimensions
+- Whether you have quantization and dimensional reduction enabled
+- Query throughput and concurrency
+
+### Resourcing Example
+
+For a deployment with 10GB of text content, your `opensearch` component will need:
+- Memory: 4 (base) + 10 × 1.5 = 19 GB
+- CPU: 2 (base) + 10 × 0.25 = 4.5 cores
+
+If deploying in a single instance, this would be *in addition to* the base requirements. Overall, that would take us to
+>= 9 CPU and >= 35GB of memory.
+
+Given these requirements, a `m7g.2xlarge` or `c5.4xlarge` EC2 instance would be appropriate.
+
+If deploying with Kubernetes, such as AWS EKS or Google GKE, this would give a per-component resource allocation of:
+
+| Component | CPU | Memory |
+| --- | --- | --- |
+| `api_server` | 1 | 2 Gi |
+| `background` | 2 | 8 Gi |
+| `indexing_model_server` | 2 | 4 Gi |
+| `inference_model_server` | 2 | 4 Gi |
+| `postgres` | 2 | 4 Gi |
+| `opensearch` | 5 | 19 Gi |
+
+Total available node size: ~14 CPU and ~41GB of Memory.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Guide: Deploy Onyx Locally" icon="microchip" href="/deployment/local/docker">
+    Deploy Onyx locally with Docker.
+  </Card>
+
+  <Card title="Guide: Deploy on AWS" icon="microchip" href="/deployment/cloud/aws/ec2">
+    Deploy Onyx on an EC2 instance.
+  </Card>
+
+  <Card title="Guide: Deploy on GCP" icon="microchip" href="/deployment/cloud/gcp">
+    Deploy Onyx on GKE with Terraform or on a Compute Engine VM.
+  </Card>
+
+  <Card title="Guide: Deploy on Azure" icon="microchip" href="/deployment/cloud/azure">
+    Deploy Onyx on an Azure VM.
+  </Card>
+</CardGroup>

@@ -4,7 +4,6 @@ import { IconLoader } from "@opal/loaders";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/lib/projects/providers";
-import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
@@ -23,7 +22,7 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import { AttachmentItemButton, Text as OpalText } from "@opal/components";
+import { AttachmentItemButton, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
@@ -102,9 +101,9 @@ function FileAttachment({
         centerChildren={
           rightText ? (
             <Section alignItems="end">
-              <OpalText font="secondary-body" color="text-03" maxLines={1}>
+              <Text font="secondary-body" color="text-03" maxLines={1}>
                 {rightText}
-              </OpalText>
+              </Text>
             </Section>
           ) : undefined
         }
@@ -258,7 +257,7 @@ export default function UserFilesModal({
           >
             {/* File display section */}
             {filtered.length === 0 ? (
-              <Text text03>{t("emptyState.description")}</Text>
+              <Text color="text-03">{t("emptyState.description")}</Text>
             ) : (
               <ScrollIndicatorDiv className="p-1 gap-1 max-h-[70vh]">
                 {filtered.map((projectFle) => {
@@ -311,7 +310,7 @@ export default function UserFilesModal({
             {/* Left side: file count and controls */}
             {onPickRecent && (
               <Section flexDirection="row" justifyContent="start" gap={2}>
-                <Text as="p" text03>
+                <Text as="p" color="text-03">
                   {t("selectedCount.label", { count: selectedCount })}
                 </Text>
                 <Button

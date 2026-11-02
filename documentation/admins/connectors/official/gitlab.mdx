@@ -1,0 +1,78 @@
+---
+title: "GitLab"
+description: "Index merge requests and issues from GitLab"
+---
+
+## How it works
+
+The GitLab connector indexes one GitLab project. It indexes:
+
+- **Merge requests**: open and closed, with the title and description.
+- **Issues**: open and closed, including incidents, with the title and description.
+
+Each item carries its URL, state, and type as metadata. The connector does not index comments, diffs, or commits.
+
+Onyx checks GitLab for new and changed items every 30 minutes by default.
+You can change **Refresh Every** on the connector.
+
+Permission sync is not available for GitLab.
+Everyone who can see the connector's documents in Onyx can see every indexed item.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Open your access tokens">
+    Log in to GitLab. In the left sidebar, select your avatar, then **Edit profile**.
+    Select **Access tokens** and then **Add new token**.
+
+    <video className="rounded-image" src="/assets/admins/connectors/gitlab/GitlabConnectorAuth.mp4" autoPlay muted loop playsInline aria-label="Creating a GitLab personal access token with the read_api scope" />
+  </Step>
+
+  <Step title="Set the token details">
+    Enter a name and an expiry date. The token expires at midnight UTC on that date. If you leave the date empty,
+    GitLab sets it to 365 days from today. When the token expires, indexing stops until you save a new token in Onyx.
+  </Step>
+
+  <Step title="Select the scope and create the token">
+    Select the `read_api` scope.
+    See the [GitLab scope
+    reference](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html#personal-access-token-scopes)
+    for details. Select **Create personal access token** and copy the token.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Onyx admin panel, go to **Connectors** and select **GitLab**. Under **Authentication Account**,
+    click **Create New**. Enter the **GitLab URL** and the token as the **API Token**.
+    Keep `https://gitlab.com` for GitLab.com. Enter the address of your instance for a self-hosted GitLab.
+  </Step>
+
+  <Step title="Enter the project">
+    Enter the **Project Owner** and the **Project Name**. For `https://gitlab.com/onyx-ai/onyx`,
+    the owner is `onyx-ai` and the name is `onyx`.
+  </Step>
+
+  <Step title="Choose the content types">
+    **Include MRs** and **Include Issues** are both on by default. Turn one off to skip that content type.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the indexed items.
+    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/gitlab/GitlabConnector.webp" alt="GitLab connector configuration in Onyx"/>
+
+## Indexing code files
+
+Self-hosted deployments can also index the text files in the project.
+Set the `GITLAB_CONNECTOR_INCLUDE_CODE_FILES` environment variable to `true` and restart Onyx.
+See [Configuration](/deployment/configuration/configuration).
+The setting applies to every GitLab connector in the deployment.

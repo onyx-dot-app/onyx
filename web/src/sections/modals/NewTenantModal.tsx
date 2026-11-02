@@ -3,13 +3,12 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { BasicModalFooter, Modal } from "@opal/components";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
 import { InputErrorText, toast } from "@opal/layouts";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
@@ -140,7 +139,7 @@ export default function NewTenantModal({
         <Modal.Header icon={SvgUsers} title={title} onClose={onClose} />
 
         <Modal.Body>
-          <Text>{description}</Text>
+          <Text color="text-05">{description}</Text>
           {error && <InputErrorText>{error}</InputErrorText>}
         </Modal.Body>
 

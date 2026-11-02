@@ -383,6 +383,52 @@ class TestGetOpenRouterAvailableModels:
             assert claude.supports_image_input is True
             assert llama.supports_image_input is False
 
+    def test_marks_router_models(self, mock_openrouter_response: dict) -> None:
+        """Router entries are detected via tokenizer "Router" or -1 pricing."""
+        from onyx.server.manage.llm.api import get_openrouter_available_models
+
+        mock_openrouter_response["data"].extend(
+            [
+                {
+                    "id": "openrouter/auto",
+                    "name": "Auto Router",
+                    "architecture": {
+                        "tokenizer": "Router",
+                        "input_modalities": ["text", "image"],
+                    },
+                    "pricing": {"prompt": "-1", "completion": "-1"},
+                },
+                {
+                    "id": "openrouter/fusion",
+                    "name": "Fusion",
+                    "architecture": {"input_modalities": ["text"]},
+                    "pricing": {"prompt": "-1", "completion": "-1"},
+                },
+            ]
+        )
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_openrouter_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenRouterModelsRequest(
+                api_base="https://openrouter.ai/api/v1",
+                api_key="test-key",
+            )
+            results = get_openrouter_available_models(
+                request, MagicMock(), mock_session
+            )
+
+            by_name = {r.name: r for r in results}
+            assert by_name["openrouter/auto"].is_router is True
+            assert by_name["openrouter/fusion"].is_router is True
+            assert by_name["anthropic/claude-3.5-sonnet"].is_router is False
+            assert by_name["openai/gpt-4o"].is_router is False
+
     def test_syncs_to_db_when_provider_id_specified(
         self, mock_openrouter_response: dict
     ) -> None:
@@ -392,10 +438,15 @@ class TestGetOpenRouterAvailableModels:
         mock_session = MagicMock()
         mock_provider = MagicMock()
         mock_provider.id = 1
+        mock_provider.provider = "openrouter"
         mock_provider.model_configurations = []
 
         with (
             patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch(
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
+            ),
             patch(
                 "onyx.db.llm.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -443,10 +494,15 @@ class TestGetOpenRouterAvailableModels:
 
         mock_provider = MagicMock()
         mock_provider.id = 1
+        mock_provider.provider = "openrouter"
         mock_provider.model_configurations = [existing_model]
 
         with (
             patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch(
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
+            ),
             patch(
                 "onyx.db.llm.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -1746,6 +1802,66 @@ class TestGetBedrockAvailableModels:
             get_bedrock_available_models(request, MagicMock(), MagicMock())
 
         assert mock_session.client.call_args.kwargs["config"] is None
+
+    def test_role_assumed_with_base_credentials(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """A role ARN is assumed with the submitted credentials, and models
+        are listed with the temporary credentials of that role."""
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        base_session = MagicMock()
+        sts_client = base_session.client.return_value
+        sts_client.assume_role.return_value = {
+            "Credentials": {
+                "AccessKeyId": "ASIATEMP",
+                "SecretAccessKey": "temp-secret",
+                "SessionToken": "temp-token",
+            }
+        }
+        role_session = MagicMock()
+        role_session.client.return_value = mock_bedrock_client
+
+        with patch(
+            "onyx.server.manage.llm.api.boto3.Session",
+            side_effect=[base_session, role_session],
+        ) as mock_session_cls:
+            request = BedrockModelsRequest(
+                aws_region_name="us-west-2",
+                aws_access_key_id="AKIAEXAMPLE",
+                aws_secret_access_key="secret",
+                aws_role_name="arn:aws:iam::123456789012:role/bedrock",
+                aws_external_id="ext-id",
+            )
+            results = get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+        base_session.client.assert_called_once_with("sts", region_name="us-west-2")
+        sts_client.assume_role.assert_called_once_with(
+            RoleArn="arn:aws:iam::123456789012:role/bedrock",
+            RoleSessionName="onyx-bedrock-model-fetch",
+            ExternalId="ext-id",
+        )
+        assert mock_session_cls.call_args_list[1].kwargs == {
+            "aws_access_key_id": "ASIATEMP",
+            "aws_secret_access_key": "temp-secret",
+            "aws_session_token": "temp-token",
+            "region_name": "us-west-2",
+        }
+        assert [r.name for r in results] == ["anthropic.claude-opus-4-7"]
+
+    @patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
+    def test_role_rejected_in_multi_tenant(self) -> None:
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        with patch("onyx.server.manage.llm.api.boto3.Session") as mock_session_cls:
+            request = BedrockModelsRequest(
+                aws_region_name="us-west-2",
+                aws_role_name="arn:aws:iam::123456789012:role/bedrock",
+            )
+            with pytest.raises(OnyxError):
+                get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+        mock_session_cls.assert_not_called()
 
     def test_masked_bearer_token_resolved_from_existing_provider(
         self, mock_bedrock_client: MagicMock

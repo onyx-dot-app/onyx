@@ -1,0 +1,440 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import {
+  Button,
+  InputTextArea,
+  InputTypeIn,
+  Modal,
+  Tabs,
+  Text,
+} from "@opal/components";
+import { Content, Section, toast } from "@opal/layouts";
+import { IconLoader } from "@opal/loaders";
+import { SvgActions } from "@opal/icons";
+import useOpenApiTools from "@/hooks/useOpenApiTools";
+import { can } from "@/lib/permissions/resource-actions";
+import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
+import { useSWRConfig } from "swr";
+import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
+import { refreshMemberPluginCaches } from "@/lib/plugins/member";
+import { updateCustomTool } from "@/lib/tools/svc";
+import {
+  extractMethodSpecsFromDefinition,
+  getActionIcon,
+} from "@/lib/tools/utils";
+import AddOpenAPIActionModal, {
+  type OpenAPIConfigurationValues,
+} from "@/sections/actions/modals/AddOpenAPIActionModal";
+import OpenAPIAuthenticationModal, {
+  type OpenAPIAuthFormValues,
+} from "@/sections/actions/modals/OpenAPIAuthenticationModal";
+import { saveOpenApiAuthentication } from "@/sections/plugins/openApiWorkflow";
+import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
+
+interface OpenAPIPluginDetailPageProps {
+  toolId: number;
+}
+
+export default function OpenAPIPluginDetailPage({
+  toolId,
+}: OpenAPIPluginDetailPageProps) {
+  const t = useTranslations("actions");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { mutate } = useSWRConfig();
+  const defaultChat = useDefaultAssistantConfiguration();
+  const {
+    openApiTools,
+    isLoading,
+    error: loadError,
+    mutateOpenApiTools,
+    refreshOpenApiTools,
+  } = useOpenApiTools();
+  const tool = openApiTools?.find((candidate) => candidate.id === toolId);
+  const [tab, setTab] = useState("server");
+  const [visited, setVisited] = useState(() => new Set(["server"]));
+  const [busy, setBusy] = useState(false);
+  const [configurationDirty, setConfigurationDirty] = useState(false);
+  const [authDirty, setAuthDirty] = useState(false);
+  const guard = useUnsavedChangesGuard({
+    isDirty: configurationDirty || authDirty,
+  });
+  const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
+  const [toolSearch, setToolSearch] = useState("");
+  const consumedConfigure = useRef(new Set<number>());
+  const authenticationSession = useRef<{
+    toolId: number;
+    pendingOAuthConfigId: number | null;
+    savedAuthentication?: { oauthConfigId: number | null; formKey: string };
+  }>({ toolId, pendingOAuthConfigId: null });
+  const active = useRef(true);
+  const canEdit = can(tool, "edit");
+  const canAuthenticate = can(tool, "authenticate");
+  const savedAuthentication = authenticationSession.current.savedAuthentication;
+  const authenticationFormKey =
+    savedAuthentication &&
+    (tool?.oauth_config_id ?? null) === savedAuthentication.oauthConfigId
+      ? savedAuthentication.formKey
+      : `${toolId}:${tool?.oauth_config_id ?? "none"}`;
+
+  useEffect(() => {
+    active.current = true;
+    authenticationSession.current = { toolId, pendingOAuthConfigId: null };
+    return () => {
+      active.current = false;
+    };
+  }, [toolId]);
+
+  useEffect(() => {
+    if (
+      !tool ||
+      searchParams.get("configure") !== "authentication" ||
+      consumedConfigure.current.has(tool.id)
+    )
+      return;
+    consumedConfigure.current.add(tool.id);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("configure");
+    router.replace(
+      withPluginSearchParams(
+        pluginDetailHref({ kind: "openapi", id: tool.id }),
+        next
+      ),
+      { scroll: false }
+    );
+    if (can(tool, "authenticate")) {
+      setTab("authentication");
+      setVisited((current) => new Set([...current, "authentication"]));
+    }
+  }, [tool, searchParams, router]);
+
+  function closeDetail() {
+    if (busy) return;
+    guard.requestLeave(() =>
+      router.replace("/admin/plugins", { scroll: false })
+    );
+  }
+
+  async function saveConfiguration(values: OpenAPIConfigurationValues) {
+    if (!tool) return;
+    const tools = await refreshOpenApiTools();
+    const currentTool = tools?.find((candidate) => candidate.id === tool.id);
+    if (!currentTool) throw new Error(t("addOpenApiModal.toasts.updateFailed"));
+    const metadataChanged =
+      values.definition !== undefined ||
+      (values.name !== undefined && values.name !== currentTool.name) ||
+      (values.description !== undefined &&
+        values.description !== currentTool.description);
+    const availabilityChanged = values.defaultChatEnabled !== undefined;
+    if (
+      (metadataChanged && !can(currentTool, "edit")) ||
+      (availabilityChanged &&
+        (!defaultChat.canEdit || !can(currentTool, "edit")))
+    ) {
+      throw new Error(t("addOpenApiModal.toasts.updateFailed"));
+    }
+    if (availabilityChanged && (!defaultChat.data || defaultChat.error)) {
+      throw new Error(t("addOpenApiModal.toasts.updateFailed"));
+    }
+    if (metadataChanged) {
+      const payload: Parameters<typeof updateCustomTool>[1] = {
+        name: values.name ?? currentTool.name,
+        description: values.description ?? currentTool.description,
+        oauth_config_id: currentTool.oauth_config_id ?? null,
+      };
+      if (values.definition !== undefined)
+        payload.definition = values.definition;
+      const response = await updateCustomTool(currentTool.id, payload);
+      if (response.error || !response.data)
+        throw new Error(
+          response.error ?? t("addOpenApiModal.toasts.updateFailed")
+        );
+    }
+    if (values.defaultChatEnabled !== undefined) {
+      await defaultChat.updateTools(
+        [currentTool.id],
+        values.defaultChatEnabled
+      );
+    }
+    await mutateOpenApiTools();
+    await refreshMemberPluginCaches(mutate);
+    toast.success(t("addOpenApiModal.toasts.actionUpdated"));
+  }
+
+  async function saveAuthentication(values: OpenAPIAuthFormValues) {
+    if (!tool || !can(tool, "authenticate")) return;
+    const session = authenticationSession.current;
+    const sourceOAuthConfigId = tool.oauth_config_id ?? null;
+    const tools = await refreshOpenApiTools();
+    const currentTool = tools?.find(
+      (candidate) => candidate.id === session.toolId
+    );
+    if (!currentTool || !can(currentTool, "authenticate")) {
+      const message = t("addOpenApiModal.editConfigsButton.disabledTooltip");
+      toast.error(message);
+      throw new Error(message);
+    }
+    const currentOAuthConfigId = currentTool.oauth_config_id ?? null;
+    if (
+      currentOAuthConfigId !== sourceOAuthConfigId &&
+      (currentOAuthConfigId !== session.savedAuthentication?.oauthConfigId ||
+        authenticationFormKey !== session.savedAuthentication?.formKey)
+    ) {
+      const message = t("openApiPage.toasts.authSaveFailed");
+      toast.error(message);
+      throw new Error(message);
+    }
+    await saveOpenApiAuthentication({
+      tool: currentTool,
+      values,
+      pendingOAuthConfigId: session.pendingOAuthConfigId,
+      onOAuthConfigCreated: (id) => {
+        session.pendingOAuthConfigId = id;
+      },
+    });
+    session.savedAuthentication = {
+      oauthConfigId:
+        values.authMethod === "oauth"
+          ? (currentOAuthConfigId ?? session.pendingOAuthConfigId)
+          : null,
+      formKey: authenticationFormKey,
+    };
+    if (values.authMethod === "oauth") session.pendingOAuthConfigId = null;
+    await refreshOpenApiTools();
+    if (active.current && authenticationSession.current === session)
+      toast.success(
+        t("openApiPage.toasts.authSaved", { name: currentTool.name })
+      );
+  }
+
+  const methods = extractMethodSpecsFromDefinition(tool?.definition);
+  const serverUrl = tool?.definition?.servers?.[0]?.url ?? "";
+  const filteredMethods = methods.filter((method) =>
+    `${method.name} ${method.summary}`
+      .toLowerCase()
+      .includes(toolSearch.trim().toLowerCase())
+  );
+  const authMethod = tool?.oauth_config_id
+    ? "oauth"
+    : tool?.passthrough_auth
+      ? "pt-oauth"
+      : tool?.custom_headers?.length
+        ? "custom-header"
+        : "none";
+  const authDescription = {
+    oauth: t("openApiAuthModal.authMethod.oauth.label"),
+    "pt-oauth": t("openApiAuthModal.authMethod.ptOauth.label"),
+    "custom-header": t("openApiAuthModal.authMethod.customHeader.label"),
+    none: t("mcpAuthModal.authType.none.label"),
+  }[authMethod];
+
+  function selectTab(value: string) {
+    if (busy) return;
+    setTab(value);
+    setVisited((current) => new Set([...current, value]));
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={(next) =>
+        !next && (guard.confirmationOpen ? guard.cancelLeave() : closeDetail())
+      }
+    >
+      <PluginModalContent>
+        {!guard.confirmationOpen && (
+          <Modal.Header
+            title={tool?.name ?? t("plugins.openapi.detailsTitle")}
+            icon={tool ? getActionIcon(serverUrl, tool.name) : SvgActions}
+            description={
+              tool?.description || t("plugins.openapi.detailDescription")
+            }
+            onClose={closeDetail}
+          />
+        )}
+        <div className={guard.confirmationOpen ? "hidden" : "contents"}>
+          <Modal.Body twoTone={false} alignItems="stretch">
+            {!tool && isLoading ? (
+              <IconLoader />
+            ) : !tool ? (
+              <div className="flex flex-col items-start gap-4">
+                <Content
+                  sizePreset="section"
+                  variant="section"
+                  title={t(
+                    loadError
+                      ? "plugins.openapi.loadFailed"
+                      : "plugins.openapi.notFound"
+                  )}
+                  description={t("plugins.openapi.unavailable")}
+                />
+                {loadError && (
+                  <Button
+                    prominence="secondary"
+                    onClick={() => void mutateOpenApiTools()}
+                  >
+                    {t("mcpDetail.retry")}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <Tabs
+                value={tab}
+                onValueChange={selectTab}
+                variant="contained"
+                gap={6}
+              >
+                <Tabs.List>
+                  <Tabs.Trigger value="server" disabled={busy}>
+                    {t("plugins.openapi.detailsTitle")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="authentication" disabled={busy}>
+                    {t("mcpDetail.authentication")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="tools" disabled={busy}>
+                    {t("mcpTools.title")}
+                  </Tabs.Trigger>
+                </Tabs.List>
+                <Tabs.Content
+                  value="server"
+                  keepMounted
+                  hidden={tab !== "server"}
+                >
+                  <Section
+                    gap={6}
+                    height="auto"
+                    justifyContent="start"
+                    alignItems="stretch"
+                    className="min-w-0"
+                  >
+                    {canEdit || can(tool, "toggle") ? (
+                      <AddOpenAPIActionModal
+                        key={tool.id}
+                        presentation="inline"
+                        existingTool={tool}
+                        defaultChatEnabled={
+                          defaultChat.data?.tool_ids.includes(tool.id) ??
+                          tool.default_chat_enabled ??
+                          false
+                        }
+                        canManageDefaultChat={defaultChat.canEdit && canEdit}
+                        defaultChatReady={
+                          Boolean(defaultChat.data) && !defaultChat.error
+                        }
+                        active={tab === "server"}
+                        footerTarget={footerTarget}
+                        onBusyChange={setBusy}
+                        onDirtyChange={setConfigurationDirty}
+                        onSaveConfiguration={saveConfiguration}
+                      />
+                    ) : (
+                      <>
+                        <Content
+                          sizePreset="main-ui"
+                          variant="section"
+                          title={tool.name}
+                          description={
+                            tool.description || t("plugins.openapi.readOnly")
+                          }
+                        />
+                        <InputTextArea
+                          value={JSON.stringify(tool.definition, null, 2)}
+                          variant="disabled"
+                          rows={8}
+                          aria-label={t("addOpenApiModal.definition.title")}
+                        />
+                      </>
+                    )}
+                  </Section>
+                </Tabs.Content>
+                <Tabs.Content
+                  value="authentication"
+                  keepMounted
+                  hidden={tab !== "authentication"}
+                >
+                  <div className="min-w-0">
+                    {visited.has("authentication") &&
+                      (canAuthenticate ? (
+                        <OpenAPIAuthenticationModal
+                          key={authenticationFormKey}
+                          presentation="inline"
+                          active={tab === "authentication"}
+                          footerTarget={footerTarget}
+                          onBusyChange={setBusy}
+                          onDirtyChange={setAuthDirty}
+                          isOpen
+                          title={t("mcpDetail.authentication")}
+                          allowNoAuthentication
+                          defaultMethod={authMethod}
+                          onClose={closeDetail}
+                          submitLabel={t(
+                            "addOpenApiModal.submitButton.saveLabel"
+                          )}
+                          oauthConfigId={tool.oauth_config_id ?? null}
+                          initialHeaders={tool.custom_headers}
+                          passthroughOAuthEnabled={tool.passthrough_auth}
+                          onConnect={saveAuthentication}
+                        />
+                      ) : (
+                        <Content
+                          sizePreset="main-ui"
+                          variant="section"
+                          title={t("mcpDetail.authentication")}
+                          description={authDescription}
+                        />
+                      ))}
+                  </div>
+                </Tabs.Content>
+                <Tabs.Content value="tools">
+                  <div className="flex flex-col gap-4">
+                    <InputTypeIn
+                      searchIcon
+                      value={toolSearch}
+                      onChange={(event) => setToolSearch(event.target.value)}
+                      placeholder={t("mcpTools.search")}
+                      aria-label={t("mcpTools.search")}
+                    />
+                    <Text font="secondary-body" color="text-03">
+                      {t("memberPlugins.detail.toolCount", {
+                        count: filteredMethods.length,
+                      })}
+                    </Text>
+                    {filteredMethods.length ? (
+                      <OpenAPIEndpointList methods={filteredMethods} />
+                    ) : (
+                      <Text as="p" color="text-03">
+                        {t(
+                          toolSearch.trim()
+                            ? "toolsList.empty.searchMessage"
+                            : "toolsList.empty.message"
+                        )}
+                      </Text>
+                    )}
+                  </div>
+                </Tabs.Content>
+              </Tabs>
+            )}
+          </Modal.Body>
+          <Modal.Footer padding={4}>
+            <div
+              ref={setFooterTarget}
+              className="ms-auto flex min-h-8 items-center gap-2"
+            />
+          </Modal.Footer>
+        </div>
+        {guard.confirmationOpen && (
+          <UnsavedChangesModalContent
+            onCancel={guard.cancelLeave}
+            onDiscard={guard.discardAndLeave}
+          />
+        )}
+      </PluginModalContent>
+    </Modal>
+  );
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getConfiguredSources } from "@/lib/connectors/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -10,7 +11,6 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
-import { getConfiguredSources } from "@/lib/sources";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
 interface UseSendChatMessageFromURLProps {

@@ -34,7 +34,7 @@ from tests.integration.tests.permissions._access_matrix import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User-group permission tests are enterprise only",
 )
 
@@ -328,9 +328,10 @@ def test_holder_cannot_touch_the_basic_group(
     permission_admin_user: DATestUser,
     holder_user: DATestUser,
 ) -> None:
-    """Basic grants only BASIC_ACCESS, so the amplification check above can't be what
-    stops the holder — the default-group gate is. The affordance map agrees, which is
-    what keeps the groups page from listing Admin/Basic for them."""
+    """The holder is a Basic member and already holds every Basic grant, so the
+    amplification check above can't be what stops them. The default-group gate is. The
+    affordance map agrees, which is what keeps the groups page from listing Admin/Basic
+    for them."""
     basic = UserGroupManager.get_default(
         user_performing_action=permission_admin_user, name="Basic"
     )

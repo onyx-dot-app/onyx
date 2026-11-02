@@ -260,6 +260,41 @@ describe("packetProcessor", () => {
       expect(result.toolGroupKeys.size).toBe(1);
     });
 
+    test("classifies a tool when debug arrives before its start, including incremental updates", () => {
+      const debug: Packet = {
+        placement: { turn_index: 0 },
+        obj: {
+          type: PacketType.TOOL_CALL_DEBUG,
+          tool_call_id: "call",
+          tool_name: "lookup",
+          tool_args: { query: "hello" },
+        },
+      };
+      const start: Packet = {
+        placement: { turn_index: 0 },
+        obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "Lookup" },
+      };
+      const pending = processPackets(createInitialState(1), [debug]);
+      expect(pending.toolGroupKeys.size).toBe(0);
+      const result = processPackets(pending, [debug, start]);
+      expect(result.toolGroupKeys.has("0-0")).toBe(true);
+      expect(result.toolGroups[0]?.packets).toEqual([debug, start]);
+    });
+
+    test("classifies display content after control packets without changing mixed-group ownership", () => {
+      const heartbeat: Packet = {
+        placement: { turn_index: 0 },
+        obj: { type: "chat_heartbeat" },
+      };
+      const result = processPackets(createInitialState(1), [
+        heartbeat,
+        createMessageStartPacket({ turn_index: 0 }),
+        createSearchToolStartPacket({ turn_index: 0 }),
+      ]);
+      expect(result.displayGroupKeys.has("0-0")).toBe(true);
+      expect(result.toolGroupKeys.size).toBe(0);
+    });
+
     // Parameterized tests for tool packet types
     test.each([
       [PacketType.SEARCH_TOOL_START, "SEARCH_TOOL_START"],

@@ -134,7 +134,7 @@ def _parse_models_env(env_var: str) -> list[str]:
     return [part.strip() for part in raw_value.split(",") if part.strip()]
 
 
-def _load_provider_config() -> NightlyProviderConfig:
+def load_provider_config() -> NightlyProviderConfig:
     provider = os.environ.get(_ENV_PROVIDER, "").strip().lower()
     model_names = _parse_models_env(_ENV_MODELS)
     api_key = os.environ.get(_ENV_API_KEY) or None
@@ -165,18 +165,18 @@ def _load_provider_config() -> NightlyProviderConfig:
     )
 
 
-def _skip_or_fail(strict: bool, message: str) -> None:
+def skip_or_fail(strict: bool, message: str) -> None:
     if strict:
         pytest.fail(message)
     pytest.skip(message)
 
 
-def _validate_provider_config(config: NightlyProviderConfig) -> None:
+def validate_provider_config(config: NightlyProviderConfig) -> None:
     if not config.provider:
-        _skip_or_fail(strict=config.strict, message=f"{_ENV_PROVIDER} must be set")
+        skip_or_fail(strict=config.strict, message=f"{_ENV_PROVIDER} must be set")
 
     if not config.model_names:
-        _skip_or_fail(
+        skip_or_fail(
             strict=config.strict,
             message=f"{_ENV_MODELS} must include at least one model",
         )
@@ -184,7 +184,7 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
     if config.provider != "ollama_chat" and not (
         config.api_key or config.custom_config
     ):
-        _skip_or_fail(
+        skip_or_fail(
             strict=config.strict,
             message=(
                 f"{_ENV_API_KEY} or {_ENV_CUSTOM_CONFIG_JSON} is required for provider '{config.provider}'"
@@ -192,23 +192,23 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
         )
 
     if config.provider == "ollama_chat" and not (
-        config.api_base or _default_api_base_for_provider(config.provider)
+        config.api_base or default_api_base_for_provider(config.provider)
     ):
-        _skip_or_fail(
+        skip_or_fail(
             strict=config.strict,
             message=(f"{_ENV_API_BASE} is required for provider '{config.provider}'"),
         )
 
     if config.provider == "azure":
         if not config.api_base:
-            _skip_or_fail(
+            skip_or_fail(
                 strict=config.strict,
                 message=(
                     f"{_ENV_API_BASE} is required for provider '{config.provider}'"
                 ),
             )
         if not config.api_version:
-            _skip_or_fail(
+            skip_or_fail(
                 strict=config.strict,
                 message=(
                     f"{_ENV_API_VERSION} is required for provider '{config.provider}'"
@@ -223,7 +223,7 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             configured_keys = (
                 sorted(config.custom_config.keys()) if config.custom_config else []
             )
-            _skip_or_fail(
+            skip_or_fail(
                 strict=config.strict,
                 message=(
                     f"{_ENV_CUSTOM_CONFIG_JSON} must include 'vertex_credentials' "
@@ -233,7 +233,7 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
             )
 
 
-def _assert_integration_mode_enabled() -> None:
+def assert_integration_mode_enabled() -> None:
     assert app_configs.INTEGRATION_TESTS_MODE is True, (
         "Integration tests require INTEGRATION_TESTS_MODE=true."
     )
@@ -255,7 +255,7 @@ def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
     raise AssertionError("SearchTool must exist for this test")
 
 
-def _default_api_base_for_provider(provider: str) -> str | None:
+def default_api_base_for_provider(provider: str) -> str | None:
     if provider == "openrouter":
         return "https://openrouter.ai/api/v1"
     if provider == "ollama_chat":
@@ -264,7 +264,7 @@ def _default_api_base_for_provider(provider: str) -> str | None:
     return None
 
 
-def _create_provider_payload(
+def create_provider_payload(
     provider: str,
     provider_name: str,
     model_name: str,
@@ -368,11 +368,11 @@ def _create_and_test_provider_for_model(
     search_tool_id: int,
 ) -> None:
     provider_name = f"nightly-{config.provider}-{uuid4().hex[:12]}"
-    resolved_api_base = config.api_base or _default_api_base_for_provider(
+    resolved_api_base = config.api_base or default_api_base_for_provider(
         config.provider
     )
 
-    provider_payload = _create_provider_payload(
+    provider_payload = create_provider_payload(
         provider=config.provider,
         provider_name=provider_name,
         model_name=model_name,
@@ -434,9 +434,9 @@ def _create_and_test_provider_for_model(
 
 def test_nightly_provider_chat_workflow(admin_user: DATestUser) -> None:
     """Nightly regression test for provider setup + default selection + chat tool calls."""
-    _assert_integration_mode_enabled()
-    config = _load_provider_config()
-    _validate_provider_config(config)
+    assert_integration_mode_enabled()
+    config = load_provider_config()
+    validate_provider_config(config)
 
     _seed_connector_for_search_tool(admin_user)
     search_tool_id = _get_internal_search_tool_id(admin_user)

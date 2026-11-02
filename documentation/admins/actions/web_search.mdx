@@ -1,0 +1,128 @@
+---
+title: "Web Search"
+description: "Enable web search for your AI Agents in Onyx"
+icon: "globe"
+---
+
+The Web Search action lets your Agents query the internet and retrieve real-time information from web sources.
+
+Web Search has two parts:
+
+- A **search engine** finds result URLs, snippets, and metadata for a query.
+- A **web crawler** reads the full contents of result pages and of links the user pastes into the chat.
+
+## Web Search in Onyx
+
+Setup is the same on Onyx Cloud and self-hosted deployments. The built-in **Onyx** web crawler works by default,
+so users can paste a link into the chat and Onyx reads the page.
+The web search action does not appear in chat until an admin connects a search engine and sets it as the default.
+
+<Steps>
+  <Step title="Set up a search engine">
+    Open **Admin Panel → Web Search**. In **Search Engine**, click **Connect** on a provider and enter its credentials.
+    Onyx tests the connection before it saves.
+
+    <img className="rounded-image" src="/assets/admins/actions/web_search/web_search.webp" alt="Web Search page in the Onyx Admin Panel"/>
+
+    <img className="rounded-image" src="/assets/admins/actions/web_search/search_engines.webp" alt="Search Engine providers"/>
+
+    <Tabs tabs={["Exa", "Serper", "Brave", "Google PSE", "SearXNG", "Tavily", "Firecrawl"]}>
+      <Tab title="Exa">
+        Create an API key in the [Exa dashboard](https://dashboard.exa.ai/api-keys)
+        and paste it in the **API Key** field.
+
+        Onyx also saves this key for the Exa web crawler, so you only need to select it there.
+      </Tab>
+
+      <Tab title="Serper">
+        Create an API key in the [Serper dashboard](https://serper.dev/api-key) and paste it in the **API Key** field.
+      </Tab>
+
+      <Tab title="Brave">
+        Create an API key for the Brave Search API in the [Brave Search API
+        dashboard](https://api-dashboard.search.brave.com/app/documentation/web-search/get-started)
+        and paste it in the **API Key** field.
+      </Tab>
+
+      <Tab title="Google PSE">
+        Create a Programmable Search Engine in the [Google PSE control
+        panel](https://programmablesearchengine.google.com/controlpanel/all).
+
+        In Onyx, paste the API key in the **API Key** field and the search engine ID in the **Search Engine ID** field.
+      </Tab>
+
+      <Tab title="SearXNG">
+        SearXNG is self-hosted and needs no API key.
+        Enter the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html)
+        in the **SearXNG Base URL** field, for example `https://your-searxng-instance.com`.
+      </Tab>
+
+      <Tab title="Tavily">
+        Create an API key in the [Tavily dashboard](https://app.tavily.com/home) and paste it in the **API Key** field.
+
+        Onyx also saves this key for the Tavily web crawler, so you only need to select it there.
+      </Tab>
+
+      <Tab title="Firecrawl">
+        Create an API key in the [Firecrawl
+        dashboard](https://www.firecrawl.dev/app/api-keys?utm_source=onyx&utm_medium=integration)
+        and paste it in the **API Key** field.
+
+        Keep the default **API Base URL** (`https://api.firecrawl.dev/v2/search`) unless you self-host Firecrawl.
+        If you do, enter your instance's full search endpoint, for example `https://firecrawl.example.com/v2/search`.
+        Onyx does not follow redirects, so use the final URL.
+
+        Onyx also saves this key for the Firecrawl web crawler, so you only need to select it there.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Set up a web crawler">
+    The **Web Crawler** section lists the supported crawlers.
+
+    <img className="rounded-image" src="/assets/admins/actions/web_search/crawlers.webp" alt="Web Crawler providers"/>
+
+    <Tabs tabs={["Onyx Web Crawler", "Firecrawl", "Exa", "Tavily"]}>
+      <Tab title="Onyx Web Crawler">
+        **(Recommended)** The built-in crawler. It is selected by default and needs no setup.
+        It works for most pages but can be less reliable on complex sites.
+      </Tab>
+
+      <Tab title="Firecrawl">
+        Click **Connect** and paste your Firecrawl API key in the **API Key** field.
+        If you entered a Firecrawl key for the search engine, Onyx already filled it in.
+
+        Keep the default **API Base URL** (`https://api.firecrawl.dev/v2/scrape`) unless you self-host Firecrawl.
+      </Tab>
+
+      <Tab title="Exa">
+        Click **Connect** and paste your Exa API key in the **API Key** field.
+        If you entered an Exa key for the search engine, Onyx already filled it in.
+      </Tab>
+
+      <Tab title="Tavily">
+        Click **Connect** and paste your Tavily API key in the **API Key** field.
+        If you entered a Tavily key for the search engine, Onyx already filled it in.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Set the default providers">
+    Click **Set as Default** on the search engine you want to use. Only one search engine is active at a time.
+    Other connected providers stay available but are not used until you select them.
+
+    The crawler marked **Current Crawler** reads result pages. If you disconnect the current crawler,
+    Onyx falls back to the Onyx Web Crawler.
+
+    <img className="rounded-image" src="/assets/admins/actions/web_search/set_default_provider.webp" alt="Set as Default on a search engine"/>
+  </Step>
+</Steps>
+
+## Enable Web Search for Agents
+
+- **Default Chat**: Go to **Admin Panel > Chat Preferences > Actions & Tools** and turn on **Web Search**.
+- **Custom Agents**: In the [Agent editor](/admins/agents/overview), open **Actions** and turn on **Web Search**.
+  Keep **Open URL** on as well. Without it, the Agent cannot read the pages it finds, and web results are much worse.
+
+Users can turn Web Search off for a single message from the **Actions** menu in the chat input.
+Links the user pastes still resolve if the page is already indexed by a connector.

@@ -24,6 +24,8 @@ class CeleryTaskPlainFormatter(PlainFormatter):
     def format(self, record: logging.LogRecord) -> str:
         task = current_task
         if task and task.request:
+            # Prefix a copy: the same record reaches several handlers.
+            record = logging.makeLogRecord(record.__dict__)
             record.__dict__.update(task_id=task.request.id, task_name=task.name)
             record.msg = f"[{task.name}({task.request.id})] {record.msg}"
 
@@ -34,6 +36,8 @@ class CeleryTaskColoredFormatter(ColoredFormatter):
     def format(self, record: logging.LogRecord) -> str:
         task = current_task
         if task and task.request:
+            # Prefix a copy: the same record reaches several handlers.
+            record = logging.makeLogRecord(record.__dict__)
             record.__dict__.update(task_id=task.request.id, task_name=task.name)
             record.msg = f"[{task.name}({task.request.id})] {record.msg}"
 

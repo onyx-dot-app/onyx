@@ -1,5 +1,42 @@
 # Opensearch Idiosyncrasies
 
+## Admin resource warnings
+
+The monitoring worker samples OpenSearch every five minutes. It makes two read-only
+statistics requests, each with a three-second timeout and no retries. A shared Redis
+lease prevents duplicate probes across workers and tenants. No documents are searched,
+loaded, or changed. Login and admin-page requests read cached results only.
+
+Warnings identify these conditions:
+
+- Disk: any data path on a data node is at least 85% full.
+- JVM memory: a data node uses at least 85% of its heap on two consecutive samples.
+- Vector memory: a node uses at least 90% of its native vector cache on two consecutive
+  samples, or the k-NN memory circuit breaker is currently triggered.
+
+These are pressure signals, not estimates of the RAM required for every index. Disk
+warnings use a fixed early-warning threshold, independent of configured allocation
+watermarks. Host RAM usage alone is not used because filesystem caches can make a
+healthy host appear full. The vector statistic measures the native k-NN cache;
+Lucene and memory-mapped vectors are not fully represented by this statistic.
+
+Each full admin can receive one popup per 24 hours when entering Onyx. An atomic,
+tenant-scoped Redis key enforces this across tabs and browsers. Dismissing the popup
+does not dismiss the compact banner pinned above admin-page content. Its details button
+opens the numbered issues in a scrollable modal, preserving space on short screens. The banner refreshes
+from the cache every five minutes and clears after a successful recovery check.
+Observations older than fifteen minutes retain their warnings with an unverified
+recovery message; they do not trigger new popups. Redis eviction or reset also resets
+popup suppression and cached observations.
+
+The monitoring worker and Celery Beat must run the updated code. OpenSearch credentials
+need access to node statistics and k-NN statistics. Failed or partial probes are logged,
+preserve the previous observation, and never count as recovery. Before the first
+successful probe, health is unknown. Lite mode does not schedule or run probes.
+
+Metric references: [Nodes Stats API](https://docs.opensearch.org/latest/api-reference/nodes-apis/nodes-stats/)
+and [k-NN Stats API](https://docs.opensearch.org/latest/vector-search/api/knn/).
+
 ## Benchmarks
 
 - [OpenSearch quantization benchmark](QUANTIZATION_BENCHMARK.md): 500-question comparison of float32, 7-bit, and 1-bit vectors.

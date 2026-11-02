@@ -32,6 +32,7 @@ def _server() -> MCPServer:
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             transport=MCPTransport.STREAMABLE_HTTP,
             oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+            oauth_cimd_enabled=True,
             oauth_authorization_endpoint=None,
             oauth_token_endpoint=None,
             oauth_scopes_override=None,
@@ -68,9 +69,11 @@ def test_mcp_attempt_store_round_trips_server_side_pkce(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cache = FakeCache()
-    monkeypatch.setattr(oauth_flow, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        oauth_flow.MCP_OAUTH_ATTEMPTS, "_cache_backend_provider", lambda: cache
+    )
 
-    stored = oauth_flow.mcp_oauth_attempt_store().store(
+    stored = oauth_flow.MCP_OAUTH_ATTEMPTS.store(
         owner_id="user-1",
         state=_STATE,
         payload=_flow(),
@@ -78,7 +81,7 @@ def test_mcp_attempt_store_round_trips_server_side_pkce(
 
     assert set(cache.expiries.values()) == {oauth_flow.MCP_OAUTH_FLOW_TTL_SECONDS}
     assert b"sensitive-client-secret" not in next(iter(cache.store.values()))
-    consumed = oauth_flow.mcp_oauth_attempt_store().consume(
+    consumed = oauth_flow.MCP_OAUTH_ATTEMPTS.consume(
         owner_id="user-1",
         state=_STATE,
     )

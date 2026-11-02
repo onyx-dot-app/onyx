@@ -18,7 +18,6 @@ import requests
 from redis.exceptions import RedisError
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.billing import fetch_billing_information
@@ -36,7 +35,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import ApplicationStatus, Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -74,13 +72,6 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
 
 
 def _self_hosted_tier() -> Tier:
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        # Mirrors apply_license_status_to_settings (settings/api.py:87-92):
-        # legacy / dev-mode self-host where EE code is loaded via
-        # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES but no license is required.
-        # Treat as ENTERPRISE so tier_gate doesn't 402 EE endpoints.
-        return Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
-
     try:
         metadata = get_cached_license_metadata()
     except RedisError as e:
@@ -189,14 +180,8 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
     is a Business+ feature. Failing at create/edit time means cc-pairs with
     SYNC access only exist on tenants that can actually run the sync —
     instead of letting the row land and silently never sync.
-
-    Mirrors `apply_license_status_to_settings`: with
-    LICENSE_ENFORCEMENT_ENABLED=False, treat the tenant as ENTERPRISE so
-    legacy EE deployments without a license aren't broken.
     """
     if not access_type.is_perm_synced():
-        return
-    if not LICENSE_ENFORCEMENT_ENABLED:
         return
     if not tier_at_least(get_tier(), Tier.BUSINESS):
         raise OnyxError(
@@ -208,10 +193,7 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
 def require_business_tier_for_connector_group_restrictions() -> None:
     """Gate turning on data-access group restrictions for perm-synced
     connectors. Groups and perm sync are Business+, so the setting would be
-    inert below that. LICENSE_ENFORCEMENT_ENABLED=False passes, matching the
-    sync-access guard."""
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        return
+    inert below that."""
     if not tier_at_least(get_tier(), Tier.BUSINESS):
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,
@@ -222,11 +204,7 @@ def require_business_tier_for_connector_group_restrictions() -> None:
 
 def require_business_tier_for_multi_sso() -> None:
     """Gate a second simultaneously enabled SSO provider to Business or
-    above. A single enabled provider works at every tier.
-    LICENSE_ENFORCEMENT_ENABLED=False passes, matching the sync-access
-    guard."""
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        return
+    above. A single enabled provider works at every tier."""
     if not tier_at_least(get_tier(), Tier.BUSINESS):
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,

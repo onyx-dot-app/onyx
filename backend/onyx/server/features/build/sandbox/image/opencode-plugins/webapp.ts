@@ -73,8 +73,12 @@ async function pidAlive(dir: string): Promise<number | null> {
 }
 
 async function probeRunning(port: number): Promise<boolean> {
+  let host: string = process.env.SANDBOX_LISTEN_HOST || "0.0.0.0";
+  if (host === "0.0.0.0") host = "127.0.0.1";
+  else if (host === "::") host = "::1";
+  const authority: string = host.includes(":") ? `[${host}]` : host;
   try {
-    await fetch(`http://127.0.0.1:${port}/`, {
+    await fetch(`http://${authority}:${port}/`, {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     return true;

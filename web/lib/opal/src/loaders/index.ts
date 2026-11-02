@@ -4,6 +4,17 @@ export {
   type CardLoaderProps,
 } from "@opal/loaders/card-loader/components";
 
+/* ChatMessageLoader */
+export {
+  ChatMessageLoader,
+  type ChatMessageLoaderProps,
+  type ChatMessageLoaderOrientation,
+  type ChatMessageLoaderBubbleWidth,
+} from "@opal/loaders/chat-message-loader/components";
+
+/* DropdownLoader */
+export { DropdownLoader } from "@opal/loaders/dropdown-loader/components";
+
 /* IconLoader */
 export {
   IconLoader,
@@ -22,6 +33,12 @@ export {
   PageLoader,
   type PageLoaderProps,
 } from "@opal/loaders/page-loader/components";
+
+/* SidebarLoader */
+export {
+  SidebarLoader,
+  type SidebarLoaderProps,
+} from "@opal/loaders/sidebar-loader/components";
 
 /* TextLoader */
 export {

@@ -29,7 +29,7 @@ describe("InputMultiSelect", () => {
         title: "OpenAI",
         foldable: true,
         options: [
-          { value: "gpt-4o", title: "GPT-4o" },
+          { value: "gpt-6-sol", title: "GPT-6 Sol" },
           { value: "gpt-4.1", title: "GPT-4.1" },
         ],
       },
@@ -79,7 +79,7 @@ describe("InputMultiSelect", () => {
       await user.click(screen.getByText("OpenAI"));
       expect(screen.getAllByRole("option")).toHaveLength(2);
 
-      await user.click(screen.getByRole("option", { name: /GPT-4o/ }));
+      await user.click(screen.getByRole("option", { name: /GPT-6 Sol/ }));
       expect(screen.getAllByRole("option")).toHaveLength(2);
       expect(
         screen.queryByRole("option", { name: /Claude/ })

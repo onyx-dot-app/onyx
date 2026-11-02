@@ -6,6 +6,7 @@ does it raise rather than answer short.
 """
 
 import itertools
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -13,13 +14,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import ConnectorMissingCredentialError, SlimDocument
-from onyx.connectors.zoom.client import ZoomNotEntitledError
 from onyx.connectors.zoom.connector import ZoomConnector
 from onyx.connectors.zoom.models import (
     ZoomMeetingDetails,
@@ -29,6 +31,7 @@ from onyx.connectors.zoom.models import (
     ZoomUser,
     ZoomUserPage,
 )
+from onyx.connectors.zoom.recordings import inventory
 from onyx.connectors.zoom.recordings.discovery import (
     EARLIEST_RECORDING_DATE,
     listing_windows,
@@ -37,11 +40,17 @@ from onyx.connectors.zoom.recordings.inventory import (
     _MAX_DOCUMENTS_PER_BATCH,
     _SCOPES_PER_HEARTBEAT,
 )
-from tests.unit.onyx.connectors.zoom.helpers import http_error, mock_zoom_client
+from tests.unit.onyx.connectors.zoom.helpers import (
+    http_error,
+    mock_zoom_client,
+    with_recording_access,
+)
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    domain_rule,
     meeting_details,
     past_meeting_details,
     recording_entry,
+    recording_settings,
     user,
     webinar_details,
 )
@@ -54,6 +63,14 @@ _ZOOM_CREDS = {
 
 # The id every recording builder defaults to.
 _NUMBER = "6840331990"
+
+# What the access stub's default share settings resolve to: the owner, and
+# public because the recording is shared with the account and the box is on.
+_ACCOUNT_SHARE = ExternalAccess(
+    external_user_emails={"owner@example.com"},
+    external_user_group_ids=set(),
+    is_public=True,
+)
 
 
 def _windows_per_host() -> int:
@@ -102,17 +119,25 @@ def _listing(client: MagicMock, *recordings: ZoomRecordingEntry) -> None:
     client.list_user_recordings.return_value = _recording_page(*recordings)
 
 
-def _documents(connector: ZoomConnector) -> list[SlimDocument]:
+def _items(batches: GenerateSlimDocumentOutput) -> list[SlimDocument]:
     return [
-        item
-        for batch in connector.retrieve_all_slim_docs()
-        for item in batch
-        if isinstance(item, SlimDocument)
+        item for batch in batches for item in batch if isinstance(item, SlimDocument)
     ]
+
+
+def _documents(connector: ZoomConnector) -> list[SlimDocument]:
+    return _items(connector.retrieve_all_slim_docs())
 
 
 def _ids(connector: ZoomConnector) -> set[str]:
     return {document.id for document in _documents(connector)}
+
+
+def _synced(connector: ZoomConnector) -> dict[str, ExternalAccess | None]:
+    return {
+        item.id: item.external_access
+        for item in _items(connector.retrieve_all_slim_docs_perm_sync())
+    }
 
 
 def _windows(client: MagicMock) -> list[dict[str, Any]]:
@@ -232,7 +257,6 @@ class TestSlimFailuresNeverDeleteAnything:
             http_error(404, 3301),  # "no recording", which is not "no such user"
             http_error(404),  # a 404 with no code at all, such as from a proxy
             InsufficientPermissionsError("the scope was revoked"),
-            ZoomNotEntitledError("the webinar add-on is gone"),
         ],
     )
     def test_a_listing_that_fails_raises_rather_than_answering_short(
@@ -266,14 +290,24 @@ class TestSlimFailuresNeverDeleteAnything:
         assert asked.count("gone@example.com") == 1
         assert "gone@example.com" not in _walked(client)
 
-    def test_a_credential_that_recognises_nobody_stops_the_prune(self) -> None:
+    @pytest.mark.parametrize(
+        ("walk", "consequence"),
+        [
+            (_documents, "pruning stopped rather than delete"),
+            (_synced, "permission sync stopped rather than make"),
+        ],
+        ids=["pruning", "doc-sync"],
+    )
+    def test_a_credential_that_recognises_nobody_stops_the_walk(
+        self, walk: Callable[[ZoomConnector], object], consequence: str
+    ) -> None:
         # Zoom answers the same 1001 for a deleted user and for one in another
         # account, so a credential pointed elsewhere would delete everything.
         connector, client = _connector(host_emails=["jill@example.com"])
         client.list_user_recordings.side_effect = _listing_by_host({})
 
-        with pytest.raises(ConnectorValidationError, match="recognised none"):
-            list(connector.retrieve_all_slim_docs())
+        with pytest.raises(ConnectorValidationError, match=consequence):
+            walk(connector)
 
     @pytest.mark.parametrize(
         "error",
@@ -573,3 +607,187 @@ class TestBatchingKeepsThePruneAlive:
 
         assert len(batches) > 1
         assert all(len(batch) <= _MAX_DOCUMENTS_PER_BATCH for batch in batches[:-1])
+
+
+class TestThePermSyncWalk:
+    """The doc sync makes every indexed document the walk leaves out private,
+    so it lists exactly what pruning lists, with each recording's access."""
+
+    def test_every_document_carries_the_recordings_access(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        _listing(client, _recording("uuid-1"), _recording("uuid-2"))
+
+        synced = _synced(connector)
+
+        assert synced == {
+            "ZOOM_MEETING_uuid-1": _ACCOUNT_SHARE,
+            "ZOOM_MEETING_uuid-2": _ACCOUNT_SHARE,
+        }
+        assert set(synced) == _ids(connector)
+
+    def test_a_domain_share_is_synced_with_the_bare_group_id(self) -> None:
+        # upsert_document_external_perms adds the source prefix itself; added
+        # here too, the id would match no group the group sync filled.
+        connector, client = _connector(host_emails=["jill@example.com"])
+        rule = domain_rule(domains="example.com")
+        with_recording_access(
+            client,
+            settings=recording_settings(authentication_option=rule.id),
+            rules=[rule],
+        )
+        _listing(client, _recording("uuid-1"))
+
+        synced = _synced(connector)
+
+        access = synced["ZOOM_MEETING_uuid-1"]
+        assert access is not None
+        assert access.external_user_group_ids == {"domain:example.com"}
+        assert access.is_public is False
+
+    def test_pruning_asks_for_no_access(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        _listing(client, _recording("uuid-1"))
+
+        documents = _documents(connector)
+
+        assert [d.external_access for d in documents] == [None]
+        client.get_recording_settings.assert_not_called()
+
+    def test_a_recording_listed_again_costs_no_second_access_call(self) -> None:
+        # The stub answers every window and the trailing pass with the same
+        # recording, so the walk lists it many times over.
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        _listing(client, _recording("uuid-1"))
+
+        _synced(connector)
+
+        client.get_recording_settings.assert_called_once()
+        client.get_user.assert_called_once()
+
+    def test_past_the_remembered_ids_cap_nothing_is_lost(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        _listing(client, _recording("uuid-1"), _recording("uuid-2"))
+
+        with patch.object(inventory, "_MAX_REMEMBERED_IDS", 1):
+            synced = _synced(connector)
+
+        assert set(synced) == {"ZOOM_MEETING_uuid-1", "ZOOM_MEETING_uuid-2"}
+        # The second recording was not remembered, so each listing resolved it.
+        assert client.get_recording_settings.call_count > 2
+
+    def test_a_recording_nobody_can_be_named_for_is_private(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(
+            client, settings=recording_settings(share_recording="none")
+        )
+        client.get_user.side_effect = http_error(404, 1001)
+        _listing(client, _recording("uuid-1"))
+
+        assert _synced(connector) == {"ZOOM_MEETING_uuid-1": ExternalAccess.empty()}
+
+    def test_the_walk_ends_with_a_count_of_what_went_private(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(
+            client, settings=recording_settings(share_recording="none")
+        )
+        client.get_user.side_effect = http_error(404, 1001)
+        _listing(client, _recording("uuid-1"), _recording("uuid-2"))
+
+        with caplog.at_level("WARNING"):
+            _synced(connector)
+
+        said = [r for r in caplog.records if "made 2 recording(s)" in r.getMessage()]
+        assert len(said) == 1
+        assert "2 that nobody could be named for" in said[0].getMessage()
+
+    def test_a_recording_deleted_mid_walk_is_private(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        client.get_recording_settings.side_effect = http_error(404)
+        _listing(client, _recording("uuid-1"))
+
+        assert _synced(connector) == {"ZOOM_MEETING_uuid-1": ExternalAccess.empty()}
+
+    def test_any_other_settings_error_fails_the_sync(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        client.get_recording_settings.side_effect = http_error(400, 1234)
+        _listing(client, _recording("uuid-1"))
+
+        with pytest.raises(requests.HTTPError):
+            _synced(connector)
+
+    @pytest.mark.parametrize(
+        "refuse",
+        [
+            lambda client: client.get_recording_authentication_rules,
+            lambda client: client.get_user,
+        ],
+        ids=["rule-catalogue", "owner-lookup"],
+    )
+    def test_a_404_from_any_other_call_fails_the_sync(
+        self, refuse: Callable[[MagicMock], MagicMock]
+    ) -> None:
+        # Only the recording's own settings answering 404 means it was deleted.
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        refuse(client).side_effect = http_error(404)
+        _listing(client, _recording("uuid-1"), _recording("uuid-2"))
+
+        with pytest.raises(requests.HTTPError):
+            _synced(connector)
+
+    def test_a_proven_recording_is_resolved_from_its_anchor(self) -> None:
+        connector, client = _connector(meeting_ids=[_NUMBER])
+        with_recording_access(client)
+        client.get_recording.return_value = _recording("uuid-proven")
+        client.list_user_recordings.side_effect = itertools.repeat(
+            http_error(404, 1001)
+        )
+
+        assert _synced(connector) == {"ZOOM_MEETING_uuid-proven": _ACCOUNT_SHARE}
+
+    def test_a_proven_recording_its_host_also_lists_is_resolved_once(self) -> None:
+        connector, client = _connector(meeting_ids=[_NUMBER])
+        with_recording_access(client)
+        recording = _recording("uuid-proven")
+        client.get_recording.return_value = recording
+        _listing(client, recording)
+
+        assert _synced(connector) == {"ZOOM_MEETING_uuid-proven": _ACCOUNT_SHARE}
+        client.get_recording_settings.assert_called_once()
+
+    def test_a_recording_with_no_host_is_resolved_without_an_owner(self) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        _listing(client, _recording("uuid-1", host_id=""))
+
+        synced = _synced(connector)
+
+        assert synced == {
+            "ZOOM_MEETING_uuid-1": ExternalAccess(
+                external_user_emails=set(),
+                external_user_group_ids=set(),
+                is_public=True,
+            )
+        }
+        client.get_user.assert_not_called()
+
+    def test_a_recording_of_unreadable_type_carries_one_access_on_every_id(
+        self,
+    ) -> None:
+        connector, client = _connector(host_emails=["jill@example.com"])
+        with_recording_access(client)
+        _listing(client, _recording("uuid-1", type="4242"))
+
+        assert _synced(connector) == {
+            "ZOOM_MEETING_uuid-1": _ACCOUNT_SHARE,
+            "ZOOM_WEBINAR_uuid-1": _ACCOUNT_SHARE,
+        }
+        client.get_recording_settings.assert_called_once()

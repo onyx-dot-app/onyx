@@ -100,7 +100,7 @@ from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.tools import can_manage_mcp_server, can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.credential import (
-    _assert_credential_share_within_scope,
+    assert_credential_share_within_scope,
     create_credential_from_model,
     create_credential_with_private_key,
 )
@@ -407,10 +407,10 @@ def test_both_credential_create_paths_share_the_scope_gate(
         )
 
     assert not _guard_raises(
-        _assert_credential_share_within_scope, cred([]), manager, db_session
+        assert_credential_share_within_scope, cred([]), manager, db_session
     )
     assert _guard_raises(
-        _assert_credential_share_within_scope, cred([unmanaged.id]), manager, db_session
+        assert_credential_share_within_scope, cred([unmanaged.id]), manager, db_session
     )
 
 
@@ -960,6 +960,7 @@ def _make_skill(
     skill = Skill(
         id=uuid4(),
         name=f"contract skill {uuid4().hex[:8]}",
+        author_user_id=create_test_user(db_session, f"skill-owner-{uuid4().hex}").id,
         description="contract",
         # custom skills need a bundle source (ck_skill_definition_source)
         bundle_file_id=f"proj-bundle-{uuid4().hex}",
@@ -1270,6 +1271,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
                 actor, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
             is_default=False,
+            permission_toggles_allowed=True,
         )
         assert tags["manage"] == manage_enforced, actor.email
         assert tags["manage_members"] == manage_enforced, actor.email
@@ -1295,6 +1297,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
             in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
         is_default=False,
+        permission_toggles_allowed=True,
     ) == {
         "manage": True,
         "manage_members": True,
@@ -1315,6 +1318,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
             groups_admin, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
         is_default=False,
+        permission_toggles_allowed=True,
     ) == {
         "manage": True,
         "manage_members": True,
@@ -1346,6 +1350,7 @@ def test_default_user_group_projection_is_membership_only(db_session: Session) -
                 actor, Permission.FULL_ADMIN_PANEL_ACCESS
             ),
             is_default=True,
+            permission_toggles_allowed=False,
         )
 
     assert _tags(admin) == {
@@ -1364,6 +1369,22 @@ def test_default_user_group_projection_is_membership_only(db_session: Session) -
         "edit_token_limits": False,
     }
 
+    # Basic is the one default group that offers permission toggles, full admin only.
+    assert user_group_permissions(
+        can_manage=False,
+        is_user_groups_admin=True,
+        is_full_admin=True,
+        is_default=True,
+        permission_toggles_allowed=True,
+    )["edit_permissions"]
+    assert not user_group_permissions(
+        can_manage=False,
+        is_user_groups_admin=True,
+        is_full_admin=False,
+        is_default=True,
+        permission_toggles_allowed=True,
+    )["edit_permissions"]
+
 
 def test_user_group_key_coverage() -> None:
     assert set(
@@ -1372,6 +1393,7 @@ def test_user_group_key_coverage() -> None:
             is_user_groups_admin=True,
             is_full_admin=True,
             is_default=False,
+            permission_toggles_allowed=True,
         )
     ) == set(USER_GROUP_ACTIONS)
 

@@ -158,10 +158,9 @@ The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 
 ## Conventions
 
-- Component directories are kebab-case (e.g. `select-button/`, `open-button/`,
+- Component directories are kebab-case (e.g. `select-button/`, `line-item-button/`,
   `content-action/`).
-- Each component dir contains `components.tsx`, `README.md`, `styles.css` (when needed), and
-  a `<PascalName>.stories.tsx` (when applicable).
+- Each component dir contains `components.tsx`, `README.md`, and `styles.css` (when needed).
 - Imports inside the lib use the `@opal/` path alias; never `@/`.
 - Types/interfaces are declared at the top of `components.tsx` without `export`; everything is
   re-exported from a single `export { Foo, type FooProps };` block at the bottom.

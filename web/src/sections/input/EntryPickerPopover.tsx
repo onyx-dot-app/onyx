@@ -109,7 +109,7 @@ function EntryPickerPopover({
   if (!anchorRect) return null;
 
   // `position: fixed` is containing-block-relative under a transformed
-  // ancestor (Storybook docs view, some app shells), so portal to body to
+  // ancestor (some app shells), so portal to body to
   // keep the anchor's coords viewport-relative.
   if (typeof document === "undefined") return null;
 
@@ -136,7 +136,7 @@ function EntryPickerPopover({
       <Popover.Content
         side="top"
         align="start"
-        width="xl"
+        width={70}
         onOpenAutoFocus={(e) => e.preventDefault()}
         data-testid="skill-picker-popover"
         aria-label={t("entryPickerPopover.content.ariaLabel")}

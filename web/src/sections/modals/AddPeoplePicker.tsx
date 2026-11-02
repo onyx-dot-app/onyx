@@ -16,7 +16,7 @@ import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import {
   SharePermissionMenu,
   type SharePermissionMenuOption,
-} from "@/sections/modals/SharePermissionMenu";
+} from "@/lib/permissions/components";
 import type { ShareAccessPermission } from "@/sections/modals/shareAccessConstants";
 
 interface Suggestion {
@@ -248,7 +248,6 @@ export function AddPeoplePicker({
               onChange={onStagedPermissionChange}
               options={permissionOptions}
               value={stagedPermission}
-              width="full"
             />
           </div>
         ) : null}

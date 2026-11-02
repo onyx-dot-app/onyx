@@ -149,6 +149,9 @@ module "vpc" {
   vpc_name           = local.vpc_name
   single_nat_gateway = var.single_nat_gateway
   tags               = local.merged_tags
+
+  iam_role_permissions_boundary = var.iam_role_permissions_boundary
+  iam_role_path                 = var.iam_role_path
 }
 
 module "redis" {
@@ -223,6 +226,10 @@ module "eks" {
   s3_bucket_names = concat([local.bucket_name], var.enable_upload_bucket ? [local.upload_bucket_name] : [])
 
   irsa_additional_service_account_names = var.irsa_additional_service_account_names
+
+  iam_role_permissions_boundary = var.iam_role_permissions_boundary
+  iam_role_path                 = var.iam_role_path
+  cluster_admin_principal_arn   = var.cluster_admin_principal_arn
 
   # Attach RDS IAM connect policy to the same IRSA role used by S3 access
   enable_rds_iam_for_service_account = var.enable_iam_auth

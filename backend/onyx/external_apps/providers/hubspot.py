@@ -7,7 +7,7 @@ from onyx.configs.app_configs import (
     EXT_APP_HUBSPOT_CLIENT_ID,
     EXT_APP_HUBSPOT_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -66,7 +66,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/crm/v3/owners"),
             RestRoute(method="GET", path="/crm/v3/owners/{owner_id}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=HubspotAction.CONTACTS_READ,
@@ -76,7 +76,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/crm/v3/objects/contacts"),
             RestRoute(method="GET", path="/crm/v3/objects/contacts/{contact_id}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=HubspotAction.COMPANIES_READ,
@@ -86,7 +86,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/crm/v3/objects/companies"),
             RestRoute(method="GET", path="/crm/v3/objects/companies/{company_id}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=HubspotAction.DEALS_READ,
@@ -96,7 +96,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/crm/v3/objects/deals"),
             RestRoute(method="GET", path="/crm/v3/objects/deals/{deal_id}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=HubspotAction.CRM_SEARCH,
@@ -107,7 +107,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/crm/v3/objects/companies/search"),
             RestRoute(method="POST", path="/crm/v3/objects/deals/search"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=HubspotAction.CONTACTS_WRITE,

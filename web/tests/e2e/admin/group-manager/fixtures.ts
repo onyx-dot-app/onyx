@@ -253,6 +253,21 @@ export const worldTest = test.extend<{}, { world: ScopedWorld }>({
         for (const id of [managedDocSetId, grouplessDocSetId]) {
           await softCleanup(() => adminClient.deleteDocumentSet(id));
         }
+        // Detach before deleting: the group list 500s while a linked connector
+        // is mid-deletion, and setGroupCcPairs reads that list.
+        // The managed group waits for sync so its own teardown can PATCH it again.
+        await softCleanup(() =>
+          adminClient.setGroupCcPairs(
+            scopedManager.groupId,
+            scopedManager.groupName,
+            []
+          )
+        );
+        await softCleanup(() =>
+          adminClient.setGroupCcPairs(foreignGroupId, foreignGroupName, [], {
+            waitForSync: false,
+          })
+        );
         for (const id of [
           managedCcPairId,
           grouplessCcPairId,
@@ -261,11 +276,6 @@ export const worldTest = test.extend<{}, { world: ScopedWorld }>({
         ]) {
           await softCleanup(() => adminClient.deleteCCPair(id));
         }
-        await softCleanup(() =>
-          adminClient.setGroupCcPairs(foreignGroupId, foreignGroupName, [], {
-            waitForSync: false,
-          })
-        );
         await softCleanup(() => adminClient.deleteUserGroup(foreignGroupId));
         await softCleanup(() => adminClient.deleteUserGroup(grouplessGroupId));
         await manager.close();

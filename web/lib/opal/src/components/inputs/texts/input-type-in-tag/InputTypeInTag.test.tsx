@@ -30,6 +30,27 @@ describe("InputTypeInTag", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  test("Escape on the clear button returns focus to the field", async () => {
+    const user = setupUser();
+    render(
+      <InputTypeInTag
+        tags={[{ id: "kiwi-1", label: "Kiwi" }]}
+        value=""
+        onChange={jest.fn()}
+        placeholder="Tag"
+        onAdd={jest.fn()}
+        onRemoveTag={jest.fn()}
+        onClear={jest.fn()}
+      />
+    );
+
+    const input = screen.getByPlaceholderText("Tag");
+    const clear = screen.getByRole("button", { name: "Clear" });
+    clear.focus();
+    await user.keyboard("{Escape}");
+    expect(input).toHaveFocus();
+  });
+
   test("caps the chip rows at maxRows and follows a new chip", () => {
     const tag = (i: number) => ({ id: String(i), label: `Tag ${i}` });
     const { container, rerender } = render(

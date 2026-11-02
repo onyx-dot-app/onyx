@@ -1,5 +1,6 @@
 import hashlib
 import tempfile
+import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -33,8 +34,10 @@ from onyx.db.engine.sql_engine import (
 from onyx.db.file_record import (
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
+    get_filerecord_by_file_id_for_update,
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
+    rename_filerecord,
     upsert_filerecord,
 )
 from onyx.db.models import FileRecord
@@ -333,13 +336,15 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def change_file_id(self, old_file_id: str, new_file_id: str) -> None:
+    def change_file_id(self, old_file_id: str, new_file_id: str) -> bool:
         """
         Change the file ID of an existing file.
 
         Parameters:
         - old_file_id: Current file ID
         - new_file_id: New file ID to assign
+
+        Returns False when the file does not exist, e.g. a concurrent delete won.
         """
         raise NotImplementedError
 
@@ -368,6 +373,9 @@ class S3BackedFileStore(FileStore):
     ) -> None:
         self._s3_client: "S3Client | None" = None
         self._legacy_s3_client: "S3Client | None" = None
+        # The store is shared across threads and its clients are built lazily,
+        # so the first operations of several threads build each client once.
+        self._client_lock = threading.Lock()
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -380,29 +388,31 @@ class S3BackedFileStore(FileStore):
         self._legacy_secret_access_key = legacy_secret_access_key
 
     def _get_s3_client(self) -> "S3Client":
-        if self._s3_client is None:
-            self._s3_client = build_s3_client(
-                self._s3_endpoint_url,
-                self._aws_access_key_id,
-                self._aws_secret_access_key,
-                self._aws_region_name,
-                self._s3_verify_ssl,
-            )
-        return self._s3_client
+        with self._client_lock:
+            if self._s3_client is None:
+                self._s3_client = build_s3_client(
+                    self._s3_endpoint_url,
+                    self._aws_access_key_id,
+                    self._aws_secret_access_key,
+                    self._aws_region_name,
+                    self._s3_verify_ssl,
+                )
+            return self._s3_client
 
     def _get_legacy_s3_client(self) -> "S3Client | None":
         if self._legacy_endpoint_url is None:
             return None
-        if self._legacy_s3_client is None:
-            self._legacy_s3_client = build_s3_client(
-                self._legacy_endpoint_url,
-                self._legacy_access_key_id,
-                self._legacy_secret_access_key,
-                self._aws_region_name,
-                self._s3_verify_ssl,
-                fail_fast=True,
-            )
-        return self._legacy_s3_client
+        with self._client_lock:
+            if self._legacy_s3_client is None:
+                self._legacy_s3_client = build_s3_client(
+                    self._legacy_endpoint_url,
+                    self._legacy_access_key_id,
+                    self._legacy_secret_access_key,
+                    self._aws_region_name,
+                    self._s3_verify_ssl,
+                    fail_fast=True,
+                )
+            return self._legacy_s3_client
 
     # Writes and deletes skip a retired legacy store. Reads still fall back to
     # it while MinIO runs, so a late write of an older release stays readable.
@@ -699,7 +709,9 @@ class S3BackedFileStore(FileStore):
     ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                file_record = get_filerecord_by_file_id_optional(
+                # The lock makes a concurrent rename either finish first (the
+                # record is then gone here) or wait until this delete commits.
+                file_record = get_filerecord_by_file_id_for_update(
                     file_id=file_id, db_session=db_session
                 )
                 if file_record is None:
@@ -708,13 +720,13 @@ class S3BackedFileStore(FileStore):
                             f"File by id {file_id} does not exist or was deleted"
                         )
                     return
+                delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                 if not file_record.bucket_name:
                     logger.error(
                         "File record %s with key %s has no bucket name, cannot delete from filestore",
                         file_id,
                         file_record.object_key,
                     )
-                    delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                     db_session.commit()
                     return
 
@@ -739,9 +751,6 @@ class S3BackedFileStore(FileStore):
                     else:
                         raise
 
-                # Delete metadata from database
-                delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
-
                 db_session.commit()
 
             except Exception:
@@ -750,7 +759,7 @@ class S3BackedFileStore(FileStore):
 
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
-    ) -> None:
+    ) -> bool:
         """Rename a file by repointing its DB record at the existing object.
 
         The object is not moved — only file_id changes — and reads resolve via
@@ -759,32 +768,12 @@ class S3BackedFileStore(FileStore):
         it has been renamed (the new write would overwrite the renamed object).
         """
         if old_file_id == new_file_id:
-            return
+            return True
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                old_file_record = get_filerecord_by_file_id(
-                    file_id=old_file_id, db_session=db_session
-                )
-                file_metadata = cast(
-                    dict[Any, Any] | None, old_file_record.file_metadata
-                )
-
-                # Reuse the old record's bucket/object_key — the object stays put.
-                upsert_filerecord(
-                    file_id=new_file_id,
-                    display_name=old_file_record.display_name,
-                    file_origin=old_file_record.file_origin,
-                    file_type=old_file_record.file_type,
-                    bucket_name=old_file_record.bucket_name,
-                    object_key=old_file_record.object_key,
-                    db_session=db_session,
-                    file_metadata=file_metadata,
-                    file_size=old_file_record.file_size,
-                )
-
-                delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
-
+                renamed = rename_filerecord(old_file_id, new_file_id, db_session)
                 db_session.commit()
+                return renamed
 
             except Exception as e:
                 db_session.rollback()
@@ -897,7 +886,22 @@ def get_azure_file_store() -> "AzureBlobBackedFileStore":
     )
 
 
+# Built once per process: a store carries no tenant or request state (keys take
+# the tenant from the context at call time) and its client is safe to share,
+# while building one costs tens of milliseconds, mostly the S3 client.
+_DEFAULT_FILE_STORE: FileStore | None = None
+_DEFAULT_FILE_STORE_LOCK: threading.Lock = threading.Lock()
+
+
 def get_default_file_store() -> FileStore:
+    global _DEFAULT_FILE_STORE
+    with _DEFAULT_FILE_STORE_LOCK:
+        if _DEFAULT_FILE_STORE is None:
+            _DEFAULT_FILE_STORE = _build_default_file_store()
+        return _DEFAULT_FILE_STORE
+
+
+def _build_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation based on FILE_STORE_BACKEND.
 

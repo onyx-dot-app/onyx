@@ -71,6 +71,9 @@ RECOVERY_HISTORY_SNAPSHOT_SECONDS = 30.0
 # wait for resources to actually disappear).
 RUNTIME_TEARDOWN_SECONDS = 30.0
 
+# Application-enforced fleet sweep budget. Celery thread pools ignore time limits.
+SANDBOX_CLEANUP_DEADLINE_SECONDS = 6000
+
 # Everything a provisioning attempt spends outside provision() itself.
 ATTEMPT_OVERHEAD_SECONDS = RECOVERY_HISTORY_SNAPSHOT_SECONDS + RUNTIME_TEARDOWN_SECONDS
 

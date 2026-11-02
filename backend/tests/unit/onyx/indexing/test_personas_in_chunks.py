@@ -44,7 +44,6 @@ def _make_index_chunk(
             full_embedding=embedding,
             mini_chunk_embeddings=[],
         ),
-        title_embedding=None,
     )
 
 

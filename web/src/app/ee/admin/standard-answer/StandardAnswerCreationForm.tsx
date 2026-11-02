@@ -118,7 +118,7 @@ export const StandardAnswerCreationForm = ({
                   label={t("form.regexPattern.label")}
                   isCode
                   tooltip={t("form.regexPattern.tooltip")}
-                  placeholder="(?:it|support)\s*ticket"
+                  placeholder={t("placeholders.matchRegex")}
                 />
               ) : values.matchAnyKeywords == "any" ? (
                 <TextFormField

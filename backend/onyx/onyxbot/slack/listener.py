@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import DEV_MODE, POD_NAME, POD_NAMESPACE
 from onyx.configs.constants import MessageType, OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
+from onyx.configs.slack_configs import SLACK_API_URL
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.db.engine.sql_engine import (
     SqlEngine,
@@ -93,10 +94,11 @@ from onyx.onyxbot.slack.utils import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
-    set_is_ee_based_on_env_variable,
+    set_is_ee_if_available,
 )
 from shared_configs.configs import (
     DISALLOWED_SLACK_BOT_TENANT_LIST,
@@ -1377,7 +1379,9 @@ def _get_socket_client(
         # This app-level token will be used only for establishing a connection
         app_token=slack_bot_tokens.app_token,
         web_client=WebClient(
-            token=slack_bot_tokens.bot_token, retry_handlers=slack_retry_handlers
+            token=slack_bot_tokens.bot_token,
+            base_url=SLACK_API_URL,
+            retry_handlers=slack_retry_handlers,
         ),
         tenant_id=tenant_id,
         slack_bot_id=slack_bot_id,
@@ -1388,11 +1392,14 @@ if __name__ == "__main__":
     # Initialize the SqlEngine
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
+    # Start telemetry before the handler starts message-processing threads.
+    start_telemetry("slack")
+
     # Initialize the tenant handler which will manage tenant connections
     logger.info("Starting SlackbotHandler")
     tenant_handler = SlackbotHandler()
 
-    set_is_ee_based_on_env_variable()
+    set_is_ee_if_available()
     setup_tracing()
 
     try:

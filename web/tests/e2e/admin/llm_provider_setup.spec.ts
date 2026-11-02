@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { CI_OPENAI_MODEL } from "@tests/e2e/constants";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
@@ -111,7 +112,7 @@ async function getDefaultTextModel(page: Page): Promise<DefaultModelInfo> {
 async function createPublicProvider(
   page: Page,
   providerName: string,
-  modelName: string = "gpt-4o"
+  modelName: string = CI_OPENAI_MODEL
 ): Promise<number> {
   return createPublicProviderWithModels(page, providerName, [
     { name: modelName, is_visible: true },
@@ -408,15 +409,16 @@ test.describe("LLM Provider Setup @exclusive", () => {
       await listbox.waitFor({ state: "visible", timeout: 10000 });
 
       // Search for the target model by its display name to filter the list
-      // to just its entry. The list carries its own search box; the page
-      // has one too.
+      // to just its entry. The list's search box sits above the listbox and
+      // takes focus as it opens; the page has a search field too.
       const secondModelDisplayName = await getModelDisplayName(
         page,
         secondProviderId,
         secondModelName
       );
-      await listbox
+      await page
         .getByRole("textbox", { name: "Search" })
+        .and(page.locator(":focus"))
         .fill(secondModelDisplayName);
 
       const defaultResponsePromise = page.waitForResponse(

@@ -8,9 +8,15 @@ import {
 } from "@/app/craft/v1/constants";
 import { processCookies } from "@/lib/users/svcSS";
 
-export const GET = async (request: NextRequest) => {
+export const GET = async (
+  request: NextRequest,
+  { params }: { params: Promise<{ connector: string }> }
+) => {
+  const { connector } = await params;
+  if (connector !== "gmail" && connector !== "google-drive") {
+    return new NextResponse(null, { status: 404 });
+  }
   const requestCookies = await cookies();
-  const connector = request.url.includes("gmail") ? "gmail" : "google-drive";
 
   const callbackEndpoint = `/manage/connector/${connector}/callback`;
   const url = new URL(buildUrl(callbackEndpoint));

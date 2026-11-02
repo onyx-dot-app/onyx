@@ -1,0 +1,927 @@
+"use client";
+
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useTranslations } from "next-intl";
+import { useDebouncedValue } from "@opal/hooks";
+import { SvgCheckCircle, SvgProgressRing, SvgXOctagon } from "@opal/icons";
+import { IconLoader } from "@opal/loaders";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
+import useSWR, { type SWRResponse, useSWRConfig } from "swr";
+import { useFormikContext } from "formik";
+import { errorHandlingFetchWith, fetchErrorDetail } from "@/lib/fetcher";
+import {
+  cancelDraftCheckRun,
+  fetchDraftCheckPlan,
+  startDraftCheckRun,
+  startPairEditCheckRun,
+} from "@/lib/connectors/checks/svc";
+import { INDETERMINATE_CHECKS_BLOCK } from "@/lib/connectors/checks/constants";
+import { connectorFormState } from "@/lib/connectors/checks/formState";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useConnectorConfiguration } from "@/lib/connectors/connectors";
+import { splitCredentialBoundFields } from "@/lib/connectors/utils";
+import { toWireAccess } from "@/lib/connectors/accessType";
+import {
+  type ChecksEndIcon,
+  checksProgress,
+} from "@/lib/connectors/checks/progress";
+import {
+  optionsFinding,
+  storedCheckResults,
+  type StoredReportScope,
+} from "@/lib/connectors/checks/findings";
+import type { CredentialRef } from "@/lib/credentials/types";
+import {
+  useCredentialCheckReports,
+  useSavedDraftCredential,
+} from "@/lib/credentials/hooks";
+import { toCredentialRequest } from "@/lib/credentials/utils";
+import type {
+  CapabilityCheckResult,
+  CapabilityCheckStatus,
+  CheckFindingKey,
+  ConnectorChecksStatus,
+  DraftCheckActions,
+  DraftCheckPlan,
+  DraftCheckRunSnapshot,
+  DraftCheckState,
+  DraftCheckStateKind,
+  DraftRerunMode,
+  FindingOption,
+  OptionsFinding,
+} from "@/lib/connectors/checks/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import type { AccessType } from "@/lib/types";
+
+const RUNNING_POLL_INTERVAL_MS = 1500;
+// The server keeps a draft run for 30 minutes (`DRAFT_RUN_TTL_SECONDS`); a
+// run still "running" after that, plus a margin, has stopped responding.
+export const DRAFT_RUN_CLIENT_DEADLINE_MS = 31 * 60 * 1000;
+// A poll that has not settled by then ends, so a hung request cannot spin.
+export const DRAFT_RUN_POLL_TIMEOUT_MS = 60 * 1000;
+
+/**
+ * One add-connector form's check session, kept in the SWR cache so every
+ * component that calls `useConnectorChecks` for the source shares it.
+ */
+interface ConnectorChecksSession {
+  /** Identifies the form session to the backend, which supersedes its runs. */
+  draftKey: string;
+  /** The latest run. */
+  runId: string | null;
+  /** The credential the latest run started with (`credentialKey`). */
+  credentialKey: string | null;
+  /** The credential and bound fields the latest run started with. */
+  ranWith: string | null;
+  /** The access type and form values the latest run started with. */
+  ranWithForm: string | null;
+  /** A start request is in flight. */
+  requesting: boolean;
+  /** The last start request failed. */
+  startFailed: boolean;
+  /** The server's reason for that failure, when it gave one. */
+  startFailureDetail: string | null;
+  /** When the latest run was accepted (ms since epoch); its polls stop after a deadline. */
+  startedAt: number | null;
+  /** Increments per start, so only the newest request applies its result. */
+  request: number;
+  /** The next start runs every check again, cached results included. */
+  rerunAll: boolean;
+  /** Checks the admin cancelled. Every run skips them until one is run. */
+  skippedCheckIds?: string[];
+}
+
+/** What a start asks of single checks, beyond the session's skips. */
+interface StartActions {
+  /** Runs only this check, ignoring its cached result. */
+  run?: string;
+  /** Runs this check next. */
+  startNow?: string;
+  /** Replaces the session's skipped checks. */
+  skip?: string[];
+}
+
+const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
+  "passed",
+  "failed",
+  "incomplete",
+  "indeterminate",
+  "skipped",
+]);
+
+/** A required check in this state keeps Create, or the form, locked. */
+function blocks(check: DraftCheckState): boolean {
+  switch (check.state) {
+    case "passed":
+    case "skipped":
+    case "not_applicable":
+      return false;
+    case "incomplete":
+    case "indeterminate":
+      return INDETERMINATE_CHECKS_BLOCK;
+    case "failed":
+    case "pending":
+    case "running":
+    case "waiting":
+    case "stopped":
+      return true;
+  }
+}
+
+function isFinished(
+  check: DraftCheckState
+): check is DraftCheckState & { state: CapabilityCheckStatus } {
+  return FINISHED_STATES.has(check.state);
+}
+
+function toCheckResult(
+  check: DraftCheckState & { state: CapabilityCheckStatus }
+): CapabilityCheckResult {
+  return {
+    capability: check.capability,
+    check_id: check.check_id,
+    display_name: check.display_name,
+    required: check.required,
+    status: check.state,
+    message: check.message,
+    summary: check.summary,
+    description: check.description,
+    error_kind: check.error_kind,
+    not_run_reason: check.not_run_reason,
+    // A draft check that does not apply is `not_applicable`, never finished.
+    applicable: true,
+    remediation: check.remediation,
+    docs_link: check.docs_link,
+    duration_ms: check.duration_ms,
+    findings: check.findings,
+  };
+}
+
+export const NO_CHECKS: Record<DraftCheckStateKind, number> = {
+  pending: 0,
+  running: 0,
+  passed: 0,
+  failed: 0,
+  incomplete: 0,
+  indeterminate: 0,
+  skipped: 0,
+  waiting: 0,
+  stopped: 0,
+  not_applicable: 0,
+};
+
+function countStates(
+  checks: DraftCheckState[],
+  broken: boolean
+): Record<DraftCheckStateKind, number> {
+  const counts = { ...NO_CHECKS };
+  for (const check of checks) counts[check.state] += 1;
+  // A run that broke will not finish its open checks.
+  if (broken) {
+    counts.pending = 0;
+    counts.running = 0;
+  }
+  return counts;
+}
+
+function formAccessType(values: Record<string, unknown>): AccessType {
+  const formValue: unknown = values.access_type;
+  const accessType: AccessType =
+    formValue === "private" || formValue === "sync" ? formValue : "public";
+  return toWireAccess(accessType, {
+    restrict_access_to_groups: values.restrict_access_to_groups === true,
+    restriction_group_ids: Array.isArray(values.restriction_group_ids)
+      ? values.restriction_group_ids.filter(
+          (id): id is number => typeof id === "number"
+        )
+      : [],
+  }).access_type;
+}
+
+export interface UseConnectorChecksInput {
+  source: ConfigurableSources;
+  /** The saved credential or draft the checks run with; `null` until one is usable. */
+  credential: CredentialRef | null;
+  /**
+   * Set when the form edits this pair: a saved credential's runs are dry
+   * runs of the proposed edit. The edit endpoint takes no typed account, so
+   * one still runs as a draft.
+   */
+  ccPairId?: number | null;
+}
+
+/** Names a credential for comparisons; `null` for none. */
+function credentialKeyOf(credential: CredentialRef | null): string | null {
+  return credential === null ? null : JSON.stringify(credential);
+}
+
+export interface UseConnectorChecksResult {
+  status: ConnectorChecksStatus;
+  /**
+   * The checks a run would hold for this form, before any run; `undefined`
+   * while they load.
+   */
+  plan: DraftCheckPlan | undefined;
+  /**
+   * The rest of the form may unlock: every check that validates the
+   * credential with its bound fields has passed. True at once when the source
+   * has none.
+   */
+  formUnlocked: boolean;
+  /**
+   * Create may run: the form is unlocked, and no required check is failed or
+   * still to run in a run of the current form. True without a run when no
+   * required check applies.
+   */
+  createReady: boolean;
+  /** The form changed since checks started; a new run would cover it. */
+  needsRun: boolean;
+  /** Identifies the current form: what a new run would check. */
+  formKey: string;
+  /** The finished checks of the latest run. */
+  results: CapabilityCheckResult[];
+  /** The latest run's checks still to finish: running, queued or waiting. */
+  openChecks: DraftCheckState[];
+  /** Checks queued or running in the latest run. */
+  inProgressCount: number;
+  /** Checks waiting on a form field before they can run. */
+  expectedCount: number;
+  /** The latest run's checks, counted per state. */
+  stateCounts: Record<DraftCheckStateKind, number>;
+  /** Starts a run. */
+  begin: () => void;
+  /** Starts a run that ignores every cached result. */
+  rerun: () => void;
+  /** Starts a run for the current form, reusing cached results. */
+  refresh: () => void;
+  /** Skips a check, running or expected; later runs skip it until it runs. */
+  skipCheck: (checkId: string) => void;
+  /** Runs one check: a skipped one again, or a queued one next. */
+  runCheck: (checkId: string) => void;
+  /**
+   * Why the checks failed to run, when known: the server's reason for
+   * refusing the start, else `runLost`. `null` with neither.
+   */
+  failure: ChecksFailure | null;
+  /**
+   * Stops the running run, and the checks go back to their start prompt.
+   * Rejects when the stop fails. `null` unless a started run is running.
+   */
+  cancel: (() => Promise<void>) | null;
+}
+
+/**
+ * Why a run failed to run. `refused`: the server refused the start, with its
+ * reason. `lost`: polling the run failed or passed the deadline.
+ */
+export type ChecksFailure =
+  | { kind: "refused"; detail: string }
+  | { kind: "lost" };
+
+/**
+ * The capability checks for the unsaved add-connector form of `source`. The
+ * session lives in the SWR cache, so the checks card, the configuration lock
+ * and the Connect button all read the same run by calling this hook. Must be
+ * called inside the form's Formik context.
+ *
+ * The first run starts on request. A change to the credential or its bound
+ * fields resets the checks to that request. Any other form change leaves the
+ * result out of date for Create until a new run (see `refresh`) covers it.
+ */
+export function useConnectorChecks({
+  source,
+  credential,
+  ccPairId = null,
+}: UseConnectorChecksInput): UseConnectorChecksResult {
+  // Names the credential; effects follow it rather than the object.
+  const credentialKey: string | null = credentialKeyOf(credential);
+  const { values } = useFormikContext<Record<string, unknown>>();
+  const configuration = useConnectorConfiguration(source);
+  const { mutate } = useSWRConfig();
+  const sessionKey = SWR_KEYS.connectorCheckSession(source);
+  const { data: session } = useSWR<ConnectorChecksSession>(sessionKey, null);
+  const { savedDraft, rememberDraft } = useSavedDraftCredential(source);
+
+  const formState: Record<string, unknown> = useMemo(
+    () => connectorFormState(source, configuration, values),
+    [source, configuration, values]
+  );
+  // The credential and its bound fields: what a result is valid for.
+  const bindingKey: string = useMemo(() => {
+    const bound = splitCredentialBoundFields(source, configuration);
+    const boundValues: unknown[] = [...bound.values, ...bound.advancedValues]
+      .map((field) => field.name)
+      .sort()
+      .map((name) => values[name]);
+    return JSON.stringify([credentialKey, boundValues]);
+  }, [source, configuration, values, credentialKey]);
+  const accessType: AccessType = formAccessType(values);
+  // The whole form a run checks: what Create's result is valid for.
+  const formKey: string = useMemo(
+    () => JSON.stringify([accessType, formState]),
+    [accessType, formState]
+  );
+  const { data: plan } = useConnectorCheckPlan(source, accessType, formState);
+  // A row action's start in flight; see `skipCheck`.
+  const actionInFlight = useRef<boolean>(false);
+
+  const runId: string | null = session?.runId ?? null;
+  const startedAt: number | null = session?.startedAt ?? null;
+  const { data: run, error: runError } = useSWR<DraftCheckRunSnapshot>(
+    runId ? SWR_KEYS.connectorCheckRun(runId) : null,
+    async (url: string) => {
+      const latest = await errorHandlingFetchWith<DraftCheckRunSnapshot>(url, {
+        signal: AbortSignal.timeout(DRAFT_RUN_POLL_TIMEOUT_MS),
+      });
+      // Judged after the fetch, so a run that finished while the tab slept
+      // past the deadline still shows its results.
+      if (
+        latest.status === "running" &&
+        startedAt !== null &&
+        Date.now() > startedAt + DRAFT_RUN_CLIENT_DEADLINE_MS
+      ) {
+        throw new Error("Capability check run passed its client deadline");
+      }
+      return latest;
+    },
+    {
+      // An error (e.g. the expired run's 404) keeps the last snapshot, so
+      // polling and retries stop there instead of spinning on it.
+      refreshInterval: (latest) =>
+        latest?.status === "running" ? RUNNING_POLL_INTERVAL_MS : 0,
+      shouldRetryOnError: false,
+    }
+  );
+  // Polling broke while the run still read as running.
+  const runLost: boolean =
+    runId !== null &&
+    runError !== undefined &&
+    !(run && run.run_id === runId && run.status !== "running");
+
+  const start = useCallback(
+    async (rerun: DraftRerunMode, actions: StartActions = {}) => {
+      if (credential === null) return;
+      const draftKey: string = session?.draftKey ?? crypto.randomUUID();
+      const request: number = (session?.request ?? 0) + 1;
+      const mode: DraftRerunMode = session?.rerunAll ? "all" : rerun;
+      const skipped: string[] = actions.skip ?? session?.skippedCheckIds ?? [];
+      const checkActions: DraftCheckActions = {};
+      if (skipped.length > 0) checkActions.skip_check_ids = skipped;
+      // A run of every check takes no single-check run; it runs that check
+      // anyway.
+      if (actions.run !== undefined && mode === "none") {
+        checkActions.check_ids = [actions.run];
+      }
+      if (actions.startNow !== undefined) {
+        checkActions.start_check_id = actions.startNow;
+      }
+      await mutate<ConnectorChecksSession>(
+        sessionKey,
+        {
+          draftKey,
+          runId: session?.runId ?? null,
+          credentialKey,
+          ranWith: bindingKey,
+          ranWithForm: formKey,
+          requesting: true,
+          startFailed: false,
+          startFailureDetail: null,
+          startedAt: null,
+          request,
+          rerunAll: false,
+          skippedCheckIds: skipped,
+        },
+        { revalidate: false }
+      );
+      // Only the newest start request may write its outcome. Resolves to
+      // whether this one still was.
+      const settle = async (
+        update: (current: ConnectorChecksSession) => ConnectorChecksSession
+      ): Promise<boolean> => {
+        let applied = false;
+        await mutate<ConnectorChecksSession>(
+          sessionKey,
+          (current) => {
+            if (!current || current.request !== request) return current;
+            applied = true;
+            return update(current);
+          },
+          { revalidate: false }
+        );
+        return applied;
+      };
+      try {
+        // A typed account's values go only with a run, which saves them in
+        // the user's draft; later requests name the draft.
+        const accepted: DraftCheckRunSnapshot =
+          ccPairId !== null && "credential_id" in credential
+            ? await startPairEditCheckRun(ccPairId, {
+                connector_specific_config: formState,
+                access_type: accessType,
+                credential_id: credential.credential_id,
+                rerun: mode,
+                ...checkActions,
+              })
+            : await startDraftCheckRun({
+                source,
+                ...toCredentialRequest(credential, savedDraft),
+                access_type: accessType,
+                draft_key: draftKey,
+                form_state: formState,
+                rerun: mode,
+                ...checkActions,
+              });
+        if ("credential_json" in credential) {
+          await rememberDraft(
+            accepted.credential_id,
+            credential.credential_json
+          );
+        }
+        // Seed the run first, so readers show it at once and poll from it.
+        await mutate(SWR_KEYS.connectorCheckRun(accepted.run_id), accepted, {
+          revalidate: false,
+        });
+        const current: boolean = await settle((session) => ({
+          ...session,
+          runId: accepted.run_id,
+          startedAt: Date.now(),
+          requesting: false,
+        }));
+        if (!current) {
+          // The form moved on (e.g. to another account) while this run
+          // started, so nothing reads it and no reset could cancel it.
+          cancelDraftCheckRun(accepted.run_id).catch(() => undefined);
+        }
+      } catch (error) {
+        await settle((current) => ({
+          ...current,
+          requesting: false,
+          startFailed: true,
+          startFailureDetail: fetchErrorDetail(error),
+        }));
+      }
+    },
+    [
+      // The key, not the object: callers may build a new one each render.
+      credentialKey,
+      ccPairId,
+      savedDraft,
+      rememberDraft,
+      session,
+      sessionKey,
+      bindingKey,
+      formKey,
+      source,
+      accessType,
+      formState,
+      mutate,
+    ]
+  );
+
+  // Results count only for the credential and bound fields they ran with.
+  const current: boolean = !!session && session.ranWith === bindingKey;
+  // A superseded snapshot belongs to an older run.
+  const snapshot: DraftCheckRunSnapshot | null =
+    current && run && run.run_id === runId && run.status !== "superseded"
+      ? run
+      : null;
+  const checks: DraftCheckState[] = snapshot?.checks ?? [];
+
+  const status: ConnectorChecksStatus = (() => {
+    if (credential === null || !session || !current) return "notStarted";
+    if (session.requesting) return "running";
+    if (session.startFailed) return "failedToRun";
+    if (!runId) return "notStarted";
+    // Another tab started a run that replaced this one (a pair's dry runs
+    // share one key per user): this run stopped, so it can start again.
+    if (run && run.run_id === runId && run.status === "superseded") {
+      return "notStarted";
+    }
+    if (runLost) return "failedToRun";
+    if (!snapshot || snapshot.status === "running") return "running";
+    if (snapshot.status === "failed_to_run") return "failedToRun";
+    return checks.some(
+      (check) => check.required && check.state !== "waiting" && blocks(check)
+    )
+      ? "failed"
+      : "passed";
+  })();
+
+  const applicable: DraftCheckState[] = (plan?.checks ?? []).filter(
+    (check) => check.state !== "not_applicable"
+  );
+  // Which checks validate the binding can depend on the form (e.g. a scoped
+  // token picks its own sign-in check). A current run worked them out from
+  // the form it ran on, so it decides; before one, the plan does, and the
+  // form waits for a run while any apply.
+  const formUnlocked: boolean = snapshot
+    ? checks.every(
+        (check) =>
+          !check.validates_binding ||
+          check.state === "not_applicable" ||
+          !blocks(check)
+      )
+    : plan !== undefined &&
+      !applicable.some((check) => check.validates_binding);
+  // A current run of this form that started fine. It need not be finished:
+  // `createReady` waits only on required checks (see `blocks`), so a slow
+  // optional check such as discovery does not hold Create back. A failed
+  // start keeps the previous run, which checked other settings.
+  const ranThisForm: boolean =
+    !!session &&
+    !session.requesting &&
+    !session.startFailed &&
+    session.ranWithForm === formKey &&
+    snapshot !== null &&
+    snapshot.status !== "failed_to_run" &&
+    !runLost;
+  const createReady: boolean =
+    formUnlocked &&
+    (!applicable.some((check) => check.required) ||
+      (ranThisForm &&
+        !checks.some((check) => check.required && blocks(check))));
+
+  const cancel = useCallback(async () => {
+    if (runId === null) return;
+    try {
+      await cancelDraftCheckRun(runId);
+    } catch (error) {
+      // The run may have ended meanwhile; show what it holds now.
+      await mutate(SWR_KEYS.connectorCheckRun(runId));
+      throw error;
+    }
+    // Drops the run; a newer start request still applies its own.
+    await mutate<ConnectorChecksSession>(
+      sessionKey,
+      (latest) =>
+        latest && latest.runId === runId
+          ? { ...latest, runId: null, startedAt: null }
+          : latest,
+      { revalidate: false }
+    );
+  }, [runId, sessionKey, mutate]);
+
+  const failure: ChecksFailure | null = (() => {
+    if (status !== "failedToRun") return null;
+    if (session?.startFailed) {
+      const detail: string | null = session.startFailureDetail;
+      return detail === null ? null : { kind: "refused", detail };
+    }
+    return runLost ? { kind: "lost" } : null;
+  })();
+
+  return {
+    status,
+    plan,
+    formUnlocked,
+    createReady,
+    formKey,
+    needsRun:
+      !!session &&
+      current &&
+      runId !== null &&
+      !session.requesting &&
+      session.ranWithForm !== formKey,
+    results: checks.flatMap((check) =>
+      isFinished(check) ? [toCheckResult(check)] : []
+    ),
+    // A run that broke will not finish its queued or running checks.
+    // A stopped check stays listed: it holds Create until it runs.
+    openChecks: checks.filter((check) =>
+      check.state === "waiting" || check.state === "stopped"
+        ? true
+        : (check.state === "pending" || check.state === "running") &&
+          status !== "failedToRun"
+    ),
+    // A run that broke will not finish its open checks, so none count.
+    inProgressCount:
+      status === "failedToRun"
+        ? 0
+        : checks.filter(
+            (check) => check.state === "pending" || check.state === "running"
+          ).length,
+    expectedCount: checks.filter((check) => check.state === "waiting").length,
+    stateCounts: countStates(checks, status === "failedToRun"),
+    begin: () => void start("none"),
+    rerun: () => void start("all"),
+    refresh: () => void start("none"),
+    // A row action waits for the one in flight: two starts racing could
+    // supersede each other. The ref is set at once, before any re-render.
+    skipCheck: (checkId) => {
+      if (actionInFlight.current || session?.requesting) return;
+      const skipped = session?.skippedCheckIds ?? [];
+      if (skipped.includes(checkId)) return;
+      actionInFlight.current = true;
+      void start("none", { skip: [...skipped, checkId] }).finally(() => {
+        actionInFlight.current = false;
+      });
+    },
+    runCheck: (checkId) => {
+      if (actionInFlight.current || session?.requesting) return;
+      const skip = (session?.skippedCheckIds ?? []).filter(
+        (id) => id !== checkId
+      );
+      const queued: boolean = checks.some(
+        (check) =>
+          check.check_id === checkId &&
+          (check.state === "pending" || check.state === "waiting")
+      );
+      actionInFlight.current = true;
+      // Either way it starts now, ahead of any check the new run redoes.
+      void start(
+        "none",
+        queued
+          ? { skip, startNow: checkId }
+          : { skip, run: checkId, startNow: checkId }
+      ).finally(() => {
+        actionInFlight.current = false;
+      });
+    },
+    failure,
+    cancel:
+      status === "running" && runId !== null && !session?.requesting
+        ? cancel
+        : null,
+  };
+}
+
+/**
+ * Resets the checks when the form's credential changes: dropped, or swapped
+ * for another. The run started with the old credential is stopped, and the
+ * checks go back to their start prompt, so picking a credential again starts
+ * fresh rather than showing an old run. The first new run re-runs every
+ * check, so no result of the stopped run comes back from the cache. Call it
+ * once per form; `useConnectorChecks` callers share the session it resets.
+ */
+export function useResetChecksOnCredentialChange({
+  source,
+  credential,
+}: UseConnectorChecksInput): void {
+  const { mutate } = useSWRConfig();
+  const sessionKey = SWR_KEYS.connectorCheckSession(source);
+  const { data: session } = useSWR<ConnectorChecksSession>(sessionKey, null);
+  const credentialKey: string | null = credentialKeyOf(credential);
+  const stale: boolean = !!session && session.credentialKey !== credentialKey;
+  const staleRunId: string | null = stale ? (session?.runId ?? null) : null;
+
+  useEffect(() => {
+    if (!stale) return;
+    if (staleRunId !== null) {
+      // Best effort: a run that already ended or expired needs no stop.
+      cancelDraftCheckRun(staleRunId).catch(() => undefined);
+    }
+    void mutate<ConnectorChecksSession>(
+      sessionKey,
+      {
+        draftKey: crypto.randomUUID(),
+        runId: null,
+        credentialKey,
+        ranWith: null,
+        ranWithForm: null,
+        requesting: false,
+        startFailed: false,
+        startFailureDetail: null,
+        startedAt: null,
+        request: (session?.request ?? 0) + 1,
+        rerunAll: true,
+      },
+      { revalidate: false }
+    );
+  }, [stale, staleRunId, credentialKey, session?.request, sessionKey, mutate]);
+}
+
+/** The listing a discovery check found under `key`: the form's latest run, else the stored reports in `scope`. Starts no run. */
+export function useOptionsFinding(
+  source: ConfigurableSources,
+  key: CheckFindingKey,
+  scope: StoredReportScope | null,
+  // The latest run's empty listing is its answer (nothing found), not a
+  // reason to read an older stored report.
+  keepEmpty: boolean = false
+): OptionsFinding | null {
+  const { data: session } = useSWR<ConnectorChecksSession>(
+    SWR_KEYS.connectorCheckSession(source),
+    null
+  );
+  const runId: string | null = session?.runId ?? null;
+  const { data: run } = useSWR<DraftCheckRunSnapshot>(
+    runId ? SWR_KEYS.connectorCheckRun(runId) : null,
+    null
+  );
+  const { reportFor } = useCredentialCheckReports(source);
+  const { savedDraft } = useSavedDraftCredential(source);
+  // The form's account: a saved credential, else the draft a run saved the
+  // typed account as. A run of another account is stale until the reset.
+  const accountId: number | null =
+    scope?.credentialId ?? savedDraft?.credential_id ?? null;
+  return useMemo(() => {
+    const fromRun: OptionsFinding | null =
+      run && run.credential_id === accountId
+        ? optionsFinding(run.checks, key, keepEmpty)
+        : null;
+    if (fromRun !== null || scope === null) return fromRun;
+    return optionsFinding(storedCheckResults(reportFor, scope), key);
+  }, [run, accountId, key, scope, reportFor, keepEmpty]);
+}
+
+/**
+ * The error a failed check reports on `fieldName` (its `reports_field`), from
+ * the form's latest run of the current account; else null.
+ */
+export function useFieldCheckError(
+  source: ConfigurableSources,
+  fieldName: string,
+  scope: StoredReportScope | null
+): string | null {
+  const { data: session } = useSWR<ConnectorChecksSession>(
+    SWR_KEYS.connectorCheckSession(source),
+    null
+  );
+  const runId: string | null = session?.runId ?? null;
+  const { data: run } = useSWR<DraftCheckRunSnapshot>(
+    runId ? SWR_KEYS.connectorCheckRun(runId) : null,
+    null
+  );
+  const { savedDraft } = useSavedDraftCredential(source);
+  const accountId: number | null =
+    scope?.credentialId ?? savedDraft?.credential_id ?? null;
+  if (!run || run.credential_id !== accountId) return null;
+  const failed = run.checks.find(
+    (check) => check.reports_field === fieldName && check.state === "failed"
+  );
+  return failed ? failed.summary || failed.message : null;
+}
+
+/** Options a discovery check listed under `key`; see `useOptionsFinding`. */
+export function useFindingOptions(
+  source: ConfigurableSources,
+  key: CheckFindingKey,
+  scope: StoredReportScope | null
+): FindingOption[] {
+  const finding = useOptionsFinding(source, key, scope);
+  return useMemo(() => finding?.options ?? [], [finding]);
+}
+
+const PLAN_DEBOUNCE_MS = 300;
+
+/**
+ * The checks a run would hold for `source` with this access type and form.
+ * Which checks apply can depend on the form, so the plan follows it, a little
+ * behind typing, and keeps its last answer while a new one loads. It does not
+ * depend on the credential.
+ */
+export function useConnectorCheckPlan(
+  source: ConfigurableSources,
+  accessType: AccessType,
+  formState: Record<string, unknown>
+): SWRResponse<DraftCheckPlan> {
+  const form = useDebouncedValue(formState, PLAN_DEBOUNCE_MS);
+  return useSWR<DraftCheckPlan>(
+    SWR_KEYS.connectorCheckPlan(source, accessType, JSON.stringify(form)),
+    () =>
+      fetchDraftCheckPlan({
+        source,
+        access_type: accessType,
+        form_state: form,
+      }),
+    { revalidateOnFocus: false, keepPreviousData: true }
+  );
+}
+
+/**
+ * Clears the check session of `source` when the add-connector page mounts,
+ * so a return visit does not show the previous visit's run.
+ */
+export function useResetConnectorChecks(source: ConfigurableSources): void {
+  const { mutate } = useSWRConfig();
+  useEffect(() => {
+    void mutate(SWR_KEYS.connectorCheckSession(source), undefined, {
+      revalidate: false,
+    });
+  }, [source, mutate]);
+}
+
+/**
+ * A red stop sign: a required check failed, or the run broke. Content colors
+ * its icon from its own stylesheet, so the color is an inline style.
+ */
+export function ChecksFailedIcon({ style, ...props }: IconProps) {
+  return createElement(SvgXOctagon, {
+    ...props,
+    style: { ...style, color: "var(--status-error-05)" },
+  });
+}
+
+/** A green check: every check succeeded. */
+function ChecksSucceededIcon({ style, ...props }: IconProps) {
+  return createElement(SvgCheckCircle, {
+    ...props,
+    style: { ...style, color: "var(--status-success-05)" },
+  });
+}
+
+const END_ICONS: Record<ChecksEndIcon, IconFunctionComponent> = {
+  succeeded: ChecksSucceededIcon,
+  requiredFailed: ChecksFailedIcon,
+};
+
+export interface ConnectorChecksProgress {
+  /** The header icon: the ring, the spinner before anything finishes, or an end state. */
+  icon: IconFunctionComponent;
+  /** `(complete/counted)` while checks run, `(counted)` once all finished; absent with nothing to count. */
+  suffix: string | undefined;
+}
+
+/**
+ * The checks' header icon and count, both from `checksProgress`, ready for a
+ * `Content` icon slot and suffix.
+ */
+export function useConnectorChecksProgress(
+  counts: Record<DraftCheckStateKind, number>,
+  status: ConnectorChecksStatus,
+  requiredFailed: boolean
+): ConnectorChecksProgress {
+  const t = useTranslations("admin.connectorChecks");
+  const { ring, end, complete, counted } = checksProgress(
+    counts,
+    status,
+    requiredFailed
+  );
+  const success = ring?.success;
+  const error = ring?.error;
+  const warning = ring?.warning;
+  const neutral = ring?.neutral;
+  const rest = ring?.rest;
+  const showRing: boolean = ring !== null;
+  const icon = useMemo<IconFunctionComponent>(
+    () =>
+      showRing
+        ? function ChecksRingIcon(props: IconProps) {
+            return createElement(SvgProgressRing, {
+              ...props,
+              success,
+              error,
+              warning,
+              neutral,
+              rest,
+            });
+          }
+        : IconLoader,
+    [showRing, success, error, warning, neutral, rest]
+  );
+  return {
+    icon: end === null ? icon : END_ICONS[end],
+    suffix:
+      counted === 0
+        ? undefined
+        : complete === counted
+          ? t("titleTotal", { total: counted })
+          : t("titleCount", { complete, total: counted }),
+  };
+}
+
+function isTyping(): boolean {
+  const focused = document.activeElement;
+  return (
+    focused instanceof HTMLInputElement ||
+    focused instanceof HTMLTextAreaElement ||
+    (focused instanceof HTMLElement && focused.isContentEditable)
+  );
+}
+
+/**
+ * Keeps the checks current as the form fills in: once checks have started, a
+ * form change starts a run when the user leaves the field, or at once when no
+ * text field has focus (a toggle or a select). Waiting checks run as their
+ * fields are set; cached results keep unchanged checks from running again.
+ *
+ * Call it from one component only, so one change starts one run.
+ */
+export function useConnectorChecksAutoRun({
+  needsRun,
+  formKey,
+  refresh,
+}: Pick<UseConnectorChecksResult, "needsRun" | "formKey" | "refresh">): void {
+  const startedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!needsRun) return;
+    const run = () => {
+      if (startedFor.current === formKey) return;
+      startedFor.current = formKey;
+      refresh();
+    };
+    if (!isTyping()) {
+      run();
+      return;
+    }
+    document.addEventListener("focusout", run, { once: true });
+    return () => document.removeEventListener("focusout", run);
+  }, [needsRun, formKey, refresh]);
+}

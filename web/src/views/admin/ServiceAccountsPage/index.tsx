@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -13,17 +12,16 @@ import {
   BasicModalFooter,
   Button,
   Code,
-  LineItemButton,
+  CopyButton,
+  Dropdown,
   MessageCard,
   Modal,
-  Popover,
-  PopoverMenu,
   Table,
   Tag,
   Text,
+  type TableColumn,
 } from "@opal/components";
-import { Content, IllustrationContent } from "@opal/layouts";
-import SvgNoResult from "@opal/illustrations/no-result";
+import { Content } from "@opal/layouts";
 import {
   SvgDownload,
   SvgKey,
@@ -40,7 +38,7 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 import { escapeMarkdown, markdown } from "@opal/utils";
 
 import { useBillingInformation } from "@/hooks/useBillingInformation";
-import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
+import { BillingStatus, hasActiveSubscription } from "@/lib/billing/types";
 import {
   deleteApiKey,
   regenerateApiKey,
@@ -50,13 +48,10 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
 import EditServiceAccountModal from "@/views/admin/ServiceAccountsPage/EditServiceAccountModal";
-import { createTableColumns } from "@opal/components/table/columns";
 import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
-
-const tc = createTableColumns<APIKey>();
 
 // ---------------------------------------------------------------------------
 // Page
@@ -134,13 +129,16 @@ export default function ServiceAccountsPage() {
   };
 
   const columns = useMemo(
-    () => [
-      tc.qualifier({
+    (): TableColumn<APIKey>[] => [
+      {
+        kind: "qualifier",
         content: "icon",
-        getContent: () => SvgUserKey,
-      }),
-      tc.column("api_key_name", {
-        header: t("table.columns.name.header"),
+        icon: () => SvgUserKey,
+      },
+      {
+        kind: "data",
+        field: "api_key_name",
+        title: t("table.columns.name.header"),
         weight: 25,
         cell: (value) => (
           <Content
@@ -149,19 +147,22 @@ export default function ServiceAccountsPage() {
             variant="body"
           />
         ),
-      }),
-      tc.column("api_key_display", {
-        header: t("table.columns.apiKey.header"),
+      },
+      {
+        kind: "data",
+        field: "api_key_display",
+        title: t("table.columns.apiKey.header"),
         weight: 30,
         cell: (value) => (
           <Text font="secondary-mono" color="text-03">
             {value}
           </Text>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "groups",
-        header: t("table.columns.groups.header"),
+        title: t("table.columns.groups.header"),
         width: { weight: 25, minWidth: 160 },
         cell: (row) => {
           const groups = row.groups ?? [];
@@ -189,8 +190,9 @@ export default function ServiceAccountsPage() {
             </div>
           );
         },
-      }),
-      tc.actions({
+      },
+      {
+        kind: "actions",
         cell: (row) => (
           <div className="flex flex-row gap-1">
             <Button
@@ -199,91 +201,60 @@ export default function ServiceAccountsPage() {
               tooltip={t("table.regenerateButton.tooltip")}
               onClick={() => setRegenerateTarget(row)}
             />
-            <Popover>
-              <Popover.Trigger asChild>
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button
                   icon={SvgMoreHorizontal}
                   prominence="tertiary"
                   tooltip={t("table.moreButton.tooltip")}
+                  aria-label={t("table.moreButton.tooltip")}
                 />
-              </Popover.Trigger>
-              <Popover.Content side="bottom" align="end" width="md">
-                <PopoverMenu>
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgUsers}
-                    onClick={() => setGroupsRolesTarget(row)}
-                    title={t("table.actions.groups.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgUserEdit}
-                    onClick={() => {
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("table.moreButton.tooltip")}
+                items={[
+                  {
+                    kind: "action",
+                    id: "groups",
+                    icon: SvgUsers,
+                    title: t("table.actions.groups.label"),
+                    onSelect: () => setGroupsRolesTarget(row),
+                  },
+                  {
+                    kind: "action",
+                    id: "edit",
+                    icon: SvgUserEdit,
+                    title: t("table.actions.edit.label"),
+                    onSelect: () => {
                       setSelectedApiKey(row);
                       setShowCreateUpdateForm(true);
-                    }}
-                    title={t("table.actions.edit.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgTrash}
-                    color="danger"
-                    onClick={() => setDeleteTarget(row)}
-                    title={t("table.actions.delete.label")}
-                  />
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+                    },
+                  },
+                  {
+                    kind: "action",
+                    id: "delete",
+                    icon: SvgTrash,
+                    danger: true,
+                    title: t("table.actions.delete.label"),
+                    onSelect: () => setDeleteTarget(row),
+                  },
+                ]}
+              />
+            </Dropdown>
           </div>
         ),
-      }),
+      },
     ],
-    [t] // eslint-disable-line react-hooks/exhaustive-deps
+    [t]
   );
-
-  if (error) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          title={adminRouteTitle(route)}
-          icon={route.icon}
-          description={t("page.description", { appName })}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <IllustrationContent
-            illustration={SvgNoResult}
-            title={t("page.error.title")}
-            description={t("page.error.description")}
-          />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          title={adminRouteTitle(route)}
-          icon={route.icon}
-          description={t("page.description", { appName })}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <IconLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
 
   const hasKeys = visibleApiKeys.length > 0;
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root
+      loading={isLoading}
+      error={error ? t("page.error.description") : false}
+    >
       <SettingsLayouts.Header
         title={adminRouteTitle(route)}
         icon={route.icon}
@@ -316,10 +287,10 @@ export default function ServiceAccountsPage() {
 
           {hasKeys && (
             <Table
-              data={filteredApiKeys}
+              items={filteredApiKeys}
               getRowId={(row) => String(row.api_key_id)}
               columns={columns}
-              searchTerm={search}
+              query={search}
             />
           )}
         </div>
@@ -359,17 +330,12 @@ export default function ServiceAccountsPage() {
                 </Button>
               }
               submit={
-                // TODO(@raunakab): Create an opalified copy-button and replace it here
-                <Button
-                  onClick={() => {
-                    if (fullApiKey) {
-                      navigator.clipboard.writeText(fullApiKey);
-                      toast.success(t("toasts.keyCopied"));
-                    }
-                  }}
+                <CopyButton
+                  prominence="primary"
+                  getCopyText={() => fullApiKey ?? ""}
                 >
                   {t("keyModal.copyButton.label")}
-                </Button>
+                </CopyButton>
               }
             />
           </Modal.Footer>

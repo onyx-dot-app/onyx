@@ -65,8 +65,10 @@ def _fetch(payload: dict = _SAMPLE) -> list[AtlasCloudFinalModelResponse]:
         )
 
 
-def test_only_text_output_models_are_returned() -> None:
-    names = [m.name for m in _fetch()]
+def test_only_text_output_models_are_returned_sorted_by_name() -> None:
+    # Feed the catalog in reverse so the assertion proves the endpoint sorts.
+    reversed_catalog = {**_SAMPLE, "data": list(reversed(_SAMPLE["data"]))}
+    names = [m.name for m in _fetch(reversed_catalog)]
     assert names == [
         "deepseek-ai/DeepSeek-V3.1-Terminus",
         "Qwen/Qwen3-235B-A22B-Instruct-2507",

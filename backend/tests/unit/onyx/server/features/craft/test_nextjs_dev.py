@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID
+
+import pytest
 
 from onyx.server.features.build.sandbox import nextjs_dev
 from onyx.server.features.build.sandbox.nextjs_dev import (
@@ -62,7 +65,7 @@ def test_start_script_port_is_env_driven_not_a_dup_flag() -> None:
     script = build_nextjs_start_script(_SESSION_PATH, 3010)
 
     assert "export ONYX_WEBAPP_PORT=3010" in script
-    assert "bun run dev -- -H 0.0.0.0 $PORT_FLAG >" in script
+    assert 'bun run dev -- -H "${SANDBOX_LISTEN_HOST:-0.0.0.0}" $PORT_FLAG >' in script
 
 
 def test_start_script_writes_naive_path_port_file() -> None:
@@ -180,6 +183,67 @@ def test_bootstrap_script_is_valid_bash() -> None:
     _assert_valid_bash(script)
 
 
+@pytest.mark.parametrize(
+    ("listen_host", "expected_host", "probe_host"),
+    [
+        (None, "0.0.0.0", "127.0.0.1"),
+        ("::", "::", "[::1]"),
+        ("::1", "::1", "[::1]"),
+    ],
+)
+def test_bootstrap_uses_matching_listener_and_readiness_address(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    listen_host: str | None,
+    expected_host: str,
+    probe_host: str,
+) -> None:
+    """Execute the generated script with launch and HTTP commands recorded."""
+    commands: Path = tmp_path / "bin"
+    commands.mkdir()
+    web_dir: Path = tmp_path / "outputs" / "web"
+    web_dir.mkdir(parents=True)
+    (web_dir / "node_modules").mkdir()
+    (web_dir / "package.json").write_text('{"scripts":{"dev":"ONYX_WEBAPP_PORT"}}')
+    launch_args: Path = tmp_path / "launch.args"
+    probe_args: Path = tmp_path / "probe.args"
+    # flock is not available on every host; this test checks network arguments.
+    command_bodies: dict[str, str] = {
+        "flock": "exit 0\n",
+        "bun": f'printf "%s\\n" "$@" > "{launch_args}"\n',
+        "curl": (
+            f'printf "%s\\n" "$@" > "{probe_args}"\n'
+            # Wait for the background launch before the fixture removes its files.
+            f'for i in $(seq 1 100); do [ -f "{launch_args}" ] && exit 0; sleep 0.01; done\n'
+            "exit 1\n"
+        ),
+    }
+    for command, body in command_bodies.items():
+        executable: Path = commands / command
+        executable.write_text("#!/bin/bash\n" + body)
+        executable.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{commands}:/usr/bin:/bin")
+    if listen_host is None:
+        monkeypatch.delenv("SANDBOX_LISTEN_HOST", raising=False)
+    else:
+        monkeypatch.setenv("SANDBOX_LISTEN_HOST", listen_host)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ["bash", "-c", build_webapp_bootstrap_script(str(tmp_path), 3010)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert launch_args.read_text().splitlines() == [
+        "run",
+        "dev",
+        "--",
+        "-H",
+        expected_host,
+    ]
+    assert probe_args.read_text().splitlines()[-1] == f"http://{probe_host}:3010/"
+
+
 def test_bootstrap_script_embeds_port_write_and_env_exports() -> None:
     script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
 
@@ -279,3 +343,48 @@ def test_restore_script_rewrites_scripts_before_gated_autostart() -> None:
 
 def test_restore_script_is_valid_bash() -> None:
     _assert_valid_bash(build_webapp_restore_script(_SESSION_PATH, 3010))
+
+
+@pytest.mark.parametrize(
+    "managed,declaration,migrates",
+    [
+        (True, "const nextConfig: NextConfig = {};", True),
+        (
+            True,
+            "const nextConfig: NextConfig = { experimental: { reactDebugChannel: false } };",
+            False,
+        ),
+        (True, "const nextConfig: NextConfig = { trailingSlash: true };", False),
+        (False, "const nextConfig: NextConfig = {};", False),
+    ],
+)
+def test_managed_config_migration_preserves_custom_settings(
+    tmp_path: Path, managed: bool, declaration: str, migrates: bool
+) -> None:
+    config = tmp_path / "outputs" / "web" / "next.config.ts"
+    config.parent.mkdir(parents=True)
+    script = build_nextjs_start_script(str(tmp_path), 3010)
+    migration = script[script.index("NEXT_CONFIG=") : script.index('NEXTJS_PID=""')]
+    if sys.platform == "darwin":
+        # BSD sed requires an explicit empty backup suffix; the sandbox uses GNU sed.
+        migration = migration.replace("sed -i '", "sed -i '' '")
+    custom_settings = "nextConfig.headers = async () => [];"
+    marker = "function resolveWebappBasePath() {}\n" if managed else ""
+    source = f"{marker}{declaration}\n{custom_settings}\n"
+    config.write_text(source)
+    before = config.stat()
+    subprocess.run(["bash", "-ec", migration], check=True, capture_output=True)
+    result = config.read_text()
+    assert custom_settings in result
+    if migrates:
+        assert "reactDebugChannel: false" in result
+    else:
+        assert result == source
+        assert config.stat().st_ino == before.st_ino
+        assert config.stat().st_mtime_ns == before.st_mtime_ns
+    migrated = config.stat()
+    subprocess.run(["bash", "-ec", migration], check=True, capture_output=True)
+    assert config.read_text() == result
+    assert config.stat().st_ino == migrated.st_ino
+    assert config.stat().st_mtime_ns == migrated.st_mtime_ns
+    assert "reactDebugChannel: false" in _TEMPLATE_NEXT_CONFIG.read_text()

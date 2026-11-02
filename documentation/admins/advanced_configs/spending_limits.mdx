@@ -1,0 +1,65 @@
+---
+title: "Spending Limits"
+description: "Cap LLM token or cost usage for the workspace, a user, or a group"
+icon: "dollar-sign"
+---
+
+## Overview
+
+Spending limits cap how many LLM tokens, or how much LLM cost, Onyx spends in a time period. When a limit is reached,
+Onyx rejects new chat messages until the period resets.
+
+<Info>
+  **Business Plan Feature**
+
+  Spending limits require a Business plan or higher. Per-user and per-group limits require an Enterprise plan.
+  Onyx Cloud includes all of them. [View plans](/admins/billing/overview).
+</Info>
+
+To manage limits, open the **Admin Panel**, select **Usage** under **Usage**,
+and scroll to **Manage spending limits** at the bottom of the page.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/spending_limits.webp" alt="Manage spending limits on the Usage page"/>
+
+## Scopes
+
+| Applies to | Who it caps | Plan |
+|---|---|---|
+| **Workspace** | Every user, group, and API key together | Business |
+| **Per user** | Each user on their own | Enterprise |
+| **User group** | All members of one group together | Enterprise |
+
+On an Enterprise plan the table has **Global**, **Users**, and **Groups** tabs.
+You can also add limits for one group from its page under **Groups**.
+
+When a user is in several groups, the most permissive group limit applies.
+A user is blocked only when every limit that applies to them is reached.
+
+## Create a limit
+
+<Steps>
+  <Step title="Choose the scope">
+    Click **Create spending limit**. Under **Applies to**, select **Workspace**, **Per user**, or **User group**.
+  </Step>
+
+  <Step title="Set the budget">
+    Enter a **Cost budget** in USD, a **Token budget** in tokens, or both.
+    A limit with both budgets blocks when either one is reached.
+  </Step>
+
+  <Step title="Set the reset period">
+    Enter the **Reset period** in days. Budgets reset at midnight UTC.
+
+    Click **Create limit**. The limit takes effect at once.
+  </Step>
+</Steps>
+
+## Manage limits
+
+Turn a limit's toggle off to pause it without deleting it.
+
+<Note>
+  Spending limits count LLM usage from chat, agents, Craft, the Slack bot, and the API.
+  Onyx records usage a few seconds after each response,
+  so a user can go slightly over a budget before the block applies.
+</Note>

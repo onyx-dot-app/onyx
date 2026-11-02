@@ -170,6 +170,7 @@ celery_app.autodiscover_tasks(
         [
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.port",
+            "onyx.background.celery.tasks.tabular_rechunk",
         ]
     )
 )

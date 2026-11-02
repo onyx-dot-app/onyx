@@ -18,6 +18,7 @@ from onyx.db.enums import (
     AccountType,
     ExternalAppType,
     Permission,
+    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.external_app import (
@@ -37,6 +38,7 @@ from onyx.db.skill import (
     replace_skill_bundle,
     replace_skill_shares,
     set_skill_enabled_for_user,
+    set_skill_installation_policy,
     set_skill_public_permission,
     transfer_skill_ownership,
 )
@@ -415,6 +417,7 @@ def create_custom_skill_from_editor(
     upload: Annotated[UploadFile | None, File()] = None,
     auto_enable: Annotated[bool, Form()] = True,
     external_app_id: Annotated[int | None, Form(gt=0)] = None,
+    sharing: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
@@ -426,6 +429,15 @@ def create_custom_skill_from_editor(
             )
         if get_external_app_by_id(db_session, external_app_id) is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "External app not found.")
+
+    try:
+        share_request = (
+            SkillShareRequest.model_validate_json(sharing) if sharing else None
+        )
+    except ValidationError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Invalid skill sharing settings."
+        ) from exc
 
     try:
         create_request = SkillCreateRequest(
@@ -484,6 +496,8 @@ def create_custom_skill_from_editor(
                 external_app_id=external_app_id,
                 skill_id=skill.id,
             )
+        if share_request is not None:
+            _apply_skill_sharing__no_commit(skill, share_request, user, db_session)
         if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
@@ -493,7 +507,7 @@ def create_custom_skill_from_editor(
             )
         db_session.commit()
 
-    if should_auto_enable:
+    if should_auto_enable or share_request is not None:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
@@ -782,32 +796,19 @@ def _assert_group_share_within_scope(
     )
 
 
-@user_router.patch("/custom/{skill_id}/share")
-def share_current_user_skill(
-    skill_id: UUID,
+def _apply_skill_sharing__no_commit(
+    skill: Skill,
     share_req: SkillShareRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> SkillResponse:
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        lock_for_update=True,
-    )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if (
-        share_req.user_shares is None
-        and share_req.group_shares is None
-        and "public_permission" not in share_req.model_fields_set
+    user: User,
+    db_session: Session,
+) -> None:
+    touches_installation_policy = "installation_policy" in share_req.model_fields_set
+    if touches_installation_policy and not has_global_permission(
+        user, Permission.FULL_ADMIN_PANEL_ACCESS
     ):
-        return skill_response_for_user(
-            skill,
-            user,
-            db_session,
-            include_share_details=True,
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only admins can change skill installation policies.",
         )
 
     touches_org_visibility = "public_permission" in share_req.model_fields_set
@@ -817,13 +818,15 @@ def share_current_user_skill(
     # group-share in one request can't slip a published skill into managed scope.
     _assert_group_share_within_scope(skill, share_req, user, db_session)
 
-    before_affected = affected_user_ids_for_skill(skill, db_session)
     if touches_org_visibility:
         set_skill_public_permission(
             skill=skill,
             public_permission=share_req.public_permission,
             db_session=db_session,
         )
+
+    if touches_installation_policy:
+        set_skill_installation_policy(skill, share_req.installation_policy, db_session)
 
     user_shares: dict[UUID, SkillSharePermission] | None = None
     if share_req.user_shares is not None:
@@ -847,9 +850,59 @@ def share_current_user_skill(
         db_session=db_session,
     )
 
+
+@user_router.get("/custom/{skill_id}/share")
+def fetch_custom_skill_sharing(
+    skill_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillResponse:
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return skill_response_for_user(skill, user, db_session, include_share_details=True)
+
+
+@user_router.patch("/custom/{skill_id}/share")
+def share_current_user_skill(
+    skill_id: UUID,
+    share_req: SkillShareRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillResponse:
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+        lock_for_update=True,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    if (
+        share_req.user_shares is None
+        and share_req.group_shares is None
+        and "installation_policy" not in share_req.model_fields_set
+        and "public_permission" not in share_req.model_fields_set
+    ):
+        return skill_response_for_user(
+            skill,
+            user,
+            db_session,
+            include_share_details=True,
+        )
+
+    before_affected = affected_user_ids_for_skill(skill, db_session)
+    _apply_skill_sharing__no_commit(skill, share_req, user, db_session)
+
+    after_affected = affected_user_ids_for_skill(skill, db_session)
     db_session.commit()
     db_session.expire(skill)
-    after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
     db_session.commit()
     return skill_response_for_user(
@@ -921,9 +974,9 @@ def transfer_current_user_skill_ownership(
         db_session=db_session,
     )
 
+    after_affected = affected_user_ids_for_skill(skill, db_session)
     db_session.commit()
     db_session.expire(skill)
-    after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
     db_session.commit()
     return skill_response_for_user(
@@ -949,6 +1002,15 @@ def delete_current_user_skill(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+
+    if (
+        skill.installation_policy == SkillInstallationPolicy.REQUIRED
+        and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only admins can delete required skills.",
+        )
 
     affected = affected_user_ids_for_skill(skill, db_session)
     old_file_id = delete_skill(skill, db_session)

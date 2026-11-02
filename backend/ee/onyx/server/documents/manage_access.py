@@ -8,12 +8,15 @@ every pair, so they show as fixed rows that no write can remove. The group-side 
 keeps the group-edit authorization instead (see set_group_managed_cc_pairs).
 """
 
+from collections.abc import Sequence
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.connector_manage_access import (
     ManageRowKey,
     assert_groups_have_no_global_manage_grant,
+    fetch_group_member_counts,
     fetch_groups_with_global_permission,
     write_manage_rows__no_commit,
 )
@@ -24,7 +27,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_manage_all_cc_pairs,
 )
 from onyx.db.enums import ConnectorManageRole, Permission
-from onyx.db.models import User
+from onyx.db.models import User, UserGroup
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -37,23 +40,47 @@ class CCPairManageAccessRow(BaseModel):
     role: ConnectorManageRole
     # Granted by a global MANAGE_CONNECTORS grant: not stored, cannot be removed.
     is_fixed: bool
+    # The group's size, for the row's description.
+    member_count: int
+    manager_count: int
 
 
 class CCPairManageAccessUpdateRequest(BaseModel):
     manage_access: ManageAccessList
 
 
-def fixed_manage_access_rows(db_session: Session) -> list[CCPairManageAccessRow]:
-    return [
-        CCPairManageAccessRow(
+def fixed_manage_access_groups(db_session: Session) -> list[UserGroup]:
+    """The groups that manage every pair through a global MANAGE_CONNECTORS grant."""
+    return fetch_groups_with_global_permission(db_session, Permission.MANAGE_CONNECTORS)
+
+
+def manage_access_rows(
+    db_session: Session,
+    fixed_groups: Sequence[UserGroup],
+    stored: Sequence[tuple[UserGroup, ConnectorManageRole]],
+) -> list[CCPairManageAccessRow]:
+    """The fixed Editor rows, then the stored rows, with every group's member
+    and manager counts from one query."""
+    counts = fetch_group_member_counts(
+        db_session,
+        [group.id for group in fixed_groups] + [group.id for group, _ in stored],
+    )
+
+    def row(
+        group: UserGroup, role: ConnectorManageRole, is_fixed: bool
+    ) -> CCPairManageAccessRow:
+        members, managers = counts.get(group.id, (0, 0))
+        return CCPairManageAccessRow(
             group_id=group.id,
             group_name=group.name,
-            role=ConnectorManageRole.EDITOR,
-            is_fixed=True,
+            role=role,
+            is_fixed=is_fixed,
+            member_count=members,
+            manager_count=managers,
         )
-        for group in fetch_groups_with_global_permission(
-            db_session, Permission.MANAGE_CONNECTORS
-        )
+
+    return [row(group, ConnectorManageRole.EDITOR, True) for group in fixed_groups] + [
+        row(group, role, False) for group, role in stored
     ]
 
 

@@ -1,12 +1,24 @@
 "use client";
 
 import "@opal/components/inputs/texts/input-type-in/styles.css";
-import { useCallback } from "react";
 import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
+import { useOpalStrings } from "@opal/strings";
 import type { InputVariants, WithoutStyles } from "@opal/types";
+
+/**
+ * Clears an input through the browser, so React sends its `onChange` a real
+ * change event, as for typing.
+ */
+function clearNativeInput(input: HTMLInputElement) {
+  Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  )?.set?.call(input, "");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 export interface InputTypeInProps extends WithoutStyles<
   Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled" | "readOnly">
@@ -17,6 +29,8 @@ export interface InputTypeInProps extends WithoutStyles<
   searchIcon?: boolean;
   /** Leading icon (a select's chosen option icon). Renders after `searchIcon`. */
   icon?: IconFunctionComponent;
+  /** Content before the text, after `prefixText` (a chosen value shown as a tag). */
+  leftChildren?: React.ReactNode;
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
   clearButton?: boolean;
@@ -25,6 +39,11 @@ export interface InputTypeInProps extends WithoutStyles<
    * (a select's button trigger). `variant="readOnly"` implies it.
    */
   readOnly?: boolean;
+  /**
+   * The list this field opens is open. The field keeps its focused border,
+   * even when focus moves into the list.
+   */
+  open?: boolean;
 }
 
 /**
@@ -60,35 +79,37 @@ export default function InputTypeIn({
   ref,
   variant = "primary",
   prefixText,
+  leftChildren,
   searchIcon,
   icon: Icon,
   rightChildren,
   clearButton = false,
   readOnly = false,
+  open = false,
   value,
   onChange,
   name,
   ...props
 }: InputTypeInProps) {
+  const strings = useOpalStrings();
   const disabled = variant === "disabled";
   const isReadOnly = readOnly || variant === "readOnly";
-
-  const handleClear = useCallback(() => {
-    onChange?.({
-      target: { value: "", name: name ?? "" },
-      currentTarget: { value: "", name: name ?? "" },
-      type: "change",
-      bubbles: true,
-      cancelable: true,
-    } as React.ChangeEvent<HTMLInputElement>);
-  }, [onChange, name]);
 
   return (
     <div
       role="presentation"
       data-variant={variant}
+      data-open={open || undefined}
       className="opal-input"
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
+      onKeyDown={(e) => {
+        // Escape on a control beside the field (the clear button, a reveal
+        // toggle, a chevron) returns focus to the field. It does so even when
+        // a tooltip or popover consumed the key to close itself.
+        if (e.key !== "Escape") return;
+        const input = e.currentTarget.querySelector("input");
+        if (input && e.target !== input) input.focus();
+      }}
     >
       {searchIcon && (
         <div className="opal-input-leading-icon">
@@ -107,6 +128,8 @@ export default function InputTypeIn({
           {prefixText}
         </span>
       )}
+
+      {leftChildren}
 
       <input
         ref={ref}
@@ -127,14 +150,23 @@ export default function InputTypeIn({
         <div className={cn(value === "" && "invisible")}>
           <Button
             icon={SvgX}
+            aria-label={strings.clear}
             disabled={disabled}
             onClick={(event) => {
               event.stopPropagation();
-              handleClear();
+              const input = event.currentTarget
+                .closest(".opal-input")
+                ?.querySelector("input");
+              if (!input) return;
+              clearNativeInput(input);
+              // The button hides once the field is empty; keep focus in the
+              // field rather than losing it to the page.
+              input.focus();
             }}
             type="button"
-            prominence="internal"
+            prominence="tertiary"
             size="sm"
+            tooltip={strings.clear}
           />
         </div>
       )}

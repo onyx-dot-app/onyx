@@ -1,3 +1,4 @@
+import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
@@ -8,10 +9,49 @@ import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import type { FileConfig, GoogleSitesConfig } from "@/lib/connectors/types";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
+import type {
+  CredentialBindingCheckRequest,
+  CredentialBindingCheckResponse,
+} from "@/lib/connectors/bindingGate";
 
 // ---------------------------------------------------------------------------
 // Indexing
 // ---------------------------------------------------------------------------
+
+/** POSTs `url`. Resolves to `null` once the server takes it, else to its error detail or `fallback`. */
+async function postForError(
+  url: string,
+  fallback: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(url, { method: "POST" });
+    return response.ok ? null : await parseErrorDetail(response, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+/** Cancels one running or queued index attempt. Resolves to `null` or the error message. */
+export function cancelIndexAttempt(
+  indexAttemptId: number,
+  fallback: string
+): Promise<string | null> {
+  return postForError(
+    `/api/manage/admin/index-attempt/${indexAttemptId}/cancel`,
+    fallback
+  );
+}
+
+/** Starts a pair's first index attempt despite its failed checks. Resolves to `null` or the error message. */
+export function releaseIndexingHold(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  return postForError(
+    `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
+    fallback
+  );
+}
 
 export async function triggerIndexing(
   fromBeginning: boolean,
@@ -40,16 +80,48 @@ export async function triggerIndexing(
   }
 }
 
+/** Starts a permission sync on a perm-synced pair. Resolves to `null` or the error message. */
+export function triggerPermissionSync(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  return postForError(
+    `/api/manage/admin/cc-pair/${ccPairId}/sync-permissions`,
+    fallback
+  );
+}
+
 // ---------------------------------------------------------------------------
 // File and Google Sites connectors: upload, create, link, run
 // ---------------------------------------------------------------------------
+
+/** A created connector's pair, `null` on a failed create. */
+export type CreatedConnector = { ccPairId: number | null } | null;
+
+/**
+ * The id of the cc-pair a pairing or create call made: the backend answers
+ * with a `StatusResponse` whose `data` is that id. `null` when it is missing.
+ */
+export async function readCreatedCCPairId(
+  response: Response
+): Promise<number | null> {
+  const body: unknown = await response.json();
+  if (typeof body !== "object" || body === null || !("data" in body)) {
+    return null;
+  }
+  return typeof body.data === "number" ? body.data : null;
+}
 
 export const submitFiles = async (
   selectedFiles: File[],
   name: string,
   access_type: AccessType,
-  groups?: number[]
-) => {
+  groups?: number[],
+  /** Who reads a private connector's documents; left out, its `groups` do. */
+  dataAccess?: number[],
+  /** The manage groups with their roles; given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
+): Promise<CreatedConnector> => {
   const formData = new FormData();
 
   selectedFiles.forEach((file) => {
@@ -64,7 +136,7 @@ export const submitFiles = async (
     await response.json();
   if (!response.ok) {
     toast.error(`Unable to upload files - ${responseJson.detail}`);
-    return;
+    return null;
   }
 
   const filePaths = responseJson.file_paths as string[];
@@ -88,7 +160,7 @@ export const submitFiles = async (
   });
   if (connectorErrorMsg || !connector) {
     toast.error(`Unable to create connector - ${connectorErrorMsg}`);
-    return;
+    return null;
   }
 
   // Since there is no "real" credential associated with a file connector
@@ -106,7 +178,7 @@ export const submitFiles = async (
   if (!createCredentialResponse.ok) {
     const errorMsg = await createCredentialResponse.text();
     toast.error(`Error creating credential for CC Pair - ${errorMsg}`);
-    return false;
+    return null;
   }
   const credentialId = (await createCredentialResponse.json()).id;
 
@@ -115,7 +187,11 @@ export const submitFiles = async (
     credentialId,
     name,
     access_type,
-    groups
+    groups,
+    undefined,
+    undefined,
+    dataAccess,
+    manageAccess
   );
   if (!credentialResponse.ok) {
     const credentialResponseJson: ErrorResponseBody =
@@ -123,17 +199,18 @@ export const submitFiles = async (
     toast.error(
       `Unable to link connector to credential - ${credentialResponseJson.detail}`
     );
-    return false;
+    return null;
   }
+  const ccPairId = await readCreatedCCPairId(credentialResponse);
 
   const runConnectorErrorMsg = await runConnector(connector.id, [0]);
   if (runConnectorErrorMsg) {
     toast.error(`Unable to run connector - ${runConnectorErrorMsg}`);
-    return false;
+    return null;
   }
 
   toast.success("Successfully uploaded files!");
-  return true;
+  return { ccPairId };
 };
 
 export const submitGoogleSite = async (
@@ -141,11 +218,15 @@ export const submitGoogleSite = async (
   base_url: string,
   refreshFreq: number,
   pruneFreq: number,
-  indexingStart: Date,
+  indexingStart: string | null,
   access_type: AccessType,
   groups: number[],
-  name?: string
-) => {
+  name?: string,
+  /** Who reads a private connector's documents; left out, its `groups` do. */
+  dataAccess?: number[],
+  /** The manage groups with their roles; given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
+): Promise<CreatedConnector> => {
   const uploadCreateAndTriggerConnector = async () => {
     const formData = new FormData();
 
@@ -164,7 +245,7 @@ export const submitGoogleSite = async (
       await response.json();
     if (!response.ok) {
       toast.error(`Unable to upload files - ${responseJson.detail}`);
-      return false;
+      return null;
     }
 
     const filePaths = responseJson.file_paths;
@@ -172,7 +253,7 @@ export const submitGoogleSite = async (
       toast.error(
         "File upload was successful, but no file path was returned. Cannot create connector."
       );
-      return false;
+      return null;
     }
 
     const filePath = filePaths[0];
@@ -180,7 +261,7 @@ export const submitGoogleSite = async (
       toast.error(
         "File upload was successful, but file path is undefined. Cannot create connector."
       );
-      return false;
+      return null;
     }
 
     const [connectorErrorMsg, connector] =
@@ -199,7 +280,7 @@ export const submitGoogleSite = async (
       });
     if (connectorErrorMsg || !connector) {
       toast.error(`Unable to create connector - ${connectorErrorMsg}`);
-      return false;
+      return null;
     }
 
     const credentialResponse = await linkCredential(
@@ -207,7 +288,11 @@ export const submitGoogleSite = async (
       0,
       base_url,
       access_type,
-      groups
+      groups,
+      undefined,
+      undefined,
+      dataAccess,
+      manageAccess
     );
     if (!credentialResponse.ok) {
       const credentialResponseJson: ErrorResponseBody =
@@ -215,23 +300,24 @@ export const submitGoogleSite = async (
       toast.error(
         `Unable to link connector to credential - ${credentialResponseJson.detail}`
       );
-      return false;
+      return null;
     }
+    const ccPairId = await readCreatedCCPairId(credentialResponse);
 
     const runConnectorErrorMsg = await runConnector(connector.id, [0]);
     if (runConnectorErrorMsg) {
       toast.error(`Unable to run connector - ${runConnectorErrorMsg}`);
-      return false;
+      return null;
     }
     toast.success("Successfully created Google Site connector!");
-    return true;
+    return { ccPairId };
   };
 
   try {
     const response = await uploadCreateAndTriggerConnector();
     return response;
   } catch (e) {
-    return false;
+    return null;
   }
 };
 
@@ -269,4 +355,33 @@ export async function getConnectorOauthRedirectUrl(
     console.error(`${OAUTH_REDIRECT_LOG_ERROR} for ${connector}:`, error);
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Credential binding
+// ---------------------------------------------------------------------------
+
+const BINDING_CHECK_ERROR = "Unable to check the credential";
+
+/**
+ * Checks the credential-bound fields of an unsaved form against a saved
+ * credential or the user's draft. Sends no credential values.
+ */
+export async function checkCredentialBinding(
+  credentialId: number,
+  request: CredentialBindingCheckRequest
+): Promise<CredentialBindingCheckResponse> {
+  const response = await fetch(
+    `/api/manage/admin/credential/${credentialId}/binding-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response, BINDING_CHECK_ERROR));
+  }
+  const body: CredentialBindingCheckResponse = await response.json();
+  return body;
 }

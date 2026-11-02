@@ -18,6 +18,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import standard_oauth
 from tests.unit.fakes import FakeCache
 
+_CODE_VERIFIER = "v" * 43
+
 
 class DisabledOAuthConnector(OAuthConnector):
     supports_manual_credentials = True
@@ -121,7 +123,7 @@ def test_authorize_passes_pkce_challenge(
         lambda: {DocumentSource.LINEAR: PKCEOAuthConnector},
     )
     monkeypatch.setattr(
-        standard_oauth, "generate_pkce_pair", lambda: ("verifier", "challenge")
+        standard_oauth, "generate_pkce_pair", lambda: (_CODE_VERIFIER, "challenge")
     )
     monkeypatch.setattr(standard_oauth, "WEB_DOMAIN", "https://onyx.example")
     monkeypatch.setattr(
@@ -202,7 +204,7 @@ def test_callback_consumes_owned_attempt_and_passes_stored_verifier(
         lambda: {DocumentSource.LINEAR: PKCEOAuthConnector},
     )
     monkeypatch.setattr(
-        standard_oauth, "generate_pkce_pair", lambda: ("verifier", "challenge")
+        standard_oauth, "generate_pkce_pair", lambda: (_CODE_VERIFIER, "challenge")
     )
     monkeypatch.setattr(
         PKCEOAuthConnector, "oauth_authorization_url", authorization_url
@@ -237,7 +239,7 @@ def test_callback_consumes_owned_attempt_and_passes_stored_verifier(
         standard_oauth.WEB_DOMAIN,
         "authorization-code",
         {"instance": "example"},
-        "verifier",
+        _CODE_VERIFIER,
     )
 
 
@@ -351,7 +353,7 @@ def test_callback_revalidates_stored_connector_arguments(
         lambda: {DocumentSource.LINEAR: PKCEOAuthConnector},
     )
     monkeypatch.setattr(
-        standard_oauth, "generate_pkce_pair", lambda: ("verifier", "challenge")
+        standard_oauth, "generate_pkce_pair", lambda: (_CODE_VERIFIER, "challenge")
     )
     monkeypatch.setattr(
         PKCEOAuthConnector, "oauth_authorization_url", authorization_url

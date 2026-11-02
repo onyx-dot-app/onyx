@@ -8,6 +8,7 @@ and the periodic cleanup function.
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -16,13 +17,17 @@ from sqlalchemy.exc import OperationalError
 
 from onyx.cache import factory as cache_factory
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackendType
+from onyx.cache.interface import (
+    TTL_KEY_NOT_FOUND,
+    TTL_NO_EXPIRY,
+    CacheBackendType,
+)
 from onyx.cache.postgres_backend import (
     PostgresCacheBackend,
     PostgresCacheLock,
     cleanup_expired_cache_entries,
 )
-from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import CacheStore
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
@@ -57,6 +62,25 @@ class TestKV:
         pg_cache.set(k, b"expired", ex=0)
 
         assert pg_cache.getdel(k) is None
+
+    def test_concurrent_getdel_with_cold_query_cache(
+        self, pg_cache: PostgresCacheBackend
+    ) -> None:
+        payload = b"\x00\xffone-time"
+        barrier = Barrier(8)
+
+        def consume(key: str) -> bytes | None:
+            barrier.wait(timeout=10)
+            return pg_cache.getdel(key)
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            for _ in range(20):
+                SqlEngine.get_engine().clear_compiled_cache()
+                key = _key()
+                pg_cache.set(key, payload, ex=60)
+                results = list(executor.map(consume, [key] * 8))
+                assert results.count(payload) == 1
+                assert results.count(None) == 7
 
     def test_set_overwrite(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()
@@ -356,3 +380,14 @@ def test_lease_renewal_rejects_lease_that_expires_during_row_lock_wait(
         assert pg_cache.ttl(key) == TTL_KEY_NOT_FOUND
     finally:
         pg_cache.delete(key)
+
+
+def test_shared_cache_backend_works_on_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cache_factory, "CACHE_BACKEND", CacheBackendType.POSTGRES)
+    cache = cache_factory.get_shared_cache_backend()
+    key = f"shared-{uuid4().hex}"
+    cache.set(key, b"value", ex=60)
+    assert cache.get(key) == b"value"
+    cache.delete(key)

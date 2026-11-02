@@ -4,9 +4,12 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  merge_group:
   pull_request:
+    paths-ignore:
+      - "documentation/**"
   push:
+    paths-ignore:
+      - "documentation/**"
     branches:
       # A push to main saves the Go build cache that PRs restore.
       - main
@@ -92,8 +95,6 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           GH_REF: ${{ github.ref }}
           IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
-          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
@@ -104,16 +105,9 @@ jobs:
             pull_request)
               BASE_SHA="${PR_BASE_SHA}"
               ;;
-            merge_group)
-              BASE_SHA="${MERGE_GROUP_BASE_SHA}"
-              if [ "${MERGE_GROUP_BASE_REF}" = "refs/heads/main" ] ||
-                 [ "${MERGE_GROUP_BASE_REF#refs/heads/release/}" != "${MERGE_GROUP_BASE_REF}" ]; then
-                PUBLISH=true
-              fi
-              ;;
             push)
-              # The merge_group run already published the snapshot for main.
-              if [ "${GH_REF#refs/heads/release/}" != "${GH_REF}" ]; then
+              if [ "${GH_REF}" = "refs/heads/main" ] ||
+                 [ "${GH_REF#refs/heads/release/}" != "${GH_REF}" ]; then
                 PUBLISH=true
               fi
               ;;
@@ -127,7 +121,7 @@ jobs:
 
           # Credentials are needed to read a snapshot and to publish one.
           AWS=false
-          if [ "${PUBLISH}" = "true" ] || [ "${EVENT_NAME}" = "merge_group" ]; then
+          if [ "${PUBLISH}" = "true" ]; then
             AWS=true
           elif [ "${EVENT_NAME}" = "pull_request" ] && [ "${IS_FORK}" = "false" ]; then
             AWS=true
@@ -175,9 +169,8 @@ jobs:
       # The report compares against the coverage snapshot of the base commit,
       # which main and release runs record in S3, so a PR sees only what it
       # changed. Without a snapshot -- a fork PR, or a module before the first
-      # publish -- the report falls back to the floors. A merge_group run on
-      # main, and a push to a release branch, publish the snapshot of the commit
-      # that lands.
+      # publish -- the report falls back to the floors. A push to main or to a
+      # release branch publishes the snapshot of the commit that lands.
       - name: Report against the base and publish the snapshot
         env:
           BASE_SHA: ${{ steps.coverage-flags.outputs.base_sha }}

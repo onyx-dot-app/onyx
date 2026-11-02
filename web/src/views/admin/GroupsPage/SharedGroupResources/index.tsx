@@ -1,19 +1,18 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { LineItemButton } from "@opal/components";
+import { LineItemButton, Text } from "@opal/components";
 import { Card, Divider } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAdminAgents } from "@/lib/agents/hooks";
-import { getSourceMetadata } from "@/lib/sources";
 import type { Agent } from "@/lib/agents/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";
@@ -42,7 +41,7 @@ const NO_ATTACHED_AGENTS: Agent[] = [];
 function SharedBadge() {
   const t = useTranslations("admin.groups");
   return (
-    <Text as="span" secondaryBody text03>
+    <Text as="span" font="secondary-body" color="text-03">
       {t("sharedResources.sharedBadge.label")}
     </Text>
   );
@@ -66,7 +65,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
       width="auto"
       height="auto"
       gap={0}
-      className="shrink-0 p-0.5"
+      className="shrink-0"
     >
       {unique.map((s, i) => {
         const Icon = getSourceMetadata(s.source).icon;
@@ -340,7 +339,7 @@ function SharedGroupResources({
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
+                <Text font="main-ui-action" color="text-04">
                   {t("sharedResources.connectors.label")}
                 </Text>
                 <ResourcePopover
@@ -412,7 +411,7 @@ function SharedGroupResources({
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
+                <Text font="main-ui-action" color="text-04">
                   {t("sharedResources.agents.label")}
                 </Text>
                 <ResourcePopover

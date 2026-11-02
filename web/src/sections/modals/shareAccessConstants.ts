@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgBubbleText, SvgEdit, SvgLock, SvgOrganization } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { SharePermissionMenuOption } from "@/sections/modals/SharePermissionMenu";
+import { SharePermissionMenuOption } from "@/lib/permissions/components";
 
 export type ShareScope = "PRIVATE" | "PUBLIC";
 export type ShareAccessPermission = "EDITOR" | "VIEWER";
@@ -48,16 +48,20 @@ const SCOPE_OPTION_DEFINITIONS: ShareOptionDefinition<ShareScope>[] = [
   },
 ];
 
-export function useSharePermissionOptions(): SharePermissionMenuOption<ShareAccessPermission>[] {
+export function useSharePermissionOptions(
+  labels?: Record<ShareAccessPermission, string>
+): SharePermissionMenuOption<ShareAccessPermission>[] {
   const t = useTranslations("chat.modals.share");
+  const viewerLabel = labels?.VIEWER;
+  const editorLabel = labels?.EDITOR;
   return useMemo(
     () =>
       PERMISSION_OPTION_DEFINITIONS.map(({ icon, labelKey, value }) => ({
         icon,
-        label: t(labelKey),
+        label: (value === "VIEWER" ? viewerLabel : editorLabel) ?? t(labelKey),
         value,
       })),
-    [t]
+    [t, viewerLabel, editorLabel]
   );
 }
 

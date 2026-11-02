@@ -2,9 +2,10 @@
 
 import React, { useState, useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Popover, OpenButton } from "@opal/components";
+import { Popover, SelectButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   useLanguageModels,
   useLanguageModelsForAgent,
@@ -34,7 +35,7 @@ export interface ModelSelectorProps {
   requiresImageInput?: boolean;
 
   /**
-   * Custom trigger element. When omitted the default OpenButton (icon +
+   * Custom trigger element. When omitted the default SelectButton (icon +
    * display name) is rendered.
    */
   renderTrigger?: () => React.ReactNode;
@@ -92,6 +93,10 @@ export default function ModelSelector({
     llmProviders: globalProviderOptions,
     defaultText: globalDefaultText,
   } = useLanguageModels();
+  const {
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
   const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
   const isLoading = providerOptions === undefined && providersLoading;
   const [open, setOpen] = useState(false);
@@ -129,8 +134,13 @@ export default function ModelSelector({
   }, [defaultText, llmProviders]);
 
   const effectiveOption = currentOption ?? defaultModelOption;
-  const currentDisplayName =
-    effectiveOption?.displayName ?? t("trigger.noSelection.label");
+  const isAutoSelected: boolean =
+    (modelRoutingEnabled ?? false) &&
+    routingModelId != null &&
+    value === routingModelId;
+  const currentDisplayName: string = isAutoSelected
+    ? t("autoItem.label")
+    : (effectiveOption?.displayName ?? t("trigger.noSelection.label"));
   const globalDefaultDisplayName = useMemo(() => {
     if (!globalDefaultText || !globalProviderOptions) return null;
     const provider = globalProviderOptions.find(
@@ -178,14 +188,14 @@ export default function ModelSelector({
           {renderTrigger ? (
             renderTrigger()
           ) : (
-            <OpenButton disabled={disabled} icon={triggerIcon}>
+            <SelectButton chevron disabled={disabled} icon={triggerIcon}>
               {currentDisplayName}
-            </OpenButton>
+            </SelectButton>
           )}
         </Popover.Trigger>
       </div>
 
-      <Popover.Content side={side} align="end" width="xl" sticky="partial">
+      <Popover.Content side={side} align="end" width={70} sticky="partial">
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
           providerOptions={llmProviders}

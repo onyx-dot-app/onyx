@@ -7,13 +7,8 @@
  * useBuildStreaming (live SSE) and useBuildSessionStore (DB reload).
  */
 
-import type { TodoItem } from "../types/displayTypes";
-
-// Re-export from displayTypes — single source of truth
-export type {
-  ToolCallKind as ToolKind,
-  ToolCallStatus as ToolStatus,
-} from "../types/displayTypes";
+import type { TodoItem } from "@/app/craft/types/displayTypes";
+import type { CompletedInteractiveTurn } from "@/app/craft/types/streamingTypes";
 
 // ─── Raw Packet Field Access ─────────────────────────────────────────
 // Every backend field name variant is listed ONCE here.
@@ -83,9 +78,15 @@ export type ToolName =
   | "invalid"
   | "unknown";
 
+export interface TextPartUpdate {
+  partId: string;
+  snapshotText?: string;
+}
+
 export interface ParsedTextChunk {
   type: "text_chunk";
   text: string;
+  part?: TextPartUpdate;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
   sessionId: string | null;
   /** Non-null only for subagent child events — the parent opencode session. */
@@ -95,6 +96,7 @@ export interface ParsedTextChunk {
 export interface ParsedThinkingChunk {
   type: "thinking_chunk";
   text: string;
+  part?: TextPartUpdate;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
   sessionId: string | null;
   /** Non-null only for subagent child events — the parent opencode session. */
@@ -159,6 +161,11 @@ export interface ParsedPromptResponse {
   type: "prompt_response";
 }
 
+export interface ParsedTurnCompleted {
+  type: "turn_completed";
+  turn: CompletedInteractiveTurn;
+}
+
 export interface ParsedArtifact {
   type: "artifact_created";
   artifact: {
@@ -214,6 +221,7 @@ export type ParsedPacket =
   | ParsedToolCallStart
   | ParsedToolCallProgress
   | ParsedPromptResponse
+  | ParsedTurnCompleted
   | ParsedArtifact
   | ParsedApprovalRequested
   | ParsedSubagentStarted

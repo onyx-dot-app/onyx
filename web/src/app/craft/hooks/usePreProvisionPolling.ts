@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useBuildSessionStore } from "./useBuildSessionStore";
-import { checkPreProvisionedSession } from "../services/apiServices";
+import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
 /** Polling interval in milliseconds (5 seconds) */
 const POLLING_INTERVAL_MS = 5000;
@@ -52,6 +52,8 @@ export function usePreProvisionPolling({
 
       try {
         const result = await checkPreProvisionedSession(sessionId);
+        if (useBuildSessionStore.getState().preProvisioning !== preProvisioning)
+          return;
 
         if (!result.valid) {
           console.log(
@@ -85,5 +87,5 @@ export function usePreProvisionPolling({
     return () => {
       clearInterval(intervalId);
     };
-  }, [enabled, sessionId, ensurePreProvisionedSession]);
+  }, [enabled, sessionId, preProvisioning, ensurePreProvisionedSession]);
 }

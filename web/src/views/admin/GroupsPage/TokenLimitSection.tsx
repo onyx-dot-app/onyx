@@ -6,11 +6,11 @@ import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button, Card } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
-import { planTagProps } from "@/lib/tier-badge";
+import { usePlans } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { Section } from "@/layouts/general-layouts";
 import { InputNumber } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
-import { Collapsible } from "@opal/components";
+import { Collapsible, Text } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +44,7 @@ function TokenLimitSection({
   disabledTooltip,
 }: TokenLimitSectionProps) {
   const t = useTranslations("admin.groups");
+  const plans = usePlans();
   const [rowKeys, setRowKeys] = useState<{
     keys: number[];
     nextKey: number;
@@ -119,7 +120,7 @@ function TokenLimitSection({
     <Collapsible
       title={t("tokenLimits.section.title")}
       description={t("tokenLimits.section.description")}
-      tag={disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined}
+      tag={disabled ? { ...plans[Tier.ENTERPRISE].tag, size: "sm" } : undefined}
     >
       <Disabled disabled={disabled} tooltip={disabledTooltip}>
         <Card border="solid" rounding={4}>
@@ -134,28 +135,34 @@ function TokenLimitSection({
               {/* Column headers */}
               <div className="flex flex-wrap items-center gap-1 pe-[40px]">
                 <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
+                  <Text font="main-ui-action" color="text-04">
                     {t("tokenLimits.tokenLimit.header")}
                   </Text>
-                  <Text mainUiMuted text03 className="ms-0.5">
-                    {t("tokenLimits.tokenLimit.unit")}
-                  </Text>
+                  <span className="ms-0.5">
+                    <Text font="main-ui-muted" color="text-03">
+                      {t("tokenLimits.tokenLimit.unit")}
+                    </Text>
+                  </span>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
+                  <Text font="main-ui-action" color="text-04">
                     {t("tokenLimits.costLimit.header")}
                   </Text>
-                  <Text mainUiMuted text03 className="ms-0.5">
-                    {t("tokenLimits.costLimit.unit")}
-                  </Text>
+                  <span className="ms-0.5">
+                    <Text font="main-ui-muted" color="text-03">
+                      {t("tokenLimits.costLimit.unit")}
+                    </Text>
+                  </span>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
-                  <Text mainUiAction text04>
+                  <Text font="main-ui-action" color="text-04">
                     {t("tokenLimits.timeWindow.header")}
                   </Text>
-                  <Text mainUiMuted text03 className="ms-0.5">
-                    {t("tokenLimits.timeWindow.unit")}
-                  </Text>
+                  <span className="ms-0.5">
+                    <Text font="main-ui-muted" color="text-03">
+                      {t("tokenLimits.timeWindow.unit")}
+                    </Text>
+                  </span>
                 </div>
               </div>
 
@@ -185,7 +192,7 @@ function TokenLimitSection({
                       value={limit.periodDays}
                       onChange={(v) => updateLimit(i, "periodDays", v)}
                       min={1}
-                      placeholder="1"
+                      placeholder={t("placeholders.tokenBudget")}
                     />
                   </div>
                   <Button

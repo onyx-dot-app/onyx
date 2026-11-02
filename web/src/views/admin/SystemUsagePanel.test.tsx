@@ -62,7 +62,7 @@ const SYSTEM_USAGE_RESPONSE = {
       records: [
         {
           attribution: "UNATTRIBUTED",
-          model: "gpt-5",
+          model: "gpt-6-sol",
           flow: "untagged_invoke",
           provider: "openai",
           day: "2026-09-01",

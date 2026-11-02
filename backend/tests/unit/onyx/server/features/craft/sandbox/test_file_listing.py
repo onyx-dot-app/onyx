@@ -4,13 +4,15 @@ from uuid import UUID
 
 import pytest
 
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
     SidecarStatusError,
 )
-from onyx.server.features.build.sandbox.models import FilesystemEntry
 
 _SANDBOX_ID = UUID("9a5c81d5-931e-4348-b034-3ebd13bcba44")
 _SESSION_ID = UUID("903a9a86-b7b1-4b49-9269-1fe558b243ee")

@@ -1,0 +1,317 @@
+---
+title: "Overview"
+description: "Managing connectors and data sources in Onyx"
+icon: "circle-nodes"
+---
+
+Onyx's Connectors create a bridge between your organization's data sources and generative AI features in Onyx.
+Nearly all connectors are persistent and regularly sync changes from your source.
+
+To find specific instructions for each Connector, see the [Supported Connectors](#supported-connectors) section.
+
+<img className="rounded-image" src="/assets/admins/connectors/add_connector.webp" alt="Onyx Add Connector page"/>
+
+## Adding a Connector
+
+To add a new connector, open the **Admin Panel** and click **Connectors** in the sidebar.
+This page shows all officially supported connectors.
+
+<Info>
+  You can see unofficial, community-supported connectors by setting `SHOW_EXTRA_CONNECTORS=true` in your environment.
+</Info>
+
+### Credentials
+
+Most Connectors require some form of authentication for Onyx to access your source.
+This authentication is called a Credential and differs by Connector.
+Onyx encrypts credentials at rest and never shows the secret again after you save it.
+
+<img className="rounded-image" src="/assets/admins/connectors/generic_credentials.webp" alt="Onyx Connector Credentials page"/>
+
+### Configuration
+
+Each Connector has its own configuration options to specify the data that should be indexed.
+
+<img className="rounded-image" src="/assets/admins/connectors/generic_config.webp" alt="Onyx Connector Configuration page"/>
+
+### Document Access Controls
+
+The **Document Access** setting controls who can see the Connector's documents in Onyx.
+
+**Everyone in Your Organization** (Public): All Onyx users can see data from this Connector.
+
+<Warning>
+  If you configure the Connector to access private data in the source, all Onyx users will be able to see this data.
+</Warning>
+
+**Specific Groups** (Private): Only the user who created the Connector and the User Groups you name can see its data.
+User Groups need a Business plan or higher.
+
+**Sync with the source**: Onyx copies the permissions from the source.
+Each user only sees documents they can open in the source.
+You can also **Restrict Access to Groups** so that only members of selected groups see the documents.
+Synced permissions still apply. The Indexing Status page shows this as **Auto-sync, restricted**.
+
+You can change the access type later from the Connector's page.
+A change starts a re-index so that search results reflect the new access.
+
+### Connector Access
+
+The **Connector Access** setting controls who can manage the Connector itself, separate from who can see its documents.
+Admins can always manage every Connector. You can also name User Groups as:
+
+- **Operator**: schedule and monitor indexing.
+- **Editor**: update or delete the Connector configuration.
+
+#### Permission-Syncing Connectors
+
+<Note>
+  Permission syncing is available on **Business**, **Enterprise**, and **Cloud** plans.
+</Note>
+
+With **Sync with the source**, Onyx keeps an access list from the source and updates it on a schedule.
+Group membership from the source is also synced where the source supports it.
+A permission change in the source can take from a few minutes to an hour to appear in Onyx.
+Click **Sync Permissions** on the Connector's page to pull permissions now.
+
+Permission syncing is available for these Connectors:
+
+- Google Drive (service account or Google Workspace Admin OAuth credentials)
+- Gmail (service account or Google Workspace Admin OAuth credentials)
+- Confluence
+- Jira
+- Slack (the indexed Slack Connector, not Federated Slack)
+- GitHub
+- Box
+- Canvas
+- SharePoint (certificate-based authentication)
+- OneDrive
+- Microsoft Teams
+- Outlook
+- Linear
+- HubSpot
+- YouTrack
+- Zoom
+
+Salesforce does not sync document permissions, but it can hide field values the user is not allowed to see.
+
+### Schedule
+
+The **Schedule** section of the Connector form has optional indexing settings.
+
+**Refresh Every**: How often Onyx pulls new and updated documents from the source. The default is 30 minutes.
+Admins can change the default for new connectors in **Index Settings**.
+
+**Prune Every**: How often Onyx checks the source and deletes documents that no longer exist. The default is 7 days.
+
+**Index Documents After**: Documents with a last-updated date before this date are not indexed.
+By default there is no start date, so the first indexing attempt reads the source's entire history.
+On a large source that first attempt can take days.
+Set a start date when you create the connector if you only need recent content, or want the connector searchable sooner.
+
+**Run Checks Every**: How often Onyx checks the connection for capabilities and health. The default is never.
+
+<img className="rounded-image" src="/assets/admins/connectors/generic_advanced_config.webp" alt="Onyx Connector Advanced Configuration page"/>
+
+## Managing Existing Connectors
+
+To see your existing Connectors, open the **Admin Panel** and click **Indexing Status** in the sidebar.
+This page shows each Connector, its status, access type, document count, and when it was last indexed.
+
+<img className="rounded-image" src="/assets/admins/connectors/indexing_status.webp" alt="Onyx Existing Connectors page showing connector statuses"/>
+
+### Connector Status
+
+The status of a Connector can be:
+
+#### Active
+
+| Status | Description |
+| --- | --- |
+| **Indexed** | The Connector is fully functional and all data is synced as of the last indexing attempt. |
+| **Scheduled** | Newly created Connectors or Connectors that have reached their refresh frequency but have not begun a new indexing attempt. The row shows the position in the queue. |
+| **Indexing** | The Connector is currently retrieving data from the source. |
+
+#### Inactive or Semi-Active
+
+| Status | Description |
+| --- | --- |
+| **Paused** | The Connector has been paused and will not retrieve new data until un-paused. Users can still access the indexed data. |
+| **Failed** | The Connector has encountered an error during indexing. Any data indexed prior to the error will remain available. Onyx will attempt to index again. If too many errors occur, the Connector will be paused. |
+| **Deleting** | The Connector and its documents are being removed. |
+
+<Note>
+  Most failures are temporary and will resolve themselves naturally within a few hours.
+</Note>
+
+### Connector Details
+
+The **Manage Index** menu has these actions:
+
+- **Update Index**: pull updates and index documents since the last successful run.
+- **Full Re-index**: re-index all documents from the source. This can take hours or days on a large source.
+- **Start Indexing**: skip the connector checks and index now.
+- **Sync Permissions**: pull who can read each document from the source now (permission-synced Connectors).
+- **Pause Indexing & Syncs** / **Resume Indexing & Syncs**: stop or restart indexing runs and permission syncs.
+  Indexed documents stay searchable while paused.
+- **Delete**: remove the Connector and its documents from Onyx.
+
+<img className="rounded-image" src="/assets/admins/connectors/connector_details.webp" alt="Onyx Connector details page showing connector details"/>
+
+<img className="rounded-image" src="/assets/admins/connectors/indexing_attempts.webp" alt="Onyx Connector details page showing indexing attempts and failures"/>
+
+### Indexing Failures
+
+An indexing run can finish with document-level errors. The Connector's page lists each failed document.
+Click retry to re-fetch only the failed documents. If the errors persist, run a **Full Re-index**.
+
+## Supported Connectors
+
+<Warning>
+  Can't find the connector you're looking for?
+  Let us know via [GitHub Discussions](https://github.com/onyx-dot-app/onyx/discussions)!
+</Warning>
+
+### Knowledge Base & Wikis
+
+<Columns cols={3}>
+  <Card title="Confluence" icon="confluence" href="/admins/connectors/official/confluence" horizontal/>
+
+  <Card title="SharePoint and OneDrive" icon="microsoft" href="/admins/connectors/official/microsoft-365/sharepoint" horizontal/>
+
+  <Card title="Notion" icon="notion" href="/admins/connectors/official/notion" horizontal/>
+
+  <Card title="BookStack" icon="book" href="/admins/connectors/official/bookstack" horizontal/>
+
+  <Card title="Canvas" icon="graduation-cap" href="/admins/connectors/official/canvas" horizontal/>
+
+  <Card title="Coda" icon="table" href="/admins/connectors/official/coda" horizontal/>
+
+  <Card title="Document360" icon="file-text" href="/admins/connectors/official/document360" horizontal/>
+
+  <Card title="Discourse" icon="comments" href="/admins/connectors/official/discourse" horizontal/>
+
+  <Card title="GitBook" icon="book-open" href="/admins/connectors/official/gitbook" horizontal/>
+
+  <Card title="Slab" icon="book" href="/admins/connectors/official/slab" horizontal/>
+
+  <Card title="LumApps" icon="building" href="/admins/connectors/official/lumapps" horizontal/>
+
+  <Card title="Outline" icon="book" href="/admins/connectors/official/outline" horizontal/>
+
+  <Card title="Axero" icon="users" href="/admins/connectors/official/axero" horizontal/>
+
+  <Card title="MediaWiki" icon="wikipedia-w" href="/admins/connectors/official/mediawiki" horizontal/>
+
+  <Card title="Wikipedia" icon="wikipedia-w" href="/admins/connectors/official/wikipedia" horizontal/>
+
+  <Card title="Loopio" icon="file-lines" href="/admins/connectors/official/loopio" horizontal/>
+
+  <Card title="Google Sites" icon="google" href="/admins/connectors/official/google_sites" horizontal/>
+
+  <Card title="Guru" icon="lightbulb" href="/admins/connectors/official/guru" horizontal/>
+</Columns>
+
+### Cloud Storage
+
+<Columns cols={3}>
+  <Card title="Google Drive" icon="google-drive" href="/admins/connectors/official/google_drive/overview" horizontal/>
+
+  <Card title="Dropbox" icon="dropbox" href="/admins/connectors/official/dropbox" horizontal/>
+
+  <Card title="Box" icon="box" href="/admins/connectors/official/box" horizontal/>
+
+  <Card title="AWS S3" icon="aws" href="/admins/connectors/official/s3/overview" horizontal/>
+
+  <Card title="Google Storage" icon="google" href="/admins/connectors/official/google_storage" horizontal/>
+
+  <Card title="Egnyte" icon="cloud" href="/admins/connectors/official/egnyte" horizontal/>
+
+  <Card title="Oracle Storage" icon="cloud" href="/admins/connectors/official/oci_storage" horizontal/>
+
+  <Card title="Cloudflare R2" icon="cloud" href="/admins/connectors/official/r2" horizontal/>
+</Columns>
+
+### Ticketing & Task Management
+
+<Columns cols={3}>
+  <Card title="Jira" icon="jira" href="/admins/connectors/official/jira" horizontal/>
+
+  <Card title="Zendesk" icon="headset" href="/admins/connectors/official/zendesk" horizontal/>
+
+  <Card title="Airtable" icon="table" href="/admins/connectors/official/airtable" horizontal/>
+
+  <Card title="Linear" icon="linear" href="/admins/connectors/official/linear" horizontal/>
+
+  <Card title="Freshdesk" icon="headset" href="/admins/connectors/official/freshdesk" horizontal/>
+
+  <Card title="Asana" icon="check" href="/admins/connectors/official/asana" horizontal/>
+
+  <Card title="TestRail" icon="clipboard-check" href="/admins/connectors/official/testrail" horizontal/>
+
+  <Card title="ClickUp" icon="mouse-pointer" href="/admins/connectors/official/clickup" horizontal/>
+
+  <Card title="YouTrack" icon="ticket" href="/admins/connectors/official/youtrack" horizontal/>
+
+  <Card title="ProductBoard" icon="trello" href="/admins/connectors/official/productboard" horizontal/>
+</Columns>
+
+### Messaging
+
+<Columns cols={3}>
+  <Card title="Slack" icon="slack" href="/admins/connectors/official/slack/slack_indexed" horizontal/>
+
+  <Card title="Microsoft Teams" icon="microsoft" href="/admins/connectors/official/microsoft-365/teams" horizontal/>
+
+  <Card title="Gmail" icon="envelope" href="/admins/connectors/official/gmail/overview" horizontal/>
+
+  <Card title="Outlook" icon="microsoft" href="/admins/connectors/official/microsoft-365/outlook" horizontal/>
+
+  <Card title="Email (IMAP)" icon="envelope" href="/admins/connectors/official/imap" horizontal/>
+
+  <Card title="Discord" icon="discord" href="/admins/connectors/official/discord" horizontal/>
+
+  <Card title="XenForo" icon="comments" href="/admins/connectors/official/xenforo" horizontal/>
+
+  <Card title="Zulip" icon="zulip" href="/admins/connectors/official/zulip" horizontal/>
+</Columns>
+
+### Meetings
+
+<Columns cols={3}>
+  <Card title="Zoom" icon="video" href="/admins/connectors/official/zoom" horizontal/>
+
+  <Card title="Fireflies" icon="microphone" href="/admins/connectors/official/fireflies" horizontal/>
+</Columns>
+
+### Sales
+
+<Columns cols={3}>
+  <Card title="Salesforce" icon="salesforce" href="/admins/connectors/official/salesforce" horizontal/>
+
+  <Card title="HubSpot" icon="hubspot" href="/admins/connectors/official/hubspot" horizontal/>
+
+  <Card title="Gong" icon="phone" href="/admins/connectors/official/gong" horizontal/>
+
+  <Card title="Highspot" icon="chart-line" href="/admins/connectors/official/highspot" horizontal/>
+</Columns>
+
+### Code Repository
+
+<Columns cols={3}>
+  <Card title="GitHub" icon="github" href="/admins/connectors/official/github" horizontal/>
+
+  <Card title="GitLab" icon="gitlab" href="/admins/connectors/official/gitlab" horizontal/>
+
+  <Card title="Bitbucket" icon="bitbucket" href="/admins/connectors/official/bitbucket" horizontal/>
+</Columns>
+
+### Other
+
+<Columns cols={3}>
+  <Card title="Web Scraper" icon="globe" href="/admins/connectors/official/web" horizontal/>
+
+  <Card title="File Upload" icon="upload" href="/admins/connectors/official/file" horizontal/>
+
+  <Card title="Braintrust" icon="flask" href="/admins/connectors/official/braintrust" horizontal/>
+</Columns>

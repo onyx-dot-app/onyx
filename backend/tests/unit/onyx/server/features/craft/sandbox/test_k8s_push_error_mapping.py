@@ -32,7 +32,7 @@ from cryptography.hazmat.primitives.serialization import (
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PATH,

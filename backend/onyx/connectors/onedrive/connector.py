@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -11,6 +12,7 @@ from onyx.connectors.interfaces import (
     CredentialsConnector,
     CredentialsProviderInterface,
     GenerateSlimDocumentOutput,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -35,6 +37,9 @@ from onyx.connectors.microsoft_utils.drive_items import (
 )
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OneDriveAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
 from onyx.connectors.models import (
@@ -56,8 +61,10 @@ from onyx.connectors.onedrive.models import (
     OneDriveDiscoveredFile,
     OneDriveDrive,
     OneDrivePermission,
+    OneDriveReindexCache,
     OneDriveSettings,
     OneDriveUser,
+    OneDriveUserDrive,
 )
 from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import (
@@ -85,6 +92,11 @@ DRIVE_ENTITY_PREFIX = "drive:"
 MAX_PERMISSION_ENTRIES = ExternalAccess.MAX_NUM_ENTRIES
 MAX_PERMISSION_PAGES = 10_000
 MAX_CACHED_FOLDER_PERMISSIONS = 1_000
+MAX_REINDEX_FOLDER_DEPTH = 500
+PERSONAL_SITE_SEGMENT = "personal"
+# A count bounds each all-users probe call. At ~0.3 s per drive lookup this
+# keeps a call near one minute, so checkpoints and stop signals stay timely.
+MAX_USERS_PROBED_PER_CHECKPOINT = 200
 
 
 def _last_delta_item_occurrences(
@@ -131,6 +143,28 @@ def user_root_node(
         node_type=HierarchyNodeType.MY_DRIVE,
         external_access=external_access or ExternalAccess.empty(),
     )
+
+
+def _root_access(user: OneDriveUser) -> ExternalAccess:
+    return ExternalAccess(
+        external_user_emails={user.user_principal_name.lower()},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+
+
+def personal_site_from_link(link: str) -> tuple[str, str] | None:
+    """Returns the host and `personal/<owner>` path of a OneDrive web URL."""
+    parts = urlsplit(link)
+    segments = [segment for segment in parts.path.split("/") if segment]
+    if (
+        parts.scheme != "https"
+        or not parts.hostname
+        or len(segments) < 2
+        or segments[0].lower() != PERSONAL_SITE_SEGMENT
+    ):
+        return None
+    return parts.hostname, f"{segments[0]}/{segments[1]}"
 
 
 def folder_node(
@@ -208,11 +242,26 @@ def _document_failure(item: DriveItemData, error: Exception) -> ConnectorFailure
     )
 
 
+def _reindex_failure(
+    failed: DocumentFailure, message: str, error: Exception | None = None
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=failed,
+        failure_message=f"OneDrive targeted reindex failed: {message}",
+        exception=error,
+    )
+
+
+class _ReindexTargetError(Exception):
+    """One target cannot be re-fetched; the other targets continue."""
+
+
 class OneDriveConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     CredentialsConnector,
     CheckpointedConnectorWithPermSync[OneDriveCheckpoint],
+    Resolver,
 ):
     def __init__(
         self,
@@ -419,7 +468,7 @@ class OneDriveConnector(
             return
         if drive is None:
             if self.settings.indexes_all_users:
-                logger.info(
+                logger.debug(
                     "OneDrive: skipping %s without a drive", user.user_principal_name
                 )
             else:
@@ -429,6 +478,21 @@ class OneDriveConnector(
             self._clear_current_user(checkpoint)
             return
         checkpoint.current_drive = drive
+
+    def _open_next_discovered_drive(
+        self, checkpoint: OneDriveCheckpoint
+    ) -> Generator[ConnectorFailure, None, None]:
+        """Probe tenant users until one has a drive. Most users in a large
+        tenant have none, so one call skips many of them instead of ending a
+        checkpoint per user; the budget keeps each call short."""
+        for _ in range(MAX_USERS_PROBED_PER_CHECKPOINT):
+            if checkpoint.current_drive is not None:
+                return
+            if checkpoint.current_user is None:
+                self._select_discovered_user(checkpoint)
+                if checkpoint.current_user is None:
+                    return
+            yield from self._open_current_drive(checkpoint)
 
     def _path_allowed(self, item: DriveDeltaItem) -> bool:
         path = build_item_relative_path(
@@ -539,16 +603,9 @@ class OneDriveConnector(
             )
         checkpoint.delta_pages += 1
         if not checkpoint.delta_started:
-            root_access = (
-                ExternalAccess(
-                    external_user_emails={user.user_principal_name.lower()},
-                    external_user_group_ids=set(),
-                    is_public=False,
-                )
-                if include_permissions
-                else None
+            yield user_root_node(
+                user, drive, _root_access(user) if include_permissions else None
             )
-            yield user_root_node(user, drive, root_access)
         checkpoint.delta_started = True
         checkpoint.delta_cursor = result.next_checkpoint_url
         if result.resync_after_410:
@@ -632,17 +689,15 @@ class OneDriveConnector(
         None,
         OneDriveCheckpoint,
     ]:
-        if checkpoint.current_user is None:
-            if self.settings.indexes_all_users:
-                self._select_discovered_user(checkpoint)
-            else:
-                yield from self._select_explicit_user(checkpoint)
+        if self.settings.indexes_all_users:
+            yield from self._open_next_discovered_drive(checkpoint)
+        else:
             if checkpoint.current_user is None:
-                return checkpoint
+                yield from self._select_explicit_user(checkpoint)
+            if checkpoint.current_user is not None and checkpoint.current_drive is None:
+                yield from self._open_current_drive(checkpoint)
         if checkpoint.current_drive is None:
-            yield from self._open_current_drive(checkpoint)
-            if checkpoint.current_drive is None:
-                return checkpoint
+            return checkpoint
         yield from self._discover_delta_page(
             checkpoint,
             start,
@@ -751,3 +806,215 @@ class OneDriveConnector(
             callback,
             include_permissions=True,
         )
+
+    def _cached_user(
+        self, identifier: str, cache: OneDriveReindexCache
+    ) -> OneDriveUser | None:
+        if identifier not in cache.users:
+            cache.users[identifier] = self.ops.get_user(identifier=identifier)
+        return cache.users[identifier]
+
+    def _configured_drives(
+        self, cache: OneDriveReindexCache
+    ) -> list[OneDriveUserDrive]:
+        if cache.configured_drives is not None:
+            return cache.configured_drives
+        drives: list[OneDriveUserDrive] = []
+        for identifier in self.settings.users:
+            try:
+                user = self._cached_user(identifier, cache)
+                drive = self.ops.get_default_drive(user_id=user.id) if user else None
+            except OneDriveGraphError as error:
+                if not error.is_permanent_refusal:
+                    raise
+                continue
+            if user is not None and drive is not None:
+                drives.append(OneDriveUserDrive(user=user, drive=drive))
+        cache.configured_drives = drives
+        return drives
+
+    def _linked_drive(
+        self, document_link: str, cache: OneDriveReindexCache
+    ) -> OneDriveUserDrive | None:
+        """Finds the indexed drive a recorded web URL points at.
+
+        Returns None when the URL is not a OneDrive personal site URL. Raises
+        when the URL names a drive this connector does not index.
+        """
+        site = personal_site_from_link(document_link)
+        if site is None:
+            return None
+        hostname, site_path = site
+        site_key = f"{hostname}/{site_path}".casefold()
+        if site_key not in cache.personal_drives:
+            cache.personal_drives[site_key] = self.ops.get_personal_site_drive(
+                hostname=hostname, site_path=site_path
+            )
+        personal = cache.personal_drives[site_key]
+        if personal is None:
+            raise _ReindexTargetError(f"No OneDrive exists at `{site_path}`.")
+        if not self.settings.indexes_all_users:
+            for configured in self._configured_drives(cache):
+                if configured.drive.id == personal.drive.id:
+                    return configured
+            raise _ReindexTargetError(
+                f"The OneDrive at `{site_path}` does not belong to a configured user."
+            )
+        owner = (
+            self._cached_user(personal.owner_id, cache) if personal.owner_id else None
+        )
+        if owner is None:
+            raise _ReindexTargetError(
+                f"The owner of the OneDrive at `{site_path}` is not an indexed user."
+            )
+        # The crawl reads only each user's default drive.
+        if owner.id not in cache.default_drives:
+            cache.default_drives[owner.id] = self.ops.get_default_drive(
+                user_id=owner.id
+            )
+        default_drive = cache.default_drives[owner.id]
+        if default_drive is None or default_drive.id != personal.drive.id:
+            raise _ReindexTargetError(
+                f"The drive at `{site_path}` is not its owner's default OneDrive."
+            )
+        return OneDriveUserDrive(user=owner, drive=default_drive)
+
+    def _locate_item(
+        self, failed: DocumentFailure, cache: OneDriveReindexCache
+    ) -> tuple[OneDriveUserDrive, DriveDeltaItem]:
+        linked = (
+            self._linked_drive(failed.document_link, cache)
+            if failed.document_link
+            else None
+        )
+        if linked is not None:
+            candidates = [linked]
+        elif self.settings.indexes_all_users:
+            reason = (
+                f"`{failed.document_link}` is not a OneDrive personal site URL."
+                if failed.document_link
+                else "this target has none."
+            )
+            raise _ReindexTargetError(
+                "A connector that indexes all users needs the document's OneDrive "
+                f"web URL to find its drive; {reason}"
+            )
+        else:
+            candidates = self._configured_drives(cache)
+        for candidate in candidates:
+            item = self.ops.get_drive_item(
+                drive_id=candidate.drive.id, item_id=failed.document_id
+            )
+            if item is not None and not item.is_tombstone:
+                return candidate, item
+        raise _ReindexTargetError(
+            f"Item `{failed.document_id}` is not in an indexed OneDrive."
+        )
+
+    def _ancestor_nodes(
+        self,
+        owned: OneDriveUserDrive,
+        item: DriveDeltaItem,
+        cache: OneDriveReindexCache,
+        include_permissions: bool,
+    ) -> Generator[HierarchyNode, None, None]:
+        user, drive = owned.user, owned.drive
+        root_id = drive_root_id(drive.id)
+        # Walk up to the drive root or to a folder this call already emitted.
+        folders: list[DriveDeltaItem] = []
+        current = item
+        while True:
+            parent_node_id = item_parent_id(drive.id, current)
+            parent = current.parent_reference
+            if (
+                parent_node_id == root_id
+                or parent_node_id in cache.emitted_node_ids
+                or parent is None
+                or parent.id is None
+            ):
+                break
+            if len(folders) >= MAX_REINDEX_FOLDER_DEPTH:
+                raise _ReindexTargetError(
+                    f"Item `{item.id}` is nested deeper than "
+                    f"{MAX_REINDEX_FOLDER_DEPTH} folders."
+                )
+            folder = self.ops.get_drive_item(drive_id=drive.id, item_id=parent.id)
+            if folder is None:
+                raise _ReindexTargetError(f"Parent folder `{parent.id}` was not found.")
+            folders.append(folder)
+            current = folder
+        if root_id not in cache.emitted_node_ids:
+            cache.emitted_node_ids.add(root_id)
+            yield user_root_node(
+                user, drive, _root_access(user) if include_permissions else None
+            )
+        # Top-down, so each folder's access is cached before its children use it.
+        for folder in reversed(folders):
+            access = (
+                self._item_access(user, drive, folder, add_prefix=True)
+                if include_permissions
+                else None
+            )
+            node = folder_node(drive, folder, access)
+            cache.emitted_node_ids.add(node.raw_node_id)
+            yield node
+
+    def _reindex_target(
+        self,
+        failed: DocumentFailure,
+        cache: OneDriveReindexCache,
+        include_permissions: bool,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        owned, item = self._locate_item(failed, cache)
+        if not item.is_file:
+            raise _ReindexTargetError(f"Item `{item.id}` is not a file.")
+        if not self._item_allowed(item, None, None):
+            raise _ReindexTargetError(
+                f"`{item.name}` has an unsupported file type or an excluded path."
+            )
+        yield from self._ancestor_nodes(owned, item, cache, include_permissions)
+        access = (
+            self._item_access(owned.user, owned.drive, item, add_prefix=True)
+            if include_permissions
+            else None
+        )
+        output = self._file_output(item, owned.drive, access)
+        if output is None:
+            raise _ReindexTargetError(
+                f"`{item.name}` was skipped: its content type is excluded or it "
+                "is over the size limit."
+            )
+        yield output
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Re-fetches failed documents by drive item id.
+
+        The recorded web URL names the owner's personal site, which gives the
+        drive. Targets without a URL are looked up in each configured user's
+        drive; a connector that indexes all users cannot look them up.
+        """
+        if self._ops is None:
+            raise ConnectorMissingCredentialError("OneDrive")
+        cache = OneDriveReindexCache()
+        self._folder_access.clear()
+        try:
+            for error in errors:
+                failed = error.failed_document
+                if failed is None:
+                    continue
+                try:
+                    yield from self._reindex_target(failed, cache, include_permissions)
+                except OneDriveAuthError:
+                    raise
+                except OneDriveGraphError as graph_error:
+                    if graph_error.fails_the_attempt:
+                        raise
+                    yield _reindex_failure(failed, str(graph_error), graph_error)
+                except Exception as target_error:
+                    yield _reindex_failure(failed, str(target_error), target_error)
+        finally:
+            self._folder_access.clear()

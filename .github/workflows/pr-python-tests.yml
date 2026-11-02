@@ -36,6 +36,7 @@ jobs:
           filters: |
             python:
               - 'backend/**'
+              - 'web/src/lib/searchSettings/constants.ts'
               - 'pyproject.toml'
               - '.github/workflows/pr-python-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
@@ -52,9 +53,6 @@ jobs:
       PYTHONPATH: ./backend
       REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
       DISABLE_TELEMETRY: "true"
-      # Unit tests run without a live backend; EE code paths that depend on
-      # Redis/OpenSearch/etc are not available, so disable enforcement here.
-      LICENSE_ENFORCEMENT_ENABLED: "false"
 
     steps:
     - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc

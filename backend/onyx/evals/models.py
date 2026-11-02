@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from onyx.configs.model_configs import DEFAULT_OPENAI_MODEL
 from onyx.db.tools import get_builtin_tool
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -86,7 +87,7 @@ class EvalConfigurationOptions(BaseModel):
     builtin_tool_types: list[str] = list(BUILT_IN_TOOL_MAP.keys())
     llm: LLMOverride = LLMOverride(
         model_provider=None,
-        model_version="gpt-4o",
+        model_version=DEFAULT_OPENAI_MODEL,
         temperature=0.0,
     )
     search_permissions_email: str

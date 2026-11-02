@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from contextlib import nullcontext
+from types import MappingProxyType
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -128,3 +129,36 @@ def test_calculate_cost_prices_cache_creation_at_write_rate() -> None:
     )
 
     assert processor._calculate_cost(data) == pytest.approx(0.0105)
+
+
+@pytest.mark.parametrize("config_kind", ["dict", "proxy", "none"])
+def test_on_span_end_exports_cache_metadata_from_optional_mapping(
+    config_kind: str,
+) -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    metadata: dict[str, str] = {
+        "prompt_cache_chat_history": "on",
+        "cacheable_prefix_msgs": "2",
+        "cacheable_prefix_tokens": "100",
+        "history_msgs": "3",
+    }
+    config: Mapping[str, Any] | None = (
+        MappingProxyType(metadata) if config_kind == "proxy" else metadata
+    )
+    if config_kind == "none":
+        config = None
+    span = _make_span("trace-123", "span-1")
+    span.span_data = GenerationSpanData(model="test-model", model_config=config)
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    observation.update.assert_called_once()
+    update: dict[str, Any] = observation.update.call_args.kwargs
+    if config is None:
+        assert "metadata" not in update
+    else:
+        assert update["metadata"] == metadata
+    observation.end.assert_called_once()

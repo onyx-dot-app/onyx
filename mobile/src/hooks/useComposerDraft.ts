@@ -26,9 +26,9 @@ export interface UseComposerDraft {
   addImages: () => Promise<void>;
   addRecent: (file: ProjectFile) => void;
   removeFile: (id: string) => void;
-  // Call once a normal composer send is accepted: clears both the text and the attachments.
+  // Clears the captured draft after acceptance, unless it has since changed.
   consume: () => void;
-  // Call once a starter/prompt send is accepted: clears the attachments but keeps the text.
+  // Clears captured attachments after acceptance, unless the draft has since changed.
   consumeAttachments: () => void;
 }
 
@@ -115,12 +115,12 @@ export function useComposerDraft(draftKey: string): UseComposerDraft {
   );
 
   const consume = useCallback(() => {
-    ctxConsume(draftKey);
-  }, [ctxConsume, draftKey]);
+    ctxConsume(draftKey, draft);
+  }, [ctxConsume, draftKey, draft]);
 
   const consumeAttachments = useCallback(() => {
-    ctxConsumeAttachments(draftKey);
-  }, [ctxConsumeAttachments, draftKey]);
+    ctxConsumeAttachments(draftKey, draft);
+  }, [ctxConsumeAttachments, draftKey, draft]);
 
   return {
     text,
