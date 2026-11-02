@@ -6,16 +6,16 @@ it, store it. Nothing is written before the signature is checked, so an
 unauthenticated caller cannot fill the table.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from onyx.connectors.event_inbox.credentials import pair_secrets
 from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
 from onyx.db.connector_event_inbox import get_active_event_cc_pairs, record_events
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ConnectorCredentialPair
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -28,14 +28,6 @@ logger = setup_logger()
 MAX_BODY_BYTES = 5 * 1024 * 1024
 
 
-def _pair_secrets(pair: ConnectorCredentialPair) -> dict[str, str]:
-    credential_json = pair.credential.credential_json
-    if credential_json is None:
-        return {}
-    values = credential_json.get_value(apply_mask=False)
-    return {key: value for key, value in values.items() if isinstance(value, str)}
-
-
 def build_webhook_router() -> APIRouter:
     """One route per registered source, fixed when the app is built.
 
@@ -45,14 +37,15 @@ def build_webhook_router() -> APIRouter:
     router = APIRouter()
 
     for spec in _registered():
-        router.add_api_route(
-            f"/{spec.slug}",
-            _handler_for(spec),
-            methods=["POST"],
-            name=f"webhook_{spec.slug}",
-            # The provider reads the status code, not a schema.
-            include_in_schema=False,
-        )
+        for endpoint in spec.endpoints:
+            router.add_api_route(
+                f"/{spec.slug}{endpoint}",
+                _handler_for(spec, endpoint),
+                methods=["POST"],
+                name=f"webhook_{spec.slug}{endpoint}",
+                # The provider reads the status code, not a schema.
+                include_in_schema=False,
+            )
     return router
 
 
@@ -83,10 +76,15 @@ async def _read_body(request: Request) -> bytes:
 
 def _handler_for(
     spec: WebhookSourceSpec,
+    endpoint: str,
 ) -> Callable[[Request], Awaitable[Response]]:
     async def handle(request: Request) -> Response:
         raw_body = await _read_body(request)
-        delivery = WebhookRequest(raw_body=raw_body, headers=dict(request.headers))
+        delivery = WebhookRequest(
+            raw_body=raw_body,
+            headers=dict(request.headers),
+            endpoint=endpoint,
+        )
 
         # The database work and the source's own callbacks are synchronous,
         # and this server runs one worker: inline they would stall every
@@ -114,7 +112,7 @@ def _receive(spec: WebhookSourceSpec, delivery: WebhookRequest) -> Response:
         # accounts resolves between them from the payload, which needs a
         # routing key the spec does not yet declare.
         pair = pairs[0]
-        secrets = _pair_secrets(pair)
+        secrets = pair_secrets(pair)
 
         if spec.verifier is None and not spec.allow_unsigned:
             # The spec validator already refuses this combination, so
@@ -181,7 +179,7 @@ def _receive(spec: WebhookSourceSpec, delivery: WebhookRequest) -> Response:
 def _answer_challenge(
     spec: WebhookSourceSpec,
     delivery: WebhookRequest,
-    secrets: dict[str, str],
+    secrets: Mapping[str, str],
 ) -> dict[str, object] | None:
     """Run the handshake responder without letting it 500 the route.
 

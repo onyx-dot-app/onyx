@@ -130,7 +130,10 @@ def parse(request: WebhookRequest) -> EventParseResult:
     )
 
 
-def to_document(event: ConnectorEventInbox) -> Document:
+def to_document(
+    event: ConnectorEventInbox,
+    secrets: Mapping[str, str],  # noqa: ARG001
+) -> Document:
     payload: Any = event.payload or {}
     return Document(
         id=event.document_id,

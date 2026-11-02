@@ -75,7 +75,10 @@ def _parser(request: WebhookRequest) -> EventParseResult:
     )
 
 
-def _handler(event: ConnectorEventInbox) -> Document:
+def _handler(
+    event: ConnectorEventInbox,
+    secrets: Mapping[str, str],  # noqa: ARG001
+) -> Document:
     return Document(
         id=event.document_id,
         source=SOURCE,
@@ -321,3 +324,21 @@ def test_a_pair_still_being_set_up_can_receive(
     assert count_events_by_status(db_session, event_pair.id) == {
         ConnectorEventStatus.PENDING: 1
     }
+
+
+def test_a_source_gets_one_route_per_endpoint_it_declares() -> None:
+    """A provider that posts to several URLs needs one route each."""
+    unregister_webhook_source(SLUG)
+    register_webhook_source(
+        WebhookSourceSpec(
+            source=SOURCE,
+            slug=SLUG,
+            endpoints=("/a", "/b"),
+            parser=_parser,
+            verifier=_verifier,
+        )
+    )
+    app = FastAPI()
+    app.include_router(build_webhook_router())
+
+    assert _route_paths(app) == {f"/{SLUG}/a", f"/{SLUG}/b"}
