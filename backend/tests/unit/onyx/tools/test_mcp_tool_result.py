@@ -19,7 +19,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
 )
 from onyx.db.models import MCPServer
-from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import ToolCall, ToolResult, ToolResultMessage
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
@@ -270,3 +270,13 @@ def test_server_error_details_are_encoded_once(
     assert response.is_error
     assert json.loads(response.text) == {"error": expected}
     assert delta.data == {"error": expected}
+
+
+def test_cancelled_call_has_separate_metric_and_propagates() -> None:
+    with (
+        patch(f"{MODULE}.call_mcp_tool", side_effect=AgentCancelled),
+        patch(f"{MODULE}.record_mcp_client_tool_outcome") as record,
+    ):
+        with pytest.raises(AgentCancelled):
+            _run(_github_tool())
+    assert record.call_args.kwargs["status"] == MCPToolCallStatus.CANCELLED

@@ -13,6 +13,7 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import mark_connection_config_reauth_required
 from onyx.db.models import MCPConnectionConfig, MCPServer
+from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.server.features.mcp.client import (
     call_mcp_tool,
@@ -275,6 +276,9 @@ class MCPTool(Tool):
             outcome = MCPToolCallStatus.SUCCESS
             return response
 
+        except AgentCancelled:
+            outcome = MCPToolCallStatus.CANCELLED
+            raise
         except Exception as e:
             credentials = self._resolved_credentials
             unauthorized_response = has_unauthorized_response(e)
