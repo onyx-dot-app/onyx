@@ -2941,6 +2941,55 @@
       "temperature": false,
       "tool_call": true
     },
+    "global.openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "cache_write": 1.25,
+        "context_over_200k": {
+          "cache_read": 0.1,
+          "cache_write": 2.5,
+          "input": 2,
+          "output": 7.5
+        },
+        "input": 1,
+        "output": 5,
+        "tiers": [
+          {
+            "cache_read": 0.1,
+            "cache_write": 2.5,
+            "input": 2,
+            "output": 7.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "global.xai.grok-4.6": {
       "attachment": true,
       "cost": {
@@ -4800,6 +4849,56 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.055,
+        "cache_write": 1.375,
+        "context_over_200k": {
+          "cache_read": 0.11,
+          "cache_write": 2.75,
+          "input": 2.2,
+          "output": 8.25
+        },
+        "input": 1.1,
+        "output": 5.5,
+        "tiers": [
+          {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -6737,6 +6836,55 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.055,
+        "cache_write": 1.375,
+        "context_over_200k": {
+          "cache_read": 0.11,
+          "cache_write": 2.75,
+          "input": 2.2,
+          "output": 8.25
+        },
+        "input": 1.1,
+        "output": 5.5,
+        "tiers": [
+          {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
       "structured_output": true,
       "temperature": false,
       "tool_call": true

@@ -1194,31 +1194,6 @@
       "structured_output": true,
       "tool_call": true
     },
-    "grok-code-fast-1": {
-      "cost": {
-        "cache_read": 0.19999999999999998,
-        "input": 1.0,
-        "output": 2.0
-      },
-      "limit": {
-        "context": 256000,
-        "output": 256000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "grok-code-fast-1",
-      "reasoning": true,
-      "structured_output": true,
-      "tool_call": true
-    },
     "grok-code-fast-1-0825": {
       "cost": {
         "cache_read": 0.19999999999999998,

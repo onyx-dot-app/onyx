@@ -1822,35 +1822,8 @@
       "temperature": false,
       "tool_call": true
     },
-    "arcee-ai/trinity-large-thinking": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.06,
-        "input": 0.25,
-        "output": 0.8
-      },
-      "family": "trinity",
-      "limit": {
-        "context": 262100,
-        "output": 80000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Trinity Large Thinking",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-01",
-      "temperature": true,
-      "tool_call": true
-    },
     "bfl/flux-2-flex": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 0,
@@ -1858,7 +1831,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -1872,7 +1846,7 @@
       "tool_call": false
     },
     "bfl/flux-2-klein-4b": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 0,
@@ -1880,7 +1854,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -1894,7 +1869,7 @@
       "tool_call": false
     },
     "bfl/flux-2-klein-9b": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 0,
@@ -1902,7 +1877,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -1916,7 +1892,7 @@
       "tool_call": false
     },
     "bfl/flux-2-max": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 67300,
@@ -1924,7 +1900,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -1938,7 +1915,7 @@
       "tool_call": false
     },
     "bfl/flux-2-pro": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 67300,
@@ -1946,7 +1923,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -1960,7 +1938,7 @@
       "tool_call": false
     },
     "bfl/flux-3-image": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 0,
@@ -1968,7 +1946,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -1982,7 +1961,7 @@
       "tool_call": false
     },
     "bfl/flux-3-image-klein": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 0,
@@ -1990,7 +1969,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2028,7 +2008,7 @@
       "tool_call": false
     },
     "bfl/flux-kontext-max": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 512,
@@ -2036,7 +2016,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2050,7 +2031,7 @@
       "tool_call": false
     },
     "bfl/flux-kontext-pro": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 512,
@@ -2058,7 +2039,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2072,7 +2054,7 @@
       "tool_call": false
     },
     "bfl/flux-pro-1.0-fill": {
-      "attachment": false,
+      "attachment": true,
       "family": "flux",
       "limit": {
         "context": 512,
@@ -2080,7 +2062,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2411,7 +2394,7 @@
       "tool_call": false
     },
     "bytedance/seedream-4.0": {
-      "attachment": false,
+      "attachment": true,
       "family": "seed",
       "limit": {
         "context": 0,
@@ -2419,7 +2402,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2433,7 +2417,7 @@
       "tool_call": false
     },
     "bytedance/seedream-4.5": {
-      "attachment": false,
+      "attachment": true,
       "family": "seed",
       "limit": {
         "context": 0,
@@ -2441,7 +2425,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2455,7 +2440,7 @@
       "tool_call": false
     },
     "bytedance/seedream-5.0-lite": {
-      "attachment": false,
+      "attachment": true,
       "family": "seed",
       "limit": {
         "context": 0,
@@ -2463,7 +2448,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2477,7 +2463,7 @@
       "tool_call": false
     },
     "bytedance/seedream-5.0-pro": {
-      "attachment": false,
+      "attachment": true,
       "family": "seed",
       "limit": {
         "context": 0,
@@ -2485,7 +2471,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -2973,9 +2960,9 @@
     "deepseek/deepseek-v4.1-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0015,
-        "input": 0.075,
-        "output": 0.3
+        "cache_read": 0.007,
+        "input": 0.3,
+        "output": 1.2
       },
       "family": "deepseek-flash",
       "limit": {
@@ -3003,14 +2990,14 @@
     "deepseek/deepseek-v4.1-flash-1017": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0015,
-        "input": 0.075,
-        "output": 0.3
+        "cache_read": 0.007,
+        "input": 0.3,
+        "output": 1.2
       },
       "family": "deepseek-flash",
       "limit": {
         "context": 1048576,
-        "output": 1048576
+        "output": 262144
       },
       "modalities": {
         "input": [
@@ -4536,6 +4523,31 @@
       "temperature": true,
       "tool_call": true
     },
+    "inclusionai/ling-3.1-flash-1019": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "ling",
+      "limit": {
+        "context": 1000000,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Ling 3.1 Flash 1019",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-30",
+      "tool_call": true
+    },
     "inference-net/schematron-v2-small": {
       "attachment": false,
       "cost": {
@@ -5244,7 +5256,7 @@
       "tool_call": true
     },
     "microsoft/mai-image-2.6": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "input": 5,
         "output": 38
@@ -5256,7 +5268,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -5270,7 +5283,7 @@
       "tool_call": false
     },
     "microsoft/mai-image-2.6-flash": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "input": 1.75,
         "output": 19
@@ -5282,7 +5295,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -5913,13 +5927,13 @@
     "mistral/mistral-large-4": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.14,
-        "input": 1.36,
-        "output": 4.18
+        "cache_read": 0.07,
+        "input": 0.7,
+        "output": 2.1
       },
       "family": "mistral-large",
       "limit": {
-        "context": 524288,
+        "context": 1048576,
         "output": 262144
       },
       "modalities": {
@@ -8565,8 +8579,106 @@
       "temperature": false,
       "tool_call": true
     },
+    "openai/gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "cache_write": 1.25,
+        "context_over_200k": {
+          "cache_read": 0.1,
+          "cache_write": 2.5,
+          "input": 2,
+          "output": 7.5
+        },
+        "input": 1,
+        "output": 5,
+        "tiers": [
+          {
+            "cache_read": 0.1,
+            "cache_write": 2.5,
+            "input": 2,
+            "output": 7.5,
+            "tier": {
+              "size": 272001,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai/gpt-6.1-terra-fast": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272001,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra (Fast)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "temperature": false,
+      "tool_call": true
+    },
     "openai/gpt-image-1-mini": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.2,
         "input": 2,
@@ -8579,7 +8691,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -8593,7 +8706,7 @@
       "tool_call": false
     },
     "openai/gpt-image-1.5": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 1.25,
         "input": 5,
@@ -8606,7 +8719,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -8620,7 +8734,7 @@
       "tool_call": false
     },
     "openai/gpt-image-2": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 1.25,
         "input": 5,
@@ -8633,7 +8747,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -8647,7 +8762,7 @@
       "tool_call": false
     },
     "openai/gpt-image-2.5-flare": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 1.25,
         "input": 5,
@@ -8660,7 +8775,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -8674,7 +8790,7 @@
       "tool_call": false
     },
     "openai/gpt-image-2.5-sunburst": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 1.25,
         "input": 5,
@@ -8687,7 +8803,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -9299,6 +9416,32 @@
       "temperature": false,
       "tool_call": false
     },
+    "particle/particle-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.125,
+        "output": 0.5
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Particle-1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-28",
+      "tool_call": true
+    },
     "perplexity/pplx-embed-v1-0.6b": {
       "attachment": false,
       "family": "v0",
@@ -9397,55 +9540,6 @@
       "structured_output": false,
       "temperature": true,
       "tool_call": true
-    },
-    "poolside/laguna-s-2.1-free": {
-      "attachment": false,
-      "cost": {
-        "input": 0,
-        "output": 0
-      },
-      "family": "laguna",
-      "limit": {
-        "context": 256000,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Laguna S 2.1 Free",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-07-21",
-      "structured_output": false,
-      "temperature": true,
-      "tool_call": true
-    },
-    "prodia/flux-fast-schnell": {
-      "attachment": false,
-      "family": "flux",
-      "limit": {
-        "context": 512,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "image"
-        ]
-      },
-      "name": "Flux Schnell",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2024-08-02",
-      "temperature": false,
-      "tool_call": false
     },
     "quiverai/arrow-2": {
       "attachment": true,
@@ -10448,7 +10542,7 @@
       "tool_call": true
     },
     "spacexai/grok-imagine-image": {
-      "attachment": false,
+      "attachment": true,
       "family": "grok",
       "limit": {
         "context": 16000,
@@ -10456,7 +10550,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -10470,7 +10565,7 @@
       "tool_call": false
     },
     "spacexai/grok-imagine-image-2.0": {
-      "attachment": false,
+      "attachment": true,
       "family": "grok",
       "limit": {
         "context": 64000,
@@ -10478,7 +10573,8 @@
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -10936,14 +11032,15 @@
       "tool_call": false
     },
     "topaz/wonder-3.5": {
-      "attachment": false,
+      "attachment": true,
       "limit": {
         "context": 0,
         "output": 0
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "image"
@@ -11732,9 +11829,9 @@
     "zai/glm-5.3": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.2,
-        "input": 1.2,
-        "output": 4
+        "cache_read": 0.14,
+        "input": 1.4,
+        "output": 4.4
       },
       "family": "glm",
       "limit": {

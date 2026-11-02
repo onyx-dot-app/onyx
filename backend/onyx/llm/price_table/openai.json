@@ -97,6 +97,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-12-16",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -2025,6 +2026,32 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-6-astra-law": {
+      "cost": {
+        "cache_read": 1.0,
+        "input": 10.0,
+        "output": 50.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-6-astra-law",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "gpt-6-luna": {
       "attachment": true,
       "cost": {
@@ -2075,6 +2102,33 @@
       "structured_output": true,
       "supports_none_reasoning_effort": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6-rosalind": {
+      "cost": {
+        "cache_read": 1.5,
+        "cache_write": 18.75,
+        "input": 15.0,
+        "output": 75.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-6-rosalind",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "gpt-6-sol": {
@@ -2431,34 +2485,12 @@
       "tool_call": true
     },
     "gpt-image-1": {
-      "attachment": true,
       "cost": {
         "cache_read": 1.25,
         "input": 5.0
       },
-      "family": "gpt-image",
-      "limit": {
-        "context": 0,
-        "input": 0,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "image"
-        ]
-      },
       "mode": "image_generation",
-      "name": "gpt-image-1",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-04-24",
-      "status": "deprecated",
-      "temperature": false,
-      "tool_call": false
+      "name": "gpt-image-1"
     },
     "gpt-image-1-mini": {
       "attachment": true,
@@ -2487,6 +2519,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-09-26",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -2518,6 +2551,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-11-25",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
