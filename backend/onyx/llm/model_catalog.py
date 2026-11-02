@@ -473,6 +473,11 @@ def _remote_supplement() -> dict[str, Any] | None:
             data: Any = response.json()
             if isinstance(data, dict):
                 supplement = data
+        else:
+            logger.warning(
+                "Remote catalog supplement fetch returned HTTP %s",
+                response.status_code,
+            )
     except Exception as e:
         logger.warning("Remote catalog supplement fetch failed: %s", e)
     _remote_supplement_cache[_SUPPLEMENT_FILE] = (now, supplement)
@@ -492,9 +497,9 @@ def iter_latest_models(provider: str, mode: str | None = None) -> list[str] | No
     supplement = _remote_supplement()
     if supplement is None:
         return None
-    provider_supplement: Any = supplement.get(provider) or {}
+    provider_supplement: Any = supplement.get(provider, {})
     supplement_models: Any = (
-        provider_supplement.get("models") or {}
+        provider_supplement.get("models", {})
         if isinstance(provider_supplement, dict)
         else None
     )

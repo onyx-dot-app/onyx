@@ -490,7 +490,8 @@ export function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
-const FOLD_THRESHOLD = 3;
+const FOLDED_MIN_MODELS = 3;
+const FOLDED_MAX_MODELS = 10;
 
 // ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
 
@@ -532,6 +533,36 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
 /** Row description. Several ids can share one title, so the model id comes
  *  first when the title is not the id. Metadata such as
  *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
+/** Selected models first. Providers that ship rich metadata (Nebius
+ *  TokenFactory) sort by id so refetches keep the order. */
+function inherentOrder(models: ModelConfiguration[]): string[] {
+  const sortByName = models.some((m) => hasModelMetadata(m));
+  return [...models]
+    .sort(
+      (a, b) =>
+        Number(b.is_visible) - Number(a.is_visible) ||
+        (sortByName ? a.name.localeCompare(b.name) : 0)
+    )
+    .map((m) => m.name);
+}
+
+interface ModelListLayout {
+  order: string[];
+  foldedCount: number;
+}
+
+/** Rows only move on open, fold and unfold, never on a checkbox change. */
+function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
+  const selected = models.filter((m) => m.is_visible).length;
+  return {
+    order: inherentOrder(models),
+    foldedCount: Math.min(
+      Math.max(selected, FOLDED_MIN_MODELS),
+      FOLDED_MAX_MODELS
+    ),
+  };
+}
+
 function buildModelDescription(model: ModelConfiguration): string | undefined {
   const id = modelDisplayName(model) === model.name ? undefined : model.name;
   if (!hasModelMetadata(model)) return id;
@@ -762,18 +793,34 @@ export function ModelSelectionField({
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const models = formikProps.values.model_configurations;
-  // Models selected when the modal opened stay on top, so the folded list
-  // shows them and rows don't move while the admin edits the selection.
-  const [openedSelection, setOpenedSelection] = useState<Set<string> | null>(
-    null
-  );
+  const [layout, setLayout] = useState<ModelListLayout | null>(null);
   useEffect(() => {
-    if (openedSelection === null && models.length > 0) {
-      setOpenedSelection(
-        new Set(models.filter((m) => m.is_visible).map((m) => m.name))
-      );
+    if (layout === null && models.length > 0) {
+      setLayout(foldedLayout(models));
     }
-  }, [models, openedSelection]);
+  }, [models, layout]);
+
+  function toggleExpanded() {
+    if (isExpanded) {
+      setLayout(foldedLayout(models));
+    } else if (layout) {
+      // Rows already on screen keep their place; the rest go below them.
+      const shown = [
+        ...layout.order.slice(0, layout.foldedCount),
+        ...models
+          .map((m) => m.name)
+          .filter((name) => !layout.order.includes(name)),
+      ];
+      setLayout({
+        order: [
+          ...shown,
+          ...inherentOrder(models).filter((name) => !shown.includes(name)),
+        ],
+        foldedCount: layout.foldedCount,
+      });
+    }
+    setIsExpanded(!isExpanded);
+  }
 
   useEffect(() => {
     const testModel = models.find((model) => model.is_visible)?.name;
@@ -852,21 +899,18 @@ export function ModelSelectionField({
         ) : (
           <Section gap={1} alignItems="stretch">
             {(() => {
-              // Sort alphabetically by id for providers that ship rich model
-              // metadata (Nebius TokenFactory) so the order is stable across
-              // refetches; otherwise keep the given order.
-              const sortByName = models.some((m) => hasModelMetadata(m));
-              const displayModels = [...models].sort(
-                (a, b) =>
-                  Number(openedSelection?.has(b.name) ?? b.is_visible) -
-                    Number(openedSelection?.has(a.name) ?? a.is_visible) ||
-                  (sortByName ? a.name.localeCompare(b.name) : 0)
-              );
-              const isFoldable = displayModels.length > FOLD_THRESHOLD;
-              const shownModels =
-                isFoldable && !isExpanded
-                  ? displayModels.slice(0, FOLD_THRESHOLD)
-                  : displayModels;
+              const { order, foldedCount } = layout ?? foldedLayout(models);
+              const byName = new Map(models.map((m) => [m.name, m]));
+              const ordered = order.flatMap((name) => byName.get(name) ?? []);
+              // Models added since the last re-sort, e.g. a custom model.
+              const added = models.filter((m) => !order.includes(m.name));
+              const isFoldable = ordered.length > foldedCount;
+              const shownModels = [
+                ...(isFoldable && !isExpanded
+                  ? ordered.slice(0, foldedCount)
+                  : ordered),
+                ...added,
+              ];
               const defaultModelName =
                 providerId != null && defaultText?.provider_id === providerId
                   ? defaultText.model_name
@@ -900,7 +944,7 @@ export function ModelSelectionField({
                   {isFoldable && (
                     <Interactive.Stateless
                       prominence="tertiary"
-                      onClick={() => setIsExpanded(!isExpanded)}
+                      onClick={toggleExpanded}
                     >
                       <Interactive.Container type="button" width="full">
                         <Content

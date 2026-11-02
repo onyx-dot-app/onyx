@@ -667,3 +667,13 @@ def test_latest_models_read_the_remote_supplement() -> None:
             assert model_catalog.iter_latest_models("openai", mode="chat") is None
         finally:
             model_catalog.reset_remote_cache()
+
+    for malformed in (None, [], {"models": None}):
+        files["openai"] = {"models": {"gpt-new": {"mode": "chat"}}}
+        files["_supplement"] = {"openai": malformed}
+        with patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get):
+            model_catalog.reset_remote_cache()
+            try:
+                assert model_catalog.iter_latest_models("openai", mode="chat") is None
+            finally:
+                model_catalog.reset_remote_cache()
