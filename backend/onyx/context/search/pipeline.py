@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from onyx.access.access import censor_chunks_for_user
+from onyx.context.search.enrichment.retrieval import EnrichmentContext
 from onyx.context.search.forced_document_set import get_forced_document_set_names
 from onyx.context.search.models import (
     BaseFilters,
@@ -277,6 +278,7 @@ def search_pipeline(
     acl_filters: UserAccessFilters | None = None,
     embedding_model: EmbeddingModel | None = None,
     prefetched_federated_retrieval_infos: list[FederatedRetrievalInfo] | None = None,
+    prefetched_enrichment_contexts: list[EnrichmentContext] | None = None,
     # Search UI only: apply the operator-forced document-set scope
     # (FORCED_DOCUMENT_SET_NAMES). Chat and other callers leave this False.
     force_configured_document_set_scope: bool = False,
@@ -328,6 +330,8 @@ def search_pipeline(
         db_session=db_session,
         embedding_model=embedding_model,
         prefetched_federated_retrieval_infos=prefetched_federated_retrieval_infos,
+        user=user,
+        prefetched_enrichment_contexts=prefetched_enrichment_contexts,
     )
 
     return censor_chunks_for_user(retrieved_chunks, user)

@@ -51,6 +51,10 @@ from onyx.configs.chat_configs import (
     NUM_RETURNED_HITS,
 )
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource, MessageType
+from onyx.context.search.enrichment.retrieval import (
+    EnrichmentContext,
+    get_enrichment_contexts,
+)
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,
@@ -622,6 +626,7 @@ class SearchTool(Tool):
         acl_filters: UserAccessFilters,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
+        enrichment_contexts: list[EnrichmentContext],
         effective_filters: BaseFilters | None,
     ) -> list[InferenceChunk]:
         """Run search pipeline for a single query using pre-fetched data.
@@ -636,6 +641,7 @@ class SearchTool(Tool):
             acl_filters: Pre-fetched ACL filters for the acting user
             embedding_model: Pre-fetched embedding model
             federated_retrieval_infos: Pre-fetched federated retrieval functions
+            enrichment_contexts: Pre-fetched withheld-source lanes
             effective_filters: Filters for THIS search, with the per-call source
                 scope already applied (computed once in run()).
 
@@ -660,6 +666,7 @@ class SearchTool(Tool):
             acl_filters=acl_filters,
             embedding_model=embedding_model,
             prefetched_federated_retrieval_infos=federated_retrieval_infos,
+            prefetched_enrichment_contexts=enrichment_contexts,
         )
 
     @classmethod
@@ -951,6 +958,15 @@ class SearchTool(Tool):
                 or []
             )
 
+            # Sources that are indexed but withheld from the default lane,
+            # resolved here for the same reason: the search itself runs
+            # without a session.
+            enrichment_contexts = get_enrichment_contexts(
+                db_session=db_session,
+                user=self.user,
+                source_types=prefetch_source_types,
+            )
+
             # Custom agents retain source selection inside projects.
             if not self._is_project_only_search:
                 connected_sources = fetch_unique_document_sources(db_session)
@@ -1090,6 +1106,11 @@ class SearchTool(Tool):
                 for info in federated_retrieval_infos
                 if info.source.to_non_federated_source() in resolved_scope
             ]
+            enrichment_contexts = [
+                context
+                for context in enrichment_contexts
+                if context.source in resolved_scope
+            ]
             # Disable the Slack federated search when Slack is out of scope.
             if DocumentSource.SLACK not in resolved_scope:
                 slack_access_token = None
@@ -1176,6 +1197,7 @@ class SearchTool(Tool):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        enrichment_contexts,
                         effective_filters,
                     ),
                 )
@@ -1194,6 +1216,7 @@ class SearchTool(Tool):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        enrichment_contexts,
                         effective_filters,
                     ),
                 )

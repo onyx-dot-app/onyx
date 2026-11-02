@@ -836,6 +836,33 @@ def get_connector_credential_pairs_for_source(
     return list(db_session.scalars(stmt).unique().all())
 
 
+def get_active_cc_pairs_for_source(
+    db_session: Session,
+    source: DocumentSource,
+) -> list[ConnectorCredentialPair]:
+    """The pairs of one source that are set up and not paused.
+
+    Not just ACTIVE: a pair is SCHEDULED until its first run finishes, and a
+    source can be usable before then.
+
+    The credential comes with them: every caller reads it, and this runs on
+    the search path, where a lazy load would be a second query per search.
+    """
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(ConnectorCredentialPair.connector)
+        .options(joinedload(ConnectorCredentialPair.credential))
+        .where(
+            Connector.source == source,
+            ConnectorCredentialPair.status.in_(
+                ConnectorCredentialPairStatus.active_statuses()
+            ),
+        )
+        .order_by(ConnectorCredentialPair.id)
+    )
+    return list(db_session.scalars(stmt).unique().all())
+
+
 def _has_unresolved_entity_error() -> ColumnElement[bool]:
     """Correlates to the enclosing query's IndexAttempt row."""
     return (

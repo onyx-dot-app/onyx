@@ -43,6 +43,7 @@ Turn a query into ranked context that the user may see.
 | [access-control](components/access-control.md) | Who can retrieve which document. Indexing stores an access control list (ACL) on every chunk, and every query passes through one filter built from the acting user's ACL. |
 | [web-search](components/web-search.md) | Search of the public internet and fetch of web pages: the `web_search` and `open_url` tools, the admin page that picks the active providers, and the `/web-search` API for callers outside the chat loop. |
 | [federated-search](components/federated-search.md) | Search of a source at query time through its own API, with no indexing. `FederatedConnectorSource` lists the sources, and their results join the same ranked set, document cards and citations as indexed documents. |
+| [withheld-sources](components/withheld-sources.md) | Sources that Onyx indexes but keeps out of ordinary search, because the provider decides who may read each document and the answer can change after indexing. A lane of its own retrieves them and clears every chunk with the provider before any of it reaches a user. |
 
 ## Ingestion
 

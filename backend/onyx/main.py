@@ -56,6 +56,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.db.engine.async_sql_engine import (
     get_sqlalchemy_async_engine,
     reset_sqlalchemy_async_engine,
@@ -417,6 +418,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     # fill up Postgres connection pools
     await warm_up_connections()
+
+    # Register the event-based sources now rather than on the first search.
+    # `search_chunks` reads the registry to decide which sources to withhold
+    # from the default lane, and loading it there would import a connector
+    # inside a parallel search lane.
+    load_event_sources()
 
     if not MULTI_TENANT:
         CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
