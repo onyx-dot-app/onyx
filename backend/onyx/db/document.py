@@ -171,6 +171,38 @@ def count_secondary_only_sync_pending_documents_for_cc_pairs(
     ).scalar_one()
 
 
+def has_secondary_only_sync_pending_documents(
+    db_session: Session, cc_pair_id: int
+) -> bool:
+    """Whether any doc owned by the cc_pair has a deferred FUTURE sync. Stops at
+    the first match, so it stays cheap on a large backlog."""
+    return bool(
+        db_session.scalar(
+            select(
+                select(DbDocument.id)
+                .join(
+                    DocumentByConnectorCredentialPair,
+                    DbDocument.id == DocumentByConnectorCredentialPair.id,
+                )
+                .join(
+                    ConnectorCredentialPair,
+                    and_(
+                        DocumentByConnectorCredentialPair.connector_id
+                        == ConnectorCredentialPair.connector_id,
+                        DocumentByConnectorCredentialPair.credential_id
+                        == ConnectorCredentialPair.credential_id,
+                    ),
+                )
+                .where(
+                    DbDocument.secondary_only_sync_pending.is_(True),
+                    ConnectorCredentialPair.id == cc_pair_id,
+                )
+                .exists()
+            )
+        )
+    )
+
+
 def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
     """count_documents_by_needs_sync plus docs whose FUTURE sync was deferred.
 

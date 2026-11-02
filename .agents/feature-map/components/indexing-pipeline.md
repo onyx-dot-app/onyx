@@ -277,8 +277,11 @@ the error type on purpose in auth code.
     reindex.** While a port-flow reindex is finalizing
     (`db/port_attempt.py:reindex_finalizing`: every connector port succeeded),
     `background/celery/tasks/docfetching/task_creation_utils.py:docfetching_priority`
-    sends FUTURE attempts at HIGH. `background/indexing/run_docfetching.py`
-    applies the same rule to the docprocessing sends and checks it again during
+    queues FUTURE attempts of pairs with a document still pending for FUTURE at
+    HIGH, other FUTURE attempts at MEDIUM and PRESENT refreshes at LOW, so a
+    FUTURE crawl with nothing pending cannot hold the fetch slot ahead of the
+    pairs the swap waits on. `background/indexing/run_docfetching.py` sends
+    every FUTURE batch to docprocessing at HIGH and checks the rule again during
     a long FUTURE run. The index swap waits until no FUTURE attempt of a
     required pair runs ([[document-index]]). A change to attempt creation or
     priority that delays FUTURE attempts stalls the swap.
