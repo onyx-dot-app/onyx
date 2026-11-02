@@ -2236,8 +2236,8 @@
         "title": "채팅 이름 지정 모델"
       },
       "searchDecisionModel": {
-        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다. 결정 모델은 한 번의 호출로 순위를 매깁니다. 언어 모델은 이전처럼 선택합니다.",
-        "title": "검색 결정 모델",
+        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다. 판단 모델은 한 번의 호출로 순위를 매깁니다. 언어 모델은 이전처럼 선택합니다.",
+        "title": "검색 판단 모델",
         "decisionSection": "판단 모델"
       },
       "taskModels": {
@@ -2419,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "채팅 이름 생성 모델을 업데이트하지 못했습니다",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
-        "searchDecisionUpdateFailed": "검색 결정 모델을 업데이트하지 못했습니다",
+        "searchDecisionUpdateFailed": "검색 판단 모델을 업데이트하지 못했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "systemPromptUpdateFailed": "시스템 프롬프트를 업데이트하지 못했습니다",
         "toolsUpdateFailed": "도구를 업데이트하지 못했습니다",
