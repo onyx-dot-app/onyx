@@ -31,6 +31,7 @@ def _build_filters(
         access_control_list=None,
         cc_pair_access=None,
         source_types=[],
+        excluded_source_types=[],
         tags=[],
         document_sets=[],
         project_id_filter=None,
