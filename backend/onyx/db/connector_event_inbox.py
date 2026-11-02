@@ -1,7 +1,7 @@
 """Reads and writes for `connector_event_inbox`."""
 
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -24,6 +24,11 @@ from onyx.db.models import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# A handler that fetches over the network fails for reasons the next run may
+# not see, so a row gets this many tries before it settles as failed.
+MAX_EVENT_ATTEMPTS = 5
+_RETRY_BACKOFF_SECONDS = 60
 
 # Keeps one unbounded traceback from bloating the row.
 _MAX_ERROR_CHARS = 2000
@@ -241,15 +246,45 @@ def release_events_to_pending(
     )
 
 
+def retry_or_fail_events(
+    db_session: Session,
+    failures: Sequence[tuple[int, str]],
+    max_attempts: int = MAX_EVENT_ATTEMPTS,
+) -> None:
+    """Return each row to the queue with backoff, or fail it once it has had
+    enough tries.
+
+    A handler can fail because a provider timed out, and the next run may
+    not. Failing on the first exception would lose the document for good:
+    `claim_events` only reads PENDING rows, and there is no reindex path
+    that can reach a settled one. Does not commit.
+    """
+    if not failures:
+        return
+
+    now = datetime.now(timezone.utc)
+    errors = dict(failures)
+    rows = db_session.scalars(
+        select(ConnectorEventInbox).where(ConnectorEventInbox.id.in_(errors))
+    ).all()
+    for row in rows:
+        row.last_error = errors[row.id][:_MAX_ERROR_CHARS]
+        if row.attempt_count < max_attempts:
+            row.status = ConnectorEventStatus.PENDING
+            row.index_attempt_id = None
+            row.available_at = now + timedelta(
+                seconds=_RETRY_BACKOFF_SECONDS * row.attempt_count
+            )
+        else:
+            row.status = ConnectorEventStatus.FAILED
+            row.processed_at = now
+
+
 def mark_events_failed(
     db_session: Session, failures: Sequence[tuple[int, str]]
 ) -> None:
-    """Settle rows whose handler rejected them, recording why.
-
-    A payload the handler cannot read fails the same way on every retry, so
-    the row stops here rather than returning to the queue. `attempt_count`
-    already records that it was tried. Does not commit.
-    """
+    """Settle rows for good, recording why. For a payload no retry can fix.
+    Does not commit."""
     if not failures:
         return
     now = datetime.now(timezone.utc)

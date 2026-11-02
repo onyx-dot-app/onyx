@@ -29,7 +29,7 @@ from onyx.connectors.models import (
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_event_inbox import (
     claim_events,
-    mark_events_failed,
+    retry_or_fail_events,
     settle_events_from_finished_attempts,
     superseded_by_newer_events,
 )
@@ -94,7 +94,7 @@ def _settle_failure(event_id: int, message: str) -> None:
     rejection, so nothing later can change its outcome.
     """
     with get_session_with_current_tenant() as db_session:
-        mark_events_failed(db_session, [(event_id, message)])
+        retry_or_fail_events(db_session, [(event_id, message)])
         db_session.commit()
 
 

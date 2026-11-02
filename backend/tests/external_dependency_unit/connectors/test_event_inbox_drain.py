@@ -27,7 +27,11 @@ from onyx.connectors.event_inbox.handlers import (
 )
 from onyx.connectors.event_models import ParsedEvent
 from onyx.connectors.models import ConnectorFailure, Document, InputType, TextSection
-from onyx.db.connector_event_inbox import count_events_by_status, record_events
+from onyx.db.connector_event_inbox import (
+    MAX_EVENT_ATTEMPTS,
+    count_events_by_status,
+    record_events,
+)
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
@@ -265,7 +269,9 @@ def test_a_rejected_event_fails_its_row_and_spares_the_batch(
 
     assert count_events_by_status(db_session, pair_id) == {
         ConnectorEventStatus.IN_PROGRESS: 1,
-        ConnectorEventStatus.FAILED: 1,
+        # Back in the queue with backoff, not settled: the handler may have
+        # failed for a reason the next run does not see.
+        ConnectorEventStatus.PENDING: 1,
     }
     rejected = (
         db_session.query(ConnectorEventInbox)
@@ -299,10 +305,10 @@ def test_a_source_with_no_handler_fails_its_rows(
     assert documents == []
     assert len(failures) == 1
     assert "No event handler registered" in failures[0].failure_message
-    # Settled, not stranded: an unregistered source must not fill the queue
-    # with rows nothing will ever claim again.
+    # Returned to the queue: the source may be registered on the next run,
+    # and MAX_EVENT_ATTEMPTS stops it retrying for ever.
     assert count_events_by_status(db_session, pair_id) == {
-        ConnectorEventStatus.FAILED: 1
+        ConnectorEventStatus.PENDING: 1
     }
 
 
@@ -501,7 +507,11 @@ def test_a_rejected_row_settles_even_if_the_run_is_abandoned(
     # Abandon it here, the way docfetching does once the failure ratio trips.
     generator.close()
 
-    assert count_events_by_status(db_session, pair_id)[ConnectorEventStatus.FAILED] == 1
+    # Not left claimed by an attempt that stopped reading: a row nothing
+    # releases would block its document for ever.
+    assert (
+        count_events_by_status(db_session, pair_id)[ConnectorEventStatus.PENDING] == 1
+    )
 
 
 def test_the_claim_session_is_closed_before_a_handler_runs(
@@ -630,3 +640,33 @@ def test_a_discarded_sibling_does_not_suppress_the_change_that_won(
 
     assert failures == []
     assert [document.id for document in documents] == ["doc-1"]
+
+
+def test_a_row_that_keeps_failing_eventually_settles(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """Retrying is for a provider that may recover. A row that never does
+    must stop, or it blocks its document and the queue for ever."""
+    pair_id, attempt_id = pair_and_attempt
+    unregister_event_handler(SOURCE)
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-1")],
+    )
+    db_session.commit()
+
+    for _ in range(MAX_EVENT_ATTEMPTS + 1):
+        db_session.query(ConnectorEventInbox).filter_by(
+            connector_credential_pair_id=pair_id
+        ).update({"available_at": datetime(2020, 1, 1, tzinfo=timezone.utc)})
+        db_session.commit()
+        _drain(
+            _connector(pair_id, attempt_id, batch_size=10),
+            EventInboxCheckpoint(has_more=True),
+        )
+
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.FAILED: 1
+    }
