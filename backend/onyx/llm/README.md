@@ -91,7 +91,9 @@ from contextlib import closing
 from onyx.llm.cancellation import CancellationSignal
 
 signal = CancellationSignal()
-with closing(client.stream(request, GenerationContext(flow=flow, cancellation=signal))) as events:
+with closing(
+    client.stream(request, GenerationContext(flow=flow, cancellation=signal))
+) as events:
     for event in events:
         if event.type == "text_delta":
             print(event.text, end="")

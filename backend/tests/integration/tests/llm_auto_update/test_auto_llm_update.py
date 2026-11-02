@@ -76,6 +76,23 @@ def _get_catalog_model_names(admin_user: DATestUser, provider_name: str) -> list
     return [m["name"] for m in response.json()["known_models"]]
 
 
+def _wait_for_catalog_baseline(provider_id: int, timeout_seconds: float = 90) -> None:
+    """The first sync records the provider's catalog baseline."""
+    from onyx.key_value_store.factory import get_kv_store
+    from onyx.key_value_store.interface import KvKeyNotFoundError
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            get_kv_store().load(
+                f"llm_auto_update_seen_models_{provider_id}", refresh_cache=True
+            )
+            return
+        except KvKeyNotFoundError:
+            time.sleep(2)
+    raise AssertionError("The auto-update sync did not run for the provider")
+
+
 def test_auto_update_keeps_the_admin_selection(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
@@ -100,8 +117,7 @@ def test_auto_update_keeps_the_admin_selection(
     )
     assert provider["is_auto_mode"] is True
 
-    # Longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS, so the sync task runs.
-    time.sleep(15)
+    _wait_for_catalog_baseline(provider["id"])
 
     synced_provider = _get_provider_by_id(admin_user, provider["id"])
     visibility = {

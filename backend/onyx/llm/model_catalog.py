@@ -464,7 +464,11 @@ def iter_latest_models(provider: str, mode: str | None = None) -> list[str] | No
     if section is None:
         return None
     vendored = _catalog().get(provider, {}).get("models", {})
-    models: dict[str, Any] = dict(section["models"])
+    models: dict[str, Any] = {
+        model_id: entry
+        for model_id, entry in section["models"].items()
+        if isinstance(model_id, str) and isinstance(entry, dict)
+    }
     for model_id in _supplement_only_model_ids().get(provider, frozenset()):
         if model_id in vendored:
             models.setdefault(model_id, vendored[model_id])

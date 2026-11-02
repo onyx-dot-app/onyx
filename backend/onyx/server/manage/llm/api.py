@@ -1177,28 +1177,36 @@ def put_llm_provider(
 
     if llm_provider_upsert_request.provider not in AUTO_UPDATE_PROVIDERS:
         llm_provider_upsert_request.is_auto_mode = False
-    enabling_auto_update = llm_provider_upsert_request.is_auto_mode and not (
-        existing_provider and existing_provider.is_auto_mode
+    provider_type_changed = bool(
+        existing_provider
+        and existing_provider.provider != llm_provider_upsert_request.provider
+    )
+    enabling_auto_update = llm_provider_upsert_request.is_auto_mode and (
+        not (existing_provider and existing_provider.is_auto_mode)
+        or provider_type_changed
     )
     # API clients may leave the model list to auto-update.
     if (
         llm_provider_upsert_request.is_auto_mode
         and not llm_provider_upsert_request.model_configurations
     ):
-        if existing_provider:
+        if existing_provider and not provider_type_changed:
             llm_provider_upsert_request.keep_existing_models = True
         else:
             llm_provider_upsert_request.model_configurations = (
                 _initial_auto_update_models(llm_provider_upsert_request.provider)
             )
 
+    # Reset before the upsert, so no sync can use the old baseline once the
+    # flag is on.
+    if enabling_auto_update and existing_provider:
+        reset_seen_catalog(existing_provider.id)
+
     try:
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
         )
-        if enabling_auto_update:
-            reset_seen_catalog(result.id)
 
         _mask_provider_credentials(result)
         emit_audit_event(

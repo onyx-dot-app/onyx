@@ -855,14 +855,12 @@ export function ModelSelectionField({
               // Sort alphabetically by id for providers that ship rich model
               // metadata (Nebius TokenFactory) so the order is stable across
               // refetches; otherwise keep the given order.
-              const displayModels = (
-                models.some((m) => hasModelMetadata(m))
-                  ? [...models].sort((a, b) => a.name.localeCompare(b.name))
-                  : [...models]
-              ).sort(
+              const sortByName = models.some((m) => hasModelMetadata(m));
+              const displayModels = [...models].sort(
                 (a, b) =>
                   Number(openedSelection?.has(b.name) ?? b.is_visible) -
-                  Number(openedSelection?.has(a.name) ?? a.is_visible)
+                    Number(openedSelection?.has(a.name) ?? a.is_visible) ||
+                  (sortByName ? a.name.localeCompare(b.name) : 0)
               );
               const isFoldable = displayModels.length > FOLD_THRESHOLD;
               const shownModels =

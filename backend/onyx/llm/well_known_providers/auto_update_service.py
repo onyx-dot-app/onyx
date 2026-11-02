@@ -38,7 +38,7 @@ def reset_seen_catalog(provider_id: int) -> None:
 
 def _load_seen_catalog(provider: LLMProvider) -> set[str] | None:
     try:
-        seen = get_kv_store().load(_seen_catalog_key(provider.id))
+        seen = get_kv_store().load(_seen_catalog_key(provider.id), refresh_cache=True)
     except KvKeyNotFoundError:
         return None
     if not isinstance(seen, list):
@@ -95,7 +95,7 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
     results: dict[str, int] = {}
     for provider in providers:
         catalog = fetch_latest_models_for_provider(provider.provider)
-        if not catalog:
+        if catalog is None:
             continue
         seen = _load_seen_catalog(provider)
         # The first sync records the catalog the admin set up against.
