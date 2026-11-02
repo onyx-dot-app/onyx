@@ -223,3 +223,34 @@ def test_an_endpoint_that_is_not_a_path_is_refused(endpoints: tuple[str, ...]) -
             parser=_parser,
             verifier=_verifier,
         )
+
+
+def test_a_source_that_signs_nothing_cannot_answer_a_handshake() -> None:
+    """A responder applies the shared secret to input the caller chose. With
+    no signature checked first the endpoint is a signing oracle: ask it for
+    the secret over the exact message a verifier would check, then replay the
+    answer as a signature."""
+
+    def _responder(
+        request: WebhookRequest,  # noqa: ARG001
+        secrets: Mapping[str, str],  # noqa: ARG001
+    ) -> dict[str, object] | None:
+        return {"challenge": "echoed"}
+
+    with pytest.raises(ValidationError, match="signing oracle"):
+        WebhookSourceSpec(
+            source=SOURCE,
+            slug="unsigned-handshake",
+            parser=_parser,
+            verifier=None,
+            allow_unsigned=True,
+            challenge_responder=_responder,
+        )
+
+
+@pytest.mark.parametrize("slug", ["", "foo/bar", "foo?x=1", "foo#frag", "a%2Fb", " x"])
+def test_a_slug_that_is_not_one_path_segment_is_refused(slug: str) -> None:
+    """The slug is interpolated into the URL an admin pastes into the
+    provider, so a delimiter would advertise one path and serve another."""
+    with pytest.raises(ValidationError):
+        WebhookSourceSpec(source=SOURCE, slug=slug, parser=_parser, verifier=_verifier)

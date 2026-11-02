@@ -130,4 +130,30 @@ class WebhookSourceSpec(BaseModel):
                 f"Webhook source {self.slug} sets allow_unsigned with a "
                 "verifier. Drop one so the intent is unambiguous."
             )
+        if self.allow_unsigned and self.challenge_responder is not None:
+            raise ValueError(
+                f"Webhook source {self.slug} answers a handshake but signs "
+                "nothing. A responder applies the shared secret to input the "
+                "caller chose, so with no signature to check first the "
+                "endpoint is a signing oracle: ask it for the secret over the "
+                "exact message a verifier would check, then replay the answer."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _slug_is_one_path_segment(self) -> "WebhookSourceSpec":
+        """The slug is interpolated into a live URL, so it has to be one.
+
+        `endpoints` carries the sub-paths; a slug holding a delimiter would
+        serve a route somewhere other than where `webhook_callback_url` tells
+        an admin to point the provider.
+        """
+        if not self.slug:
+            raise ValueError("A webhook source needs a slug; it is in its URL.")
+        bad = {character for character in "/?#%" if character in self.slug}
+        if bad or self.slug.strip() != self.slug:
+            raise ValueError(
+                f"Webhook slug {self.slug!r} is not a single URL path "
+                "segment. Put sub-paths in `endpoints` instead."
+            )
         return self
