@@ -324,7 +324,8 @@ export interface BuildModelSelectOptionsOptions {
    * Group models under a foldable divider per provider (aggregators split
    * per vendor, as the chat picker does). Off, or with a single group,
    * the rows come flat: a lone header says nothing, and an admin can hide
-   * grouping workspace-wide. Defaults to true.
+   * grouping workspace-wide. `labelSingleGroup` keeps a single group's
+   * header. Defaults to true.
    */
   grouped?: boolean;
   /**

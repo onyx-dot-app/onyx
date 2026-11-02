@@ -338,10 +338,21 @@ describe("SimpleModelSelector", () => {
         />
       );
       await user.click(screen.getByRole("combobox"));
+      // The lone provider keeps its header under the decision section.
+      expect(screen.getByText("OpenAI")).toBeInTheDocument();
       await user.type(screen.getByRole("textbox", { name: "Search" }), "luna");
       jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
       // Only the decision copy is loaded; the language copy may be on a later page.
       expect(modelPaging.search).toHaveBeenCalledWith("luna");
+
+      // A header match is not a row match, so the server is still asked.
+      const search = screen.getByRole("textbox", { name: "Search" });
+      await user.clear(search);
+      await user.type(search, "openai");
+      jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
+      expect(modelPaging.search).toHaveBeenCalledWith("openai");
+      await user.clear(search);
+      await user.type(search, "luna");
 
       await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
       expect(handleDecision).toHaveBeenCalledWith(13);

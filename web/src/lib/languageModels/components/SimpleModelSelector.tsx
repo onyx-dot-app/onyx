@@ -33,13 +33,16 @@ const DECISION_SELECT_PREFIX = "decision:";
 /** A keystroke storm settles before a search leaves for the server. */
 export const SERVER_SEARCH_DEBOUNCE_MS = 300;
 
-/** True when the list's own filter would show at least one loaded row. */
+/**
+ * True when a loaded row matches the query. A provider title match does not
+ * count: it shows only that provider's loaded rows, so the server is still
+ * asked for the rest.
+ */
 function hasLoadedMatch(options: SelectOptions, query: string): boolean {
   const term = query.toLowerCase();
   return options.some((item) =>
     "options" in item
-      ? (item.title?.toLowerCase().includes(term) ?? false) ||
-        item.options.some((opt) => optionMatchesSearch(opt, term))
+      ? item.options.some((opt) => optionMatchesSearch(opt, term))
       : optionMatchesSearch(item, term)
   );
 }
@@ -142,11 +145,24 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   const providerNames = useProviderNames();
   const decisionTitle = decisionSection?.title;
   const decisionProviders = decisionSection?.providers;
+  const decisionRows = useMemo(
+    (): SelectOption[] =>
+      decisionProviders
+        ? buildModelSelectOptions(decisionProviders, {
+            grouped: false,
+            providerNames,
+            includeDecisionOnly: true,
+          }).flatMap((option): SelectOption[] =>
+            "options" in option
+              ? []
+              : [{ ...option, value: DECISION_SELECT_PREFIX + option.value }]
+          )
+        : [],
+    [decisionProviders, providerNames]
+  );
   // Under a decision section, a lone provider keeps its header so its rows
   // are not read as part of that section.
-  const hasDecisionRows = (decisionProviders ?? []).some(
-    (provider) => provider.model_configurations.length > 0
-  );
+  const hasDecisionRows = decisionRows.length > 0;
   const models = useMemo(
     () =>
       buildModelSelectOptions(providers, {
@@ -158,17 +174,6 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     [providers, grouped, providerNames, includeDecisionOnly, hasDecisionRows]
   );
   const options = useMemo((): SelectOptions => {
-    const decisionRows = decisionProviders
-      ? buildModelSelectOptions(decisionProviders, {
-          grouped: false,
-          providerNames,
-          includeDecisionOnly: true,
-        }).flatMap((option): SelectOption[] =>
-          "options" in option
-            ? []
-            : [{ ...option, value: DECISION_SELECT_PREFIX + option.value }]
-        )
-      : [];
     if (!globalDefault && decisionRows.length === 0) return models;
     // Loose model rows go under an untitled divider, so a line always
     // separates them from the rows above.
@@ -193,14 +198,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         ? [{ options: looseModels }]
         : models),
     ];
-  }, [
-    models,
-    globalDefault,
-    t,
-    providerNames,
-    decisionTitle,
-    decisionProviders,
-  ]);
+  }, [models, globalDefault, t, decisionTitle, decisionRows]);
 
   // Server search only when nothing loaded matches. The query is remembered
   // so a merged page, which changes `modelPaging`, does not re-run it.
