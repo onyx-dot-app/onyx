@@ -169,7 +169,7 @@ class UserSettings(Settings):
     hooks_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
-    # Git details of the server's build (onyx/utils/build_info.py).
+    # Git details of the server's build (server/settings/build_info.py).
     commit: str | None = None
     # ISO 8601 committer date.
     commit_date: str | None = None

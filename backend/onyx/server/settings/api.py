@@ -40,6 +40,7 @@ from onyx.server.features.build.utils import (
 )
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
+from onyx.server.settings.build_info import BUILD_INFO
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -59,7 +60,6 @@ from onyx.utils.audit import (
     actor_from_user,
     emit_audit_event,
 )
-from onyx.utils.build_info import BUILD_INFO
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.variable_functionality import (

@@ -21,7 +21,7 @@ import {
   type DropdownView,
 } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
+import NotificationsPopover from "@/lib/app/components/NotificationsPopover";
 import {
   SvgBell,
   SvgChevronLeft,
@@ -33,21 +33,15 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import {
-  Content,
-  KeyValue,
-  Section,
-  toast,
-  useSidebarFolded,
-} from "@opal/layouts";
+import { Content, Section, toast, useSidebarFolded } from "@opal/layouts";
 import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SidebarLoader } from "@opal/loaders";
-import { escapeMarkdown, markdown } from "@opal/utils";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
+import { AboutDetails } from "@/lib/app/components/AboutDetails";
 
 interface SettingsItemsProps {
   undismissedCount: number;
@@ -214,13 +208,12 @@ function useSettingsItems({
   ];
 }
 
-/** The about page: the app's version, the git details of the server's build, and this instance's URL. */
+/** The about page: a back row, then the build's details. */
 function useAboutView(): DropdownView {
   const t = useTranslations("accountPopover");
-  const format = useFormatter();
-  const { version, commit, commit_date, git_ref } = useSettings();
-  const unavailable = t("about.unavailable");
   return {
+    // Wider than the menu, so long values (a URL, a ref) fit on one line.
+    width: 80,
     items: [
       {
         kind: "action",
@@ -235,45 +228,7 @@ function useAboutView(): DropdownView {
         disabled: true,
         render: ({ props }) => (
           <div {...props}>
-            <Section gap={0.5} padding={0.5} alignItems="stretch">
-              <KeyValue
-                label={t("about.version.label")}
-                value={markdown(
-                  `[${escapeMarkdown(version ?? "dev")}](https://docs.onyx.app/changelog)`
-                )}
-              />
-              <KeyValue
-                label={t("about.ref.label")}
-                value={git_ref ?? unavailable}
-                mono={!!git_ref}
-              />
-              <KeyValue
-                label={t("about.commit.label")}
-                value={
-                  commit
-                    ? markdown(
-                        `[${commit.slice(0, 7)}](https://github.com/onyx-dot-app/onyx/commit/${commit})`
-                      )
-                    : unavailable
-                }
-                mono={!!commit}
-              />
-              <KeyValue
-                label={t("about.commitDate.label")}
-                value={
-                  commit_date
-                    ? format.dateTime(new Date(commit_date), {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })
-                    : unavailable
-                }
-              />
-              <KeyValue
-                label={t("about.instanceUrl.label")}
-                value={window.location.origin}
-              />
-            </Section>
+            <AboutDetails />
           </div>
         ),
       },
