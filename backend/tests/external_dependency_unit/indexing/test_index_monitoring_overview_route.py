@@ -248,3 +248,74 @@ def test_a_reader_counts_only_readable_paused_pairs(db_session: Session) -> None
         )
 
     assert response.paused_connectors == before.paused_connectors + 1
+def test_ac4_fleet_bins_give_the_same_slice_shape_across_readable_pairs(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+    # 17 seconds past a minute is off every hourly boundary.
+    now = datetime.now(timezone.utc).replace(second=17, microsecond=0)
+    width = timedelta(hours=1)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    window_end = epoch + width * -(-(now - epoch) // width)
+    window_start = window_end - timedelta(hours=24)
+    first = _create_cc_pair(db_session)
+    second = _create_cc_pair(db_session)
+    failed = _index_attempt(
+        db_session,
+        first,
+        IndexingStatus.FAILED,
+        window_start + width * 6 + timedelta(minutes=10),
+        window_start + width * 6 + timedelta(minutes=40),
+        0,
+    )
+    succeeded = _index_attempt(
+        db_session,
+        second,
+        IndexingStatus.SUCCESS,
+        window_start + width * 15 + timedelta(minutes=10),
+        window_start + width * 15 + timedelta(minutes=40),
+        12,
+    )
+
+    with _clock_at(now):
+        response = get_indexing_overview(
+            window=CCPairThroughputWindow.HOURS_24,
+            bins=24,
+            user=admin,
+            db_session=db_session,
+        )
+
+    throughput = response.throughput
+    assert throughput.window_end == window_end
+    assert len(throughput.docs_indexed) == 24
+    assert [(s.start, s.end) for s in throughput.slices] == [
+        (window_start + width * i, window_start + width * (i + 1)) for i in range(24)
+    ]
+    holding = {
+        attempt.id: [
+            (index, run.status, run.resolved)
+            for index, s in enumerate(throughput.slices)
+            for run in s.runs
+            if run.attempt_id == attempt.id
+        ]
+        for attempt in (failed, succeeded)
+    }
+    assert holding == {
+        failed.id: [(6, IndexingStatus.FAILED, False)],
+        succeeded.id: [(15, IndexingStatus.SUCCESS, False)],
+    }
+    assert [s.docs_indexed for s in throughput.slices] == throughput.docs_indexed
+
+
+def test_ac6_fleet_without_bins_keeps_the_window_default_count(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+
+    response = get_indexing_overview(
+        window=CCPairThroughputWindow.HOURS_24, user=admin, db_session=db_session
+    )
+
+    assert len(response.throughput.docs_indexed) == 72
+    assert len(response.throughput.slices) == 72
+    assert sum(response.throughput.docs_indexed) == response.recent_docs_indexed
