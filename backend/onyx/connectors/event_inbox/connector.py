@@ -7,9 +7,13 @@ rather than a pipeline of its own.
 """
 
 from collections import defaultdict
+from collections.abc import Mapping
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.connectors.event_inbox.credentials import pair_secrets
 from onyx.connectors.event_inbox.handlers import get_event_handler
 from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.interfaces import (
@@ -22,6 +26,7 @@ from onyx.connectors.models import (
     ConnectorFailure,
     DocumentFailure,
 )
+from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_event_inbox import (
     claim_events,
     mark_events_failed,
@@ -62,6 +67,20 @@ def _latest(group: list[ConnectorEventInbox]) -> ConnectorEventInbox:
     if all(event.occurred_at is not None for event in group):
         return max(group, key=lambda event: (event.occurred_at, event.id))
     return max(group, key=lambda event: event.id)
+
+
+def _secrets_for(db_session: Session, cc_pair_id: int) -> Mapping[str, str]:
+    """The pair's credential, read once per batch.
+
+    The same values the verifier saw when the delivery arrived: a provider
+    that pushes a link rather than a body needs them again to fetch it.
+    """
+    pair = get_connector_credential_pair_from_id(
+        db_session, cc_pair_id, eager_load_credential=True
+    )
+    if pair is None:
+        raise RuntimeError(f"Event pair {cc_pair_id} no longer exists")
+    return pair_secrets(pair)
 
 
 class EventInboxCheckpoint(ConnectorCheckpoint):
@@ -145,6 +164,8 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             # even if this generator is abandoned part way through.
             db_session.commit()
 
+            secrets = _secrets_for(db_session, self._cc_pair_id) if events else {}
+
             superseded = _superseded(events)
 
             for event in events:
@@ -165,7 +186,7 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
                     continue
 
                 try:
-                    document = handler(event)
+                    document = handler(event, secrets)
                 except Exception as e:
                     logger.exception(
                         "Event %s for document %s could not be handled",

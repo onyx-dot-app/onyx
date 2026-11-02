@@ -89,7 +89,10 @@ def pair_and_attempt(db_session: Session) -> Generator[tuple[int, int], None, No
         db_session.commit()
 
 
-def _handler(event: ConnectorEventInbox) -> Document | None:
+def _handler(
+    event: ConnectorEventInbox,
+    secrets: Mapping[str, str],  # noqa: ARG001
+) -> Document | None:
     if event.event_type == ConnectorEventType.DELETE:
         # Nothing to index; the row still settles because it was handled.
         return None
