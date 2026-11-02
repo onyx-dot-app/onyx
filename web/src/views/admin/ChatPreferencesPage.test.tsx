@@ -125,7 +125,7 @@ describe("ChatPreferencesPage", () => {
       "Multi-Model Generation",
       "Search Mode",
       "Auto-Detect Search Filters",
-      "Search Decision Model",
+      "Search Selection Model",
       "Team Name",
     ].map((text) => screen.getByText(text));
     ordered.slice(1).forEach((node, i) => {

@@ -2235,9 +2235,10 @@
         "description": "Gera os títulos das sessões. Um modelo rápido e de baixo custo funciona bem.",
         "title": "Modelo de nomeação de chats"
       },
-      "searchDecisionModel": {
-        "description": "Seleciona os documentos recuperados e decide quanto contexto adicionar. Um modelo de decisão os classifica em uma única chamada. Um modelo de linguagem os seleciona como antes.",
-        "title": "Modelo de decisão de pesquisa"
+      "searchSelectionModel": {
+        "description": "Seleciona e verifica os documentos recuperados. Um modelo rápido e de baixo custo pode reduzir os custos de pesquisa, mas pode afetar a qualidade das respostas.",
+        "title": "Modelo de seleção de pesquisa",
+        "decisionSection": "Modelos de decisão"
       },
       "taskModels": {
         "loadFailed": "Não foi possível carregar os modelos de tarefas",
@@ -2418,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Falha ao atualizar o modelo para nomear chats",
         "providerResolveFailed": "Não foi possível resolver o provedor",
-        "searchDecisionUpdateFailed": "Falha ao atualizar o modelo de decisão de pesquisa",
+        "searchSelectionUpdateFailed": "Falha ao atualizar o modelo de seleção da busca",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "systemPromptUpdateFailed": "Falha ao atualizar o prompt de sistema",
         "toolsUpdateFailed": "Falha ao atualizar as ferramentas",

@@ -26,6 +26,10 @@ import type {
 /** The select value of the Global Default row; `fromSelectValue` reads it as null. */
 const GLOBAL_DEFAULT_SELECT_VALUE = "global-default";
 
+/** Prefixes a decision-section row's select value, so a model listed among
+ *  both decision and language models has two distinct rows. */
+const DECISION_SELECT_PREFIX = "decision:";
+
 /** A keystroke storm settles before a search leaves for the server. */
 export const SERVER_SEARCH_DEBOUNCE_MS = 300;
 
@@ -45,6 +49,16 @@ export interface GlobalDefaultRow {
   label?: string;
   /** The model null resolves to, shown under the row's title. */
   description?: string | null;
+}
+
+export interface DecisionSection {
+  /** The section's divider title. */
+  title: string;
+  providers: ModelOptionProvider[];
+  /** True when `value` is one of this section's models. */
+  selected: boolean;
+  /** Called instead of `onChange` when a row of this section is picked. */
+  onChange: (modelConfigurationId: number) => void;
 }
 
 /** What `onChange` emits: only a nullable selector can emit null. */
@@ -93,6 +107,12 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
   container?: InputSingleSelectProps["container"];
   /** The select input's id, so a `<label htmlFor>` (`withLabel="<id>"`) opens it. */
   id?: string;
+  /**
+   * Decision models in their own section above `providers`, for a setting
+   * that takes either kind. A model can be in both lists; each copy is its
+   * own row with its own callback.
+   */
+  decisionSection?: DecisionSection;
 }
 
 /**
@@ -116,28 +136,49 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   modelPaging,
   container,
   id,
+  decisionSection,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
   const providerNames = useProviderNames();
+  const decisionTitle = decisionSection?.title;
+  const decisionProviders = decisionSection?.providers;
   const options = useMemo((): SelectOptions => {
     const models = buildModelSelectOptions(providers, {
       grouped,
       providerNames,
       includeDecisionOnly,
     });
-    if (!globalDefault) return models;
+    const decisionRows = decisionProviders
+      ? buildModelSelectOptions(decisionProviders, {
+          grouped: false,
+          providerNames,
+          includeDecisionOnly: true,
+        }).flatMap((option): SelectOption[] =>
+          "options" in option
+            ? []
+            : [{ ...option, value: DECISION_SELECT_PREFIX + option.value }]
+        )
+      : [];
+    if (!globalDefault && decisionRows.length === 0) return models;
     // Loose model rows go under an untitled divider, so a line always
-    // separates them from the Global Default row.
+    // separates them from the rows above.
     const looseModels = models.filter(
       (option): option is SelectOption => !("options" in option)
     );
     return [
-      {
-        value: GLOBAL_DEFAULT_SELECT_VALUE,
-        title: globalDefault.label ?? t("globalDefault.label"),
-        description: globalDefault.description ?? undefined,
-        icon: getModelIcon("", ""),
-      },
+      ...(globalDefault
+        ? [
+            {
+              value: GLOBAL_DEFAULT_SELECT_VALUE,
+              title: globalDefault.label ?? t("globalDefault.label"),
+              description: globalDefault.description ?? undefined,
+              icon: getModelIcon("", ""),
+            },
+          ]
+        : []),
+      ...(decisionTitle && decisionRows.length > 0
+        ? [{ title: decisionTitle, options: decisionRows }]
+        : []),
       ...(looseModels.length === models.length
         ? [{ options: looseModels }]
         : models),
@@ -149,6 +190,8 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     t,
     providerNames,
     includeDecisionOnly,
+    decisionTitle,
+    decisionProviders,
   ]);
 
   // Server search only when nothing loaded matches. The query is remembered
@@ -223,23 +266,35 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     [modelPaging, trimmedQuery, providerIdByValue]
   );
 
+  const selectValue =
+    decisionSection?.selected && value !== null
+      ? DECISION_SELECT_PREFIX + value
+      : toSelectValue(value);
+
   // The Global Default row is what null shows as; otherwise a non-nullable
   // field's own value is its floor. Either way a re-pick is a no-op.
   const defaultOption = globalDefault
     ? GLOBAL_DEFAULT_SELECT_VALUE
     : nullable || value === null
       ? undefined
-      : String(value);
+      : selectValue;
 
   return (
     <InputSingleSelect
       // Provider lists run long: the list always carries a search field.
       search
-      value={toSelectValue(value)}
+      value={selectValue}
       defaultOption={defaultOption}
       disabled={disabled}
       isError={isError}
       onValueChange={(next) => {
+        if (decisionSection && next.startsWith(DECISION_SELECT_PREFIX)) {
+          const decisionId = fromSelectValue(
+            next.slice(DECISION_SELECT_PREFIX.length)
+          );
+          if (decisionId !== null) decisionSection.onChange(decisionId);
+          return;
+        }
         const id = fromSelectValue(next);
         // The Global Default row stands for null, so picking it while
         // nothing is chosen changes nothing; the family cannot tell, since

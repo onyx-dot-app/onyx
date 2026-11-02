@@ -2235,9 +2235,10 @@
         "description": "يُنشئ عناوين الجلسات. يعمل النموذج السريع منخفض التكلفة بشكل جيد.",
         "title": "نموذج تسمية المحادثات"
       },
-      "searchDecisionModel": {
-        "description": "يختار المستندات المسترجعة ويحدد مقدار السياق المضاف. يرتبها نموذج القرار في استدعاء واحد. ويختارها نموذج اللغة كما كان من قبل.",
-        "title": "نموذج قرار البحث"
+      "searchSelectionModel": {
+        "description": "يختار المستندات المسترجعة ويتحقق منها. يمكن لنموذج سريع ومنخفض التكلفة تقليل تكاليف البحث، لكنه قد يؤثر في جودة الإجابات.",
+        "title": "نموذج اختيار البحث",
+        "decisionSection": "نماذج القرار"
       },
       "taskModels": {
         "loadFailed": "تعذر تحميل نماذج المهام",
@@ -2418,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "تعذر تحديث نموذج تسمية المحادثة",
         "providerResolveFailed": "تعذّر تحديد الموفر",
-        "searchDecisionUpdateFailed": "تعذر تحديث نموذج قرار البحث",
+        "searchSelectionUpdateFailed": "تعذر تحديث نموذج اختيار مستندات البحث",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "systemPromptUpdateFailed": "فشل تحديث مطالبة النظام",
         "toolsUpdateFailed": "فشل تحديث الأدوات",
