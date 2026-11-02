@@ -158,7 +158,7 @@ kubectl --context kind-onyx-dev -n onyx-sandboxes get pods
 ```
 
 - Image pull failure: check the PodTemplate image, then run `make craft-sandbox-image`.
-- DNS failure: check the Telepresence context and namespace with `telepresence status --format json`.
+- DNS failure: check the Telepresence context and namespace with `telepresence status --output json`.
 - Startup failure: read the local service logs and the rollout that the readiness output names.
 
 ## Pause, tear down, and clean up
