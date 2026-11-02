@@ -281,21 +281,6 @@ def list_skills_for_current_user(
     return skills_list_response_for_user(rows, user, db_session)
 
 
-@user_router.get("/admin/list")
-def list_skills_for_admin(
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> SkillsList:
-    rows = list_skills(
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-    )
-    return skills_list_response_for_user(
-        rows, user, db_session, include_share_details=True
-    )
-
-
 @user_router.post("/bulk")
 def bulk_update_skills(
     request: Annotated[

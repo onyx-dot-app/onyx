@@ -352,7 +352,6 @@
   "GET /search/search-history": "read:search",
   "GET /settings": "basic +anonymous",
   "GET /skills": "basic",
-  "GET /skills/admin/list": "admin",
   "GET /skills/custom/{skill_id}/edit": "basic",
   "GET /skills/custom/{skill_id}/share": "basic",
   "GET /skills/{skill_id}": "basic",
