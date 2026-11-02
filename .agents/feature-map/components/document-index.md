@@ -147,9 +147,10 @@ source of an INSTANT backfill, is what the index holds; a record for an older
 index means the document never reached PRESENT; otherwise `content_hash`. A
 port-flow swap changes no document rows. The port reads the hashes before each
 batch, refreshes the source index so its scan sees the writes behind them, and
-records each hash only if it is unchanged after the copy; a document the scan
-found no chunks for, or whose hash changed during the copy, is recorded as
-absent (`background/celery/tasks/port/tasks.py:_ported_doc_hashes`).
+records each hash only if it is unchanged after the copy, re-read under the
+document row lock so a batch still writing the document is waited for; a
+document the scan found no chunks for, or whose hash changed during the copy,
+is recorded as absent (`background/celery/tasks/port/tasks.py:_ported_doc_hashes`).
 
 ## Contracts and traps
 

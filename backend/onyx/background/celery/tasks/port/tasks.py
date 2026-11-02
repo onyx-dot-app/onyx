@@ -213,9 +213,16 @@ def _ported_doc_hashes(
 
     Left out: a doc deleted mid-batch and a doc the create-only write found already
     in the target (secondary indexing or an earlier copy owns it).
+
+    The re-read locks the rows, so it waits for an indexing batch that is writing
+    one of these docs: that batch commits its hash last, and an unlocked read would
+    still return the old hash after the scan copied the new chunks.
     """
     current = get_port_source_content_hashes(
-        db_session, list(surviving_doc_ids), source_search_settings_id
+        db_session,
+        list(surviving_doc_ids),
+        source_search_settings_id,
+        for_update=True,
     )
     hashes: dict[str, str | None] = {}
     for doc_id in surviving_doc_ids - docs_already_in_target:

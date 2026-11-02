@@ -272,6 +272,7 @@ def get_port_source_content_hashes(
     db_session: Session,
     document_ids: list[str],
     source_search_settings_id: int,
+    for_update: bool = False,
 ) -> dict[str, str | None]:
     """For each doc, the hash of the version the port copies: the one in the source
     index. None if the source index does not have the doc.
@@ -279,15 +280,21 @@ def get_port_source_content_hashes(
     - Recorded for the source index: secondary_content_hash.
     - Recorded for an older index: the doc never reached the source, so None.
     - Otherwise: content_hash.
+
+    `for_update` locks the rows: an indexing batch holds them while it writes and
+    commits its hash last, so the read waits for that batch and sees its hash.
     """
     if not document_ids:
         return {}
     # populate_existing: rows already in the session may be stale after a bulk UPDATE.
-    docs = db_session.scalars(
+    stmt = (
         select(DbDocument)
         .where(DbDocument.id.in_(document_ids))
         .execution_options(populate_existing=True)
-    ).all()
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    docs = db_session.scalars(stmt).all()
     hashes: dict[str, str | None] = {}
     for doc in docs:
         recorded_for = doc.secondary_search_settings_id
