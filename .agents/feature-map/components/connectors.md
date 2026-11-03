@@ -163,7 +163,9 @@ without one there is no ACL to attribute a document to
 ([[#handshake-after-verification]] governs the order within it). A source's
 parser, verifier and responder are each contained: the parser and responder
 answer 400 and the verifier 401, because a 5xx makes a provider retry a body
-that will never parse. Single tenant only; the webhook server refuses to start under
+that will never parse. A delivery belongs to the active pair whose secret it verifies
+against, so each account of a source signs with its own; an unsigned source
+serves one pair and refuses a delivery when several are active. Single tenant only; the webhook server refuses to start under
 `MULTI_TENANT`.
 
 A handler is given the pair's decrypted credential JSON alongside the row

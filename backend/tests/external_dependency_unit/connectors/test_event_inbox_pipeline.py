@@ -342,3 +342,77 @@ def test_a_source_gets_one_route_per_endpoint_it_declares() -> None:
     app.include_router(build_webhook_router())
 
     assert _route_paths(app) == {f"/{SLUG}/a", f"/{SLUG}/b"}
+
+
+@pytest.fixture
+def second_pair(
+    db_session: Session,
+    event_pair: ConnectorCredentialPair,  # noqa: ARG001
+) -> Generator[ConnectorCredentialPair, None, None]:
+    """A second account of the same source, with its own signing secret."""
+    connector = Connector(
+        name="pipeline-connector-2",
+        source=SOURCE,
+        input_type=InputType.EVENT,
+        connector_specific_config={},
+    )
+    credential = Credential(
+        credential_json={"webhook_secret": "second-secret"},
+        source=SOURCE,
+        admin_public=True,
+    )
+    db_session.add_all([connector, credential])
+    db_session.flush()
+    pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name=f"pipeline-pair-{connector.id}",
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=AccessType.PUBLIC,
+        total_docs_indexed=0,
+    )
+    db_session.add(pair)
+    db_session.commit()
+    try:
+        yield pair
+    finally:
+        db_session.rollback()
+        db_session.delete(pair)
+        db_session.delete(connector)
+        db_session.delete(credential)
+        db_session.commit()
+
+
+def test_each_account_receives_with_its_own_secret(
+    client: TestClient,
+    db_session: Session,
+    event_pair: ConnectorCredentialPair,
+    second_pair: ConnectorCredentialPair,
+) -> None:
+    """A delivery belongs to the pair whose secret it verifies against."""
+    response = _post(
+        client,
+        {"changed": [{"id": "doc-2", "delivery": "k-2"}]},
+        signature="second-secret",
+    )
+
+    assert response.status_code == 200
+    assert count_events_by_status(db_session, second_pair.id) == {
+        ConnectorEventStatus.PENDING: 1
+    }
+    assert count_events_by_status(db_session, event_pair.id) == {}
+
+
+def test_a_signature_no_account_holds_is_refused(
+    client: TestClient,
+    db_session: Session,
+    event_pair: ConnectorCredentialPair,
+    second_pair: ConnectorCredentialPair,
+) -> None:
+    response = _post(
+        client, {"changed": [{"id": "doc-3", "delivery": "k-3"}]}, signature="forged"
+    )
+
+    assert response.status_code == 401
+    assert count_events_by_status(db_session, event_pair.id) == {}
+    assert count_events_by_status(db_session, second_pair.id) == {}

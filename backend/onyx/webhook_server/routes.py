@@ -15,6 +15,7 @@ from onyx.connectors.event_inbox.credentials import pair_secrets
 from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
 from onyx.db.connector_event_inbox import get_active_event_cc_pairs, record_events
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import ConnectorCredentialPair
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -91,10 +92,6 @@ def _receive(spec: WebhookSourceSpec, delivery: WebhookRequest) -> Response:
             )
             raise OnyxError(OnyxErrorCode.NOT_FOUND)
 
-        # One pair per source until a spec can declare a routing key.
-        pair = pairs[0]
-        secrets = pair_secrets(pair)
-
         if spec.verifier is None and not spec.allow_unsigned:
             # The spec validator refuses this; do not trust that it ran.
             logger.error(
@@ -103,22 +100,7 @@ def _receive(spec: WebhookSourceSpec, delivery: WebhookRequest) -> Response:
             )
             raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
 
-        if spec.verifier is not None:
-            try:
-                spec.verifier(delivery, secrets)
-            except WebhookAuthError:
-                logger.warning(
-                    "Rejected a %s delivery: signature did not verify",
-                    spec.source.value,
-                )
-                raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-            except Exception:
-                # Fail closed: a verifier that broke proved nothing.
-                logger.exception(
-                    "The %s verifier raised; refusing the delivery",
-                    spec.source.value,
-                )
-                raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+        pair, secrets = _attribute(spec, delivery, pairs)
 
         # Only after verification, or the responder is a signing oracle.
         if spec.challenge_responder:
@@ -147,6 +129,49 @@ def _receive(spec: WebhookSourceSpec, delivery: WebhookRequest) -> Response:
                 "ignored": parsed.ignored,
             }
         )
+
+
+def _attribute(
+    spec: WebhookSourceSpec,
+    delivery: WebhookRequest,
+    pairs: list[ConnectorCredentialPair],
+) -> tuple[ConnectorCredentialPair, Mapping[str, str]]:
+    """The pair whose secret the delivery verifies against, so each account
+    of a source can sign with its own. An unsigned source cannot tell its
+    pairs apart, so it serves one."""
+    if spec.verifier is None:
+        if len(pairs) > 1:
+            logger.error(
+                "Refused a %s delivery: %s pairs receive an unsigned source",
+                spec.source.value,
+                len(pairs),
+            )
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "An unsigned source can serve only one connector.",
+            )
+        return pairs[0], pair_secrets(pairs[0])
+
+    for pair in pairs:
+        secrets = pair_secrets(pair)
+        try:
+            spec.verifier(delivery, secrets)
+        except WebhookAuthError:
+            continue
+        except Exception:
+            # Fail closed: a verifier that broke proved nothing.
+            logger.exception(
+                "The %s verifier raised for cc_pair %s",
+                spec.source.value,
+                pair.id,
+            )
+            continue
+        return pair, secrets
+
+    logger.warning(
+        "Rejected a %s delivery: signature did not verify", spec.source.value
+    )
+    raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
 
 
 def _answer_challenge(
