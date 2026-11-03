@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "Failed items",
           "search": {
-            "placeholder": "Search items…"
+            "placeholder": "Search documents…"
           },
-          "resolveAll": "Retry all",
-          "resolveOne": "Retry this document",
+          "resolveAll": "Retry All Docs",
+          "resolveOne": "Retry Doc",
+          "resolveWithoutRetry": "Resolve without Retry",
           "more": "More",
           "less": "Less",
           "unknownDocument": "Unknown document",
-          "empty": "No open errors",
+          "empty": "No failed documents",
           "loadError": "Couldn't load the failed items.",
-          "open": "Open the document"
+          "openDocument": "Open Document",
+          "resolvedGroup": "Resolved Errors",
+          "resolvedWithoutRetry": "Resolved without Retry",
+          "resolvedByLaterRun": "Resolved by Later Run"
         },
         "trace": {
           "header": "Stack Trace • Run ID: {id}",

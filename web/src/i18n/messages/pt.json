@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "Itens com falha",
           "search": {
-            "placeholder": "Pesquisar itens…"
+            "placeholder": "Pesquisar documentos…"
           },
-          "resolveAll": "Repetir todos",
-          "resolveOne": "Repetir este documento",
+          "resolveAll": "Tentar todos os documentos novamente",
+          "resolveOne": "Tentar documento novamente",
+          "resolveWithoutRetry": "Resolver sem tentar novamente",
           "more": "Mais",
           "less": "Menos",
           "unknownDocument": "Documento desconhecido",
-          "empty": "Sem erros em aberto",
+          "empty": "Nenhum documento com falha",
           "loadError": "Não foi possível carregar os itens com falha.",
-          "open": "Abrir o documento"
+          "openDocument": "Abrir documento",
+          "resolvedGroup": "Erros resolvidos",
+          "resolvedWithoutRetry": "Resolvido sem tentar novamente",
+          "resolvedByLaterRun": "Resolvido por uma execução posterior"
         },
         "trace": {
           "header": "Rastreamento de pilha • ID da execução: {id}",

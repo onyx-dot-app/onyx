@@ -62,24 +62,48 @@ export const getCCPairStatusMessage = (
   return undefined;
 };
 
-/** Marks these runs of the pair resolved. They keep their status; the feeds move them out of the open failures and errors. */
-export async function resolveCCPairRuns(
-  ccPairId: number,
-  runs: { kind: CCPairRunKind; attempt_id: number }[]
-): Promise<void> {
-  const response = await fetch(
-    `/api/manage/admin/cc-pair/${ccPairId}/runs/resolve`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ runs }),
-    }
-  );
+/** The bodies of the pair's resolve routes. */
+type ResolveRequestBody =
+  | { runs: { kind: CCPairRunKind; attempt_id: number }[] }
+  | { error_ids: number[] }
+  | CCPairRunsMatchingFilter;
+
+/** POSTs `body` as JSON and throws the route's error detail on a failed response. */
+async function postJson(
+  path: string,
+  body: ResolveRequestBody
+): Promise<Response> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!response.ok) {
     throw new Error(
       await parseErrorDetail(response, `HTTP ${response.status}`)
     );
   }
+  return response;
+}
+
+/** Marks these runs of the pair resolved. They keep their status; the feeds move them out of the open failures and errors. */
+export async function resolveCCPairRuns(
+  ccPairId: number,
+  runs: { kind: CCPairRunKind; attempt_id: number }[]
+): Promise<void> {
+  await postJson(`/api/manage/admin/cc-pair/${ccPairId}/runs/resolve`, {
+    runs,
+  });
+}
+
+/** Closes these open errors of the pair without a reindex. Retry Doc (a retry by error id) still takes them. */
+export async function resolveErrorsWithoutRetry(
+  ccPairId: number,
+  errorIds: number[]
+): Promise<void> {
+  await postJson(`/api/manage/admin/cc-pair/${ccPairId}/errors/resolve`, {
+    error_ids: errorIds,
+  });
 }
 
 /** The open runs of one activity level, or of every level when `level` is null, narrowed as the runs feed narrows them. */
@@ -104,20 +128,11 @@ export async function resolveMatchingRuns(
   ccPairId: number | null,
   filter: CCPairRunsMatchingFilter
 ): Promise<CCPairRunsResolveMatchingResponse> {
-  const response = await fetch(
+  const response = await postJson(
     ccPairId === null
       ? "/api/manage/admin/index-monitoring/runs/resolve"
       : `/api/manage/admin/cc-pair/${ccPairId}/runs/resolve-matching`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(filter),
-    }
+    filter
   );
-  if (!response.ok) {
-    throw new Error(
-      await parseErrorDetail(response, `HTTP ${response.status}`)
-    );
-  }
   return response.json();
 }

@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "실패한 항목",
           "search": {
-            "placeholder": "항목 검색…"
+            "placeholder": "문서 검색…"
           },
-          "resolveAll": "모두 다시 시도",
-          "resolveOne": "이 문서 다시 시도",
+          "resolveAll": "모든 문서 재시도",
+          "resolveOne": "문서 재시도",
+          "resolveWithoutRetry": "재시도 없이 해결",
           "more": "더 보기",
           "less": "접기",
           "unknownDocument": "알 수 없는 문서",
-          "empty": "미해결 오류가 없습니다",
+          "empty": "실패한 문서가 없습니다",
           "loadError": "실패한 항목을 불러올 수 없습니다.",
-          "open": "문서 열기"
+          "openDocument": "문서 열기",
+          "resolvedGroup": "해결된 오류",
+          "resolvedWithoutRetry": "재시도 없이 해결됨",
+          "resolvedByLaterRun": "이후 실행에서 해결됨"
         },
         "trace": {
           "header": "스택 트레이스 • 실행 ID: {id}",

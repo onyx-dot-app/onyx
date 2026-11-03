@@ -457,7 +457,7 @@ export const SWR_KEYS = {
   // this base key invalidates every variant under the same prefix.
   ccPairIndexingErrors: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-  // One attempt's open errors, searched by message or document id.
+  // One attempt's open and resolved errors, newest first, searched by message, document id or entity id.
   ccPairAttemptErrors: (
     ccPairId: number,
     query: {
@@ -471,7 +471,7 @@ export const SWR_KEYS = {
       index_attempt_id: String(query.indexAttemptId),
       page_num: String(query.pageNum),
       page_size: String(query.pageSize),
-      include_resolved: "false",
+      include_resolved: "true",
     });
     if (query.q) params.set("q", query.q);
     return `/api/manage/admin/cc-pair/${ccPairId}/errors?${params.toString()}`;

@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "失敗した項目",
           "search": {
-            "placeholder": "項目を検索…"
+            "placeholder": "ドキュメントを検索…"
           },
-          "resolveAll": "すべて再試行",
-          "resolveOne": "このドキュメントを再試行",
+          "resolveAll": "すべてのドキュメントを再試行",
+          "resolveOne": "ドキュメントを再試行",
+          "resolveWithoutRetry": "再試行せずに解決",
           "more": "さらに表示",
           "less": "折りたたむ",
           "unknownDocument": "不明なドキュメント",
-          "empty": "未解決のエラーはありません",
+          "empty": "失敗したドキュメントはありません",
           "loadError": "失敗した項目を読み込めませんでした。",
-          "open": "ドキュメントを開く"
+          "openDocument": "ドキュメントを開く",
+          "resolvedGroup": "解決済みのエラー",
+          "resolvedWithoutRetry": "再試行せずに解決済み",
+          "resolvedByLaterRun": "後続の実行で解決済み"
         },
         "trace": {
           "header": "スタックトレース • 実行 ID: {id}",

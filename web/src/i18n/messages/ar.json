@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "العناصر الفاشلة",
           "search": {
-            "placeholder": "ابحث في العناصر…"
+            "placeholder": "ابحث في المستندات…"
           },
-          "resolveAll": "إعادة محاولة الكل",
-          "resolveOne": "إعادة محاولة هذا المستند",
+          "resolveAll": "إعادة محاولة كل المستندات",
+          "resolveOne": "إعادة محاولة المستند",
+          "resolveWithoutRetry": "حل دون إعادة المحاولة",
           "more": "المزيد",
           "less": "أقل",
           "unknownDocument": "مستند غير معروف",
-          "empty": "لا توجد أخطاء مفتوحة",
+          "empty": "لا توجد مستندات فاشلة",
           "loadError": "تعذر تحميل العناصر الفاشلة.",
-          "open": "فتح المستند"
+          "openDocument": "فتح المستند",
+          "resolvedGroup": "الأخطاء التي تم حلها",
+          "resolvedWithoutRetry": "تم الحل دون إعادة المحاولة",
+          "resolvedByLaterRun": "تم الحل في تشغيل لاحق"
         },
         "trace": {
           "header": "تتبع المكدس • معرّف التشغيل: {id}",

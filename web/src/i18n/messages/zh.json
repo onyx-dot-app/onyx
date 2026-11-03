@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "失败的项目",
           "search": {
-            "placeholder": "搜索项目…"
+            "placeholder": "搜索文档…"
           },
-          "resolveAll": "全部重试",
-          "resolveOne": "重试此文档",
+          "resolveAll": "重试所有文档",
+          "resolveOne": "重试文档",
+          "resolveWithoutRetry": "解决但不重试",
           "more": "更多",
           "less": "收起",
           "unknownDocument": "未知文档",
-          "empty": "没有未解决的错误",
+          "empty": "没有失败的文档",
           "loadError": "无法加载失败的项目。",
-          "open": "打开文档"
+          "openDocument": "打开文档",
+          "resolvedGroup": "已解决的错误",
+          "resolvedWithoutRetry": "已解决但未重试",
+          "resolvedByLaterRun": "已由后续运行解决"
         },
         "trace": {
           "header": "堆栈跟踪 • 运行 ID：{id}",

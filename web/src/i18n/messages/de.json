@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "Fehlgeschlagene Elemente",
           "search": {
-            "placeholder": "Elemente durchsuchen…"
+            "placeholder": "Dokumente durchsuchen…"
           },
-          "resolveAll": "Alle erneut versuchen",
-          "resolveOne": "Dieses Dokument erneut versuchen",
+          "resolveAll": "Alle Dokumente erneut versuchen",
+          "resolveOne": "Dokument erneut versuchen",
+          "resolveWithoutRetry": "Ohne erneuten Versuch beheben",
           "more": "Mehr",
           "less": "Weniger",
           "unknownDocument": "Unbekanntes Dokument",
-          "empty": "Keine offenen Fehler",
+          "empty": "Keine fehlgeschlagenen Dokumente",
           "loadError": "Die fehlgeschlagenen Elemente konnten nicht geladen werden.",
-          "open": "Dokument öffnen"
+          "openDocument": "Dokument öffnen",
+          "resolvedGroup": "Behobene Fehler",
+          "resolvedWithoutRetry": "Ohne erneuten Versuch behoben",
+          "resolvedByLaterRun": "Durch späteren Lauf behoben"
         },
         "trace": {
           "header": "Stacktrace • Lauf-ID: {id}",

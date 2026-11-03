@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "Elementos fallidos",
           "search": {
-            "placeholder": "Buscar elementos…"
+            "placeholder": "Buscar documentos…"
           },
-          "resolveAll": "Reintentar todos",
-          "resolveOne": "Reintentar este documento",
+          "resolveAll": "Reintentar todos los documentos",
+          "resolveOne": "Reintentar documento",
+          "resolveWithoutRetry": "Resolver sin reintentar",
           "more": "Más",
           "less": "Menos",
           "unknownDocument": "Documento desconocido",
-          "empty": "Sin errores abiertos",
+          "empty": "No hay documentos fallidos",
           "loadError": "No se pudieron cargar los elementos fallidos.",
-          "open": "Abrir el documento"
+          "openDocument": "Abrir documento",
+          "resolvedGroup": "Errores resueltos",
+          "resolvedWithoutRetry": "Resuelto sin reintentar",
+          "resolvedByLaterRun": "Resuelto por una ejecución posterior"
         },
         "trace": {
           "header": "Seguimiento de pila • ID de ejecución: {id}",

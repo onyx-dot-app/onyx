@@ -3204,16 +3204,20 @@
         "docs": {
           "title": "Éléments en échec",
           "search": {
-            "placeholder": "Rechercher des éléments…"
+            "placeholder": "Rechercher des documents…"
           },
-          "resolveAll": "Tout réessayer",
-          "resolveOne": "Réessayer ce document",
+          "resolveAll": "Relancer tous les documents",
+          "resolveOne": "Relancer le document",
+          "resolveWithoutRetry": "Résoudre sans relancer",
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",
-          "empty": "Aucune erreur ouverte",
+          "empty": "Aucun document en échec",
           "loadError": "Impossible de charger les éléments en échec.",
-          "open": "Ouvrir le document"
+          "openDocument": "Ouvrir le document",
+          "resolvedGroup": "Erreurs résolues",
+          "resolvedWithoutRetry": "Résolu sans relance",
+          "resolvedByLaterRun": "Résolu par une exécution ultérieure"
         },
         "trace": {
           "header": "Trace de la pile • ID d'exécution : {id}",

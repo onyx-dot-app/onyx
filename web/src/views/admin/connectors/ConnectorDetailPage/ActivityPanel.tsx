@@ -46,6 +46,7 @@ import {
   useActivityItems,
   useActivityRunsCount,
   useConnectorChoices,
+  useHeldOpenRun,
   useResolvableRunsCount,
   useResolveRunErrors,
   DEFAULT_ACTIVITY_SECTIONS,
@@ -228,15 +229,27 @@ interface BlockListProps {
   block: Block;
   resolving: boolean;
   onResolve: (item: ActivityItem, errorIds: number[] | null) => void;
+  onResolveWithoutRetry: (
+    item: ActivityItem,
+    errorIds: number[]
+  ) => Promise<void>;
   onResolveRun: (item: ActivityItem) => void;
   links: Partial<ActivityPanelLinks>;
+  /** An open card's panel opened or closed. */
+  onPanelOpenChange: (
+    item: ActivityItem,
+    section: ActivitySection,
+    open: boolean
+  ) => void;
 }
 function BlockList({
   block,
   resolving,
   onResolve,
+  onResolveWithoutRetry,
   onResolveRun,
   links,
+  onPanelOpenChange,
 }: BlockListProps) {
   const t = useTranslations("admin.connector.activity");
   const { onHoverAttempt, focusAttemptId = null, outlinedAttemptIds } = links;
@@ -270,7 +283,15 @@ function BlockList({
             canResolveRuns={item.canResolveRuns}
             resolving={resolving}
             onResolve={(errorIds) => onResolve(item, errorIds)}
+            onResolveWithoutRetry={(errorIds) =>
+              onResolveWithoutRetry(item, errorIds)
+            }
             onResolveRun={() => onResolveRun(item)}
+            onPanelOpenChange={
+              closed
+                ? undefined
+                : (open) => onPanelOpenChange(item, section, open)
+            }
             onHoverChange={
               charted && onHoverAttempt !== undefined
                 ? (hovered) => onHoverAttempt(hovered ? attempt.id : null)
@@ -449,8 +470,13 @@ export default function ActivityPanel({
     failures: number;
     errors: number;
   } | null>(null);
-  const { resolving, resolve, resolveRun, resolveMatching } =
-    useResolveRunErrors();
+  const {
+    resolving,
+    resolve,
+    resolveRun,
+    resolveWithoutRetry,
+    resolveMatching,
+  } = useResolveRunErrors();
 
   const timeRange = {
     since: range?.since ?? null,
@@ -594,19 +620,32 @@ export default function ActivityPanel({
     ? closed.filter((state) => isShown(state.section))
     : [];
 
-  const resolvedCards = resolvedStates.flatMap(sectionCards);
+  // A card with a panel open stays in its section after its last open error resolves there, until the panel closes.
+  const {
+    sections: heldOpen,
+    hold,
+    isHeld,
+  } = useHeldOpenRun(Object.values(open));
+  const resolvedCards = resolvedStates
+    .flatMap(sectionCards)
+    .filter(({ item }) => !isHeld(item));
   const resolvedKeys = new Set(
     resolvedCards.map(({ item }) => runKey(item.run))
   );
+  const openState = (section: ActivitySection): ActivitySectionState =>
+    heldOpen.find((state) => state.section === section) ?? open[section];
   // Only Resolved lists a closed run: a resolved run with no error rows also matches a section that resolves nothing, and a search finds superseded runs under their open section too.
-  const sectionBlock = (section: ActivitySection): Block => ({
-    key: section,
-    title: t(`groups.${section}`, { count: open[section].total }),
-    cards: sectionCards(open[section]).filter(
-      ({ item }) => !resolvedKeys.has(runKey(item.run))
-    ),
-    states: [open[section]],
-  });
+  const sectionBlock = (section: ActivitySection): Block => {
+    const state = openState(section);
+    return {
+      key: section,
+      title: t(`groups.${section}`, { count: state.total }),
+      cards: sectionCards(state).filter(
+        ({ item }) => !resolvedKeys.has(runKey(item.run))
+      ),
+      states: [state],
+    };
+  };
   const blocks: Block[] = [
     ...shownSections
       .filter((section) => !SETTLED.includes(section))
@@ -692,6 +731,8 @@ export default function ActivityPanel({
         className
       )}
       data-testid="connector-activity"
+      // The stack trace opens beside this edge.
+      data-side-panel=""
     >
       {/* 1.5rem and 6rem match SettingsLayouts.Body's pt-6 and pt-6 + pb-18, so the page's end never pushes the title out of view. */}
       <Section
@@ -923,8 +964,14 @@ export default function ActivityPanel({
                         onResolve={(item, errorIds) =>
                           void resolve(item, errorIds)
                         }
+                        onResolveWithoutRetry={(item, errorIds) =>
+                          resolveWithoutRetry(item.ccPairId, errorIds)
+                        }
                         onResolveRun={(item) => void resolveRun(item)}
                         links={links}
+                        onPanelOpenChange={(item, section, open) =>
+                          hold(section, item, open)
+                        }
                       />
                     ))
                 )}
