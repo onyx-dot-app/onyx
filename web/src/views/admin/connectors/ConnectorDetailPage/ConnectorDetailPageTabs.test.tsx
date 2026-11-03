@@ -1272,3 +1272,93 @@ describe("connector page layout edges", () => {
     topBar.remove();
   });
 });
+
+// ── Status cards (PR 16) ────────────────────────────────────────────────────
+
+function pruneRun(id: number): CCPairRun {
+  return {
+    kind: "pruning",
+    time_created: isoAgo(60 * MINUTE_MS),
+    resolved_at: null,
+    superseded: false,
+    attempt: {
+      id,
+      status: "success",
+      docs_removed: 15,
+      docs_failed: 0,
+      error_message: null,
+      time_created: isoAgo(60 * MINUTE_MS),
+      time_started: isoAgo(60 * MINUTE_MS),
+      time_finished: isoAgo(58 * MINUTE_MS),
+    },
+  };
+}
+
+/** Every URL the page has routed to: the address bar and the router's pushes and replaces. */
+function routedUrls(): URL[] {
+  return [
+    window.location.href,
+    ...mockPush.mock.calls.map((call) => String(call[0])),
+    ...mockReplace.mock.calls.map((call) => String(call[0])),
+  ].map((href) => new URL(href, "http://localhost/admin/connector/7"));
+}
+
+describe("connector page status cards", () => {
+  beforeEach(() => {
+    mockPush.mockClear();
+    mockReplace.mockClear();
+  });
+
+  it("AC-2, D-67: View Pruning Run on the status card opens the Indexing tab at that run", async () => {
+    const user = setupUser();
+    await renderPage({ runs: [pruneRun(44)] });
+    await loaded();
+    await settle();
+
+    const [indexingCard] = await screen.findAllByTestId("status-card");
+    const prune = await within(indexingCard!).findByRole("button", {
+      name: copy("admin.connector.statusCard.actions.viewPruningRun"),
+    });
+    await user.click(prune);
+
+    await waitFor(() =>
+      expect(tab(TAB_INDEXING)).toHaveAttribute("aria-selected", "true")
+    );
+    await waitFor(() =>
+      expect(
+        routedUrls().some(
+          (url) =>
+            url.searchParams.get("tab") === "indexing" &&
+            url.searchParams.get("run") === "44" &&
+            url.searchParams.get("run_kind") === "pruning"
+        )
+      ).toBe(true)
+    );
+  });
+
+  it("D-62: the status card's Activities panel button hides and shows the panel", async () => {
+    const user = setupUser();
+    await renderPage();
+    await loaded();
+    await settle();
+
+    const hide = copy("admin.connector.statusCard.actions.hideActivities");
+    const show = copy("admin.connector.statusCard.actions.showActivities");
+    const [indexingCard] = await screen.findAllByTestId("status-card");
+    expect(screen.getByTestId("connector-activity")).toBeInTheDocument();
+
+    await user.click(within(indexingCard!).getByRole("button", { name: hide }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("connector-activity")).toBeNull()
+    );
+
+    await user.click(
+      within(screen.getAllByTestId("status-card")[0]!).getByRole("button", {
+        name: show,
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("connector-activity")).toBeInTheDocument()
+    );
+  });
+});
