@@ -1,5 +1,6 @@
 """Unit tests for the live-reload behavior of DynamicTracingProcessor."""
 
+import os
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -156,7 +157,10 @@ def test_in_flight_trace_keeps_its_original_delegates() -> None:
 
 def test_langfuse_client_sends_v4_ingestion_header() -> None:
     config = LangfuseConfig(secret_key="sk", public_key="pk", host=None)
-    with patch("langfuse.Langfuse") as mock_langfuse:
+    with (
+        patch.dict(os.environ),
+        patch("langfuse.Langfuse") as mock_langfuse,
+    ):
         _build_langfuse_processor(config)
     headers = mock_langfuse.call_args.kwargs["additional_headers"]
     assert headers["x-langfuse-ingestion-version"] == "4"
