@@ -473,3 +473,15 @@ run "the_sandbox_archive_storage_is_created_on_request" {
     error_message = "The archive account name must be valid, keep the digest and differ from the other accounts."
   }
 }
+
+run "rejects_an_archive_account_named_like_the_file_store" {
+  command = plan
+
+  variables {
+    enable_sandbox_archive_storage       = true
+    storage_account_name                 = "onyxfilesshared"
+    sandbox_archive_storage_account_name = "onyxfilesshared"
+  }
+
+  expect_failures = [terraform_data.sandbox_archive_storage_account_name_check]
+}

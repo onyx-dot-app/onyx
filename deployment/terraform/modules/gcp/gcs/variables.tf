@@ -118,7 +118,7 @@ variable "kms_key_name" {
 
 variable "create_kms_key" {
   type        = bool
-  description = "Create a Cloud KMS key ring and key named after the bucket, in the bucket's location, and encrypt the bucket with it. Only the project's GCS service agent gets use of the key. Needs the Cloud KMS API. Key rings cannot be deleted, so the name stays taken after a destroy."
+  description = "Create a Cloud KMS key ring and key named after the bucket, in the bucket's location, and encrypt the bucket with it. Only the project's GCS service agent gets use of the key. Needs the Cloud KMS API. Dots in the bucket name become hyphens in the key ring and key names. Key rings cannot be deleted, so the name stays taken after a destroy."
   default     = false
 
   validation {
@@ -133,8 +133,8 @@ variable "kms_key_rotation_period" {
   default     = "7776000s"
 
   validation {
-    condition     = can(regex("^[0-9]+s$", var.kms_key_rotation_period)) && tonumber(trimsuffix(var.kms_key_rotation_period, "s")) >= 86400
-    error_message = "kms_key_rotation_period must be a number of seconds with an \"s\" suffix, at least 86400s (one day)."
+    condition     = can(regex("^[0-9]+s$", var.kms_key_rotation_period)) && tonumber(trimsuffix(var.kms_key_rotation_period, "s")) >= 86400 && tonumber(trimsuffix(var.kms_key_rotation_period, "s")) <= 3153600000
+    error_message = "kms_key_rotation_period must be a number of seconds with an \"s\" suffix, from 86400s (one day) to 3153600000s (100 years)."
   }
 }
 

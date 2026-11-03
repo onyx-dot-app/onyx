@@ -192,6 +192,18 @@ module "storage" {
 # Craft sandbox session archives, in their own account so the expiry policy
 # and the customer-managed key touch nothing else. No identity gets a data
 # role on it: the api_server will hand out SAS URLs.
+# The archive's expiry rules must never land on the file store account.
+resource "terraform_data" "sandbox_archive_storage_account_name_check" {
+  count = var.enable_sandbox_archive_storage ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = !contains([local.storage_account_name, local.flow_log_storage_account_name], local.sandbox_archive_storage_account_name)
+      error_message = "sandbox_archive_storage_account_name must differ from the file store and flow log storage account names. The archive expires blobs after sandbox_archive_expiration_days."
+    }
+  }
+}
+
 module "storage_sandbox_archive" {
   source = "../storage"
   count  = var.enable_sandbox_archive_storage ? 1 : 0

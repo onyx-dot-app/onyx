@@ -38,7 +38,7 @@ resource "aws_kms_key" "this" {
 resource "aws_kms_alias" "this" {
   count = var.create_kms_key ? 1 : 0
 
-  name          = "alias/${var.bucket_name}"
+  name          = "alias/${replace(var.bucket_name, ".", "-")}"
   target_key_id = aws_kms_key.this[0].key_id
 }
 

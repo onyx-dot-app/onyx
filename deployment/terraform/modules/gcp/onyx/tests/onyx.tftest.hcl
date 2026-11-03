@@ -581,3 +581,15 @@ run "a_long_name_keeps_the_archive_and_file_store_buckets_apart" {
     error_message = "Truncation must not make the archive bucket name collide with the file store name."
   }
 }
+
+run "rejects_an_archive_bucket_named_like_the_file_store" {
+  command = plan
+
+  variables {
+    enable_sandbox_archive_bucket = true
+    bucket_name                   = "onyx-files-shared"
+    sandbox_archive_bucket_name   = "onyx-files-shared"
+  }
+
+  expect_failures = [terraform_data.sandbox_archive_bucket_name_check]
+}

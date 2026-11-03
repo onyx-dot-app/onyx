@@ -9,7 +9,8 @@ locals {
   has_lifecycle_rules = var.enable_versioning || var.expiration_days > 0 || var.transition_to_cool
 
   # Key Vault names are global, 3-24 characters, and must start with a letter.
-  key_vault_name = coalesce(var.key_vault_name, "kv-${substr(var.storage_account_name, 0, 21)}")
+  # 3 + 13 + 8 = 24, so a digest of the full account name always survives.
+  key_vault_name = coalesce(var.key_vault_name, "kv-${substr(var.storage_account_name, 0, 13)}${substr(sha1(var.storage_account_name), 0, 8)}")
 }
 
 # A key owned by this account alone. Azure storage encryption with a customer

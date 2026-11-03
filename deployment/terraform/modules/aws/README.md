@@ -314,8 +314,9 @@ Key inputs include:
   optionally to source IPs or VPCs (`allow_anonymous_read` with
   `allowed_source_ips` / `allowed_vpc_ids`)
 - `create_kms_key` (default false) creates a customer-managed KMS key with
-  rotation and an `alias/<bucket_name>` alias, and encrypts the bucket with it.
-  It cannot be combined with `kms_key_id` or `allow_anonymous_read`. Output: `kms_key_arn`
+  rotation and an `alias/<bucket_name>` alias (dots become hyphens), and
+  encrypts the bucket with it. It cannot be combined with `kms_key_id` or
+  `allow_anonymous_read`. Output: `kms_key_arn` (the created key, null when off)
 - `abort_incomplete_multipart_upload_days` (default 0, off) removes unfinished
   multipart uploads
 
@@ -332,6 +333,8 @@ true. The bucket holds Craft sandbox session archives:
 - No Intelligent-Tiering, because objects are short-lived
 - No node or pod role gets access. The bucket is not in `s3_bucket_names` and
   has no VPC endpoint grant. The api_server will hand out presigned URLs
+- The plan fails if `sandbox_archive_bucket_name` equals the file store or
+  upload bucket name, so the expiry rules cannot reach those buckets
 
 ### `opensearch`
 - Creates an Amazon OpenSearch domain inside the VPC

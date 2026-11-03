@@ -155,11 +155,11 @@ variable "create_customer_managed_key" {
 
 variable "key_vault_name" {
   type        = string
-  description = "Name of the Key Vault that create_customer_managed_key creates. Null derives kv-<storage_account_name>. Purge protection keeps the name taken for the retention period after a destroy."
+  description = "Name of the Key Vault that create_customer_managed_key creates. Null derives kv-<first 13 characters of storage_account_name><8-character digest of it>. Purge protection keeps the name taken for the retention period after a destroy."
   default     = null
 
   validation {
-    condition     = var.key_vault_name == null || can(regex("^[a-zA-Z](-?[a-zA-Z0-9])+$", var.key_vault_name)) && length(coalesce(var.key_vault_name, "x")) <= 24
+    condition     = var.key_vault_name == null || can(regex("^[a-zA-Z](-?[a-zA-Z0-9])+$", var.key_vault_name)) && length(coalesce(var.key_vault_name, "x")) >= 3 && length(coalesce(var.key_vault_name, "x")) <= 24
     error_message = "key_vault_name must be 3-24 letters, digits and single hyphens, start with a letter and end with a letter or digit."
   }
 }

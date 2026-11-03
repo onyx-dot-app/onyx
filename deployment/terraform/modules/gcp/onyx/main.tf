@@ -230,6 +230,18 @@ module "gcs" {
 
 # Craft sandbox session archives, encrypted with a key of their own. No
 # workload identity gets access: the api_server will hand out signed URLs.
+# The archive's expiry rules must never land on the file store bucket.
+resource "terraform_data" "sandbox_archive_bucket_name_check" {
+  count = var.enable_sandbox_archive_bucket ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.sandbox_archive_bucket_name != local.bucket_name
+      error_message = "sandbox_archive_bucket_name must differ from the file store bucket name. The archive expires objects after sandbox_archive_expiration_days."
+    }
+  }
+}
+
 module "gcs_sandbox_archive" {
   source = "../gcs"
   count  = var.enable_sandbox_archive_bucket ? 1 : 0

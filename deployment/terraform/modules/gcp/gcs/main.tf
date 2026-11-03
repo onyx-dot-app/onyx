@@ -17,6 +17,8 @@ locals {
 
 locals {
   kms_key_name = var.create_kms_key ? google_kms_crypto_key.this[0].id : var.kms_key_name
+  # Key ring and key IDs allow no dots and at most 63 characters.
+  kms_resource_name = substr(replace(var.name, ".", "-"), 0, 63)
 }
 
 # A key owned by this bucket alone. Cloud KMS key rings cannot be deleted, so a
@@ -25,7 +27,7 @@ locals {
 resource "google_kms_key_ring" "this" {
   count = var.create_kms_key ? 1 : 0
 
-  name     = var.name
+  name     = local.kms_resource_name
   project  = var.project_id
   location = lower(var.location)
 }
@@ -33,7 +35,7 @@ resource "google_kms_key_ring" "this" {
 resource "google_kms_crypto_key" "this" {
   count = var.create_kms_key ? 1 : 0
 
-  name            = var.name
+  name            = local.kms_resource_name
   key_ring        = google_kms_key_ring.this[0].id
   purpose         = "ENCRYPT_DECRYPT"
   rotation_period = var.kms_key_rotation_period

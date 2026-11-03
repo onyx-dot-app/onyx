@@ -440,3 +440,28 @@ run "rejects_a_dedicated_key_with_a_supplied_key" {
 
   expect_failures = [var.create_kms_key]
 }
+
+run "a_dotted_bucket_name_gives_dot_free_key_names" {
+  command = plan
+
+  variables {
+    name           = "archive.example.com"
+    create_kms_key = true
+  }
+
+  assert {
+    condition     = google_kms_key_ring.this[0].name == "archive-example-com" && google_kms_crypto_key.this[0].name == "archive-example-com"
+    error_message = "Cloud KMS names allow no dots, so dots in the bucket name must become hyphens."
+  }
+}
+
+run "rejects_a_rotation_period_above_the_cloud_kms_limit" {
+  command = plan
+
+  variables {
+    create_kms_key          = true
+    kms_key_rotation_period = "3153600001s"
+  }
+
+  expect_failures = [var.kms_key_rotation_period]
+}

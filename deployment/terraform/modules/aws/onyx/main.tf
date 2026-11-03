@@ -223,6 +223,18 @@ module "s3_upload" {
 # Craft sandbox session archives. Not added to s3_bucket_names and given no
 # VPC endpoint grant: no node or pod role can reach it. The api_server will
 # hand out presigned URLs instead.
+# The archive's expiry rules must never land on the file store or upload bucket.
+resource "terraform_data" "sandbox_archive_bucket_name_check" {
+  count = var.enable_sandbox_archive_bucket ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = !contains([local.bucket_name, local.upload_bucket_name], local.sandbox_archive_bucket_name)
+      error_message = "sandbox_archive_bucket_name must differ from the file store and upload bucket names. The archive expires objects after sandbox_archive_expiration_days."
+    }
+  }
+}
+
 module "s3_sandbox_archive" {
   count  = var.enable_sandbox_archive_bucket ? 1 : 0
   source = "../s3"

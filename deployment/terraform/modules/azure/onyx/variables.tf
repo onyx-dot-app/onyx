@@ -172,13 +172,13 @@ variable "enable_sandbox_archive_storage" {
 
 variable "sandbox_archive_storage_account_name" {
   type        = string
-  description = "Name of the sandbox archive storage account. Null derives one from the name, workspace and a short digest. Also names the Key Vault (kv-<name>)."
+  description = "Name of the sandbox archive storage account. Null derives one from the name, workspace and a short digest. The Key Vault is named kv-<first 13 characters of this name><8-character digest of it>."
   default     = null
 }
 
 variable "sandbox_archive_expiration_days" {
   type        = number
-  description = "Days after which sandbox archives are deleted"
+  description = "Days after which sandbox archives are deleted. Blob soft delete keeps a deleted blob recoverable for 7 more days."
   default     = 30
 
   validation {

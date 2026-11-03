@@ -283,8 +283,11 @@ object access and the narrow read that Onyx needs at startup.
 
 `create_kms_key` (default off) creates a Cloud KMS key ring and key named after
 the bucket, in the bucket's location, with 90-day rotation. It grants only the
-project's GCS service agent use of the key. Cloud KMS never deletes key rings,
-so the name stays taken after a destroy. `expiration_days` (default off)
+project's GCS service agent use of the key. Dots in the bucket name become
+hyphens in the key ring and key names. Cloud KMS never deletes key rings or
+keys, so the names stay taken after a destroy. To turn the option on again
+after a destroy, `terraform import` the key ring and key, or use a new bucket
+name. `expiration_days` (default off)
 deletes live objects after that many days.
 
 #### Sandbox archive bucket
@@ -299,6 +302,11 @@ true. It holds Craft sandbox session archives:
   Noncurrent versions expire after `sandbox_archive_noncurrent_expiration_days`
   (default 7)
 - No workload identity gets access. The api_server will hand out signed URLs
+- The plan fails if `sandbox_archive_bucket_name` equals the file store bucket
+  name, so the expiry rules cannot reach it
+- Turning `enable_sandbox_archive_bucket` off and on again fails on the key
+  ring create. Import the old ring and key, or set a new
+  `sandbox_archive_bucket_name`
 
 Outputs: `sandbox_archive_bucket_name`, `sandbox_archive_kms_key_name` (null
 when off).

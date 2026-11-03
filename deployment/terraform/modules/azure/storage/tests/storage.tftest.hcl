@@ -318,8 +318,8 @@ run "a_customer_managed_key_encrypts_and_expires_the_account" {
   }
 
   assert {
-    condition     = azurerm_key_vault.cmk[0].name == "kv-onyxsandboxarchive"
-    error_message = "The vault name should derive from the account name."
+    condition     = azurerm_key_vault.cmk[0].name == "kv-onyxsandboxar${substr(sha1("onyxsandboxarchive"), 0, 8)}"
+    error_message = "The vault name should be kv- plus 13 characters of the account name plus an 8-character digest of it."
   }
 
   assert {
@@ -369,6 +369,34 @@ run "rejects_a_malformed_key_vault_name" {
   variables {
     create_customer_managed_key = true
     key_vault_name              = "1-bad--name"
+  }
+
+  expect_failures = [var.key_vault_name]
+}
+
+run "a_long_account_name_keeps_the_full_vault_digest" {
+  command = plan
+
+  variables {
+    storage_account_name        = "onyxenterpriseprodarc123"
+    create_customer_managed_key = true
+  }
+
+  assert {
+    condition = (
+      length(azurerm_key_vault.cmk[0].name) <= 24 &&
+      endswith(azurerm_key_vault.cmk[0].name, substr(sha1("onyxenterpriseprodarc123"), 0, 8))
+    )
+    error_message = "A 24-character account name must still give a vault name of at most 24 characters that ends in the full digest."
+  }
+}
+
+run "rejects_a_key_vault_name_that_is_too_short" {
+  command = plan
+
+  variables {
+    create_customer_managed_key = true
+    key_vault_name              = "ab"
   }
 
   expect_failures = [var.key_vault_name]
