@@ -2980,6 +2980,7 @@
           "all": "All Types",
           "indexing": "Document Index",
           "backfill": "Document Backfill",
+          "retry": "Document Index - Retry",
           "doc_permission_sync": "Permissions Sync",
           "group_sync": "Group Membership Sync",
           "pruning": "Document Pruning",
@@ -2987,9 +2988,10 @@
         },
         "detail": {
           "queued": "Queued",
+          "starting": "Starting sync",
           "running": "Running",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({duration})",
+          "runtime": "Runtime {duration}",
           "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} memberships/min",
           "membershipRateFinished": "{rate} memberships/min ({duration})"
@@ -2998,6 +3000,7 @@
           "stages": "View Stage Metrics",
           "cancel": "Cancel",
           "logs": "View Logs",
+          "noLogs": "No logs recorded",
           "checks": "View Check Results"
         },
         "warnings": {
@@ -3243,6 +3246,9 @@
         "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
+        "noDocs": "No docs completed indexing",
+        "laterCanceled": "Later stages canceled",
+        "retry": "Retry",
         "uneven": {
           "tooltip": "Batch times vary widely for this stage"
         },

@@ -2980,6 +2980,7 @@
           "all": "Alle Arten",
           "indexing": "Dokumentindex",
           "backfill": "Dokument-Nachindexierung",
+          "retry": "Dokumentindex - Wiederholung",
           "doc_permission_sync": "Berechtigungssync",
           "group_sync": "Gruppenmitgliedschaftssync",
           "pruning": "Dokumentbereinigung",
@@ -2987,9 +2988,10 @@
         },
         "detail": {
           "queued": "In Warteschlange",
+          "starting": "Synchronisierung startet",
           "running": "Läuft",
           "rate": "{rate} Dok./Min.",
-          "finished": "{time} ({duration})",
+          "runtime": "Laufzeit {duration}",
           "rateFinished": "{rate} Dok./Min. ({duration})",
           "membershipRate": "{rate} Mitgliedschaften/Min.",
           "membershipRateFinished": "{rate} Mitgliedschaften/Min. ({duration})"
@@ -2998,6 +3000,7 @@
           "stages": "Phasenmetriken anzeigen",
           "cancel": "Abbrechen",
           "logs": "Logs anzeigen",
+          "noLogs": "Keine Protokolle aufgezeichnet",
           "checks": "Prüfergebnisse anzeigen"
         },
         "warnings": {
@@ -3243,6 +3246,9 @@
         "calls": "Batches",
         "averageTime": "Durchschnittszeit",
         "maxTime": "Maximalzeit",
+        "noDocs": "Keine Dokumente fertig indexiert",
+        "laterCanceled": "Spätere Phasen abgebrochen",
+        "retry": "Erneut versuchen",
         "uneven": {
           "tooltip": "Die Batch-Zeiten dieser Phase schwanken stark"
         },

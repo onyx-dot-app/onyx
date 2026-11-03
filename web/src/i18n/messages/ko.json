@@ -2980,6 +2980,7 @@
           "all": "모든 유형",
           "indexing": "문서 인덱스",
           "backfill": "문서 백필",
+          "retry": "문서 인덱스 - 재시도",
           "doc_permission_sync": "권한 동기화",
           "group_sync": "그룹 멤버십 동기화",
           "pruning": "문서 정리",
@@ -2987,9 +2988,10 @@
         },
         "detail": {
           "queued": "대기 중",
+          "starting": "동기화 시작 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({duration})",
+          "runtime": "실행 시간 {duration}",
           "rateFinished": "분당 {rate}개 문서 ({duration})",
           "membershipRate": "{rate} 멤버십/분",
           "membershipRateFinished": "{rate} 멤버십/분 ({duration})"
@@ -2998,6 +3000,7 @@
           "stages": "단계별 지표 보기",
           "cancel": "취소",
           "logs": "로그 보기",
+          "noLogs": "기록된 로그 없음",
           "checks": "검사 결과 보기"
         },
         "warnings": {
@@ -3243,6 +3246,9 @@
         "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
+        "noDocs": "인덱싱을 완료한 문서가 없습니다",
+        "laterCanceled": "이후 단계가 취소됨",
+        "retry": "다시 시도",
         "uneven": {
           "tooltip": "이 단계의 배치 시간 편차가 큽니다"
         },
