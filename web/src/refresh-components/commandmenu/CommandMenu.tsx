@@ -14,12 +14,11 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@opal/utils";
-import { Text, InputTypeIn } from "@opal/components";
+import { Text, InputTypeIn, Divider } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-import Divider from "@/refresh-components/Divider";
 import { Section } from "@/layouts/general-layouts";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type {
@@ -565,7 +564,6 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
 function CommandMenuFilter({
   value,
   children,
-  icon,
   isApplied,
   onSelect,
 }: CommandMenuFilterProps) {
@@ -588,31 +586,27 @@ function CommandMenuFilter({
 
   // When filter is applied, show as group label (non-interactive)
   if (isApplied) {
-    return (
-      <Divider
-        showTitle
-        text={children as string}
-        icon={icon}
-        dividerLine={false}
-      />
-    );
+    return <Divider title={children} />;
   }
 
   const isHighlighted = value === highlightedValue;
 
-  // Selectable filter - uses LineItem, delegates all events to context
+  // Selectable filter - a foldable Divider header, delegates all events to context
   return (
-    <div data-command-item={value} role="option" aria-selected={isHighlighted}>
+    <div
+      data-command-item={value}
+      role="option"
+      aria-selected={isHighlighted}
+      tabIndex={-1}
+      onMouseEnter={() => onItemMouseEnter(value)}
+      onMouseMove={() => onItemMouseMove(value)}
+    >
       <Divider
-        showTitle
-        text={children as string}
-        icon={icon}
+        title={children}
         foldable
-        isHighlighted={isHighlighted}
-        onClick={() => onItemClick(value)}
-        onMouseEnter={() => onItemMouseEnter(value)}
-        onMouseMove={() => onItemMouseMove(value)}
-        dividerLine={false}
+        open={false}
+        onOpenChange={() => onItemClick(value)}
+        interaction={isHighlighted ? "hover" : undefined}
       />
     </div>
   );

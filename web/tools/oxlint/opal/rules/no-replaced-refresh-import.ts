@@ -4,7 +4,6 @@ import { defineRule } from "@oxlint/plugins";
 // replacement, and delete the row when the refresh module is deleted.
 const OPAL_REPLACEMENTS = new Map<string, string>([
   ["@/refresh-components/cards/Card", "`Card` from `@opal/components`"],
-  ["@/refresh-components/Divider", "`Divider` from `@opal/components`"],
   [
     "@/refresh-components/buttons/LineItem",
     "`LineItemButton` from `@opal/components`",
