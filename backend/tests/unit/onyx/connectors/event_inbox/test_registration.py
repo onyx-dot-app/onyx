@@ -5,11 +5,13 @@ fix the two things such a package relies on: that one call claims
 everything a source needs, and that configuration can name its module.
 """
 
+import os
+import subprocess
+import sys
 from collections.abc import Generator, Mapping, Sequence
 
 import pytest
 
-from onyx.configs.app_configs import EXTRA_EVENT_SOURCE_MODULES
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox.models import (
     EventHandler,
@@ -34,6 +36,7 @@ from onyx.db.models import ConnectorEventInbox
 
 SOURCE = DocumentSource.MOCK_CONNECTOR
 SLUG = "registration-test"
+_STUB_MODULE = "tests.unit.onyx.connectors.event_inbox.registering_source"
 
 
 def _parse(request: WebhookRequest) -> EventParseResult:  # noqa: ARG001
@@ -122,23 +125,41 @@ def test_unregistering_gives_up_everything_at_once() -> None:
     assert SOURCE not in claimed_event_sources()
 
 
-def test_configuration_can_name_a_source_outside_this_repository() -> None:
-    """The private-package path: a module named in the environment is loaded
-    beside the built-in ones."""
+def test_configuration_names_modules_for_the_loader() -> None:
+    """The private-package path: `EXTRA_EVENT_SOURCE_MODULES` reaches the
+    loader's list. A fresh interpreter, since the list is read at import."""
+    env = {**os.environ, "EXTRA_EVENT_SOURCE_MODULES": " acme.events , other.events,"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from onyx.connectors.event_inbox.sources import EVENT_SOURCE_MODULES;"
+            "print(','.join(EVENT_SOURCE_MODULES))",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    loaded = result.stdout.strip().split(",")
+    assert loaded[-2:] == ["acme.events", "other.events"]
+
+
+def test_a_configured_module_registers_through_the_loader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from onyx.connectors.event_inbox import sources as sources_module
 
-    assert (
-        sources_module.EVENT_SOURCE_MODULES[
-            : len(sources_module._BUILT_IN_EVENT_SOURCE_MODULES)
-        ]
-        == sources_module._BUILT_IN_EVENT_SOURCE_MODULES
-    )
-    assert (
-        sources_module.EVENT_SOURCE_MODULES[
-            len(sources_module._BUILT_IN_EVENT_SOURCE_MODULES) :
-        ]
-        == EXTRA_EVENT_SOURCE_MODULES
-    )
+    monkeypatch.setattr(sources_module, "EVENT_SOURCE_MODULES", (_STUB_MODULE,))
+    sources_module.reset_event_sources()
+    try:
+        sources_module.load_event_sources()
+
+        assert get_webhook_source("registering-source") is not None
+    finally:
+        sys.modules.pop(_STUB_MODULE, None)
+        sources_module.reset_event_sources()
 
 
 def test_a_second_module_claiming_a_source_leaves_the_first_alone() -> None:
