@@ -189,7 +189,9 @@ def test_cancellation_stops_a_running_call(monkeypatch: pytest.MonkeyPatch) -> N
         AudioContent(type="audio", mimeType="audio/wav", data="aGVsbG8="),
     ],
 )
-@pytest.mark.parametrize("readable", ["none", "text", "resource", "structured"])
+@pytest.mark.parametrize(
+    "readable", ["none", "empty_text", "text", "resource", "structured"]
+)
 def test_media_notice_is_only_a_fallback(
     media: ImageContent | AudioContent, readable: str
 ) -> None:
@@ -211,11 +213,12 @@ def test_media_notice_is_only_a_fallback(
     elif readable == "structured":
         result.structuredContent = payload
     else:
-        result.content.append(TextContent(type="text", text=""))
+        if readable == "empty_text":
+            result.content.append(TextContent(type="text", text=""))
         expected = f"[{media.type} omitted: {media.mimeType}]"
 
     actual = client.process_mcp_result(result)
 
     assert actual == expected
-    if readable != "none":
+    if readable not in ("none", "empty_text"):
         assert json.loads(actual) == payload
