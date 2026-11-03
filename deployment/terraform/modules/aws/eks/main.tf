@@ -471,12 +471,31 @@ module "irsa-workload-access" {
   depends_on = [module.eks]
 }
 
+# Optional workload namespace. The service accounts below reference it, so a new
+# cluster gets the namespace before them in the same apply.
+resource "kubernetes_namespace_v1" "irsa" {
+  count = var.create_irsa_service_account_namespace ? 1 : 0
+  metadata {
+    name = var.irsa_service_account_namespace
+  }
+
+  depends_on = [module.eks]
+}
+
+locals {
+  irsa_service_account_namespace = (
+    var.create_irsa_service_account_namespace
+    ? kubernetes_namespace_v1.irsa[0].metadata[0].name
+    : var.irsa_service_account_namespace
+  )
+}
+
 # Create Kubernetes service account for workload IRSA access (optional)
 resource "kubernetes_service_account" "s3_access" {
   count = local.workload_irsa_enabled ? 1 : 0
   metadata {
     name      = var.irsa_service_account_name
-    namespace = var.irsa_service_account_namespace
+    namespace = local.irsa_service_account_namespace
     annotations = {
       "eks.amazonaws.com/role-arn" = module.irsa-workload-access[0].iam_role_arn
     }

@@ -232,6 +232,12 @@ variable "irsa_service_account_namespace" {
   default     = "onyx"
 }
 
+variable "create_irsa_service_account_namespace" {
+  type        = bool
+  description = "Create irsa_service_account_namespace in this module, before the service accounts in it. Set true when no earlier step creates the namespace, such as on a new cluster. Leave false when the namespace exists outside this module."
+  default     = false
+}
+
 variable "irsa_service_account_name" {
   type        = string
   description = "Name of the IRSA-enabled Kubernetes service account for workload access (S3 + optional RDS)"

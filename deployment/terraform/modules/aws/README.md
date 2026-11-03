@@ -280,6 +280,7 @@ Key inputs include:
 - `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
 - `eks_managed_node_groups` (defaults include a main group and a dedicated document-index group, legacy key `vespa`, with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
+- `create_irsa_service_account_namespace` (default false). If true, the module creates `irsa_service_account_namespace` before the service account in it. Set it for a new cluster when no earlier step creates the namespace; otherwise the first apply fails with `namespaces "onyx" not found`. Leave it false when the namespace exists outside the module. The `irsa_service_account_namespace` output references the namespace, so resources that use it are created after it
 
 ### `postgres`
 - Amazon RDS for PostgreSQL with parameterized instance size, storage, version

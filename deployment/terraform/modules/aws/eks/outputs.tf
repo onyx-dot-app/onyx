@@ -38,3 +38,8 @@ output "oidc_provider_arn" {
   description = "OIDC provider ARN for IRSA role trust policies"
   value       = module.eks.oidc_provider_arn
 }
+
+output "irsa_service_account_namespace" {
+  description = "Workload namespace; references the module's namespace when create_irsa_service_account_namespace is true, so dependents wait for it"
+  value       = local.irsa_service_account_namespace
+}
