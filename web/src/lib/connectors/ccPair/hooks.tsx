@@ -26,6 +26,8 @@ import type {
   CCPairRunLevel,
   CCPairRunsQuery,
   CCPairRunStatusGroup,
+  IndexingConnectorRow,
+  IndexingConnectorsResponse,
   IndexingRun,
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -500,6 +502,70 @@ function refreshFeeds(ccPairIds: number[]) {
       )
       .map((feed) => feed.revalidate()),
   ]);
+}
+
+// The connectors route's largest page.
+const CONNECTOR_CHOICES_PAGE_SIZE = 100;
+
+export interface ConnectorChoices {
+  connectors: IndexingConnectorRow[];
+  /** The first page for the search is on its way, or a later one is. */
+  isLoading: boolean;
+  failed: boolean;
+  hasMore: boolean;
+  /** Asks for the next page. */
+  more: () => void;
+  retry: () => void;
+}
+
+/** The readable pairs whose names match `q`, a page at a time, for a connector picker. */
+export function useConnectorChoices(q: string): ConnectorChoices {
+  const { data, error, isLoading, size, setSize, mutate } =
+    useSWRInfinite<IndexingConnectorsResponse>(
+      (pageNum, previous: IndexingConnectorsResponse | null) => {
+        if (
+          previous !== null &&
+          previous.items.length < CONNECTOR_CHOICES_PAGE_SIZE
+        )
+          return null;
+        return SWR_KEYS.indexMonitoringConnectors({
+          pageNum,
+          pageSize: CONNECTOR_CHOICES_PAGE_SIZE,
+          q,
+          status: null,
+        });
+      },
+      errorHandlingFetcher,
+      { keepPreviousData: true }
+    );
+  useEffect(() => {
+    void setSize(1);
+  }, [q, setSize]);
+  // The list sorts by status, so a pair whose status moves between two page reads can land on both.
+  const connectors = useMemo(() => {
+    const seen = new Set<number>();
+    return (data ?? []).flatMap((page) =>
+      page.items.filter((row) => {
+        if (seen.has(row.cc_pair_id)) return false;
+        seen.add(row.cc_pair_id);
+        return true;
+      })
+    );
+  }, [data]);
+  const first = data?.[0];
+  const last = data?.[data.length - 1];
+  return {
+    connectors,
+    isLoading: isLoading || (data !== undefined && size > data.length),
+    failed: error !== undefined,
+    hasMore:
+      first !== undefined &&
+      last !== undefined &&
+      connectors.length < first.total_items &&
+      last.items.length === CONNECTOR_CHOICES_PAGE_SIZE,
+    more: () => void setSize(size + 1),
+    retry: () => void mutate(),
+  };
 }
 
 /** How many open runs of the level, or of every level when `level` is null, the batch resolve would mark under the narrowing, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */

@@ -3104,6 +3104,8 @@
           "resolved": "Resolved",
           "connectors": "Connectors",
           "connectorsLoading": "Loading connectors…",
+          "connectorsLoadError": "Couldn't load connectors.",
+          "connectorsRetry": "Retry",
           "toggleShow": "Show Filters",
           "toggleHide": "Hide Filters"
         },

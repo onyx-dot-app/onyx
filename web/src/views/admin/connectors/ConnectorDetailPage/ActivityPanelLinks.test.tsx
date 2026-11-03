@@ -1,6 +1,8 @@
-/** The activity panel's links to the page around it: the chart's hover and focus, the empty panel's Past Activities, Resolve All on a level the batch routes cannot narrow to, the Connectors menu while it loads, an index chip's label, Resolve on running runs, and a searched superseded run. */
+/** The activity panel's links to the page around it: the chart's hover and focus (widening a span that hides the failure), the empty panel's Past Activities, Resolve All on a level the batch routes cannot narrow to, the Connectors menu while it loads, pages and fails, an index chip's label, Resolve on running runs, and a searched superseded run. */
+import { useState } from "react";
 import {
   act,
+  fireEvent,
   render,
   renderHook,
   screen,
@@ -13,12 +15,14 @@ import {
   type ActivityScope,
 } from "@/lib/connectors/ccPair/hooks";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
+import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import {
   SALES_DRIVE,
   SUPPORT_INBOX,
   cardFor,
   cardKeys,
   indexRun,
+  type FeedPair,
   installActivityFeed,
   permSyncRun,
   minutesAgo,
@@ -209,6 +213,80 @@ describe("Chart focus on a hidden card", () => {
   });
 });
 
+describe("Chart focus on a failure outside the chart's span", () => {
+  interface SpannedPanelProps {
+    focusAttemptId: number | null;
+    onClearRange: () => void;
+  }
+  /** The page's span state, which the panel's onClearRange drops. */
+  function SpannedPanel({ focusAttemptId, onClearRange }: SpannedPanelProps) {
+    const [range, setRange] = useState<SliceRange | null>({
+      since: minutesAgo(60),
+      until: minutesAgo(-1),
+    });
+    return (
+      <ActivityPanel
+        scope={PAIR}
+        title="Activities"
+        range={range}
+        onClearRange={() => {
+          onClearRange();
+          setRange(null);
+        }}
+        focusAttemptId={focusAttemptId}
+      />
+    );
+  }
+  const old = indexRun({
+    id: 803,
+    status: "failed",
+    minutesAgo: 3 * 24 * 60,
+    errorMsg: "Old outage.",
+  });
+
+  it("widens the span to list the failure", async () => {
+    installActivityFeed([FAILED, old]);
+    const onClearRange = jest.fn();
+    const { rerender } = render(
+      <SpannedPanel focusAttemptId={null} onClearRange={onClearRange} />
+    );
+    await waitFor(() => expect(cardFor(FAILED)).not.toBeNull());
+    expect(cardFor(old)).toBeNull();
+
+    rerender(
+      <SpannedPanel
+        focusAttemptId={old.run.attempt.id}
+        onClearRange={onClearRange}
+      />
+    );
+
+    await waitFor(() => expect(cardFor(old)).not.toBeNull());
+    expect(onClearRange).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a span that already lists the failure", async () => {
+    installActivityFeed([FAILED, old]);
+    const onClearRange = jest.fn();
+    const { rerender } = render(
+      <SpannedPanel focusAttemptId={null} onClearRange={onClearRange} />
+    );
+    await waitFor(() => expect(cardFor(FAILED)).not.toBeNull());
+
+    rerender(
+      <SpannedPanel
+        focusAttemptId={FAILED.run.attempt.id}
+        onClearRange={onClearRange}
+      />
+    );
+
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    );
+    expect(cardFor(old)).toBeNull();
+    expect(onClearRange).not.toHaveBeenCalled();
+  });
+});
+
 describe("Connectors filter", () => {
   it("says it is loading while a typed search's page is on its way, then lists the matches", async () => {
     installActivityFeed([FAILED]);
@@ -249,6 +327,82 @@ describe("Connectors filter", () => {
       expect(screen.queryByText("Loading connectors…")).toBeNull()
     );
     expect(screen.getByText(SALES_DRIVE.name)).toBeInTheDocument();
+  });
+});
+
+describe("Connectors filter pages and failures", () => {
+  /** Serves the connectors route a page at a time over the installed feed, which lists every match at once. */
+  function pageConnectors(fail: () => boolean) {
+    const feedFetch = global.fetch;
+    global.fetch = jest.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const raw = typeof input === "string" ? input : input.toString();
+        if (!raw.includes("/index-monitoring/connectors")) {
+          return feedFetch(input, init);
+        }
+        if (fail()) return new Response("{}", { status: 500 });
+        const params = new URL(raw, "http://localhost").searchParams;
+        const pageNum = Number(params.get("page_num"));
+        const pageSize = Number(params.get("page_size"));
+        const all = await (await feedFetch(input, init)).json();
+        return new Response(
+          JSON.stringify({
+            ...all,
+            items: all.items.slice(
+              pageNum * pageSize,
+              (pageNum + 1) * pageSize
+            ),
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    ) as typeof fetch;
+  }
+
+  it("loads the next page of connectors when the list scrolls to its end", async () => {
+    const many: FeedPair[] = Array.from({ length: 150 }, (_, index) => ({
+      ...SUPPORT_INBOX,
+      id: 1000 + index,
+      name: `Pair ${String(index).padStart(3, "0")}`,
+    }));
+    installActivityFeed([FAILED], [SALES_DRIVE, ...many]);
+    pageConnectors(() => false);
+    const user = userEvent.setup();
+    render(<ActivityPanel scope="fleet" title="Activities" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Show Filters" })
+    );
+    await user.click(screen.getByRole("button", { name: "Connectors" }));
+    expect(await screen.findByText("Pair 000")).toBeInTheDocument();
+    expect(screen.queryByText("Pair 140")).toBeNull();
+
+    fireEvent.scroll(screen.getByRole("listbox"));
+
+    expect(await screen.findByText("Pair 140")).toBeInTheDocument();
+  });
+
+  it("shows a failed load as an error with Retry, not as no connectors", async () => {
+    installActivityFeed([FAILED]);
+    let failing = true;
+    pageConnectors(() => failing);
+    const user = userEvent.setup();
+    render(<ActivityPanel scope="fleet" title="Activities" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Show Filters" })
+    );
+    await user.click(screen.getByRole("button", { name: "Connectors" }));
+    expect(
+      await screen.findByText("Couldn't load connectors.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(SUPPORT_INBOX.name)).toBeNull();
+
+    failing = false;
+    await user.click(screen.getByText("Retry"));
+
+    expect(await screen.findByText(SUPPORT_INBOX.name)).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load connectors.")).toBeNull();
   });
 });
 
