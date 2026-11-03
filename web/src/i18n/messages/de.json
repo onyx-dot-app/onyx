@@ -3105,6 +3105,8 @@
           "resolved": "Behoben",
           "connectors": "Konnektoren",
           "connectorsLoading": "Konnektoren werden geladen…",
+          "connectorsLoadError": "Die Konnektoren konnten nicht geladen werden.",
+          "connectorsRetry": "Erneut versuchen",
           "toggleShow": "Filter anzeigen",
           "toggleHide": "Filter ausblenden"
         },

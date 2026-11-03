@@ -3105,6 +3105,8 @@
           "resolved": "해결됨",
           "connectors": "커넥터",
           "connectorsLoading": "커넥터 불러오는 중…",
+          "connectorsLoadError": "커넥터를 불러올 수 없습니다.",
+          "connectorsRetry": "다시 시도",
           "toggleShow": "필터 표시",
           "toggleHide": "필터 숨기기"
         },

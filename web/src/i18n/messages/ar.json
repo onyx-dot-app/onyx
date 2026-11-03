@@ -3105,6 +3105,8 @@
           "resolved": "تم الحل",
           "connectors": "الموصلات",
           "connectorsLoading": "جارٍ تحميل الموصّلات…",
+          "connectorsLoadError": "تعذر تحميل الموصّلات.",
+          "connectorsRetry": "إعادة المحاولة",
           "toggleShow": "إظهار عوامل التصفية",
           "toggleHide": "إخفاء عوامل التصفية"
         },

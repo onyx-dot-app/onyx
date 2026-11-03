@@ -3105,6 +3105,8 @@
           "resolved": "解決済み",
           "connectors": "コネクター",
           "connectorsLoading": "コネクタを読み込み中…",
+          "connectorsLoadError": "コネクタを読み込めませんでした。",
+          "connectorsRetry": "再試行",
           "toggleShow": "フィルターを表示",
           "toggleHide": "フィルターを非表示"
         },

@@ -3105,6 +3105,8 @@
           "resolved": "已解决",
           "connectors": "连接器",
           "connectorsLoading": "正在加载连接器…",
+          "connectorsLoadError": "无法加载连接器。",
+          "connectorsRetry": "重试",
           "toggleShow": "显示筛选",
           "toggleHide": "隐藏筛选"
         },

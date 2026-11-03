@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import useSWR from "swr";
 import {
   Button,
   Card,
@@ -46,6 +45,7 @@ import {
   runKey,
   useActivityItems,
   useActivityRunsCount,
+  useConnectorChoices,
   useResolvableRunsCount,
   useResolveRunErrors,
   DEFAULT_ACTIVITY_SECTIONS,
@@ -60,11 +60,8 @@ import {
 import type {
   CCPairRunLevel,
   CCPairRunStatusGroup,
-  IndexingConnectorsResponse,
 } from "@/lib/connectors/types";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
 import { isActive } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import {
@@ -75,8 +72,6 @@ import {
 import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const LOADER_ROWS = 2;
-// The connectors route's largest page. The filter's search reaches the rest.
-const CONNECTORS_PAGE_SIZE = 100;
 
 /** Which runs the panel lists. */
 type ActivityLevel =
@@ -312,18 +307,10 @@ function ConnectorsFilter({ value, onChange }: ConnectorsFilterProps) {
   const tList = useTranslations("admin.indexing.list");
   const [queryInput, setQueryInput] = useState("");
   const query = useDebouncedValue(queryInput.trim(), SEARCH_DELAY_MS);
-  const { data, isLoading } = useSWR<IndexingConnectorsResponse>(
-    SWR_KEYS.indexMonitoringConnectors({
-      pageNum: 0,
-      pageSize: CONNECTORS_PAGE_SIZE,
-      q: query,
-      status: null,
-    }),
-    errorHandlingFetcher
-  );
+  const choices = useConnectorChoices(query);
   // Until the typed search's page arrives, the list says so rather than "no items".
-  const pending = isLoading || queryInput.trim() !== query;
-  const options: DropdownItem[] = (data?.items ?? []).map((row) => ({
+  const pending = choices.isLoading || queryInput.trim() !== query;
+  const options: DropdownItem[] = choices.connectors.map((row) => ({
     kind: "option",
     value: String(row.cc_pair_id),
     title: row.name,
@@ -350,6 +337,33 @@ function ConnectorsFilter({ value, onChange }: ConnectorsFilterProps) {
       </Section>
     ),
   };
+  // A failed page reads as an error, never as a list with no matches. The row is the retry, so the keyboard reaches it too.
+  const errorRow: DropdownItem = {
+    kind: "custom",
+    id: "error",
+    pinned: true,
+    keepOpen: true,
+    onActivate: choices.retry,
+    render: ({ highlighted, props }) => (
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        gap={0.5}
+        padding={0.5}
+        height="fit"
+        className={cn("cursor-pointer", highlighted && "bg-background-tint-02")}
+        {...props}
+      >
+        <Text font="secondary-body" color="status-error-05">
+          {t("filter.connectorsLoadError")}
+        </Text>
+        <Text font="secondary-action" color="text-04">
+          {t("filter.connectorsRetry")}
+        </Text>
+      </Section>
+    ),
+  };
+  const statusRows = choices.failed ? [errorRow] : pending ? [loadingRow] : [];
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
@@ -379,7 +393,10 @@ function ConnectorsFilter({ value, onChange }: ConnectorsFilterProps) {
               : [...value, picked]
           );
         }}
-        items={pending ? [loadingRow, ...options] : options}
+        items={[...statusRows, ...options]}
+        onReachEnd={() => {
+          if (choices.hasMore && !pending && !choices.failed) choices.more();
+        }}
       />
     </Dropdown>
   );
@@ -532,14 +549,30 @@ export default function ActivityPanel({
   const focusListed = focusFeed.runs.some(
     ({ run }) => run.kind === "indexing" && run.attempt.id === focusAttemptId
   );
+  const rangeSet = range !== null;
   useEffect(() => {
-    if (focusAttemptId === null || focusListed || !focusFeed.hasMore) return;
+    if (focusAttemptId === null || focusListed) return;
     // Pages only once the reset above shows the unnarrowed failures, or the page lands on a feed about to start over.
     if (!focusRevealed) return;
+    if (!focusFeed.hasMore) {
+      // Every failure in the chart's span is listed without the run, so the span is dropped. A span that lists the run stays.
+      if (rangeSet && focusFeed.loaded && !focusFeed.isLoading) {
+        focusPagedAt.current = null;
+        onClearRange?.();
+      }
+      return;
+    }
     if (focusPagedAt.current === focusFeed.runs.length) return;
     focusPagedAt.current = focusFeed.runs.length;
     focusFeed.more();
-  }, [focusAttemptId, focusListed, focusFeed, focusRevealed]);
+  }, [
+    focusAttemptId,
+    focusListed,
+    focusFeed,
+    focusRevealed,
+    rangeSet,
+    onClearRange,
+  ]);
   const closed = [
     useActivityItems(
       scope,

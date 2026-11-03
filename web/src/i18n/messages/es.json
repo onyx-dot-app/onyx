@@ -3105,6 +3105,8 @@
           "resolved": "Resuelto",
           "connectors": "Conectores",
           "connectorsLoading": "Cargando conectores…",
+          "connectorsLoadError": "No se pudieron cargar los conectores.",
+          "connectorsRetry": "Reintentar",
           "toggleShow": "Mostrar filtros",
           "toggleHide": "Ocultar filtros"
         },
