@@ -278,6 +278,20 @@ export function useNavigation(): Navigation {
  * a page that has not rendered yet. Call it in a component that the layout at
  * `base` renders (e.g. the chrome), so the rendered segments are read below it.
  */
+/** A pathname with each segment decoded; a malformed one stays as it is. */
+function decodePathname(pathname: string): string {
+  return pathname
+    .split("/")
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join("/");
+}
+
 export function useRouteRendering(base: string): boolean {
   const pathname = usePathname();
   // The rendered tree's segments, which follow the router, not the URL.
@@ -287,7 +301,10 @@ export function useRouteRendering(base: string): boolean {
   );
   const renderedPathname =
     segments.length > 0 ? `${base}/${segments.join("/")}` : base;
-  const rendering = renderedPathname !== pathname;
+  // Segments may come decoded while the URL keeps `%31`, so compare both
+  // decoded.
+  const rendering =
+    decodePathname(renderedPathname) !== decodePathname(pathname);
   useEffect(() => {
     if (!rendering) routeNavigationInFlight = false;
   }, [rendering]);
