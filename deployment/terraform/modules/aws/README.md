@@ -514,9 +514,10 @@ With `"firecracker"`, the `eks` module:
 - keeps the group on-demand. A spot reclaim stops every microVM on the node;
 - keeps IMDSv2 with hop limit 1.
 
-The default, `"pod"`, leaves the group as it is. A change to
-`craft_sandbox_runtime` makes a new launch template version, so EKS rolls the
-sandbox nodes. `craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
+The default, `"pod"`, leaves the group as it is. On non-metal types, a change
+to `craft_sandbox_runtime` makes a new launch template version, so EKS rolls the
+sandbox nodes. On `.metal` groups, only the label changes, in place.
+`craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
 volume (defaults 3000 and 125). The tested values for Firecracker are 6000 and
 500 MiB/s. The AL2023 root filesystem is XFS with reflink, so no extra disk is
 needed.
@@ -532,7 +533,7 @@ Node requirements:
 
 The module refuses a blocked type, and a group that mixes `.metal` and
 nested virtualization types. Keep `craft_sandbox_runtime = "pod"` on Graviton,
-AMD or older Intel sandbox nodes.
+AMD, or older Intel non-metal sandbox nodes.
 
 ## Workflow tips
 - First apply can be infra-only; once EKS is active, install the Helm chart.
