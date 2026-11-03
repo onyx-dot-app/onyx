@@ -1,6 +1,7 @@
-/** The status page's chart: the overview fetch carries the chart's bar count and the browser's clock. */
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { render, setupUser } from "@tests/setup/test-utils";
+/** The status page's overview: the fetch carries the chart's bar count and the browser's clock, the old window's bars pick nothing while a new one loads, and a failed refresh never leaves old counts looking current. */
+import { fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { render, screen, setupUser } from "@tests/setup/test-utils";
 import type { IndexingOverviewResponse } from "@/lib/connectors/types";
 import OverviewCard from "@/views/admin/connectors/IndexingStatusPage/OverviewCard";
 import {
@@ -92,7 +93,12 @@ it("ignores clicks on the old window's bars while a new window loads", async () 
   const onRangeChange = jest.fn();
   const user = setupUser();
   const { container } = render(
-    <OverviewCard range={null} onRangeChange={onRangeChange} />
+    <OverviewCard
+      range={null}
+      onRangeChange={onRangeChange}
+      panelOpen={false}
+      onPanelOpenChange={() => {}}
+    />
   );
   const bars = () =>
     Array.from(container.querySelectorAll('[data-testid="chart-bar"]'));
@@ -107,4 +113,49 @@ it("ignores clicks on the old window's bars while a new window loads", async () 
   fireEvent.keyDown(bars()[2]!, { key: "Enter" });
 
   expect(onRangeChange).not.toHaveBeenCalled();
+});
+
+it("shows dashes, not the last window's counts, once a refresh fails", async () => {
+  installChartLayout(472);
+  const overview: IndexingOverviewResponse = {
+    indexing_connectors: 1,
+    active_connectors: 21,
+    recent_docs_indexed: 3,
+    total_docs_indexed: 43,
+    paused_connectors: 65,
+    throughput: throughputFixture(),
+  };
+  // Only the first window loads, so picking another fails while SWR keeps the first response.
+  global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+    String(input).includes("window=1h")
+      ? new Response(JSON.stringify(overview), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      : new Response("{}", { status: 500 })
+  ) as unknown as typeof fetch;
+  const user = userEvent.setup();
+
+  render(
+    <OverviewCard
+      range={null}
+      onRangeChange={() => {}}
+      panelOpen={false}
+      onPanelOpenChange={() => {}}
+    />
+  );
+  expect(await screen.findByText("21")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Last hour" }));
+  await user.click(
+    await screen.findByRole("option", { name: "Last 24 hours" })
+  );
+
+  expect(
+    await screen.findByText("The overview could not load.")
+  ).toBeInTheDocument();
+  expect(screen.queryByText("21")).toBeNull();
+  expect(screen.queryByText("43")).toBeNull();
+  expect(screen.queryByText("65")).toBeNull();
+  expect(screen.getAllByText("—")).toHaveLength(3);
 });

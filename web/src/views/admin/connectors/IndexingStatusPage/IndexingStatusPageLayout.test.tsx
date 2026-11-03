@@ -1,4 +1,4 @@
-/** FE-2: the status page's header, counts and graph cards, fleet Activities panel, its hidden state, the row lift on activity hover and the 816 px container stacking. jsdom has no layout, so widths are pinned by class and the query each class answers to. */
+/** The status page's header, counts and graph cards, fleet Activities panel, its hidden state, the row lift on activity hover and the 816 px container stacking. jsdom has no layout, so widths are pinned by class and the query each class answers to. */
 import {
   act,
   render,
@@ -45,6 +45,15 @@ import {
   resetChartLayout,
   throughputFixture,
 } from "@tests/setup/throughputChartTestUtils";
+
+// A global connector manager, who is offered Add Connector.
+jest.mock("@/lib/permissions/hooks", () => ({
+  ...jest.requireActual("@/lib/permissions/hooks"),
+  usePermissionAuthority: () => ({
+    isGlobalHolder: true,
+    isScopedManager: false,
+  }),
+}));
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
@@ -94,7 +103,7 @@ jest.mock(
 const OVERVIEW_PATH = "/api/manage/admin/index-monitoring/overview";
 const CONNECTORS_PATH = "/api/manage/admin/index-monitoring/connectors";
 
-/** The overview as PR 1 serves it, `paused_connectors` included. */
+/** The overview with `paused_connectors`. */
 function overview(
   withPaused = true
 ): IndexingOverviewResponse & { paused_connectors?: number } {
@@ -219,7 +228,7 @@ afterEach(() => {
 async function renderPage(pool: FeedRun[] = [FAILED_RUN], withPaused = true) {
   const feed = stubApi(pool, withPaused);
   render(<IndexingStatusPage />);
-  // The list and the overview's figures, both of which the page shows today.
+  // The list and the overview's figures.
   await screen.findByTestId(`indexing-connector-${SALES_DRIVE.id}`);
   await screen.findByText("214,316");
   return feed;
@@ -340,8 +349,8 @@ function isSelected(button: HTMLElement): boolean {
   );
 }
 
-describe("AC-1: page header", () => {
-  it("AC-1: holds an Add Connector button with a plus icon that opens the Add Connector page", async () => {
+describe("page header", () => {
+  it("holds an Add Connector button with a plus icon that opens the connector catalog", async () => {
     await renderPage();
     expect(screen.getByText("Connector Indexing Status")).toBeInTheDocument();
     const add = screen.getByRole("link", { name: "Add Connector" });
@@ -351,7 +360,7 @@ describe("AC-1: page header", () => {
     expect(bodyRow()).not.toContainElement(add);
   });
 
-  it("AC-4, AC-5: keeps the xl page with the connector page's narrow gutters", async () => {
+  it("keeps the xl page with the connector page's narrow gutters", async () => {
     await renderPage();
     const root = document.querySelector('[class~="@container/settings-page"]');
     expect(root).not.toBeNull();
@@ -359,8 +368,8 @@ describe("AC-1: page header", () => {
   });
 });
 
-describe("AC-2: counts card", () => {
-  it("AC-2: puts Active, Total and Paused on one line with the Activities panel button in D", async () => {
+describe("counts card", () => {
+  it("puts Active, Total and Paused on one line with the Activities panel button in D", async () => {
     await renderPage();
     const { root, third, part } = lineOf("Active connectors");
     const a = part(screen.getByText("Active connectors"));
@@ -381,7 +390,7 @@ describe("AC-2: counts card", () => {
     expect(root).not.toHaveTextContent("Indexing connectors");
   });
 
-  it("AC-2: leaves Paused out when the overview does not carry it", async () => {
+  it("leaves Paused out when the overview does not carry it", async () => {
     await renderPage([FAILED_RUN], false);
     expect(screen.getByText("Total documents indexed")).toBeInTheDocument();
     expect(screen.queryByText("Paused connectors")).toBeNull();
@@ -390,7 +399,7 @@ describe("AC-2: counts card", () => {
     ).toBeInTheDocument();
   });
 
-  it("AC-5: drops the panel button below 816 px of content, on the body's container", async () => {
+  it("drops the panel button below 816 px of content, on the body's container", async () => {
     await renderPage();
     let node: HTMLElement | null = screen.getByRole("button", {
       name: "Hide Activities",
@@ -408,8 +417,8 @@ describe("AC-2: counts card", () => {
   });
 });
 
-describe("AC-3, AC-6: graph card", () => {
-  it("AC-3: shows Indexing connectors and Docs processed recently with the window picker on the line, the chart under it", async () => {
+describe("graph card", () => {
+  it("shows Indexing connectors and Docs processed recently with the window picker on the line, the chart under it", async () => {
     await renderPage();
     await screen.findByText("Indexing connectors");
     const { root, third, part } = lineOf("Indexing connectors");
@@ -437,7 +446,7 @@ describe("AC-3, AC-6: graph card", () => {
     ).toBeTruthy();
   });
 
-  it("AC-6: a span brushed on the graph card's chart narrows the fleet panel", async () => {
+  it("a span brushed on the graph card's chart narrows the fleet panel", async () => {
     const user = setupUser();
     const feed = await renderPage();
     await screen.findByText("Indexing connectors");
@@ -464,8 +473,8 @@ describe("AC-3, AC-6: graph card", () => {
   });
 });
 
-describe("AC-4, AC-6: the fleet Activities panel beside the 640 column", () => {
-  it("AC-6: opens the fleet panel by default when Errors has items, with the panel button selected and no Activities card", async () => {
+describe("the fleet Activities panel beside the 640 column", () => {
+  it("opens the fleet panel by default when Errors has items, with the panel button selected", async () => {
     await renderPage([FAILED_RUN]);
     await waitFor(() => expect(panel()).not.toBeNull());
     await waitFor(() => expect(cardFor(FAILED_RUN)).not.toBeNull());
@@ -475,7 +484,7 @@ describe("AC-4, AC-6: the fleet Activities panel beside the 640 column", () => {
     expect(screen.queryByTestId("indexing-activities")).toBeNull();
   });
 
-  it("AC-4: sits the 640 column and the 400 panel 16 apart in one row", async () => {
+  it("sits the 640 column and the 400 panel 16 apart in one row", async () => {
     await renderPage([FAILED_RUN]);
     await waitFor(() => expect(panel()).not.toBeNull());
     const rowElement = bodyRow();
@@ -488,7 +497,7 @@ describe("AC-4, AC-6: the fleet Activities panel beside the 640 column", () => {
     expectQueriesBody(panel()!, "min", "w-100");
   });
 
-  it("AC-4: with no open errors the panel starts hidden, the column centers and the button is not selected", async () => {
+  it("with no open errors the panel starts hidden, the column centers and the button is not selected", async () => {
     const feed = await renderPage([CLEAN_RUN]);
     await settled(feed);
     expect(panel()).toBeNull();
@@ -501,7 +510,7 @@ describe("AC-4, AC-6: the fleet Activities panel beside the 640 column", () => {
     ).toBe(true);
   });
 
-  it("AC-4: the panel button hides and shows the panel", async () => {
+  it("the panel button hides and shows the panel", async () => {
     const user = setupUser();
     await renderPage([FAILED_RUN]);
     await waitFor(() => expect(panel()).not.toBeNull());
@@ -521,8 +530,8 @@ describe("AC-4, AC-6: the fleet Activities panel beside the 640 column", () => {
   });
 });
 
-describe("AC-5: stacking below 816 px of content", () => {
-  it("AC-5: stacks the row on the body's container like the connector page, not on the viewport", async () => {
+describe("stacking below 816 px of content", () => {
+  it("stacks the row on the body's container like the connector page, not on the viewport", async () => {
     await renderPage([FAILED_RUN]);
     await waitFor(() => expect(panel()).not.toBeNull());
     expectQueriesBody(bodyRow(), "max", "flex-col");
@@ -541,7 +550,7 @@ describe("AC-5: stacking below 816 px of content", () => {
   });
 });
 
-describe("D-73: activity hover lifts the connector row", () => {
+describe("activity hover lifts the connector row", () => {
   it("lifts the hovered activity's connector row and only that row", async () => {
     const user = setupUser();
     await renderPage([FAILED_RUN, CLEAN_RUN]);
@@ -564,7 +573,7 @@ describe("D-73: activity hover lifts the connector row", () => {
   });
 });
 
-describe("AC-7: copy in every locale", () => {
+describe("copy in every locale", () => {
   type Catalog = Record<string, unknown>;
   const LOCALES: Record<string, Catalog> = {
     ar,
@@ -606,7 +615,7 @@ describe("AC-7: copy in every locale", () => {
     "Indexing connectors",
     "Show Activities",
     "Hide Activities",
-  ])("AC-7: %s has a key in all nine locales", (copy) => {
+  ])("%s has a key in all nine locales", (copy) => {
     const paths = pathsOf((en as Catalog).admin, copy, ["admin"]);
     expect(paths).not.toEqual([]);
     for (const [locale, catalog] of Object.entries(LOCALES)) {
