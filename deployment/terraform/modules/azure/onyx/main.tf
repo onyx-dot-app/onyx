@@ -248,8 +248,13 @@ module "aks" {
   node_pools              = local.node_pools
   index_node_pool_enabled = var.index_node_pool_enabled
 
-  enable_gpu_node_pool     = var.enable_gpu_node_pool
-  enable_sandbox_node_pool = var.enable_sandbox_node_pool
+  enable_gpu_node_pool      = var.enable_gpu_node_pool
+  enable_sandbox_node_pool  = var.enable_sandbox_node_pool
+  sandbox_node_vm_size      = var.sandbox_node_vm_size
+  sandbox_node_min_count    = var.sandbox_node_min_count
+  sandbox_node_max_count    = var.sandbox_node_max_count
+  sandbox_node_disk_size_gb = var.sandbox_node_disk_size_gb
+  craft_sandbox_runtime     = var.craft_sandbox_runtime
 
   private_cluster_enabled              = var.private_cluster_enabled
   api_server_authorized_ip_ranges      = local.api_server_authorized_ip_ranges

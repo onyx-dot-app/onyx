@@ -375,6 +375,37 @@ variable "enable_sandbox_node_pool" {
   default     = false
 }
 
+# Defaults match the aks module's, so passing them through changes nothing.
+variable "sandbox_node_vm_size" {
+  type        = string
+  description = "VM size for the Craft sandbox pool"
+  default     = "Standard_D8ds_v5"
+}
+
+variable "sandbox_node_min_count" {
+  type        = number
+  description = "Minimum nodes in the Craft sandbox pool"
+  default     = 1
+}
+
+variable "sandbox_node_max_count" {
+  type        = number
+  description = "Maximum nodes in the Craft sandbox pool"
+  default     = 7
+}
+
+variable "sandbox_node_disk_size_gb" {
+  type        = number
+  description = "OS disk for Craft sandbox nodes. Each sandbox pod reserves about 5.5 GiB of ephemeral storage."
+  default     = 200
+}
+
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the azure module README for the node requirements."
+  default     = "pod"
+}
+
 variable "log_analytics_workspace_id" {
   type        = string
   description = "Workspace that receives control plane logs and container insights. Null sends neither."

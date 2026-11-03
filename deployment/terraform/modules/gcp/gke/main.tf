@@ -1,6 +1,12 @@
 locals {
   location = coalesce(var.zonal_location, var.region)
 
+  sandbox_firecracker = var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker"
+  sandbox_node_labels = merge(
+    { "onyx.app/workload" = "sandbox" },
+    local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
+  )
+
   # GKE adds this taint to a GPU pool itself, but only when a non-GPU pool
   # already exists. On a fresh apply the pools are built in parallel, so the
   # module declares it rather than rely on the order.
@@ -26,7 +32,7 @@ locals {
       max_count      = var.sandbox_node_max_count
       disk_size_gb   = var.sandbox_node_disk_size_gb
       disk_type      = "pd-balanced"
-      labels         = { "onyx.app/workload" = "sandbox" }
+      labels         = local.sandbox_node_labels
       taints         = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
       node_locations = []
     }
@@ -284,6 +290,27 @@ resource "google_container_node_pool" "this" {
       for_each = each.key == "sandbox" && var.enable_sandbox_node_pool && var.sandbox_gvisor_enabled ? [1] : []
       content {
         type = "GVISOR"
+      }
+    }
+
+    # Firecracker needs /dev/kvm. GCP offers it only on Intel types with
+    # nested virtualization, which can be set only when the pool is created.
+    # threads_per_core 0 keeps the machine type's default.
+    dynamic "advanced_machine_features" {
+      for_each = each.key == "sandbox" && local.sandbox_firecracker ? [1] : []
+      content {
+        threads_per_core             = 0
+        enable_nested_virtualization = true
+      }
+    }
+
+    # COS ships 65530, too few map areas for many guests with large memory.
+    dynamic "linux_node_config" {
+      for_each = each.key == "sandbox" && local.sandbox_firecracker ? [1] : []
+      content {
+        sysctls = {
+          "vm.max_map_count" = "1048576"
+        }
       }
     }
 
