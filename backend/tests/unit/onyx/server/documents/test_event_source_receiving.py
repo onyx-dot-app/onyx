@@ -2,13 +2,14 @@
 accepts: an unsigned source refuses deliveries once several pairs exist."""
 
 from collections.abc import Mapping
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
 from onyx.connectors.event_models import EventParseResult
-from onyx.server.documents.connector import _is_receiving
+from onyx.server.documents import connector as connector_api
 
 
 def _parse(request: WebhookRequest) -> EventParseResult:  # noqa: ARG001
@@ -45,4 +46,15 @@ UNSIGNED = WebhookSourceSpec(
 def test_receiving_matches_what_the_route_accepts(
     spec: WebhookSourceSpec, active_pairs: int, receiving: bool
 ) -> None:
-    assert _is_receiving(spec, active_pairs) is receiving
+    with (
+        patch.object(connector_api, "load_event_sources"),
+        patch.object(connector_api, "registered_webhook_sources", return_value=[spec]),
+        patch.object(
+            connector_api,
+            "get_active_event_cc_pairs",
+            return_value=[MagicMock() for _ in range(active_pairs)],
+        ),
+    ):
+        snapshots = connector_api.get_event_sources(MagicMock(), MagicMock())
+
+    assert [snapshot.receiving for snapshot in snapshots] == [receiving]
