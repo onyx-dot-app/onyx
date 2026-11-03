@@ -381,10 +381,17 @@ export default function ActivityCard({
   }, [focused]);
   const selected = openPopover !== null;
   const traceBeside = openPopover === "trace" && placement.trace === "beside";
-  // Measured on open and again when a resize moves the trace beside while it is open.
+  // Measured on open, when a resize moves the trace beside, and while beside whenever the card resizes, since a polled run can reword its message and move the chip.
   useLayoutEffect(() => {
     if (!traceBeside) return;
-    setTraceAnchor(besideSidePanel(traceChipRef.current, frameRef.current));
+    const measure = () =>
+      setTraceAnchor(besideSidePanel(traceChipRef.current, frameRef.current));
+    measure();
+    const card = rootRef.current;
+    if (card === null) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(card);
+    return () => observer.disconnect();
   }, [traceBeside]);
   const reportPanelOpen = useEffectEvent((open: boolean) =>
     onPanelOpenChange?.(open)
