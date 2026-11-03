@@ -26,6 +26,8 @@ from onyx.db.models import (
     IndexAttempt,
     SearchSettings,
 )
+from onyx.db.reindex_hold import ReindexHoldState, get_reindex_hold_state
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
@@ -232,11 +234,38 @@ def _is_reindex_request_due(
     return True
 
 
+def _reindex_hold_verdict(
+    cc_pair: ConnectorCredentialPair,
+    search_settings_instance: SearchSettings,
+    reindex_hold: ReindexHoldState | None,
+) -> bool | None:
+    """What the reindex hold says about starting an attempt, or None when it has
+    no say. Once every connector's port is SUCCESS, PRESENT stops so FUTURE can
+    catch up on what PRESENT indexed during the port and the swap can fire. A
+    port-flow FUTURE then starts only catch-up polls, for pairs PRESENT wrote
+    after the reindex began, with no refresh_freq wait, so routine FUTURE polls
+    do not hold the swap either. Before the ports finish, FUTURE polls like
+    PRESENT (its synthetic seed primes the cursor)."""
+    if reindex_hold is None:
+        return None
+    if search_settings_instance.status == IndexModelStatus.PRESENT:
+        return False if reindex_hold.hold_active else None
+    if (
+        search_settings_instance.status == IndexModelStatus.FUTURE
+        and search_settings_instance.use_port_flow
+        and reindex_hold.finalizing
+    ):
+        pair = reindex_hold.pair(cc_pair.id)
+        return pair is not None and pair.catch_up_due
+    return None
+
+
 def should_index(
     cc_pair: ConnectorCredentialPair,
     search_settings_instance: SearchSettings,
     secondary_index_building: bool,
     db_session: Session,
+    reindex_hold: ReindexHoldState | None = None,
 ) -> bool:
     """Checks various global settings and past indexing attempts to determine if
     we should try to start indexing the cc pair / search setting combination.
@@ -244,9 +273,17 @@ def should_index(
     Note that tactical checks such as preventing overlap with a currently running task
     are not handled here.
 
+    `reindex_hold` is the beat's reindex hold state (`get_reindex_hold_state`);
+    the beat computes it once and passes it in. Left out, it is computed here
+    when a secondary index is building.
+
     Return True if we should try to index, False if not.
     """
     connector = cc_pair.connector
+    if reindex_hold is None and secondary_index_building:
+        reindex_hold = get_reindex_hold_state(
+            db_session, get_secondary_search_settings(db_session)
+        )
     last_index_attempt = get_last_attempt_for_cc_pair(
         cc_pair_id=cc_pair.id,
         search_settings_id=search_settings_instance.id,
@@ -281,6 +318,14 @@ def should_index(
             #     f"Not indexing cc_pair={cc_pair.id}: DISABLE_INDEX_UPDATE_ON_SWAP is True and secondary index building"
             # )
             return False
+
+    # This check precedes the manual trigger and re-index requests below, so they
+    # stay pending through the hold and run on the new PRESENT after the swap.
+    hold_verdict = _reindex_hold_verdict(
+        cc_pair, search_settings_instance, reindex_hold
+    )
+    if hold_verdict is not None:
+        return hold_verdict
 
     # Legacy FUTURE reindex indexes once, then stops so the swap can fire. A
     # port-flow FUTURE polls continuously like PRESENT (its synthetic seed primes

@@ -1,11 +1,14 @@
 """External dependency unit tests for the port-aware swap criterion (T7/D8).
 
-The port-flow branch of `check_and_perform_index_swap` swaps on four conditions
+The port-flow branch of `check_and_perform_index_swap` swaps on these conditions
 rather than the legacy successful-index count: every required cc_pair's port is
-SUCCESS, a real (non-seed) FUTURE index attempt landed after the port, nothing is
-in progress, and the deferred metadata-sync backlog has drained. The push-based
-Ingestion pair is gated on its port only (it never runs a connector index attempt).
-Mode C (INSTANT) swaps immediately; the legacy (flag-off) path is untouched.
+SUCCESS, no FUTURE attempt runs, no PRESENT attempt of a required pair runs or is
+queued, FUTURE has caught up with what PRESENT wrote after the reindex began (a
+successful FUTURE poll whose window ends past the port and PRESENT's last run;
+paused and abandoned pairs are exempt and get their hashes cleared at the swap),
+and the deferred metadata-sync backlog has drained. The push-based Ingestion pair
+is gated on its port only (it never runs a connector index attempt). Mode C
+(INSTANT) swaps immediately; the legacy (flag-off) path is untouched.
 
 `_perform_index_swap` must flip PRESENT -> PAST and FUTURE -> PRESENT in one
 commit, so no other session ever reads a state with no PRESENT row.
@@ -22,7 +25,7 @@ port outright, `mark_port_in_progress` starts only NOT_STARTED (no double writer
 """
 
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -34,12 +37,15 @@ from onyx.configs.constants import DocumentSource
 from onyx.db import swap_index
 from onyx.db.document import (
     PortedScope,
+    clear_content_hash_for_cc_pair_since__no_commit,
     mark_document_synced_secondary_pending,
     sample_ported_document_ids,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
+    IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
@@ -47,6 +53,7 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt import (
     create_index_attempt,
+    create_synthetic_seed_attempt,
     mark_attempt_in_progress,
     mark_attempt_succeeded,
 )
@@ -746,6 +753,191 @@ def test_writer_starting_during_the_sample_holds_the_swap(
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
 
+def _present_attempt(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    *,
+    status: IndexingStatus,
+    ended: datetime | None = None,
+    celery_task_id: str | None = None,
+) -> IndexAttempt:
+    """An attempt on the live PRESENT settings with explicit times."""
+    row = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=get_current_search_settings(db_session).id,
+        status=status,
+        from_beginning=False,
+        celery_task_id=celery_task_id,
+        time_started=ended,
+        time_finished=ended if status.is_terminal() else None,
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def _seed_and_port(
+    db_session: Session, cc_pair: ConnectorCredentialPair, future_id: int
+) -> tuple[datetime, datetime]:
+    """The reindex as set_new_search_settings and the port leave it: a seed (when the
+    reindex began) and a SUCCESS port. Returns (seed time_created, port completion)."""
+    seed_id = create_synthetic_seed_attempt(cc_pair.id, future_id, db_session, 0.0)
+    db_session.commit()
+    seed = db_session.get(IndexAttempt, seed_id)
+    assert seed is not None
+    since = seed.time_created
+    completed = _make_success_port(db_session, cc_pair.id, future_id)
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    return since, completed
+
+
+def test_swap_holds_while_a_present_attempt_runs_or_is_queued(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A PRESENT attempt that runs, or is queued with a task, will still write;
+    an attempt waiting for the capability checks will not."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _seed_and_port(db_session, cc_pair, future_id)
+
+    attempt = _present_attempt(db_session, cc_pair, status=IndexingStatus.NOT_STARTED)
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+    attempt.celery_task_id = "queued"
+    db_session.commit()
+    _clear_verification_backoff(future_id)
+    with patch.object(
+        swap_index, "find_documents_missing_from_index", return_value=[]
+    ) as lookup:
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+    lookup.assert_not_called()
+
+    attempt.status = IndexingStatus.IN_PROGRESS
+    db_session.commit()
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+
+def test_swap_holds_until_future_catches_up_with_present(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _since, completed = _seed_and_port(db_session, cc_pair, future_id)
+
+    # PRESENT wrote after the port copied: the copy may be behind.
+    present_end = completed + timedelta(minutes=5)
+    _present_attempt(
+        db_session, cc_pair, status=IndexingStatus.SUCCESS, ended=present_end
+    )
+    _clear_verification_backoff(future_id)
+    with patch.object(
+        swap_index, "find_documents_missing_from_index", return_value=[]
+    ) as lookup:
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+    lookup.assert_not_called()
+
+    # A FUTURE poll whose window ended before PRESENT's run may have missed it.
+    db_session.add(
+        IndexAttempt(
+            connector_credential_pair_id=cc_pair.id,
+            search_settings_id=future_id,
+            status=IndexingStatus.SUCCESS,
+            from_beginning=False,
+            poll_range_end=present_end - timedelta(seconds=1),
+            time_started=present_end + timedelta(minutes=1),
+            time_finished=present_end + timedelta(minutes=1),
+        )
+    )
+    db_session.commit()
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+    db_session.add(
+        IndexAttempt(
+            connector_credential_pair_id=cc_pair.id,
+            search_settings_id=future_id,
+            status=IndexingStatus.SUCCESS,
+            from_beginning=False,
+            poll_range_end=present_end,
+            time_started=present_end + timedelta(minutes=2),
+            time_finished=present_end + timedelta(minutes=2),
+        )
+    )
+    db_session.commit()
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+
+def test_swap_ignores_present_attempts_from_before_the_reindex(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    since, _completed = _seed_and_port(db_session, cc_pair, future_id)
+    _present_attempt(
+        db_session,
+        cc_pair,
+        status=IndexingStatus.SUCCESS,
+        ended=since - timedelta(minutes=1),
+    )
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+
+def test_swap_clears_hashes_of_a_pair_future_could_not_catch_up_with(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A paused pair cannot run FUTURE attempts: the swap does not wait for it,
+    and the hashes of what PRESENT wrote during the reindex are cleared so the
+    next poll re-indexes those documents into the new index."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    since, completed = _seed_and_port(db_session, cc_pair, future_id)
+    _present_attempt(
+        db_session,
+        cc_pair,
+        status=IndexingStatus.SUCCESS,
+        ended=completed + timedelta(minutes=5),
+    )
+    (doc_id,) = (
+        d
+        for d in db_session.scalars(
+            select(DocumentByConnectorCredentialPair.id).where(
+                DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == cc_pair.credential_id,
+            )
+        )
+    )
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None
+    doc.content_hash = "written-during-the-reindex"
+    doc.last_modified = since + timedelta(minutes=1)
+    cc_pair.status = ConnectorCredentialPairStatus.PAUSED
+    db_session.commit()
+
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+    swap_index._clear_hashes_future_skipped__no_commit(db_session, future_ss, [cc_pair])
+    db_session.commit()
+    db_session.expire_all()
+    assert doc.content_hash is None
+
+
 def test_sampler_skips_a_scope_with_no_snapshot_bound(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
@@ -1012,3 +1204,40 @@ def test_port_swap_blocks_when_a_ported_user_file_is_missing(
         delete_test_user(db_session, user)
         db_session.commit()
         _clear_verification_backoff(future_id)
+
+
+def test_hash_reset_clears_only_documents_modified_since(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The reset a swap applies to a pair FUTURE could not catch up with forgets
+    only what PRESENT wrote since the reindex began."""
+    cc_pair, _future_id = cc_pair_and_future
+    old_id, new_id = seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=_VERIFY_DOC_PREFIX
+    )
+    since = get_db_current_time(db_session)
+    for doc_id, modified in (
+        (old_id, since - timedelta(minutes=1)),
+        (new_id, since + timedelta(minutes=1)),
+    ):
+        doc = db_session.get(DbDocument, doc_id)
+        assert doc is not None
+        doc.content_hash = "hash"
+        doc.last_modified = modified
+    db_session.commit()
+
+    cleared = clear_content_hash_for_cc_pair_since__no_commit(
+        db_session, cc_pair.connector_id, cc_pair.credential_id, since
+    )
+    db_session.commit()
+    assert cleared == 1
+    hashes = dict(
+        db_session.execute(
+            select(DbDocument.id, DbDocument.content_hash).where(
+                DbDocument.id.in_([old_id, new_id])
+            )
+        )
+        .tuples()
+        .all()
+    )
+    assert hashes == {old_id: "hash", new_id: None}

@@ -198,8 +198,10 @@ the error type on purpose in auth code.
    attempt's own `SearchSettings`. During a REINDEX or ACTIVE_ONLY reindex,
    `background/celery/tasks/docprocessing/tasks.py:check_for_indexing` creates
    attempts for both generations; an INSTANT reindex creates none for FUTURE.
-   Do not make docprocessing write both: the port fills FUTURE, and a second
-   writer would race its create-only copy.
+   While the reindex finalizes it creates no PRESENT attempt and only catch-up
+   FUTURE attempts ([[document-index#reindex-hold]]). Do not make docprocessing
+   write both: the port fills FUTURE, and a second writer would race its
+   create-only copy.
 2. `document-written-whole` **A document's chunks go to `DocumentIndex.index()`
    in one call.** The index deletes stale trailing chunks from
    `IndexingMetadata.doc_id_to_chunk_cnt_diff`. The write is not atomic, so the
@@ -276,16 +278,21 @@ the error type on purpose in auth code.
 13. `future-attempts-first` **Do not starve FUTURE attempts of a finalizing
     reindex.** While a port-flow reindex is finalizing
     (`db/port_attempt.py:reindex_finalizing`: every seeded connector port
-    succeeded),
+    succeeded), no new PRESENT attempt starts ([[document-index#reindex-hold]])
+    and
     `background/celery/tasks/docfetching/task_creation_utils.py:docfetching_priority`
     queues FUTURE attempts of pairs with a document still pending for FUTURE at
-    HIGH, other FUTURE attempts at MEDIUM and PRESENT refreshes at LOW, so a
-    FUTURE crawl with nothing pending cannot hold the fetch slot ahead of the
-    pairs the swap waits on. `background/indexing/run_docfetching.py` sends
-    every FUTURE batch to docprocessing at HIGH and checks the rule again during
-    a long FUTURE run. The index swap waits until no FUTURE attempt of a
-    required pair runs ([[document-index]]). A change to attempt creation or
-    priority that delays FUTURE attempts stalls the swap.
+    HIGH, other FUTURE attempts at MEDIUM and PRESENT attempts still queued from
+    before at LOW, so a FUTURE crawl with nothing pending cannot hold the fetch
+    slot ahead of the pairs the swap waits on.
+    `background/indexing/run_docfetching.py` sends every FUTURE batch to
+    docprocessing at HIGH and checks the rule again during a long FUTURE run.
+    Only a PRESENT attempt consumes a pair's manual indexing trigger
+    (`backend/onyx/background/indexing/run_docfetching.py:_consumes_indexing_trigger`), so a held trigger runs on
+    the new PRESENT after the swap. The index swap waits until no FUTURE attempt
+    of a required pair runs and every pair has caught up ([[document-index]]).
+    A change to attempt creation or priority that delays FUTURE attempts stalls
+    the swap.
 14. `tabular-chunks-bounded` **Tabular chunk count does not grow with row
     count.** `TABULAR_MAX_CHUNKS_PER_WORKBOOK` caps the chunks of each file, and
     there is no per-row chunking.

@@ -1517,6 +1517,29 @@ def update_docs_chunk_count__no_commit(
         doc.chunk_count = doc_id_to_chunk_count[doc.id]
 
 
+def clear_content_hash_for_cc_pair_since__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    since: datetime,
+) -> int:
+    """Forget what the index holds for this cc_pair's documents modified at or
+    after `since`: a NULL hash never matches, so the next poll re-indexes them.
+    Used at a reindex swap for a connector FUTURE did not catch up on. Caller
+    commits. Returns the number of rows cleared."""
+    doc_ids = select(DocumentByConnectorCredentialPair.id).where(
+        DocumentByConnectorCredentialPair.connector_id == connector_id,
+        DocumentByConnectorCredentialPair.credential_id == credential_id,
+    )
+    result = db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(doc_ids), DbDocument.last_modified >= since)
+        .values(content_hash=None)
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
+
+
 def update_docs_content_hash__no_commit(
     ids_to_new_hash: dict[str, str],
     db_session: Session,

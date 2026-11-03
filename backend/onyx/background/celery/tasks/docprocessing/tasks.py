@@ -120,6 +120,7 @@ from onyx.db.index_attempt_metrics import (
 )
 from onyx.db.indexing_coordination import CoordinationStatus, IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
+from onyx.db.reindex_hold import ReindexHoldState, get_reindex_hold_state
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
@@ -792,11 +793,15 @@ def _dispatch_pair_waiting_attempt(
     search_settings: SearchSettings,
     redis_client: TenantRedisClient,
     tenant_id: str,
+    hold_active: bool = False,
 ) -> bool:
     """Sends the task of the pair's attempt that waits for the capability
-    checks, when they pass. False when no attempt waits or it still waits."""
+    checks, when they pass. False when no attempt waits or it still waits.
+    While the reindex hold is active a PRESENT attempt keeps waiting."""
     waiting = get_waiting_index_attempt(db_session, cc_pair_id, search_settings.id)
     if waiting is None:
+        return False
+    if hold_active and search_settings.status.is_current():
         return False
     cc_pair = get_connector_credential_pair_from_id(
         db_session=db_session, cc_pair_id=cc_pair_id
@@ -844,6 +849,33 @@ def _next_ready_backfill(
     )
 
 
+def _alert_abandoned_catch_up(
+    db_session: Session, reindex_hold: ReindexHoldState
+) -> None:
+    """Tell admins once per connector and reindex that FUTURE gave up catching up
+    on it: the swap proceeds and its changes land on the next sync. The alert's
+    dedup key carries the FUTURE id, so a later reindex alerts again."""
+    for cc_pair_id in reindex_hold.abandoned_ids:
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session, cc_pair_id=cc_pair_id
+        )
+        if cc_pair is None:
+            continue
+        name = cc_pair.name or cc_pair.connector.name or f"CC pair {cc_pair.id}"
+        notify_admins_of_connector_alert(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+            notif_type=NotificationType.REINDEX_CATCH_UP_ABANDONED,
+            title=f"Connector '{name}' could not finish the re-index catch-up",
+            description=(
+                "The new index will switch over without it. Documents this "
+                "connector changed during the re-index appear in the new index "
+                "after its next sync."
+            ),
+            additional_data_extra={"search_settings_id": reindex_hold.future_id},
+        )
+
+
 def _try_creating_pending_backfill(
     celery_app: Celery,
     db_session: Session,
@@ -853,13 +885,15 @@ def _try_creating_pending_backfill(
     secondary_index_building: bool,
     redis_client: TenantRedisClient,
     tenant_id: str,
+    hold_active: bool = False,
 ) -> bool:
     """Settles the pair's ended backfill attempts, then creates the attempt of
     its oldest ready backfill on the current index. The caller checked that no
     attempt is active there. The backfill waits while the pair is not ACTIVE,
-    and while an indexing trigger, a prune-after-reindex or a full re-index
-    request is pending: that run goes first, and a full re-index covers the
-    backfill. The creation checks these again under the pair's row lock."""
+    while the reindex hold is active, and while an indexing trigger, a
+    prune-after-reindex or a full re-index request is pending: that run goes
+    first, and a full re-index covers the backfill. The creation checks these
+    again under the pair's row lock."""
     if not search_settings.status.is_current() or not cc_pair.pending_backfills:
         return False
     if (
@@ -868,6 +902,7 @@ def _try_creating_pending_backfill(
         or cc_pair.prune_after_reindex_requested_at is not None
         or cc_pair.full_reindex_requested_at is not None
         or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
+        or hold_active
     ):
         return False
 
@@ -924,12 +959,15 @@ def _kickoff_indexing_tasks(
     redis_client: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
+    reindex_hold: ReindexHoldState | None = None,
 ) -> _KickoffResult:
     """Kick off indexing tasks for the given cc_pair_ids and search_settings.
 
-    Returns a _KickoffResult with diagnostic counts.
+    `reindex_hold` is the beat's reindex hold state; while it is active no
+    PRESENT attempt starts. Returns a _KickoffResult with diagnostic counts.
     """
     result = _KickoffResult()
+    hold_active = reindex_hold is not None and reindex_hold.hold_active
 
     for cc_pair_id in cc_pair_ids:
         lock_beat.reacquire()
@@ -949,6 +987,7 @@ def _kickoff_indexing_tasks(
                 search_settings=search_settings,
                 redis_client=redis_client,
                 tenant_id=tenant_id,
+                hold_active=hold_active,
             ):
                 result.created += 1
             else:
@@ -976,6 +1015,7 @@ def _kickoff_indexing_tasks(
             secondary_index_building=secondary_index_building,
             redis_client=redis_client,
             tenant_id=tenant_id,
+            hold_active=hold_active,
         ):
             result.created += 1
             continue
@@ -986,6 +1026,7 @@ def _kickoff_indexing_tasks(
             search_settings_instance=search_settings,
             secondary_index_building=secondary_index_building,
             db_session=db_session,
+            reindex_hold=reindex_hold,
         ):
             task_logger.debug(
                 f"_kickoff_indexing_tasks - Not indexing cc_pair_id: {cc_pair_id} "
@@ -1145,6 +1186,10 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     calls try_creating_docfetching_task, which creates a docfetching task.
     All the logic for determining what state the indexing pipeline is in
     w.r.t previous failed attempt, checkpointing, etc is handled in the docfetching task.
+
+    While a port-flow reindex finalizes (every connector's port is SUCCESS) no
+    PRESENT attempt starts and FUTURE only runs catch-up attempts, so the swap
+    can fire; see onyx.db.reindex_hold.
     """
 
     from onyx.natural_language_processing.search_nlp_models import (
@@ -1250,6 +1295,10 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
                 secondary_cc_pair_ids = standard_cc_pair_ids
 
+            # Once per beat: the reindex hold (every seeded connector's port is
+            # SUCCESS) and what each connector still owes the swap.
+            reindex_hold = get_reindex_hold_state(db_session, secondary_search_settings)
+
         # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
             for cc_pair_id in primary_cc_pair_ids:
@@ -1334,6 +1383,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             # A resolve can land between the alert and the flag above, leaving it set.
             heal_resolved_repeated_error_states(db_session, tenant_id)
 
+            _alert_abandoned_catch_up(db_session, reindex_hold)
+
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks
         with get_session_with_current_tenant() as db_session:
@@ -1347,6 +1398,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 redis_client=redis_client,
                 lock_beat=lock_beat,
                 tenant_id=tenant_id,
+                reindex_hold=reindex_hold,
             )
             tasks_created += primary_result.created
 
@@ -1365,6 +1417,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     redis_client=redis_client,
                     lock_beat=lock_beat,
                     tenant_id=tenant_id,
+                    reindex_hold=reindex_hold,
                 )
                 tasks_created += secondary_result.created
             elif (
@@ -1379,8 +1432,9 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         # actually dispatched at least one docfetching task. `_kickoff_indexing_tasks`
         # internally calls `should_index()` to decide per-cc_pair; using
         # `tasks_created > 0` here gives us a "real work was done" signal
-        # rather than just "tenant has a cc_pair somewhere."
-        if tasks_created > 0:
+        # rather than just "tenant has a cc_pair somewhere." A reindex counts as
+        # work too: its swap check runs here, and a quiet hold creates no tasks.
+        if tasks_created > 0 or secondary_search_settings is not None:
             maybe_mark_tenant_active(tenant_id, caller="check_for_indexing")
 
         # 2/3: VALIDATE

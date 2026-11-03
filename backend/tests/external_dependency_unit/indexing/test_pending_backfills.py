@@ -33,6 +33,7 @@ from onyx.db.connector_edit_requests import (
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexingMode, IndexingStatus
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
+from onyx.db.reindex_hold import ReindexHoldState
 from onyx.db.search_settings import get_current_search_settings
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import get_current_tenant_id
@@ -96,6 +97,7 @@ def _run_beat(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
     search_settings: SearchSettings,
+    reindex_hold: ReindexHoldState | None = None,
 ) -> None:
     db_session.expire_all()
     _kickoff_indexing_tasks(
@@ -107,6 +109,7 @@ def _run_beat(
         redis_client=get_redis_client(),
         lock_beat=MagicMock(),
         tenant_id=get_current_tenant_id(),
+        reindex_hold=reindex_hold,
     )
     db_session.expire_all()
 
@@ -544,3 +547,20 @@ def test_a_backfill_in_backoff_does_not_hold_back_later_ones(
     _run_beat(db_session, cc_pair, search_settings)
     [_, _, retry] = _backfills(db_session, cc_pair.id)
     assert retry.connector_config_override == _SCOPED_CONFIG
+
+
+def test_backfill_waits_during_the_reindex_hold(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+) -> None:
+    """While a reindex finalizes, PRESENT starts nothing, a backfill included; the
+    request stays pending and runs once the hold is over."""
+    _request(db_session, cc_pair, _scoped())
+
+    _run_beat(db_session, cc_pair, search_settings, ReindexHoldState(finalizing=True))
+    assert _backfills(db_session, cc_pair.id) == []
+    assert len(cc_pair.pending_backfills) == 1
+
+    _run_beat(db_session, cc_pair, search_settings, ReindexHoldState())
+    assert len(_backfills(db_session, cc_pair.id)) == 1

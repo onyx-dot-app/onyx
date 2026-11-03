@@ -63,6 +63,7 @@ from onyx.db.port_attempt import (
     has_active_port_attempts,
     port_backfill_has_pending_work,
 )
+from onyx.db.reindex_hold import get_reindex_hold_state
 from onyx.db.search_settings import (
     clear_reclaim_intent__no_commit,
     create_search_settings,
@@ -887,8 +888,13 @@ def get_reindex_progress(
             reembeds=True,
         )
     counts: ReindexProgressCounts = get_reindex_progress_counts(db_session, target.id)
+    hold = get_reindex_hold_state(db_session, target)
     return ReindexProgress(
-        **counts.model_dump(), reembeds=_port_reembeds(db_session, target)
+        **counts.model_dump(),
+        reembeds=_port_reembeds(db_session, target),
+        finalizing=hold.finalizing,
+        catching_up=len(hold.catching_up_ids),
+        abandoned=len(hold.abandoned_ids),
     )
 
 

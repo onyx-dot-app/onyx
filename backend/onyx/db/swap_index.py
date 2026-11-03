@@ -18,6 +18,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.document import (
     PortedScope,
+    clear_content_hash_for_cc_pair_since__no_commit,
     count_secondary_only_sync_pending_documents_for_cc_pairs,
     delete_all_documents_for_connector_credential_pair,
     filter_existing_document_ids,
@@ -46,6 +47,7 @@ from onyx.db.port_attempt import (
     get_latest_port_attempt,
     latest_port_bounds_by_user,
 )
+from onyx.db.reindex_hold import get_pair_catch_up_states
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
@@ -337,10 +339,17 @@ def _ported_documents_present_in_new_index(
 
 def _no_writer_left_in_flight(
     db_session: Session,
-    ss_id: int,
+    new_search_settings: SearchSettings,
     required_cc_pairs: list[ConnectorCredentialPair],
     required_user_ids: list[UUID],
 ) -> bool:
+    """No connector or user-file write can still land in FUTURE or PRESENT
+    behind the swap: no FUTURE attempt runs, no PRESENT attempt of a required
+    pair runs or is queued, FUTURE has caught up with what PRESENT wrote after
+    the reindex began for every required pair that can catch up (paused and
+    abandoned pairs get their hashes cleared at the swap instead), no user-file
+    reconcile is pending and no doc is pending for FUTURE."""
+    ss_id = new_search_settings.id
     cc_pair_ids = [cc_pair.id for cc_pair in required_cc_pairs]
 
     # Connector index attempts write into FUTURE for the whole reindex. A wedged
@@ -352,6 +361,25 @@ def _no_writer_left_in_flight(
             ss_id,
         )
         return False
+
+    states = get_pair_catch_up_states(db_session, new_search_settings, cc_pair_ids)
+    for cc_pair_id in cc_pair_ids:
+        state = states.get(cc_pair_id)
+        if state is None:
+            return False
+        if state.present_active:
+            logger.info(
+                "Port swap held: a PRESENT index attempt of cc_pair %s is running "
+                "or queued.",
+                cc_pair_id,
+            )
+            return False
+        if state.needs_catch_up and not state.abandoned:
+            logger.info(
+                "Port swap held: FUTURE has not caught up with cc_pair %s yet.",
+                cc_pair_id,
+            )
+            return False
 
     # Waiting on this flag is safe because new files dual-write to FUTURE and the
     # reconciler supplies the content on a 404, so every pending flag eventually clears.
@@ -375,11 +403,11 @@ def _port_swap_ready(
     """Port-flow swap gate.
 
     Returns True once every required cc_pair and user has a SUCCESS port and no active
-    one, nothing is still writing into the new settings, and a sample of ported
-    documents is present in the new index. There is no post-port connector index
-    attempt; the port copy is the whole bar. The pending-sync count is scoped to
-    required_cc_pairs because a global count never drains for INVALID/DELETING
-    documents, which never reach FUTURE.
+    one, no writer is left in flight (see _no_writer_left_in_flight: this includes
+    FUTURE having caught up with what PRESENT indexed after the reindex began),
+    and a sample of ported documents is present in the new index. The pending-sync
+    count is scoped to required_cc_pairs because a global count never drains for
+    INVALID/DELETING documents, which never reach FUTURE.
     """
     ss_id = new_search_settings.id
     cc_pair_scopes: list[PortedScope] = []
@@ -401,7 +429,7 @@ def _port_swap_ready(
         )
 
     if not _no_writer_left_in_flight(
-        db_session, ss_id, required_cc_pairs, required_user_ids
+        db_session, new_search_settings, required_cc_pairs, required_user_ids
     ):
         return False
 
@@ -423,8 +451,36 @@ def _port_swap_ready(
     # The OpenSearch call above took long enough for an index attempt to start, so
     # check the writers again.
     return _no_writer_left_in_flight(
-        db_session, ss_id, required_cc_pairs, required_user_ids
+        db_session, new_search_settings, required_cc_pairs, required_user_ids
     )
+
+
+def _clear_hashes_future_skipped__no_commit(
+    db_session: Session,
+    new_search_settings: SearchSettings,
+    required_cc_pairs: list[ConnectorCredentialPair],
+) -> None:
+    """A paused connector cannot run FUTURE attempts and an abandoned one gave up,
+    so the swap proceeds without their catch-up. Forget the hashes of what PRESENT
+    wrote during the reindex, so the next poll on the new PRESENT re-indexes those
+    documents instead of skipping them as unchanged. Rides in the swap's commit."""
+    states = get_pair_catch_up_states(
+        db_session, new_search_settings, [cc_pair.id for cc_pair in required_cc_pairs]
+    )
+    for cc_pair in required_cc_pairs:
+        state = states.get(cc_pair.id)
+        if state is None or not state.reset_hashes_at_swap:
+            continue
+        cleared = clear_content_hash_for_cc_pair_since__no_commit(
+            db_session, cc_pair.connector_id, cc_pair.credential_id, state.since
+        )
+        logger.info(
+            "Port swap: FUTURE did not catch up with cc_pair %s (%s); cleared the "
+            "content hash of %s documents so the next poll re-indexes them.",
+            cc_pair.id,
+            "abandoned" if state.abandoned else "not active",
+            cleared,
+        )
 
 
 def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
@@ -470,6 +526,9 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         if _port_swap_ready(
             db_session, new_search_settings, required_cc_pairs, required_user_ids
         ):
+            _clear_hashes_future_skipped__no_commit(
+                db_session, new_search_settings, required_cc_pairs
+            )
             return _perform_index_swap(
                 db_session=db_session,
                 new_search_settings=new_search_settings,

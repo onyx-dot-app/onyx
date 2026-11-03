@@ -28,11 +28,15 @@ def notify_admins_of_connector_alert(
     notif_type: NotificationType,
     title: str,
     description: str,
+    additional_data_extra: dict[str, Any] | None = None,
 ) -> None:
     """Best-effort ERROR alert to all active admins; never raises.
 
-    Commits the inserts on success; rolls the session back on failure. Call
-    it with no uncommitted work pending on the session."""
+    `additional_data_extra` widens the dedup key: alerts are unique per
+    (admin, type, additional_data), so an alert that may recur per event (one
+    reindex, say) passes the event id here. Commits the inserts on success;
+    rolls the session back on failure. Call it with no uncommitted work
+    pending on the session."""
     try:
         batch_create_notifications(
             user_ids=[admin.id for admin in get_active_admin_users(db_session)],
@@ -40,7 +44,10 @@ def notify_admins_of_connector_alert(
             db_session=db_session,
             title=title,
             description=description,
-            additional_data=connector_alert_additional_data(cc_pair_id),
+            additional_data={
+                **connector_alert_additional_data(cc_pair_id),
+                **(additional_data_extra or {}),
+            },
             severity=NotificationSeverity.ERROR,
         )
     except Exception:

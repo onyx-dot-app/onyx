@@ -114,9 +114,10 @@ set_new_search_settings        server/manage/search_settings.py
 check_for_port / run_port_attempt          tasks/port/tasks.py
   copy PRESENT chunks to FUTURE, re-embedded (indexing/port_reembed.py), create-only
   all seeded connector ports SUCCESS -> finalizing  db/port_attempt.py:reindex_finalizing
+  PRESENT attempts stop, FUTURE runs catch-up polls   backend/onyx/db/reindex_hold.py (the hold)
 check_and_perform_index_swap               db/swap_index.py, run by check_for_indexing
   INSTANT: swap at once, the port keeps filling the live index
-  REINDEX / ACTIVE_ONLY: swap when _port_swap_ready
+  REINDEX / ACTIVE_ONLY: swap when _port_swap_ready (ports done, FUTURE caught up)
 _perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit
 check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
   PENDING -> SOAKING -> DELETING -> RECLAIMED (row kept), or BLOCKED
@@ -124,13 +125,23 @@ check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
 
 The reindex never fetches sources again. It copies and re-embeds stored chunks
 (`document_index/opensearch/port_copy.py`), and connectors keep indexing new
-changes into both generations. Once every seeded connector port succeeds, the
-reindex is finalizing (`backend/onyx/db/reindex_hold.py` derives from attempt and
-port rows what each connector still owes the swap; a connector created or
-un-paused after the reindex began has no seed and does not end the phase). The swap then waits while any FUTURE index attempt of a required
-pair runs (`db/swap_index.py:_no_writer_left_in_flight`).
+changes into both generations while the ports run. Once every seeded connector
+port succeeds, the reindex is finalizing: PRESENT attempts stop (the reindex
+hold, `backend/onyx/db/reindex_hold.py`) and FUTURE runs only catch-up polls for pairs
+PRESENT wrote after the reindex began ([[#reindex-hold]]). The swap then waits
+until no FUTURE attempt of a required pair runs, no PRESENT attempt runs or is
+queued, and every pair that can catch up has a successful FUTURE poll whose
+window ends past its port and PRESENT's last run
+(`db/swap_index.py:_no_writer_left_in_flight`).
 [[indexing-pipeline#future-attempts-first]] keeps those attempts from waiting
-behind PRESENT refreshes. Reclaim waits `OLD_INDEX_RETENTION_HOURS` in SOAKING,
+behind PRESENT refreshes. A paused pair cannot run FUTURE attempts, and a pair
+whose FUTURE attempts end without success `REINDEX_HOLD_MAX_FUTURE_FAILURES`
+times in a row after its port, or stays behind for `REINDEX_HOLD_MAX_SECONDS`,
+is abandoned: the swap proceeds, clears the content hash of what PRESENT wrote
+during the reindex so the next poll re-indexes it, and admins get a
+`REINDEX_CATCH_UP_ABANDONED` alert. The
+reindex-progress endpoint reports `finalizing`, `catching_up` and `abandoned`.
+Reclaim waits `OLD_INDEX_RETENTION_HOURS` in SOAKING,
 then requires the new index to be not red and to answer a count query
 (`background/celery/tasks/index_reclaim/tasks.py:_new_index_can_serve`) before
 it deletes the old one.
@@ -223,6 +234,25 @@ it deletes the old one.
     do the same, or [[llm-providers]] shows a default that indexing does not use. The in-place
     endpoint refuses to turn the feature off while the `ENABLE_CONTEXTUAL_RAG`
     env flag is set ([[indexing-pipeline]]).
+13. `reindex-hold` **Once every seeded connector port succeeds, PRESENT stops and
+    FUTURE catches up; the swap waits for the catch-up.**
+    `backend/onyx/db/reindex_hold.py:get_reindex_hold_state` derives the hold and each pair's
+    catch-up from attempt and port rows, with no stored state: a pair needs
+    catch-up when PRESENT wrote after its seed (`IndexAttempt.end_time` past the
+    seed's `time_created`) and no successful FUTURE poll has a `poll_range_end`
+    at or past the port's `time_completed` and PRESENT's last `end_time`.
+    `background/celery/tasks/docprocessing/utils.py:should_index` starts no
+    PRESENT attempt and only due catch-up polls while the hold is active, the
+    beat dispatches no waiting PRESENT attempt and no backfill, and
+    `db/swap_index.py:_no_writer_left_in_flight` holds the swap for a running or
+    queued PRESENT attempt and for a pair that still needs catch-up. Keep the
+    three in step: a PRESENT writer the gate does not see, or a FUTURE poll the
+    beat never starts, leaves a document stale in the new index for good,
+    because `content_hash` then says it is current. A paused or abandoned pair
+    is exempt and gets
+    `backend/onyx/db/document.py:clear_content_hash_for_cc_pair_since__no_commit` at the swap
+    instead. A pair created or un-paused after the reindex began has no seed:
+    its port gates the swap but does not end the hold.
 
 ## Decisions
 
