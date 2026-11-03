@@ -298,6 +298,10 @@ export const OpenSearchSizingCalculator = () => {
     provision, hotAll, recommendedRam, nodeRam, cachePerNode, recommendedType, nodeType, vcpusPerNode,
     diskOptions, recommendedDisk, nodeDisk, nodes, limit,
   } = effectiveCopies > copies ? layout(effectiveCopies) : first;
+  // Share of the cluster's storage, file cache and vCPUs that the data and peak search use.
+  const storageUse = (indexOneCopy * effectiveCopies) / (nodeDisk * 1e9 * nodes);
+  const memoryUse = hotAll / (cachePerNode * nodes);
+  const cpuUse = (vcpusForSearch * SEARCH_CPU_TARGET) / (vcpusPerNode * nodes);
   // Shards are whole units, so pick a primary count whose copies divide evenly over the
   // nodes. Then no node holds more than its share of the vectors and the data.
   const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
@@ -696,22 +700,25 @@ export const OpenSearchSizingCalculator = () => {
         <div className={card + " h-fit space-y-4"}>
           <div className="text-lg font-semibold text-gray-900 dark:text-white">Cluster</div>
           <div className="rounded-xl bg-primary/10 p-4 dark:bg-primary-light/10">
-            <div className="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{nodes + (nodes === 1 ? " data node · " : " data nodes · ") + vcpusPerNode + " vCPUs · " + nodeRam + " GB RAM · " + fmtDisk(nodeDisk) + " storage each"}</div>
+            <div className="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{nodes + (nodes === 1 ? " data node with " : " data nodes, each with ") + vcpusPerNode + " vCPUs · " + nodeRam + " GB RAM · " + fmtDisk(nodeDisk) + " storage"}</div>
             <div className={hint + " mt-1"}>
               {limit === "storage"
-                ? "Set by storage: the cluster needs " + fmtBytes(provision) + " of disk, and each node has " + fmtDisk(nodeDisk) + "."
+                ? "Set by storage: the cluster needs " + fmtBytes(provision) + " of disk in total, and each node has " + fmtDisk(nodeDisk) + "."
                 : limit === "memory"
-                ? "Set by memory: the vectors need " + fmtBytes(hotAll) + " of file cache, and each node has about " + fmtBytes(cachePerNode) + "."
+                ? "Set by memory: the vectors of " + (effectiveCopies === 1 ? "1 copy" : effectiveCopies + " copies") + " need " + fmtBytes(hotAll) + " of file cache in total, and each node has about " + fmtBytes(cachePerNode) + "."
                 : limit === "search"
-                ? "Set by search load: peak searches need " + fmtVcpus(vcpusForSearch) + " at 50% CPU, and each node has " + vcpusPerNode + " vCPUs."
+                ? "Set by search load: peak searches need " + fmtVcpus(vcpusForSearch) + " in total at 50% CPU, and each node has " + vcpusPerNode + " vCPUs."
                 : "Set by the copy count: " + effectiveCopies + (effectiveCopies === 1 ? " copy needs" : " copies need") + " at least " + effectiveCopies + (effectiveCopies === 1 ? " node" : " nodes") + (zones === 3 ? ", one in each zone" : "") + "."}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {stat({ value: fmtBytes(provision), text: "storage to provision, all nodes" })}
-            {stat({ value: fmtBytes(provision / nodes), text: "storage needed per node" })}
-            {stat({ value: fmtBytes(hotAll), text: "RAM for vector search, all copies" })}
-            {stat({ value: fmtVcpus(vcpusForSearch), text: "for search at peak, " + vcpusPerNode * nodes + " in the cluster" })}
+            {stat({
+              value: pct(storageUse),
+              text: "of storage holds the index" + (rebuildRoom ? ", " + pct(storageUse * 2) + " during a rebuild" : ""),
+            })}
+            {stat({ value: pct(memoryUse), text: "of the file cache holds vectors (" + fmtBytes(hotAll) + ")" })}
+            {stat({ value: pct(cpuUse), text: "of vCPUs busy at peak search (" + fmtVcpus(vcpusForSearch * SEARCH_CPU_TARGET) + " of " + vcpusPerNode * nodes + ")" })}
             {stat({ value: String(primaries), text: "primary shards" })}
             {stat({ value: String(effectiveCopies), text: effectiveCopies === 1 ? "copy of the data" : "copies of the data" })}
           </div>
