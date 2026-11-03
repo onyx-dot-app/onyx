@@ -39,6 +39,7 @@ from onyx.connectors.capability_checks.recorder import (
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.connector_runner import ConnectorRunner
+from onyx.connectors.event_inbox.connector import EventInboxConnector
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
@@ -224,6 +225,14 @@ def _get_connector_runner(
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
             )
+
+            # The drain needs the pair and the attempt, which are the run's,
+            # not stored config, so the factory cannot supply them.
+            if isinstance(runnable_connector, EventInboxConnector):
+                runnable_connector.set_event_context(
+                    cc_pair_id=attempt.connector_credential_pair_id,
+                    index_attempt_id=attempt.id,
+                )
 
             # Validate the connector settings.
             if not INTEGRATION_TESTS_MODE:
