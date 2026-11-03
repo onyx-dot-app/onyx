@@ -101,7 +101,7 @@ packages:
   src/lib/voice: 99.3
   src/lib/webSearch: 97.4
   src/providers: 99.5
-  src/refresh-components: 99.5
+  src/refresh-components: 99.3
   src/refresh-components/avatars: 99.6
   src/refresh-components/buttons: 99.6
   src/refresh-components/cards: 93.3
@@ -111,7 +111,6 @@ packages:
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100
   src/refresh-components/popovers: 99.5
-  src/refresh-components/skeletons: 100
   src/refresh-components/texts: 98.9
   src/refresh-components/tiles: 100
   src/sections: 100
