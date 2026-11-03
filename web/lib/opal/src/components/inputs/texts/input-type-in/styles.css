@@ -36,6 +36,11 @@
   @apply text-text-02 cursor-not-allowed;
 }
 
+/* The component draws its own clear button. */
+.opal-input-field::-webkit-search-cancel-button {
+  @apply appearance-none;
+}
+
 .opal-input-field::placeholder {
   @apply font-main-ui-muted text-text-02;
 }

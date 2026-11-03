@@ -215,7 +215,6 @@ export default function ConnectorsPage() {
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header icon={route.icon} title={adminRouteTitle(route)}>
         <InputTypeIn
-          type="text"
           searchIcon
           placeholder={t("search.placeholder")}
           ref={searchInputRef}

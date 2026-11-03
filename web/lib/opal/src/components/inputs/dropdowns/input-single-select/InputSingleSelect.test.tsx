@@ -57,7 +57,7 @@ describe("InputSingleSelect", () => {
         />
       );
       await user.click(screen.getByRole("combobox", { name: "Model" }));
-      const search = screen.getByRole("textbox", { name: "Search" });
+      const search = screen.getByRole("searchbox", { name: "Search" });
       expect(search).toHaveFocus();
       expect(screen.getAllByRole("option")).toHaveLength(3);
 
@@ -166,7 +166,7 @@ describe("InputSingleSelect", () => {
         />
       );
       await user.click(screen.getByRole("combobox", { name: "Model" }));
-      const searchField = screen.getByRole("textbox", { name: "Search" });
+      const searchField = screen.getByRole("searchbox", { name: "Search" });
       await user.type(searchField, "a");
       expect(
         screen
@@ -286,7 +286,10 @@ describe("InputSingleSelect", () => {
         />
       );
       await user.click(screen.getByRole("combobox", { name: "Model" }));
-      await user.type(screen.getByRole("textbox", { name: "Search" }), "open");
+      await user.type(
+        screen.getByRole("searchbox", { name: "Search" }),
+        "open"
+      );
       expect(screen.getAllByRole("option")).toHaveLength(2);
       expect(screen.queryByText("Anthropic")).not.toBeInTheDocument();
     });
@@ -302,7 +305,7 @@ describe("InputSingleSelect", () => {
         />
       );
       await user.click(screen.getByRole("combobox", { name: "Model" }));
-      await user.type(screen.getByRole("textbox", { name: "Search" }), "gpt");
+      await user.type(screen.getByRole("searchbox", { name: "Search" }), "gpt");
       expect(screen.getAllByRole("option")).toHaveLength(2);
       await user.click(screen.getByText("OpenAI"));
       expect(screen.queryAllByRole("option")).toHaveLength(0);
@@ -322,7 +325,7 @@ describe("InputSingleSelect", () => {
       await user.click(screen.getByRole("combobox", { name: "Model" }));
       expect(screen.queryAllByRole("option")).toHaveLength(0);
       await user.type(
-        screen.getByRole("textbox", { name: "Search" }),
+        screen.getByRole("searchbox", { name: "Search" }),
         "claude"
       );
       expect(screen.getAllByRole("option")).toHaveLength(1);

@@ -76,7 +76,7 @@ test("search matches descriptions and clearing restores the app's skills", async
   );
   await screen.findByText("linear-issues");
   const user = setupUser();
-  const search = screen.getByRole("textbox", { name: "Search skills" });
+  const search = screen.getByRole("searchbox", { name: "Search skills" });
   await user.type(search, "WEEKLY");
   expect(screen.getByText("release-notes")).toBeVisible();
   expect(screen.queryByText("linear-issues")).not.toBeInTheDocument();
