@@ -1,0 +1,27 @@
+name: Docs Preview Cleanup
+
+# Deletes the docs-preview/pr-<number> branch that docs-preview-publish.yml pushes. It has
+# no path filter, so it also runs when a pull request reverted its docs changes before closing.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  delete-preview-branch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PREVIEW_BRANCH: docs-preview/pr-${{ github.event.pull_request.number }}
+    steps:
+      - name: Delete the preview branch
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH" >/dev/null 2>&1; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH"
+          fi
