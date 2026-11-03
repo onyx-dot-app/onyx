@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ee.onyx.external_permissions.azure_datalake.capability_checks import (
+    _GROUP_PROBE_MAX_PAGES,
     build_azure_datalake_doc_permission_sync_checks,
     build_azure_datalake_group_sync_checks,
 )
@@ -278,6 +279,22 @@ def test_the_members_check_reads_groups_on_later_pages() -> None:
 
     assert output is not None
     assert output.summary == f"Read the members of {groups[-1].id}"
+
+
+def test_the_members_check_stops_at_the_group_page_limit() -> None:
+    groups = fake_ops({}).list_groups().items
+    ops = _refusing_group({group.id for group in groups})
+    ops.list_groups.side_effect = None
+    ops.list_groups.return_value = EntraPage[EntraGroup](
+        items=groups, next_link="next-page"
+    )
+
+    with pytest.raises(InsufficientPermissionsError):
+        _checks()["adls_graph_group_members"].run(
+            _context(ops, {"authentication_method": "client_secret"})
+        )
+
+    assert ops.list_groups.call_count == _GROUP_PROBE_MAX_PAGES
 
 
 def test_a_refusal_for_every_group_fails_the_members_check() -> None:
