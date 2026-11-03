@@ -17,7 +17,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import ConnectorRow from "@/views/admin/connectors/IndexingStatusPage/ConnectorRow";
 import englishMessages from "@/i18n/messages/en.json";
 
-// Private access is always shared with groups, so it reads as the group count.
+// A private pair's access line reads its visible group count.
 const SHARED_LABEL = "Shared with 2 groups";
 
 // A line under 620 px, which is a card under 640 px once its border and padding are taken off.
@@ -59,7 +59,7 @@ const ROW: IndexingConnectorRow = {
   group_names: ["Sales", "Support"],
   queue_position: null,
   permissions: { operate: true },
-} as IndexingConnectorRow;
+};
 
 function renderRow(expanded = false) {
   return render(
@@ -243,7 +243,7 @@ const KEYS = {
   sync: `${LIST}.access.sync`,
   syncRestricted: `${LIST}.access.sync_restricted`,
   shared: `${LIST}.access.private`,
-  recentlyProcessed: `${LIST}.docs.recentlyProcessed`,
+  recentlyProcessed: `${LIST}.docs.processed`,
   viewErrors: `${LIST}.actions.viewErrors`,
   manage: `${LIST}.actions.manage`,
   expand: `${LIST}.actions.expand`,
