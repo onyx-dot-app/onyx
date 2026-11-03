@@ -712,7 +712,6 @@ export const OpenSearchSizingCalculator = () => {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {stat({ value: fmtBytes(nodeDisk * nodes * 1e9), text: "storage in the cluster, " + nodes + " × " + fmtDisk(nodeDisk) })}
             {stat({
               value: pct(storageUse),
               text: "of storage holds the index" + (rebuildRoom ? ", " + pct(storageUse * 2) + " during a rebuild" : ""),
