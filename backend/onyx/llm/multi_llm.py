@@ -562,6 +562,27 @@ def _is_mistral_family_name(identity_names: list[str]) -> bool:
     )
 
 
+def _is_gemini_family_name(identity_names: list[str]) -> bool:
+    return any("gemini" in name.lower() for name in identity_names)
+
+
+def _gemini_compatible_tools(
+    tools: list[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
+    """Gemini parses function parameters as its OpenAPI Schema subset and
+    rejects other JSON Schema keywords (e.g. exclusiveMinimum) with a 400.
+    LiteLLM's native Gemini route rewrites them with _build_vertex_schema, but
+    OpenAI-compatible routes forward them as-is, so apply the same rewrite."""
+    from litellm.llms.vertex_ai.common_utils import _build_vertex_schema
+
+    sanitized = copy.deepcopy(tools)
+    for tool in sanitized:
+        function = tool.get("function")
+        if isinstance(function, dict) and isinstance(function.get("parameters"), dict):
+            function["parameters"] = _build_vertex_schema(function["parameters"])
+    return sanitized
+
+
 def _messages_contain_tool_content(messages: list[dict[str, JsonValue]]) -> bool:
     """Check if any messages contain tool-related content blocks."""
     for msg in messages:
@@ -1314,6 +1335,13 @@ class LitellmLLM(LLM):
             )
             if is_mistral_model:
                 messages = _fix_tool_user_message_ordering(messages)
+
+            if (
+                tools
+                and self._api_surface in OPENAI_COMPATIBLE_SURFACES
+                and _is_gemini_family_name(model_identity_names)
+            ):
+                tools = _gemini_compatible_tools(tools)
 
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.
