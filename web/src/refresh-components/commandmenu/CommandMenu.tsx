@@ -269,6 +269,8 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
           break;
         }
         case "Enter": {
+          // A focused filter header already handled its own Enter.
+          if (e.defaultPrevented) break;
           e.preventDefault();
           e.stopPropagation();
           if (highlightedValue) {
