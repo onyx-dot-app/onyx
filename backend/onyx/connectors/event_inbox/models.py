@@ -17,25 +17,21 @@ class WebhookRequest(BaseModel):
 
     raw_body: bytes
     headers: Mapping[str, str]
-    # Which of the source's endpoints it arrived on, as the spec spells it.
     endpoint: str = ""
 
 
-# runtime_checkable so the spec below can hold these as Pydantic fields.
+# runtime_checkable so Pydantic can hold these as fields.
 @runtime_checkable
 class EventParser(Protocol):
     def __call__(self, request: WebhookRequest) -> EventParseResult:
-        """Turn one delivery into the changes it reports.
-
-        Raise `WebhookPayloadError` for a body this source cannot read.
-        """
+        """Raise `WebhookPayloadError` for a body this source cannot read."""
 
 
 @runtime_checkable
 class SignatureVerifier(Protocol):
     def __call__(self, request: WebhookRequest, secrets: Mapping[str, str]) -> None:
-        """Raise `WebhookAuthError` unless the delivery is genuinely from the
-        source. `secrets` is the pair's decrypted credential JSON."""
+        """Raise `WebhookAuthError` unless the source sent the delivery.
+        `secrets` is the pair's decrypted credential JSON."""
 
 
 @runtime_checkable
@@ -43,14 +39,9 @@ class ChallengeResponder(Protocol):
     def __call__(
         self, request: WebhookRequest, secrets: Mapping[str, str]
     ) -> dict[str, object] | None:
-        """Answer a provider's endpoint-validation handshake, or None when
-        the delivery is an ordinary event.
-
-        Always runs after the signature check. A responder answers with the
-        shared secret applied to input the caller chose, so on an unverified
-        request it is a signing oracle: ask for the secret over the message
-        a verifier would check, then replay the answer.
-        """
+        """Answer an endpoint-validation handshake, or None for an ordinary
+        event. Runs only after the signature check: on an unverified request
+        a responder is a signing oracle."""
 
 
 class WebhookSourceSpec(BaseModel):
@@ -59,17 +50,12 @@ class WebhookSourceSpec(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     source: DocumentSource
-    # The path segment under /webhook. Keep it stable: it is in the URL an
-    # admin pastes into the provider's console.
+    # Keep it stable: admins paste the URL into the provider's console.
     slug: str
-    # Sub-paths under the slug, one per URL the provider posts to. The
-    # parser reads `request.endpoint` to tell them apart.
     endpoints: tuple[str, ...] = ("",)
     parser: EventParser
-    # No default: unauthenticated writes must be somebody's decision, not a
-    # source's omission.
+    # No default, so an unsigned source is a decision, not an omission.
     verifier: SignatureVerifier | None
-    # Grep for it to find every endpoint the internet can write to.
     allow_unsigned: bool = False
     challenge_responder: ChallengeResponder | None = None
 
@@ -121,21 +107,12 @@ class WebhookSourceSpec(BaseModel):
         if self.allow_unsigned and self.challenge_responder is not None:
             raise ValueError(
                 f"Webhook source {self.slug} answers a handshake but signs "
-                "nothing. A responder applies the shared secret to input the "
-                "caller chose, so with no signature to check first the "
-                "endpoint is a signing oracle: ask it for the secret over the "
-                "exact message a verifier would check, then replay the answer."
+                "nothing, which makes the endpoint a signing oracle."
             )
         return self
 
     @model_validator(mode="after")
     def _slug_is_one_path_segment(self) -> "WebhookSourceSpec":
-        """The slug is interpolated into a live URL, so it has to be one.
-
-        `endpoints` carries the sub-paths; a slug holding a delimiter would
-        serve a route somewhere other than where `webhook_callback_url` tells
-        an admin to point the provider.
-        """
         if not self.slug:
             raise ValueError("A webhook source needs a slug; it is in its URL.")
         bad = {character for character in "/?#%" if character in self.slug}

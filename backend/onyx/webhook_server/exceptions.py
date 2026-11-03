@@ -1,9 +1,5 @@
-"""What a source's verifier and parser raise.
-
-Separate from `OnyxError` so a source writes no HTTP: the route decides the
-status code, and a source that raised one of these cannot accidentally leak
-why a delivery was rejected.
-"""
+"""What a source's verifier and parser raise. Not `OnyxError`: the route
+picks the status code, so a source cannot leak why it rejected a delivery."""
 
 
 class WebhookAuthError(Exception):

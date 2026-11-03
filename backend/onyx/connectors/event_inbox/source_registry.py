@@ -1,9 +1,4 @@
-"""Which source owns which endpoint.
-
-A source registers one `WebhookSourceSpec`; the webhook server and the drain
-both build from this registry. It mirrors `connectors/registry.py`, which maps
-a source to its connector class, so the two seams read the same way.
-"""
+"""Which source owns which webhook endpoint."""
 
 from onyx.configs.app_configs import WEBHOOK_PUBLIC_URL
 from onyx.configs.constants import DocumentSource
@@ -13,14 +8,8 @@ _SPECS: dict[str, WebhookSourceSpec] = {}
 
 
 def register_webhook_source(spec: WebhookSourceSpec) -> None:
-    """Expose one source's endpoint. Import-time; the route list is fixed
-    once the app is built.
-
-    Refuses a duplicate rather than replacing it. A slug is a live URL and a
-    source resolves to one spec, so a clash means two modules disagree about
-    which owns it; taking the last would move an endpoint, or leave
-    `get_webhook_source` and `webhook_source_for` answering differently.
-    """
+    """Expose one source's endpoint at import time. Refuses a clash rather
+    than moving a live URL."""
     existing = _SPECS.get(spec.slug)
     if existing is not None and existing is not spec:
         raise ValueError(
@@ -39,11 +28,7 @@ def register_webhook_source(spec: WebhookSourceSpec) -> None:
 
 
 def unregister_webhook_source(slug: str) -> None:
-    """Give up a slug. Unknown slugs are ignored.
-
-    Registration is an import side effect, so the only callers are the ones
-    that undo it: the loader rolling back a failed import, and tests.
-    """
+    """For the loader's rollback and for tests. Ignores an unknown slug."""
     _SPECS.pop(slug, None)
 
 
@@ -56,17 +41,11 @@ def registered_webhook_sources() -> list[WebhookSourceSpec]:
 
 
 def webhook_callback_url(slug: str, endpoint: str = "") -> str:
-    """The URL an admin registers with the provider.
-
-    `WEBHOOK_PUBLIC_URL` defaults to WEB_DOMAIN, which is right whenever one
-    host fronts both; the Helm webhook ingress uses `ingress.api.host`, so a
-    split-host deployment sets it.
-    """
+    """The URL an admin registers with the provider."""
     return f"{WEBHOOK_PUBLIC_URL.rstrip('/')}/webhook/{slug}{endpoint}"
 
 
 def webhook_source_for(source: DocumentSource) -> WebhookSourceSpec | None:
-    """The spec a source registered, if it receives pushed events."""
     for spec in _SPECS.values():
         if spec.source == source:
             return spec

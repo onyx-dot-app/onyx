@@ -2003,10 +2003,8 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
-# Where providers reach the webhook server, when that is not WEB_DOMAIN. The
-# Helm webhook ingress is served from `ingress.api.host`, so a deployment
-# that splits the API and web hosts needs this: an admin pastes the URL into
-# a provider's console, where a wrong host simply never delivers.
+# Where providers reach the webhook server. Set it when the API and web hosts
+# differ: the Helm webhook ingress is on `ingress.api.host`.
 WEBHOOK_PUBLIC_URL = os.environ.get("WEBHOOK_PUBLIC_URL") or WEB_DOMAIN
 
 # Global limit on indexing embedding requests (see embedding_rate_limit.py).
