@@ -2,15 +2,33 @@
 
 import threading
 from collections.abc import Mapping, Sequence
+from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enrichment.registry import ChunkPermissionFilter
 from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+# runtime_checkable so `EnrichmentContext` can hold one as a Pydantic field.
+@runtime_checkable
+class ChunkPermissionFilter(Protocol):
+    def __call__(
+        self,
+        user_email: str,
+        chunks: Sequence[InferenceChunk],
+        secrets: Mapping[str, str],
+    ) -> list[InferenceChunk]:
+        """The chunks this user may read, asked of the provider.
+
+        Raise rather than return the input when the provider cannot answer:
+        the caller drops the whole lane, because returning uncleared chunks
+        would publish them. The verdict must depend on the document, not the
+        chunk, since the caller remembers it per document id.
+        """
 
 
 class EnrichmentContext(BaseModel):

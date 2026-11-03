@@ -28,18 +28,9 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import (
-    register_event_handler,
-    unregister_event_handler,
-)
 from onyx.connectors.event_inbox.models import (
     WebhookRequest,
     WebhookSourceSpec,
-)
-from onyx.connectors.event_inbox.source_registry import (
-    register_webhook_source,
-    unregister_webhook_source,
-    webhook_source_for,
 )
 from onyx.connectors.event_models import EventParseResult, ParsedEvent
 from onyx.connectors.models import Document, InputType, TextSection
@@ -59,6 +50,7 @@ from onyx.db.models import (
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.webhook_server.exceptions import WebhookAuthError, WebhookPayloadError
 from onyx.webhook_server.routes import build_webhook_router
+from tests.utils.event_sources import declare_event_source, event_source_registered
 
 # Stands in for DocumentSource.ZOOM so the test owns no real source.
 SOURCE = DocumentSource.MOCK_CONNECTOR
@@ -160,28 +152,10 @@ SPEC = WebhookSourceSpec(
 # --------------------------------------------------------------------------
 
 
-def _claim_the_source() -> None:
-    """Take the source from whatever registered it.
-
-    A source registers when its module is imported, and pytest imports every
-    test module while collecting, so another file's source can already own
-    this one before any fixture runs.
-    """
-    owner = webhook_source_for(SOURCE)
-    if owner is not None:
-        unregister_webhook_source(owner.slug)
-
-
 @pytest.fixture(autouse=True)
 def registered() -> Generator[None, None, None]:
-    _claim_the_source()
-    register_webhook_source(SPEC)
-    register_event_handler(SOURCE, to_document)
-    try:
+    with event_source_registered(SOURCE, webhook=SPEC, handler=to_document):
         yield
-    finally:
-        unregister_webhook_source(SLUG)
-        unregister_event_handler(SOURCE)
 
 
 @pytest.fixture
@@ -423,11 +397,12 @@ def test_a_verifier_that_raises_fails_closed(
     def exploding_verifier(request: WebhookRequest, secrets: Mapping[str, str]) -> None:  # noqa: ARG001
         raise RuntimeError("the verifier has a bug")
 
-    # Register before building: a router captures the specs it was built
-    # from, so a later registration does not reach an existing app. The slug
-    # is already claimed, and a registry refuses a duplicate.
-    unregister_webhook_source(SLUG)
-    register_webhook_source(SPEC.model_copy(update={"verifier": exploding_verifier}))
+    # Before building: a router captures the specs it was built from.
+    declare_event_source(
+        SOURCE,
+        webhook=SPEC.model_copy(update={"verifier": exploding_verifier}),
+        handler=to_document,
+    )
     app = FastAPI()
     register_onyx_exception_handlers(app)
     app.include_router(build_webhook_router())

@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_models import EventParseResult
+from onyx.connectors.models import Document
+from onyx.db.models import ConnectorEventInbox
 
 
 class WebhookRequest(BaseModel):
@@ -122,3 +124,15 @@ class WebhookSourceSpec(BaseModel):
                 "segment. Put sub-paths in `endpoints` instead."
             )
         return self
+
+
+@runtime_checkable
+class EventHandler(Protocol):
+    """Turns one stored event into the document it describes."""
+
+    def __call__(
+        self, event: ConnectorEventInbox, secrets: Mapping[str, str]
+    ) -> Document | None:
+        """Return the document, or None to index nothing. `secrets` is the
+        pair's credential, for a provider that pushes a link to the body.
+        Raising retries this row alone."""

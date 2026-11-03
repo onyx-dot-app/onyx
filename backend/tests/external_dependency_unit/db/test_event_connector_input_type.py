@@ -12,52 +12,21 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
-from onyx.connectors.event_inbox.source_registry import (
-    register_webhook_source,
-    unregister_webhook_source,
-    webhook_source_for,
-)
-from onyx.connectors.event_models import EventParseResult
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector, update_connector
 from onyx.db.models import Connector
 from onyx.server.documents.models import ConnectorBase
+from tests.utils.event_sources import event_source_registered
 
 EVENT_SOURCE = DocumentSource.MOCK_CONNECTOR
 POLLED_SOURCE = DocumentSource.WEB
 
 
-def _parse(request: WebhookRequest) -> EventParseResult:  # noqa: ARG001
-    return EventParseResult()
-
-
 @pytest.fixture
 def registered_event_source() -> Generator[None, None, None]:
-    """Take the source over for this module, then hand it back.
-
-    Another module registers the same source at import time. Without the
-    restore, every later test in the process would run with the source no
-    longer registered, and nothing would fail on it.
-    """
-    displaced = webhook_source_for(EVENT_SOURCE)
-    if displaced is not None:
-        unregister_webhook_source(displaced.slug)
-    register_webhook_source(
-        WebhookSourceSpec(
-            source=EVENT_SOURCE,
-            slug="input-type-test",
-            parser=_parse,
-            verifier=None,
-            allow_unsigned=True,
-        )
-    )
-    try:
+    """Take the source over for this module, then hand it back."""
+    with event_source_registered(EVENT_SOURCE):
         yield
-    finally:
-        unregister_webhook_source("input-type-test")
-        if displaced is not None:
-            register_webhook_source(displaced)
 
 
 def _create(db_session: Session, source: DocumentSource, name: str) -> Connector:

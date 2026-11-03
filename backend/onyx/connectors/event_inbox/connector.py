@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.event_inbox.credentials import pair_secrets
-from onyx.connectors.event_inbox.handlers import get_event_handler
+from onyx.connectors.event_inbox.registration import get_event_source
 from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
@@ -122,9 +122,9 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             if event.id in superseded:
                 continue
 
-            handler = get_event_handler(event.source)
-            if handler is None:
-                message = f"No event handler registered for {event.source.value}"
+            declared = get_event_source(event.source)
+            if declared is None:
+                message = f"No event source registered for {event.source.value}"
                 _settle_failure(event.id, message)
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(document_id=event.document_id),
@@ -133,7 +133,7 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
                 continue
 
             try:
-                document = handler(event, secrets)
+                document = declared.handler(event, secrets)
             except Exception as e:
                 logger.exception(
                     "Event %s for document %s could not be handled",

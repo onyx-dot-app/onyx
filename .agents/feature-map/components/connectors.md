@@ -321,11 +321,13 @@ downloaded file with
     to reverse the order, and `onyx/webhook_server/routes.py` calls the
     responder after `spec.verifier`. A provider that signs challenges
     differently needs its own challenge verifier, not an earlier responder.
-14. `drain-before-route` **A source's handler is registered before its
-    webhook route.** `register_event_source` claims the drain and the search
-    behaviour first and opens the endpoint last. The route is the part the
-    internet can reach, so a half-registered source must not be one that
-    accepts deliveries with nothing to drain them.
+14. `one-event-source-record` **An event source is one record.**
+    `onyx/connectors/event_inbox/registration.py` holds a single
+    `EventSource` per source: its webhook spec, handler and optional
+    permission filter. `register_event_source` refuses a clash before it
+    stores anything, so no reader sees a route with nothing to drain it. The
+    webhook, drain and search lookups are read-only views of that store; do
+    not add a second dict.
 15. `event-source-catalog-entry-is-unconditional` **The Add Connector page
     offers every source in its static map, whether or not an implementation
     is registered.** `web/src/lib/connectors/utils.ts:listSourceMetadata`

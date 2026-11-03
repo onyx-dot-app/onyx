@@ -11,18 +11,18 @@ import pytest
 
 from onyx.configs.app_configs import EXTRA_EVENT_SOURCE_MODULES
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.event_inbox import registration
-from onyx.connectors.event_inbox.handlers import EventHandler, get_event_handler
-from onyx.connectors.event_inbox.models import WebhookRequest, WebhookSourceSpec
+from onyx.connectors.event_inbox.models import (
+    EventHandler,
+    WebhookRequest,
+    WebhookSourceSpec,
+)
 from onyx.connectors.event_inbox.registration import (
     claimed_event_sources,
+    get_event_source,
     register_event_source,
     unregister_event_source,
 )
-from onyx.connectors.event_inbox.source_registry import (
-    get_webhook_source,
-    webhook_source_for,
-)
+from onyx.connectors.event_inbox.source_registry import get_webhook_source
 from onyx.connectors.event_models import EventParseResult
 from onyx.connectors.models import Document
 from onyx.context.search.enrichment.registry import (
@@ -55,6 +55,11 @@ def _permit(
     return list(chunks)
 
 
+def _handler_of(source: DocumentSource) -> EventHandler | None:
+    record = get_event_source(source)
+    return record.handler if record is not None else None
+
+
 def _spec() -> WebhookSourceSpec:
     return WebhookSourceSpec(
         source=SOURCE,
@@ -68,19 +73,17 @@ def _spec() -> WebhookSourceSpec:
 @pytest.fixture(autouse=True)
 def restore() -> Generator[None, None, None]:
     """Hand the source back to whoever held it."""
-    displaced_webhook = webhook_source_for(SOURCE)
-    displaced_handler = get_event_handler(SOURCE)
-    displaced_filter = get_enrichment_filter(SOURCE)
+    displaced = get_event_source(SOURCE)
     unregister_event_source(SOURCE)
     try:
         yield
     finally:
         unregister_event_source(SOURCE)
-        if displaced_webhook is not None and displaced_handler is not None:
+        if displaced is not None:
             register_event_source(
-                webhook=displaced_webhook,
-                handler=displaced_handler,
-                permission_filter=displaced_filter,
+                webhook=displaced.webhook,
+                handler=displaced.handler,
+                permission_filter=displaced.permission_filter,
             )
 
 
@@ -88,7 +91,7 @@ def test_one_call_claims_the_route_and_the_drain() -> None:
     register_event_source(webhook=_spec(), handler=_handler)
 
     assert get_webhook_source(SLUG) is not None
-    assert get_event_handler(SOURCE) is _handler
+    assert _handler_of(SOURCE) is _handler
     assert SOURCE in claimed_event_sources()
 
 
@@ -108,32 +111,15 @@ def test_a_permission_filter_withholds_the_source() -> None:
 
 
 def test_unregistering_gives_up_everything_at_once() -> None:
-    """The loader rolls a failed import back with this, so a source must
-    not survive in one registry after being dropped from another."""
+    """The loader rolls a failed import back with this."""
     register_event_source(webhook=_spec(), handler=_handler, permission_filter=_permit)
 
     unregister_event_source(SOURCE)
 
     assert get_webhook_source(SLUG) is None
-    assert get_event_handler(SOURCE) is None
+    assert _handler_of(SOURCE) is None
     assert get_enrichment_filter(SOURCE) is None
     assert SOURCE not in claimed_event_sources()
-
-
-def test_the_route_is_not_opened_before_the_drain_exists(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A half-registered source must never be one with a live endpoint and
-    nothing to drain it, because the route is what the internet reaches."""
-    opened_with: list[EventHandler | None] = []
-
-    def _record(spec: WebhookSourceSpec) -> None:
-        opened_with.append(get_event_handler(spec.source))
-
-    monkeypatch.setattr(registration, "register_webhook_source", _record)
-    register_event_source(webhook=_spec(), handler=_handler)
-
-    assert opened_with == [_handler]
 
 
 def test_configuration_can_name_a_source_outside_this_repository() -> None:
@@ -156,10 +142,8 @@ def test_configuration_can_name_a_source_outside_this_repository() -> None:
 
 
 def test_a_second_module_claiming_a_source_leaves_the_first_alone() -> None:
-    """The drain registry takes the last registration, so a refusal has to
-    happen before anything is written. Otherwise the module that gets
-    rejected has already replaced the incumbent's handler, and the loader
-    cannot put it back: the source was claimed before that module ran."""
+    """A refused module must not have replaced the incumbent's handler: the
+    loader could not put it back."""
 
     def _other_handler(
         event: ConnectorEventInbox,  # noqa: ARG001
@@ -181,7 +165,7 @@ def test_a_second_module_claiming_a_source_leaves_the_first_alone() -> None:
             handler=_other_handler,
         )
 
-    assert get_event_handler(SOURCE) is _handler
+    assert _handler_of(SOURCE) is _handler
     assert get_webhook_source(SLUG) is not None
     assert get_webhook_source("a-second-slug") is None
 
@@ -207,5 +191,5 @@ def test_a_second_module_claiming_a_slug_leaves_the_first_alone() -> None:
             handler=_other_handler,
         )
 
-    assert get_event_handler(SOURCE) is _handler
-    assert get_event_handler(DocumentSource.WEB) is None
+    assert _handler_of(SOURCE) is _handler
+    assert _handler_of(DocumentSource.WEB) is None
