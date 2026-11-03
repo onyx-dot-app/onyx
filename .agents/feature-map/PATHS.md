@@ -374,7 +374,8 @@ the admin routes and check that each has a row above, run
 | `cli/` | The Onyx CLI client. Only its packet parser has an owner (streaming-protocol). |
 | `tools/`, `backend/scripts/`, `backend/requirements/` | Developer tooling and dependency files. |
 | `web/src/lib/common/` | App components meant for any feature: the list states `NoResults` and `NoItems`, and `GridSearchInput`. The agents catalog is their only caller so far. Check the callers. |
-| `web/.oxlintrc.json` | Lint config for `web/`, with the design-system and layout baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
+| `web/AGENTS.md` | Frontend standards for `web/` and `desktop/`, read before working there. A component that a rule cites documents its own part. |
+| `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
 | `.github/` | CI. Read the workflow. |
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
