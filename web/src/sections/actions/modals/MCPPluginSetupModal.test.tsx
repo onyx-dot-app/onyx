@@ -34,10 +34,10 @@ function SetupModal() {
   );
 }
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual("next/navigation"),
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  ...jest.requireActual("next/navigation"),
   useRouter: () => mockRouter,
   usePathname: () => "/admin/plugins",
 }));

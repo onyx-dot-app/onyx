@@ -2,10 +2,10 @@ jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: { id: "admin-user" } }),
 }));
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual("next/navigation"),
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  ...jest.requireActual("next/navigation"),
   useRouter: () => ({ push: jest.fn() }),
 }));
 

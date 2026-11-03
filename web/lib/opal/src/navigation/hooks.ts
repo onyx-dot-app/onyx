@@ -152,6 +152,16 @@ function isOtherOrigin(href: string): boolean {
   return new URL(href, window.location.href).origin !== window.location.origin;
 }
 
+/** A `#fragment` on this page, which the browser scrolls to itself. */
+function isSamePageHash(href: string): boolean {
+  const target = new URL(href, window.location.href);
+  return (
+    target.hash !== "" &&
+    target.pathname === window.location.pathname &&
+    target.search === window.location.search
+  );
+}
+
 /**
  * A full page load: another origin, a backend route (`/api/…`), or a page
  * whose client state must start over (e.g. after sign-out). No loader shows,
@@ -209,8 +219,15 @@ export class Navigation {
       href,
       onClick: (event) => {
         // A modified or middle click keeps the link's own behavior, e.g.
-        // opening a new tab, and so does a link to another origin.
-        if (!isPlainClick(event) || isOtherOrigin(href)) return;
+        // opening a new tab, and so does a link to another origin or to a
+        // fragment of this page (the browser scrolls to it).
+        if (
+          !isPlainClick(event) ||
+          isOtherOrigin(href) ||
+          isSamePageHash(href)
+        ) {
+          return;
+        }
         event.preventDefault();
         navigate(this.router, href, options);
       },

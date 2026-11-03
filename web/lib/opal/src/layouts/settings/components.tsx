@@ -2,7 +2,6 @@
 
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation/hooks";
-import { usePathname } from "@opal/navigation/next";
 import { cn } from "@opal/utils";
 import { Divider, Button, Presence, Spacer } from "@opal/components";
 import type { TagProps } from "@opal/components";
@@ -151,10 +150,15 @@ export interface SettingsHeaderProps {
   actions?: React.ReactNode[];
   stackActionsOnMobile?: boolean;
   /**
-   * Renders a secondary Cancel as the first action. `true` goes back in
-   * history; a function overrides the destination.
+   * Renders a secondary Cancel as the first action. `true` goes back within
+   * the app (`clampedBack`); a function overrides the destination.
    */
   cancel?: boolean | (() => void);
+  /**
+   * Where `cancel={true}` goes when the page was not reached within the app
+   * (a deep link, a new tab). Defaults to `/`.
+   */
+  cancelFallback?: string;
   divider?: boolean;
 }
 
@@ -177,10 +181,10 @@ function SettingsHeader({
   actions,
   stackActionsOnMobile = false,
   cancel,
+  cancelFallback = "/",
   divider,
 }: SettingsHeaderProps) {
   const navigation = useNavigation();
-  const pathname = usePathname();
   const strings = useOpalStrings();
   const [showShadow, setShowShadow] = useState(false);
   const { setPageTitle } = useContext(SettingsPageContext);
@@ -196,11 +200,8 @@ function SettingsHeader({
       ? cancel
       : cancel
         ? () =>
-            // Back within the app; from a page opened directly, the page
-            // above this one. SAFETY: a parent path of a page is a page.
-            navigation.clampedBack(
-              (pathname.slice(0, pathname.lastIndexOf("/")) || "/") as Route
-            )
+            // SAFETY: callers name a page of the app, like Opal's other hrefs.
+            navigation.clampedBack(cancelFallback as Route)
         : undefined;
   const hasActions = !!onCancel || (!!actions && actions.length > 0);
   const isSticky = hasActions;

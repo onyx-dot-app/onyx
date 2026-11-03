@@ -44,7 +44,7 @@ type TextButtonProps = Pick<InteractiveStatelessProps, "passive"> &
  * `Button` (no `icon`/`rightIcon`, `variant`, `prominence`, `tooltip`, or
  * `size`).
  *
- * Renders its `<Link>`/`<button>` directly as `Interactive.Stateless`'s
+ * Renders its `<NavLink>`/`<button>` directly as `Interactive.Stateless`'s
  * single child — Radix `Slot` auto-merges `className`, data-attributes, and
  * `onClick` onto it (`className`/`style` are joined, handlers are chained,
  * everything else falls through), so no separate surface component is

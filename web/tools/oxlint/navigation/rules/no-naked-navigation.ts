@@ -4,7 +4,21 @@ const ROUTER_METHODS = new Set(["push", "replace", "back"]);
 
 const HISTORY_METHODS = new Set(["pushState", "replaceState", "back"]);
 
-const NOT_NAVIGATING_ELEMENTS = new Set(["NavLink", "use", "image"]);
+// `NavLink` goes through @opal/navigation; the SVG elements reference a
+// resource or a fragment of the document, not a page.
+const NOT_NAVIGATING_ELEMENTS = new Set([
+  "NavLink",
+  "use",
+  "image",
+  "feImage",
+  "linearGradient",
+  "radialGradient",
+  "pattern",
+  "filter",
+  "textPath",
+  "mpath",
+  "tref",
+]);
 
 const LOCATION_METHODS = new Set(["assign", "replace", "reload"]);
 
@@ -161,8 +175,6 @@ export const noNakedNavigationRule = defineRule({
         if (node.name.type !== "JSXIdentifier" || node.name.name !== "href") {
           return;
         }
-        // `NavLink` is the link that goes through @opal/navigation, and an SVG
-        // `<use>` or `<image>` href names a resource, not a page.
         const element = node.parent;
         if (
           element.type === "JSXOpeningElement" &&
