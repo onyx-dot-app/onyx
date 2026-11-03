@@ -83,4 +83,159 @@ run "optional_node_groups_and_addons_plan" {
     condition     = local.craft_sandbox_node_groups.sandbox.metadata_options.http_put_response_hop_limit == 1
     error_message = "The sandbox node group must keep IMDS hop limit 1 so sandboxed pods cannot reach node credentials."
   }
+
+  assert {
+    condition = (
+      !contains(keys(local.craft_sandbox_node_groups.sandbox.labels), "onyx.app/kvm") &&
+      !contains(keys(local.craft_sandbox_node_groups.sandbox), "cpu_options") &&
+      !contains(keys(local.craft_sandbox_node_groups.sandbox), "capacity_type")
+    )
+    error_message = "The default pod runtime must leave the sandbox node group unchanged: no kvm label, cpu_options or capacity_type."
+  }
+
+  assert {
+    condition = (
+      local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.iops == 3000 &&
+      local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.throughput == 125
+    )
+    error_message = "Default sandbox disk IOPS and throughput must stay at 3000 and 125."
+  }
+}
+
+run "firecracker_nested_plan" {
+  command = plan
+
+  variables {
+    enable_craft                       = true
+    craft_sandbox_runtime              = "firecracker"
+    craft_sandbox_node_instance_types  = ["m8i.2xlarge", "c8i-flex.4xlarge"]
+    craft_sandbox_node_disk_iops       = 6000
+    craft_sandbox_node_disk_throughput = 500
+  }
+
+  assert {
+    condition     = local.craft_sandbox_node_groups.sandbox.cpu_options.nested_virtualization == "enabled"
+    error_message = "Firecracker on non-metal types must turn on nested virtualization."
+  }
+
+  assert {
+    condition = (
+      local.craft_sandbox_node_groups.sandbox.labels["onyx.app/kvm"] == "true" &&
+      local.craft_sandbox_node_groups.sandbox.labels["onyx.app/workload"] == "sandbox"
+    )
+    error_message = "Firecracker sandbox nodes must keep the workload label and add onyx.app/kvm=true."
+  }
+
+  assert {
+    condition     = local.craft_sandbox_node_groups.sandbox.capacity_type == "ON_DEMAND"
+    error_message = "Firecracker sandbox nodes must be on-demand, never spot."
+  }
+
+  assert {
+    condition     = local.craft_sandbox_node_groups.sandbox.metadata_options.http_put_response_hop_limit == 1
+    error_message = "Firecracker sandbox nodes must keep IMDS hop limit 1."
+  }
+
+  assert {
+    condition = (
+      local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.iops == 6000 &&
+      local.craft_sandbox_node_groups.sandbox.block_device_mappings.xvda.ebs.throughput == 500
+    )
+    error_message = "Sandbox disk IOPS and throughput must follow the variables."
+  }
+}
+
+run "firecracker_metal_plan" {
+  command = plan
+
+  variables {
+    enable_craft                      = true
+    craft_sandbox_runtime             = "firecracker"
+    craft_sandbox_node_instance_types = ["m7i.metal-24xl", "c6i.metal"]
+  }
+
+  assert {
+    condition     = !contains(keys(local.craft_sandbox_node_groups.sandbox), "cpu_options")
+    error_message = "Metal types expose /dev/kvm directly and must not set nested virtualization."
+  }
+
+  assert {
+    condition     = local.craft_sandbox_node_groups.sandbox.labels["onyx.app/kvm"] == "true"
+    error_message = "Metal Firecracker sandbox nodes must have the onyx.app/kvm=true label."
+  }
+}
+
+run "firecracker_rejects_m7i_nested" {
+  command = plan
+  variables {
+    enable_craft                      = true
+    craft_sandbox_runtime             = "firecracker"
+    craft_sandbox_node_instance_types = ["m7i.2xlarge"]
+  }
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_graviton" {
+  command = plan
+  variables {
+    enable_craft                      = true
+    craft_sandbox_runtime             = "firecracker"
+    craft_sandbox_node_instance_types = ["m8g.2xlarge"]
+  }
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_amd" {
+  command = plan
+  variables {
+    enable_craft                      = true
+    craft_sandbox_runtime             = "firecracker"
+    craft_sandbox_node_instance_types = ["m8a.2xlarge"]
+  }
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_amd_and_graviton_metal" {
+  command = plan
+  variables {
+    enable_craft                      = true
+    craft_sandbox_runtime             = "firecracker"
+    craft_sandbox_node_instance_types = ["m7a.metal-48xl", "c7g.metal", "a1.metal"]
+  }
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_mixed_metal_and_nested" {
+  command = plan
+  variables {
+    enable_craft                      = true
+    craft_sandbox_runtime             = "firecracker"
+    craft_sandbox_node_instance_types = ["m8i.2xlarge", "m7i.metal-24xl"]
+  }
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "pod_runtime_accepts_any_type" {
+  command = plan
+  variables {
+    enable_craft                      = true
+    craft_sandbox_node_instance_types = ["m7a.2xlarge"]
+  }
+}
+
+run "rejects_unknown_runtime" {
+  command = plan
+  variables {
+    craft_sandbox_runtime = "kata"
+  }
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "rejects_throughput_above_gp3_ratio" {
+  command = plan
+  variables {
+    craft_sandbox_node_disk_iops       = 3000
+    craft_sandbox_node_disk_throughput = 1000
+  }
+  expect_failures = [var.craft_sandbox_node_disk_throughput]
 }

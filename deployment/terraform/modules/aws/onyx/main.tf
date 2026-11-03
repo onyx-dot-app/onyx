@@ -291,12 +291,15 @@ module "eks" {
   enable_gpu_node         = var.enable_gpu_node
   gpu_node_instance_types = var.gpu_node_instance_types
 
-  enable_craft                      = var.enable_craft
-  craft_sandbox_node_instance_types = var.craft_sandbox_node_instance_types
-  craft_sandbox_node_min_size       = var.craft_sandbox_node_min_size
-  craft_sandbox_node_max_size       = var.craft_sandbox_node_max_size
-  craft_sandbox_node_desired_size   = var.craft_sandbox_node_desired_size
-  craft_sandbox_node_disk_size_gb   = var.craft_sandbox_node_disk_size_gb
+  enable_craft                       = var.enable_craft
+  craft_sandbox_node_instance_types  = var.craft_sandbox_node_instance_types
+  craft_sandbox_node_min_size        = var.craft_sandbox_node_min_size
+  craft_sandbox_node_max_size        = var.craft_sandbox_node_max_size
+  craft_sandbox_node_desired_size    = var.craft_sandbox_node_desired_size
+  craft_sandbox_node_disk_size_gb    = var.craft_sandbox_node_disk_size_gb
+  craft_sandbox_node_disk_iops       = var.craft_sandbox_node_disk_iops
+  craft_sandbox_node_disk_throughput = var.craft_sandbox_node_disk_throughput
+  craft_sandbox_runtime              = var.craft_sandbox_runtime
 
   # Control plane logging
   cluster_enabled_log_types              = var.eks_cluster_enabled_log_types

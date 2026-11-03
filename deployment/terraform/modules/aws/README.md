@@ -494,6 +494,47 @@ To tear down a cluster, run `helm uninstall` before `terraform destroy`. If dest
 fails with `DependencyViolation`, delete orphaned `aws-K8S-*` network interfaces
 that the VPC CNI left, then run destroy again.
 
+### Craft sandboxes on Firecracker
+
+Craft can run each sandbox as a Firecracker microVM instead of a pod. This
+needs `/dev/kvm` on the sandbox nodes. Set it on the sandbox node group:
+
+```hcl
+enable_craft                       = true
+craft_sandbox_runtime              = "firecracker"
+craft_sandbox_node_instance_types  = ["m8i.2xlarge"]
+craft_sandbox_node_disk_iops       = 6000
+craft_sandbox_node_disk_throughput = 500
+```
+
+With `"firecracker"`, the `eks` module:
+
+- turns on nested virtualization in the launch template (non-metal types only);
+- adds the label `onyx.app/kvm=true`;
+- keeps the group on-demand. A spot reclaim stops every microVM on the node;
+- keeps IMDSv2 with hop limit 1.
+
+The default, `"pod"`, leaves the group as it is. On non-metal types, a change
+to `craft_sandbox_runtime` makes a new launch template version, so EKS rolls the
+sandbox nodes. On `.metal` groups, only the label changes, in place.
+`craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
+volume (defaults 3000 and 125). The tested values for Firecracker are 6000 and
+500 MiB/s. The AL2023 root filesystem is XFS with reflink, so no extra disk is
+needed.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| Nested virtualization | Intel `c8i`, `m8i`, `r8i` and their `-flex` types | `m7i` and older Intel (no nested virtualization or slow page faults), Graviton (`g`), AMD (`a`) |
+| Metal | Intel `.metal` types, such as `m7i.metal-24xl` | Graviton and AMD `.metal`, `a1.metal`, `mac*.metal` |
+| AMI | AL2023 (module default `AL2023_x86_64_STANDARD`). Use an AMI release with kernel 6.18, the tested host kernel. | — |
+| Capacity | On-demand | Spot |
+
+The module refuses a blocked type, and a group that mixes `.metal` and
+nested virtualization types. Keep `craft_sandbox_runtime = "pod"` on Graviton,
+AMD, or older Intel non-metal sandbox nodes.
+
 ## Workflow tips
 - First apply can be infra-only; once EKS is active, install the Helm chart.
 - Use Terraform workspaces to create isolated environments; the `onyx` module automatically includes the workspace in resource names.
