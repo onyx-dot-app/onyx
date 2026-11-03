@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 
@@ -10,6 +11,14 @@ mcp = FastMCP("My HTTP MCP")
 def hello(name: str) -> str:
     """Say hi."""
     return f"Hello, {name}!"
+
+
+@mcp.tool
+def get_ticket(ticket_id: int) -> str:
+    """Get a ticket. Returns JSON text, as many MCP servers do."""
+    return json.dumps(
+        {"id": ticket_id, "title": 'Fix the "widget" parser', "labels": ["bug"]}
+    )
 
 
 def make_many_tools() -> None:

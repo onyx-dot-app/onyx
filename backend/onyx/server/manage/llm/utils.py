@@ -10,6 +10,7 @@ Utilities for dynamic LLM providers (Bedrock, Ollama, OpenRouter):
 import re
 from typing import TypedDict
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.llm.constants import (
     BEDROCK_MODEL_NAME_MAPPINGS,
     MODEL_PREFIX_TO_VENDOR,
@@ -317,6 +318,12 @@ def filter_model_configurations(
 
     filtered_configs = []
     for model_configuration in model_configurations:
+        flows = model_configuration.llm_model_flow_types
+        if (
+            LLMModelFlowType.IMAGE_GENERATION in flows
+            and LLMModelFlowType.CHAT not in flows
+        ):
+            continue
         # Skip dated duplicates when non-dated version exists
         if should_filter_as_dated_duplicate(model_configuration.name, all_model_names):
             continue
@@ -389,8 +396,9 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
     return None
 
 
-def is_embedding_model(model_name: str) -> bool:
-    """Checks for if a model is an embedding model."""
-    from onyx.llm.model_catalog import is_embedding_model_name
+def is_non_chat_model(model_name: str) -> bool:
+    """Should this model stay out of chat-model listings (embedding, rerank,
+    image, audio, ...)?"""
+    from onyx.llm.model_catalog import is_non_chat_model_name
 
-    return is_embedding_model_name(model_name)
+    return is_non_chat_model_name(model_name)

@@ -617,10 +617,6 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 		}
 	}
 
-	// Add standard checklist
-	body += "\n\n"
-	body += "- [x] [Optional] Override Linear Check\n"
-
 	args := []string{
 		"pr", "create",
 		"--base", baseBranch,

@@ -64,7 +64,7 @@ func TestRunUpdateBaseDigests_reportsWithoutWriting(t *testing.T) {
 	}
 	summaryFile := filepath.Join(t.TempDir(), "summary.md")
 
-	output, err := runUpdateBaseDigests(false, summaryFile, "", false, cacheFile)
+	output, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{SummaryFile: summaryFile, CacheFile: cacheFile})
 	if err != nil {
 		t.Fatalf("runUpdateBaseDigests failed: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestRunUpdateBaseDigests_writesOneFamily(t *testing.T) {
 		shotWorkflowPython:   shotDigest("c"),
 	})
 
-	output, err := runUpdateBaseDigests(true, "", "python", false, cacheFile)
+	output, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, Family: "python", CacheFile: cacheFile})
 	if err != nil {
 		t.Fatalf("runUpdateBaseDigests failed: %v", err)
 	}
@@ -120,13 +120,91 @@ func TestRunUpdateBaseDigests_listsStaleFamilies(t *testing.T) {
 		shotWorkflowPython:   shotDigest("d"),
 	})
 
-	output, err := runUpdateBaseDigests(true, "", "", true, cacheFile)
+	output, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, ListStaleFamilies: true, CacheFile: cacheFile})
 	if err != nil {
 		t.Fatalf("runUpdateBaseDigests failed: %v", err)
 	}
 
 	if output != "node\npython\n" {
 		t.Fatalf("expected each stale family once, got %q", output)
+	}
+}
+
+func TestRunUpdateBaseDigests_writesPinsAsACache(t *testing.T) {
+	shotDigestRepo(t)
+	pinsFile := filepath.Join(t.TempDir(), "pins.json")
+
+	output, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{PinsFile: pinsFile})
+	if err != nil {
+		t.Fatalf("runUpdateBaseDigests failed: %v", err)
+	}
+
+	if want := "Wrote 3 pinned reference(s) to " + pinsFile + ".\n"; output != want {
+		t.Fatalf("expected output %q, got %q", want, output)
+	}
+	var pins map[string]string
+	if err := json.Unmarshal([]byte(readShotFile(t, pinsFile)), &pins); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		shotDockerfilePython: shotDigest("a"),
+		shotDockerfileNode:   shotDigest("b"),
+		shotWorkflowPython:   shotDigest("c"),
+	}
+	if fmt.Sprint(pins) != fmt.Sprint(want) {
+		t.Fatalf("expected pins %v, got %v", want, pins)
+	}
+
+	// One checkout's pins rewrite another with --cached-only: no registry is
+	// asked, and a tag the pins lack keeps its own digest, in any family.
+	other := shotGitRepo(t, map[string]string{
+		"Dockerfile": "FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@" + shotDigest("0") + "\n" +
+			"FROM python:3.12-slim@" + shotDigest("1") + "\n" +
+			"FROM golang:1.26.5-alpine@" + shotDigest("2") + "\n",
+	})
+	output, err = runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, Family: "python", CacheFile: pinsFile, CachedOnly: true})
+	if err != nil {
+		t.Fatalf("runUpdateBaseDigests failed: %v", err)
+	}
+	wantOutput := shotReportLine("update", "library/python:3.13-slim", "Dockerfile:1") +
+		shotReportLine("kept", "python:3.12-slim", "Dockerfile:2") +
+		"\nUpdated 1 reference(s).\n"
+	if output != wantOutput {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", wantOutput, output)
+	}
+	wantDockerfile := "FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@" + shotDigest("a") + "\n" +
+		"FROM python:3.12-slim@" + shotDigest("1") + "\n" +
+		"FROM golang:1.26.5-alpine@" + shotDigest("2") + "\n"
+	if got := readShotFile(t, filepath.Join(other, "Dockerfile")); got != wantDockerfile {
+		t.Fatalf("expected only the covered python pin to change, got:\n%s", got)
+	}
+}
+
+func TestRunUpdateBaseDigests_cachedOnlyNeedsACache(t *testing.T) {
+	shotDigestRepo(t)
+
+	_, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, CachedOnly: true})
+	if err == nil || err.Error() != "--cached-only needs --cache-file." {
+		t.Fatalf("expected the missing cache flag to be refused, got %v", err)
+	}
+
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	_, err = runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, CachedOnly: true, CacheFile: missing})
+	if err == nil || !strings.HasPrefix(err.Error(), "Could not read the cache: ") || !strings.Contains(err.Error(), missing) {
+		t.Fatalf("expected the absent cache file to be refused, got %v", err)
+	}
+}
+
+func TestRunUpdateBaseDigests_refusesDriftedPins(t *testing.T) {
+	shotGitRepo(t, map[string]string{
+		"Dockerfile":       "FROM node:22@" + shotDigest("a") + "\n",
+		"Dockerfile.model": "FROM node:22@" + shotDigest("b") + "\n",
+	})
+
+	_, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{PinsFile: filepath.Join(t.TempDir(), "pins.json")})
+	want := "Could not write the pins: node:22 is pinned to two digests, " + shotDigest("a") + " and " + shotDigest("b")
+	if err == nil || err.Error() != want {
+		t.Fatalf("expected %q, got %v", want, err)
 	}
 }
 
@@ -139,7 +217,7 @@ func TestRunUpdateBaseDigests_reportsAllCurrent(t *testing.T) {
 	})
 	summaryFile := filepath.Join(t.TempDir(), "summary.md")
 
-	output, err := runUpdateBaseDigests(true, summaryFile, "node", false, cacheFile)
+	output, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, SummaryFile: summaryFile, Family: "node", CacheFile: cacheFile})
 	if err != nil {
 		t.Fatalf("runUpdateBaseDigests failed: %v", err)
 	}
@@ -214,7 +292,7 @@ func TestRunUpdateBaseDigests_reportsFailures(t *testing.T) {
 			write, summaryFile, family := tt.setup(t, root, cacheFile)
 			want := strings.ReplaceAll(tt.want, "<cache>", cacheFile)
 
-			output, err := runUpdateBaseDigests(write, summaryFile, family, false, cacheFile)
+			output, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: write, SummaryFile: summaryFile, Family: family, CacheFile: cacheFile})
 
 			if err == nil || !strings.HasPrefix(err.Error(), want) {
 				t.Fatalf("expected %q, got %v", want, err)
@@ -229,7 +307,7 @@ func TestRunUpdateBaseDigests_reportsFailures(t *testing.T) {
 func TestRunUpdateBaseDigests_needsPinnedReferences(t *testing.T) {
 	shotGitRepo(t, map[string]string{"Dockerfile": "FROM python:3.13\n"})
 
-	_, err := runUpdateBaseDigests(false, "", "", false, "")
+	_, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{})
 
 	if err == nil || err.Error() != "No pinned image references found." {
 		t.Fatalf("expected the no-references error, got %v", err)
@@ -241,7 +319,7 @@ func TestRunUpdateBaseDigests_needsARepository(t *testing.T) {
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
 	t.Chdir(dir)
 
-	_, err := runUpdateBaseDigests(false, "", "", false, "")
+	_, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{})
 
 	if err == nil || !strings.HasPrefix(err.Error(), "Could not find the repository root: ") {
 		t.Fatalf("expected the repository root error, got %v", err)
@@ -260,7 +338,7 @@ func TestRunUpdateBaseDigests_reportsListFailure(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	_, err := runUpdateBaseDigests(false, "", "", false, "")
+	_, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{})
 
 	if err == nil || err.Error() != "Could not list the tracked files: git ls-files: exit status 5" {
 		t.Fatalf("expected the list error, got %v", err)

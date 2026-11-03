@@ -36,6 +36,64 @@ func TestCreateCCPairRequest(t *testing.T) {
 	if _, ok := body["groups"]; !ok {
 		t.Error("groups must be present in the request body")
 	}
+	// data_access is new in Onyx v5.0, so an unset value stays off the wire.
+	if _, ok := body["data_access"]; ok {
+		t.Error("data_access must be omitted when unset")
+	}
+}
+
+// A set data_access goes out as a list, even when empty.
+func TestCreateCCPairSendsDataAccessWhenSet(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK, `{"success": true, "message": "created", "data": 77}`)
+	groups := []int64{4, 6}
+	if _, err := c.CreateCCPair(context.Background(), 3, 5, CCPairCreate{
+		Name:       "docs",
+		AccessType: "sync_restricted",
+		DataAccess: &groups,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ids, ok := bodyAsMap(t, captured.Body)["data_access"].([]any)
+	if !ok || len(ids) != 2 || ids[0] != float64(4) {
+		t.Errorf("want data_access [4 6], got %s", captured.Body)
+	}
+
+	empty := []int64{}
+	if _, err := c.CreateCCPair(context.Background(), 3, 5, CCPairCreate{
+		Name:       "docs",
+		AccessType: "private",
+		DataAccess: &empty,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ids, ok := bodyAsMap(t, captured.Body)["data_access"].([]any); !ok || len(ids) != 0 {
+		t.Errorf("want an empty data_access list, got %s", captured.Body)
+	}
+}
+
+func TestCCPairDataAccessRoutes(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK,
+		`{"groups": [{"id": 4, "name": "eng", "is_default": false}, {"id": 6, "name": "ops", "is_default": false}]}`)
+	ids, err := c.GetCCPairDataAccess(context.Background(), 77)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if captured.Method != http.MethodGet || captured.Path != "/manage/admin/cc-pair/77/data-access" {
+		t.Errorf("%s %s", captured.Method, captured.Path)
+	}
+	if len(ids) != 2 || ids[0] != 4 || ids[1] != 6 {
+		t.Errorf("ids = %v, want [4 6]", ids)
+	}
+
+	if _, err := c.SetCCPairDataAccess(context.Background(), 77, nil); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Method != http.MethodPut || captured.Path != "/manage/admin/cc-pair/77/data-access" {
+		t.Errorf("%s %s", captured.Method, captured.Path)
+	}
+	if list, ok := bodyAsMap(t, captured.Body)["group_ids"].([]any); !ok || len(list) != 0 {
+		t.Errorf("want an empty group_ids list, got %s", captured.Body)
+	}
 }
 
 // A duplicate association answers 200 with success=false and puts the
@@ -63,7 +121,10 @@ func TestGetCCPairParsesNestedIDs(t *testing.T) {
 		"deletion_failure_message": null,
 		"indexing": false,
 		"connector": {"id": 3, "name": "c", "source": "mock_connector"},
-		"credential": {"id": 5, "source": "mock_connector"}
+		"credential": {"id": 5, "source": "mock_connector"},
+		"groups": [4, 6],
+		"auto_sync_options": {"customer_id": "c1"},
+		"processing_mode": "RAW_BINARY"
 	}`)
 	pair, err := c.GetCCPair(context.Background(), 77)
 	if err != nil {
@@ -77,6 +138,9 @@ func TestGetCCPairParsesNestedIDs(t *testing.T) {
 	}
 	if pair.Status != CCPairStatusPaused || pair.AccessType != "private" {
 		t.Errorf("unexpected pair: %+v", pair)
+	}
+	if len(pair.Groups) != 2 || pair.AutoSyncOptions["customer_id"] != "c1" || pair.ProcessingMode != "RAW_BINARY" {
+		t.Errorf("groups, auto_sync_options and processing_mode must decode: %+v", pair)
 	}
 }
 

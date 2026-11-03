@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/svcSS";
 import { Permission } from "@/lib/types";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 
 interface CraftManageLayoutProps {
   children: React.ReactNode;

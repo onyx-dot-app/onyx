@@ -13,6 +13,7 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/composegen"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/deployfilessync"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/safefs"
 )
 
 // NewGenerateComposeCommand creates the generate-compose command.
@@ -85,6 +86,10 @@ func runGenerateCompose(write bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	repoRoot, err := paths.GitRoot()
+	if err != nil {
+		return false, fatalErrorf("Failed to find git root: %w", err)
+	}
 
 	data, err := os.ReadFile(filepath.Join(dir, composegen.TemplateName))
 	if err != nil {
@@ -112,7 +117,7 @@ func runGenerateCompose(write bool) (bool, error) {
 		}
 
 		if write {
-			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			if err := safefs.WriteFileNoFollow(repoRoot, path, []byte(content), 0o644); err != nil {
 				return false, fatalErrorf("Failed to write %s: %w", filename, err)
 			}
 			fmt.Printf("regenerated %s\n", filename)
@@ -124,10 +129,6 @@ func runGenerateCompose(write bool) (bool, error) {
 
 	// Sync the embedded copies for onyx-cli after the variants, so the copy
 	// of docker-compose.yml reflects the freshly rendered output.
-	repoRoot, err := paths.GitRoot()
-	if err != nil {
-		return false, fatalErrorf("Failed to find git root: %w", err)
-	}
 	var results []deployfilessync.Result
 	if write {
 		results, err = deployfilessync.Write(repoRoot)

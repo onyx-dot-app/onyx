@@ -1,0 +1,54 @@
+---
+title: "Egnyte"
+description: "Access files stored in Egnyte"
+---
+
+## How it works
+
+The Egnyte connector indexes the files in your Egnyte domain.
+You can index the whole domain or one folder and its subfolders. Onyx indexes the file name, the file type,
+and the text content of the supported document types. It skips images.
+
+Onyx checks Egnyte for new and changed files every 30 minutes by default.
+You can change **Refresh Every** on the connector.
+
+Permission sync is not available for Egnyte.
+Everyone who can see the connector's documents in Onyx can see every indexed file.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Register an Egnyte application">
+    Register an application in the [Egnyte Developer Portal](https://developers.egnyte.com/)
+    and note its API key (client ID) and secret.
+  </Step>
+
+  <Step title="Get an access token">
+    Use the application to get an access token for your Egnyte domain.
+    Follow the [Egnyte authentication guide](https://developers.egnyte.com/docs/read/Public_API_Authentication).
+    The token must belong to a user who can read every folder you want to index.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Onyx admin panel, go to **Connectors** and select **Egnyte**. Under **Authentication Account**,
+    click **Create New**. Enter the **Egnyte Domain**, for example `acme` for `acme.egnyte.com`,
+    and the access token as the **API Token**.
+  </Step>
+
+  <Step title="Choose the folder">
+    Enter a **Folder Path** such as `/Shared/Documents` to index one folder and its subfolders.
+    Leave it empty to index everything.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the indexed files.
+    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>

@@ -21,7 +21,7 @@ resource "onyx_llm_provider" "ds_seed" {
   api_key       = "sk-tf-acc-fake-key"
 
   model_configurations = [
-    { name = "gpt-5-mini" },
+    { name = "gpt-6-luna" },
   ]
 }
 
@@ -73,6 +73,43 @@ data "onyx_embedding_providers" "all" {
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("data.onyx_embedding_providers.all", "providers.#"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccToolsDataSource(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Onyx seeds built-in actions, so the list is never empty.
+				Config: `data "onyx_tools" "all" {}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("data.onyx_tools.all", "tools.0.id"),
+					resource.TestCheckResourceAttrSet("data.onyx_tools.all", "tools.0.name"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccUserGroupsDataSource(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccRequireEE(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Onyx seeds the Admin and Basic groups.
+				Config: `data "onyx_user_groups" "all" {}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("data.onyx_user_groups.all", "groups.0.id"),
+					resource.TestCheckResourceAttrSet("data.onyx_user_groups.all", "groups.0.name"),
 				),
 			},
 		},

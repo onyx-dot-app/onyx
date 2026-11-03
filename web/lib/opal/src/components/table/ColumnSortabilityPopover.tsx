@@ -49,7 +49,7 @@ function SortingPopover<TData extends RowData>({
         />
       </Popover.Trigger>
 
-      <Popover.Content width="lg" align="end" side="bottom">
+      <Popover.Content width={60} align="end" side="bottom">
         <Popover.Menu
           footer={
             footerText ? (

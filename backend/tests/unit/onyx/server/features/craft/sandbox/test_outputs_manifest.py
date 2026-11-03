@@ -276,3 +276,40 @@ def test_directory_swapped_for_symlink_during_scan_is_not_followed(
     result = manifest_module.build_outputs_manifest(session_id)
     assert result.entries == []
     assert not result.complete
+
+
+def test_optional_app_inventory_excludes_generated_and_hidden_files(
+    manifest_module: ModuleType, session: tuple[UUID, Path]
+) -> None:
+    session_id, outputs = session
+    for path in [
+        "report.pdf",
+        "web/package.json",
+        "web/app/page.tsx",
+        "web/app/build/page.tsx",
+        "web/.next/build.js",
+        "web/node_modules/pkg/index.js",
+        "web/dist/index.js",
+        "web/build/log.txt",
+        "web/out/index.html",
+        "web/coverage/index.html",
+        "web/.git/index",
+        "web/next-env.d.ts",
+        "web/tsconfig.tsbuildinfo",
+        "web/nextjs.log",
+    ]:
+        target = outputs / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("content")
+    result = manifest_module.build_outputs_manifest(session_id, include_web=True)
+    assert result.complete
+    assert [entry.path for entry in result.entries] == [
+        "report.pdf",
+        "web/app/build/page.tsx",
+        "web/app/page.tsx",
+        "web/package.json",
+    ]
+    assert [
+        entry.path
+        for entry in manifest_module.build_outputs_manifest(session_id).entries
+    ] == ["report.pdf"]

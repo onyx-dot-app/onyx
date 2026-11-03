@@ -8,11 +8,11 @@ import { federatedSourceToRegularSource } from "@/lib/connectors/types/source";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
-import Text from "@/refresh-components/texts/Text";
 import {
   Button,
   Dropdown,
   InputTypeIn,
+  Text,
   type DropdownMenuItem,
 } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -133,11 +133,11 @@ export const FederatedConnectorSelector = ({
     <div className="flex flex-col w-full space-y-2 mb-4">
       {label && (
         <Label>
-          <Text>{label}</Text>
+          <Text color="text-05">{label}</Text>
         </Label>
       )}
 
-      <Text as="p" mainUiMuted text03>
+      <Text as="p" font="main-ui-muted" color="text-03">
         {t("realtimeSearchHint.description")}
       </Text>
       <Dropdown open={open} onOpenChange={setOpen}>

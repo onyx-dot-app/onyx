@@ -1,0 +1,13 @@
+---
+title: "Get Group Token Limit Settings"
+openapi: "GET /admin/token-rate-limits/user-group/{group_id}"
+---
+
+import EnterpriseEditionInfo from "/snippets/enterprise-edition-info.mdx";
+
+<EnterpriseEditionInfo />
+
+<Info>
+  **Required permission:** Manage Groups (`manage:user_groups`), or Admin (`admin`).
+  A **Group Manager** can also call this, limited to the groups they manage.
+</Info>

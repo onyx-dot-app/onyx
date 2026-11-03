@@ -121,6 +121,7 @@ function OllamaModalInternals({
                 <PasswordInputTypeInField
                   name="api_key"
                   placeholder={t("ollama.apiKeyField.placeholder")}
+                  existingValue={formikProps.initialValues.api_key || undefined}
                 />
               </InputVertical>
             </Tabs.Content>

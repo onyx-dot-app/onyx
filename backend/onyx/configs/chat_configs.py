@@ -1,5 +1,8 @@
 import os
 
+# Bounds full-response callers waiting after delivery ends; execution keeps its own lifetime.
+CHAT_RESPONSE_WAIT_TIMEOUT_S = 3600
+
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model
@@ -7,8 +10,7 @@ MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
 # Maximum number of LLM cycles (one tool-call round-trip per cycle) before the
 # agent is forced to answer. Default 6 covers the common search → open_url
-# pattern documented at the call site; raise via env when integrating with
-# tool-heavy MCPs that legitimately need more turns.
+# pattern; raise via env when integrating with tool-heavy MCPs that need more turns.
 MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
@@ -110,3 +112,6 @@ COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0
 SKIP_DEEP_RESEARCH_CLARIFICATION = (
     os.environ.get("SKIP_DEEP_RESEARCH_CLARIFICATION", "false").lower() == "true"
 )
+
+# Bound execution separately from a caller waiting for its saved response.
+CHAT_EXECUTION_TIMEOUT_S = 3600

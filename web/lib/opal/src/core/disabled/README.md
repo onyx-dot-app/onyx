@@ -9,7 +9,9 @@ descendants. Works with any children — DOM elements, React components, or frag
 When `disabled` is true, it also blocks the keyboard: the children sit in a `<fieldset>` (with
 `display: contents`) that is disabled, so the form controls inside leave the tab order and take no
 input. `allowClick` keeps the children interactive, so it leaves the keyboard enabled too. The
-fieldset is always rendered, so toggling `disabled` does not remount the children.
+fieldset is always rendered, so toggling `disabled` does not remount the children. Pass `tooltip`
+whether or not the region is disabled: the tooltip stays mounted and is suppressed while enabled. A
+tooltip given only while disabled adds a wrapper on each toggle, which remounts the children.
 
 A `tooltip` only shows on hover, and nothing in a disabled region can take focus to open it. So
 `Disabled` also keeps the tooltip's plain text in a visually hidden, polite live region while it is
@@ -22,7 +24,8 @@ disabled: screen readers read the reason in the region and announce it when it c
 | `disabled`    | `boolean`                                | `false`   | Applies disabled styling when truthy                                                |
 | `allowClick`  | `boolean`                                | `false`   | Re-enables pointer events and keyboard input while keeping disabled visuals         |
 | `tooltip`     | `string \| RichStr`                      | —         | Tooltip shown on hover when disabled (implies `allowClick`). Supports `markdown()`. |
-| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on                                                   |
+| `tooltipSide` | `"top" \| "bottom" \| "start" \| "end"` | `"end"` | Which side the tooltip appears on                                                   |
+| `tooltipAlign` | `TooltipAlign` | `"center"` | Where the tooltip sits along its side; `"follow"` keeps it level with the pointer. See `Tooltip`'s `align` |
 
 ## CSS behavior
 

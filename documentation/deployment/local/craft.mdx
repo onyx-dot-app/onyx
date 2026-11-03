@@ -1,0 +1,84 @@
+---
+title: "Deploying Craft"
+description: "Choose and prepare a sandbox runtime for self-hosted Craft"
+icon: "hammer"
+---
+
+Craft runs generated code in isolated sandboxes and sends sandbox network traffic through an egress proxy.
+Self-hosted deployments can run these sandboxes in Kubernetes or Docker.
+
+<CardGroup cols={2}>
+  <Card title="Kubernetes" icon="dharmachakra" href="/deployment/local/craft_kubernetes">
+    Deploy sandbox pods, the proxy, RBAC, and workers with the Onyx Helm chart.
+  </Card>
+
+  <Card title="Docker Compose" icon="docker" href="/deployment/local/craft_docker_compose">
+    Run sandbox containers and the proxy on a trusted single Docker host.
+  </Card>
+</CardGroup>
+
+<Tip>
+  Use Kubernetes if more than a few people will use Craft, especially when they may work concurrently.
+  Each active user needs a sandbox, so Docker Compose is best suited to small, single-host deployments.
+</Tip>
+
+| | Kubernetes | Docker Compose |
+| --- | --- | --- |
+| Sandbox runtime | One pod per active user | One container per active user |
+| Recommended for | Production and multi-node deployments | Single-host self-hosted deployments |
+| Provisioning | Onyx Helm chart | `onyx-cli deploy install --include-craft` |
+| Host access | Kubernetes API through scoped RBAC | Docker socket access on the host |
+
+## Requirements
+
+<Note>
+  Craft requires a Business or Enterprise license. Onyx Cloud includes it. On the Community Edition,
+  Craft stays visible in the sidebar with an upgrade prompt, but users cannot start a session.
+</Note>
+
+Both deployment paths require:
+
+- A full Onyx deployment with the vector database and background workers. Craft does not run on Onyx Lite.
+- Matching application and sandbox image versions. The sandbox image follows the Onyx release tag.
+- An Onyx API base URL that sandboxes can reach, set as `ONYX_SERVER_URL`.
+  Docker Compose and Helm both set a working in-cluster default. Set it yourself when sandboxes must use a public URL.
+- Capacity for one sandbox per active Craft user.
+- An Anthropic, OpenAI, or OpenRouter provider configured after deployment.
+
+<Warning>
+  Sandboxes execute model-generated code. Review [Craft Architecture](/security/architecture/craft)
+  before enabling Craft, especially the sandbox, network, credential, and sharing boundaries.
+</Warning>
+
+## After the runtime is ready
+
+<Steps>
+  <Step title="Configure a model">
+    In **Admin Panel → Language Models**, add an Anthropic, OpenAI,
+    or OpenRouter provider and make at least one model available to your Craft users.
+  </Step>
+
+  <Step title="Configure workspace access">
+    Open **Admin Panel → Craft → Access**. Keep the workspace default off for a limited rollout,
+    or enable Craft for everyone. Set workspace instructions and defaults under **Admin Panel → Craft → Preferences**.
+  </Step>
+
+  <Step title="Run a complete test">
+    As an enabled user, start a Craft session, send a prompt that creates a file, and open or download the result.
+  </Step>
+
+  <Step title="Add Apps and Skills">
+    Configure Craft Apps and MCP servers under **Admin Panel → Plugins**. Manage reusable Skills in **Craft → Skills**.
+    See [Craft Apps](/admins/plugins/craft_apps).
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="Managing Craft" icon="sliders" href="/admins/managing_features/craft">
+    Configure access, models, Apps, and workspace instructions.
+  </Card>
+
+  <Card title="Craft Architecture" icon="diagram-project" href="/security/architecture/craft">
+    Understand sandbox isolation, egress, credentials, and approvals.
+  </Card>
+</CardGroup>

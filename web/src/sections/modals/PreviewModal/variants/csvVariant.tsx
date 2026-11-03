@@ -6,11 +6,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
-import { CopyButton } from "@opal/components";
+import { CopyButton, Text } from "@opal/components";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 import TextSeparator from "@/refresh-components/TextSeparator";
 
@@ -52,7 +51,12 @@ export const csvVariant: PreviewVariant = {
             <TableRow noHover>
               {headers.map((h: string, i: number) => (
                 <TableHead key={i}>
-                  <Text as="p" className="line-clamp-2" text04 secondaryAction>
+                  <Text
+                    as="p"
+                    font="secondary-action"
+                    color="text-04"
+                    maxLines={2}
+                  >
                     {h}
                   </Text>
                 </TableHead>
@@ -72,9 +76,8 @@ export const csvVariant: PreviewVariant = {
                   >
                     <Text
                       as="p"
-                      {...(cIdx === 0
-                        ? { text04: true, secondaryAction: true }
-                        : { text03: true, secondaryBody: true })}
+                      font={cIdx === 0 ? "secondary-action" : "secondary-body"}
+                      color={cIdx === 0 ? "text-04" : "text-03"}
                     >
                       {row?.[cIdx] ?? ""}
                     </Text>
@@ -95,12 +98,14 @@ export const csvVariant: PreviewVariant = {
     if (!ctx.fileContent) return null;
     const { headers, rows } = parseCsv(ctx.fileContent);
     return (
-      <Text text03 mainUiBody className="select-none">
-        {ctx.t("csv.footer", {
-          columnCount: headers.length,
-          rowCount: rows.length,
-        })}
-      </Text>
+      <span className="select-none">
+        <Text font="main-ui-body" color="text-03">
+          {ctx.t("csv.footer", {
+            columnCount: headers.length,
+            rowCount: rows.length,
+          })}
+        </Text>
+      </span>
     );
   },
   renderFooterRight: (ctx) => (

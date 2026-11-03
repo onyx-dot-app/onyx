@@ -19,6 +19,9 @@ export interface UsagePerDayByModel {
 export interface ModelPrice {
   model: string;
   provider: string | null;
+  /** The saved model configuration this price is for; providers of one type
+   *  can price the same model name differently. */
+  model_configuration_id: number | null;
   input_per_mtok: number | null; // $/1M tokens; null if the model is unpriced
   output_per_mtok: number | null;
   cache_per_mtok: number | null; // null => cache reads bill at the input rate

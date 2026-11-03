@@ -11,7 +11,7 @@ import {
   formatAbsolute,
   isScheduledRunContextInFlight,
 } from "@/app/craft/v1/tasks/utils";
-import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
+import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 

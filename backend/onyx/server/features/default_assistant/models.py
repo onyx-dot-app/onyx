@@ -29,3 +29,10 @@ class DefaultAssistantUpdateRequest(BaseModel):
         default=None,
         description="New system prompt (instructions). None resets to default, empty string is allowed.",
     )
+
+
+class DefaultAssistantToolsUpdateRequest(BaseModel):
+    """Add or remove only the given tools, keeping the rest of the selection."""
+
+    tool_ids: list[int]
+    enabled: bool

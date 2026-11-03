@@ -38,6 +38,9 @@ Empty states and placeholder screens share a recurring pattern: a large illustra
 | `title`        | `string`                | **(required)** | Main title text, center-aligned.                                                                                 |
 | `description`  | `string`                | —              | Optional description below the title, center-aligned.                                                            |
 
+The optional `size="lg"` uses an 18px heading and 16px description with more space between them.
+The default `size="md"` preserves the compact typography. Illustration sizing stays the same.
+
 ## Usage Examples
 
 ### Empty search results

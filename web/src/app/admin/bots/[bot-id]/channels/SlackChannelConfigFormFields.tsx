@@ -22,7 +22,7 @@ import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswer
 import { InputSingleComboBox } from "@opal/components";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
-import { AlertCircle } from "lucide-react";
+import { SvgAlertCircle } from "@opal/icons";
 import { useRouter } from "next/navigation";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -173,7 +173,6 @@ export function SlackChannelConfigFormFields({
       );
     }
     return false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values.knowledge_source, values.document_sets, values.persona_id]);
 
   return (
@@ -595,7 +594,7 @@ export function SlackChannelConfigFormFields({
             }
           >
             <div className="flex hover:bg-background-150 cursor-pointer p-2 rounded-lg items-center">
-              <AlertCircle className="h-5 w-5 text-alert" />
+              <SvgAlertCircle className="h-5 w-5 text-alert" />
             </div>
           </Tooltip>
         )}

@@ -7,11 +7,9 @@ import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { SettingsLayouts, toast } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Card, Text } from "@opal/components";
 import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
-import Card from "@/refresh-components/cards/Card";
 import { SvgKey, SvgPlusCircle } from "@opal/icons";
 import {
   useDiscordGuilds,
@@ -79,17 +77,17 @@ function DiscordBotContent() {
             description={t("registrationKey.header.description")}
           />
           <Modal.Body>
-            <Text text04 mainUiBody>
+            <Text font="main-ui-body" color="text-04">
               {t("registrationKey.instructions.text")}
             </Text>
-            <Card variant="secondary">
+            <Card color="transparent" border="solid" rounding={4}>
               <Section
                 flexDirection="row"
                 justifyContent="between"
                 alignItems="center"
               >
-                <Text text03 secondaryMono>
-                  !register {registrationKey}
+                <Text font="secondary-mono" color="text-03">
+                  {`!register ${registrationKey}`}
                 </Text>
                 <CopyButton
                   getCopyText={() => `!register ${registrationKey}`}
@@ -100,27 +98,29 @@ function DiscordBotContent() {
         </Modal.Content>
       </Modal>
 
-      <Card variant={!isBotAvailable ? "disabled" : "primary"}>
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="center"
-        >
-          <Text mainContentEmphasis text05>
-            {t("serverConfigs.section.title")}
-          </Text>
-          <Button
-            icon={SvgPlusCircle}
-            prominence="secondary"
-            onClick={handleCreateGuild}
-            disabled={isCreating || !isBotAvailable}
+      <Card border="solid" rounding={4} disabled={!isBotAvailable}>
+        <Section alignItems="start" height="fit">
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
           >
-            {isCreating
-              ? t("serverConfigs.addButton.creating.label")
-              : t("serverConfigs.addButton.label")}
-          </Button>
+            <Text font="main-content-emphasis" color="text-05">
+              {t("serverConfigs.section.title")}
+            </Text>
+            <Button
+              icon={SvgPlusCircle}
+              prominence="secondary"
+              onClick={handleCreateGuild}
+              disabled={isCreating || !isBotAvailable}
+            >
+              {isCreating
+                ? t("serverConfigs.addButton.creating.label")
+                : t("serverConfigs.addButton.label")}
+            </Button>
+          </Section>
+          <DiscordGuildsTable guilds={guilds} onRefresh={refreshGuilds} />
         </Section>
-        <DiscordGuildsTable guilds={guilds} onRefresh={refreshGuilds} />
       </Card>
     </>
   );

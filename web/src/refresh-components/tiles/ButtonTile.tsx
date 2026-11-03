@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "react";
 
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Interactive } from "@opal/core";
 import type { IconProps } from "@opal/types";
 
@@ -43,16 +43,18 @@ export default function ButtonTile({
           <div className="min-w-0 flex flex-col px-0.5">
             {title && (
               <Text
-                secondaryAction
-                text02={disabled}
-                text04={!disabled}
-                className="truncate"
+                font="secondary-action"
+                color={disabled ? "text-02" : "text-04"}
+                maxLines={1}
               >
                 {title}
               </Text>
             )}
             {description && (
-              <Text secondaryBody text02={disabled} text03={!disabled}>
+              <Text
+                font="secondary-body"
+                color={disabled ? "text-02" : "text-03"}
+              >
                 {description}
               </Text>
             )}

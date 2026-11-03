@@ -1,4 +1,4 @@
-import type { OnboardingActions } from "@/interfaces/onboarding";
+import type { OnboardingActions } from "@/lib/onboarding/types";
 import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import type { FunctionComponent } from "react";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
@@ -21,6 +21,8 @@ export interface ModelConfiguration {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   /**
    * Effort levels this model tells apart, ascending, as resolved by the
    * backend that builds the request. Absent from an older backend, in which
@@ -39,6 +41,9 @@ export interface ModelConfiguration {
   supported_features?: string[];
   /** True when this is the provider's recommended default model. */
   is_recommended_default?: boolean;
+  /** Virtual entry that delegates model selection to a routing layer
+   *  (openrouter/auto, a Portkey config) rather than naming a model. */
+  is_router?: boolean;
   display_name?: string;
   /** Admin-set override that takes precedence over display_name everywhere in the UI. */
   custom_display_name?: string;
@@ -56,6 +61,8 @@ export interface ModelConfiguration {
 }
 
 export enum LLMProviderName {
+  TYPESAFE = "typesafe",
+  ZOOM_AI = "zoom_ai",
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
   OLLAMA_CHAT = "ollama_chat",
@@ -97,6 +104,7 @@ export interface LLMModelDescriptor {
 
 export interface LLMProviderView {
   id: number;
+  zoom_voice_provider_id?: number | null;
   name: string | null;
   provider: string;
   api_key: string | null;
@@ -143,8 +151,9 @@ export interface ModelPaging {
   hasMore: boolean;
   isLoading: boolean;
   /** Loads the next page of the first listed provider that still has
-   *  unloaded models, in the order given (any provider when omitted). */
-  loadMore: (providerIds?: number[]) => Promise<void>;
+   *  unloaded models, in the order given (any provider when omitted).
+   *  Resolves false when no listed provider has unloaded models. */
+  loadMore: (providerIds?: number[]) => Promise<boolean>;
   /** Fetches the first window of server matches for every provider with
    *  unloaded models. Resolves false when a page load was in flight and the
    *  search was skipped, so the caller can retry once that load settles. */
@@ -163,10 +172,13 @@ export interface OllamaModelResponse {
 }
 
 export interface OpenRouterModelResponse {
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   name: string;
   display_name: string;
   max_input_tokens: number | null;
   supports_image_input: boolean;
+  is_router: boolean;
 }
 
 export interface BedrockModelResponse {
@@ -193,6 +205,7 @@ export interface LLMProviderResponse<T> {
   providers: T[];
   default_text: DefaultModel | null;
   default_vision: DefaultModel | null;
+  default_search_selection: DefaultModel | null;
   default_chat_naming: DefaultModel | null;
   default_craft: DefaultModel | null;
 }
@@ -218,6 +231,8 @@ export interface BedrockFetchParams {
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
   aws_bearer_token_bedrock?: string;
+  aws_role_name?: string;
+  aws_external_id?: string;
   provider_id?: number;
 }
 
@@ -321,6 +336,8 @@ export interface VercelAIGatewayFetchParams {
 }
 
 export interface VercelAIGatewayModelResponse {
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   name: string;
   display_name: string;
   max_input_tokens: number | null;
@@ -381,6 +398,10 @@ export interface LLMOption {
   reasoningEffortDefault?: ReasoningEffortOverride | null;
   temperatureDefault?: number | null;
   supportsImageInput?: boolean;
+  /** See ModelConfiguration.is_router. */
+  isRouter?: boolean;
+  /** Synthesized picker item for model routing; selects the backing router. */
+  isAuto?: boolean;
 }
 
 export interface LLMOptionGroup {
@@ -391,8 +412,7 @@ export interface LLMOptionGroup {
 }
 
 export interface FilterModelConfigurationsOptions {
-  /** Drop models an admin hid from users. Defaults to true. */
-  visibleOnly?: boolean;
+  includeDecisionOnly?: boolean;
   /** Keep only models that accept image input. */
   imageInput?: boolean;
   /** A configuration id kept regardless: the current value stays listed. */
@@ -437,12 +457,19 @@ export interface LlmDefaults {
 }
 
 /**
- * Admin-set negotiated per-model rate, overriding the built-in price book.
- * Rates are USD per MILLION tokens. Keyed on (provider, model); provider is ""
- * for a provider-agnostic override.
+ * Admin-set negotiated rate for one model configuration, overriding the
+ * built-in price book. Rates are USD per MILLION tokens.
  */
 export interface CostOverride {
-  model: string;
+  model_configuration_id: number;
+  /** The model's API name. */
+  model_name: string;
+  /** The name to show (custom, then display, then API name). */
+  model_display_name: string;
+  llm_provider_id: number;
+  /** The provider's own name; null when unnamed. */
+  llm_provider_name: string | null;
+  /** Provider type, e.g. "openai". */
   provider: string;
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
@@ -450,18 +477,36 @@ export interface CostOverride {
   updated_at: string | null;
 }
 
-/** PUT body — an idempotent upsert keyed on (provider, model). */
-export interface CostOverrideUpsert {
-  model: string;
-  provider?: string; // "" / omitted = provider-agnostic
+/** PUT body: an override's rates. */
+export interface CostOverrideRates {
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
   cache_read_cost_per_mtok: number | null;
 }
 
+/** POST body: a new override for a model configuration that has none. */
+export interface CostOverrideCreate extends CostOverrideRates {
+  model_configuration_id: number;
+}
+
+/** PUT body: new rates, and optionally another model to move the override to. */
+export interface CostOverrideUpdate extends CostOverrideRates {
+  model_configuration_id?: number;
+}
+
+/**
+ * A provider whose names are copy rather than brand names. Its names come from
+ * `admin.languageModels.providers.<key>`; show them with `useProviderNames`.
+ */
+export type ProviderCopyKey = "custom" | "openAICompatible";
+
 export interface ProviderEntry {
+  decisionOnly?: boolean;
   icon: IconFunctionComponent;
+  /** A brand name, or the provider key when `copyKey` holds its names. */
   productName: string;
+  /** A brand name, or the provider key when `copyKey` holds its names. */
   companyName: string;
+  copyKey?: ProviderCopyKey;
   Modal: React.ComponentType<LLMProviderFormProps>;
 }

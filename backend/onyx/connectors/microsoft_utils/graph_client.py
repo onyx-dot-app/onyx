@@ -82,18 +82,6 @@ def backoff_seconds(attempt: int, retry_after: str | None) -> float:
     return base / 2 + random.uniform(0, base / 2)
 
 
-def graph_error_code(response: requests.Response | None) -> str:
-    if response is None:
-        return "<no response>"
-    try:
-        return response.json().get("error", {}).get("code") or "<no code>"
-    except Exception:
-        logger.debug(
-            "Failed to parse Graph error code from response body", exc_info=True
-        )
-        return "<no code>"
-
-
 def log_and_raise_for_status(response: requests.Response) -> None:
     """Log the response text and raise for status.
 

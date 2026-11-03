@@ -37,6 +37,12 @@ interface CardFoldProps {
    */
   contentHeight?: CardFoldHeight;
 
+  /**
+   * Keeps the children while closed, e.g. so a form keeps what was typed.
+   * Off, a closed fold drops them once it finishes closing.
+   */
+  keepMounted?: boolean;
+
   children?: React.ReactNode;
 }
 
@@ -69,6 +75,7 @@ function CardFold({
   radius,
   borderColor,
   contentHeight = 80,
+  keepMounted = false,
   children,
 }: CardFoldProps) {
   const frameStyle: React.CSSProperties & Record<"--opal-card-radius", string> =
@@ -79,6 +86,7 @@ function CardFold({
     // stays visible, and only the content inside it fades.
     <Fold
       open={expanded}
+      keepMounted={keepMounted}
       frame={(content) => (
         <div
           className="opal-card-fold-body"

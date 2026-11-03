@@ -248,6 +248,9 @@ module.exports = {
         "box-01": "var(--shadow-box-01)",
         "box-02": "var(--shadow-box-02)",
       },
+      maxWidth: {
+        "chat-message": "var(--width-chat-message-max)",
+      },
       backdropBlur: {
         "01": "var(--backdrop-blur-01)",
         "02": "var(--backdrop-blur-02)",

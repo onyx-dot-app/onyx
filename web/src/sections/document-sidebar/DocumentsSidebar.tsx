@@ -10,8 +10,7 @@ import {
   useCurrentMessageTree,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Divider } from "@opal/components";
+import { Text, Button, Divider } from "@opal/components";
 import { SvgSearchMenu, SvgX } from "@opal/icons";
 
 // Build an OnyxDocument from basic file info
@@ -51,7 +50,7 @@ function Header({ children, onClose }: HeaderProps) {
       <div className="flex flex-row w-full items-center justify-between gap-2 py-3">
         <div className="flex items-center gap-2 w-full px-3">
           <SvgSearchMenu className="w-[1.3rem] h-[1.3rem] stroke-text-03" />
-          <Text as="p" headingH3 text03>
+          <Text as="p" font="heading-h3" color="text-03">
             {children}
           </Text>
         </div>

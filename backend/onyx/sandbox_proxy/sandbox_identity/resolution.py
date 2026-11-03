@@ -13,6 +13,7 @@ There is deliberately no most-recent-active fallback: a gated request with no
 verifiable session tag fails closed rather than routing to a guessed session.
 """
 
+import ipaddress
 from typing import Protocol
 from uuid import UUID
 
@@ -25,6 +26,22 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+PeerAddress = tuple[str, int] | tuple[str, int, int, int]
+
+
+def source_ip(peer: PeerAddress | None) -> str | None:
+    """Normalize transport peers for sandbox identity lookup, including mapped IPv4."""
+    if not peer:
+        return None
+    try:
+        address = ipaddress.ip_address(peer[0])
+    except ValueError:
+        return None
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        return str(address.ipv4_mapped)
+    return str(address)
 
 
 class SandboxIPLookup(Protocol):
@@ -45,7 +62,17 @@ class SandboxIPLookup(Protocol):
     def stop(self) -> None: ...
 
 
-class IdentityResolver:
+class SandboxIdentityResolver(Protocol):
+    """Resolve sandbox ownership and verify session attribution."""
+
+    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
+
+    def resolve_session_by_id(
+        self, session_id: UUID, user_id: UUID, tenant_id: str
+    ) -> UUID | None: ...
+
+
+class IdentityResolver(SandboxIdentityResolver):
     def __init__(self, ip_lookup: SandboxIPLookup) -> None:
         self._ip_lookup = ip_lookup
 

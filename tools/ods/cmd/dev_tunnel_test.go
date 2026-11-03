@@ -55,6 +55,21 @@ func TestDevTunnel_forwardsThroughDockerExecOnLoopback(t *testing.T) {
 		{"ps", "-q", "--filter", "label=devcontainer.local_folder=" + root},
 	})
 	kubeAssertCalls(t, kubeCallsTo(got, "socat"), [][]string{
-		{"TCP-LISTEN:9000,fork,reuseaddr", `SYSTEM:docker exec -i abc123 socat - TCP\:127.0.0.1\:8080`},
+		{"TCP-LISTEN:9000,fork,reuseaddr,bind=127.0.0.1", `SYSTEM:docker exec -i abc123 socat - TCP\:127.0.0.1\:8080`},
+	})
+}
+
+func TestDevTunnel_bindAllListensOnEveryInterface(t *testing.T) {
+	root := t.TempDir()
+	calls := kubeFakeTools(t, map[string]string{
+		"git":    kubeGitScript(t, root, "main"),
+		"docker": "printf 'abc123\\n'\n",
+		"socat":  "exit 0\n",
+	})
+
+	kubeExecute(t, newDevTunnelCommand(), "--bind-all", "8080")
+
+	kubeAssertCalls(t, kubeCallsTo(calls(), "socat"), [][]string{
+		{"TCP-LISTEN:8080,fork,reuseaddr", `SYSTEM:docker exec -i abc123 socat - TCP\:127.0.0.1\:8080`},
 	})
 }

@@ -1,11 +1,15 @@
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Text } from "@opal/components";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface IllustrationContentProps {
+  /** Text size for compact placeholders or spacious content panels. */
+  size?: "md" | "lg";
+
   /** Optional illustration rendered at 7.5rem × 7.5rem (120px), centered. */
   illustration?: IconFunctionComponent;
 
@@ -59,18 +63,32 @@ function IllustrationContent({
   illustration: Illustration,
   title,
   description,
+  size = "md",
 }: IllustrationContentProps) {
   return (
     <div className="flex flex-col items-center gap-3 p-5 text-center">
       {Illustration && (
         <Illustration aria-hidden="true" className="shrink-0 w-30 h-30" />
       )}
-      <div className="flex flex-col items-center text-center">
-        <Text font="main-content-emphasis" color="text-04" as="p">
+      <div
+        className={cn(
+          "flex flex-col items-center text-center",
+          size === "lg" && "gap-2"
+        )}
+      >
+        <Text
+          font={size === "lg" ? "heading-h3" : "main-content-emphasis"}
+          color="text-04"
+          as="p"
+        >
           {title}
         </Text>
         {description && (
-          <Text font="secondary-body" color="text-03" as="p">
+          <Text
+            font={size === "lg" ? "main-content-body" : "secondary-body"}
+            color="text-03"
+            as="p"
+          >
             {description}
           </Text>
         )}

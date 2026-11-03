@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -13,6 +12,7 @@ import {
   BasicModalFooter,
   Button,
   Code,
+  CopyButton,
   Dropdown,
   MessageCard,
   Modal,
@@ -21,8 +21,7 @@ import {
   Text,
   type TableColumn,
 } from "@opal/components";
-import { Content, IllustrationContent } from "@opal/layouts";
-import SvgNoResult from "@opal/illustrations/no-result";
+import { Content } from "@opal/layouts";
 import {
   SvgDownload,
   SvgKey,
@@ -246,49 +245,16 @@ export default function ServiceAccountsPage() {
         ),
       },
     ],
-    [t] // eslint-disable-line react-hooks/exhaustive-deps
+    [t]
   );
-
-  if (error) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          title={adminRouteTitle(route)}
-          icon={route.icon}
-          description={t("page.description", { appName })}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <IllustrationContent
-            illustration={SvgNoResult}
-            title={t("page.error.title")}
-            description={t("page.error.description")}
-          />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          title={adminRouteTitle(route)}
-          icon={route.icon}
-          description={t("page.description", { appName })}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <IconLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
 
   const hasKeys = visibleApiKeys.length > 0;
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root
+      loading={isLoading}
+      error={error ? t("page.error.description") : false}
+    >
       <SettingsLayouts.Header
         title={adminRouteTitle(route)}
         icon={route.icon}
@@ -364,17 +330,12 @@ export default function ServiceAccountsPage() {
                 </Button>
               }
               submit={
-                // TODO(@raunakab): Create an opalified copy-button and replace it here
-                <Button
-                  onClick={() => {
-                    if (fullApiKey) {
-                      navigator.clipboard.writeText(fullApiKey);
-                      toast.success(t("toasts.keyCopied"));
-                    }
-                  }}
+                <CopyButton
+                  prominence="primary"
+                  getCopyText={() => fullApiKey ?? ""}
                 >
                   {t("keyModal.copyButton.label")}
-                </Button>
+                </CopyButton>
               }
             />
           </Modal.Footer>

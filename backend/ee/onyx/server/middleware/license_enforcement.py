@@ -40,12 +40,12 @@ For self-hosted deployments:
 
 import logging
 import time
-from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
@@ -87,22 +87,25 @@ def _should_recheck_gated() -> bool:
     return True
 
 
-def add_license_enforcement_middleware(
-    app: FastAPI, logger: logging.LoggerAdapter
-) -> None:
+def license_enforcement_middleware(
+    app: ASGIApp, logger: logging.LoggerAdapter
+) -> ASGIApp:
     logger.info("License enforcement middleware registered")
 
-    @app.middleware("http")
-    async def enforce_license(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        """Block requests when license is expired/gated."""
+    async def middleware(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await app(scope, receive, send)
+            return
+
+        request = Request(scope)
         path = strip_api_prefix(request.url.path)
 
         if _is_path_allowed(path):
-            return await call_next(request)
+            await app(scope, receive, send)
+            return
 
         is_gated = False
+        response: JSONResponse | None = None
         tenant_id = get_current_tenant_id()
 
         try:
@@ -165,7 +168,7 @@ def add_license_enforcement_middleware(
                             metadata.used_seats,
                             metadata.seats,
                         )
-                        return JSONResponse(
+                        response = JSONResponse(
                             status_code=402,
                             content={
                                 "detail": {
@@ -192,12 +195,16 @@ def add_license_enforcement_middleware(
             # Fail open - don't block users due to cache connectivity issues
             is_gated = False
 
+        if response is not None:
+            await response(scope, receive, send)
+            return
+
         if is_gated:
             logger.info(
                 "[license_enforcement] Blocking request (license expired): %s", path
             )
 
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=402,
                 content={
                     "detail": {
@@ -206,5 +213,9 @@ def add_license_enforcement_middleware(
                     }
                 },
             )
+            await response(scope, receive, send)
+            return
 
-        return await call_next(request)
+        await app(scope, receive, send)
+
+    return middleware

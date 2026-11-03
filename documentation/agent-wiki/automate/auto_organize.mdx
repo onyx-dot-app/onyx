@@ -1,0 +1,75 @@
+---
+title: "Auto Organize"
+description: "Let the wiki find and fix its own clutter, with your approval"
+icon: "wand-magic-sparkles"
+---
+
+Wikis decay. Duplicate pages accumulate, folders empty out, a page gets created twice under slightly different names.
+**Auto Organize** scans for that clutter and proposes fixes — it never reorganizes silently behind you.
+
+Everything it finds becomes a **proposal** you approve or reject. Nothing is applied without consent,
+except in scopes you have explicitly marked as AI-managed.
+
+## What it looks for
+
+A sweep detects structural problems with definite answers, such as:
+
+- **Empty folders** left behind after their contents moved
+- **Duplicate pages** with identical content, proposing a merge into one survivor
+- **Name collisions** that differ only by capitalization
+- **Unfilled templates** — a page still identical to the template it was created from
+- **Stub pages** that never got written
+- **Deeply nested single-child folders** that can be flattened
+
+Because deletion goes to [Trash](/agent-wiki/using/trash) with a 30-day recovery window,
+approving a cleanup is not a one-way door.
+
+## Reviewing proposals
+
+When something is proposed for a page or folder you own, you'll see it in two places:
+
+- A **banner on the page or folder** itself, with approve and reject.
+- The **Suggestions** card in a folder's side panel, listing everything pending underneath it.
+
+Each proposal describes the change in plain terms and, where it applies, shows a preview.
+You approve the *intent* — the wiki then applies it against the page's current state,
+so an unrelated edit made while the proposal was waiting doesn't invalidate it.
+
+Rejecting is durable: the same finding is never proposed again. It's the way to say "this duplicate is deliberate."
+
+## Turning it on for a scope
+
+Auto Organize only touches a page or folder when its **Organize** switch is on — see [Update
+Policies](/agent-wiki/using/update_policies). With it off, detectors skip the scope entirely.
+
+With it on, proposals in that scope can be applied automatically rather than waiting in your queue. That's the trade:
+the switch is how you say "this area is tidy-able without asking me each time."
+
+## Admin controls
+
+Under **Admin → Auto Organize**:
+
+| Control | What it does |
+| --- | --- |
+| **Auto Organize** | The master switch. Off means no sweeps run, nothing is auto-applied, and pending proposals are frozen |
+| **Automatic sweeps** | Off, Daily, or Weekly — scheduled whole-wiki scans at a fixed off-peak time (UTC) |
+| **Scan the whole wiki** | Runs a sweep immediately |
+| **Recent sweeps** | What the last runs scanned and proposed, including failures |
+
+A sweep also runs automatically, narrowly scoped,
+when a page is created — that's what catches a duplicate or a name collision at the moment it's introduced,
+rather than days later.
+
+<Note>
+  The master switch is a genuine freeze, not a pause on new work.
+  Turning it off also stops pending proposals from being applied, so it's the right lever if something looks wrong.
+</Note>
+
+## Good to know
+
+- **Permissions are respected throughout.** A proposal never pairs pages across a visibility boundary, so a suggestion
+  can't reveal that a restricted page exists.
+- **Only one live proposal per page.** Findings are de-duplicated, so a page can't accumulate competing suggestions or
+  re-nag you every sweep.
+- **Auto-applied changes are visible.** They appear in the Activity Center, and every change is an ordinary commit in
+  the page's history.

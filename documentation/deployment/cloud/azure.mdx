@@ -1,0 +1,83 @@
+---
+title: "Azure"
+description: "Deploy Onyx on Azure Virtual Machines"
+icon: "microsoft"
+---
+
+import CustomDomain from "/snippets/custom-domain.mdx"
+import InstallOnyx from "/snippets/install-onyx.mdx"
+import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
+
+A single Azure virtual machine is the simplest way to self-host Onyx on Azure.
+
+<Tip>
+  To deploy Onyx on AKS with Azure Database for PostgreSQL, Azure Managed Redis, and Blob Storage,
+  use the [Terraform modules](/deployment/local/terraform) for Azure.
+</Tip>
+
+## Guide
+
+<Steps>
+  <Step title="Create a VM instance">
+    Create a VM with the appropriate resources. This guide uses the recommended `Standard_D4s_v3` size.
+
+    - Give your VM a descriptive name like `onyx-prod`
+    - Select the `Ubuntu Server 24.04 LTS` image
+    - Select the `Standard_D4s_v3` size
+    - Select `Allow selected ports` and check `HTTPS (443)` in the *Inbound port rules* section
+    - Configure storage following the [Resourcing guide](/deployment/getting_started/resourcing)
+
+    <img className="rounded-image" src="/assets/deployment/setup_guides/azure/create-vm.webp" alt="Create VM Instance"/>
+
+    <img className="rounded-image" src="/assets/deployment/setup_guides/azure/create-vm-2.webp" alt="Instance Settings"/>
+
+    <img className="rounded-image" src="/assets/deployment/setup_guides/azure/create-vm-3.webp" alt="Network Settings"/>
+  </Step>
+
+  <Step title="Create the instance">
+    Click **Create** and then view your VM details.
+
+    <Tip>
+      Save the **Public IP address** of the VM.
+    </Tip>
+
+    <img className="rounded-image" src="/assets/deployment/setup_guides/azure/instance-ip.webp" alt="Azure Public IP Address"/>
+  </Step>
+
+  <CustomDomain />
+
+  <Step title="Install Onyx requirements">
+    Onyx requires `git`, `docker`, and the `docker compose` plugin.
+
+    To install these on Ubuntu Server, run the following:
+
+    ```bash
+    sudo apt-get update
+    sudo apt-get install -y ca-certificates curl
+
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    sudo apt-get update
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin git
+    sudo usermod -aG docker $USER
+    ```
+
+    Log out and back in so your user can run `docker` without `sudo`.
+
+    <Tip>
+      Prefer a guided install? The [Onyx CLI](/deployment/local/onyx_cli) installs Docker Compose,
+      writes the configuration, and manages upgrades for you. Skip the remaining steps if you use it.
+    </Tip>
+  </Step>
+
+  <InstallOnyx />
+</Steps>
+
+<DeploymentNextSteps />

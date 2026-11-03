@@ -7,9 +7,8 @@ import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { Card, Divider } from "@opal/components";
+import { Card, Divider, Text } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import {
   SvgActions,
@@ -300,7 +299,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
           </Section>
 
           {/* Description */}
-          {agent.description && <Text text03>{agent.description}</Text>}
+          {agent.description && (
+            <Text color="text-03">{agent.description}</Text>
+          )}
 
           {/* Knowledge */}
           <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -377,7 +378,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                     appName,
                   })}
                 >
-                  <Text>{defaultModel}</Text>
+                  <Text color="text-05">{defaultModel}</Text>
                 </InputHorizontal>
               )}
               {agent.search_start_date && (
@@ -385,7 +386,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                   title={t("viewer.knowledgeCutoff.title")}
                   description={t("viewer.knowledgeCutoff.description")}
                 >
-                  <Text mainUiMono>
+                  <Text font="main-ui-mono" color="text-05">
                     {formatMmDdYyyy(agent.search_start_date)}
                   </Text>
                 </InputHorizontal>

@@ -1,0 +1,51 @@
+---
+title: "Axero"
+description: "Index articles, blogs, wikis, and forums from Axero"
+---
+
+## How it works
+
+The Axero connector indexes the articles, blog posts, wiki pages, and forum threads of your Axero intranet.
+You can index every space, or only the spaces you list.
+
+Each article, blog post, and wiki page becomes one document.
+A forum thread becomes one document that holds the first post and its replies.
+
+Onyx pulls new and changed content every 24 hours by default. You can change this under **Schedule**.
+
+**Sync with Axero** is not offered.
+The access type can only be **Everyone in Your Organization** or **Specific Groups**.
+
+## Setting up
+
+### Authorization
+
+Create an Axero REST API key for a user who can view the content you want Onyx to index.
+Onyx indexes only what that user can see.
+See Axero's [REST API
+documentation](https://my.axerosolutions.com/spaces/5/communifire-documentation/wiki/view/370/rest-api).
+
+### Indexing
+
+<Steps>
+  <Step title="Connect an Axero account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Axero**. Under **Authentication Account**,
+    select **New Axero Account**. Enter your site in **Axero Base URL**, such as `https://axero.example.com`,
+    and paste the key into **API Token**.
+  </Step>
+
+  <Step title="Choose what to index">
+    - **Axero Base URL**: The same site URL. Axero's REST API must be reachable at this address.
+    - **Spaces** (optional): One or more Space IDs. Leave it empty to index every space.
+  </Step>
+
+  <Step title="Choose who can see the content">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. Open **Admin Panel → Indexing Status**, select the connector,
+    and confirm its first indexing attempt completes.
+  </Step>
+</Steps>

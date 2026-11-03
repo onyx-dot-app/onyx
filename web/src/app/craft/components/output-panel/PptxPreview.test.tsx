@@ -1,3 +1,4 @@
+import { SWRConfig } from "swr";
 import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 import {
   render,
@@ -11,6 +12,10 @@ import {
   fetchPptxPreview,
   type PptxPreviewResponse,
 } from "@/app/craft/services/apiServices";
+
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: { id: "preview-user" } }),
+}));
 
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
@@ -58,7 +63,8 @@ it("waits for an updated conversion and reloads slide images at the same paths",
     />
   );
   await waitFor(() => expect(fetchPptxPreview).toHaveBeenCalledTimes(2));
-  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.getByRole("img")).toBe(image);
+  expect(image).toHaveAttribute("src", originalUrl);
   await act(async () => {
     finishConversion(converted);
   });
@@ -105,9 +111,11 @@ it("keeps the selected slide valid when an updated deck has fewer slides", async
       refreshKey={2}
     />
   );
-  expect(await screen.findByRole("img")).toHaveAttribute(
-    "src",
-    expect.stringContaining("slide-1.jpg")
+  await waitFor(() =>
+    expect(screen.getByRole("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("slide-1.jpg")
+    )
   );
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 1 of 1");
 });
@@ -219,8 +227,10 @@ it("reloads an edited deck by revision and preserves explicit reloads", async ()
       revision="456:100"
     />
   );
-  const updatedUrl = (await screen.findByRole("img")).getAttribute("src");
-  expect(updatedUrl).not.toBe(originalUrl);
+  await waitFor(() =>
+    expect(screen.getByRole("img")).not.toHaveAttribute("src", originalUrl)
+  );
+  const updatedUrl = screen.getByRole("img").getAttribute("src");
   expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 1);
   rerender(
     <PptxPreview
@@ -230,7 +240,9 @@ it("reloads an edited deck by revision and preserves explicit reloads", async ()
       refreshKey={1}
     />
   );
-  expect(await screen.findByRole("img")).not.toHaveAttribute("src", updatedUrl);
+  await waitFor(() =>
+    expect(screen.getByRole("img")).not.toHaveAttribute("src", updatedUrl)
+  );
   expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 2);
 });
 
@@ -270,7 +282,7 @@ it("navigates from thumbnails and ignores keyboard events while its tab is hidde
   });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
   rerender(<PptxPreview sessionId="thumbnails" filePath="outputs/deck.pptx" />);
-  fireEvent.keyDown(screen.getByRole("toolbar", { name: "Slides" }), {
+  fireEvent.keyDown(await screen.findByRole("toolbar", { name: "Slides" }), {
     key: "ArrowRight",
   });
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
@@ -391,4 +403,108 @@ it("keeps a hidden deck intact and converts only the latest revision on activati
   );
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
   expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 1);
+});
+
+it("restores the retained slide after viewer eviction", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 3,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg", "slide-3.jpg"],
+    cached: false,
+  });
+  const onSlideChange = jest.fn();
+  render(
+    <PptxPreview
+      sessionId="restored-deck"
+      filePath="outputs/deck.pptx"
+      initialSlide={2}
+      onSlideChange={onSlideChange}
+    />
+  );
+  const image = await screen.findByRole("img");
+  expect(image).toHaveAttribute("alt", "Slide 3 of 3");
+  expect(onSlideChange).toHaveBeenLastCalledWith(2);
+});
+
+it("retains slides and sidebar sizing through a failed activation read", async () => {
+  const observe = jest.spyOn(ResizeObserver.prototype, "observe");
+  const preview = {
+    slide_count: 1,
+    slide_paths: ["slide-1.jpg"],
+    cached: true,
+  };
+  jest
+    .mocked(fetchPptxPreview)
+    .mockResolvedValueOnce(preview)
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue(preview);
+  const view = (isActive = true) => (
+    <SWRConfig value={{ shouldRetryOnError: false }}>
+      <PptxPreview
+        sessionId="resize-recovery"
+        filePath="outputs/deck.pptx"
+        isActive={isActive}
+      />
+    </SWRConfig>
+  );
+  try {
+    const { rerender } = render(view());
+    await screen.findByRole("separator");
+    const firstCalls = observe.mock.calls.length;
+    const sidebar = screen.getByRole("separator");
+    const image = screen.getByRole("img");
+    rerender(view(false));
+    rerender(view());
+    await screen.findByRole("alert");
+    expect(screen.getByRole("img")).toBe(image);
+    expect(screen.getByRole("separator")).toBe(sidebar);
+    rerender(view(false));
+    rerender(view());
+    await screen.findByRole("separator");
+    expect(observe.mock.calls.length).toBe(firstCalls);
+  } finally {
+    observe.mockRestore();
+  }
+});
+
+// Initial position and image ownership.
+it("keeps user selection when initial position changes and resets loading per slide", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 3,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg", "slide-3.jpg"],
+    cached: true,
+  });
+  const props = {
+    sessionId: "initial-position",
+    filePath: "outputs/deck.pptx",
+    revision: "1",
+  };
+  const { rerender } = render(<PptxPreview {...props} initialSlide={0} />);
+  fireEvent.load(await screen.findByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
+  fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 3" }));
+  expect(screen.getByRole("img")).toHaveClass("opacity-0");
+  fireEvent.load(screen.getByRole("img"));
+  rerender(<PptxPreview {...props} initialSlide={2} />);
+  expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 2 of 3");
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
+});
+
+// Preview lifetime and rendering.
+it("shows an image error and clears it when another slide loads", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 2,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg"],
+    cached: true,
+  });
+  render(<PptxPreview sessionId="failed-image" filePath="outputs/deck.pptx" />);
+  fireEvent.error(await screen.findByRole("img"));
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.getByText("Cannot preview presentation")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 2" }));
+  expect(screen.getByRole("img")).toHaveClass("opacity-0");
+  expect(
+    screen.queryByText("Cannot preview presentation")
+  ).not.toBeInTheDocument();
+  fireEvent.load(screen.getByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
 });

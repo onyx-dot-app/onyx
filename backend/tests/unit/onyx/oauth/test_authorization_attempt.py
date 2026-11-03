@@ -5,7 +5,11 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.oauth.authorization_attempt import AuthorizationAttemptStore
+from onyx.oauth.authorization_attempt import (
+    AuthorizationAttemptStore,
+    canonical_json_fingerprint,
+    generate_authorization_state,
+)
 from onyx.oauth.models import AuthorizationAttempt
 from tests.unit.fakes import FakeCache
 
@@ -27,19 +31,57 @@ def _store(
     cache: FakeCache, namespace: str = "mcp"
 ) -> AuthorizationAttemptStore[_Payload]:
     return AuthorizationAttemptStore(
-        cache,
+        cache_backend_provider=lambda: cache,
         namespace=namespace,
         payload_type=_Payload,
         ttl_seconds=300,
     )
 
 
-def test_store_generates_isolated_one_time_attempts() -> None:
+def test_configuration_fingerprint_is_canonical_and_value_sensitive() -> None:
+    first = {"client": {"id": "client-id", "secret": "secret"}, "scopes": ["a"]}
+    reordered = {"scopes": ["a"], "client": {"secret": "secret", "id": "client-id"}}
+    changed = {
+        "client": {"id": "client-id", "secret": "rotated"},
+        "scopes": ["a"],
+    }
+
+    assert canonical_json_fingerprint(first) == canonical_json_fingerprint(reordered)
+    assert canonical_json_fingerprint(first) != canonical_json_fingerprint(changed)
+
+
+def test_store_uses_cache_provider_and_default_ttl() -> None:
+    cache = FakeCache()
+    store = AuthorizationAttemptStore(
+        cache_backend_provider=lambda: cache,
+        namespace="mcp",
+        payload_type=_Payload,
+    )
+
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=1),
+    )
+
+    assert set(cache.expiries.values()) == {600}
+    assert store.consume(owner_id="user-1", state=attempt.state) == attempt
+
+
+def test_store_preserves_isolated_one_time_attempts() -> None:
     cache = FakeCache()
     store = _store(cache)
 
-    first = store.store(owner_id="user-1", payload=_Payload(target_id=1))
-    second = store.store(owner_id="user-1", payload=_Payload(target_id=2))
+    first = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=1),
+    )
+    second = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=2),
+    )
 
     assert first.state != second.state
     assert set(cache.expiries.values()) == {300}
@@ -98,7 +140,11 @@ def test_same_state_is_isolated_between_owners() -> None:
 
 def test_attempt_supports_unicode_owner_id() -> None:
     store = _store(FakeCache())
-    attempt = store.store(owner_id="用户-1", payload=_Payload(target_id=1))
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id="用户-1",
+        payload=_Payload(target_id=1),
+    )
 
     assert store.consume(owner_id="用户-1", state=attempt.state) == attempt
 
@@ -192,7 +238,11 @@ def test_consume_rejects_and_removes_tampered_envelope(
 def test_consume_rejects_expired_attempt_after_atomic_removal() -> None:
     cache = FakeCache()
     store = _store(cache)
-    attempt = store.store(owner_id="user-1", payload=_Payload(target_id=1))
+    attempt = store.store(
+        state=generate_authorization_state(),
+        owner_id="user-1",
+        payload=_Payload(target_id=1),
+    )
     key = next(iter(cache.store))
     cache.store[key] = (
         attempt.model_copy(
@@ -218,7 +268,7 @@ def test_store_rejects_invalid_namespace(namespace: str) -> None:
 def test_store_rejects_out_of_range_ttl(ttl_seconds: int) -> None:
     with pytest.raises(ValueError, match="TTL"):
         AuthorizationAttemptStore(
-            FakeCache(),
+            cache_backend_provider=FakeCache,
             namespace="mcp",
             payload_type=_Payload,
             ttl_seconds=ttl_seconds,
@@ -233,3 +283,21 @@ def test_store_rejects_invalid_caller_state(state: str) -> None:
             state=state,
             payload=_Payload(target_id=1),
         )
+
+
+def test_store_resolves_tenant_cache_for_each_operation() -> None:
+    caches = {"first": FakeCache(), "second": FakeCache()}
+    current_tenant = "first"
+    store = AuthorizationAttemptStore(
+        cache_backend_provider=lambda: caches[current_tenant],
+        namespace="external-app",
+        payload_type=_Payload,
+    )
+    store.store(owner_id="owner", state=_STATE_ONE, payload=_Payload(target_id=1))
+    current_tenant = "second"
+    with pytest.raises(OnyxError, match="Invalid or expired"):
+        store.consume(owner_id="owner", state=_STATE_ONE)
+    store.store(owner_id="owner", state=_STATE_ONE, payload=_Payload(target_id=2))
+    assert store.consume(owner_id="owner", state=_STATE_ONE).payload.target_id == 2
+    current_tenant = "first"
+    assert store.consume(owner_id="owner", state=_STATE_ONE).payload.target_id == 1

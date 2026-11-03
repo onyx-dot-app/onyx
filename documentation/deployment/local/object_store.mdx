@@ -1,0 +1,95 @@
+---
+title: "Object Store"
+description: "Configuring the bundled SeaweedFS object store"
+icon: "box-archive"
+---
+
+## Overview
+
+The object store is the S3-compatible service that self-hosted Onyx bundles for file storage: chat attachments, uploads,
+connector attachments, Craft snapshots, and the other files Onyx keeps outside PostgreSQL.
+It runs [SeaweedFS](https://github.com/seaweedfs/seaweedfs) as a single process and replaces the bundled MinIO.
+The upgrade from MinIO is automatic. See [Object Store Migration](/admins/advanced_configs/object_store_migration).
+
+You can use AWS S3, Google Cloud Storage, Azure Blob Storage, or any S3-compatible service instead.
+Set `FILE_STORE_BACKEND` and the matching variables from the [configuration
+reference](/deployment/configuration/configuration) and leave the object store disabled.
+Onyx Lite stores files in PostgreSQL (`FILE_STORE_BACKEND=postgres`) and runs no object store.
+
+## Docker Compose
+
+The `object-store` service is part of the `s3-filestore` Compose profile,
+which `.env` enables by default (`COMPOSE_PROFILES=s3-filestore`).
+The app reaches it at `S3_ENDPOINT_URL=http://object-store:8333` and authenticates with the `S3_AWS_ACCESS_KEY_ID` /
+`S3_AWS_SECRET_ACCESS_KEY` pair, which the store uses as its admin credentials.
+The Onyx CLI installer generates that pair. If you write `.env` by hand,
+change it from the `minioadmin` default before you go to production.
+
+Data lives in the `object_store_data` volume. Only the S3 port leaves the container. The SeaweedFS filer, master,
+and volume ports accept requests without credentials, so they listen on loopback inside the container.
+
+A `.env` from a release before v5.0 still points at MinIO (`S3_ENDPOINT_URL=http://minio:9000`).
+`onyx-cli deploy upgrade` rewrites it. For a hand-run upgrade,
+set `S3_ENDPOINT_URL=http://object-store:8333` and `S3_LEGACY_ENDPOINT_URL=http://minio:9000`,
+then keep the `minio` service until the copy completes.
+
+## Helm
+
+The `objectStore` section of `values.yaml` runs the store as a single-replica Deployment with its own PVC,
+`<fullname>-object-store`,
+where `<fullname>` is the release name when it contains `onyx` and `<release>-onyx` otherwise.
+`objectStore.enabled` defaults to the value of `minio.enabled`,
+so an install that already disables MinIO keeps the object store off as well. The examples set both to be explicit.
+
+MinIO is deprecated. The chart keeps `minio.enabled:
+true` for now so that upgrades from before v5.0 can copy their files to SeaweedFS.
+A future release changes the default to `false`. Set `minio.enabled:
+false` on new installs and after the [move to SeaweedFS](/admins/advanced_configs/object_store_migration) completes.
+
+```yaml values.yaml
+objectStore:
+  enabled: true
+  persistence:
+    size: 100Gi
+    storageClass: ""
+```
+
+The pod runs as a non-root user with a read-only root file system and no capabilities,
+so it passes the `restricted` Pod Security Standard. On OpenShift,
+set `objectStore.podSecurityContext` to an empty map so the cluster assigns the user.
+Its admin credentials are the `s3_aws_access_key_id` and `s3_aws_secret_access_key` keys of `auth.objectstorage`,
+so no new secrets are needed.
+
+The PVC carries `helm.sh/resource-policy: keep` and survives upgrade, rollback and uninstall.
+Delete it yourself when you no longer need the data.
+
+## Using your own storage
+
+To run without the object store, disable it and point the app at your storage:
+
+```yaml values.yaml
+minio:
+  enabled: false
+objectStore:
+  enabled: false
+
+configMap:
+  FILE_STORE_BACKEND: "s3"
+  S3_FILE_STORE_BUCKET_NAME: "<your bucket>"
+
+auth:
+  objectstorage:
+    # A Secret holding s3_aws_access_key_id and s3_aws_secret_access_key
+    existingSecret: "<your secret>"
+```
+
+See [external services](/deployment/production/external_services) for IAM roles and other credential options.
+
+In Compose, remove `s3-filestore` from `COMPOSE_PROFILES` and set the same variables in `.env`.
+To store files in PostgreSQL instead, set `FILE_STORE_BACKEND=postgres`.
+
+## Sizing
+
+The store needs as much disk as your files take, plus the same again during the migration from MinIO,
+while both stores hold every file. Its CPU and memory needs are small.
+A copy of one million files took about two cores and less than 2 GB of memory. At rest it needs far less.

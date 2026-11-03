@@ -10,7 +10,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from onyx.db.connector_credential_pair import (
     build_restricted_acl_guard,
     build_user_cc_pair_access_filter,
-    has_sync_restricted_cc_pairs,
+    has_guarded_cc_pairs,
 )
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import (
@@ -61,9 +61,13 @@ def apply_document_access_filter(
                 cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
-    acl_match = or_(*acl_filters)
-    # The guard's per-row EXISTS checks can only matter once a restricted pair exists.
-    if has_sync_restricted_cc_pairs(db_session):
+    # Source ACL columns only count on a perm-synced pair's row.
+    acl_match = and_(
+        ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+        or_(*acl_filters),
+    )
+    # The guard's per-row EXISTS checks can only matter once a guarded pair exists.
+    if has_guarded_cc_pairs(db_session):
         acl_match = and_(
             acl_match, build_restricted_acl_guard(user_id, _document_has_cc_pair)
         )

@@ -33,7 +33,7 @@ def _connector(include_attachments: bool) -> MagicMock:
     connector.include_attachments = include_attachments
     connector.channel_site_urls.return_value = iter(SITES)
     connector.channel_member_groups.return_value = iter(CHANNEL_GROUPS)
-    connector.rest_context.side_effect = lambda url: f"ctx:{url}"
+    connector.permission_reader.return_value = "reader"
     return connector
 
 
@@ -73,7 +73,7 @@ def test_each_channel_site_is_expanded_once() -> None:
         groups = list(teams_group_sync("tenant", _cc_pair(include_attachments=True)))
 
     assert groups == [*THREAD_GROUPS, members, owners]
-    assert [call.args[0] for call in expand.call_args_list] == [
-        f"ctx:{SITES[0]}",
-        f"ctx:{SITES[1]}",
+    assert [call.args for call in expand.call_args_list] == [
+        ("reader", SITES[0]),
+        ("reader", SITES[1]),
     ]

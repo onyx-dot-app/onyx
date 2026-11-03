@@ -3,8 +3,8 @@ name: Preview Deployment
 # Per-commit full-stack previews on the self-hosted preview server: the
 # Next.js frontend and the FastAPI backend running together at
 # <sha>-onyx.<the server's preview domain>. Which server that is lives
-# entirely in vars.PREVIEW_URL, managed in onyx-infra
-# (internal-tools/terraform/github-org) — nothing here names a host, so
+# entirely in vars.PREVIEW_URL, managed in the internal infra repo —
+# nothing here names a host, so
 # pointing this at a different deployment is a variable change, not a PR.
 #
 # The server does not watch this repo: it deploys only what this workflow
@@ -156,16 +156,74 @@ jobs:
           mkdir -p upload/.next
           cp -r web/.next/standalone upload/.next/standalone
 
+      # A GitHub Actions OIDC token expires minutes after it is minted.
+      # `preview upload --deploy` mints one at the start and polls the deploy
+      # with it, so a slow upload plus build failed with "invalid or
+      # unauthorized token" about 5 minutes in.
+      # The CLI uploads with its own token; the deploy and the wait mint a
+      # fresh one for each request (the server accepts OIDC on exactly these).
       - name: Upload the frontend and deploy
         id: deploy
         run: |
           # Without pipefail the tee below would mask a failed upload.
-          set -o pipefail
+          set -euo pipefail
           # stderr into the capture too: on a failure it holds the reason, and
           # the next step quotes the tail of it into the PR comment.
           preview upload frontend upload "$PREVIEW_SHA" \
-            --repo onyx --server "$PREVIEW_URL" --oidc --deploy 2>&1 | tee out.txt
-          URL=$(sed -n 's/^ready: //p' out.txt)
+            --repo onyx --server "$PREVIEW_URL" --oidc 2>&1 | tee out.txt
+
+          # Every call is bounded (connect, per attempt, and all retries), so a
+          # stalled server cannot hold the step past the 20-minute wait below
+          # and the report step still runs before the job timeout. Retries
+          # cover timeouts, 408/429/5xx and refused connections, not 4xx.
+          CURL_LIMITS=(--connect-timeout 10 --max-time 30 --retry 3 --retry-connrefused --retry-max-time 90)
+          token() {
+            curl -fsS "${CURL_LIMITS[@]}" -G \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              -H "Accept: application/json; api-version=2.0" \
+              --data-urlencode "audience=$PREVIEW_GITHUB_OIDC_AUDIENCE" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value
+          }
+          # method path [body]. The body and curl's messages go to separate
+          # files: retry warnings must not end up in the JSON. On an HTTP error
+          # both (the server's reason) go into out.txt for the PR comment.
+          api() {
+            local body err tok
+            body=$(mktemp) err=$(mktemp)
+            tok=$(token)
+            if ! curl -sS --fail-with-body "${CURL_LIMITS[@]}" -X "$1" \
+              -H "Authorization: Bearer $tok" -H "Content-Type: application/json" \
+              ${3:+--data "$3"} -o "$body" "$PREVIEW_URL$2" 2>"$err"; then
+              echo "Error: $1 $2: $(cat "$err") $(cat "$body")" | tee -a out.txt >&2
+              rm -f "$body" "$err"
+              return 1
+            fi
+            cat "$body"
+            rm -f "$body" "$err"
+          }
+
+          DEPLOY=$(api POST /api/deploys "$(jq -nc --arg ref "$PREVIEW_SHA" '{repo: "onyx", ref: $ref, rebuild: false}')")
+          ID=$(jq -r .id <<<"$DEPLOY")
+          STATUS=$(jq -r .status <<<"$DEPLOY")
+          echo "deploy $ID: $STATUS" | tee -a out.txt
+          # The build runs on the server; 20 minutes is well past its slowest.
+          DEADLINE=$((SECONDS + 1200))
+          while [ "$STATUS" = queued ] || [ "$STATUS" = building ]; do
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "deploy $ID still $STATUS after 20 minutes" | tee -a out.txt
+              exit 1
+            fi
+            sleep 5
+            DEPLOY=$(api GET "/api/deploys/$ID")
+            STATUS=$(jq -r .status <<<"$DEPLOY")
+          done
+          if [ "$STATUS" != ready ]; then
+            echo "deploy $ID $STATUS: $(jq -r .error <<<"$DEPLOY")" | tee -a out.txt
+            echo "full logs: preview deploy logs $ID" | tee -a out.txt
+            exit 1
+          fi
+          URL=$(jq -r .preview_url <<<"$DEPLOY")
+          echo "ready: $URL" | tee -a out.txt
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
       # Reports failure as well as success. Gated on the deploy's URL, a failed

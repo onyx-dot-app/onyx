@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, delete, exists, func, select
+from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
@@ -147,8 +147,16 @@ def create_connector(
         connector_specific_config=connector_data.connector_specific_config,
         refresh_freq=connector_data.refresh_freq,
         indexing_start=connector_data.indexing_start,
-        prune_freq=connector_data.prune_freq,
+        # Omitted takes the default; an explicit null never prunes.
+        prune_freq=(
+            connector_data.prune_freq
+            if "prune_freq" in connector_data.model_fields_set
+            else DEFAULT_PRUNING_FREQ
+        ),
+        check_freq=connector_data.check_freq,
     )
+    connector.validate_prune_freq()
+    connector.validate_check_freq()
     db_session.add(connector)
     db_session.commit()
 
@@ -176,14 +184,27 @@ def update_connector(
     connector.input_type = connector_data.input_type
     connector.connector_specific_config = connector_data.connector_specific_config
     connector.refresh_freq = connector_data.refresh_freq
-    connector.prune_freq = (
-        connector_data.prune_freq
-        if connector_data.prune_freq is not None
-        else DEFAULT_PRUNING_FREQ
-    )
+    # As check_freq: omitted keeps the schedule, an explicit null clears it
+    # (the connector then never prunes).
+    if "prune_freq" in connector_data.model_fields_set:
+        connector.prune_freq = connector_data.prune_freq
+        connector.validate_prune_freq()
+    # Omitted keeps the schedule (Terraform's upsert never sends it), an explicit null clears it.
+    if "check_freq" in connector_data.model_fields_set:
+        connector.check_freq = connector_data.check_freq
+        connector.validate_check_freq()
 
     db_session.commit()
     return connector
+
+
+def set_connector_check_frequency(
+    db_session: Session, connector: Connector, seconds: int | None
+) -> None:
+    """Schedules the connector's checks every ``seconds``, or None for on request only. Commits."""
+    connector.check_freq = seconds
+    connector.validate_check_freq()
+    db_session.commit()
 
 
 def delete_connector(
@@ -344,7 +365,13 @@ def create_initial_default_connector(db_session: Session) -> None:
     db_session.commit()
 
 
-def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
+def mark_ccpair_as_pruned(
+    cc_pair_id: int,
+    db_session: Session,
+    served_prune_request_at: datetime | None,
+) -> None:
+    """Records a successful prune. Clears the pair's prune request only when
+    the prune was dispatched for that request, so a newer one stays."""
     stmt = select(ConnectorCredentialPair).where(
         ConnectorCredentialPair.id == cc_pair_id
     )
@@ -353,6 +380,15 @@ def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
         raise ValueError(f"No cc_pair with ID: {cc_pair_id}")
 
     cc_pair.last_pruned = datetime.now(timezone.utc)
+    if served_prune_request_at is not None:
+        db_session.execute(
+            update(ConnectorCredentialPair)
+            .where(
+                ConnectorCredentialPair.id == cc_pair_id,
+                ConnectorCredentialPair.prune_requested_at == served_prune_request_at,
+            )
+            .values(prune_requested_at=None)
+        )
     db_session.commit()
 
 

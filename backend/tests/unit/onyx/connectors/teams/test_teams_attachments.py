@@ -26,6 +26,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
 )
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.models import ConnectorFailure, Document, SlimDocument, TextSection
 from onyx.connectors.teams import files as files_module
 from onyx.connectors.teams import listing as listing_module
@@ -116,7 +117,13 @@ def _item(item_id: str, name: str) -> DriveItemData:
 def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """The channel folder holds the files in ``files``. Listing, extraction and
     the SharePoint readers are stubbed and their calls recorded."""
-    seen: dict[str, Any] = {"files": [], "listed": [], "extracted": [], "access": []}
+    seen: dict[str, Any] = {
+        "files": [],
+        "listed": [],
+        "extracted": [],
+        "access": [],
+        "sites": [],
+    }
 
     def iter_items(_client: Any, drive_id: str, **kwargs: Any) -> Any:
         seen["listed"].append((drive_id, kwargs.get("folder_id"), kwargs.get("start")))
@@ -135,6 +142,7 @@ def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     def access(**kwargs: Any) -> ExternalAccess:
         seen["access"].append((kwargs["drive_item"].id, kwargs["list_id"]))
+        seen["sites"].append(kwargs["site_url"])
         return SHAREPOINT_READERS
 
     monkeypatch.setattr(files_module, "iter_drive_items_paged", iter_items)
@@ -151,12 +159,10 @@ def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 def _rest_refusing(status: int) -> Callable[..., ExternalAccess]:
     """SharePoint REST answering the readers lookup with ``status``, the way
-    the office365 SDK raises it."""
+    the permission reader raises it."""
 
     def refuse(**_: Any) -> ExternalAccess:
-        response = MagicMock(status_code=status, text="refused")
-        response.headers = {"Content-Type": "text/plain"}
-        raise ClientRequestException(response=response)
+        raise MicrosoftGraphError(status, "accessDenied", "refused")
 
     return refuse
 
@@ -561,12 +567,12 @@ def test_the_rest_context_is_reused_per_site_until_its_token_ages(
 ) -> None:
     clock = MagicMock(monotonic=MagicMock(side_effect=[0.0, 10.0, 2000.0, 2001.0]))
     monkeypatch.setattr(files_module, "time", clock)
-    teams_connector = connector(graph_client({}), include_attachments=True)
+    files = _files(connector(graph_client({}), include_attachments=True))
 
-    first = teams_connector.rest_context(SITE_URL)
+    first = files.rest_context(SITE_URL)
 
-    assert teams_connector.rest_context(SITE_URL) is first
-    assert teams_connector.rest_context(SITE_URL) is not first
+    assert files.rest_context(SITE_URL) is first
+    assert files.rest_context(SITE_URL) is not first
     assert _rest_context_calls() == [(SITE_URL,), (SITE_URL,)]
 
 
@@ -593,17 +599,21 @@ def test_each_thread_gets_its_own_graph_client_for_queries() -> None:
 def test_a_file_without_a_list_item_id_is_looked_up_on_the_threads_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The readers lookup fetches a list item Graph did not name through the
-    drive item's own client, so a worker's drive item must carry the worker's
-    client, not the shared one the direct requests use."""
+    """The readers lookup fetches a list item Graph did not name with an SDK
+    query, so a worker's reader must carry the worker's client, not the shared
+    one the direct requests use."""
     teams_connector = connector(graph_client({}), include_attachments=True)
     teams_connector._acquire_token = lambda: {"access_token": "token"}
-    monkeypatch.setattr(DriveItemData, "to_sdk_driveitem", lambda _, client: client)
-    seen: list[dict[str, Any]] = []
+    built: list[Any] = []
+    monkeypatch.setattr(
+        files_module,
+        "SharepointRestReads",
+        lambda _rest_context, graph_client, _graph_api: built.append(graph_client),
+    )
     monkeypatch.setattr(
         files_module,
         "get_sharepoint_external_access",
-        lambda **kwargs: seen.append(kwargs) or SHAREPOINT_READERS,
+        lambda **_kwargs: SHAREPOINT_READERS,
     )
     channel_library = ChannelLibrary(
         drive_id=DRIVE, list_id="list-1", site_url=SITE_URL, folder_id="folder-1"
@@ -617,26 +627,24 @@ def test_a_file_without_a_list_item_id_is_looked_up_on_the_threads_client(
     worker.start()
     worker.join()
 
-    assert seen[0]["drive_item"] is seen[0]["graph_client"]
-    assert seen[0]["graph_client"] is not teams_connector.graph()
+    assert built[0] is not teams_connector.graph()
+    assert built[0] is not teams_connector.graph_for_thread()
 
 
 @pytest.mark.usefixtures("library")
 def test_each_thread_gets_its_own_rest_context_for_a_site() -> None:
     """The SDK's context queues requests on the instance, so the walk that
     reads file readers side by side cannot share one across workers."""
-    teams_connector = connector(graph_client({}), include_attachments=True)
-    first = teams_connector.rest_context(SITE_URL)
+    files = _files(connector(graph_client({}), include_attachments=True))
+    first = files.rest_context(SITE_URL)
     seen: list[Any] = []
 
-    worker = threading.Thread(
-        target=lambda: seen.append(teams_connector.rest_context(SITE_URL))
-    )
+    worker = threading.Thread(target=lambda: seen.append(files.rest_context(SITE_URL)))
     worker.start()
     worker.join()
 
     assert seen[0] is not first
-    assert teams_connector.rest_context(SITE_URL) is first
+    assert files.rest_context(SITE_URL) is first
 
 
 def test_channel_site_urls_are_distinct_and_a_refused_channel_is_left_out(
@@ -729,7 +737,7 @@ def test_a_site_outage_during_the_readers_fails_the_attempt(
     )
     client = graph_client(_channel_routes(message("m1", "Plan")))
 
-    with pytest.raises(ClientRequestException):
+    with pytest.raises(MicrosoftGraphError):
         walk_channel(connector(client, include_attachments=True))
 
 
@@ -859,7 +867,7 @@ def test_the_site_comes_from_the_drive_not_the_files_folder(
     # The files folder of LIBRARY_ROUTES carries no site id, as a live tenant's
     # does, and the file still indexes with SharePoint REST on the drive's site.
     assert file_document_id("item-1") in _document_ids(items)
-    assert _rest_context_calls() == [(SITE_URL,)]
+    assert library["sites"] == [SITE_URL]
 
 
 def test_a_library_that_names_no_site_keeps_the_pair_active(

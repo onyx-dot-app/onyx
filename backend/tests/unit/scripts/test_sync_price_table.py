@@ -51,13 +51,31 @@ def test_merge_litellm_skips_non_gap_fill_chat_models() -> None:
         {
             "bedrock/ai21.j2-mid-v1": _chat_entry("bedrock"),
             "ft:gpt-4.1-2025-04-14": _chat_entry("openai"),
-            "eu/gpt-5": _chat_entry("openai"),
+            "eu/gpt-6-sol": _chat_entry("openai"),
             "gpt-retired": _chat_entry("openai", deprecation_date="2020-01-01"),
             "gpt-unpriced": _chat_entry("openai", output_cost_per_token=None),
         },
     )
 
     assert all(not section["models"] for section in providers.values())
+
+
+def test_merge_litellm_marks_past_deprecation_date_non_chat_models() -> None:
+    providers = _providers()
+    image = {"litellm_provider": "openai", "mode": "image_generation"}
+    merge_litellm(
+        providers,
+        {
+            "img-retired": {**image, "deprecation_date": "2020-01-01"},
+            "img-retiring": {**image, "deprecation_date": "2999-01-01"},
+            "img-live": image,
+        },
+    )
+
+    models = providers["openai"]["models"]
+    assert models["img-retired"]["status"] == "deprecated"
+    assert "status" not in models["img-retiring"]
+    assert "status" not in models["img-live"]
 
 
 def test_merge_litellm_keeps_existing_rates() -> None:
@@ -216,3 +234,40 @@ def test_build_provider_section_drops_negative_costs_and_empty_ids() -> None:
     assert list(section["models"]) == ["mistral-large"]
     # The -1 sentinel field is dropped; the real rate stays.
     assert section["models"]["mistral-large"]["cost"] == {"output": 2.0}
+
+
+def test_build_provider_section_drops_nested_negative_rates() -> None:
+    """Sentinel rates nested inside tiers / context_over_200k must be cleaned
+    too — top-level cleanup alone lets -1 rates reach compute_cost_cents."""
+    api: dict[str, Any] = {
+        "mistral": {
+            "models": {
+                "mistral-large": {
+                    "name": "Mistral Large",
+                    "cost": {
+                        "input": 2.0,
+                        "output": 10.0,
+                        "context_over_200k": {"input": -1.0, "output": 15.0},
+                        "tiers": [
+                            {
+                                "tier": {"type": "context", "size": 272000},
+                                "input": -1.0,
+                                "output": 15.0,
+                            }
+                        ],
+                    },
+                    "limit": {"context": 128000, "output": 8192},
+                },
+            }
+        }
+    }
+
+    section: dict[str, Any] | None = _build_provider_section(api, ["mistral"])
+
+    assert section is not None
+    cost: dict[str, Any] = section["models"]["mistral-large"]["cost"]
+    assert cost["input"] == 2.0
+    assert cost["context_over_200k"] == {"output": 15.0}
+    assert cost["tiers"] == [
+        {"tier": {"type": "context", "size": 272000}, "output": 15.0}
+    ]

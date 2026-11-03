@@ -1,0 +1,125 @@
+---
+title: "SSO Providers"
+description: "Manage multiple SSO providers from the admin panel"
+icon: "users-gear"
+---
+
+Admins add and manage single sign-on (SSO) providers at **Admin Panel → Organization → SSO Providers**.
+Each provider is one way to sign in: Google, OIDC, or SAML. Changes apply at once.
+No restart or environment variables are needed.
+
+![SSO Providers page](/assets/deployment/sso_providers_page.webp)
+
+| Plan                         | What you can do                                                          |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| Community Edition            | One enabled provider of any type.                                        |
+| Business / Enterprise        | Any number of enabled providers at the same time.                        |
+| Onyx Cloud                   | Google and OIDC providers. Allowed email domains are required and verified. |
+
+For the setup steps for each type, see [Google OAuth](/deployment/authentication/oauth),
+[OIDC](/deployment/authentication/oidc), and [SAML](/deployment/authentication/saml).
+
+## Managing Providers
+
+### Add a Provider
+
+1. Click **Add Provider**.
+2. Set **Provider Type**: **Google**, **OIDC**, or **SAML**.
+3. Fill in the common fields:
+
+| Field                     | Description                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Name**                  | A unique lowercase slug: letters, numbers, and hyphens. It is part of the sign-in URL and cannot change later.                   |
+| **Display Name**          | The label on the sign-in button.                                                                                                |
+| **Allowed Email Domains** | Only emails on these domains can sign in through this provider. Recommended on self-hosted. Required on Onyx Cloud.             |
+| **Enabled**               | Turn the provider off to hide it from the login page without deleting it.                                                       |
+
+4. Fill in the provider-specific fields. The modal shows the **Redirect URI** (Google and OIDC) or **ACS (Reply)
+   URL** (SAML) to register in your identity provider.
+
+![Add SSO Provider modal](/assets/deployment/sso_providers_modal.webp)
+
+The redirect URI for Google and OIDC providers is:
+
+```
+https://<your-onyx-domain>/api/auth/oidc/<name>/callback
+```
+
+The ACS URL for SAML is shared by all SAML providers:
+
+```
+https://<your-onyx-domain>/auth/saml/callback
+```
+
+### Edit a Provider
+
+You can change every field except **Name**. Secret fields show as empty. Leave them empty to keep the stored secret,
+or enter a new value to replace it.
+
+### Delete a Provider
+
+The delete modal shows how many users signed in with the provider.
+
+- Users keep their accounts. Their next sign-in through another provider with the same email opens the same account.
+- Add the replacement provider before you delete the old one.
+- You cannot delete or disable the last enabled provider while **Disable Password Login & Signup** is on.
+
+## How Accounts Match
+
+Onyx matches SSO sign-ins to accounts by email.
+
+- A user who signed up with a password and then signs in with SSO for the first time gets the same account.
+- An account that is already linked to one SSO provider does not accept a second provider.
+  The sign-in fails with an "account already exists" error. Delete the old provider first,
+  or ask the user to sign in with the provider they used before.
+- A user whose email changed in the identity provider cannot claim their old account by default.
+
+Two settings in **Admin Panel → Organization → Security & Hardening** open a window for these cases.
+Turn them on only while you move users, then turn them off again:
+
+- **Relink Accounts After an OIDC Client Change**:
+  lets users whose provider issued a new subject ID sign back in to the account with their email.
+- **Claim Renamed Accounts After a Provider Delete**:
+  lets users whose email changed sign in through another provider to the account that holds their current email,
+  when that account has no provider link left.
+
+## Onyx Cloud
+
+On Onyx Cloud, the login page shows a **Sign in with SSO** button. Users enter their email,
+and Onyx sends them to the provider whose **Allowed Email Domains** includes that domain. Because of this:
+
+- **Allowed Email Domains** is required for every provider.
+- You must verify each domain before users can sign in through it.
+- SAML providers are not available. Use OIDC.
+
+### Domain Verification
+
+When you add a domain, the provider modal shows a **Domain verification** panel with a DNS record for each domain:
+
+1. Copy the **Name**, **Type** (`TXT`), and **Value**.
+2. Add the record at your DNS host.
+3. Click **Verify domain**. The status changes from **Pending** to **Verified**.
+
+Verified domains also let Onyx create accounts for new users on first sign-in without an invitation.
+
+## Turning Off Password Login
+
+To require SSO for everyone:
+
+1. Make sure at least one provider is enabled and that you can sign in with it.
+2. Go to **Admin Panel → Organization → Security & Hardening**.
+3. Turn on **Disable Password Login & Signup**.
+
+The login page then shows only SSO buttons. Password sign-in returns "Password login is turned off.
+Sign in with your identity provider."
+
+Related settings in the same section:
+
+- **Restrict Open Sign-Up**: only invited users can create an account.
+- **Allowed Email Domains**: limits sign-up and sign-in to these domains for all methods.
+- **Sync Session Expiry with Identity Provider**: ends the Onyx session when the provider session ends.
+
+## Notes
+
+- Client secrets and SAML private keys are stored encrypted.
+- Set `OIDC_PKCE_ENABLED=true` to force PKCE for every Google and OIDC provider. Set `GOOGLE_OAUTH_SCOPE_OVERRIDE` or `OIDC_SCOPE_OVERRIDE` to change the default scopes for a provider type.

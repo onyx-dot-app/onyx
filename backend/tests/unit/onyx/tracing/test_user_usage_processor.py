@@ -39,10 +39,11 @@ def _fake_span(span_data: SpanData) -> Span[Any]:
 
 
 def _generation_span(
-    model: str = "gpt-4o",
+    model: str = "gpt-6-sol",
     provider: str = "openai",
     flow: str = "chat_response",
     usage: dict[str, Any] | None = None,
+    model_configuration_id: int | None = None,
 ) -> Span[Any]:
     return _fake_span(
         GenerationSpanData(
@@ -51,6 +52,7 @@ def _generation_span(
             usage=usage
             if usage is not None
             else {"input_tokens": 0, "output_tokens": 0},
+            model_configuration_id=model_configuration_id,
         )
     )
 
@@ -112,7 +114,7 @@ def test_records_usage_when_user_id_set(
     assert usage.input_tokens == 100
     assert usage.output_tokens == 50
     assert usage.cache_read_tokens == 20
-    assert usage.model == "gpt-4o"
+    assert usage.model == "gpt-6-sol"
     assert usage.provider == "openai"
     assert usage.flow == "chat_response"
     assert usage.cost_cents == pytest.approx(3.0)  # 1.0 input + 2.0 output
@@ -168,6 +170,39 @@ def test_batch_aggregates_matching_ledger_dimensions(
     assert len(aggregated) == 1
     assert aggregated[0].input_tokens == 30
     assert aggregated[0].output_tokens == 5
+
+
+def test_batch_keeps_model_configurations_apart(
+    processor: UserUsageTracingProcessor,
+) -> None:
+    """Admin overrides key on the configuration, so two providers serving the
+    same model name must not merge into one priced record."""
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        first = processor._capture(
+            _generation_span(
+                usage={"input_tokens": 10, "output_tokens": 2},
+                model_configuration_id=1,
+            )
+        )
+        second = processor._capture(
+            _generation_span(
+                usage={"input_tokens": 20, "output_tokens": 3},
+                model_configuration_id=2,
+            )
+        )
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    assert first is not None
+    assert second is not None
+    assert first.model_configuration_id == 1
+    assert second.model_configuration_id == 2
+    aggregated = processor._aggregate_batch([first, second])
+    assert sorted((r.model_configuration_id, r.input_tokens) for r in aggregated) == [
+        (1, 10),
+        (2, 20),
+    ]
 
 
 def test_batch_aggregates_cache_creation_tokens(
@@ -296,7 +331,7 @@ def test_ignores_generation_span_without_usage(
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
     try:
         processor.on_span_end(
-            _fake_span(GenerationSpanData(model="gpt-4o", usage=None))
+            _fake_span(GenerationSpanData(model="gpt-6-sol", usage=None))
         )
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
@@ -437,3 +472,38 @@ def test_flush_swallows_record_errors(
 
     processor.force_flush()
     assert recorded_calls == []
+
+
+def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
+    monkeypatch: pytest.MonkeyPatch,
+    processor: UserUsageTracingProcessor,
+    recorded_calls: list[dict[str, Any]],
+) -> None:
+    priced: list[tuple[str, str | None, int | None]] = []
+
+    def _compute(**kwargs: Any) -> tuple[float, float]:
+        priced.append(
+            (kwargs["model"], kwargs["served_model"], kwargs["model_configuration_id"])
+        )
+        return 1.0, 2.0
+
+    monkeypatch.setattr(proc_mod, "compute_cost_cents", _compute)
+    span = _generation_span(
+        model="openrouter/auto",
+        provider="openrouter",
+        usage={"input_tokens": 10, "output_tokens": 5},
+        model_configuration_id=7,
+    )
+    span.span_data.routed_model = "deepseek/deepseek-v4-flash"
+
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        processor.on_span_end(span)
+        processor.shutdown()
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    # The router's configuration keys its override; the served model prices
+    # from the catalog.
+    assert priced == [("openrouter/auto", "deepseek/deepseek-v4-flash", 7)]
+    assert recorded_calls[0]["usage"].model == "openrouter/auto"

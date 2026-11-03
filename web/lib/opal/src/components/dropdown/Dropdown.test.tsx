@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { render, screen } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
-import { Dropdown, InputTypeIn } from "@opal/components";
+import { Button, Dropdown, InputTypeIn } from "@opal/components";
 import { scrollWithinList } from "@opal/components/dropdown/list";
 import type {
   DropdownItem,
@@ -926,4 +926,28 @@ describe("Dropdown scrolling", () => {
     // scrollIntoView scrolls every ancestor of the portal, the page too.
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
+});
+
+test("secondary row sizing is opt-in and preserves the default typography", () => {
+  const items: DropdownMenuItem[] = [
+    { kind: "action", id: "files", title: "Files", onSelect: jest.fn() },
+  ];
+  const { rerender } = render(
+    <Dropdown open>
+      <Dropdown.Trigger asChild>
+        <Button>Open</Button>
+      </Dropdown.Trigger>
+      <Dropdown.Data label="Resources" items={items} />
+    </Dropdown>
+  );
+  expect(screen.getByText("Files")).toHaveClass("font-main-ui-body");
+  rerender(
+    <Dropdown open>
+      <Dropdown.Trigger asChild>
+        <Button>Open</Button>
+      </Dropdown.Trigger>
+      <Dropdown.Data label="Resources" items={items} sizePreset="secondary" />
+    </Dropdown>
+  );
+  expect(screen.getByText("Files")).toHaveClass("font-secondary-body");
 });

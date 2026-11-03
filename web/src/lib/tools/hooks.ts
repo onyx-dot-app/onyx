@@ -375,7 +375,7 @@ export interface ToolConfigurationHandle {
    * agent viewer, which hands off to `/app` rather than sending in place.
    * Leaves the configuration where that page will find it, once.
    */
-  handOffToNewChatWith: (agentId: number) => void;
+  handOffToNewChatWith: (agentId: number, projectId?: number | null) => void;
 }
 
 /**
@@ -510,8 +510,13 @@ export function useToolConfiguration(
   );
 
   const handOffToNewChatWith = useCallback(
-    (agentId: number) =>
-      writeConfiguration(`${STORAGE_PREFIX}:new:${agentId}`, configuration),
+    (agentId: number, projectId: number | null = null) =>
+      writeConfiguration(
+        projectId === null
+          ? `${STORAGE_PREFIX}:new:${agentId}`
+          : `${STORAGE_PREFIX}:new:${agentId}:${projectId}`,
+        configuration
+      ),
     [configuration]
   );
 

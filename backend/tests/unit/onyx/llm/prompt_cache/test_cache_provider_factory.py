@@ -52,7 +52,7 @@ def test_portkey_messages_surface_gets_anthropic_adapter() -> None:
 def test_gateway_non_anthropic_model_stays_noop() -> None:
     for provider in ("litellm_proxy", "bifrost", "openai_compatible", "portkey"):
         adapter: PromptCacheProvider = get_provider_adapter(
-            _config(provider, "gpt-5-mini")
+            _config(provider, "gpt-6-luna")
         )
         assert isinstance(adapter, NoOpPromptCacheProvider), provider
 
@@ -117,7 +117,7 @@ def test_bedrock_unknown_model_stays_noop() -> None:
 
 def test_direct_providers_unchanged() -> None:
     assert isinstance(
-        get_provider_adapter(_config("openai", "gpt-5-mini")),
+        get_provider_adapter(_config("openai", "gpt-6-luna")),
         OpenAIPromptCacheProvider,
     )
     assert isinstance(
@@ -129,7 +129,7 @@ def test_direct_providers_unchanged() -> None:
         AnthropicPromptCacheProvider,
     )
     assert isinstance(
-        get_provider_adapter(_config("openrouter", "openai/gpt-5-mini")),
+        get_provider_adapter(_config("openrouter", "openai/gpt-6-luna")),
         OpenAIPromptCacheProvider,
     )
     assert isinstance(

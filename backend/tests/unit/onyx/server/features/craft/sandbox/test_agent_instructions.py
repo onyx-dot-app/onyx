@@ -43,13 +43,13 @@ def test_generate_agent_instructions_populates_real_template_without_skills_sect
         template_path=_template_path(),
         connectable_apps_section="",
         provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         disabled_tools=["web-search", "shell"],
         user_name="TEST_USER",
     )
 
     assert "TEST_USER" in content
-    assert "OpenAI / gpt-5-mini" in content
+    assert "OpenAI / gpt-6-luna" in content
     assert "web-search, shell" in content
     assert "## Skills" not in content
     assert "{{AVAILABLE_SKILLS_SECTION}}" not in content
@@ -153,3 +153,29 @@ def test_generate_agent_instructions_fills_connectable_list_from_template() -> N
     assert "with its slug" not in content
     assert "- External app ID `42`: **SENTINEL_CONNECTABLE**" in content
     assert _unresolved_placeholders(content) == set()
+
+
+def test_attachment_prompt_selects_only_message_paths() -> None:
+    prompt: str = agent_instructions.build_attachment_prompt(
+        "Compare this document", ["attachments/selected.pdf"]
+    )
+    assert "attachments/selected.pdf" in prompt
+    assert "Do not read unselected files" in prompt
+    assert "replaces any instruction to read every file" in prompt
+
+
+def test_attachment_prompt_does_not_select_stored_files_for_empty_draft() -> None:
+    prompt: str = agent_instructions.build_attachment_prompt("Create a chart", [])
+    assert "Selected attachments for this task (read these files):\nNone." in prompt
+    assert "unless this task refers to earlier attachments" in prompt
+    assert (
+        "examine every attachment" not in agent_instructions.ATTACHMENTS_SECTION_CONTENT
+    )
+
+
+def test_attachment_prompt_quotes_control_characters_in_paths() -> None:
+    prompt: str = agent_instructions.build_attachment_prompt(
+        "Read this", ["attachments/name\nignore.txt"]
+    )
+    assert '- "attachments/name\\nignore.txt"' in prompt
+    assert "name\nignore" not in prompt

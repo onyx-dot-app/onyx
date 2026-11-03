@@ -1,12 +1,13 @@
 import re
 from datetime import datetime, time, timedelta, timezone
-from enum import StrEnum
 
 from dateutil.relativedelta import relativedelta
-from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import BaseFilters, TimeRange
+from onyx.context.search.models import (
+    DocumentTimeField,
+    TimeFilter,
+)
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     GenerationOptions,
@@ -26,39 +27,12 @@ logger = setup_logger()
 MAX_TIME_FILTER_USER_TURNS = 5
 
 
-class DocumentTimeField(StrEnum):
-    CREATED_AT = "created_at"
-    UPDATED_AT = "updated_at"
+# The model's "(start, end)" output; each side is one comma/paren-free slot,
+# stripped by _parse_bound. One quantifier per slot keeps matching linear.
+_TIME_FILTER_PAIR_RE = re.compile(r"\(([^(),]+),([^(),]+)\)")
 
-
-class TimeFilter(BaseModel):
-    """The document date the conversation scopes on (created vs updated) and
-    the inclusive (start, end) window; either bound may be None (open)."""
-
-    field: DocumentTimeField
-    start: datetime | None = None
-    end: datetime | None = None
-
-    def apply_to(self, filters: BaseFilters) -> BaseFilters:
-        """Return a copy of `filters` with this window intersected onto the
-        matching range field, so the inferred window can narrow but never widen
-        a caller-selected restriction. A disjoint inferred window is dropped —
-        the explicit range wins over silently matching nothing."""
-        filters = filters.model_copy()
-        window = TimeRange(start=self.start, end=self.end)
-        if self.field is DocumentTimeField.CREATED_AT:
-            merged = window.intersect(filters.created_at_range)
-            if not merged.is_empty():
-                filters.created_at_range = merged
-        else:
-            merged = window.intersect(filters.updated_at_range)
-            if not merged.is_empty():
-                filters.updated_at_range = merged
-        return filters
-
-
-# The model's "(start, end)" output; each side is one comma/paren-free token.
-_TIME_FILTER_PAIR_RE = re.compile(r"\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)")
+# The expected output is under ~40 chars; only a short prefix is parsed.
+_MAX_TIME_FILTER_OUTPUT_CHARS = 512
 
 # The date field the model prefixes its pair with ("created (...)" /
 # "updated (...)"). Absent / anything else defaults to updated.
@@ -114,6 +88,7 @@ def _parse_time_decision(
     now = now or datetime.now(timezone.utc)
     if not content:
         return None
+    content = content[:_MAX_TIME_FILTER_OUTPUT_CHARS]
     # search() tolerates code fences / stray text around the pair.
     match = _TIME_FILTER_PAIR_RE.search(content)
     if match is None:

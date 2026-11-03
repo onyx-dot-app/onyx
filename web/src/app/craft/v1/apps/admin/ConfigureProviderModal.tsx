@@ -4,14 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import isEqual from "lodash/isEqual";
-import { Divider } from "@opal/components";
 import ActionPolicyEditorModal, {
   EditorField,
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
 import {
   BuiltInExternalAppDescriptor,
-  EndpointPolicy,
+  ActionPolicy,
   ExternalAppAdminResponse,
+  getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
 import {
   createBuiltInExternalApp,
@@ -53,8 +53,19 @@ export default function ConfigureProviderModal({
   existingApp,
 }: ConfigureProviderModalProps) {
   const t = useTranslations("craft.apps.configureProvider");
+  const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
   const tApps = useTranslations("craft.apps");
   const router = useRouter();
+  const savedEnabled = existingApp?.enabled ?? true;
+  const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
+  const enabled = enabledDraft ?? savedEnabled;
+  const availabilityChanged = enabled !== savedEnabled;
+  function setEnabled(value: boolean) {
+    setEnabledDraft(value === savedEnabled ? null : value);
+  }
+  const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
+    existingApp?.users_can_manage_policies ?? true
+  );
   const upload = useSkillUploadModal();
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
@@ -78,6 +89,7 @@ export default function ConfigureProviderModal({
     ? []
     : [
         {
+          section: "configuration",
           key: NAME_KEY,
           label: t("fields.name.label"),
           description: t("fields.name.description", { name: descriptor.name }),
@@ -85,6 +97,7 @@ export default function ConfigureProviderModal({
           secret: false,
         },
         ...descriptor.required_org_credential_fields.map((field) => ({
+          section: "authentication" as const,
           key: field.key,
           label: field.label,
           description: field.description,
@@ -104,12 +117,12 @@ export default function ConfigureProviderModal({
   // Seed each action from the admin's stored choice (edit) or the action's
   // backend-declared default (create) — usually "Ask", but a provider can
   // declare a different out-of-the-box stance per action.
-  const storedPolicies: Record<string, EndpointPolicy> = {};
+  const storedPolicies: Record<string, ActionPolicy> = {};
   for (const action of existingApp?.actions ?? []) {
     storedPolicies[action.action_id] = action.state;
   }
   const initialPolicies = Object.fromEntries(
-    descriptor.actions.map((action): [string, EndpointPolicy] => [
+    descriptor.actions.map((action): [string, ActionPolicy] => [
       action.action_id,
       storedPolicies[action.action_id] ?? action.default_policy,
     ])
@@ -117,14 +130,17 @@ export default function ConfigureProviderModal({
 
   async function save(
     values: Record<string, string>,
-    policies: Record<string, EndpointPolicy>
+    policies: Record<string, ActionPolicy>
   ) {
     if (managed && existingApp) {
-      // Managed: only policies are persisted; a partial PATCH leaves the rest.
-      await updateExternalApp(existingApp.id, {
+      // Keep Onyx-managed credentials unchanged.
+      const payload: Parameters<typeof updateExternalApp>[1] = {
         action_policies: policies,
+        users_can_manage_policies: usersCanManagePolicies,
         ...associationPatch,
-      });
+      };
+      if (availabilityChanged) payload.enabled = enabled;
+      await updateExternalApp(existingApp.id, payload);
     } else {
       const credentialValues = Object.fromEntries(
         descriptor.required_org_credential_fields.map((field) => [
@@ -137,20 +153,24 @@ export default function ConfigureProviderModal({
         upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         action_policies: policies,
+        users_can_manage_policies: usersCanManagePolicies,
       };
       if (existingApp) {
         // Merge creds so non-credential metadata survives a credential edit.
-        await updateExternalApp(existingApp.id, {
+        const payload: Parameters<typeof updateExternalApp>[1] = {
           ...shared,
           organization_credentials: {
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
           ...associationPatch,
-        });
+        };
+        if (availabilityChanged) payload.enabled = enabled;
+        await updateExternalApp(existingApp.id, payload);
       } else {
         const created = await createBuiltInExternalApp({
           ...shared,
+          enabled,
           app_type: descriptor.app_type,
           organization_credentials: credentialValues,
         });
@@ -221,15 +241,24 @@ export default function ConfigureProviderModal({
           : undefined
       }
       alternateContentConfirmationOpen={upload.confirmationOpen}
-      isAdditionalContentDirty={existingAssociationDirty}
-      onClose={upload.isOpen ? upload.requestDismiss : onClose}
-      title={
-        existingApp
-          ? t("editTitle", { name: existingApp.name })
-          : t("addTitle", { name: descriptor.name })
+      enabled={enabled}
+      onEnabledChange={setEnabled}
+      usersCanManagePolicies={usersCanManagePolicies}
+      onUsersCanManagePoliciesChange={setUsersCanManagePolicies}
+      isAdditionalContentDirty={
+        availabilityChanged ||
+        existingAssociationDirty ||
+        usersCanManagePolicies !==
+          (existingApp?.users_can_manage_policies ?? true)
       }
-      description={
-        managed ? t("managedDescription") : descriptor.setup_instructions
+      onClose={upload.isOpen ? upload.requestDismiss : onClose}
+      title={existingApp?.name ?? descriptor.name}
+      description={pluginCopy(
+        enabled ? "craftOnlyDescription" : "craftDisabledDescription"
+      )}
+      icon={getAppTypeLogo(descriptor.app_type)}
+      authenticationInstructions={
+        managed ? undefined : descriptor.setup_instructions
       }
       note={managed ? t("managedNote") : undefined}
       fields={fields}
@@ -247,24 +276,22 @@ export default function ConfigureProviderModal({
       allowPristineSave={existingApp === null}
       onSave={save}
       closeAfterSave={existingApp !== null}
-      bodyAfterPolicies={
+      discardOnClose={existingApp === null}
+      skillsContent={
         existingApp
           ? (requestLeave) => (
-              <>
-                <Divider />
-                <AssociatedSkillsEditor
-                  app={existingApp}
-                  selectedSkillIds={selectedSkillIds}
-                  onChange={setSelectedSkillIds}
-                  onOpenSkill={(skillId) =>
-                    requestLeave(() => navigateToExistingSkill(skillId))
-                  }
-                  onCreateSkill={() =>
-                    requestLeave(() => navigateToSkillEditor())
-                  }
-                  onUploadSkill={upload.open}
-                />
-              </>
+              <AssociatedSkillsEditor
+                app={existingApp}
+                selectedSkillIds={selectedSkillIds}
+                onChange={setSelectedSkillIds}
+                onOpenSkill={(skillId) =>
+                  requestLeave(() => navigateToExistingSkill(skillId))
+                }
+                onCreateSkill={() =>
+                  requestLeave(() => navigateToSkillEditor())
+                }
+                onUploadSkill={upload.open}
+              />
             )
           : undefined
       }

@@ -4,8 +4,10 @@ Emits one JSON line per security-relevant action (auth, admin-config /
 access-control change, credential access) on the ``onyx.audit`` logger tree.
 Field names and the action taxonomy are shaped toward OCSF so the stream maps
 onto OCSF event classes (Authentication / Account Change / User Access
-Management / Group Management / API Activity) and drops into any SIEM. See
-``docs/AUDIT_LOGGING.md`` for the schema + export path.
+Management / Group Management / API Activity) and drops into any SIEM. The
+customer schema and export guide is
+``documentation/admins/auditing/audit_logs.mdx``; update it when the schema or
+the ``AuditAction`` taxonomy changes. ``AuditAction`` values are append-only.
 
 Invariants (from the ``credential_audit`` seed): never raise into the caller
 (emission sits on hot paths), never log a secret, always tenant-tag, and dedup
@@ -84,9 +86,11 @@ class AuditAction(str, Enum):
 
     # API activity (admin config + resource CRUD)
     CRAFT_DEFAULT_CHANGE = "settings.craft_default_change"
+    DEFAULT_LANGUAGE_CHANGE = "settings.default_language_change"
     LLM_GATEWAY_ENABLED_CHANGE = "settings.llm_gateway_enabled_change"
     SECURITY_SETTINGS_CHANGE = "settings.security_settings_change"
     CONTEXTUAL_RAG_MODEL_UPDATE = "search_settings.contextual_rag_model_update"
+    CC_PAIR_ACCESS_MODE_CHANGE = "search_settings.cc_pair_access_mode_change"
     LLM_PROVIDER_CREATE = "llm_provider.create"
     LLM_PROVIDER_UPDATE = "llm_provider.update"
     LLM_PROVIDER_DELETE = "llm_provider.delete"
@@ -131,9 +135,11 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.USER_GROUP_PERMISSION_CHANGE: OCSFEventClass.GROUP_MANAGEMENT,
     AuditAction.USER_GROUP_MANAGER_CHANGE: OCSFEventClass.GROUP_MANAGEMENT,
     AuditAction.CRAFT_DEFAULT_CHANGE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.DEFAULT_LANGUAGE_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_GATEWAY_ENABLED_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.SECURITY_SETTINGS_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.CC_PAIR_ACCESS_MODE_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_CREATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_UPDATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_DELETE: OCSFEventClass.API_ACTIVITY,

@@ -4,10 +4,7 @@ import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
-import {
-  RateLimitDetails,
-  RATE_LIMITED_ERROR_CODE,
-} from "@/app/app/interfaces";
+import { RateLimitDetails, RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
 import { useTranslations } from "next-intl";
 
 const COUNTDOWN_TICK_MS = 1_000;

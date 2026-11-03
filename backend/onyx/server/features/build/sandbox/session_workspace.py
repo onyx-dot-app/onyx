@@ -31,6 +31,7 @@ SETUP_IN_PROGRESS_MARKER = ".setup-in-progress"
 # when its timeout lapses (and never raises on a nonzero exit), so the
 # sentinel is the only reliable success signal.
 WORKSPACE_SETUP_COMPLETE_SENTINEL = "ONYX_WORKSPACE_SETUP_COMPLETE"
+SESSION_CONFIG_COMPLETE_SENTINEL = "ONYX_SESSION_CONFIG_COMPLETE"
 
 
 def build_workspace_exists_check_script(session_path: str) -> str:
@@ -40,6 +41,16 @@ def build_workspace_exists_check_script(session_path: str) -> str:
         f'if [ -d "{session_path}/outputs" ] && '
         f'[ ! -f "{session_path}/{SETUP_IN_PROGRESS_MARKER}" ]; '
         f'then echo "WORKSPACE_FOUND"; else echo "WORKSPACE_MISSING"; fi'
+    )
+
+
+def build_opencode_dependency_setup_command(session_path: str) -> str:
+    """Older sandbox images use OpenCode's runtime-install fallback."""
+    script = "/usr/local/bin/seed-opencode-dependencies"
+    return (
+        f"if [ -x {script} ]; then flock -x "
+        f"{shlex.quote(session_path + '.opencode-seed.lock')} "
+        f"{script} {shlex.quote(session_path)}; fi"
     )
 
 
@@ -84,6 +95,7 @@ mkdir -p {session_path}/attachments
 # which fails if the mount is a real directory. Dangling until the first
 # push lands is fine; nothing reads these during the rest of setup.
 mkdir -p {session_path}/.opencode
+{build_opencode_dependency_setup_command(session_path)}
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 echo "Linked skills to {MANAGED_SKILLS_PATH}"
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library

@@ -9,7 +9,10 @@ from onyx.deep_research.tool_definitions import (
     THINK_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
 )
-from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.server.query_and_chat.models import ChatSessionDetailResponse
+from onyx.server.query_and_chat.streaming_models import ReasoningDelta, StreamingType
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.test_models import DATestUser
@@ -25,7 +28,7 @@ _CHILD_THINK_CALL_ID = "call_child_think"
 _ORCHESTRATOR_THINK_CALL_ID = "call_orchestrator_think"
 
 _RESEARCH_TASK = "Investigate the history of the alpha protocol."
-# Each ends in characters the think tool processor used to drop.
+# Escapes and final characters must survive streaming and replay.
 _CHILD_REASONING = 'Search for "alpha" first,\nthen report. Done'
 _ORCHESTRATOR_REASONING = 'The research is complete: write the report \\ "end"'
 _RESEARCH_PLAN = "1. Research the alpha protocol."
@@ -166,7 +169,26 @@ def test_think_tool_reasoning_is_streamed_and_saved_in_full(
     ]
     assert len(assistant_messages) == 1
     assert assistant_messages[0].message == _FINAL_REPORT
-    assert assistant_messages[0].reasoning_tokens == _ORCHESTRATOR_REASONING
+    saved_response = client.get(
+        f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
+        headers=admin_user.headers,
+    )
+    saved_response.raise_for_status()
+    saved = ChatSessionDetailResponse.model_validate(saved_response.json())
+    assert len(saved.packets) == 1
+    for is_child, expected in (
+        (True, _CHILD_REASONING),
+        (False, _ORCHESTRATOR_REASONING),
+    ):
+        assert (
+            "".join(
+                packet.obj.reasoning
+                for packet in saved.packets[0]
+                if isinstance(packet.obj, ReasoningDelta)
+                and (packet.placement.sub_turn_index is not None) == is_child
+            )
+            == expected
+        )
 
     # Each think call goes back to the model with its full reasoning and the
     # acknowledgement as its tool result.

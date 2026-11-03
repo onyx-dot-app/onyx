@@ -1,0 +1,113 @@
+---
+title: "Manage Your Subscription"
+description: "Update seats, manage licenses, and access the Stripe portal"
+icon: "gear"
+---
+
+Once you have an active subscription, you can manage it from **Admin Panel > Plans & Billing**.
+
+The billing page shows your plan, next payment date, and current seat usage.
+
+## Managing Seats
+
+Every active user in your workspace counts as a seat.
+Service accounts and users who exist only for permission sync do not count. The billing page shows seats **in use**,
+**pending** invitations, and **remaining** seats. You can adjust your seat count at any time.
+
+<Steps>
+  <Step title="Set the new count">
+    Click **Update Seats** on the billing page and enter your desired number of seats.
+    You cannot go below the number of seats currently in use (active users + pending invitations).
+
+    <Note>
+      Need to reduce seats below current usage? [Remove users](/admins/user_management/users_and_groups) first,
+      then adjust the seat count.
+    </Note>
+  </Step>
+
+  <Step title="Review the billing impact">
+    - **Adding seats** — you'll be billed a pro-rated amount immediately.
+    - **Removing seats** — the change takes effect at the end of your current billing cycle.
+  </Step>
+</Steps>
+
+## Stripe Customer Portal
+
+Click **Manage Plan** on the billing page to open the Stripe customer portal. From there you can:
+
+- Update your payment method
+- View and download invoices
+- Cancel or modify your subscription
+
+If your plan is managed through sales, the billing page shows a **Contact billing** link instead.
+
+## Free Trial (Cloud)
+
+During a Cloud trial, the billing page shows when the trial ends and when payment is due.
+Add a payment method before the trial ends to keep access.
+Click **Upgrade now** to end the trial early and start the paid plan. This needs a payment method on file.
+
+## Sync Your License (Self-Hosted)
+
+A self-hosted deployment fetches its license after checkout and after a seat change.
+If the billing page does not show the latest plan or seat count, click **Sync License** to fetch it again.
+
+## Air-Gapped License Activation
+
+For self-hosted deployments without internet access,
+you can activate a license manually instead of going through Stripe checkout.
+
+Contact the Onyx team at **support@onyx.app** to request a license file.
+You will receive a file containing your signed license in this format:
+
+```
+-----BEGIN ONYX LICENSE-----
+eyJwYXlsb2FkIjogeyJ2ZXJzaW9...
+-----END ONYX LICENSE-----
+```
+
+<Steps>
+  <Step title="Open the license form">
+    Go to **Admin Panel > Plans & Billing** and click **Activate License Key** at the bottom of the billing page.
+  </Step>
+
+  <Step title="Upload your license">
+    Paste the contents of your license file, or use the file upload button to attach it directly,
+    then click **Activate License**. Paid features are enabled immediately.
+  </Step>
+</Steps>
+
+To update an existing license (e.g., after renewal or a seat change),
+click **Update License Key** instead and follow the same steps.
+
+## Downgrade to Community Edition
+
+A self-hosted deployment whose license has lapsed can drop to the free Community Edition instead of renewing.
+The option appears only while the workspace is locked (the **Access Restricted** page),
+as a **Downgrade to Community** link at the bottom of the billing page and as a button on the lock page itself.
+Only admins see it.
+
+<Warning>
+  The downgrade cannot be undone.
+  Content that was restricted by synced permissions or user groups becomes visible to every user of the workspace.
+</Warning>
+
+Confirming the consent dialog does the following in one step:
+
+- **Every connector becomes public.** Permissions synced from the source (Google Drive, Confluence,
+  SharePoint and so on) stop applying, and connectors restricted to user groups open up.
+  Search results follow once the document index has been rewritten, which can take a while on a large index.
+- **User groups are removed.** Agents, document sets, LLM providers,
+  MCP servers and skills that were shared with a group become public.
+  Published agents are view-only for everyone except their owner.
+  Members of a group that granted admin rights keep them through the default Admin group.
+- **Paid features are switched off.** Service account API keys, token rate limits and hooks are deleted.
+  Standard answers and SCIM tokens are deactivated. Custom branding and chat retention are reset.
+- **The license is removed** from the deployment.
+
+No indexed data is deleted, and chats, agents, connectors and users stay as they are. If the request fails part way,
+nothing is lost: the license is removed last,
+so the deployment stays licensed and running the downgrade again finishes the job.
+
+To return to a paid plan later, [subscribe](/admins/billing/subscribing) or upload a license file again.
+Connector permissions and user groups are not restored by that. Set them up again after the license is active.

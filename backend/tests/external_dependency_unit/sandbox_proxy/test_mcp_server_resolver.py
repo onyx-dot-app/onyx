@@ -19,11 +19,12 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from mitmproxy import http
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -35,6 +36,7 @@ from onyx.db.mcp import (
     create_mcp_server__no_commit,
     get_connection_config_by_id,
     update_mcp_server__no_commit,
+    upsert_mcp_server_user_preferences__no_commit,
 )
 from onyx.db.models import MCPServer, OAuthAccount, User
 from onyx.external_apps.matching.engine import (
@@ -49,7 +51,7 @@ from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.server.features.mcp.credentials import extract_connection_data
 from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 CraftServerFactory = Callable[..., MCPServer]
 
@@ -146,7 +148,7 @@ def _matched(kind: GatedAppKind, target_id: int) -> AllMatchedActions:
                 action_type="x",
                 display_name="X",
                 description="d",
-                policy=EndpointPolicy.ASK,
+                policy=ActionPolicy.ASK,
             ),
         ),
         target=GatedTarget(kind=kind, id=target_id, app_name="srv"),
@@ -494,6 +496,34 @@ def test_admin_managed_server_detail_points_to_admin(
     assert "Apps page in Craft" not in detail
 
 
+def test_personal_craft_optout_keeps_host_claim_and_blocks_live_resolve(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    user = create_test_user(db_session, "mcp_resolver_personal_optout")
+    other = create_test_user(db_session, "mcp_resolver_personal_other")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.NONE,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    resolver = MCPServerResolver()
+    request = _request(_server_host(server))
+    try:
+        assert resolver.claims(request, _ctx(user)) is True
+        assert resolver.resolve(request, _ctx(user)) == {}
+        upsert_mcp_server_user_preferences__no_commit(
+            server.id, user.id, db_session, enabled_in_craft=False
+        )
+        db_session.commit()
+        assert resolver.claims(request, _ctx(user)) is True
+        with pytest.raises(CredentialUnavailableError, match="disabled MCP server"):
+            resolver.resolve(request, _ctx(user))
+        assert resolver.resolve(request, _ctx(other)) == {}
+    finally:
+        db_session.rollback()
+        delete_test_user(db_session, user, other)
+        db_session.commit()
+
+
 def test_none_auth_claims_without_injecting(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
@@ -778,3 +808,25 @@ def test_ungated_tool_call_never_gets_credentials(
             _request(_server_host(server), method="POST", raw_content=body),
             _ctx(user),
         )
+
+
+def test_ungated_upgrade_never_gets_credentials(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    user = create_test_user(db_session, "mcp_resolver_upgrade")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        server,
+        MCPConnectionData(headers={"Authorization": "Bearer admin-token"}),
+    )
+    request = http.Request.make(
+        "GET",
+        server.server_url,
+        headers={"Connection": "Upgrade", "Upgrade": "websocket"},
+    )
+    with pytest.raises(CredentialUnavailableError, match="without a gate verdict"):
+        MCPServerResolver().resolve(request, _ctx(user))

@@ -1,17 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { useFilePreview } from "@/lib/build/hooks";
 import { FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
-import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
-import { SvgFileText } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
-import { buildArtifactUrl } from "@/app/craft/services/apiServices";
+import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import dynamic from "next/dynamic";
+import {
+  buildArtifactUrl,
+  downloadArtifactFile,
+} from "@/app/craft/services/apiServices";
+
+const PdfDocumentViewer = dynamic(
+  () => import("@/app/craft/components/output-panel/PdfDocumentViewer"),
+  { ssr: false }
+);
 
 interface PdfPreviewProps {
+  initialPage?: number;
+  onPageChange?: (page: number) => void;
+  onRefreshingChange?: (isRefreshing: boolean) => void;
   sessionId: string;
   filePath: string;
   revision?: string;
@@ -19,29 +29,19 @@ interface PdfPreviewProps {
   isActive?: boolean;
 }
 
-/**
- * PdfPreview - Renders PDF files using the browser's built-in PDF viewer.
- * Fetches the PDF as a blob and creates an object URL so the iframe renders
- * it inline (the backend serves artifacts with Content-Disposition: attachment,
- * which would otherwise force a download).
- */
 export default function PdfPreview({
   sessionId,
   filePath,
   revision,
   refreshKey,
   isActive = true,
+  onRefreshingChange,
+  initialPage,
+  onPageChange,
 }: PdfPreviewProps) {
   const t = useTranslations("craft.pdfPreview");
-  const [objectUrl, setObjectUrl] = useState<{
-    blob: Blob;
-    url: string;
-  } | null>(null);
-  const {
-    data: blob,
-    error,
-    isLoading,
-  } = useFilePreview(
+  const displayedBlobRef = useRef<Blob | null>(null);
+  const { data: blob, error } = useFilePreview(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     async () => {
       const response = await fetch(buildArtifactUrl(sessionId, filePath), {
@@ -54,7 +54,7 @@ export default function PdfPreview({
           null
         );
       const nextBlob = await response.blob();
-      const displayedBlob = objectUrl?.blob;
+      const displayedBlob = displayedBlobRef.current;
       if (
         revision === undefined &&
         displayedBlob &&
@@ -66,7 +66,7 @@ export default function PdfPreview({
           nextBlob.arrayBuffer(),
         ]);
         const next = new Uint8Array(nextBytes);
-        // Keep the iframe's URL when an activation read returns identical bytes.
+        // Reuse the loaded document when an activation read returns identical bytes.
         if (
           new Uint8Array(displayedBytes).every(
             (byte, index) => byte === next[index]
@@ -76,64 +76,45 @@ export default function PdfPreview({
       }
       return nextBlob;
     },
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive, onRefreshingChange }
   );
 
-  // Object URLs belong only to the mounted viewer.
   useEffect(() => {
-    if (!blob) {
-      setObjectUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    setObjectUrl({ blob, url });
-    return () => URL.revokeObjectURL(url);
+    displayedBlobRef.current = blob ?? null;
   }, [blob]);
-  const blobUrl = objectUrl?.blob === blob ? objectUrl?.url : undefined;
 
-  if (error) {
+  if (!blob)
     return (
-      <Section
-        height="full"
-        alignItems="center"
-        justifyContent="center"
-        padding={8}
-      >
-        <SvgFileText size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
-          {t("error.title")}
-        </Text>
-        <div className="text-center max-w-md">
-          <Text font="secondary-body" color="text-02">
+      <WorkspaceHome title={t(error ? "error.title" : "loading.label")}>
+        {error && (
+          <Text font="secondary-body" color="text-03">
+            {t("error.description")}
+          </Text>
+        )}
+      </WorkspaceHome>
+    );
+
+  return (
+    <div className="flex h-full flex-col">
+      {error && (
+        <div
+          role="alert"
+          className="shrink-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
             {t("error.description")}
           </Text>
         </div>
-      </Section>
-    );
-  }
-
-  if (isLoading || !blobUrl) {
-    return (
-      <Section
-        height="full"
-        alignItems="center"
-        justifyContent="center"
-        padding={8}
-      >
-        <Text font="secondary-body" color="text-03">
-          {t("loading.label")}
-        </Text>
-      </Section>
-    );
-  }
-
-  return (
-    <iframe
-      src={blobUrl}
-      title={filePath.split("/").pop() || t("frame.title")}
-      className={cn("w-full h-full border-none")}
-    />
+      )}
+      <div className="min-h-0 flex-1">
+        <PdfDocumentViewer
+          blob={blob}
+          isActive={isActive}
+          initialPage={initialPage}
+          onPageChange={onPageChange}
+          onDownload={() => downloadArtifactFile(sessionId, filePath)}
+        />
+      </div>
+    </div>
   );
 }

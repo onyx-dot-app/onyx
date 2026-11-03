@@ -20,10 +20,19 @@ export enum EmbeddingProviderName {
   GOOGLE = "google",
   LITELLM = "litellm",
   AZURE = "azure",
+  BIFROST = "bifrost",
+  OPENAI_COMPATIBLE = "openai_compatible",
 
-  // Self-hosted
+  // Self-hosted display groups. Frontend-only: the backend stores
+  // provider_type=null for every self-hosted model, so these values are never
+  // sent. Do not reuse a cloud value (e.g. VOYAGE) for a self-hosted group:
+  // `isCloudBased` would then route the model to that cloud API.
+  IBM = "ibm",
+  VOYAGE_SELF_HOSTED = "voyage_self_hosted",
+  NVIDIA = "nvidia",
   NOMIC = "nomic",
   MICROSOFT = "microsoft",
+  GTE = "gte",
 
   // Custom self-hosted (frontend-only sentinel; backend stores provider_type=null)
   CUSTOM = "custom",
@@ -46,6 +55,20 @@ export enum VectorQuantization {
   NONE = "none",
   SCALAR_7_BIT = "scalar_7_bit",
   SCALAR_1_BIT = "scalar_1_bit",
+}
+
+/** Mirrors backend `VectorQuantizationLevelSupport`. */
+export interface VectorQuantizationLevelSupport {
+  vector_quantization: VectorQuantization;
+  supported: boolean;
+  /** "major.minor" of the oldest OpenSearch that can index this level. */
+  min_opensearch_version: string | null;
+}
+
+/** Mirrors backend `VectorQuantizationSupport`; a null version restricts nothing. */
+export interface VectorQuantizationSupport {
+  opensearch_version: string | null;
+  levels: VectorQuantizationLevelSupport[];
 }
 
 // ---------------------------------------------------------------------------
@@ -72,18 +95,29 @@ export interface EmbeddingModel {
   passagePrefix?: string | null;
   // Absent for custom models, which have no registry description.
   descriptionKey?: IndexSettingsMessageKey;
-
   /**
-   * When true, existing usage is allowed, but selecting it as a new embedding
-   * model is blocked.
+   * Kept only so existing deployments still display and re-index correctly.
+   * Not offered as a new target: the picker shows a legacy model only while it
+   * is the current model, and the backend rejects it as a new target.
    */
-  deprecated?: boolean;
+  legacy?: boolean;
+  /** Indexing on CPU is too slow for practical use. */
+  gpuRecommended?: boolean;
+  /** Shorter vector width requested via the OpenAI `dimensions` parameter. */
+  reducedDimension?: number | null;
 }
 
+/** The fields sent to the backend. Registry display flags are left out. */
 export type EmbeddingModelSpec = Omit<
   EmbeddingModel,
-  "descriptionKey" | "deprecated"
+  "descriptionKey" | "legacy" | "gpuRecommended"
 >;
+
+/** The active embedding model, identified by its display group and name. */
+export interface EmbeddingModelRef {
+  modelName: string;
+  providerName: EmbeddingProviderName;
+}
 
 /**
  * Always write all three fields together. A name without its spec and provider forces
@@ -137,6 +171,7 @@ export interface EmbeddingModelResponse {
   api_key: string | null;
   api_url: string | null;
   index_name: string | null;
+  reduced_dimension: number | null;
   switchover_type?: SwitchoverType;
 }
 
@@ -147,6 +182,7 @@ export interface EmbeddingModelRequest {
   normalize: boolean;
   queryPrefix?: string | null;
   passagePrefix?: string | null;
+  reducedDimension?: number | null;
 }
 
 /** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
@@ -204,7 +240,7 @@ export interface LLMContextualCost {
   cost: number;
 }
 
-/** Mirrors backend `ReindexProgressCounts`; buckets partition `total`. */
+/** Mirrors backend `ReindexProgress`; buckets partition `total`. */
 export interface ReindexProgress {
   total: number;
   waiting: number;
@@ -212,6 +248,33 @@ export interface ReindexProgress {
   completed: number;
   failed: number;
   paused: number;
+  /** False when the port copies the stored vectors instead of re-embedding. */
+  reembeds: boolean;
+}
+
+/** Mirrors backend `CCPairAccessMode`. */
+export type CCPairAccessMode = "off" | "shadow" | "enforce";
+
+/**
+ * Mirrors backend `CCPairIdsBackfillStatus`. Counts are null when the backfill
+ * has not started or is complete; totals are also null for progress stored
+ * before the backend kept a snapshot.
+ */
+export interface CCPairIdsBackfillStatus {
+  index_name: string;
+  started: boolean;
+  completed: boolean;
+  total_cc_pairs: number | null;
+  pending_cc_pairs: number | null;
+  total_documents: number | null;
+  completed_documents: number | null;
+  remaining_documents: number | null;
+  current_cc_pair_name: string | null;
+  access_mode: CCPairAccessMode;
+  filter_enabled: boolean;
+  enforce_requested: boolean;
+  /** False in multi-tenant deployments, where operators own the mode. */
+  mode_editable: boolean;
 }
 
 /** Mirrors backend `ReindexErrorRow`; exactly one of cc_pair_id / user_id set. */

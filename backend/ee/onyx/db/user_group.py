@@ -1088,9 +1088,10 @@ def set_user_group_data_access_cc_pairs(
     return final_cc_pair_ids
 
 
-def _set_group_manager__no_commit(
+def set_group_manager__no_commit(
     db_session: Session, *, user_id: UUID, group_id: int, is_manager: bool
 ) -> None:
+    """Set manager status for an existing group member without committing."""
     edge = db_session.scalar(
         select(User__UserGroup).where(
             User__UserGroup.user_id == user_id,
@@ -1103,22 +1104,6 @@ def _set_group_manager__no_commit(
     # Refresh the affected user's cached is_group_manager flag; a pure manager flip
     # (no membership change) otherwise leaves the route-gate flag stale.
     recompute_user_permissions__no_commit([user_id], db_session)
-
-
-def make_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
-    """Flip is_manager=true on the (user, group) edge. The row must already exist —
-    a manager is always a member — else ValueError. Idempotent. Does NOT commit."""
-    _set_group_manager__no_commit(
-        db_session, user_id=user_id, group_id=group_id, is_manager=True
-    )
-
-
-def revoke_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
-    """Flip is_manager=false on the (user, group) edge. The row must exist else
-    ValueError. Idempotent. Does NOT commit."""
-    _set_group_manager__no_commit(
-        db_session, user_id=user_id, group_id=group_id, is_manager=False
-    )
 
 
 def rename_user_group(

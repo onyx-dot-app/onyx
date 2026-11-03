@@ -12,7 +12,10 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, SSOProviderType
 from onyx.db.models import SSOProvider, User
 from onyx.db.sso_provider import (
+    count_sso_provider_links,
     create_sso_provider,
+    delete_sso_provider_links__no_commit,
+    delete_sso_provider_row__no_commit,
     enabled_provider_domains,
     fetch_sso_providers,
     is_valid_email_domain,
@@ -32,6 +35,7 @@ from onyx.server.manage.sso.models import (
     SSOLoginDomainStatus,
     SSOProviderCreateRequest,
     SSOProviderEnabledRequest,
+    SSOProviderHandoffResponse,
     SSOProviderResponse,
     SSOProviderUpdateRequest,
 )
@@ -134,6 +138,26 @@ def _fetch_sso_provider_or_raise(db_session: Session, provider_id: int) -> SSOPr
             f"SSO provider {provider_id} does not exist",
         )
     return provider
+
+
+def _reject_removing_last_sign_in(
+    db_session: Session, provider_id: int, action: str
+) -> None:
+    """Refuse to take the last enabled provider out of sign-in while password
+    login is off. Hold security_settings_write_lock so a concurrent password
+    login toggle or provider removal cannot slip past the check."""
+    if load_effective_uncached().password_auth_enabled:
+        return
+    if any(
+        other.id != provider_id
+        for other in fetch_sso_providers(db_session, enabled_only=True)
+    ):
+        return
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        f"Re-enable password login before {action} the last SSO provider, "
+        "otherwise no one can sign in.",
+    )
 
 
 @admin_router.get("/provider-type")
@@ -255,17 +279,8 @@ def set_sso_provider_enabled_endpoint(
             enabled=True,
         )
     else:
-        # Both lockout guards run under the shared write lock on fresh state.
         with security_settings_write_lock():
-            if not load_effective_uncached().password_auth_enabled and not any(
-                other.id != provider_id
-                for other in fetch_sso_providers(db_session, enabled_only=True)
-            ):
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "Re-enable password login before disabling the last SSO "
-                    "provider, otherwise no one can sign in.",
-                )
+            _reject_removing_last_sign_in(db_session, provider_id, "disabling")
             provider = set_sso_provider_enabled(
                 db_session=db_session,
                 provider_id=provider_id,
@@ -275,6 +290,46 @@ def set_sso_provider_enabled_endpoint(
     _sync_login_domain_routing(db_session)
     invalidate_sso_provider_options_cache()
     return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
+
+
+@admin_router.get("/provider/{provider_id}/handoff")
+def sso_provider_handoff_endpoint(
+    provider_id: int,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SSOProviderHandoffResponse:
+    """Who a delete would unlink, so the admin can open the renamed-account
+    claim window before those users sign in through another provider."""
+    provider = _fetch_sso_provider_or_raise(db_session, provider_id)
+    counts = count_sso_provider_links(db_session, provider.name)
+    return SSOProviderHandoffResponse(
+        linked_users=counts.linked_users, renamed_users=counts.renamed_users
+    )
+
+
+@admin_router.delete("/provider/{provider_id}")
+def delete_sso_provider_endpoint(
+    provider_id: int,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    with security_settings_write_lock():
+        # Read inside the lock: a concurrent enable must not bypass the guard.
+        provider = _fetch_sso_provider_or_raise(db_session, provider_id)
+        if provider.enabled:
+            _reject_removing_last_sign_in(db_session, provider_id, "deleting")
+        # The row goes first so in-flight logins finish before the cleanup, and
+        # nothing commits until the catalog is clean, so a failure keeps the
+        # provider for a retry.
+        name = delete_sso_provider_row__no_commit(db_session, provider_id)
+        fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "forget_oauth_identities", None
+        )(get_current_tenant_id(), name)
+        delete_sso_provider_links__no_commit(db_session, name)
+        db_session.commit()
+
+    _sync_login_domain_routing(db_session)
+    invalidate_sso_provider_options_cache()
 
 
 def _list_login_domains(tenant_id: str) -> list[Any]:

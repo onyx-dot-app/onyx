@@ -1,8 +1,7 @@
 import { FormikProps, ErrorMessage } from "formik";
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
-import { InputSingleComboBox } from "@opal/components";
-import { Tag } from "@opal/components";
+import { InputSingleComboBox, Text } from "@opal/components";
+import { Chip } from "@opal/components";
 import { Disabled } from "@opal/core";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
@@ -48,7 +47,7 @@ export function GenericMultiSelect<
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text as="p" mainUiAction>
+        <Text as="p" font="main-ui-action" color="text-05">
           {label}
         </Text>
         <div className="animate-pulse bg-background-neutral-02 h-10 w-full rounded-08" />
@@ -59,10 +58,10 @@ export function GenericMultiSelect<
   if (error) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text as="p" mainUiAction>
+        <Text as="p" font="main-ui-action" color="text-05">
           {label}
         </Text>
-        <Text as="p" text03 className="text-action-danger-05">
+        <Text as="p" color="status-error-05">
           {t("loadFailed.text", { label: label.toLowerCase() })}
         </Text>
       </div>
@@ -72,10 +71,10 @@ export function GenericMultiSelect<
   if (!items || items.length === 0) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text as="p" mainUiAction>
+        <Text as="p" font="main-ui-action" color="text-05">
           {label}
         </Text>
-        <Text as="p" text03>
+        <Text as="p" color="text-03">
           {emptyMessage}
         </Text>
       </div>
@@ -104,13 +103,13 @@ export function GenericMultiSelect<
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      <Text as="p" mainUiAction>
+      <Text as="p" font="main-ui-action" color="text-05">
         {label}
       </Text>
 
       {subtext && (
-        <Text as="p" text03>
-          {disabled ? disabledMessage : subtext}
+        <Text as="p" color="text-03">
+          {(disabled ? disabledMessage : subtext) ?? ""}
         </Text>
       )}
 
@@ -141,9 +140,8 @@ export function GenericMultiSelect<
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((item) => (
-            <Tag
+            <Chip
               key={item.id}
-              size="md"
               title={item.name}
               disabled={disabled}
               onRemove={() => handleRemove(item.id)}
@@ -154,7 +152,7 @@ export function GenericMultiSelect<
 
       <ErrorMessage name={fieldName} component="div">
         {(msg) => (
-          <Text as="p" text03 className="text-action-danger-05">
+          <Text as="p" color="status-error-05">
             {msg}
           </Text>
         )}

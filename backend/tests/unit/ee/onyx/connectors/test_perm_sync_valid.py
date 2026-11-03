@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -8,7 +8,11 @@ from ee.onyx.connectors.perm_sync_valid import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.connector import CanvasConnector
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.linear.connector import LinearConnector
+from onyx.connectors.linear.models import LinearViewer
+from onyx.connectors.linear.source_operations import LinearSourceOperations
 from onyx.connectors.zoom.connector import ZoomConnector
 
 
@@ -27,7 +31,9 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             DocumentSource.GITHUB,
             DocumentSource.GMAIL,
             DocumentSource.GOOGLE_DRIVE,
+            DocumentSource.HUBSPOT,
             DocumentSource.JIRA,
+            DocumentSource.LINEAR,
             DocumentSource.ONEDRIVE,
             DocumentSource.SHAREPOINT,
             DocumentSource.SLACK,
@@ -41,6 +47,8 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
         DocumentSource.CANVAS,
         DocumentSource.CONFLUENCE,
         DocumentSource.GOOGLE_DRIVE,
+        DocumentSource.LINEAR,
+        DocumentSource.HUBSPOT,
         DocumentSource.ONEDRIVE,
         DocumentSource.SHAREPOINT,
         DocumentSource.ZOOM,
@@ -79,3 +87,14 @@ def test_dispatch_is_a_noop_for_probeless_connectors() -> None:
     """Verifies connectors outside the dispatch table validate as a no-op."""
     # Under test and postcondition (nothing raises, nothing is probed).
     validate_perm_sync(MagicMock(spec=BaseConnector))
+
+
+def test_linear_reruns_its_named_sync_checks_before_each_sync() -> None:
+    """A user who became a guest after setup fails the scheduled sync's
+    validation instead of hiding every issue outside the guest's teams."""
+    connector = LinearConnector(team_keys=["ENG"])
+    connector._ops = create_autospec(LinearSourceOperations, instance=True)
+    connector._ops.get_viewer.return_value = LinearViewer(guest=True)
+
+    with pytest.raises(InsufficientPermissionsError, match="guest"):
+        validate_perm_sync(connector)

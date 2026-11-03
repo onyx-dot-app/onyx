@@ -113,9 +113,16 @@ def test_vector_quantization_mapping_and_retrieval(
             if lucene_scalar_quantization is None:
                 assert "encoder" not in method_parameters
             else:
+                expected_encoder_parameters: dict[str, Any] = {
+                    "bits": lucene_scalar_quantization.bits
+                }
+                if lucene_scalar_quantization.confidence_interval is not None:
+                    expected_encoder_parameters["confidence_interval"] = (
+                        lucene_scalar_quantization.confidence_interval
+                    )
                 assert method_parameters["encoder"] == {
                     "name": "sq",
-                    "parameters": {"bits": lucene_scalar_quantization.bits},
+                    "parameters": expected_encoder_parameters,
                 }
 
             # Startup puts the mapping on the existing index again. OpenSearch

@@ -6,8 +6,7 @@ import type { UserGroup } from "@/lib/types";
 import { Divider } from "@opal/components";
 import GroupCard from "./GroupCard";
 import { isBuiltInGroup } from "./utils";
-import { Section } from "@/layouts/general-layouts";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 
 interface GroupsListProps {
@@ -33,7 +32,10 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
     );
   }
 
-  const builtInGroups = filtered.filter(isBuiltInGroup);
+  // Basic leads the built-in groups, above Admin.
+  const builtInGroups = filtered
+    .filter(isBuiltInGroup)
+    .sort((a, b) => Number(b.name === "Basic") - Number(a.name === "Basic"));
   const customGroups = filtered.filter((g) => !isBuiltInGroup(g));
 
   return (
@@ -41,11 +43,9 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
       {builtInGroups.map((group) => (
         <GroupCard key={group.id} group={group} />
       ))}
-
       {builtInGroups.length > 0 && customGroups.length > 0 && (
         <Divider paddingPerpendicular={2} paddingParallel={0} />
       )}
-
       {customGroups.map((group) => (
         <GroupCard key={group.id} group={group} />
       ))}

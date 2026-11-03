@@ -53,7 +53,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
         />
       </Popover.Trigger>
 
-      <Popover.Content width="lg" align="end" side="bottom">
+      <Popover.Content width={60} align="end" side="bottom">
         <Divider title={strings.shownColumns} />
         <Popover.Menu>
           {dataColumns.map((column) => {

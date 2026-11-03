@@ -2,7 +2,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GOOGLE_DRIVE_CLIENT_ID,
     EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import (
     EndpointSpec,
     ExternalAppAction,
@@ -65,7 +65,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_FILES),
             RestRoute(method="GET", path=_FILE_ITEM),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleDriveAction.FILES_EXPORT,
@@ -75,7 +75,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "or CSV so its contents can be read."
         ),
         matches=(RestRoute(method="GET", path=f"{_FILE_ITEM}/export"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleDriveAction.DRIVES_READ,
@@ -85,7 +85,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/drive/v3/drives"),
             RestRoute(method="GET", path="/drive/v3/drives/{driveId}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
         # drives.list needs a Drive-wide scope; `drive.file` can't reach it.
         requires_self_hosted_scope=True,
     ),
@@ -124,7 +124,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             "layout) via the Docs API."
         ),
         matches=(RestRoute(method="GET", path=_DOC_ITEM),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleDriveAction.DOCS_CREATE,
@@ -148,7 +148,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_SHEET_ITEM),
             RestRoute(method="GET", path=_SHEET_VALUES),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleDriveAction.SHEETS_CREATE,
@@ -179,7 +179,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_SLIDE_ITEM),
             RestRoute(method="GET", path=f"{_SLIDE_ITEM}/pages/{{pageObjectId}}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleDriveAction.SLIDES_CREATE,

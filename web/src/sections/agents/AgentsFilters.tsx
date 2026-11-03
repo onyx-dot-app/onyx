@@ -30,7 +30,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Dropdown,
-  FilterButton,
+  SelectButton,
   type DropdownItem,
   type DropdownOption,
 } from "@opal/components";
@@ -335,13 +335,16 @@ export function useAgentsFilters<T extends MinimalAgent>(
       {/* Created By filter */}
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <FilterButton
+          <SelectButton
+            variant="select-filter"
+            chevron
+            labelFont="main-ui-action"
             icon={SvgUser}
-            active={selectedCreatorIds.size > 0}
+            state={selectedCreatorIds.size > 0 ? "selected" : "empty"}
             onClear={() => setSelectedCreatorIds(new Set())}
           >
             {creatorFilterButtonText}
-          </FilterButton>
+          </SelectButton>
         </Dropdown.Trigger>
         <Dropdown.Data
           label={creatorFilterButtonText}
@@ -355,13 +358,16 @@ export function useAgentsFilters<T extends MinimalAgent>(
       {/* Actions filter */}
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <FilterButton
+          <SelectButton
+            variant="select-filter"
+            chevron
+            labelFont="main-ui-action"
             icon={SvgActions}
-            active={selectedActionKeys.size > 0}
+            state={selectedActionKeys.size > 0 ? "selected" : "empty"}
             onClear={() => setSelectedActionKeys(new Set())}
           >
             {actionsFilterButtonText}
-          </FilterButton>
+          </SelectButton>
         </Dropdown.Trigger>
         <Dropdown.Data
           label={actionsFilterButtonText}

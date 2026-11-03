@@ -107,7 +107,7 @@ export default function ShareButton({
             {isShared ? t("shared.label") : t("share.label")}
           </Button>
         </Popover.Trigger>
-        <Popover.Content side="bottom" align="end" width="lg" sideOffset={4}>
+        <Popover.Content side="bottom" align="end" width={60} sideOffset={4}>
           <Section
             alignItems="stretch"
             gap={1}

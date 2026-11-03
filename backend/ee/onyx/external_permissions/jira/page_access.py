@@ -1,41 +1,34 @@
 from collections import defaultdict
 from enum import StrEnum
+from typing import Any
 
-from jira import JIRA
-from jira.resources import PermissionScheme
 from pydantic import ValidationError
 
 from ee.onyx.external_permissions.jira.models import Holder, Permission, User
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
+from onyx.connectors.jira.source_operations import (
+    JiraSourceOperations,
+    is_cloud_gateway,
+)
+from onyx.connectors.jira.utils import (
+    ATLASSIAN_GROUP_ROLE_ACTOR_TYPE,
+    ATLASSIAN_USER_ROLE_ACTOR_TYPE,
+    BROWSE_PROJECTS_PERMISSION,
+    HOLDER_TYPE_ANYONE,
+    HOLDER_TYPE_APPLICATION_ROLE,
+    HOLDER_TYPE_GROUP,
+    HOLDER_TYPE_PROJECT_ROLE,
+    HOLDER_TYPE_USER,
+    SUPPORTED_STATIC_HOLDER_TYPES,
+)
 from onyx.utils.logger import setup_logger
 
 HolderMap = dict[str, list[Holder]]
 
 
 logger = setup_logger()
-
-BROWSE_PROJECTS_PERMISSION = "BROWSE_PROJECTS"
-HOLDER_TYPE_ANYONE = "anyone"
-HOLDER_TYPE_APPLICATION_ROLE = "applicationRole"
-HOLDER_TYPE_USER = "user"
-HOLDER_TYPE_PROJECT_ROLE = "projectRole"
-HOLDER_TYPE_GROUP = "group"
-
-SUPPORTED_STATIC_HOLDER_TYPES = {
-    HOLDER_TYPE_ANYONE,
-    HOLDER_TYPE_APPLICATION_ROLE,
-    HOLDER_TYPE_USER,
-    HOLDER_TYPE_PROJECT_ROLE,
-    HOLDER_TYPE_GROUP,
-}
-
-# Jira DC/Server returns project-role actors flat with this `type` discriminator;
-# Jira Cloud v3 instead wraps them in nested `actorGroup` / `actorUser` objects.
-ATLASSIAN_GROUP_ROLE_ACTOR_TYPE = "atlassian-group-role-actor"
-ATLASSIAN_USER_ROLE_ACTOR_TYPE = "atlassian-user-role-actor"
 
 
 class _RoleActorCategory(StrEnum):
@@ -69,13 +62,6 @@ def _get_first_str_value(obj: object, fields: tuple[str, ...]) -> str | None:
     return None
 
 
-def _is_cloud_client(jira_client: JIRA) -> bool:
-    try:
-        return jira_client._options["rest_api_version"] == JIRA_CLOUD_API_VERSION
-    except Exception:
-        return False
-
-
 def _get_holder_counts(holder_map: HolderMap) -> dict[str, int]:
     return {
         holder_type: len(holders) for holder_type, holders in sorted(holder_map.items())
@@ -90,7 +76,7 @@ def _get_unsupported_holder_counts(holder_map: HolderMap) -> dict[str, int]:
     }
 
 
-def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
+def _build_holder_map(permissions: list[dict[str, Any]]) -> dict[str, list[Holder]]:
     """
     A "Holder" in JIRA is a person / entity who "holds" the corresponding permission.
     It can have different types. They can be one of (but not limited to):
@@ -132,13 +118,7 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
     holder_map: defaultdict[str, list[Holder]] = defaultdict(list)
 
     for raw_perm in permissions:
-        if not hasattr(raw_perm, "raw"):
-            logger.warning(
-                "Expected a 'raw' field, but none was found: raw_perm=%r", raw_perm
-            )
-            continue
-
-        permission = Permission(**raw_perm.raw)  # ty: ignore[invalid-argument-type]
+        permission = Permission(**raw_perm)
 
         # We only care about ability to browse through projects + issues (not other permissions such as read/write).
         if permission.permission != BROWSE_PROJECTS_PERMISSION:
@@ -283,14 +263,16 @@ def _get_actor_group_name(actor: object) -> str | None:
     return _get_first_str_value(actor, ("parameter", "name", "displayName"))
 
 
-def _get_user_lookup_id(jira_client: JIRA, actor_user: object) -> str | None:
-    if _is_cloud_client(jira_client):
+def _get_user_lookup_id(
+    source_operations: JiraSourceOperations, actor_user: object
+) -> str | None:
+    if is_cloud_gateway(source_operations):
         return _get_first_str_value(actor_user, ("accountId", "name", "key"))
     return _get_first_str_value(actor_user, ("name", "key", "accountId"))
 
 
 def _get_actor_user_email(
-    jira_client: JIRA,
+    source_operations: JiraSourceOperations,
     jira_project: str,
     role_id: str,
     actor_user: object,
@@ -299,7 +281,7 @@ def _get_actor_user_email(
     if embedded_email:
         return embedded_email
 
-    user_lookup_id = _get_user_lookup_id(jira_client, actor_user)
+    user_lookup_id = _get_user_lookup_id(source_operations, actor_user)
     if not user_lookup_id:
         logger.error(
             "Jira project %s project role %s actorUser has no usable user identifier; "
@@ -310,8 +292,8 @@ def _get_actor_user_email(
         )
         return None
 
-    user = jira_client.user(id=user_lookup_id)
-    account_type = getattr(user, "accountType", None)  # ods: ignore[getattr]
+    user = source_operations.get_user(user_id=user_lookup_id)
+    account_type = user.get("accountType")
     if account_type is not None and account_type != "atlassian":
         logger.info(
             "Skipping Jira project %s project role %s user %s because it is not an "
@@ -322,7 +304,7 @@ def _get_actor_user_email(
         )
         return None
 
-    email = getattr(user, "emailAddress", None)  # ods: ignore[getattr]
+    email = user.get("emailAddress")
     if email:
         return email
 
@@ -337,7 +319,7 @@ def _get_actor_user_email(
 
 
 def _get_user_emails_and_groups_from_project_roles(
-    jira_client: JIRA,
+    source_operations: JiraSourceOperations,
     jira_project: str,
     project_role_holders: list[Holder],
 ) -> tuple[list[str], list[str]]:
@@ -369,7 +351,7 @@ def _get_user_emails_and_groups_from_project_roles(
         )
 
     roles = [
-        jira_client.project_role(project=jira_project, id=role_id)
+        source_operations.get_project_role(project_key=jira_project, role_id=role_id)
         for role_id in role_ids
     ]
 
@@ -382,7 +364,8 @@ def _get_user_emails_and_groups_from_project_roles(
     unsupported_actor_count = 0
 
     for role_id, role in zip(role_ids, roles, strict=True):
-        if not hasattr(role, "actors"):
+        actors = role.get("actors")
+        if actors is None:
             roles_without_actors_count += 1
             logger.warning(
                 "Jira project %s project role %s has no actors attribute; "
@@ -392,7 +375,7 @@ def _get_user_emails_and_groups_from_project_roles(
             )
             continue
 
-        for actor in role.actors:
+        for actor in actors:
             category = _classify_role_actor(actor)
             logger.debug(
                 "Jira project %s project role %s actor classified; "
@@ -429,7 +412,7 @@ def _get_user_emails_and_groups_from_project_roles(
                     or actor
                 )
                 email = _get_actor_user_email(
-                    jira_client=jira_client,
+                    source_operations=source_operations,
                     jira_project=jira_project,
                     role_id=role_id,
                     actor_user=actor_user,
@@ -470,7 +453,7 @@ def _get_user_emails_and_groups_from_project_roles(
 
 
 def _build_external_access_from_holder_map(
-    jira_client: JIRA, jira_project: str, holder_map: HolderMap
+    source_operations: JiraSourceOperations, jira_project: str, holder_map: HolderMap
 ) -> ExternalAccess:
     """
     Build ExternalAccess from the holder map.
@@ -539,7 +522,7 @@ def _build_external_access_from_holder_map(
     if HOLDER_TYPE_PROJECT_ROLE in holder_map:
         project_role_user_emails, project_role_groups = (
             _get_user_emails_and_groups_from_project_roles(
-                jira_client=jira_client,
+                source_operations=source_operations,
                 jira_project=jira_project,
                 project_role_holders=holder_map[HOLDER_TYPE_PROJECT_ROLE],
             )
@@ -630,7 +613,7 @@ def _build_external_access_from_holder_map(
 
 
 def get_project_permissions(
-    jira_client: JIRA,
+    source_operations: JiraSourceOperations,
     jira_project: str,
     add_prefix: bool = False,
 ) -> ExternalAccess | None:
@@ -640,31 +623,34 @@ def get_project_permissions(
     add_prefix: When True, prefix group IDs with source type (for indexing path).
                When False (default), leave unprefixed (for permission sync path).
     """
-    project_permissions: PermissionScheme = jira_client.project_permissionscheme(
-        project=jira_project
+    permission_scheme = source_operations.get_project_permission_scheme(
+        project_key=jira_project
     )
+    permissions = permission_scheme.get("permissions")
 
-    if not hasattr(project_permissions, "permissions"):
+    if permissions is None:
         logger.error("Project %s has no permissions attribute", jira_project)
         return None
 
-    if not isinstance(project_permissions.permissions, list):
+    if not isinstance(permissions, list):
         logger.error("Project %s permissions is not a list", jira_project)
         return None
 
-    holder_map = _build_holder_map(permissions=project_permissions.permissions)
+    holder_map = _build_holder_map(permissions=permissions)
     logger.info(
         "Jira project %s %s holder summary; permission_count=%s holder_counts=%s "
         "unsupported_holder_counts=%s",
         jira_project,
         BROWSE_PROJECTS_PERMISSION,
-        len(project_permissions.permissions),
+        len(permissions),
         _get_holder_counts(holder_map),
         _get_unsupported_holder_counts(holder_map),
     )
 
     external_access = _build_external_access_from_holder_map(
-        jira_client=jira_client, jira_project=jira_project, holder_map=holder_map
+        source_operations=source_operations,
+        jira_project=jira_project,
+        holder_map=holder_map,
     )
 
     # Prefix group IDs with source type if requested (for indexing path)

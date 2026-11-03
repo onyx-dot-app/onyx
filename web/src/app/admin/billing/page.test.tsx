@@ -137,7 +137,7 @@ function setupHooks() {
 
 // ---- Tests ----
 
-describe("BillingPage — handleBillingReturn retry logic", () => {
+describe("BillingPage: handleBillingReturn retry logic", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();

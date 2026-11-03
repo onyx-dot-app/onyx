@@ -5,8 +5,9 @@ import httpx
 
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.db.enums import ConnectorCredentialPairStatus, SwitchoverType
-from onyx.db.port_attempt import ReindexErrorRow, ReindexProgressCounts
+from onyx.db.port_attempt import ReindexErrorRow
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.server.manage.models import ReindexProgress
 from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -70,9 +71,17 @@ class ReindexPortManager:
         enable_contextual_rag: bool | None = None,
         contextual_rag_model_configuration_id: int | None = None,
         acknowledged_wont_port_cc_pair_ids: list[int] | None = None,
+        vector_quantization: str | None = None,
+        passage_prefix: str | None = None,
+        index_name: str | None = None,
+        settings_overrides: dict[str, Any] | None = None,
     ) -> httpx.Response:
-        """Reindex to the current embedding model (a new ALT index), which forces the
-        port flow to re-embed PRESENT->FUTURE. Returns the raw response so a caller can
+        """Reindex to the current embedding model (a new ALT index). With no vector
+        setting changed, the port copies the stored vectors; a changed
+        `passage_prefix` makes it re-embed. Unset `vector_quantization` /
+        `passage_prefix` keep the current values. Pass `index_name` for a new index
+        whose mapping differs: OpenSearch is shared across tests, so the computed
+        name may already hold an index with the old mapping. Returns the raw response so a caller can
         assert on a guard rejection; use `start_reindex` when it must succeed.
         `switchover_type` is a SwitchoverType value ("reindex" waits for the port before
         swapping; "instant" swaps immediately and backfills the live index after).
@@ -83,7 +92,10 @@ class ReindexPortManager:
 
         Leaving `enable_contextual_rag` / `contextual_rag_model_configuration_id` unset
         preserves whatever the tenant already has, so a reindex that isn't testing
-        contextual RAG can't silently disable it. Pass either explicitly to change it."""
+        contextual RAG can't silently disable it. Pass either explicitly to change it.
+
+        `settings_overrides` replaces payload fields, for example the model fields of
+        another target model."""
         if acknowledged_wont_port_cc_pair_ids is None:
             acknowledged_wont_port_cc_pair_ids = (
                 ReindexPortManager.wont_port_cc_pair_ids(
@@ -102,16 +114,26 @@ class ReindexPortManager:
             "model_dim": current["model_dim"],
             "normalize": current["normalize"],
             "query_prefix": current.get("query_prefix") or "",
-            "passage_prefix": current.get("passage_prefix") or "",
+            "passage_prefix": (
+                passage_prefix
+                if passage_prefix is not None
+                else current.get("passage_prefix") or ""
+            ),
             "provider_type": current.get("provider_type"),
-            "index_name": None,
+            "index_name": index_name,
             "multipass_indexing": current.get("multipass_indexing", False),
             "reduced_dimension": current.get("reduced_dimension"),
+            "vector_quantization": (
+                vector_quantization
+                if vector_quantization is not None
+                else current.get("vector_quantization", "none")
+            ),
             "switchover_type": switchover_type,
             "enable_contextual_rag": enable_contextual_rag,
             "contextual_rag_model_configuration_id": contextual_rag_model_configuration_id,
             "acknowledged_wont_port_cc_pair_ids": acknowledged_wont_port_cc_pair_ids,
         }
+        payload.update(settings_overrides or {})
         return client.post(
             f"{SEARCH_SETTINGS_URL}/set-new-search-settings",
             json=payload,
@@ -186,13 +208,13 @@ class ReindexPortManager:
         ).raise_for_status()
 
     @staticmethod
-    def get_progress(user_performing_action: DATestUser) -> ReindexProgressCounts:
+    def get_progress(user_performing_action: DATestUser) -> ReindexProgress:
         response = client.get(
             f"{SEARCH_SETTINGS_URL}/reindex-progress",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
-        return ReindexProgressCounts(**response.json())
+        return ReindexProgress(**response.json())
 
     @staticmethod
     def get_errors(user_performing_action: DATestUser) -> list[ReindexErrorRow]:
@@ -207,7 +229,7 @@ class ReindexPortManager:
     def wait_for_reindex_completion(
         user_performing_action: DATestUser,
         timeout: float = MAX_DELAY,
-    ) -> ReindexProgressCounts:
+    ) -> ReindexProgress:
         """Poll /reindex-progress until every in-scope port unit is done.
 
         Returns when all units are `completed` (swap imminent) OR when the port target

@@ -111,8 +111,21 @@ class UserGroupManager:
         user_performing_action: DATestUser,
         include_non_toggleable: bool = False,
     ) -> list[str]:
+        return UserGroupManager.get_permissions_by_id(
+            user_group.id, user_performing_action, include_non_toggleable
+        )
+
+    # *_by_id variants: SCIM tests hold only the group id the SCIM API returns, and
+    # default-group tests hold the API model from get_default.
+
+    @staticmethod
+    def get_permissions_by_id(
+        user_group_id: int | str,
+        user_performing_action: DATestUser,
+        include_non_toggleable: bool = False,
+    ) -> list[str]:
         response = client.get(
-            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group_id}/permissions",
             params=(
                 {"include_non_toggleable": "true"} if include_non_toggleable else None
             ),
@@ -120,8 +133,6 @@ class UserGroupManager:
         )
         response.raise_for_status()
         return response.json()
-
-    # *_by_id variants: SCIM tests hold only the group id the SCIM API returns.
 
     @staticmethod
     def set_permissions_by_id(

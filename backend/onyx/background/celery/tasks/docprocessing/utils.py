@@ -7,8 +7,11 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT, DocumentSource
+from onyx.db.cc_pair_run_resolution import get_resolution_times
+from onyx.db.connector_edit_requests import get_reindex_request_backoff
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -17,7 +20,12 @@ from onyx.db.index_attempt import (
     get_last_attempt_for_cc_pair,
     get_recent_attempts_for_cc_pair,
 )
-from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    IndexAttempt,
+    SearchSettings,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
@@ -146,29 +154,82 @@ class IndexingCallback(IndexingHeartbeatInterface):
 # handled by validate_active_indexing_attempts in the main indexing tasks module.
 
 
-def is_in_repeated_error_state(
-    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
-) -> bool:
-    """Checks if the cc pair / search setting combination is in a repeated error state."""
-    # if the connector doesn't have a refresh_freq, a single failed attempt is enough
-    number_of_failed_attempts_in_a_row_needed = (
-        NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
-        if cc_pair.connector.refresh_freq is not None
-        else 1
+def failures_before_repeated_error_state(connector: Connector) -> int:
+    """How many failed attempts in a row flag a pair. A connector without a
+    refresh_freq does not retry on its own, so one failure is enough."""
+    if connector.refresh_freq is None:
+        return 1
+    return NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
+
+
+def repeated_error_alert(
+    connector_name: str, source: str, failures_needed: int
+) -> tuple[str, str]:
+    """The flagged connector alert's title and description."""
+    if failures_needed == 1:
+        return (
+            f"Connector '{connector_name}' has failed",
+            f"The {source} connector failed and has been flagged. "
+            "Check its indexing history and credentials.",
+        )
+    return (
+        f"Connector '{connector_name}' has entered repeated error state",
+        f"The {source} connector has failed repeatedly and has been flagged. "
+        "Check its indexing history and credentials.",
     )
 
+
+def _failed_streak(
+    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
+) -> list[IndexAttempt]:
+    """The pair's latest attempts under the search settings when enough of them
+    in a row failed to flag it, else none."""
+    failures_needed = failures_before_repeated_error_state(cc_pair.connector)
     most_recent_index_attempts = get_recent_attempts_for_cc_pair(
         cc_pair_id=cc_pair.id,
         search_settings_id=search_settings_id,
-        limit=number_of_failed_attempts_in_a_row_needed,
+        limit=failures_needed,
         db_session=db_session,
     )
-    return len(
-        most_recent_index_attempts
-    ) >= number_of_failed_attempts_in_a_row_needed and all(
-        attempt.status == IndexingStatus.FAILED
+    if len(most_recent_index_attempts) < failures_needed or any(
+        attempt.status != IndexingStatus.FAILED
         for attempt in most_recent_index_attempts
+    ):
+        return []
+    return most_recent_index_attempts
+
+
+def is_in_repeated_error_state(
+    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
+) -> bool:
+    """Whether the beat flags the pair: its failed streak holds no failure an
+    admin resolved, so resolving the latest one keeps the flag down."""
+    streak = _failed_streak(cc_pair, search_settings_id, db_session)
+    if not streak:
+        return False
+    resolved = get_resolution_times(
+        db_session, [(CCPairRunKind.INDEXING, attempt.id) for attempt in streak]
     )
+    return not resolved
+
+
+def _is_reindex_request_due(
+    cc_pair_id: int, search_settings_id: int, db_session: Session
+) -> bool:
+    """A pending re-index request is due at once. After failed attempts it
+    waits for a capped exponential backoff, and then retries."""
+    backoff = get_reindex_request_backoff(db_session, cc_pair_id, search_settings_id)
+    if backoff is None:
+        return True
+    if get_db_current_time(db_session) < backoff.retry_after:
+        return False
+    logger.warning(
+        "Retrying a full re-index request after failed attempts: "
+        "cc_pair=%s failure_count=%s",
+        cc_pair_id,
+        backoff.failure_count,
+    )
+    return True
 
 
 def should_index(
@@ -191,10 +252,9 @@ def should_index(
         search_settings_id=search_settings_instance.id,
         db_session=db_session,
     )
-    all_recent_errored = is_in_repeated_error_state(
-        cc_pair=cc_pair,
-        search_settings_id=search_settings_instance.id,
-        db_session=db_session,
+    # Retries back off on the raw failed streak, so a resolve does not speed them up.
+    all_recent_errored = bool(
+        _failed_streak(cc_pair, search_settings_instance.id, db_session)
     )
 
     # uncomment for debugging
@@ -279,6 +339,17 @@ def should_index(
         if cc_pair.indexing_trigger is not None:
             # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
+        # The first attempt spends the trigger. A pending prune-after-reindex
+        # or full re-index request keeps the pair due until a full re-index
+        # succeeds, even without refresh_freq, with a backoff after failed
+        # attempts.
+        if (
+            cc_pair.prune_after_reindex_requested_at is not None
+            or cc_pair.full_reindex_requested_at is not None
+        ):
+            return _is_reindex_request_due(
+                cc_pair.id, search_settings_instance.id, db_session
+            )
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq
     if not last_index_attempt:

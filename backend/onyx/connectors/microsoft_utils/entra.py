@@ -11,7 +11,6 @@ from onyx.connectors.microsoft_utils.graph_gateway import build_graph_user_url
 ENTRA_PAGE_SIZE = 999
 MAX_ENTRA_COLLECTION_PAGES = 100_000
 ENTRA_USER_SELECT = "id,userPrincipalName,mail,displayName,userType,accountEnabled"
-ENTRA_GROUP_ID_SELECT = "id"
 ENTRA_NAMED_GROUP_SELECT = "id,displayName"
 ENTRA_GROUP_SELECT = "id,displayName,visibility"
 ENTRA_GROUP_MEMBER_SELECT = "id,userPrincipalName,mail"

@@ -457,7 +457,7 @@ export function EmailPasswordForm({
                 <InputVertical
                   title={t("emailPasswordForm.password.label")}
                   withLabel="password"
-                  topRight={
+                  rightChildren={
                     NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED &&
                     !isSignup &&
                     !errors.email &&
@@ -478,7 +478,6 @@ export function EmailPasswordForm({
                   <PasswordInputTypeInField
                     name="password"
                     placeholder={t("emailPasswordForm.password.placeholder")}
-                    mask="native"
                     data-testid="password"
                     autoComplete={
                       isSignup ? "new-password" : "current-password"

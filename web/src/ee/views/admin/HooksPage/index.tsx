@@ -8,8 +8,8 @@ import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
 import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";
@@ -23,7 +23,7 @@ import {
   SvgArrowExchange,
   SvgArrowRightDot,
   SvgBubbleText,
-  SvgFileBroadcast,
+  SvgFiles,
   SvgShareWebhook,
   SvgPlug,
   SvgRefreshCw,
@@ -56,7 +56,7 @@ import { noProp } from "@/lib/utils";
 const route = ADMIN_ROUTES.HOOKS;
 
 const HOOK_POINT_ICONS: Record<string, IconFunctionComponent> = {
-  document_ingestion: SvgFileBroadcast,
+  document_ingestion: SvgFiles,
   document_push: SvgArrowRightDot,
   query_processing: SvgBubbleText,
 };
@@ -598,7 +598,7 @@ export default function HooksPage() {
         />
       )}
 
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
@@ -606,9 +606,7 @@ export default function HooksPage() {
           divider
         />
         <SettingsLayouts.Body>
-          {isLoading ? (
-            <IconLoader />
-          ) : specsError || hooksError ? (
+          {specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError
                 ? t("page.loadSpecsFailed.message")

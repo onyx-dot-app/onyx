@@ -12,6 +12,9 @@ from onyx.connectors.google_drive.models import (
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
 )
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
+)
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
@@ -21,7 +24,7 @@ _CONN_MODULE = "onyx.connectors.google_drive.connector"
 
 def _make_connector() -> GoogleDriveConnector:
     connector = GoogleDriveConnector(include_my_drives=True)
-    connector._creds = MagicMock()
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
     connector._primary_admin_email = "admin@example.com"
     connector.exclude_domain_link_only = False
     connector._retrieved_folder_and_drive_ids = set()

@@ -14,7 +14,7 @@ import {
 import { SvgChevronRight } from "@opal/icons";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 
 interface ConnectDataBannerProps {

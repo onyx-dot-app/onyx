@@ -59,8 +59,7 @@ def send_capability_check_run_task(
         kwargs=kwargs,
         queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
         priority=OnyxCeleryPriority.HIGH,
-        # Queue wait is bounded by one execution ceiling; the staleness
-        # cutoff allows for both, so an expired task never strands the
-        # scope.
+        # A task that starts after its mark expired still runs: its fenced
+        # completion lands unless a newer run took the row.
         expires=capability_check_run_ceiling_seconds(source),
     )

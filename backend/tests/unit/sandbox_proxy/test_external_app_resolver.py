@@ -35,6 +35,9 @@ def _noop_token_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         external_app, "ensure_fresh_credentials", lambda *_a, **_k: None
     )
+    monkeypatch.setattr(
+        external_app, "get_external_app_by_id", lambda *_args: MagicMock()
+    )
 
 
 def _recorder_db_factory(ops: list[str]) -> Any:
@@ -128,3 +131,49 @@ def test_resolve_raises_when_match_is_none() -> None:
     resolver = ExternalAppResolver()
     with pytest.raises(CredentialUnavailableError):
         resolver.resolve(make_flow().request, _ctx(matched_actions=None))
+
+
+@pytest.mark.parametrize("exists", [True, False])
+def test_unavailable_app_blocks_forwarding(
+    monkeypatch: pytest.MonkeyPatch, exists: bool
+) -> None:
+    monkeypatch.setattr(
+        external_app, "get_session_with_tenant", _recorder_db_factory([])
+    )
+    monkeypatch.setattr(
+        external_app,
+        "get_external_app_by_id",
+        lambda *_args: MagicMock(enabled=False) if exists else None,
+    )
+    with pytest.raises(CredentialUnavailableError, match="Connect the app"):
+        ExternalAppResolver().resolve(
+            make_flow().request, _ctx(matched_actions=make_matched_actions())
+        )
+
+
+@pytest.mark.parametrize("requires_credentials", [False, True])
+def test_empty_headers_only_permit_credentialless_apps(
+    monkeypatch: pytest.MonkeyPatch, requires_credentials: bool
+) -> None:
+    monkeypatch.setattr(
+        external_app, "get_session_with_tenant", _recorder_db_factory([])
+    )
+    monkeypatch.setattr(
+        external_app,
+        "get_external_app_by_id",
+        lambda *_args: MagicMock(
+            enabled=True,
+            auth_template={"Authorization": "Bearer {token}"}
+            if requires_credentials
+            else {},
+        ),
+    )
+    render = MagicMock(return_value={})
+    monkeypatch.setattr(external_app, "resolve_injection_headers", render)
+    ctx = _ctx(matched_actions=make_matched_actions())
+    if requires_credentials:
+        with pytest.raises(CredentialUnavailableError, match="Connect the app"):
+            ExternalAppResolver().resolve(make_flow().request, ctx)
+    else:
+        assert ExternalAppResolver().resolve(make_flow().request, ctx) == {}
+    render.assert_called_once()

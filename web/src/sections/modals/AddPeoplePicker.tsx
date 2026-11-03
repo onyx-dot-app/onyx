@@ -9,15 +9,15 @@ import {
   Tag,
   Text,
 } from "@opal/components";
-import { SvgBubbleText, SvgEdit, SvgUser, SvgUsers, SvgX } from "@opal/icons";
+import { SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
+import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
-  SharePermissionMenu,
-  type SharePermissionMenuOption,
-} from "@/lib/permissions/components";
-import type { ShareAccessPermission } from "@/sections/modals/shareAccessConstants";
+  type ShareAccessPermission,
+  useSharePermissionOptions,
+} from "@/sections/modals/shareAccessConstants";
 
 interface Suggestion {
   id: string;
@@ -107,22 +107,7 @@ export function AddPeoplePicker({
   ]);
 
   const hasStagedItems = stagedUsers.length > 0 || stagedGroups.length > 0;
-  const permissionOptions: SharePermissionMenuOption<ShareAccessPermission>[] =
-    useMemo(
-      () => [
-        {
-          icon: SvgBubbleText,
-          label: t("permissionMenu.viewAndChat.label"),
-          value: "VIEWER",
-        },
-        {
-          icon: SvgEdit,
-          label: t("permissionMenu.edit.label"),
-          value: "EDITOR",
-        },
-      ],
-      [t]
-    );
+  const permissionOptions = useSharePermissionOptions();
 
   function handleSelectSuggestion(suggestion: Suggestion) {
     if (suggestion.shared) {
@@ -248,7 +233,6 @@ export function AddPeoplePicker({
               onChange={onStagedPermissionChange}
               options={permissionOptions}
               value={stagedPermission}
-              width="full"
             />
           </div>
         ) : null}

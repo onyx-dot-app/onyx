@@ -1,7 +1,6 @@
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
 import { SvgX } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import type { IconProps } from "@opal/types";
 
 export interface ChipProps {
@@ -43,7 +42,10 @@ export default function Chip({
     >
       {Icon && <Icon size={12} className="text-text-03" />}
       {children && (
-        <Text figureSmallLabel={smallLabel} text03>
+        <Text
+          font={smallLabel ? "figure-small-label" : "main-ui-body"}
+          color="text-03"
+        >
           {children}
         </Text>
       )}

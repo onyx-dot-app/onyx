@@ -20,7 +20,7 @@ type FoldProps = {
    * Wraps the fold in a frame, such as a bordered box. The frame's height
    * follows the animation, so its edges move with it, and it stays visible;
    * only the content inside fades. A fully closed fold's frame has no height,
-   * and should show no edge then (see `data-mounted` on the root).
+   * and should show no edge then (see `data-visible` on the root).
    */
   frame?: (content: React.ReactNode) => React.ReactNode;
   children?: React.ReactNode;
@@ -99,8 +99,11 @@ function Fold({ open, keepMounted = false, id, frame, children }: FoldProps) {
       id={id}
       className="opal-fold"
       data-open={open ? "true" : "false"}
-      // Fully closed: nothing inside, and a frame shows no edge.
+      // Fully closed: nothing inside, unless `keepMounted`.
       data-mounted={mounted ? "true" : "false"}
+      // Open or closing: the fold has height. Unlike `data-mounted`, false
+      // once closed even when `keepMounted` keeps the children.
+      data-visible={open || closing ? "true" : "false"}
       aria-hidden={!open || undefined}
       inert={!open || undefined}
     >

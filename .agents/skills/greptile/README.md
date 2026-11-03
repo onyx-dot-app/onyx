@@ -6,9 +6,9 @@
 
 | Skill | Description |
 |-------|-------------|
-| [`check-pr`](check-pr/) | Check a PR/MR/CL for unresolved comments, failing checks, incomplete description. Fix and resolve. |
-| [`cli-review`](cli-review/) | Run a Greptile CLI review from the current checkout and summarize findings. |
-| [`greploop`](greploop/) | Loop: trigger Greptile review, fix comments, re-review — until 5/5 confidence and zero comments. |
+| [`check-pr`](skills/check-pr/) | Check a PR/MR/CL for unresolved comments, failing checks, incomplete description. Fix and resolve. |
+| [`cli-review`](skills/cli-review/) | Run a Greptile CLI review from the current checkout and summarize findings. |
+| [`greploop`](skills/greploop/) | Loop: trigger Greptile review, fix comments, re-review — until 5/5 confidence and zero comments. |
 
 `check-pr` and `greploop` auto-detect the platform (GitHub, GitLab, or Perforce) from the environment. `cli-review` runs against the current local git checkout with the Greptile CLI.
 
@@ -25,21 +25,28 @@ Authenticate before use: `gh auth login`, `glab auth login`, configure `P4PORT`/
 
 ## Install
 
+### Recommended: skills CLI
+
+```bash
+npx skills add greptileai/skills -g
+```
+
+This uses the [skills CLI](https://skills.sh) to install all three skills globally for your agent.
+
+To install into a single project instead of globally, run this from the project root:
+
+```bash
+npx skills add greptileai/skills
+```
+
+### Alternative: git clone + symlinks
+
 ```bash
 git clone https://github.com/greptileai/skills.git ~/.claude/skills/greptile
 cd ~/.claude/skills
-ln -s greptile/check-pr check-pr
-ln -s greptile/cli-review cli-review
-ln -s greptile/greploop greploop
-```
-
-Or as a submodule:
-
-```bash
-git submodule add https://github.com/greptileai/skills.git .skills/greptile
-ln -s greptile/check-pr .skills/check-pr
-ln -s greptile/cli-review .skills/cli-review
-ln -s greptile/greploop .skills/greploop
+ln -sfn greptile/skills/check-pr check-pr
+ln -sfn greptile/skills/cli-review cli-review
+ln -sfn greptile/skills/greploop greploop
 ```
 
 Claude Code discovers skills by looking for `SKILL.md` files at `~/.claude/skills/<skill-name>/SKILL.md`. Since this is a multi-skill repo, symlinks are needed to expose each sub-skill at the expected depth.
@@ -49,6 +56,22 @@ Claude Code discovers skills by looking for `SKILL.md` files at `~/.claude/skill
 Invoke by name in your agent (e.g. `/check-pr 123`, `/cli-review`, or `/greploop`). If no PR/MR/CL number is given, `check-pr` and `greploop` auto-detect the PR/MR for the current branch, or the pending changelist for Perforce.
 
 For self-hosted GitLab instances whose hostname doesn't contain "gitlab", pass `--vcs gitlab` explicitly. For Perforce, pass `--vcs perforce` if auto-detection fails.
+
+## Plugin
+
+The Greptile plugin for Claude Code and Codex lives in [`plugins/greptile`](plugins/greptile/). It bundles the Greptile MCP server and CLI, with `login` and `review` skills:
+
+```
+/plugin marketplace add greptileai/skills
+/plugin install greptile@greptile-plugin
+```
+
+```
+codex plugin marketplace add greptileai/skills
+codex plugin add greptile@greptile-plugin
+```
+
+See its [README](plugins/greptile/README.md) for setup and the MCP tools.
 
 ## License
 

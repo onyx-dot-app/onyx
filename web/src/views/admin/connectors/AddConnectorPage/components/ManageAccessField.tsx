@@ -3,6 +3,8 @@
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { Divider, MessageCard } from "@opal/components";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { Content, Section } from "@opal/layouts";
 import { SvgBarChart, SvgEditBig, SvgUserManage } from "@opal/icons";
 import useUsers from "@/hooks/useUsers";
@@ -24,12 +26,17 @@ interface ManageAccessFieldProps {
 
 /**
  * Who can operate or edit the connector: admins always, plus the groups added
- * here (sent as `groups`, so each is an Editor).
+ * here (sent as `groups`, so each is an Editor). Groups need the Business
+ * tier: below it the field still shows, with the Business plan tag, and its
+ * picker offers an upgrade link.
  */
 export default function ManageAccessField({
   disabled,
 }: ManageAccessFieldProps) {
   const t = useTranslations("admin.connectorsList.settings.manageAccess");
+  const plans = usePlans();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const groupsLocked: boolean = disabled === true || !businessTier;
   const tRestriction = useTranslations("admin.connector.groupRestriction");
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -79,7 +86,7 @@ export default function ManageAccessField({
         removeLabel={t("role.removeAccess.label")}
         menuWidth={60}
         ariaLabel={t("role.menu.ariaLabel", { name: group.name })}
-        disabled={disabled}
+        disabled={groupsLocked}
       />
     );
   }
@@ -90,6 +97,21 @@ export default function ManageAccessField({
     icon: SvgUserManage,
     memberCount: adminCount,
     note: t("admins.alwaysShared"),
+    // Admins are always Editors, so the role shows as text, not a menu. The
+    // end margin stands in for the menu's chevron (gap, 16px chevron, end
+    // padding, less the title's own 2px padding), so this "Editor" lines up
+    // with an Editor group's menu below it.
+    role: (
+      <div className="me-5.5">
+        <Content
+          icon={SvgEditBig}
+          title={t("role.editor.label")}
+          sizePreset="main-ui"
+          variant="section"
+          width="fit"
+        />
+      </div>
+    ),
   };
 
   return (
@@ -97,6 +119,7 @@ export default function ManageAccessField({
       <Content
         title={t("title")}
         description={t("description")}
+        tag={businessTier ? undefined : plans[Tier.BUSINESS].tag}
         sizePreset="main-ui"
         variant="section"
       />
@@ -107,6 +130,7 @@ export default function ManageAccessField({
         lockedRows={[adminsRow]}
         rowAction={renderRoleMenu}
         disabled={disabled}
+        requiredTier={Tier.BUSINESS}
       />
       <Divider paddingParallel={0} paddingPerpendicular={0} />
       <MessageCard

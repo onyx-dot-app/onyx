@@ -7,7 +7,7 @@ from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackendType
+from onyx.cache.interface import CacheBackend, CacheBackendType
 from onyx.configs.app_configs import (
     CACHE_BACKEND,
     ENABLE_CC_PAIR_ACCESS_FILTER,
@@ -161,6 +161,22 @@ class OnyxRuntime:
         return OnyxRuntime._parse_bool_flag(raw, default)
 
     @staticmethod
+    def _request_path_flag_cache(
+        operation_timeout_s: float | None = None,
+    ) -> CacheBackend:
+        """The cache that holds request-path flags. The Postgres backend has no
+        cloud schema in a single-tenant install, so it uses the current
+        tenant's cache."""
+        return get_cache_backend(
+            tenant_id=(
+                None
+                if CACHE_BACKEND == CacheBackendType.POSTGRES
+                else ONYX_CLOUD_TENANT_ID
+            ),
+            operation_timeout_s=operation_timeout_s,
+        )
+
+    @staticmethod
     def _read_request_path_bool_flag(feature: str, axis: str, default: bool) -> bool:
         """Like `_read_runtime_bool_flag`, for flags read on every request. It
         reads the same key through the cache backend, so it also works with
@@ -170,13 +186,8 @@ class OnyxRuntime:
         so an outage of the cache falls back to the default behavior instead
         of failing the request."""
         try:
-            raw = get_cache_backend(
-                tenant_id=(
-                    None
-                    if CACHE_BACKEND == CacheBackendType.POSTGRES
-                    else ONYX_CLOUD_TENANT_ID
-                ),
-                operation_timeout_s=_REQUEST_PATH_FLAG_TIMEOUT_S,
+            raw = OnyxRuntime._request_path_flag_cache(
+                operation_timeout_s=_REQUEST_PATH_FLAG_TIMEOUT_S
             ).get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
         except Exception:
             logger.warning(
@@ -242,6 +253,17 @@ class OnyxRuntime:
         return OnyxRuntime._read_request_path_bool_flag(
             "cc_pair_access_filter", "enforce", default=False
         )
+
+    @staticmethod
+    def set_cc_pair_access_filter_flags(enabled: bool, enforce: bool) -> None:
+        """Writes both cc-pair access filter flags. An explicit value overrides
+        the `ENABLE_CC_PAIR_ACCESS_FILTER` env var."""
+        cache = OnyxRuntime._request_path_flag_cache()
+        for axis, value in (("enabled", enabled), ("enforce", enforce)):
+            cache.set(
+                f"{ONYX_CLOUD_REDIS_RUNTIME}:cc_pair_access_filter:{axis}",
+                "true" if value else "false",
+            )
 
     @staticmethod
     def get_tenant_work_gating_ttl_seconds() -> int:

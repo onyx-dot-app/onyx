@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { notFound } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { SvgLoader } from "@opal/icons";
 import { useFederatedConnector } from "@/lib/connectors/hooks";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 
@@ -25,7 +25,7 @@ export default function EditFederatedConnectorPage(props: {
       <div className="flex justify-center w-full h-full">
         <div className="mt-12 w-full max-w-4xl mx-auto">
           <div className="flex flex-col items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
+            <SvgLoader className="h-8 w-8 animate-spin text-blue-500 mb-4" />
             <div className="text-center">
               <p className="text-lg font-medium text-gray-700 mb-2">
                 {t("loading.title")}

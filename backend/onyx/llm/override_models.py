@@ -20,7 +20,7 @@ class LLMOverride(BaseModel):
             unique, so only the id routes unambiguously.
         model_provider: LLM provider display name. When ``None``, the
             persona's default provider is used.
-        model_version: Specific model version string (e.g. ``"gpt-4o"``).
+        model_version: Specific model version string (e.g. ``"gpt-6-sol"``).
             When ``None``, the persona's default model is used.
         temperature: Sampling temperature in ``[0, 2]``. When ``None``, the
             persona's default temperature is used.

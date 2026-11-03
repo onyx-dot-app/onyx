@@ -79,7 +79,7 @@
 
 /* Expanded, the header's bottom border is the separator between the two
    halves, so it keeps the resting colour whatever state the card is in. */
-.opal-select-card:has(+ .opal-fold[data-mounted="true"]) {
+.opal-select-card:has(+ .opal-fold[data-visible="true"]) {
   @apply border-b-border-01;
 }
 

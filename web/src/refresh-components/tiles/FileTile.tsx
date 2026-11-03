@@ -1,13 +1,11 @@
 import type { FunctionComponent } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { Button, OverflowText, Text } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";
-import Text from "../texts/Text";
-import Truncated from "../texts/Truncated";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -119,39 +117,39 @@ export default function FileTile({
           {isMuted ? (
             <div className="flex flex-col min-w-0">
               {title && (
-                <Truncated
-                  secondaryAction
-                  text02
+                <div
                   className={cn(
-                    "truncate",
+                    "text-text-02",
                     state === "processing" && "hover:text-text-03"
                   )}
                 >
-                  {title}
-                </Truncated>
+                  <OverflowText as="p" font="secondary-action" color="inherit">
+                    {title}
+                  </OverflowText>
+                </div>
               )}
               {description && (
-                <Text
-                  secondaryBody
-                  text02
+                <div
                   className={cn(
-                    "line-clamp-2",
+                    "text-text-02",
                     state === "processing" && "hover:text-text-03"
                   )}
                 >
-                  {description}
-                </Text>
+                  <Text font="secondary-body" color="inherit" maxLines={2}>
+                    {description}
+                  </Text>
+                </div>
               )}
             </div>
           ) : (
             <div className="flex flex-col min-w-0">
               {title && (
-                <Truncated secondaryAction text04 className="truncate">
+                <OverflowText as="p" font="secondary-action" color="text-04">
                   {title}
-                </Truncated>
+                </OverflowText>
               )}
               {description && (
-                <Text secondaryBody text03 className="line-clamp-2">
+                <Text font="secondary-body" color="text-03" maxLines={2}>
                   {description}
                 </Text>
               )}

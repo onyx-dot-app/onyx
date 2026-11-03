@@ -1418,12 +1418,19 @@ def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(
     (session_path / "outputs/apps/admin/node_modules/pkg").mkdir(parents=True)
     (session_path / "outputs/apps/admin/.next/cache").mkdir(parents=True)
     (session_path / "attachments/node_modules/pkg").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails/owned.txt").write_bytes(b"keep")
+    (session_path / "outputs/.document-thumbnails/report").mkdir(parents=True)
     (session_path / "outputs/apps/admin/app/page.tsx").write_text("ok\n")
     (session_path / "outputs/apps/admin/node_modules/pkg/index.js").write_bytes(
         b"x" * 1024
     )
     (session_path / "outputs/apps/admin/.next/cache/blob").write_bytes(b"y" * 1024)
     (session_path / "attachments/node_modules/pkg/index.js").write_text("keep\n")
+    (session_path / "outputs/.document-thumbnails/report/slide-1.jpg").write_bytes(
+        b"z" * 1024
+    )
+    (session_path / "outputs/.document-thumbnails/report/.conversion.lock").touch()
     monkeypatch.setattr(snapshot_mod, "SESSIONS_ROOT", sessions_root)
     monkeypatch.setattr(snapshot_mod, "MAX_SNAPSHOT_UNCOMPRESSED_BYTES", 16)
 
@@ -1432,11 +1439,15 @@ def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(
     with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
         members = tar.getnames()
     assert "outputs/apps/admin/app/page.tsx" in members
+    assert "outputs/user/.document-thumbnails/owned.txt" in members
     assert "attachments/node_modules/pkg/index.js" in members
     assert not any(
         member.startswith("outputs/apps/admin/node_modules") for member in members
     )
     assert not any(member.startswith("outputs/apps/admin/.next") for member in members)
+    assert not any(
+        member.startswith("outputs/.document-thumbnails") for member in members
+    )
 
 
 @pytest.mark.parametrize(
@@ -1557,11 +1568,13 @@ def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
     assert resp.status_code == 401
 
 
+@pytest.mark.parametrize("include_web", [False, True])
 def test_output_manifest_client_and_daemon_contract(
     client: TestClient,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     keypair: tuple[Ed25519PrivateKey, str],
+    include_web: bool,
 ) -> None:
     session_id = uuid4()
     sessions_root = tmp_path / "sessions"
@@ -1595,9 +1608,15 @@ def test_output_manifest_client_and_daemon_contract(
 
     monkeypatch.setattr(sidecar.httpx, "Client", in_process_client)
     transport = sidecar.SidecarClient(host=lambda _: "sandbox.test")
-    result = transport.outputs_manifest(sandbox_id=uuid4(), session_id=session_id)
-    expected_body = {"session_id": str(session_id)}
-    assert [entry.path for entry in result.entries] == ["deck.pptx"]
+    result = transport.outputs_manifest(
+        sandbox_id=uuid4(), session_id=session_id, include_web=include_web
+    )
+    expected_body: dict[str, object] = {"session_id": str(session_id)}
+    if include_web:
+        expected_body["include_web"] = True
+    assert [entry.path for entry in result.entries] == (
+        ["deck.pptx", "web/page.tsx"] if include_web else ["deck.pptx"]
+    )
     assert result.entries[0].size == len(b"presentation")
     assert result.complete
 

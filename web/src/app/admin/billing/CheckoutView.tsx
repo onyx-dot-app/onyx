@@ -4,8 +4,8 @@ import { useState, useMemo, useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
-import { Button, Divider } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Divider, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import Card from "@/refresh-components/cards/Card";
 import { SvgUsers, SvgCheck } from "@opal/icons";
 import { createCheckoutSession } from "@/lib/billing/svc";
@@ -57,14 +57,20 @@ function BillingOption({
           height="fit"
           width="fit"
         >
-          <Text mainUiAction className="billing-option-title">
-            {title}
-          </Text>
+          <span className="billing-option-title">
+            <Text font="main-ui-action" color="inherit">
+              {title}
+            </Text>
+          </span>
           <div className="billing-option-price">
-            <Text mainContentEmphasis text04>
+            <Text font="main-content-emphasis" color="text-04">
               {t("checkout.price.label", { price })}
             </Text>
-            <Text secondaryBody text03 nowrap>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {t("checkout.perSeatMonth.label")}
             </Text>
           </div>
@@ -78,7 +84,7 @@ function BillingOption({
             width="fit"
             height="fit"
           >
-            <Text secondaryAction className="billing-option-badge">
+            <Text font="secondary-action" color="action-selection-05">
               {badge}
             </Text>
             <SvgCheck className="billing-option-check" />
@@ -178,7 +184,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           width="fit"
         >
           <SvgUsers size={24} />
-          <Text headingH2 text04>
+          <Text font="heading-h2" color="text-04">
             {t("checkout.plan.title")}
           </Text>
         </Section>
@@ -255,19 +261,21 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         height="auto"
       >
         {error ? (
-          <Text secondaryBody className="billing-error-text">
+          <Text font="secondary-body" color="status-error-05">
             {error}
           </Text>
         ) : !annualPriceSelected ? (
-          <Text secondaryBody text03>
-            {t.rich("checkout.trialBilling.text", {
-              date: trialEndDate,
-              value: (chunks) => (
-                <Text secondaryBody text04>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text font="secondary-body" color="text-03">
+            {richNodes(
+              t.rich("checkout.trialBilling.text", {
+                date: trialEndDate,
+                value: (chunks) => (
+                  <Text font="secondary-body" color="text-04">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         ) : (
           // Empty div to maintain space-between alignment

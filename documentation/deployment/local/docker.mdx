@@ -1,0 +1,98 @@
+---
+title: "Docker"
+description: "Deploy Onyx with Docker Compose"
+icon: "docker"
+---
+
+import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
+
+<Tip>
+  Read the [Resourcing Guide](/deployment/getting_started/resourcing) before you start.
+</Tip>
+
+<Note>
+  This guide covers managing the Compose files by hand. For a guided install with managed upgrades,
+  use the [Onyx CLI](/deployment/local/onyx_cli) instead.
+  The CLI can also [adopt a manual setup](/deployment/local/onyx_cli#from-a-manual-docker-compose-setup) later.
+</Note>
+
+## Guide
+
+**Note:** On Windows, the commands differ slightly, but the steps are the same.
+
+<Steps>
+  <Step title="Install requirements">
+    - [Git](https://git-scm.com/downloads)
+    - [Docker (with Compose)](https://docs.docker.com/get-docker/)
+  </Step>
+
+  <Step title="Clone the Onyx repo">
+    ```bash
+    git clone --depth 1 https://github.com/onyx-dot-app/onyx.git
+    cd onyx/deployment/docker_compose
+    ```
+  </Step>
+
+  <Step title="Create the .env file">
+    Copy the template and edit the values you need:
+
+    ```bash
+    cp env.template .env
+    ```
+
+    `IMAGE_TAG` selects the Onyx version. It defaults to `latest`.
+    Change the `S3_AWS_ACCESS_KEY_ID` and `S3_AWS_SECRET_ACCESS_KEY` pair before you use the deployment in production.
+    See the [configuration reference](/deployment/configuration/configuration) for all settings.
+  </Step>
+
+  <Step title="Launch Onyx">
+    To pull images from Docker Hub and start Onyx:
+
+    ```bash
+    docker compose up -d
+    ```
+
+    To build images from source instead:
+
+    ```bash
+    docker compose up -d --build --force-recreate
+    ```
+
+    <Warning>
+      If you first launched Onyx with the old `onyx-stack` project name,
+      add `-p onyx-stack` to your command so Compose reuses your volumes.
+
+      For example: `docker compose -p onyx-stack up -d`.
+    </Warning>
+  </Step>
+</Steps>
+
+After the containers start, Onyx initializes its database and search index.
+Then open [localhost:3000](http://localhost:3000).
+
+## Onyx Lite
+
+Onyx Lite runs the core chat experience with only PostgreSQL. It starts no OpenSearch, Redis, model servers,
+object store, or background workers. Connectors and search over indexed documents are disabled. Chat, user file uploads,
+Projects, Agent knowledge, and the code interpreter still work.
+
+Add the Lite overlay to the launch command:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml up -d
+```
+
+The overlay moves the removed services to Compose profiles. For example, `--profile opensearch` brings OpenSearch back.
+The header of `docker-compose.onyx-lite.yml` lists the profiles.
+
+## Enabling Onyx Craft
+
+Craft adds isolated sandbox containers and an egress proxy to the Docker Compose deployment.
+Craft requires a Business or Enterprise license and does not run on Onyx Lite.
+Use the [Craft Docker Compose guide](/deployment/local/craft_docker_compose) for both new and existing installations.
+
+<Card title="Deploy Craft on Docker Compose" icon="docker" href="/deployment/local/craft_docker_compose">
+  Install the Craft overlay, set the Onyx URL, plan host capacity, and verify the runtime.
+</Card>
+
+<DeploymentNextSteps />

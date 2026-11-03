@@ -10,6 +10,9 @@ import {
   getCredentialCreationMethods,
   getEditableCredentialFields,
   shouldRedirectToOAuth,
+  bindingCheckCredentialId,
+  credentialMatchesBoundFields,
+  toCredentialRequest,
 } from "@/lib/credentials/utils";
 import {
   CredentialCreationMethod,
@@ -27,6 +30,7 @@ function buildCredential(
     source: ValidSources.Jira,
     user_id: null,
     user_email: null,
+    user_personal_name: null,
     time_created: "2026-01-01T00:00:00Z",
     time_updated: "2026-01-01T00:00:00Z",
     ...credential,
@@ -259,4 +263,100 @@ test("falls back to manual credentials without OAuth details", () => {
 test("redirects OAuth providers without additional fields", () => {
   expect(shouldRedirectToOAuth(oauthDetails(true, false))).toBe(true);
   expect(shouldRedirectToOAuth(oauthDetails(true, false, true))).toBe(false);
+});
+
+describe("naming a credential in a request", () => {
+  const values = { api_token: "token" };
+  const typed = { credential_json: values };
+  const saved = { credential_id: 7, sent_values: JSON.stringify(values) };
+
+  it("sends a typed account's values until a run saves a draft", () => {
+    expect(toCredentialRequest(typed, null)).toEqual(typed);
+    expect(bindingCheckCredentialId(typed, null)).toBeNull();
+  });
+
+  it("names the draft alone while it holds the values", () => {
+    expect(toCredentialRequest(typed, saved)).toEqual({ credential_id: 7 });
+    expect(bindingCheckCredentialId(typed, saved)).toBe(7);
+  });
+
+  it("sends changed values with the draft, and no binding check names it", () => {
+    const changed = { credential_json: { api_token: "other" } };
+    expect(toCredentialRequest(changed, saved)).toEqual({
+      credential_id: 7,
+      credential_json: changed.credential_json,
+    });
+    expect(bindingCheckCredentialId(changed, saved)).toBeNull();
+  });
+
+  it("names a saved credential by its id", () => {
+    expect(toCredentialRequest({ credential_id: 3 }, saved)).toEqual({
+      credential_id: 3,
+    });
+    expect(bindingCheckCredentialId({ credential_id: 3 }, saved)).toBe(3);
+  });
+});
+
+describe("credentialMatchesBoundFields", () => {
+  // GitHub's realm is optional and defaults to github.com.
+  const github = CREDENTIAL_SPECS.github.fields;
+  const at = (url: string) => ({ github_base_url: url });
+  const matches = (
+    credentialJson: Record<string, unknown>,
+    formValues: Record<string, unknown>
+  ) =>
+    credentialMatchesBoundFields(
+      ["github_base_url"],
+      github,
+      credentialJson,
+      formValues
+    );
+
+  it("restricts nothing while the field is empty", () => {
+    expect(matches(at("https://a.com"), {})).toBe(true);
+    expect(matches(at("https://a.com"), at(" "))).toBe(true);
+  });
+
+  it("matches without case, scheme or a trailing slash", () => {
+    expect(matches(at("https://A.com/"), at("a.com"))).toBe(true);
+    expect(matches(at("https://b.com"), at("https://a.com"))).toBe(false);
+  });
+
+  it("reads an account without its own realm as the default", () => {
+    expect(matches({}, at("https://github.com"))).toBe(true);
+    expect(matches({}, at("https://a.com"))).toBe(false);
+  });
+
+  it("matches a pasted host to a stored subdomain", () => {
+    expect(
+      credentialMatchesBoundFields(
+        ["zendesk_subdomain"],
+        CREDENTIAL_SPECS.zendesk.fields,
+        { zendesk_subdomain: "acme" },
+        { zendesk_subdomain: "https://acme.zendesk.com" }
+      )
+    ).toBe(true);
+  });
+
+  it("compares a bound field the account stores, like an OAuth site", () => {
+    const site = (url: string) => ({ wiki_base: url });
+    const confluence = CREDENTIAL_SPECS.confluence.fields;
+    expect(
+      credentialMatchesBoundFields(
+        ["wiki_base"],
+        confluence,
+        site("https://a.atlassian.net/wiki"),
+        site("https://b.atlassian.net/wiki")
+      )
+    ).toBe(false);
+    // An API-token account stores no site, so it cannot tell.
+    expect(
+      credentialMatchesBoundFields(
+        ["wiki_base"],
+        confluence,
+        {},
+        site("https://b.atlassian.net/wiki")
+      )
+    ).toBe(true);
+  });
 });

@@ -1,13 +1,5 @@
-"""A disabled action must not reach the model.
+"""Legacy OpenAPI disablement applies to default Chat, not custom agents."""
 
-Disabling an action leaves its `Persona__Tool` rows in place, and `construct_tools`
-used to build every attached tool. Only the tool *listing* endpoints filtered on
-`enabled`, so a disabled tool stayed callable by any request that sends no
-`allowed_tool_ids` whitelist — which is most of them (the Slack bot and evals pass
-None, and the web client omits it unless the user turned something off in chat).
-"""
-
-import queue
 from collections.abc import Generator
 from typing import Any
 from uuid import uuid4
@@ -15,7 +7,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
 from onyx.db.models import Persona, Tool, User
 from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.factory import get_default_llm
@@ -115,44 +106,45 @@ def _create_persona(db_session: Session, user: User, tools: list[Tool]) -> Perso
     return persona
 
 
-def test_disabled_tool_is_not_constructed(db_session: Session) -> None:
-    """Without a whitelist nothing else filters, so `enabled` has to."""
+@pytest.mark.parametrize("default_chat", [True, False])
+def test_legacy_openapi_availability(db_session: Session, default_chat: bool) -> None:
     user = create_test_user(db_session, USER_EMAIL_PREFIX)
     disabled_tool = _create_tool(db_session, user, enabled=False)
     enabled_tool = _create_tool(db_session, user, enabled=True)
     persona = _create_persona(db_session, user, [disabled_tool, enabled_tool])
 
     tool_dict = construct_tools(
-        configuration=capture_persona_tool_configuration(persona),
+        configuration=capture_persona_tool_configuration(persona).model_copy(
+            update={"persona_id": 0 if default_chat else persona.id}
+        ),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
     )
 
-    assert disabled_tool.id not in tool_dict
+    assert (disabled_tool.id in tool_dict) is not default_chat
     assert enabled_tool.id in tool_dict
 
 
-def test_disabled_tool_is_not_constructed_even_when_whitelisted(
-    db_session: Session,
+@pytest.mark.parametrize("default_chat", [True, False])
+def test_legacy_openapi_availability_when_whitelisted(
+    db_session: Session, default_chat: bool
 ) -> None:
-    """`allowed_tool_ids` is built from what the frontend can see, which is not
-    filtered on `enabled` — so a whitelist must not resurrect a disabled tool."""
     user = create_test_user(db_session, USER_EMAIL_PREFIX)
     disabled_tool = _create_tool(db_session, user, enabled=False)
     persona = _create_persona(db_session, user, [disabled_tool])
 
     tool_dict = construct_tools(
-        configuration=capture_persona_tool_configuration(persona),
+        configuration=capture_persona_tool_configuration(persona).model_copy(
+            update={"persona_id": 0 if default_chat else persona.id}
+        ),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
         allowed_tool_ids=[disabled_tool.id],
     )
 
-    assert disabled_tool.id not in tool_dict
+    assert (disabled_tool.id in tool_dict) is not default_chat
 
 
 def test_prepared_configuration_survives_persona_edits(db_session: Session) -> None:
@@ -168,7 +160,6 @@ def test_prepared_configuration_survives_persona_edits(db_session: Session) -> N
     tools = construct_tools(
         configuration=configuration,
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
     )

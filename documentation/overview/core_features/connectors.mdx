@@ -1,0 +1,45 @@
+---
+title: "Connectors"
+description: "Ingest knowledge from connected applications"
+icon: "plug"
+---
+import ConnectorGrid from "/snippets/connector-grid.mdx";
+
+## What are Connectors?
+
+Connectors bring documents from your team's applications into Onyx.
+Onyx indexes them so answers are grounded in your organization's knowledge.
+
+Connectors:
+- Keep documents in Onyx in sync with the source application.
+- Pull in metadata, such as owners and update times, to improve answer relevance.
+- Sync document permissions from the source, so users see only what they can access. Permission sync requires the
+  Enterprise Edition.
+
+Admins add and manage connectors at **Admin Panel → Connectors**,
+and can watch sync progress at **Admin Panel → Indexing Status**.
+Document Sets group documents from one or more connectors for use in [Agents](/overview/core_features/agents)
+and search filters.
+
+## Supported Connectors
+
+<ConnectorGrid />
+
+You can also push documents into Onyx with the [Ingestion API](/developers/guides/index_files_ingestion_api),
+or upload files in a chat or [Project](/overview/core_features/chat#projects).
+
+## Common Connector Questions
+
+<Card title="How do I ensure my data is secure?" icon="lock" href="/admins/connectors/overview#security">
+  Onyx processes and stores documents and metadata inside your deployment.
+
+  By default, Onyx embeds documents with a local model.
+  Admins can choose to use an external embedding provider or an LLM during indexing instead.
+</Card>
+
+<Card title="Why are connectors/indexing important?" icon="circle-nodes" href="/overview/core_features/internal_search">
+  Onyx builds a searchable index of the documents, concepts, and people in your organization.
+
+  This gives more accurate answers to questions about internal knowledge than calling each application's own search API
+  at query time.
+</Card>

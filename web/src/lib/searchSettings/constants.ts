@@ -1,11 +1,14 @@
-import { SvgHardDrive } from "@opal/icons";
+import { SvgHardDrive, SvgPlug, SvgServer } from "@opal/icons";
 import {
   SvgAzure,
+  SvgBifrost,
   SvgCohere,
   SvgGoogle,
+  SvgIBM,
   SvgLiteLLM,
   SvgMicrosoft,
   SvgNomic,
+  SvgNVIDIA,
   SvgOpenAI,
   SvgVoyage,
 } from "@opal/logos";
@@ -17,6 +20,11 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Embedding
+//
+// Mirrors backend/shared_configs/embedding_models.py, and
+// test_web_embedding_model_registry_parity.py pins the two together. Never
+// remove or rename an entry: mark it `legacy`. List selectable models first in
+// each group.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
@@ -29,12 +37,29 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
     costslink: "https://cohere.com/pricing",
     embeddingModels: [
       {
+        modelName: "embed-v5.0-pro",
+        modelDim: 2048,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.cohereEmbedV5Pro",
+      },
+      {
+        modelName: "embed-v5.0-fast",
+        modelDim: 2048,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.cohereEmbedV5Fast",
+      },
+      {
         modelName: "embed-english-v3.0",
         modelDim: 1024,
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.cohereEmbedEnglishV3",
+        legacy: true,
       },
       {
         modelName: "embed-english-light-v3.0",
@@ -43,6 +68,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.cohereEmbedEnglishLightV3",
+        legacy: true,
       },
       {
         modelName: "embed-v4.0",
@@ -51,6 +77,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.cohereEmbedV4",
+        legacy: true,
       },
     ],
   },
@@ -89,22 +116,6 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
     costslink: "https://cloud.google.com/vertex-ai/pricing",
     embeddingModels: [
       {
-        modelName: "gemini-embedding-001",
-        modelDim: 3072,
-        normalize: false,
-        queryPrefix: "",
-        passagePrefix: "",
-        descriptionKey: "modelDescriptions.googleGeminiEmbedding001",
-      },
-      {
-        modelName: "text-embedding-005",
-        modelDim: 768,
-        normalize: false,
-        queryPrefix: "",
-        passagePrefix: "",
-        descriptionKey: "modelDescriptions.googleTextEmbedding005",
-      },
-      {
         modelName: "gemini-embedding-2",
         modelDim: 3072,
         normalize: false,
@@ -113,12 +124,47 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         descriptionKey: "modelDescriptions.googleGeminiEmbedding2",
       },
       {
+        modelName: "gemini-embedding-001",
+        modelDim: 3072,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.googleGeminiEmbedding001",
+        legacy: true,
+      },
+      {
+        modelName: "text-embedding-005",
+        modelDim: 768,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.googleTextEmbedding005",
+        legacy: true,
+      },
+      {
         modelName: "gemini-embedding-2-preview",
         modelDim: 3072,
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.googleGeminiEmbedding2Preview",
+        legacy: true,
+      },
+      {
+        modelName: "text-embedding-004",
+        modelDim: 768,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        legacy: true,
+      },
+      {
+        modelName: "textembedding-gecko@003",
+        modelDim: 768,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        legacy: true,
       },
     ],
   },
@@ -161,7 +207,7 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.voyageLarge2Instruct",
-        deprecated: true,
+        legacy: true,
       },
       {
         modelName: "voyage-light-2-instruct",
@@ -170,10 +216,12 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "",
         passagePrefix: "",
         descriptionKey: "modelDescriptions.voyageLight2Instruct",
-        deprecated: true,
+        legacy: true,
       },
     ],
   },
+  // Bring-your-own providers: no registry models. The admin enters the model
+  // spec in the connect modal. See `isBringYourOwnProvider`.
   {
     providerName: EmbeddingProviderName.LITELLM,
     displayName: "LiteLLM",
@@ -191,9 +239,74 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
       "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai/",
     embeddingModels: [],
   },
+  {
+    providerName: EmbeddingProviderName.BIFROST,
+    displayName: "Bifrost",
+    icon: SvgBifrost,
+    apiLink:
+      "https://docs.getbifrost.ai/providers/supported-providers/overview",
+    embeddingModels: [],
+  },
+  {
+    providerName: EmbeddingProviderName.OPENAI_COMPATIBLE,
+    displayName: "OpenAI-Compatible",
+    icon: SvgPlug,
+    apiLink: "https://platform.openai.com/docs/api-reference/embeddings/create",
+    embeddingModels: [],
+  },
 ];
 
 export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
+  {
+    providerName: EmbeddingProviderName.IBM,
+    displayName: "IBM",
+    icon: SvgIBM,
+    docsLink: "https://huggingface.co/ibm-granite",
+    embeddingModels: [
+      {
+        modelName: "ibm-granite/granite-embedding-97m-multilingual-r2",
+        modelDim: 384,
+        normalize: true,
+        queryPrefix: "",
+        passagePrefix: "",
+        descriptionKey: "modelDescriptions.graniteEmbedding97mMultilingualR2",
+      },
+    ],
+  },
+  {
+    providerName: EmbeddingProviderName.VOYAGE_SELF_HOSTED,
+    displayName: "Voyage AI",
+    icon: SvgVoyage,
+    docsLink: "https://huggingface.co/voyageai",
+    embeddingModels: [
+      {
+        modelName: "voyageai/voyage-4-nano",
+        modelDim: 2048,
+        normalize: true,
+        queryPrefix:
+          "Represent the query for retrieving supporting documents: ",
+        passagePrefix: "Represent the document for retrieval: ",
+        descriptionKey: "modelDescriptions.voyage4Nano",
+      },
+    ],
+  },
+  {
+    providerName: EmbeddingProviderName.NVIDIA,
+    displayName: "NVIDIA",
+    icon: SvgNVIDIA,
+    docsLink: "https://huggingface.co/nvidia",
+    embeddingModels: [
+      {
+        modelName: "nvidia/Nemotron-3-Embed-1B-BF16",
+        modelDim: 2048,
+        normalize: true,
+        queryPrefix: "query: ",
+        passagePrefix: "passage: ",
+        descriptionKey: "modelDescriptions.nemotron3Embed1b",
+        gpuRecommended: true,
+      },
+    ],
+  },
   {
     providerName: EmbeddingProviderName.NOMIC,
     displayName: "Nomic",
@@ -207,6 +320,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "search_query: ",
         passagePrefix: "search_document: ",
         descriptionKey: "modelDescriptions.nomicEmbedTextV1",
+        legacy: true,
       },
     ],
   },
@@ -223,6 +337,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
         descriptionKey: "modelDescriptions.e5BaseV2",
+        legacy: true,
       },
       {
         modelName: "intfloat/e5-small-v2",
@@ -231,6 +346,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
         descriptionKey: "modelDescriptions.e5SmallV2",
+        legacy: true,
       },
       {
         modelName: "intfloat/multilingual-e5-base",
@@ -239,6 +355,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
         descriptionKey: "modelDescriptions.multilingualE5Base",
+        legacy: true,
       },
       {
         modelName: "intfloat/multilingual-e5-small",
@@ -247,6 +364,23 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
         descriptionKey: "modelDescriptions.multilingualE5Small",
+        legacy: true,
+      },
+    ],
+  },
+  {
+    providerName: EmbeddingProviderName.GTE,
+    displayName: "GTE",
+    icon: SvgServer,
+    docsLink: "https://huggingface.co/thenlper",
+    embeddingModels: [
+      {
+        modelName: "thenlper/gte-small",
+        modelDim: 384,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        legacy: true,
       },
     ],
   },
@@ -267,10 +401,10 @@ export const CUSTOM_PROVIDER: EmbeddingProvider = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Image processing
+// Embedding rate limit
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
-
-/** Mirrors `DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB` on the backend. */
-export const DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20;
+/** Mirror the `*EMBEDDING_RATE_LIMIT*` constants on the backend. */
+export const DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60;
+export const MAX_EMBEDDING_RATE_LIMIT_REQUESTS = 100_000;
+export const MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 24 * 60 * 60;

@@ -312,6 +312,7 @@ class TestValidateCCPairForUser:
                 credential_id=2,
                 access_type=AccessType.PUBLIC,
                 db_session=MagicMock(),
+                user=None,
             )
 
         assert "SSL verification failed" in str(exc_info.value)
@@ -346,6 +347,7 @@ class TestValidateCCPairForUser:
                 access_type=AccessType.PUBLIC,
                 db_session=MagicMock(),
                 enforce_creation=False,
+                user=None,
             )
 
         assert valid is False
@@ -380,4 +382,5 @@ class TestValidateCCPairForUser:
                 credential_id=2,
                 access_type=AccessType.PUBLIC,
                 db_session=MagicMock(),
+                user=None,
             )

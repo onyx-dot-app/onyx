@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
 import {
@@ -241,7 +241,10 @@ const ChatButton = memo(
     ];
 
     // Pin the chat's agent when clicking on the conversation
-    async function handleClick() {
+    const chatLink = appPosition.linkToChat(chatSession.id);
+
+    async function handleClick(event: React.MouseEvent<HTMLElement>) {
+      chatLink.onClick(event);
       await pinChatAgent(chatSession);
     }
 
@@ -384,11 +387,7 @@ const ChatButton = memo(
         >
           <SidebarTab
             /* While renaming, drop the click target so the input stays usable. */
-            href={
-              isDragging || renaming
-                ? undefined
-                : `/app?chatId=${chatSession.id}`
-            }
+            href={isDragging || renaming ? undefined : chatLink.href}
             onClick={renaming ? undefined : handleClick}
             selected={active}
             rightChildren={rightMenu}

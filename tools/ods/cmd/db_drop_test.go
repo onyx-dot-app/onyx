@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 )
 
 func TestRunDBDrop_recreatesTheDatabaseFromTemplate1(t *testing.T) {
@@ -114,6 +118,107 @@ func TestRunDBDrop_stopsAtTheFirstFailedStatement(t *testing.T) {
 			}
 			if execs := dbDockerExecs(calls()); len(execs) != c.wantExecs {
 				t.Fatalf("expected %d statements, got:\n%s", c.wantExecs, dbFormatCalls(execs))
+			}
+		})
+	}
+}
+
+func TestDBCommands_rejectExplicitNetworkHostBeforeMutation(t *testing.T) {
+	for _, operation := range []string{"drop", "dump", "restore"} {
+		t.Run(operation, func(t *testing.T) {
+			binDir := dbSetup(t)
+			t.Setenv("POSTGRES_HOST", "remote.example")
+			_, calls := dbFakeDocker(t, binDir, "")
+			var err error
+			switch operation {
+			case "drop":
+				err = runDBDrop(&DBDropOptions{Yes: true})
+			case "dump":
+				err = runDBDump(&DBDumpOptions{Format: "custom", Output: filepath.Join(t.TempDir(), "backup.dump")})
+			case "restore":
+				input := filepath.Join(t.TempDir(), "backup.dump")
+				dbWriteSnapshot(t, input)
+				err = runDBRestore(input, &DBRestoreOptions{Yes: true})
+			}
+			if err == nil || !strings.Contains(err.Error(), "POSTGRES_HOST") {
+				t.Fatalf("expected an explicit network-target error, got %v", err)
+			}
+			if got := calls(); len(got) != 0 {
+				t.Fatalf("network intent must not select a Docker container: %v", got)
+			}
+		})
+	}
+}
+
+func TestDBDropUsesSavedProjectAndPrivateCredentials(t *testing.T) {
+	binDir := dbSetup(t)
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stack, err := devstack.Open(root, "saved-data", devstack.Isolated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stack.WriteState(&devstack.State{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".vscode"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".vscode", ".env"), []byte("POSTGRES_USER=file_user\nPOSTGRES_PASSWORD=file-secret\nPOSTGRES_DB=file_db\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	container, calls := dbFakeDocker(t, binDir, "")
+	logs := dbCaptureLog(t)
+	if err := runDBDrop(&DBDropOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if container != "saved-data-relational_db-1" {
+		t.Fatalf("wrong saved target %s", container)
+	}
+	for _, call := range dbDockerExecs(calls()) {
+		line := strings.Join(call, " ")
+		if !strings.Contains(line, "saved-data-relational_db-1 psql -U file_user") || !strings.Contains(line, "PGPASSWORD=file-secret") {
+			t.Fatalf("wrong selected target or private credential: %v", call)
+		}
+	}
+	if strings.Contains(logs.String(), "file-secret") {
+		t.Fatal("database secret leaked into logs")
+	}
+}
+
+func TestDBMutationsRejectAnotherManagedOwner(t *testing.T) {
+	for _, operation := range []string{"drop", "restore", "upgrade"} {
+		t.Run(operation, func(t *testing.T) {
+			binDir := dbSetup(t)
+			root, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			stack, err := devstack.Open(root, "foreign-data", devstack.Isolated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := stack.WriteState(&devstack.State{Root: t.TempDir()}); err != nil {
+				t.Fatal(err)
+			}
+			_, calls := dbFakeDocker(t, binDir, "")
+			switch operation {
+			case "drop":
+				err = runDBDrop(&DBDropOptions{Yes: true})
+			case "restore":
+				input := filepath.Join(t.TempDir(), "backup.dump")
+				dbWriteSnapshot(t, input)
+				err = runDBRestore(input, &DBRestoreOptions{Yes: true})
+			case "upgrade":
+				err = runDBUpgrade("head", &MigrateOptions{})
+			}
+			if err == nil || !strings.Contains(err.Error(), "managed by another checkout") {
+				t.Fatalf("expected owner refusal, got %v", err)
+			}
+			if got := dbDockerExecs(calls()); len(got) != 0 {
+				t.Fatalf("mutated another owner's database: %v", got)
 			}
 		})
 	}

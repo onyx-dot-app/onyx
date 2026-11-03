@@ -1,7 +1,7 @@
 "use client";
 
-import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources } from "@/lib/connectors/types/source";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 
 export interface SourceIconProps {
   sourceType: ValidSources;

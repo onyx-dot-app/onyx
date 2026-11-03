@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from uuid import UUID
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -10,6 +12,9 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.conftest import SharedSession
 from tests.integration.tests.craft.user_library_http import multipart_headers
+
+# The Craft integration API configures this quota independently of pytest.
+CI_UPLOAD_FILE_COUNT_LIMIT: int = 5
 
 
 def _create_session_id(user: DATestUser) -> UUID:
@@ -55,8 +60,7 @@ def test_upload_over_per_file_cap_returns_400(
 def test_upload_at_count_cap_returns_429(admin_user: DATestUser) -> None:
     session_id = _create_session_id(admin_user)
 
-    # CI lowers BUILD_MAX_UPLOAD_FILES_PER_SESSION to 5.
-    for i in range(5):
+    for i in range(CI_UPLOAD_FILE_COUNT_LIMIT):
         BuildSessionManager.upload_file(
             admin_user,
             session_id,
@@ -166,3 +170,38 @@ def test_upload_endpoint_404_for_other_users_session(
         cookies=basic_user.cookies,
     )
     assert response.status_code == 404
+
+
+def test_concurrent_uploads_share_stored_file_quota(admin_user: DATestUser) -> None:
+    session_id: UUID = _create_session_id(admin_user)
+    try:
+        for index in range(CI_UPLOAD_FILE_COUNT_LIMIT - 1):
+            BuildSessionManager.upload_file(
+                admin_user, session_id, filename=f"existing_{index}.txt", content=b"x"
+            )
+        barrier: Barrier = Barrier(2)
+
+        def upload(index: int) -> int:
+            barrier.wait(timeout=10)
+            response = client.post(
+                _upload_url(session_id),
+                files={"file": (f"concurrent_{index}.txt", b"x", "text/plain")},
+                headers=multipart_headers(admin_user),
+                cookies=admin_user.cookies,
+            )
+            return response.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            statuses: list[int] = list(executor.map(upload, range(2)))
+        assert sorted(statuses) == [200, 429]
+        listing = BuildSessionManager.list_files(
+            admin_user, session_id, path="attachments"
+        )
+        assert len(listing.entries) == CI_UPLOAD_FILE_COUNT_LIMIT
+    finally:
+        response = client.delete(
+            f"{API_SERVER_URL}/build/sessions/{session_id}",
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        )
+        assert response.status_code == 204

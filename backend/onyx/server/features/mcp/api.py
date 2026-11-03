@@ -3,12 +3,15 @@ import ipaddress
 import secrets
 import time
 from collections.abc import Mapping
+from copy import deepcopy
 from enum import Enum
 from typing import Literal
 from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.types import Tool as MCPLibTool
@@ -20,14 +23,21 @@ from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permission_projection import mcp_server_permissions, tool_permissions
 from onyx.auth.permissions import (
     get_effective_permissions,
+    has_global_permission,
     has_permission,
     require_permission,
 )
 from onyx.auth.scoped_permissions import assert_within_scope, get_scoped_groups
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.action_policy import (
+    get_or_create_gated_app_id,
+    get_workspace_action_policies,
+    replace_workspace_action_policies,
+    users_can_manage_policies,
+)
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -37,13 +47,9 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
 )
-from onyx.db.gated_app import (
-    get_action_policies,
-    get_or_create_gated_app_id,
-    replace_action_policies__no_commit,
-)
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
+    clear_mcp_admin_connection_config__no_commit,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
@@ -51,9 +57,11 @@ from onyx.db.mcp import (
     delete_mcp_server,
     delete_user_connection_configs_for_server,
     get_all_mcp_servers,
-    get_all_mcp_tools_for_server,
+    get_connection_config_by_id,
     get_craft_enabled_mcp_servers,
+    get_default_chat_mcp_server_ids,
     get_mcp_server_by_id,
+    get_mcp_server_user_preferences,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
     get_user_connection_config,
@@ -61,11 +69,19 @@ from onyx.db.mcp import (
     update_connection_config,
     update_connection_config__no_commit,
     update_mcp_server__no_commit,
+    upsert_mcp_server_user_preferences__no_commit,
     upsert_user_connection_config,
     user_can_access_mcp_server,
+    user_can_configure_mcp_credentials,
 )
 from onyx.db.models import MCPConnectionConfig, Tool, User
 from onyx.db.models import MCPServer as DbMCPServer
+from onyx.db.persona import (
+    get_default_assistant,
+    get_persona_by_id,
+    lock_default_assistant__no_commit,
+    set_default_chat_tool__no_commit,
+)
 from onyx.db.tools import (
     can_manage_mcp_server,
     can_manage_tool,
@@ -76,27 +92,37 @@ from onyx.db.tools import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.oauth.authorization_attempt import canonical_json_fingerprint
 from onyx.server.features.mcp.client import (
     discover_mcp_tools,
     log_exception_group,
 )
 from onyx.server.features.mcp.client_metadata import (
+    is_mcp_oauth_cimd_client_id,
+)
+from onyx.server.features.mcp.client_metadata import (
     router as client_metadata_router,
 )
 from onyx.server.features.mcp.credentials import (
+    ResolvedMCPCredentials,
     extract_connection_data,
     get_mcp_auth_template,
     mcp_oauth_client_information_fingerprint,
+    mcp_oauth_setup_mode,
     mcp_token_expired,
     requires_user_authentication,
     resolve_mcp_credentials,
-    user_can_authenticate,
+    user_connection_status,
 )
 from onyx.server.features.mcp.models import (
+    AUTO_SUBSTITUTED_PLACEHOLDER_KEYS,
     MCPApiKeyResponse,
     MCPAuthTemplate,
     MCPConnectionData,
+    MCPConnectionStatus,
     MCPOAuthCallbackResponse,
+    MCPOAuthDiscoveryRequest,
+    MCPOAuthDiscoveryResponse,
     MCPOAuthKeys,
     MCPServer,
     MCPServerCreateResponse,
@@ -104,12 +130,18 @@ from onyx.server.features.mcp.models import (
     MCPServerSimpleUpdateRequest,
     MCPServersResponse,
     MCPServerUpdateResponse,
+    MCPSetupAuthorizationResponse,
+    MCPSetupConnectedResponse,
+    MCPSetupProbeRequest,
+    MCPSetupRequest,
     MCPToolCreateRequest,
     MCPToolListResponse,
     MCPToolUpdateRequest,
     MCPUserCredentialsRequest,
     MCPUserOAuthConnectRequest,
     MCPUserOAuthConnectResponse,
+    MCPUserPreferencesResponse,
+    MCPUserPreferencesUpdateRequest,
     contains_mcp_placeholder,
     merge_mcp_headers,
 )
@@ -119,14 +151,25 @@ from onyx.server.features.mcp.oauth import (
     complete_mcp_oauth_authorization,
     make_oauth_provider,
 )
+from onyx.server.features.mcp.oauth_discovery import (
+    discover_oauth_capabilities,
+    oauth_setup_error,
+)
 from onyx.server.features.mcp.oauth_flow import (
+    MCP_OAUTH_ATTEMPTS,
     OAuthAlreadyAuthenticated,
     OAuthAuthorizationRedirect,
-    mcp_oauth_attempt_store,
     start_auto_discovery_oauth_flow,
     start_known_provider_oauth_flow,
     validate_mcp_oauth_flow_configuration,
 )
+from onyx.server.features.mcp.setup_oauth import (
+    SETUP_OAUTH_STATE_PREFIX,
+    complete_setup_oauth,
+    consume_setup_oauth,
+    start_setup_oauth,
+)
+from onyx.server.features.mcp.setup_probe import stream_mcp_probe
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.utils.encryption import (
@@ -146,7 +189,7 @@ logger = setup_logger()
 
 # A tool with no stored override is treated as ASK; stored policies stay sparse
 # by omitting this value (mirrors the gate evaluator's default).
-MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
+MCP_TOOL_DEFAULT_POLICY = ActionPolicy.ASK
 
 
 _SSRF_HINT_NEVER_ALLOWED = (
@@ -444,6 +487,7 @@ def _build_oauth_admin_config_data(
         scope=REQUESTED_SCOPE,  # TODO(evan): allow specifying scopes?
         token_endpoint_auth_method=token_endpoint_auth_method,
     )
+    config_data["oauth_setup_mode"] = "own_client"
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(mode="json")
     return config_data
 
@@ -453,6 +497,7 @@ def _build_oauth_admin_config_data_for_update(
     client_id: str | None,
     client_secret: str | None,
     existing_client: OAuthClientInformationFull,
+    setup_mode: Literal["automatic", "own_client"] = "own_client",
     auth_template: MCPAuthTemplate | None = None,
 ) -> MCPConnectionData:
     """Construct the admin connection config payload for an OAuth client
@@ -505,6 +550,7 @@ def _build_oauth_admin_config_data_for_update(
     if auth_template is not None:
         config_data["header_template"] = auth_template.headers
         config_data["required_fields"] = auth_template.required_fields
+    config_data["oauth_setup_mode"] = setup_mode
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = merged.model_dump(mode="json")
     return config_data
 
@@ -617,6 +663,46 @@ def test_mcp_server_credentials(
         return False, f"Connection failed: {str(e)}"
 
 
+@admin_router.post("/probe")
+async def stream_admin_mcp_probe(
+    request: MCPSetupProbeRequest,
+    _user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
+) -> StreamingResponse:
+    return StreamingResponse(
+        stream_mcp_probe(request.server_url),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@admin_router.post("/oauth/discover")
+async def discover_admin_oauth(
+    request: MCPOAuthDiscoveryRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
+) -> MCPOAuthDiscoveryResponse:
+    server_url = await run_in_threadpool(
+        lambda: _get_authorized_discovery_url(request.server_id, user)
+    )
+    return await discover_oauth_capabilities(server_url)
+
+
+def _get_authorized_discovery_url(server_id: int, user: User) -> str:
+    with get_session_with_current_tenant() as db:
+        try:
+            server = get_mcp_server_by_id(server_id, db)
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
+        _ensure_mcp_server_owner_or_admin(server, user)
+        return server.server_url
+
+
 @admin_router.post("/oauth/connect", response_model=MCPUserOAuthConnectResponse)
 async def connect_admin_oauth(
     request: MCPUserOAuthConnectRequest,
@@ -678,6 +764,7 @@ async def _connect_oauth(
     # values for any field the frontend marked as unchanged. This protects
     # against the resubmit case where the form replays masked placeholders.
     existing_client: OAuthClientInformationFull | None = None
+    existing_data = MCPConnectionData(headers={})
     if mcp_server.admin_connection_config:
         existing_data = extract_connection_data(
             mcp_server.admin_connection_config, apply_mask=False
@@ -705,6 +792,12 @@ async def _connect_oauth(
             client_id=oauth_client_id,
             client_secret=oauth_client_secret,
             existing_client=existing_client,
+            setup_mode=(
+                "own_client"
+                if request.oauth_client_id_changed
+                or request.oauth_client_secret_changed
+                else mcp_oauth_setup_mode(existing_data)
+            ),
             auth_template=get_mcp_auth_template(mcp_server),
         )
         if existing_client is not None
@@ -745,12 +838,13 @@ async def _connect_oauth(
     credentials_usable = bool(
         oauth_credentials_unchanged
         and not mcp_token_expired(existing_user_data)
-        and user_can_authenticate(
+        and user_connection_status(
             mcp_server,
             user,
             db,
             user_configs={mcp_server.id: connection_config},
         )
+        == MCPConnectionStatus.CONNECTED
     )
     auth_template = get_mcp_auth_template(mcp_server)
     if auth_template is not None and auth_template.required_fields:
@@ -776,6 +870,8 @@ async def _connect_oauth(
         user_config_data["headers"] = existing_user_data.get("headers", {})
         if substitutions := existing_user_data.get(HEADER_SUBSTITUTIONS):
             user_config_data[HEADER_SUBSTITUTIONS] = substitutions
+        if existing_user_data.get("reauth_required"):
+            user_config_data["reauth_required"] = True
         if oauth_credentials_unchanged:
             for key in (
                 MCPOAuthKeys.TOKENS.value,
@@ -864,10 +960,7 @@ async def _connect_oauth(
     except Exception as e:
         saved_e = log_exception_group(e) if isinstance(e, ExceptionGroup) else e
         logger.error("OAuth initialization failed: %s", saved_e)
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Failed to initialize OAuth client: {str(saved_e)}",
-        ) from e
+        raise oauth_setup_error(e) from e
 
     match oauth_result:
         case OAuthAuthorizationRedirect(url=oauth_url):
@@ -901,14 +994,13 @@ async def process_oauth_callback(
     if not state:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Missing state parameter")
 
-    flow = (
-        mcp_oauth_attempt_store()
-        .consume(
-            owner_id=user_id,
-            state=state,
-        )
-        .payload
-    )
+    if state.startswith(SETUP_OAUTH_STATE_PREFIX):
+        return await _complete_mcp_setup(callback_data, db_session, user)
+
+    flow = MCP_OAUTH_ATTEMPTS.consume(
+        owner_id=user_id,
+        state=state,
+    ).payload
     logger.info(
         "OAuth callback: claimed flow for user_id=%s tenant=%s server_id=%s",
         user_id,
@@ -927,9 +1019,7 @@ async def process_oauth_callback(
     except ValueError as error:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
 
-    if not user_can_access_mcp_server(
-        user, mcp_server.id, db_session
-    ) and not can_manage_mcp_server(user, mcp_server):
+    if not user_can_configure_mcp_credentials(user, mcp_server, db_session):
         raise OnyxError(
             OnyxErrorCode.UNAUTHORIZED,
             "You no longer have access to or management authority for this MCP server.",
@@ -1006,27 +1096,35 @@ def save_user_credentials(
     except ValueError:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
+    if not user_can_configure_mcp_credentials(user, mcp_server, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
+
     server_id = mcp_server.id
     email = user.email
+    credentials = {
+        key: value
+        for key, value in request.credentials.items()
+        if key not in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS
+    }
     template = get_mcp_auth_template(mcp_server)
     if template is None:
         if (
             mcp_server.auth_type != MCPAuthenticationType.API_TOKEN
-            or "api_key" not in request.credentials
+            or "api_key" not in credentials
         ):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "This MCP server has no user-configurable header template.",
             )
         config_data = MCPConnectionData(
-            headers={"Authorization": f"Bearer {request.credentials['api_key']}"},
-            header_substitutions=request.credentials,
+            headers={"Authorization": f"Bearer {credentials['api_key']}"},
+            header_substitutions=credentials,
         )
     else:
         try:
             config_data = MCPConnectionData(
-                headers=template.render(request.credentials, user_email=email),
-                header_substitutions=request.credentials,
+                headers=template.render(credentials, user_email=email),
+                header_substitutions=credentials,
             )
         except ValueError as error:
             raise OnyxError(
@@ -1036,8 +1134,16 @@ def save_user_credentials(
 
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
         existing_config = get_user_connection_config(server_id, email, db_session)
-        source_config = existing_config or mcp_server.admin_connection_config
-        source_data = extract_connection_data(source_config, apply_mask=False)
+        existing_user_data = extract_connection_data(existing_config, apply_mask=False)
+        source_data = (
+            existing_user_data
+            if existing_config is not None
+            else extract_connection_data(
+                mcp_server.admin_connection_config, apply_mask=False
+            )
+        )
+        if existing_user_data.get("reauth_required"):
+            config_data["reauth_required"] = True
         for oauth_key in MCPOAuthKeys:
             field_key: Literal[
                 "client_info", "tokens", "metadata", "token_expires_at"
@@ -1070,7 +1176,7 @@ def save_user_credentials(
         if not is_valid:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
-                f"Credentials validation failed: {test_message}",
+                "Credentials validation failed.",
             )
         validation_message = (
             f"Credentials saved and validated successfully. {test_message}"
@@ -1107,6 +1213,9 @@ def delete_user_credentials(
     try:
         mcp_server = get_mcp_server_by_id(server_id, db_session)
     except ValueError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
+
+    if not user_can_configure_mcp_credentials(user, mcp_server, db_session):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     # The helper commits internally.
@@ -1185,7 +1294,6 @@ def _db_mcp_server_to_api_mcp_server(
     request_user: User | None,
     include_auth_config: bool = False,
     permissions: dict[str, bool] | None = None,
-    craft_connected: bool | None = None,
     user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> MCPServer:
     """Convert database MCP server to API model.
@@ -1200,9 +1308,10 @@ def _db_mcp_server_to_api_mcp_server(
 
     # Check if user has authentication configured and extract credentials
     auth_performer = db_server.auth_performer
-    can_authenticate: bool | None = None
+    connection_status: MCPConnectionStatus | None = None
     user_credentials = None
     admin_credentials = None
+    oauth_setup_mode = None
     is_owner_or_admin = request_user is not None and (
         Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(request_user)
         or (request_user.email and request_user.email == db_server.owner)
@@ -1218,7 +1327,7 @@ def _db_mcp_server_to_api_mcp_server(
         else get_user_connection_config(db_server.id, email, db)
     )
     if request_user is not None:
-        can_authenticate = user_can_authenticate(
+        connection_status = user_connection_status(
             db_server,
             request_user,
             db,
@@ -1247,6 +1356,11 @@ def _db_mcp_server_to_api_mcp_server(
                 {"api_key": mask_string(_extract_shared_api_token(admin_config_dict))}
             )
         elif db_server.auth_type == MCPAuthenticationType.OAUTH:
+            oauth_setup_mode = (
+                "own_client"
+                if db_server.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER
+                else mcp_oauth_setup_mode(admin_config_dict)
+            )
             client_info_raw = admin_config_dict.get(MCPOAuthKeys.CLIENT_INFO.value)
             client_info = (
                 OAuthClientInformationFull.model_validate(client_info_raw)
@@ -1291,19 +1405,23 @@ def _db_mcp_server_to_api_mcp_server(
         auth_type=db_server.auth_type,
         auth_performer=auth_performer,
         oauth_provider_mode=db_server.oauth_provider_mode,
+        oauth_cimd_enabled=db_server.oauth_cimd_enabled,
+        oauth_setup_mode=oauth_setup_mode,
         oauth_authorization_endpoint=db_server.oauth_authorization_endpoint,
         oauth_token_endpoint=db_server.oauth_token_endpoint,
         oauth_scopes_override=db_server.oauth_scopes_override,
         oauth_additional_auth_params=db_server.oauth_additional_auth_params,
-        user_can_authenticate=can_authenticate,
-        craft_connected=craft_connected,
+        connection_status=connection_status,
         status=db_server.status,
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
-        tool_policies=(
-            get_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
+        users_can_manage_policies=users_can_manage_policies(
+            db, GatedAppKind.MCP_SERVER, db_server.id
+        ),
+        action_policies=(
+            get_workspace_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
             if can_view_server_details
             else None
         ),
@@ -1314,6 +1432,58 @@ def _db_mcp_server_to_api_mcp_server(
         admin_credentials=admin_credentials,
         permissions=permissions or {},
     )
+
+
+def _stamp_user_preferences(servers: list[MCPServer], user: User, db: Session) -> None:
+    preferences = get_mcp_server_user_preferences(
+        [server.id for server in servers], user.id, db
+    )
+    for server in servers:
+        preference = preferences.get(server.id)
+        if preference is not None:
+            server.user_enabled_in_chat = preference.enabled_in_chat
+            server.user_enabled_in_craft = preference.enabled_in_craft
+
+
+@router.patch("/server/{server_id}/preferences")
+def update_mcp_user_preferences(
+    server_id: int,
+    request: MCPUserPreferencesUpdateRequest,
+    db: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> MCPUserPreferencesResponse:
+    if not user_can_access_mcp_server(user, server_id, db):
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "MCP server is not accessible")
+    try:
+        server = get_mcp_server_by_id(server_id, db)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
+    if (
+        request.enabled_in_chat is True
+        and server_id not in get_default_chat_mcp_server_ids([server_id], db)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "MCP server is not available in default Chat"
+        )
+    if request.enabled_in_craft is True and not server.available_in_craft:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "MCP server is not available in Craft"
+        )
+    preference = upsert_mcp_server_user_preferences__no_commit(
+        server_id,
+        user.id,
+        db,
+        enabled_in_chat=request.enabled_in_chat,
+        enabled_in_craft=request.enabled_in_craft,
+    )
+    response = MCPUserPreferencesResponse(
+        enabled_in_chat=preference.enabled_in_chat,
+        enabled_in_craft=preference.enabled_in_craft,
+    )
+    db.commit()
+    if request.enabled_in_craft is not None:
+        _hot_reload_craft_sessions({user.id}, db)
+    return response
 
 
 @router.get("/servers/persona/{assistant_id}", response_model=MCPServersResponse)
@@ -1328,6 +1498,20 @@ def get_mcp_servers_for_assistant(
 
     try:
         persona_id = int(assistant_id)
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid assistant ID")
+
+    try:
+        get_persona_by_id(
+            persona_id=persona_id, user=user, db_session=db, is_for_edit=False
+        )
+    except ValueError as e:
+        raise OnyxError(
+            OnyxErrorCode.PERSONA_NOT_FOUND,
+            f"Agent with ID {persona_id} does not exist",
+        ) from e
+
+    try:
         db_mcp_servers = get_mcp_servers_for_persona(persona_id, db, user)
 
         # Convert to API model format with opportunistic token refresh for OAuth
@@ -1336,10 +1520,9 @@ def get_mcp_servers_for_assistant(
             for db_server in db_mcp_servers
         ]
 
+        _stamp_user_preferences(mcp_servers, user, db)
         return MCPServersResponse(assistant_id=assistant_id, mcp_servers=mcp_servers)
 
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid assistant ID")
     except Exception as e:
         logger.error("Failed to fetch MCP servers: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
@@ -1355,10 +1538,16 @@ def get_mcp_servers_for_user(
     Chat uses ``/servers/persona/{id}`` for servers already on a persona.
     """
     db_mcp_servers = get_mcp_servers_accessible_to_user(user, db)
+    default_chat_server_ids = get_default_chat_mcp_server_ids(
+        [server.id for server in db_mcp_servers], db
+    )
     mcp_servers = [
         _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
         for db_server in db_mcp_servers
     ]
+    for server in mcp_servers:
+        server.default_chat_enabled = server.id in default_chat_server_ids
+    _stamp_user_preferences(mcp_servers, user, db)
     return MCPServersResponse(mcp_servers=mcp_servers)
 
 
@@ -1372,26 +1561,29 @@ def get_craft_mcp_servers_for_user(
     rows as chat, so a server connected in either surface shows as
     authenticated here.
 
-    `craft_connected` is the only field here that answers "will this server
-    actually reach the user's sessions" — see `resolve_craft_mcp_servers`, which
-    filters emission on the same predicate.
+    Personal preferences remain visible so users can enable a server again.
+    `craft_connected` reports credentials independently of personal availability.
     """
-    db_mcp_servers = get_craft_enabled_mcp_servers(db, user)
+    db_mcp_servers = get_craft_enabled_mcp_servers(
+        db, user, include_personal_disabled=True
+    )
+    default_chat_server_ids = get_default_chat_mcp_server_ids(
+        [server.id for server in db_mcp_servers], db
+    )
     user_configs = get_user_connection_configs(
         [s.id for s in db_mcp_servers], user.email, db
     )
-    mcp_servers = [
-        _db_mcp_server_to_api_mcp_server(
-            db_server,
-            db,
-            request_user=user,
-            craft_connected=user_can_authenticate(
-                db_server, user, db, user_configs=user_configs
-            ),
-            user_configs=user_configs,
+    mcp_servers = []
+    for db_server in db_mcp_servers:
+        server = _db_mcp_server_to_api_mcp_server(
+            db_server, db, request_user=user, user_configs=user_configs
         )
-        for db_server in db_mcp_servers
-    ]
+        server.default_chat_enabled = server.id in default_chat_server_ids
+        server.craft_connected = (
+            server.connection_status == MCPConnectionStatus.CONNECTED
+        )
+        mcp_servers.append(server)
+    _stamp_user_preferences(mcp_servers, user, db)
     return MCPServersResponse(mcp_servers=mcp_servers)
 
 
@@ -1484,7 +1676,11 @@ def user_list_mcp_tools_by_id(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPToolListResponse:
-    return _list_mcp_tools_by_id(server_id, db, False, user)
+    # Read-only: status and stored tools change only on the owner-or-admin path.
+    mcp_server, discovered_tools = _discover_mcp_server_tools(
+        server_id, db, False, user
+    )
+    return _tool_list_response(mcp_server, discovered_tools)
 
 
 def _upsert_db_tools(
@@ -1532,6 +1728,8 @@ def _sync_mcp_server_tools(
     mcp_server_id: int,
     discovered_tools: list[MCPLibTool],
     db: Session,
+    *,
+    commit: bool = True,
 ) -> None:
     """Make the stored tools for the server match the discovered tools.
 
@@ -1560,7 +1758,8 @@ def _sync_mcp_server_tools(
         if name not in processed_names:
             delete_tool__no_commit(db_tool.id, db)
 
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def _list_mcp_tools_by_id(
@@ -1570,6 +1769,27 @@ def _list_mcp_tools_by_id(
     user: User,
 ) -> MCPToolListResponse:
     """List available tools from an existing MCP server"""
+    mcp_server, discovered_tools = _discover_mcp_server_tools(
+        server_id, db, is_admin, user
+    )
+    if is_admin:
+        update_mcp_server__no_commit(
+            server_id=server_id,
+            db_session=db,
+            status=MCPServerStatus.CONNECTED,
+        )
+        db.commit()
+        _sync_mcp_server_tools(mcp_server.id, discovered_tools, db)
+    return _tool_list_response(mcp_server, discovered_tools)
+
+
+def _discover_mcp_server_tools(
+    server_id: int,
+    db: Session,
+    is_admin: bool,
+    user: User,
+) -> tuple[DbMCPServer, list[MCPLibTool]]:
+    """Gate the caller, then discover the server's tools. Never writes."""
     logger.info("Listing tools for MCP server: %s", server_id)
 
     try:
@@ -1632,16 +1852,12 @@ def _list_mcp_tools_by_id(
         mcp_server.name,
         time.time() - t1,
     )
-    update_mcp_server__no_commit(
-        server_id=server_id,
-        db_session=db,
-        status=MCPServerStatus.CONNECTED,
-    )
-    db.commit()
+    return mcp_server, discovered_tools
 
-    if is_admin:
-        _sync_mcp_server_tools(mcp_server.id, discovered_tools, db)
 
+def _tool_list_response(
+    mcp_server: DbMCPServer, discovered_tools: list[MCPLibTool]
+) -> MCPToolListResponse:
     # Truncate tool descriptions to prevent overly long responses
     for tool in discovered_tools:
         if tool.description:
@@ -1651,7 +1867,7 @@ def _list_mcp_tools_by_id(
     # resources = discover_mcp_resources(mcp_server, connection_config)
 
     return MCPToolListResponse(
-        server_id=server_id,
+        server_id=mcp_server.id,
         server_name=mcp_server.name,
         server_url=mcp_server.server_url,
         tools=discovered_tools,
@@ -1712,6 +1928,8 @@ def _upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session,
     user: User,
+    *,
+    commit: bool = True,
 ) -> DbMCPServer:
     """
     Creates a new or edits an existing MCP server. Returns the DB model
@@ -1738,6 +1956,8 @@ def _upsert_mcp_server(
     changing_connection_config = True
     users_to_reload: set[UUID] = set()
 
+    existing_admin_config_dict = MCPConnectionData(headers={})
+
     # Handle existing server update
     if request.existing_server_id:
         try:
@@ -1748,7 +1968,6 @@ def _upsert_mcp_server(
                 detail=f"MCP server with ID {request.existing_server_id} not found",
             )
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
-        existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
         if mcp_server.admin_connection_config:
             existing_admin_config_dict = extract_connection_data(
                 mcp_server.admin_connection_config, apply_mask=False
@@ -1893,7 +2112,7 @@ def _upsert_mcp_server(
             or request.auth_performer != mcp_server.auth_performer
         )
         server_url_changed = request.server_url != mcp_server.server_url
-        # Known-provider OAuth settings (endpoints/mode/scopes/extra params)
+        # OAuth provider settings (mode, CIMD, endpoints, scopes, extra params)
         # determine where and with what scope user tokens are minted. A change
         # to any of them invalidates existing user tokens, so it must trigger
         # the same re-handshake wipe as a client_id/secret change.
@@ -1901,6 +2120,7 @@ def _upsert_mcp_server(
             request.auth_type == MCPAuthenticationType.OAUTH
             and (
                 request.oauth_provider_mode != mcp_server.oauth_provider_mode
+                or request.oauth_cimd_enabled != mcp_server.oauth_cimd_enabled
                 or request.oauth_authorization_endpoint
                 != mcp_server.oauth_authorization_endpoint
                 or request.oauth_token_endpoint != mcp_server.oauth_token_endpoint
@@ -1947,9 +2167,7 @@ def _upsert_mcp_server(
             )
 
         if server_url_changed and mcp_server.admin_connection_config_id:
-            previous_admin_config_id = mcp_server.admin_connection_config_id
-            mcp_server.admin_connection_config_id = None
-            delete_connection_config(previous_admin_config_id, db_session)
+            clear_mcp_admin_connection_config__no_commit(mcp_server, db_session)
             if (
                 request.auth_type == MCPAuthenticationType.OAUTH
                 and request.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
@@ -1990,6 +2208,7 @@ def _upsert_mcp_server(
             oauth_token_endpoint=request.oauth_token_endpoint,
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
+            oauth_cimd_enabled=request.oauth_cimd_enabled,
             transport=request.transport,
         )
 
@@ -2028,6 +2247,7 @@ def _upsert_mcp_server(
             oauth_token_endpoint=request.oauth_token_endpoint,
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
+            oauth_cimd_enabled=request.oauth_cimd_enabled,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
         )
@@ -2072,8 +2292,23 @@ def _upsert_mcp_server(
         users_to_reload.add(user.id)
 
     if not changing_connection_config:
-        db_session.commit()
-        _hot_reload_craft_sessions(users_to_reload, db_session)
+        if (
+            request.auth_type == MCPAuthenticationType.OAUTH
+            and request.oauth_setup_mode is not None
+            and mcp_server.admin_connection_config_id is not None
+            and existing_admin_config_dict.get("oauth_setup_mode")
+            != request.oauth_setup_mode
+        ):
+            # Preserve tokens or registration data refreshed since the initial read.
+            current_config = get_connection_config_by_id(
+                mcp_server.admin_connection_config_id, db_session, for_update=True
+            )
+            current_data = extract_connection_data(current_config, apply_mask=False)
+            current_data["oauth_setup_mode"] = request.oauth_setup_mode
+            _persist_admin_connection_config(mcp_server, current_data, db_session)
+        if commit:
+            db_session.commit()
+            _hot_reload_craft_sessions(users_to_reload, db_session)
         return mcp_server
 
     admin_connection_config_id: int | None = None
@@ -2112,6 +2347,12 @@ def _upsert_mcp_server(
                 client_id=oauth_client_id,
                 client_secret=oauth_client_secret,
                 existing_client=client_info,
+                setup_mode=(
+                    "own_client"
+                    if request.oauth_client_id_changed
+                    or request.oauth_client_secret_changed
+                    else mcp_oauth_setup_mode(existing_admin_config_dict)
+                ),
                 auth_template=auth_template,
             )
             if client_info is not None
@@ -2121,6 +2362,8 @@ def _upsert_mcp_server(
                 auth_template=auth_template,
             )
         )
+        if request.oauth_setup_mode is not None:
+            config_data["oauth_setup_mode"] = request.oauth_setup_mode
         admin_connection_config_id = _persist_admin_connection_config(
             mcp_server, config_data, db_session
         )
@@ -2137,8 +2380,9 @@ def _upsert_mcp_server(
             admin_connection_config_id=admin_connection_config_id,
         )
 
-    db_session.commit()
-    _hot_reload_craft_sessions(users_to_reload, db_session)
+    if commit:
+        db_session.commit()
+        _hot_reload_craft_sessions(users_to_reload, db_session)
     return mcp_server
 
 
@@ -2298,6 +2542,9 @@ def get_mcp_servers_for_admin(
                 if server.owner == user.email or server.id in connected
             ]
 
+        default_chat_server_ids = get_default_chat_mcp_server_ids(
+            [server.id for server in visible_servers], db
+        )
         mcp_servers = [
             _db_mcp_server_to_api_mcp_server(
                 db_server,
@@ -2309,6 +2556,8 @@ def get_mcp_servers_for_admin(
             )
             for db_server in visible_servers
         ]
+        for server in mcp_servers:
+            server.default_chat_enabled = server.id in default_chat_server_ids
 
         return MCPServersResponse(mcp_servers=mcp_servers)
 
@@ -2380,6 +2629,17 @@ def upsert_mcp_server(
             status_code=400, detail="auth_performer is required for non-none auth types"
         )
 
+    # Pass-through OAuth sends each chatting user's login token to server_url.
+    # Scoped managers could aim it at a server they control, so require global.
+    if (
+        request.auth_type == MCPAuthenticationType.PT_OAUTH
+        and not has_global_permission(user, Permission.MANAGE_ACTIONS)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only a full action manager can configure pass-through OAuth.",
+        )
+
     try:
         mcp_server = _upsert_mcp_server(request, db_session, user)
 
@@ -2413,6 +2673,7 @@ def upsert_mcp_server(
                 request.auth_performer.value if request.auth_performer else None
             ),
             oauth_provider_mode=mcp_server.oauth_provider_mode,
+            oauth_cimd_enabled=mcp_server.oauth_cimd_enabled,
             oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
             oauth_token_endpoint=mcp_server.oauth_token_endpoint,
             oauth_scopes_override=mcp_server.oauth_scopes_override,
@@ -2493,6 +2754,620 @@ def update_mcp_server_with_tools(
     )
 
 
+def _mcp_setup_configuration_fingerprint(
+    server: DbMCPServer, user: User, db: Session
+) -> str:
+    admin_data = extract_connection_data(
+        get_connection_config_by_id(server.admin_connection_config_id, db)
+        if server.admin_connection_config_id is not None
+        else None
+    )
+    user_data = extract_connection_data(
+        get_user_connection_config(server.id, user.email, db)
+    )
+    admin_data = deepcopy(admin_data)
+    user_data = deepcopy(user_data)
+    if server.auth_type == MCPAuthenticationType.OAUTH:
+        for data in (admin_data, user_data):
+            for key in ("tokens", "token_expires_at", "metadata", "reauth_required"):
+                data.pop(key, None)
+            data["headers"] = {
+                key: value
+                for key, value in data.get("headers", {}).items()
+                if key.lower() != "authorization"
+            }
+    default_assistant = get_default_assistant(db)
+    return canonical_json_fingerprint(
+        {
+            "name": server.name,
+            "description": server.description,
+            "server_url": server.server_url,
+            "auth_type": server.auth_type.value if server.auth_type else None,
+            "auth_performer": server.auth_performer.value
+            if server.auth_performer
+            else None,
+            "transport": server.transport.value if server.transport else None,
+            "oauth_provider_mode": server.oauth_provider_mode.value,
+            "oauth_cimd_enabled": server.oauth_cimd_enabled,
+            "oauth_authorization_endpoint": server.oauth_authorization_endpoint,
+            "oauth_token_endpoint": server.oauth_token_endpoint,
+            "oauth_scopes_override": server.oauth_scopes_override,
+            "oauth_additional_auth_params": server.oauth_additional_auth_params,
+            "is_public": server.is_public,
+            "groups": sorted(group.id for group in server.user_groups),
+            "users": sorted(str(member.id) for member in server.users),
+            "available_in_craft": server.available_in_craft,
+            "default_chat_tool_ids": sorted(
+                tool.id
+                for tool in default_assistant.tools
+                if tool.mcp_server_id == server.id
+            )
+            if default_assistant
+            else [],
+            "action_policies": {
+                key: value.value
+                for key, value in get_workspace_action_policies(
+                    db, GatedAppKind.MCP_SERVER, server.id
+                ).items()
+            },
+            "users_can_manage_policies": users_can_manage_policies(
+                db, GatedAppKind.MCP_SERVER, server.id
+            ),
+            "admin_config_id": server.admin_connection_config_id,
+            "admin_data": dict(admin_data),
+            "user_data": dict(user_data),
+        }
+    )
+
+
+def _prepare_mcp_setup(
+    request: MCPSetupRequest, user: User, db: Session
+) -> tuple[MCPSetupRequest, str | None, OAuthClientInformationFull | None]:
+    if request.existing_server_id is None:
+        return request, None, None
+    try:
+        server = get_mcp_server_by_id(request.existing_server_id, db)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
+    _ensure_mcp_server_owner_or_admin(server, user)
+    fingerprint = _mcp_setup_configuration_fingerprint(server, user, db)
+    normalized = request.model_copy(deep=True)
+    if normalized.transport is None:
+        normalized.transport = server.transport
+    if normalized.is_public is None:
+        normalized.is_public = server.is_public
+    if normalized.groups is None:
+        normalized.groups = [group.id for group in server.user_groups]
+    if normalized.users is None:
+        normalized.users = [member.id for member in server.users]
+    if request.server_url != server.server_url:
+        # A new destination must not receive credentials from the old endpoint.
+        normalized.auth_template = request.auth_template or (
+            _default_shared_api_token_template()
+            if request.auth_type == MCPAuthenticationType.API_TOKEN
+            and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+            else MCPAuthTemplate(headers={})
+        )
+        normalized.admin_credentials = request.admin_credentials or {}
+        normalized.oauth_client_id_changed = True
+        normalized.oauth_client_secret_changed = True
+        normalized.api_token_changed = True
+        normalized.auth_template_headers_changed = dict.fromkeys(
+            normalized.auth_template.headers, True
+        )
+        normalized.admin_credentials_changed = dict.fromkeys(
+            normalized.admin_credentials, True
+        )
+        return normalized, fingerprint, None
+    admin_data = extract_connection_data(server.admin_connection_config)
+    user_data = extract_connection_data(
+        get_user_connection_config(server.id, user.email, db)
+    )
+    old_template = get_mcp_auth_template(server)
+    if request.auth_template is None:
+        normalized.auth_template = old_template
+    if request.admin_credentials is None:
+        normalized.admin_credentials = (
+            admin_data
+            if request.auth_performer == MCPAuthenticationPerformer.ADMIN
+            else user_data
+        ).get(HEADER_SUBSTITUTIONS, {})
+    if request.auth_template is not None:
+        normalized.auth_template = _resolve_auth_template(
+            request.auth_template, request.auth_template_headers_changed, old_template
+        )
+    if request.admin_credentials is not None:
+        old_credentials = (
+            admin_data
+            if request.auth_performer == MCPAuthenticationPerformer.ADMIN
+            else user_data
+        )
+        normalized.admin_credentials = _resolve_admin_credentials(
+            request_credentials=request.admin_credentials,
+            request_credentials_changed=request.admin_credentials_changed,
+            existing_user_credentials=old_credentials.get(HEADER_SUBSTITUTIONS, {}),
+        )
+    if (
+        request.auth_type == MCPAuthenticationType.API_TOKEN
+        and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+    ):
+        normalized.api_token = _resolve_shared_api_token(
+            request_api_token=request.api_token,
+            request_api_token_changed=request.api_token_changed,
+            existing_config=admin_data
+            if server.auth_type == request.auth_type
+            and server.auth_performer == request.auth_performer
+            else None,
+        )
+        normalized.auth_template = _resolve_shared_api_token_template(
+            request_template=normalized.auth_template, existing_config=admin_data
+        )
+    client_information = None
+    if request.auth_type == MCPAuthenticationType.OAUTH:
+        if normalized.oauth_setup_mode is None:
+            normalized.oauth_setup_mode = (
+                "own_client"
+                if request.oauth_client_id_changed
+                or request.oauth_client_secret_changed
+                else mcp_oauth_setup_mode(admin_data)
+            )
+        client_info = (
+            OAuthClientInformationFull.model_validate(admin_data["client_info"])
+            if admin_data.get("client_info")
+            else None
+        )
+        normalized.oauth_client_id, normalized.oauth_client_secret = (
+            _resolve_oauth_credentials(
+                request_client_id=request.oauth_client_id,
+                request_client_secret=request.oauth_client_secret,
+                request_client_id_changed=request.oauth_client_id_changed,
+                request_client_secret_changed=request.oauth_client_secret_changed,
+                existing_client=client_info,
+            )
+        )
+        if client_info is not None:
+            if not request.oauth_cimd_enabled and is_mcp_oauth_cimd_client_id(
+                normalized.oauth_client_id
+            ):
+                normalized.oauth_client_id = None
+                normalized.oauth_client_secret = None
+            else:
+                config = _build_oauth_admin_config_data_for_update(
+                    client_id=normalized.oauth_client_id,
+                    client_secret=normalized.oauth_client_secret,
+                    existing_client=client_info,
+                )
+                if "client_info" in config:
+                    client_information = OAuthClientInformationFull.model_validate(
+                        config["client_info"]
+                    )
+    normalized.oauth_client_id_changed = True
+    normalized.oauth_client_secret_changed = True
+    normalized.api_token_changed = True
+    normalized.auth_template_headers_changed = dict.fromkeys(
+        normalized.auth_template.headers if normalized.auth_template else {}, True
+    )
+    normalized.admin_credentials_changed = dict.fromkeys(
+        normalized.admin_credentials or {}, True
+    )
+    return normalized, fingerprint, client_information
+
+
+def _assert_mcp_setup_current(
+    request: MCPSetupRequest,
+    user: User,
+    db: Session,
+    expected: str | None,
+    *,
+    for_update: bool = False,
+) -> None:
+    if request.existing_server_id is None:
+        return
+    try:
+        server = get_mcp_server_by_id(
+            request.existing_server_id, db, for_update=for_update
+        )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
+    _ensure_mcp_server_owner_or_admin(server, user)
+    if for_update:
+        get_or_create_gated_app_id(
+            db, GatedAppKind.MCP_SERVER, server.id, for_update=True
+        )
+        lock_default_assistant__no_commit(db)
+    if expected is None or not secrets.compare_digest(
+        expected, _mcp_setup_configuration_fingerprint(server, user, db)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "MCP configuration changed while the connection was being checked. Reload and try again.",
+        )
+
+
+def _validate_mcp_setup(request: MCPSetupRequest, user: User, db: Session) -> None:
+    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.NONE:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "MCP setup permission required"
+        )
+    if (
+        request.enable_chat is True
+        or (request.enable_chat is not None and request.existing_server_id is not None)
+    ) and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only full admins can change default Chat availability",
+        )
+    if (
+        request.auth_type == MCPAuthenticationType.PT_OAUTH
+        and not has_global_permission(user, Permission.MANAGE_ACTIONS)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only a full action manager can configure pass-through OAuth",
+        )
+    is_public = request.is_public is not False
+    if not is_public and not global_version.is_ee_version():
+        raise OnyxError(
+            OnyxErrorCode.EE_REQUIRED,
+            "Restricted MCP servers require Enterprise Edition",
+        )
+    assert_within_scope(
+        user,
+        db,
+        permission=Permission.MANAGE_ACTIONS,
+        current_group_ids=[
+            group.id
+            for group in get_mcp_server_by_id(
+                request.existing_server_id, db
+            ).user_groups
+        ]
+        if request.existing_server_id is not None
+        else [],
+        requested_group_ids=request.groups or [],
+        is_non_public=not is_public,
+    )
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+    _validate_mcp_server_url(
+        request.oauth_authorization_endpoint,
+        "oauth_authorization_endpoint",
+        require_https=True,
+    )
+    _validate_mcp_server_url(
+        request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
+    )
+    if (
+        request.auth_type == MCPAuthenticationType.API_TOKEN
+        and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+        and not request.api_token
+    ):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "A shared API token is required")
+    if not user.email or not request.name.strip():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "A server name and authenticated email are required",
+        )
+    reject_masked_credentials(
+        {
+            key: value
+            for key, value in {
+                "api_token": request.api_token,
+                "oauth_client_id": request.oauth_client_id,
+                "oauth_client_secret": request.oauth_client_secret,
+                **(request.admin_credentials or {}),
+            }.items()
+            if value
+        }
+    )
+    if request.auth_template:
+        _resolve_auth_template(
+            request.auth_template, request.auth_template_headers_changed, None
+        )
+
+
+def _mcp_setup_headers(request: MCPSetupRequest, user: User) -> dict[str, str]:
+    if (
+        request.auth_type == MCPAuthenticationType.API_TOKEN
+        and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+    ):
+        data = _build_shared_api_token_config_data(
+            api_token=request.api_token or "",
+            auth_template=request.auth_template,
+            header_substitutions=request.admin_credentials,
+            user_email=user.email,
+        )
+    else:
+        data = MCPConnectionData(
+            headers={}, header_substitutions=request.admin_credentials or {}
+        )
+        if request.auth_template:
+            data["headers"] = request.auth_template.render(
+                request.admin_credentials or {}, user_email=user.email
+            )
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=None,
+        connection_data=data,
+        user_oauth_token=user.live_oauth_token
+        if request.auth_type == MCPAuthenticationType.PT_OAUTH
+        else None,
+        auth_type=request.auth_type,
+        auth_template=request.auth_template,
+        user_email=user.email,
+    )
+    if (
+        request.auth_type != MCPAuthenticationType.OAUTH
+        and not credentials.can_authenticate()
+    ):
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "MCP credentials are required")
+    return credentials.build_headers()
+
+
+def _reusable_mcp_setup_grant(
+    request: MCPSetupRequest, user: User, db: Session, *, for_update: bool = False
+) -> MCPConnectionData | None:
+    if (
+        request.existing_server_id is None
+        or request.auth_type != MCPAuthenticationType.OAUTH
+    ):
+        return None
+    server = get_mcp_server_by_id(request.existing_server_id, db)
+    if any(
+        proposed != current
+        for proposed, current in (
+            (request.server_url, server.server_url),
+            (request.auth_type, server.auth_type),
+            (request.auth_performer, server.auth_performer),
+            (request.oauth_provider_mode, server.oauth_provider_mode),
+            (request.oauth_cimd_enabled, server.oauth_cimd_enabled),
+            (request.oauth_authorization_endpoint, server.oauth_authorization_endpoint),
+            (request.oauth_token_endpoint, server.oauth_token_endpoint),
+            (request.oauth_scopes_override, server.oauth_scopes_override),
+            (request.oauth_additional_auth_params, server.oauth_additional_auth_params),
+        )
+    ):
+        return None
+    admin_data = extract_connection_data(server.admin_connection_config)
+    client_info = admin_data.get("client_info", {})
+    if request.oauth_client_id != client_info.get("client_id") or (
+        request.oauth_client_secret or ""
+    ) != (client_info.get("client_secret") or ""):
+        return None
+    config = get_user_connection_config(server.id, user.email, db)
+    if config is not None and for_update:
+        config = get_connection_config_by_id(config.id, db, for_update=True)
+    data = extract_connection_data(config)
+    if (
+        data.get("reauth_required")
+        or not data.get("tokens", {}).get("access_token")
+        or mcp_token_expired(data)
+    ):
+        return None
+    return deepcopy(data)
+
+
+def _publish_mcp_setup(
+    request: MCPSetupRequest,
+    discovered_tools: list[MCPLibTool],
+    oauth_data: MCPConnectionData | None,
+    user: User,
+    db: Session,
+    expected_configuration_fingerprint: str | None = None,
+    *,
+    reuse_existing_grant: bool = False,
+) -> MCPServer:
+    """Publish a validated connection and its tools in one transaction."""
+    try:
+        db.expire_all()
+        if (
+            not reuse_existing_grant
+            and request.auth_type == MCPAuthenticationType.OAUTH
+            and (oauth_data is None or not oauth_data.get("tokens"))
+        ):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED, "OAuth did not return credentials"
+            )
+        _assert_mcp_setup_current(
+            request, user, db, expected_configuration_fingerprint, for_update=True
+        )
+        _validate_mcp_setup(request, user, db)
+        if reuse_existing_grant:
+            oauth_data = _reusable_mcp_setup_grant(request, user, db, for_update=True)
+            if oauth_data is None:
+                raise OnyxError(
+                    OnyxErrorCode.UNAUTHENTICATED,
+                    "OAuth credentials changed or expired; retry setup",
+                )
+            oauth_data["headers"] = _mcp_setup_headers(request, user)
+            oauth_data["header_substitutions"] = request.admin_credentials or {}
+        reload_user_ids = {user.id}
+        if request.existing_server_id is not None:
+            reload_user_ids.update(
+                affected_user_ids_for_mcp_server(
+                    get_mcp_server_by_id(request.existing_server_id, db), db
+                )
+            )
+        server = _upsert_mcp_server(request, db, user, commit=False)
+        if oauth_data is not None:
+            admin_data = extract_connection_data(
+                get_connection_config_by_id(server.admin_connection_config_id, db)
+                if server.admin_connection_config_id is not None
+                else None
+            )
+            admin_data = deepcopy(admin_data)
+            if "client_info" in oauth_data:
+                admin_data["client_info"] = oauth_data["client_info"]
+            _persist_admin_connection_config(server, admin_data, db)
+            upsert_user_connection_config(server.id, user.email, oauth_data, db)
+        update_mcp_server__no_commit(
+            server.id,
+            db,
+            available_in_craft=request.available_in_craft,
+            status=MCPServerStatus.CONNECTED,
+            last_refreshed_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        _sync_mcp_server_tools(server.id, discovered_tools, db, commit=False)
+        if (
+            request.action_policies is not None
+            or request.users_can_manage_policies is not None
+        ):
+            gated_app_id = get_or_create_gated_app_id(
+                db, GatedAppKind.MCP_SERVER, server.id
+            )
+            replace_workspace_action_policies(
+                db,
+                gated_app_id,
+                request.action_policies,
+                users_can_manage=request.users_can_manage_policies,
+            )
+
+        if request.enable_chat is not None and (
+            request.enable_chat or request.existing_server_id is not None
+        ):
+            for tool in get_tools_by_mcp_server_id(server.id, db):
+                set_default_chat_tool__no_commit(db, tool, request.enable_chat)
+        db.flush()
+        result = _db_mcp_server_to_api_mcp_server(
+            server,
+            db,
+            request_user=user,
+            permissions=mcp_server_permissions(can_manage=True),
+        )
+        result.default_chat_enabled = server.id in get_default_chat_mcp_server_ids(
+            [server.id], db
+        )
+        reload_user_ids.update(affected_user_ids_for_mcp_server(server, db))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    try:
+        _hot_reload_craft_sessions(reload_user_ids, db)
+    except Exception:
+        logger.exception("Could not refresh Craft sessions after MCP setup")
+    return result
+
+
+async def _discover_mcp_setup_tools(
+    request: MCPSetupRequest,
+    headers: dict[str, str],
+    provider: OAuthClientProvider | None,
+) -> list[MCPLibTool]:
+    try:
+        return await run_in_threadpool(
+            discover_mcp_tools,
+            request.server_url,
+            headers,
+            request.transport or MCPTransport.STREAMABLE_HTTP,
+            provider,
+        )
+    except MCPReauthenticationRequired as error:
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, str(error)) from error
+    except ExceptionGroup as error:
+        logger.error("MCP setup discovery failed: %s", log_exception_group(error))
+        raise
+
+
+@admin_router.post("/setup")
+async def setup_mcp_server(
+    request: MCPSetupRequest,
+    db: Session = Depends(get_session),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
+) -> MCPSetupConnectedResponse | MCPSetupAuthorizationResponse:
+    """Validate proposed connection settings before saving the server."""
+    request, expected_configuration_fingerprint, client_information = (
+        _prepare_mcp_setup(request, user, db)
+    )
+    _validate_mcp_setup(request, user, db)
+    headers = _mcp_setup_headers(request, user)
+    provider = None
+    storage = None
+    reusable_grant = _reusable_mcp_setup_grant(request, user, db)
+    if reusable_grant is not None:
+        headers = merge_mcp_headers(
+            headers,
+            {"Authorization": f"Bearer {reusable_grant['tokens']['access_token']}"},
+        )
+    if request.auth_type == MCPAuthenticationType.OAUTH and reusable_grant is None:
+        try:
+            provider, storage, authorization_url = await start_setup_oauth(
+                request,
+                str(user.id),
+                headers,
+                expected_configuration_fingerprint=expected_configuration_fingerprint,
+                client_information=client_information,
+            )
+        except OnyxError:
+            raise
+        except Exception as error:
+            raise oauth_setup_error(error) from error
+        if authorization_url is not None:
+            return MCPSetupAuthorizationResponse(authorization_url=authorization_url)
+    discovered_tools = await _discover_mcp_setup_tools(request, headers, provider)
+    oauth_data = (
+        storage.connection_data(provider.context)
+        if storage is not None and provider is not None
+        else None
+    )
+    if oauth_data is not None:
+        oauth_data["headers"] = headers
+        oauth_data["header_substitutions"] = request.admin_credentials or {}
+    return MCPSetupConnectedResponse(
+        server=await run_in_threadpool(
+            _publish_mcp_setup,
+            request,
+            discovered_tools,
+            oauth_data,
+            user,
+            db,
+            expected_configuration_fingerprint,
+            reuse_existing_grant=reusable_grant is not None,
+        )
+    )
+
+
+async def _complete_mcp_setup(
+    callback_data: dict[str, str], db: Session, user: User
+) -> MCPOAuthCallbackResponse:
+    attempt = consume_setup_oauth(callback_data["state"], str(user.id))
+    if callback_data.get("error") or not callback_data.get("code"):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "MCP OAuth authorization was denied or failed"
+        )
+    _assert_mcp_setup_current(
+        attempt.request, user, db, attempt.expected_configuration_fingerprint
+    )
+    _validate_mcp_setup(attempt.request, user, db)
+    headers = _mcp_setup_headers(attempt.request, user)
+    provider, storage = await complete_setup_oauth(attempt, callback_data["code"])
+    if storage.tokens is not None:
+        headers = merge_mcp_headers(
+            headers, {"Authorization": f"Bearer {storage.tokens.access_token}"}
+        )
+    discovered_tools = await _discover_mcp_setup_tools(
+        attempt.request, headers, provider
+    )
+    oauth_data = storage.connection_data(provider.context)
+    oauth_data["headers"] = headers
+    oauth_data["header_substitutions"] = attempt.request.admin_credentials or {}
+    server = await run_in_threadpool(
+        _publish_mcp_setup,
+        attempt.request,
+        discovered_tools,
+        oauth_data,
+        user,
+        db,
+        attempt.expected_configuration_fingerprint,
+    )
+    return MCPOAuthCallbackResponse(
+        success=True,
+        server_id=server.id,
+        server_name=server.name,
+        message="MCP setup completed",
+        redirect_url=f"/admin/plugins/mcp/{server.id}?tab=tools",
+    )
+
+
 @admin_router.post("/server", response_model=MCPServer)
 def create_mcp_server_simple(
     request: MCPServerSimpleCreateRequest,
@@ -2513,6 +3388,7 @@ def create_mcp_server_simple(
         auth_type=None,  # To be configured later
         transport=None,  # To be configured later
         auth_performer=None,  # To be configured later
+        available_in_craft=request.available_in_craft,
         db_session=db_session,
     )
 
@@ -2538,11 +3414,12 @@ def create_mcp_server_simple(
         auth_type=mcp_server.auth_type,
         auth_performer=mcp_server.auth_performer,
         oauth_provider_mode=mcp_server.oauth_provider_mode,
+        oauth_cimd_enabled=mcp_server.oauth_cimd_enabled,
         oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
         oauth_token_endpoint=mcp_server.oauth_token_endpoint,
         oauth_scopes_override=mcp_server.oauth_scopes_override,
         oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-        user_can_authenticate=False,  # No credentials resolved yet
+        connection_status=MCPConnectionStatus.NOT_CONNECTED,
         status=mcp_server.status,
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],
@@ -2574,6 +3451,14 @@ def update_mcp_server_simple(
 
     _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 
+    url_changed = (
+        request.server_url is not None and request.server_url != mcp_server.server_url
+    )
+    reload_user_ids: set[UUID] = set()
+    if url_changed:
+        reload_user_ids.update(_invalidate_mcp_user_credentials(mcp_server, db_session))
+        clear_mcp_admin_connection_config__no_commit(mcp_server, db_session)
+
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(
         server_id=server_id,
@@ -2582,6 +3467,14 @@ def update_mcp_server_simple(
         description=request.description,
         server_url=request.server_url,
         available_in_craft=request.available_in_craft,
+        status=(
+            MCPServerStatus.AWAITING_AUTH
+            if mcp_server.auth_type
+            not in (None, MCPAuthenticationType.NONE, MCPAuthenticationType.PT_OAUTH)
+            else MCPServerStatus.CREATED
+        )
+        if url_changed
+        else None,
     )
 
     acl_changing = any(
@@ -2591,13 +3484,10 @@ def update_mcp_server_simple(
     # Only an ACL change can drop a user's access; snapshot the pre-change
     # recipients in that case so they're reloaded to lose the server (the
     # post-update query wouldn't include them).
-    reload_user_ids: set[UUID] = (
-        affected_user_ids_for_mcp_server(updated_server, db_session)
-        if acl_changing
-        else set()
-    )
-
     if acl_changing:
+        reload_user_ids.update(
+            affected_user_ids_for_mcp_server(updated_server, db_session)
+        )
         _apply_mcp_server_access(
             mcp_server=updated_server,
             acting_user=user,
@@ -2608,26 +3498,19 @@ def update_mcp_server_simple(
             db_session=db_session,
         )
 
-    if request.tool_policies is not None:
-        known = {t.name for t in get_all_mcp_tools_for_server(server_id, db_session)}
-        unknown = sorted(set(request.tool_policies) - known)
-        if unknown:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"unknown tool names for this server: {unknown}",
-            )
-        # Canonicalize at the input boundary so the stored set stays sparse
-        # regardless of which client wrote it: a default (ASK) choice is
-        # equivalent to leaving the tool unlisted.
-        sparse_policies = {
-            tool: policy
-            for tool, policy in request.tool_policies.items()
-            if policy != MCP_TOOL_DEFAULT_POLICY
-        }
+    if (
+        request.action_policies is not None
+        or request.users_can_manage_policies is not None
+    ):
         gated_app_id = get_or_create_gated_app_id(
             db_session, GatedAppKind.MCP_SERVER, server_id
         )
-        replace_action_policies__no_commit(db_session, gated_app_id, sparse_policies)
+        replace_workspace_action_policies(
+            db_session,
+            gated_app_id,
+            request.action_policies,
+            users_can_manage=request.users_can_manage_policies,
+        )
 
     db_session.commit()
 

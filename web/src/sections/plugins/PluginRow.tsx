@@ -1,0 +1,197 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { useId } from "react";
+import { Button, SelectCard, Text, Tooltip } from "@opal/components";
+import { SvgCodeFile } from "@opal/icons";
+import type { IconProps } from "@opal/types";
+import PluginStatusIcon from "@/sections/plugins/PluginStatusIcon";
+import { getActionIcon } from "@/lib/tools/utils";
+import { can } from "@/lib/permissions/resource-actions";
+import { pluginDetailHref } from "@/lib/plugins/routes";
+import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
+import type { InstalledPlugin } from "@/lib/plugins/types";
+import PluginLifecycleMenu from "@/sections/plugins/PluginLifecycleMenu";
+import PluginRowLayout from "@/sections/plugins/PluginRowLayout";
+import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import { useSettings } from "@/lib/settings/hooks";
+
+interface PluginRowProps {
+  plugin: InstalledPlugin;
+}
+
+function PluginAvailability({
+  plugin,
+  disabled,
+  craftAvailable,
+}: PluginRowProps & {
+  disabled: boolean;
+  craftAvailable: boolean;
+}) {
+  const t = useTranslations("actions.plugins.availability");
+  const craftDescriptionId = useId();
+  const enabled =
+    plugin.kind === "external-app"
+      ? plugin.app.enabled
+      : plugin.kind === "openapi"
+        ? plugin.tool.default_chat_enabled
+        : plugin.server.default_chat_enabled;
+  const label =
+    plugin.kind === "external-app"
+      ? t(enabled ? "craftEnabled" : "craftDisabled")
+      : t(
+          enabled == null
+            ? "chatUnknown"
+            : enabled
+              ? "chatEnabled"
+              : "chatDisabled"
+        );
+  const craftLabel =
+    craftAvailable &&
+    plugin.kind === "mcp" &&
+    plugin.server.available_in_craft !== undefined
+      ? t(plugin.server.available_in_craft ? "craftEnabled" : "craftDisabled")
+      : null;
+  function StatusIcon(props: IconProps) {
+    const craft =
+      plugin.kind === "mcp" ? plugin.server.available_in_craft : undefined;
+    return (
+      <PluginStatusIcon
+        {...props}
+        primary={enabled == null ? "unknown" : enabled ? "active" : "inactive"}
+        secondary={
+          plugin.kind === "mcp" && craftAvailable
+            ? craft == null
+              ? "unknown"
+              : craft
+                ? "active"
+                : "inactive"
+            : undefined
+        }
+      />
+    );
+  }
+  return (
+    <>
+      <Tooltip
+        side="top"
+        tone="neutral"
+        sideOffset={6}
+        delayDuration={250}
+        tooltip={
+          <div className="grid grid-cols-[auto_auto] items-center gap-x-6 gap-y-1.5">
+            <Text font="secondary-body" color="text-03">
+              {t(plugin.kind === "external-app" ? "craft" : "mainChat")}
+            </Text>
+            <Text font="secondary-body" color="text-04">
+              {t(enabled == null ? "unknown" : enabled ? "on" : "off")}
+            </Text>
+            {craftLabel && (
+              <>
+                <Text font="secondary-body" color="text-03">
+                  {t("craft")}
+                </Text>
+                <Text font="secondary-body" color="text-04">
+                  {t(
+                    plugin.kind === "mcp" && plugin.server.available_in_craft
+                      ? "on"
+                      : "off"
+                  )}
+                </Text>
+              </>
+            )}
+          </div>
+        }
+      >
+        <Button
+          size="sm"
+          prominence="tertiary"
+          icon={StatusIcon}
+          aria-label={label}
+          aria-describedby={craftLabel ? craftDescriptionId : undefined}
+          disabled={disabled}
+        />
+      </Tooltip>
+      {craftLabel && (
+        <span id={craftDescriptionId} className="sr-only">
+          <Text>{craftLabel}</Text>
+        </span>
+      )}
+    </>
+  );
+}
+
+export function PluginRow({ plugin }: PluginRowProps) {
+  const t = useTranslations("actions.plugins");
+  const settings = useSettings();
+  const craftAvailable = settings.onyx_craft_available === true;
+  const resource =
+    plugin.kind === "mcp"
+      ? plugin.server
+      : plugin.kind === "openapi"
+        ? plugin.tool
+        : plugin.app;
+  const description =
+    plugin.kind === "mcp"
+      ? plugin.server.description || plugin.server.server_url
+      : plugin.kind === "openapi"
+        ? plugin.tool.description
+        : externalAppDisplayUrl(plugin.app.upstream_url_patterns);
+  const icon =
+    plugin.kind === "mcp"
+      ? getActionIcon(plugin.server.server_url, plugin.server.name)
+      : plugin.kind === "openapi"
+        ? SvgCodeFile
+        : getAppTypeLogo(plugin.app.app_type);
+  const canManage =
+    plugin.kind === "external-app" ||
+    (plugin.kind === "mcp"
+      ? can(plugin.server, "edit") || can(plugin.server, "authenticate")
+      : can(plugin.tool, "edit") || can(plugin.tool, "authenticate"));
+
+  return (
+    <div
+      className="relative min-w-0 [&_button]:relative [&_button]:z-10"
+      role="group"
+      aria-label={resource.name}
+    >
+      <SelectCard border="none" padding={0}>
+        <div className="flex min-w-0 items-center gap-2 pe-3">
+          <Link
+            href={pluginDetailHref({ kind: plugin.kind, id: resource.id })}
+            aria-label={t(canManage ? "row.manage.label" : "row.view.label", {
+              name: resource.name,
+            })}
+            className="block min-w-0 flex-1 rounded-12 after:absolute after:inset-0 after:content-[''] focus-visible:outline focus-visible:outline-2"
+          >
+            <PluginRowLayout
+              icon={icon}
+              title={resource.name}
+              description={description}
+              action={
+                <Text font="secondary-body" color="text-03">
+                  {t(
+                    plugin.kind === "external-app"
+                      ? "row.externalAppKind"
+                      : `kind.${plugin.kind}`
+                  )}
+                </Text>
+              }
+            />
+          </Link>
+          <PluginLifecycleMenu
+            plugin={plugin}
+            renderStatus={(controls) => (
+              <PluginAvailability
+                plugin={plugin}
+                craftAvailable={craftAvailable}
+                {...controls}
+              />
+            )}
+          />
+        </div>
+      </SelectCard>
+    </div>
+  );
+}

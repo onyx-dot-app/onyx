@@ -2,13 +2,25 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, union, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import PublicExternalUserGroup, User, User__ExternalUserGroupId
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+    HierarchyNode,
+    HierarchyNodeByConnectorCredentialPair,
+    PublicExternalUserGroup,
+    User,
+    User__ExternalUserGroupId,
+)
+from onyx.db.permission_sync_attempt import (
+    lock_external_group_sync_attempt_if_owned,
+)
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists, get_user_by_email
 from onyx.utils.logger import setup_logger
 
@@ -89,9 +101,12 @@ def upsert_external_groups(
     cc_pair_id: int,
     external_groups: list[ExternalUserGroup],
     source: DocumentSource,
+    owning_attempt_id: int | None = None,
 ) -> None:
     """
     Batch upsert external user groups using INSERT ... ON CONFLICT DO UPDATE.
+    With owning_attempt_id, the write happens only while that group sync
+    attempt is IN_PROGRESS (see lock_external_group_sync_attempt_if_owned).
     - For existing rows (same user_id, external_user_group_id, cc_pair_id),
       sets stale=False
     - For new rows, inserts with stale=False
@@ -112,6 +127,10 @@ def upsert_external_groups(
     )
 
     email_id_map = {user.email.lower(): user.id for user in all_group_members}
+
+    # After the user insert, which commits, so the lock covers the group writes
+    if owning_attempt_id is not None:
+        lock_external_group_sync_attempt_if_owned(owning_attempt_id, db_session)
 
     # Build all user-group mappings and public-group mappings
     user_group_mappings: list[dict] = []
@@ -195,7 +214,12 @@ def upsert_external_groups(
 def remove_stale_external_groups(
     db_session: Session,
     cc_pair_id: int,
+    owning_attempt_id: int | None = None,
 ) -> None:
+    """Deletes the rows no sync cycle re-confirmed. With owning_attempt_id, the
+    delete happens only while that group sync attempt is IN_PROGRESS."""
+    if owning_attempt_id is not None:
+        lock_external_group_sync_attempt_if_owned(owning_attempt_id, db_session)
     db_session.execute(
         delete(User__ExternalUserGroupId).where(
             User__ExternalUserGroupId.cc_pair_id == cc_pair_id,
@@ -245,4 +269,45 @@ def fetch_public_external_group_ids(
 ) -> list[str]:
     return list(
         db_session.scalars(select(PublicExternalUserGroup.external_user_group_id)).all()
+    )
+
+
+def fetch_referenced_external_group_ids_for_cc_pair(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    group_id_prefix: str,
+) -> set[str]:
+    """The stored group ids that start with ``group_id_prefix`` and that a
+    document or hierarchy node of the cc-pair grants access to."""
+    document_group_ids = (
+        select(func.unnest(Document.external_user_group_ids).label("group_id"))
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == Document.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+    )
+    node_group_ids = (
+        select(func.unnest(HierarchyNode.external_user_group_ids).label("group_id"))
+        .join(
+            HierarchyNodeByConnectorCredentialPair,
+            HierarchyNodeByConnectorCredentialPair.hierarchy_node_id
+            == HierarchyNode.id,
+        )
+        .where(
+            HierarchyNodeByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id
+            == cc_pair.credential_id,
+        )
+    )
+    referenced = union(document_group_ids, node_group_ids).subquery()
+    return set(
+        db_session.scalars(
+            select(referenced.c.group_id).where(
+                referenced.c.group_id.startswith(group_id_prefix, autoescape=True)
+            )
+        ).all()
     )

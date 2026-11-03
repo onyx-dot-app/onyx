@@ -4,7 +4,7 @@ import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/svcSS";
 import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";
 import { Agent } from "@/lib/agents/types";
-import type { BackendChatSession } from "@/app/app/interfaces";
+import type { BackendChatSession } from "@/app/app/types";
 
 // This is used for rendering a persona in the shared chat display
 export function constructMiniFiedPersona(name: string, id: number): Agent {

@@ -52,7 +52,7 @@ describe("isSupportedProviderType", () => {
 describe("hasSupportedCraftProvider", () => {
   it("accepts any configured provider with a visible model", () => {
     expect(
-      hasSupportedCraftProvider([provider("azure", [model("gpt-5")])])
+      hasSupportedCraftProvider([provider("azure", [model("gpt-6-sol")])])
     ).toBe(true);
   });
 
@@ -71,7 +71,7 @@ describe("getDefaultLlmSelection", () => {
   it("picks the recommended-default model, skipping earlier providers without one", () => {
     const result = getDefaultLlmSelection([
       {
-        ...provider("openai", [model("gpt-5.5", { craft: true })], 2),
+        ...provider("openai", [model("gpt-6.1-sol", { craft: true })], 2),
         name: "Zulu OpenAI",
       },
       {
@@ -101,27 +101,27 @@ describe("getDefaultLlmSelection", () => {
         ...provider(
           "openai",
           [
-            model("gpt-5-turbo"),
+            model("gpt-6-luna"),
             model("hidden-model", { visible: false }),
-            model("gpt-4o"),
+            model("gpt-6-astra"),
           ],
           7
         ),
         name: "Self-hosted OpenAI",
       },
     ]);
-    // Sorted visible names are [gpt-4o, gpt-5-turbo] — picked over DB order.
+    // Sorted visible names are [gpt-6-astra, gpt-6-luna] — picked over DB order.
     expect(result).toEqual({
       providerId: 7,
       providerName: "Self-hosted OpenAI",
       provider: "openai",
-      modelName: "gpt-4o",
+      modelName: "gpt-6-astra",
     });
   });
 
   it("returns null when no provider has any visible model", () => {
     const result = getDefaultLlmSelection([
-      provider("openai", [model("gpt-5-mini", { visible: false })]),
+      provider("openai", [model("gpt-6.2-sol", { visible: false })]),
     ]);
     expect(result).toBeNull();
   });
@@ -198,8 +198,8 @@ describe("getDefaultLlmSelection", () => {
     // localeCompare puts "aäb" before "azb"; codepoint order ("z" < "ä") —
     // what Python's sorted() uses in _gateway_provider_order — is the reverse.
     const result = getDefaultLlmSelection([
-      { ...provider("openai", [model("gpt-5.5")], 1), name: "aäb" },
-      { ...provider("openai", [model("gpt-5.6-sol")], 2), name: "azb" },
+      { ...provider("openai", [model("gpt-6.1-sol")], 1), name: "aäb" },
+      { ...provider("openai", [model("gpt-6.2-luna")], 2), name: "azb" },
     ]);
     expect(result?.providerId).toBe(2);
   });
@@ -246,23 +246,23 @@ describe("resolveSessionLlmSelection", () => {
 
   it("prefers the same-type provider that hosts a legacy session's model", () => {
     expect(
-      resolveSessionLlmSelection("openai", "gpt-5.5", [
-        provider("openai", [model("gpt-4o")], 1),
-        provider("openai", [model("gpt-5.5")], 2),
+      resolveSessionLlmSelection("openai", "gpt-6.1-sol", [
+        provider("openai", [model("gpt-6-astra")], 1),
+        provider("openai", [model("gpt-6.1-sol")], 2),
       ])
     ).toEqual({
       providerId: 2,
       providerName: "openai",
       provider: "openai",
-      modelName: "gpt-5.5",
+      modelName: "gpt-6.1-sol",
     });
   });
 
   it("falls back to any same-type provider when none hosts the legacy model", () => {
     expect(
-      resolveSessionLlmSelection("openai", "gpt-5.5", [
+      resolveSessionLlmSelection("openai", "gpt-6.1-sol", [
         provider("anthropic", [model("claude-fable-5")], 1),
-        provider("openai", [model("gpt-4o")], 2),
+        provider("openai", [model("gpt-6-astra")], 2),
       ])?.providerId
     ).toBe(2);
   });

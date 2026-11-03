@@ -1,14 +1,6 @@
 import type { Tag } from "@/lib/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
-// Generic action status for UI components
-export enum ActionStatus {
-  CONNECTED = "connected",
-  PENDING = "pending",
-  DISCONNECTED = "disconnected",
-  FETCHING = "fetching",
-}
-
 export interface MethodSpec {
   /* Defines a single method that is part of a custom tool. Each method maps to a single
   action that the LLM can choose to take. */
@@ -31,7 +23,7 @@ export interface ToolSnapshot {
   definition: Record<string, any> | null;
 
   // only specified for Custom Tools. Custom headers to add to the tool's API requests.
-  custom_headers: { key: string; value: string }[];
+  custom_headers: { key: string; value: string }[] | null;
 
   // only specified for Custom Tools. ID of the tool in the codebase.
   in_code_tool_id: string | null;
@@ -54,10 +46,18 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
+  default_chat_enabled?: boolean | null;
+  user_enabled_in_chat?: boolean;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: PermissionsOf<"Action">;
 }
+
+export interface ToolUserPreferencesRequest {
+  enabled_in_chat: boolean;
+}
+
+export type ToolUserPreferencesResponse = ToolUserPreferencesRequest;
 
 export interface ApiResponse<T> {
   data: T | null;
@@ -70,6 +70,7 @@ export interface OAuthConfig {
   authorization_url: string;
   token_url: string;
   scopes: string[] | null;
+  supports_pkce: boolean;
   has_client_credentials: boolean;
   tool_count: number;
   created_at: string;
@@ -84,6 +85,7 @@ export interface OAuthConfigCreate {
   client_secret: string;
   scopes?: string[];
   additional_params?: Record<string, any>;
+  supports_pkce?: boolean;
 }
 
 export interface OAuthConfigUpdate {
@@ -94,18 +96,15 @@ export interface OAuthConfigUpdate {
   client_secret?: string;
   scopes?: string[];
   additional_params?: Record<string, any>;
+  supports_pkce?: boolean;
 }
 
 export interface OAuthTokenStatus {
   oauth_config_id: number;
   expires_at: number | null;
   is_expired: boolean;
+  can_refresh?: boolean;
 }
-
-/** Which drill-down the actions popover is showing, if any. */
-export type SecondaryViewState =
-  | { type: "sources" }
-  | { type: "mcp"; serverId: number };
 
 /**
  * What a chat has been told to do about one tool.

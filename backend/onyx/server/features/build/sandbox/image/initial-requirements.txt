@@ -10,7 +10,7 @@ anyio==4.14.2
     # via
     #   starlette
     #   watchfiles
-certifi==2026.6.17
+certifi==2026.10.19
     # via requests
 cffi==2.0.0
     # via cryptography
@@ -73,7 +73,7 @@ pdfminer-six==20251230
     # via pdfplumber
 pdfplumber==0.11.9
     # via -r initial-requirements.in
-pillow==12.3.0
+pillow==13.0.0
     # via
     #   -r initial-requirements.in
     #   matplotlib

@@ -49,46 +49,6 @@ export interface BuildMessageAttachment {
   mimeType: string;
 }
 
-// =============================================================================
-// Tool Call Types (for tracking agent tool usage)
-// =============================================================================
-
-export type ToolCallStatus =
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | "failed"
-  | "cancelled";
-
-export interface ToolCall {
-  /** Unique ID for this tool call */
-  id: string;
-  /** Tool kind/category (e.g., "edit", "execute", "other") */
-  kind: string;
-  /** Tool name (e.g., "write", "bash", "ls") */
-  name: string;
-  /** Human-readable title */
-  title: string;
-  /** Current status */
-  status: ToolCallStatus;
-  /** Tool input parameters */
-  input?: Record<string, unknown>;
-  /** Raw input from sandbox (complete command/parameters) */
-  raw_input?: Record<string, any> | null;
-  /** Raw output from sandbox (complete result) */
-  raw_output?: Record<string, any> | null;
-  /** Content block from sandbox (description text) */
-  content?: any | null;
-  /** Result content (when completed) */
-  result?: string;
-  /** Error message (when failed) */
-  error?: string;
-  /** When the tool call started */
-  startedAt: Date;
-  /** When the tool call finished */
-  finishedAt?: Date;
-}
-
 export type SessionStatus =
   | "idle"
   | "creating"
@@ -181,6 +141,11 @@ export interface ApiInteractiveTurnResponse {
   session_id: string;
   status: InteractiveTurnStatus;
   turn_index: number;
+  error_detail?: string | null;
+}
+
+export interface CompletedInteractiveTurn extends ApiInteractiveTurnResponse {
+  status: "SUCCEEDED" | "FAILED" | "CANCELLED";
 }
 
 export interface ApiArtifactResponse {
@@ -206,6 +171,18 @@ export interface OutputFile {
   path: string;
   revision: string;
   size: number;
+}
+
+export interface OutputCard {
+  id: string;
+  kind: "file" | "app";
+  path: string;
+  name: string;
+  turn_index: number;
+  revision: number;
+  size_bytes: number | null;
+  deleted: boolean;
+  viewed_revision: number | null;
 }
 
 export interface OutputInventory {

@@ -127,6 +127,13 @@ def _run_oauth_provider_cleanup() -> None:
     cleanup_oauth_provider_clients.run()
 
 
+def _run_fleet_telemetry() -> None:
+    from onyx.utils.fleet_telemetry_collector import collect_snapshots
+    from shared_configs.contextvars import get_current_tenant_id
+
+    collect_snapshots(get_current_tenant_id())
+
+
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
 _OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS = 24 * 3600
 # The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
@@ -138,8 +145,10 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
     from onyx.configs.app_configs import (
         AUTO_LLM_CONFIG_URL,
         CACHE_BACKEND,
+        DISABLE_TELEMETRY,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
+    from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
     from onyx.utils.variable_functionality import global_version
     from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 
@@ -190,6 +199,15 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
             run_fn=_run_oauth_provider_cleanup,
         )
     )
+    if not DISABLE_TELEMETRY:
+        tasks.append(
+            _PeriodicTaskDef(
+                name="fleet-telemetry",
+                interval_seconds=COLLECTION_INTERVAL_SECONDS,
+                lock_id=PERIODIC_TASK_LOCK_BASE + 5,
+                run_fn=_run_fleet_telemetry,
+            )
+        )
     return tasks
 
 

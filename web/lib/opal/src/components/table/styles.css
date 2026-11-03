@@ -14,14 +14,14 @@
   @apply px-1 py-0.5;
 }
 .tbl-cell[data-size="2.25"] {
-  @apply ps-0.5 pe-1.5 py-1.5;
+  @apply px-1 py-1.5;
 }
 
 .tbl-cell-inner[data-size="2.75"] {
-  @apply h-10 px-1;
+  @apply h-10 px-0;
 }
 .tbl-cell-inner[data-size="2.25"] {
-  @apply h-6 px-0.5;
+  @apply h-6 px-0;
 }
 
 /* ---- TableHead ---- */
@@ -30,10 +30,10 @@
   @apply relative;
 }
 .table-head[data-size="2.75"] {
-  @apply px-2 py-1;
+  @apply p-1;
 }
 .table-head[data-size="2.25"] {
-  @apply px-2 py-1;
+  @apply p-1;
 }
 .table-head[data-bottom-border] {
   @apply border-b border-transparent hover:border-border-03;
@@ -41,7 +41,7 @@
 
 /* Inner text wrapper */
 .table-head[data-size="2.75"] .table-head-label {
-  @apply py-2 px-0.5;
+  @apply py-2;
 }
 .table-head[data-size="2.25"] .table-head-label {
   @apply py-1;
@@ -144,7 +144,7 @@ table.tbl .tbl-row:has(:focus-visible) > td {
   @apply w-px whitespace-nowrap px-1;
 }
 .tbl-actions[data-type="head"] {
-  @apply px-2 py-1;
+  @apply p-1;
 }
 
 /* ---- Footer ---- */

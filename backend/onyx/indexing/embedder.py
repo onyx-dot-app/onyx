@@ -15,6 +15,9 @@ from onyx.document_index.chunk_content_enrichment import (
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
+from onyx.natural_language_processing.embedding_rate_limit import (
+    EmbeddingWaitTimeoutError,
+)
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
@@ -217,11 +220,15 @@ def embed_chunks_with_failure_handling(
     request_id: str | None = None,
 ) -> tuple[list[IndexChunk], list[ConnectorFailure]]:
     """Tries to embed all chunks in one large batch. If that batch fails for any reason,
-    goes document by document to isolate the failure(s).
+    goes document by document to isolate the failure(s). A rate limit wait that
+    times out fails every remaining document at once: retrying each document
+    would wait the full time limit again.
     """
 
     # TODO(rkuo): this doesn't disambiguate calls to the model server on retries.
     # Improve this if needed.
+
+    wait_timeout: EmbeddingWaitTimeoutError | None = None
 
     # First try to embed all chunks in one batch
     try:
@@ -236,6 +243,10 @@ def embed_chunks_with_failure_handling(
             "Connector stop signal detected in embed_chunks_with_failure_handling"
         )
         raise e
+    except EmbeddingWaitTimeoutError as e:
+        logger.error("Embedding rate limit wait timed out; failing the batch: %s", e)
+        sentry_sdk.capture_exception(e)
+        wait_timeout = e
     except Exception:
         logger.exception("Failed to embed chunk batch. Trying individual docs.")
         # wait a couple seconds to let any rate limits or temporary issues resolve
@@ -250,11 +261,21 @@ def embed_chunks_with_failure_handling(
     failures: list[ConnectorFailure] = []
 
     for doc_id, chunks_for_doc in chunks_by_doc.items():
+        if wait_timeout is not None:
+            failures.append(_document_failure(doc_id, chunks_for_doc, wait_timeout))
+            continue
         try:
             doc_embedded_chunks = embedder.embed_chunks(
                 chunks=chunks_for_doc, tenant_id=tenant_id, request_id=request_id
             )
             embedded_chunks.extend(doc_embedded_chunks)
+        except EmbeddingWaitTimeoutError as e:
+            logger.error(
+                "Embedding rate limit wait timed out; failing the batch: %s", e
+            )
+            sentry_sdk.capture_exception(e)
+            wait_timeout = e
+            failures.append(_document_failure(doc_id, chunks_for_doc, e))
         except Exception as e:
             with sentry_sdk.new_scope() as scope:
                 scope.set_tag("stage", "embedding")
@@ -264,17 +285,19 @@ def embed_chunks_with_failure_handling(
                 scope.fingerprint = ["embedding-failure", type(e).__name__]
                 sentry_sdk.capture_exception(e)
             logger.exception("Failed to embed chunks for document '%s'", doc_id)
-            failures.append(
-                ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=doc_id,
-                        document_link=(
-                            chunks_for_doc[0].get_link() if chunks_for_doc else None
-                        ),
-                    ),
-                    failure_message=str(e),
-                    exception=e,
-                )
-            )
+            failures.append(_document_failure(doc_id, chunks_for_doc, e))
 
     return embedded_chunks, failures
+
+
+def _document_failure(
+    doc_id: str, chunks_for_doc: list[DocAwareChunk], error: Exception
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=doc_id,
+            document_link=chunks_for_doc[0].get_link() if chunks_for_doc else None,
+        ),
+        failure_message=str(error),
+        exception=error,
+    )

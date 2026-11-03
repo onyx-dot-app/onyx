@@ -1,6 +1,6 @@
-from collections.abc import Callable
+from enum import Enum
+from typing import Literal, overload
 
-from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -27,54 +27,54 @@ class GmailService(Resource):
     pass
 
 
-class ImpersonationError(Exception):
-    """Raised when the service account cannot impersonate a user."""
-
-    def __init__(self, user_email: str, original: RefreshError) -> None:
-        super().__init__(f"Cannot impersonate '{user_email}'")
-        self.user_email = user_email
-        self.original = original
+class GoogleService(Enum):
+    DOCS = ("docs", "v1")
+    DRIVE = ("drive", "v3")
+    ADMIN = ("admin", "directory_v1")
+    GMAIL = ("gmail", "v1")
 
 
-class UserRemovedError(ImpersonationError):
-    """Raised when the impersonation failure is confirmed to be a deleted/suspended user."""
+@overload
+def get_google_service(
+    service: Literal[GoogleService.DOCS],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GoogleDocsService: ...
 
 
-def make_user_removal_checker(
-    user_email: str,
-    get_fresh_emails: Callable[[], list[str]] | None = None,
-) -> Callable[[], bool]:
-    """Return a callable that checks whether user_email was removed from the workspace.
-
-    The Admin SDK callback is fired at most once regardless of how many times
-    the returned callable is invoked.
-    """
-    checked = False
-    user_removed = False
-
-    def is_user_removed() -> bool:
-        nonlocal checked, user_removed
-        if not checked:
-            checked = True
-            if get_fresh_emails is not None:
-                try:
-                    user_removed = user_email not in get_fresh_emails()
-                except Exception:
-                    pass
-        return user_removed
-
-    return is_user_removed
+@overload
+def get_google_service(
+    service: Literal[GoogleService.DRIVE],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GoogleDriveService: ...
 
 
-def _get_google_service(
-    service_name: str,
-    service_version: str,
+@overload
+def get_google_service(
+    service: Literal[GoogleService.ADMIN],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> AdminService: ...
+
+
+@overload
+def get_google_service(
+    service: Literal[GoogleService.GMAIL],
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GmailService: ...
+
+
+def get_google_service(
+    service: GoogleService,
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
     creds = get_impersonated_creds(creds, user_email)
-    service: Resource = build(service_name, service_version, credentials=creds)
-    return service  # ty: ignore[invalid-return-type]
+    service_name, service_version = service.value
+    resource: Resource = build(service_name, service_version, credentials=creds)
+    return resource  # ty: ignore[invalid-return-type]
 
 
 def get_impersonated_creds(
@@ -97,39 +97,3 @@ def get_google_authorized_session(
     builders don't cover (e.g. streaming a response under a byte cap). Caller owns
     the session and must close it."""
     return AuthorizedSession(get_impersonated_creds(creds, user_email))
-
-
-def get_google_docs_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> GoogleDocsService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "docs", "v1", creds, user_email
-    )
-
-
-def get_drive_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> GoogleDriveService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "drive", "v3", creds, user_email
-    )
-
-
-def get_admin_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> AdminService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "admin", "directory_v1", creds, user_email
-    )
-
-
-def get_gmail_service(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> GmailService:
-    return _get_google_service(  # ty: ignore[invalid-return-type]
-        "gmail", "v1", creds, user_email
-    )

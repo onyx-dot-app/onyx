@@ -23,7 +23,10 @@ from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
+from onyx.document_index.opensearch.schema import (
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+)
 from onyx.indexing.chunker import DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS
 from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.port_reembed import (
@@ -31,11 +34,15 @@ from onyx.indexing.port_reembed import (
     ReembedStrategy,
     re_embed_chunks,
     select_reembed_strategy,
+    split_copyable_chunks,
 )
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE, MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 # Cap per bulk write so it can't run long unheartbeated and get a live port stall-failed.
 _PORT_WRITE_PAGE_SIZE = 1000
@@ -100,6 +107,18 @@ def copy_present_chunks_to_future(
     should_abort brackets each re-embed and precedes each write — it aborts a cancelled
     attempt and heartbeats so a slow-but-live port isn't stall-failed. surviving_doc_ids
     drops chunks of docs deleted mid-batch (no resurrection)."""
+    if strategy is ReembedStrategy.COPY_VECTORS:
+        return _copy_stored_vectors(
+            present_client=present_client,
+            future_index=future_index,
+            doc_ids=doc_ids,
+            embedder=embedder,
+            present_tokenizer=present_tokenizer,
+            tenant_state=tenant_state,
+            surviving_doc_ids=surviving_doc_ids,
+            should_abort=should_abort,
+            strip_stored_context=strip_stored_context,
+        )
     pages: Iterable[list[DocumentChunkWithoutVectors]]
     # Contextual RAG-on AUGMENTATION: buffer to reassemble each doc (chunks span PIT pages), then
     # re-embed one doc per page so the unheartbeated per-chunk LLM re-enrichment is bounded
@@ -136,34 +155,92 @@ def copy_present_chunks_to_future(
             present_tokenizer=present_tokenizer,
             strip_stored_context=strip_stored_context,
         )
-        if not reembedded:
-            continue
-        # Mark these as port writes so the orphan sweep can delete a resurrected doc
-        # (create-only re-add after a concurrent delete) without touching a legitimately
-        # re-added one, whose forward-written chunks are unmarked. DocumentChunk is
-        # frozen, so rebuild via model_copy rather than mutating.
-        reembedded = [
-            chunk.model_copy(update={"written_by_port": True}) for chunk in reembedded
-        ]
-        # Stop writing the instant the attempt is cancelled (e.g. by a deletion).
+        written, aborted = _write_port_chunks(
+            future_index, reembedded, surviving_doc_ids, should_abort
+        )
+        chunks_written += written
+        if aborted:
+            return chunks_written, True
+    return chunks_written, False
+
+
+def _copy_stored_vectors(
+    present_client: OpenSearchIndexClient,
+    future_index: OpenSearchDocumentIndex,
+    doc_ids: list[str],
+    embedder: IndexingEmbedder,
+    present_tokenizer: BaseTokenizer,
+    tenant_state: TenantState,
+    surviving_doc_ids: Callable[[], set[str]] | None,
+    should_abort: Callable[[], bool] | None,
+    strip_stored_context: bool,
+) -> tuple[int, bool]:
+    """COPY_VECTORS: write each PRESENT chunk with its stored content vector.
+    Only a chunk whose stored context the FUTURE strips is re-embedded."""
+    chunks_written: int = 0
+    for page_chunks in present_client.iter_chunks_with_vectors_for_doc_ids(
+        doc_ids, tenant_state=tenant_state
+    ):
         if should_abort is not None and should_abort():
             return chunks_written, True
-        # Heartbeat before each sub-page write.
-        for i in range(0, len(reembedded), _PORT_WRITE_PAGE_SIZE):
-            if should_abort is not None and should_abort():
-                return chunks_written, True
-            sub = reembedded[i : i + _PORT_WRITE_PAGE_SIZE]
-            # Drop chunks of docs deleted mid-batch, re-checked immediately before each
-            # write (not once per page): a doc's chunks can span several sub-pages, and a
-            # doc deleted between writes would otherwise be create-only resurrected.
-            if surviving_doc_ids is not None:
-                surviving = surviving_doc_ids()
-                sub = [c for c in sub if c.document_id in surviving]
-                if not sub:
-                    continue
-            future_index.index_raw_chunks(sub, use_create_only=True)
-            chunks_written += len(sub)
+        copied, to_reembed = split_copyable_chunks(page_chunks, strip_stored_context)
+        reembedded: list[DocumentChunk] = re_embed_chunks(
+            [
+                DocumentChunkWithoutVectors(
+                    **{k: v for k, v in dict(c).items() if k != "content_vector"}
+                )
+                for c in to_reembed
+            ],
+            ReembedStrategy.MODEL_ONLY,
+            embedder,
+            present_tokenizer=present_tokenizer,
+            strip_stored_context=True,
+        )
+        written, aborted = _write_port_chunks(
+            future_index, copied + reembedded, surviving_doc_ids, should_abort
+        )
+        chunks_written += written
+        if aborted:
+            return chunks_written, True
     return chunks_written, False
+
+
+def _write_port_chunks(
+    future_index: OpenSearchDocumentIndex,
+    chunks: list[DocumentChunk],
+    surviving_doc_ids: Callable[[], set[str]] | None,
+    should_abort: Callable[[], bool] | None,
+) -> tuple[int, bool]:
+    """Writes one page of ported chunks create-only; returns (written, aborted)."""
+    if not chunks:
+        return 0, False
+    # Mark these as port writes so the orphan sweep can delete a resurrected doc
+    # (create-only re-add after a concurrent delete) without touching a legitimately
+    # re-added one, whose forward-written chunks are unmarked. DocumentChunk is
+    # frozen, so rebuild via model_copy rather than mutating.
+    marked: list[DocumentChunk] = [
+        chunk.model_copy(update={"written_by_port": True}) for chunk in chunks
+    ]
+    # Stop writing the instant the attempt is cancelled (e.g. by a deletion).
+    if should_abort is not None and should_abort():
+        return 0, True
+    written: int = 0
+    # Heartbeat before each sub-page write.
+    for i in range(0, len(marked), _PORT_WRITE_PAGE_SIZE):
+        if should_abort is not None and should_abort():
+            return written, True
+        sub: list[DocumentChunk] = marked[i : i + _PORT_WRITE_PAGE_SIZE]
+        # Drop chunks of docs deleted mid-batch, re-checked immediately before each
+        # write (not once per page): a doc's chunks can span several sub-pages, and a
+        # doc deleted between writes would otherwise be create-only resurrected.
+        if surviving_doc_ids is not None:
+            surviving: set[str] = surviving_doc_ids()
+            sub = [c for c in sub if c.document_id in surviving]
+            if not sub:
+                continue
+        future_index.index_raw_chunks(sub, use_create_only=True)
+        written += len(sub)
+    return written, False
 
 
 def find_documents_with_no_chunks(
@@ -206,6 +283,12 @@ class PortCopier:
     ) -> None:
         self._strategy = select_reembed_strategy(
             present_search_settings, future_search_settings
+        )
+        logger.info(
+            "Porting %s into %s with the %s strategy",
+            present_search_settings.index_name,
+            future_search_settings.index_name,
+            self._strategy.value,
         )
         self._present_client = OpenSearchIndexClient(
             index_name=present_search_settings.index_name

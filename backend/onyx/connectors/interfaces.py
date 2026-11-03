@@ -48,6 +48,10 @@ class BaseConnector(abc.ABC, Generic[CT]):
     # Optional raw-file persistence hook to save original file
     raw_file_callback: RawFileCallback | None = None
 
+    # True when the slim listing filters `start` by the same date as indexing,
+    # so a prune can list only the documents from the indexing start.
+    slim_listing_honors_indexing_start: ClassVar[bool] = False
+
     @abc.abstractmethod
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError
@@ -341,3 +345,17 @@ class HierarchyConnector(BaseConnector):
         end: SecondsSinceUnixEpoch,
     ) -> HierarchyOutput:
         raise NotImplementedError
+
+
+def prune_listing_honors_indexing_start(
+    connector_class: type[BaseConnector],
+) -> bool:
+    """True if a prune lists only the documents from the indexing start.
+    Follows the listing order of ``extract_ids_from_runnable_connector``: a
+    slim listing honors it only if the connector says so, a full load cannot
+    filter, and a poll or checkpoint run filters as indexing does."""
+    if issubclass(connector_class, (SlimConnector, SlimConnectorWithPermSync)):
+        return connector_class.slim_listing_honors_indexing_start
+    if issubclass(connector_class, LoadConnector):
+        return False
+    return issubclass(connector_class, (PollConnector, CheckpointedConnector))

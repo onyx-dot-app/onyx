@@ -1,9 +1,10 @@
 """An in-memory Drive tenant for exercising the phased retrieval engine.
 
-It replaces the listing functions the connector calls (not the raw Google
-client), so tests control who sees what and how listings paginate without
-emulating the Drive query language. Page tokens are scoped to the listing that
-issued them; reusing one for a different principal or partition fails the test.
+It replaces the listing functions and the gateway operations the connector
+calls (not the raw Google client), so tests control who sees what and how
+listings paginate without emulating the Drive query language. Page tokens are
+scoped to the listing that issued them; reusing one for a different principal
+or partition fails the test.
 """
 
 from collections.abc import Iterator
@@ -11,11 +12,6 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import MagicMock, patch
-
-import httplib2
-from google.auth.exceptions import RefreshError
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.errors import HttpError
 
 from onyx.connectors.google_drive import connector as connector_mod
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -29,6 +25,11 @@ from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
+)
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveRefreshError,
+    GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import ConnectorFailure, Document, HierarchyNode
 
@@ -97,28 +98,28 @@ class FakeTenant:
     def admin(self) -> str:
         return self.users[0]
 
-    # --- the functions the connector module calls ---------------------------
+    # --- the gateway operations and module functions the connector calls ----
 
-    def get_drive_service(self, _creds: object, email: str) -> MagicMock:
-        service = MagicMock()
-        service.fake_email = email
-        return service
-
-    def get_root_folder_id(self, service: MagicMock) -> str:
-        if service.fake_email in self.broken_users:
-            raise RefreshError("token_refresh_failed")
-        return f"root-{service.fake_email}"
+    def get_root_folder_id(self, *, user_email: str) -> str:
+        if user_email in self.broken_users:
+            raise GoogleDriveRefreshError("token_refresh_failed")
+        return f"root-{user_email}"
 
     def list_drive_members(
-        self, _admin_service: MagicMock, drive_id: str
+        self, _ops: GoogleDriveSourceOperations, drive_id: str
     ) -> list[DriveMember]:
         if drive_id in self.failing_member_reads:
-            raise HttpError(httplib2.Response({"status": 500}), b"backend error")
+            raise GoogleDriveHttpError(
+                status_code=500,
+                reasons=(),
+                access_denied=False,
+                message="backend error",
+            )
         drive = self.shared_drives.get(drive_id)
         return list(drive.members) if drive else []
 
     def list_group_member_emails(
-        self, _admin_service: MagicMock, group_email: str
+        self, _ops: GoogleDriveSourceOperations, group_email: str
     ) -> list[str]:
         return list(self.groups.get(group_email, []))
 
@@ -136,23 +137,22 @@ class FakeTenant:
                 return member.role
         return None
 
-    def can_list_drive(self, service: MagicMock, drive_id: str) -> bool:
-        email = service.fake_email
-        if email in self.broken_users:
+    def can_list_drive(self, *, user_email: str, drive_id: str) -> bool:
+        if user_email in self.broken_users:
             return False
-        return self._drive_role(email, drive_id) is not None
+        return self._drive_role(user_email, drive_id) is not None
 
     def get_files_in_shared_drive(
         self,
-        service: MagicMock,
+        user_email: str,
         drive_id: str,
         max_num_pages: int,
         page_token: str | None = None,
         **_kwargs: object,
     ) -> Iterator[dict[str, Any] | str]:
-        email = service.fake_email
+        email = user_email
         if email in self.broken_users:
-            raise RefreshError("token_refresh_failed")
+            raise GoogleDriveRefreshError("token_refresh_failed")
         role = self._drive_role(email, drive_id)
         if role is None:
             return
@@ -166,30 +166,31 @@ class FakeTenant:
 
     def get_all_files_in_my_drive_and_shared(
         self,
-        service: MagicMock,
+        user_email: str,
         include_shared_with_me: bool,
         max_num_pages: int,
         page_token: str | None = None,
         **_kwargs: object,
     ) -> Iterator[dict[str, Any] | str]:
-        email = service.fake_email
+        email = user_email
         if email in self.broken_users:
-            raise RefreshError("token_refresh_failed")
+            raise GoogleDriveRefreshError("token_refresh_failed")
         files = list(self.my_drive.get(email, []))
         if include_shared_with_me:
             files += self.shared_with.get(email, [])
         scope = f"user:{email}:{include_shared_with_me}"
         yield from _paged(files, scope, max_num_pages, page_token)
 
-    def probe_target(self, service: MagicMock, target_id: str) -> dict[str, Any] | None:
+    def probe_target(self, *, user_email: str, target_id: str) -> dict[str, Any] | None:
         folder = self.folders.get(target_id)
-        if folder is None or service.fake_email not in folder.visible_files:
+        if folder is None or user_email not in folder.visible_files:
             return None
         return drive_file(target_id, owner=folder.owner, drive_id=folder.drive_id)
 
     def internal_principals_of(
         self,
-        _service: MagicMock,
+        _ops: GoogleDriveSourceOperations,
+        _viewer_email: str,
         target_id: str,
         google_domain: str,
         _expand_group: object,
@@ -205,15 +206,14 @@ class FakeTenant:
 
     def crawl_folders_for_files(
         self,
-        service: MagicMock,
         parent_id: str,
         user_email: str,
         **_kwargs: object,
     ) -> Iterator[RetrievedDriveFile]:
         folder = self.folders[parent_id]
-        if service.fake_email in self.broken_users:
-            raise RefreshError("token_refresh_failed")
-        for file_id in folder.visible_files.get(service.fake_email, []):
+        if user_email in self.broken_users:
+            raise GoogleDriveRefreshError("token_refresh_failed")
+        for file_id in folder.visible_files.get(user_email, []):
             yield RetrievedDriveFile(
                 completion_stage=DriveRetrievalStage.FOLDER_FILES,
                 drive_file=drive_file(file_id, owner=folder.owner),
@@ -221,28 +221,32 @@ class FakeTenant:
                 parent_id=parent_id,
             )
 
+    def ops(self) -> MagicMock:
+        """A gateway whose operations read this tenant."""
+        ops = MagicMock(spec=GoogleDriveSourceOperations)
+        ops.get_root_folder_id.side_effect = self.get_root_folder_id
+        ops.can_list_drive.side_effect = self.can_list_drive
+        ops.probe_target.side_effect = self.probe_target
+        return ops
+
     def patch(self, connector: GoogleDriveConnector) -> ExitStack:
-        """Point the connector module at this tenant."""
+        """Point the connector at this tenant."""
         stack = ExitStack()
         fakes: dict[str, object] = {
-            "get_drive_service": self.get_drive_service,
-            "get_root_folder_id": self.get_root_folder_id,
             "list_drive_members": self.list_drive_members,
             "list_group_member_emails": self.list_group_member_emails,
-            "can_list_drive": self.can_list_drive,
-            "get_files_in_shared_drive": self.get_files_in_shared_drive,
-            "get_all_files_in_my_drive_and_shared": (
+            "get_files_in_shared_drive": self._without_ops(
+                self.get_files_in_shared_drive
+            ),
+            "get_all_files_in_my_drive_and_shared": self._without_ops(
                 self.get_all_files_in_my_drive_and_shared
             ),
-            "probe_target": self.probe_target,
             "internal_principals_of": self.internal_principals_of,
-            "crawl_folders_for_files": self.crawl_folders_for_files,
+            "crawl_folders_for_files": self._without_ops(self.crawl_folders_for_files),
         }
         for name, fake in fakes.items():
             stack.enter_context(patch.object(connector_mod, name, fake))
-        stack.enter_context(
-            patch.object(connector_mod, "get_admin_service", return_value=MagicMock())
-        )
+        stack.enter_context(patch.object(connector, "_ops", self.ops()))
         stack.enter_context(
             patch.object(connector_mod, "retry_builder", return_value=lambda f: f)
         )
@@ -267,6 +271,16 @@ class FakeTenant:
             )
         )
         return stack
+
+    @staticmethod
+    def _without_ops(function: Any) -> Any:
+        """Drops the ``ops`` keyword the connector passes to listing
+        functions; the tenant answers them itself."""
+
+        def call(*args: Any, ops: object = None, **kwargs: Any) -> Any:  # noqa: ARG001
+            return function(*args, **kwargs)
+
+        return call
 
 
 def _paged(
@@ -295,7 +309,7 @@ def _paged(
 
 def make_service_account_connector(**config: Any) -> GoogleDriveConnector:
     connector = GoogleDriveConnector(**config)
-    connector._creds = MagicMock(spec=ServiceAccountCredentials)
+    connector._is_service_account = True
     connector._primary_admin_email = f"admin@{DOMAIN}"
     if not connector.specific_requests_made:
         connector.include_files_shared_with_me = True

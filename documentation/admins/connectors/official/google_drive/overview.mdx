@@ -1,0 +1,77 @@
+---
+title: "Google Drive Overview"
+description: "Overview of the Google Drive connector"
+---
+
+## How it works
+
+The Google Drive connector indexes the files in your Google Drive. It supports:
+- Google: Docs, Sheets, and Slides
+- Microsoft: Word, Excel, and PowerPoint
+- PDF, CSV, and TXT files
+- Certain other document, plaintext, and image files
+
+Files larger than 10 MB are skipped.
+Self-hosted admins can change this limit with the `GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD` environment variable.
+
+Onyx checks Google Drive for new and changed files on the connector's refresh schedule.
+The default is every **30** minutes.
+
+## Setting up
+
+- **[Recommended]** To set up the connector with a service account, follow the guide
+  [here](./service_account). This requires a Google Workspace and access to its Admin console.
+
+- To set up the connector with an individual account and OAuth, follow the guide [here](./oauth).
+  This does not require a Google Workspace.
+
+<Note>
+  You can set up more than one Google Drive connector on a single Onyx instance,
+  each with its own credential and service account.
+  This lets you index multiple Google Workspaces from one Onyx deployment.
+</Note>
+
+## Choosing what to index
+
+After you select a credential, choose the indexing scope under **Index Configurations**.
+
+### General
+
+**General** indexes broad parts of the Workspace:
+
+- **Include Shared Drives**: index every shared drive. With a service account,
+  this covers all shared drives in the organization. With OAuth,
+  it covers the shared drives the connected user can access.
+- **Include My Drive** (OAuth) / **Include Everyone's My Drive** (service account): index the connected user's My Drive,
+  or the My Drive of every user in the organization.
+- **Include All Files Shared with You** (OAuth only): index the files shared with the connected user.
+
+### Specific
+
+**Specific** limits the connector to the locations you list, as comma-separated values:
+
+- **Shared Drive URLs**: index only these shared drives.
+- **Folder URLs**: index these folders and all of their subfolders.
+- **My Drive Emails** (service account only): index the My Drive of these users.
+
+### Other settings
+
+- **Specific User Emails** (service account only): index only files that these users can access.
+- **Hide Domain Link-Only Files**: skip files that are shared with the whole domain or publicly, but only by link.
+
+## Document access and permission sync
+
+Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with Google Drive**.
+**Sync with Google Drive** mirrors Google Drive sharing. A user finds a file in Onyx only if their Google account,
+matched by email, can open it in Drive.
+Onyx re-reads file permissions and Google group membership every 5 minutes by default.
+Self-hosted admins can change the group interval with `GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY`, in seconds.
+
+**Specific Groups** and **Sync with Google Drive** need a Business plan or higher, or Onyx Cloud.
+
+## Connection checks
+
+When you select a credential, Onyx runs checks against Google Drive. The checks confirm that Onyx can sign in,
+list Workspace users, find the drives and folders you listed, and read file content. With **Sync with Google Drive**,
+Onyx also checks that it can read file permissions and group members.
+**Create Connector** is enabled when the required checks pass.

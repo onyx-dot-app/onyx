@@ -8,12 +8,13 @@ import type {
   DropdownMode,
   DropdownRow,
   DropdownRowProps,
+  DropdownSizePreset,
 } from "@opal/components/dropdown/types";
 
 /**
- * Whether a mousedown must keep its default: the target is a control that
- * needs focus to work (an input inside a custom row). Anything else keeps
- * focus on the trigger, so a pick never blurs it.
+ * Whether the pointer's target is a control that needs focus to work (an
+ * input inside a custom row, or the search field). Focus stays there;
+ * anywhere else a press gives focus back to where it was.
  */
 export function targetTakesFocus(event: React.MouseEvent): boolean {
   return (
@@ -22,10 +23,17 @@ export function targetTakesFocus(event: React.MouseEvent): boolean {
   );
 }
 
+/** Whether the user has text selected: a drag or a double-click on text. */
+export function selectsText(): boolean {
+  const selection = window.getSelection();
+  return selection !== null && !selection.isCollapsed;
+}
+
 interface RowProps {
   listId: string;
   mode: DropdownMode;
   row: DropdownRow;
+  sizePreset: DropdownSizePreset;
   /** The row's keyboard stop, or -1 while it is withheld (folded). */
   index: number;
   isHighlighted: boolean;
@@ -46,6 +54,7 @@ export const Row = React.memo(function Row({
   listId,
   mode,
   row,
+  sizePreset,
   index,
   isHighlighted,
   isSelected,
@@ -55,12 +64,9 @@ export const Row = React.memo(function Row({
   const interaction = isHighlighted ? "hover" : "rest";
   const onClick = (event: React.MouseEvent) => {
     event.stopPropagation();
+    // A drag that selected text is not a pick.
+    if (selectsText()) return;
     if (!row.disabled) onActivate(row);
-  };
-  // Keep focus on the trigger: the pick must not blur it. A control inside
-  // a custom row that needs focus keeps the default.
-  const onMouseDown = (event: React.MouseEvent) => {
-    if (!targetTakesFocus(event)) event.preventDefault();
   };
 
   if (row.kind === "custom") {
@@ -72,7 +78,6 @@ export const Row = React.memo(function Row({
       "data-index": index,
       tabIndex: -1,
       onClick,
-      onMouseDown,
     };
     return <>{row.render({ highlighted: isHighlighted, props })}</>;
   }
@@ -88,7 +93,8 @@ export const Row = React.memo(function Row({
         icon={row.icon}
         title={row.title}
         description={row.description}
-        sizePreset="main-ui"
+        sizePreset={sizePreset}
+        padding={sizePreset === "secondary" ? 0 : 0.5}
         variant={row.description ? "heading" : "body"}
         // The switch only shows the state: the row is the control, so the
         // switch takes no pointer or focus of its own.
@@ -105,7 +111,6 @@ export const Row = React.memo(function Row({
           : { "aria-checked": row.checked })}
         tabIndex={-1}
         onClick={onClick}
-        onMouseDown={onMouseDown}
       />
     );
   }
@@ -120,15 +125,20 @@ export const Row = React.memo(function Row({
     title: row.title,
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
+    tag: row.kind === "option" ? row.tag : undefined,
     descriptionMaxLines:
       row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
-    tooltip: row.kind === "action" ? row.tooltip : undefined,
-    sizePreset: "main-ui",
-    // `body` resolves to `ContentSm`, which has no description or suffix
-    // slot; a row with either takes the `heading` layout.
+    tooltip:
+      row.kind === "action" || row.kind === "option" ? row.tooltip : undefined,
+    // Beside the list, so it never covers the row above.
+    tooltipSide: "end",
+    sizePreset,
+    padding: sizePreset === "secondary" ? 0 : 0.5,
+    // `body` resolves to `ContentSm`, which has no description, suffix or
+    // tag slot; a row with any of them takes the `heading` layout.
     variant:
-      row.description || (row.kind === "option" && row.suffix)
+      row.description || (row.kind === "option" && (row.suffix || row.tag))
         ? "heading"
         : "body",
     id,
@@ -137,13 +147,16 @@ export const Row = React.memo(function Row({
     ...(mode === "picker" && { "aria-selected": isSelected }),
     tabIndex: -1,
     onClick,
-    onMouseDown,
   } as const;
 
   if (row.kind === "action" && row.href !== undefined) {
     // A real link: the click navigates natively, and Enter clicks it, so
     // middle-click, modifier-click and copy-link work.
     return <LineItemButton {...content} href={row.href} target={row.target} />;
+  }
+  if (row.kind === "option" && row.href !== undefined) {
+    // A link among the options, the same way.
+    return <LineItemButton {...content} href={row.href} />;
   }
   return <LineItemButton presentational {...content} />;
 });

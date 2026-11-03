@@ -13,7 +13,8 @@ jest.mock("@/lib/permissions/hooks", () => ({
     isScopedManager: false,
   }),
 }));
-jest.mock("@/hooks/useTierAtLeast", () => ({
+jest.mock("@/lib/tiers/hooks", () => ({
+  ...jest.requireActual("@/lib/tiers/hooks"),
   useTierAtLeast: () => true,
 }));
 jest.mock("@/lib/hooks", () => ({

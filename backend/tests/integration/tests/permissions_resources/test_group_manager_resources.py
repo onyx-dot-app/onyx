@@ -739,11 +739,7 @@ def test_admin_cc_pair_detail_carries_permissions_map(env: _ScopedEnv) -> None:
 
 def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
     """Every fetch the detail page makes, on a connector that lost its last group.
-
-    The page gates its whole render on the cc-pair AND the index-attempts fetch, and
-    usePaginatedFetch never clears isLoading on error — so a single 404 here is an
-    infinite spinner, not a visible failure.
-    """
+    A refused sub-resource leaves part of the page loading forever, not failed."""
     cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.manager,
         access_type=AccessType.PRIVATE,
@@ -753,9 +749,9 @@ def test_manager_reads_detail_of_own_groupless_cc_pair(env: _ScopedEnv) -> None:
 
     for path in [
         f"/manage/admin/cc-pair/{cc_pair.id}",
-        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=10",
+        f"/manage/admin/cc-pair/{cc_pair.id}/index-attempts?page_num=0&page_size=1",
         f"/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
-        f"/manage/admin/cc-pair/{cc_pair.id}/permission-sync-attempts",
+        f"/manage/admin/cc-pair/{cc_pair.id}/runs?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/errors?page_num=0&page_size=10",
         f"/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
     ]:

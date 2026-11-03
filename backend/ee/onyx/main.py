@@ -21,12 +21,12 @@ from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.log_export.api import router as log_export_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
 from ee.onyx.server.middleware.license_enforcement import (
-    add_license_enforcement_middleware,
+    license_enforcement_middleware,
 )
 from ee.onyx.server.middleware.tenant_tracking import (
-    add_api_server_tenant_id_middleware,
+    tenant_id_middleware,
 )
-from ee.onyx.server.middleware.tier_gate import add_tier_gate_middleware
+from ee.onyx.server.middleware.tier_gate import tier_gate_middleware
 from ee.onyx.server.oauth.api import router as ee_oauth_router
 from ee.onyx.server.query_and_chat.query_backend import basic_router as ee_query_router
 from ee.onyx.server.query_and_chat.search_backend import router as search_router
@@ -92,14 +92,14 @@ def get_application() -> FastAPI:
     # AFTER tenant_tracking has populated CURRENT_TENANT_ID_CONTEXTVAR.
     # Tier gate attaches in both modes; get_tier() resolves per deployment
     # internally. Reads the unified PATH_PREFIX_MIN_TIER map.
-    add_tier_gate_middleware(application, logger)
+    application.add_middleware(tier_gate_middleware, logger=logger)
 
     if MULTI_TENANT:
-        add_api_server_tenant_id_middleware(application, logger)
+        application.add_middleware(tenant_id_middleware, logger=logger)
     else:
         # License enforcement middleware for self-hosted deployments only
         # MT deployments use control plane gating via is_tenant_gated() instead
-        add_license_enforcement_middleware(application, logger)
+        application.add_middleware(license_enforcement_middleware, logger=logger)
 
     if MULTI_TENANT:
         # For Google OAuth, refresh tokens are requested by:

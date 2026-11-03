@@ -8,6 +8,7 @@ resource "onyx_cc_pair" "confluence_wiki" {
 
   # Everyone can read the indexed documents. Use "private" with groups to
   # restrict them, or "sync" to mirror permissions from the source system.
+  # Onyx cannot change access in place, so a change here replaces the pair.
   access_type = "public"
 }
 
@@ -23,6 +24,17 @@ resource "onyx_cc_pair" "hr_handbook" {
 
   # Pause a pair to stop new index runs. It keeps the documents it has.
   paused = false
+}
+
+# A pair that mirrors source permissions, narrowed to members of one group.
+# Needs Onyx v5.0 or later and Enterprise Edition.
+resource "onyx_cc_pair" "restricted_drive" {
+  name          = "restricted-drive"
+  connector_id  = onyx_connector.drive.id
+  credential_id = onyx_credential.drive.id
+
+  access_type           = "sync_restricted"
+  data_access_group_ids = [onyx_user_group.finance.id]
 }
 
 # Destroying a pair also removes the documents it indexed, which Onyx does in

@@ -4,8 +4,7 @@ import { IconLoader } from "@opal/loaders";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Card, InputPasswordTypeIn } from "@opal/components";
+import { Button, Card, InputPasswordTypeIn, Text } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
 import {
@@ -47,7 +46,7 @@ export function BotConfigCard() {
             justifyContent="between"
             alignItems="center"
           >
-            <Text mainContentEmphasis text05>
+            <Text font="main-content-emphasis" color="text-05">
               {t("botToken.section.title")}
             </Text>
           </Section>
@@ -115,7 +114,7 @@ export function BotConfigCard() {
         <Section alignItems="start" height="fit">
           <Section flexDirection="row" justifyContent="between">
             <Section flexDirection="row" gap={2} width="fit">
-              <Text mainContentEmphasis text05>
+              <Text font="main-content-emphasis" color="text-05">
                 {t("botToken.section.title")}
               </Text>
               {isConfigured ? (
@@ -149,7 +148,7 @@ export function BotConfigCard() {
 
           {isConfigured ? (
             <Section flexDirection="column" alignItems="start" gap={2}>
-              <Text text03 secondaryBody>
+              <Text font="secondary-body" color="text-03">
                 {botConfig?.created_at
                   ? t("botToken.configuredWithDate.text", {
                       date:
@@ -160,13 +159,13 @@ export function BotConfigCard() {
                     })
                   : t("botToken.configured.text")}
               </Text>
-              <Text text03 secondaryBody>
+              <Text font="secondary-body" color="text-03">
                 {t("botToken.changeInstructions.text")}
               </Text>
             </Section>
           ) : (
             <Section flexDirection="column" alignItems="start" gap={3}>
-              <Text text03 secondaryBody>
+              <Text font="secondary-body" color="text-03">
                 {t("botToken.enterInstructions.text")}
               </Text>
               <Section flexDirection="row" alignItems="end" gap={2}>

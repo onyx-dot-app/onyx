@@ -73,7 +73,7 @@ def analyze_topics(topics: list[str]) -> None:
         name=ASSISTANT_NAME,
         instructions=SYSTEM_PROMPT,
         tools=[{"type": "SearchTool"}],  # type: ignore
-        model="gpt-4o",
+        model="gpt-6-sol",
     )
 
     # Process each topic individually

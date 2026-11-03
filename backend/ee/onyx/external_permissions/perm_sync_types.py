@@ -1,12 +1,16 @@
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
+from datetime import datetime
 from typing import Optional, Protocol
 
 from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
+from ee.onyx.external_permissions.models import DocSyncResume
 from onyx.access.models import (
     DocExternalAccess,  # noqa
     ElementExternalAccess,  # noqa
     NodeExternalAccess,  # noqa
 )
+from onyx.connectors.models import ConnectorCheckpoint
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import ConnectorCredentialPair  # noqa
 from onyx.db.utils import DocumentRow, SortOrder
@@ -53,6 +57,39 @@ DocSyncFuncType = Callable[
         FetchAllDocumentsFunction,
         FetchAllDocumentsIdsFunction,
         Optional[IndexingHeartbeatInterface],
+    ],
+    Generator[ElementExternalAccess, None, None],
+]
+
+
+class DocSyncCheckpointer(ABC):
+    """Carries a resumable doc sync's crawl state across attempts, so an attempt
+    stopped by the timeout hands its progress to the next one."""
+
+    @property
+    @abstractmethod
+    def resume(self) -> DocSyncResume | None:
+        """Where an earlier failed attempt stopped, or None to start fresh."""
+
+    @abstractmethod
+    def save(
+        self,
+        checkpoint: ConnectorCheckpoint,
+        poll_range_start: datetime | None,
+        poll_range_end: datetime,
+    ) -> None:
+        """Called at a boundary where every element before ``checkpoint`` has
+        been yielded and written. May skip writes to bound their frequency."""
+
+
+# Resumable variant of DocSyncFuncType
+CheckpointedDocSyncFuncType = Callable[
+    [
+        ConnectorCredentialPair,
+        FetchAllDocumentsFunction,
+        FetchAllDocumentsIdsFunction,
+        Optional[IndexingHeartbeatInterface],
+        DocSyncCheckpointer,
     ],
     Generator[ElementExternalAccess, None, None],
 ]

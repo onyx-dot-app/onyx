@@ -314,7 +314,7 @@ def save_files(
     return run_functions_tuples_in_parallel(funcs)
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def verify_user_files(
     user_files: list[FileDescriptor],
     user_id: UUID | None,

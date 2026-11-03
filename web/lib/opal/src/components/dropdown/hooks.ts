@@ -15,7 +15,7 @@ import {
   useFloating,
   type ReferenceType,
 } from "@floating-ui/react-dom";
-import { DROPDOWN_WIDTH_TOKENS } from "@opal/components/dropdown/model";
+import { contextualMenuWidthToCss } from "@opal/shared";
 import type {
   DropdownAlign,
   DropdownRow,
@@ -483,6 +483,10 @@ export function useDropdownOverlay({
     },
     [openProp, onOpenChange, disabled]
   );
+  // Disabling closes an open list; it then exits like any other close.
+  useEffect(() => {
+    if (disabled) setIsOpen(false);
+  }, [disabled, setIsOpen]);
 
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
@@ -500,13 +504,14 @@ export function useDropdownOverlay({
   const labelRef = useRef<HTMLElement | null>(null);
   const floatingRef = useRef<HTMLDivElement | null>(null);
 
-  // Reset highlight and keyboard nav when closing
+  // Reset highlight and keyboard nav when the list closes, including when
+  // disabling closes it under a parent that still holds `open`.
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || disabled) {
       setHighlightedIndex(-1);
       setIsKeyboardNav(false);
     }
-  }, [isOpen]);
+  }, [isOpen, disabled]);
 
   const widthRef = useRef(width);
   const { refs, floatingStyles, isPositioned, placement, update } =
@@ -532,14 +537,21 @@ export function useDropdownOverlay({
         flip(),
         shift({ padding: 8 }),
         size({
-          apply({ rects, elements }) {
+          padding: 8,
+          apply({ rects, elements, availableWidth, availableHeight }) {
             // Read through a ref: floating-ui compares middleware by source
             // text, so a closure over `width` would never be seen to change.
             // Inline, so a fixed width also beats the stylesheet's floor.
+            // A fixed width never exceeds the space beside the anchor, so a
+            // wide step still fits a narrow window.
             const fixed =
               widthRef.current === undefined
                 ? undefined
-                : `var(${DROPDOWN_WIDTH_TOKENS[widthRef.current]})`;
+                : `min(${contextualMenuWidthToCss(widthRef.current)}, ${availableWidth}px)`;
+            elements.floating.style.setProperty(
+              "--opal-dropdown-available-height",
+              `${Math.max(0, availableHeight)}px`
+            );
             Object.assign(
               elements.floating.style,
               fixed !== undefined

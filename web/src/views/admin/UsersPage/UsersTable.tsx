@@ -5,13 +5,12 @@ import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Table, type TableColumn } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import { AccountType, UserStatus } from "@/lib/types";
 import { timeAgo } from "@opal/time";
-import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
@@ -51,11 +50,11 @@ function renderStatusColumn(
 ) {
   return (
     <div className="flex flex-col">
-      <Text as="span" mainUiBody text03>
+      <Text as="span" font="main-ui-body" color="text-03">
         {labels.status[value] ?? value}
       </Text>
       {row.is_scim_synced && (
-        <Text as="span" secondaryBody text03>
+        <Text as="span" font="secondary-body" color="text-03">
           {labels.scimSynced}
         </Text>
       )}
@@ -65,7 +64,7 @@ function renderStatusColumn(
 
 function renderLastActiveColumn(value: string | null, locale: string) {
   return (
-    <Text as="span" secondaryBody text03>
+    <Text as="span" font="secondary-body" color="text-03">
       {value ? (timeAgo(value, locale) ?? "\u2014") : "\u2014"}
     </Text>
   );
@@ -249,7 +248,7 @@ export default function UsersTable({
 
   if (error) {
     return (
-      <Text as="p" secondaryBody text03>
+      <Text as="p" font="secondary-body" color="text-03">
         {t("table.error.description")}
       </Text>
     );

@@ -136,6 +136,7 @@ from onyx.server.models import (
     UserGroupInfo,
 )
 from onyx.server.security.store import get_security_settings
+from onyx.server.settings.store import resolve_user_language
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import (
@@ -1093,6 +1094,9 @@ def verify_user_logged_in(
         # If anonymous access is enabled, return anonymous user info
         if anonymous_user_enabled(tenant_id=tenant_id):
             store = get_kv_store()
+            # A browser that still carries a signed-out user's cookie follows
+            # the workspace default like any other anonymous visitor.
+            reconcile_locale_cookie(request, response, stored_language=None)
             return fetch_anonymous_user_info(store)
         session_rejection_error = build_session_rejection_error()
         if session_rejection_error is not None:
@@ -1169,10 +1173,7 @@ def verify_user_logged_in(
         effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
 
-    # Reconcile the locale cookie with the stored preference so a login on a
-    # fresh browser (or after an identity switch) renders the user's language.
-    if request.cookies.get(NEXT_LOCALE_COOKIE_NAME) != user.language:
-        set_locale_cookie(response, user.language)
+    reconcile_locale_cookie(request, response, stored_language=user.language)
 
     return user_info
 
@@ -1290,9 +1291,9 @@ LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
 
 
 def set_locale_cookie(response: Response, language: str) -> None:
-    """The backend owns the locale cookie: it is set from the stored
-    preference on PATCH /user/language and reconciled on GET /me, so the
-    client never writes it. The Next.js server layout is the only reader."""
+    """The backend owns the locale cookie: PATCH /user/language and GET /me
+    set it to the effective language, so the client never writes it. The
+    Next.js server layout is the only reader."""
     response.set_cookie(
         key=NEXT_LOCALE_COOKIE_NAME,
         value=language,
@@ -1304,6 +1305,17 @@ def set_locale_cookie(response: Response, language: str) -> None:
     )
 
 
+def reconcile_locale_cookie(
+    request: Request, response: Response, stored_language: str | None
+) -> None:
+    """Re-issue the locale cookie when it disagrees with the effective
+    language, so a fresh browser, an identity switch or a changed workspace
+    default renders the right language."""
+    language: str = resolve_user_language(stored_language)
+    if request.cookies.get(NEXT_LOCALE_COOKIE_NAME) != language:
+        set_locale_cookie(response, language)
+
+
 @router.patch("/user/language")
 def update_user_language_api(
     request: LanguageRequest,
@@ -1311,8 +1323,9 @@ def update_user_language_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_language(user.id, request.language.value, db_session)
-    set_locale_cookie(response, request.language.value)
+    language: str | None = request.language.value if request.language else None
+    update_user_language(user.id, language, db_session)
+    set_locale_cookie(response, resolve_user_language(language))
 
 
 @router.patch("/user/chat-background")
