@@ -13,6 +13,9 @@ import type { DefaultModel } from "@/lib/languageModels/types";
 const mockUseSWR = jest.fn();
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   usePathname: () => "/admin/configuration/llm",
 }));
 

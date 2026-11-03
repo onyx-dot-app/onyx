@@ -9,6 +9,9 @@ const originalBroadcastChannel = window.BroadcastChannel;
 const channels: NativeBroadcastChannel[] = [];
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useSearchParams: () => query,
 }));
 

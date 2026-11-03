@@ -40,6 +40,9 @@ let mockManage = false;
 let mockSearchParams = new URLSearchParams();
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useSearchParams: () => mockSearchParams,
   usePathname: () => "/app/plugins",

@@ -8,6 +8,9 @@ const mockReplace = jest.fn();
 let mockError: string | null = null;
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ replace: mockReplace }),
   usePathname: () => "/auth/error",
   useSearchParams: () => ({ get: () => mockError }),

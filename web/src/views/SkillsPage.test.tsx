@@ -28,6 +28,9 @@ jest.mock("swr", () => ({
 }));
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: mockRouterPush }),
   usePathname: () => "/craft/v1/skills",
   useSearchParams: () => ({ get: mockSearchParamsGet }),

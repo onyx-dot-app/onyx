@@ -29,6 +29,9 @@ let mockScopedManager = false;
 let mockCraftAvailable = true;
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   usePathname: () => "/admin/plugins",
   useSearchParams: () => mockSearchParams,

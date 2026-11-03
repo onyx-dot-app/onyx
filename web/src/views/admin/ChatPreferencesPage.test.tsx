@@ -22,6 +22,9 @@ jest.mock("@/lib/permissions/hooks", () => ({
 }));
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ refresh: jest.fn() }),
   usePathname: () => "/admin/chat-preferences",
 }));

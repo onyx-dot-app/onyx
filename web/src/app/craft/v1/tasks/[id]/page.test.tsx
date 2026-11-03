@@ -14,6 +14,9 @@ import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useParams: () => ({ id: "task-id" }),
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => "/craft/v1/tasks/task-id",

@@ -6,6 +6,9 @@ import { memberPluginMessages } from "@/sections/plugins/__tests__/memberPluginF
 const mockPush = jest.fn();
 const mockAction = jest.fn();
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: mockPush }),
   usePathname: () => "/craft/v1/plugins",
 }));

@@ -2,6 +2,9 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 const mockPush = jest.fn();
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   ...jest.requireActual("next/navigation"),
   useRouter: () => ({ push: mockPush }),
 }));

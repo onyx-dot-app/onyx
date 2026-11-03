@@ -12,6 +12,9 @@ const mockToastWarning = jest.fn();
 const mockGetUserFileStatuses = jest.fn();
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useSearchParams: () => ({
     get: () => null,
   }),
