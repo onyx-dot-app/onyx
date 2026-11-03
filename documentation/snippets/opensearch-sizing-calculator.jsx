@@ -114,9 +114,9 @@ export const OpenSearchSizingCalculator = () => {
       ? (n / 1e9).toFixed(1) + "B"
       : n >= 1e6
         ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M"
-        : n >= 1e3
+        : n >= 1e4
           ? Math.round(n / 1e3) + "k"
-          : String(Math.round(n));
+          : Math.round(n).toLocaleString();
   const pct = (v) => Math.round(v * 100) + "%";
   const fmtDisk = (gb) => (gb < 1000 ? gb + " GB" : gb / 1000 + " TB");
 
