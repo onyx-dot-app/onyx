@@ -14,7 +14,10 @@ import type {
 } from "@/lib/connectors/types";
 
 /** The query string a runs feed takes, for one pair or the fleet. */
-function runsQueryParams(query: CCPairRunsQuery): string {
+function runsQueryParams(
+  query: CCPairRunsQuery,
+  ccPairIds: readonly number[] = []
+): string {
   const params = new URLSearchParams({
     page_num: String(query.pageNum),
     page_size: String(query.pageSize),
@@ -33,6 +36,7 @@ function runsQueryParams(query: CCPairRunsQuery): string {
   if (query.resolved !== null) {
     params.set("resolved", String(query.resolved));
   }
+  appendPairIds(params, ccPairIds);
   return params.toString();
 }
 
@@ -48,17 +52,28 @@ function throughputParams(
   }).toString();
 }
 
+/** Narrows a fleet route to these pairs. Empty leaves the backend's scope: readable on the feed, operated on the batch routes. */
+function appendPairIds(params: URLSearchParams, ccPairIds: readonly number[]) {
+  for (const ccPairId of ccPairIds) {
+    params.append("cc_pair_ids", String(ccPairId));
+  }
+}
+
+const ACTIVITY_RUNS_COUNT_TAG = "activity-runs-count";
+
 function resolvableCountParams(
   level: CCPairRunLevel | null,
   q: string,
   since: string | null,
-  until: string | null
+  until: string | null,
+  ccPairIds: readonly number[] = []
 ): string {
   const params = new URLSearchParams();
   if (level !== null) params.set("level", level);
   if (q) params.set("q", q);
   if (since) params.set("since", since);
   if (until) params.set("until", until);
+  appendPairIds(params, ccPairIds);
   return params.toString();
 }
 
@@ -416,11 +431,16 @@ export const SWR_KEYS = {
     level: CCPairRunLevel | null,
     q: string,
     since: string | null,
-    until: string | null
+    until: string | null,
+    ccPairIds: readonly number[]
   ) =>
-    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until)}`,
-  indexMonitoringRuns: (query: CCPairRunsQuery) =>
-    `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until, ccPairIds)}`,
+  indexMonitoringRuns: (query: CCPairRunsQuery, ccPairIds: readonly number[]) =>
+    `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query, ccPairIds)}`,
+  // Sums the totals of these runs feed URLs. `mutate` matches it by its first element.
+  activityRunsCountTag: ACTIVITY_RUNS_COUNT_TAG,
+  activityRunsCount: (urls: readonly string[]) =>
+    [ACTIVITY_RUNS_COUNT_TAG, ...urls] as const,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 

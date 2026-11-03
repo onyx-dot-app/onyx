@@ -3099,15 +3099,22 @@
           "all": "All Levels",
           "failures": "Failures",
           "errors": "Errors",
-          "other": "Other",
+          "running": "Running",
+          "success": "Success",
+          "canceled": "Canceled",
           "resolved": "Resolved",
-          "toggle": "Filters"
+          "connectors": "Connectors",
+          "connectorsLoading": "Loading connectors…",
+          "toggleShow": "Show Filters",
+          "toggleHide": "Hide Filters"
         },
         "groups": {
           "failures": "{count, plural, =0 {Failures} one {# Failure} other {# Failures}}",
           "errors": "{count, plural, =0 {Errors} one {# Error} other {# Errors}}",
-          "other": "Other",
-          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}"
+          "running": "{count, number} Running",
+          "resolved": "Resolved",
+          "success": "Success",
+          "canceled": "Canceled"
         },
         "title": {
           "indexing": {
@@ -3118,9 +3125,8 @@
             "errors": "Indexing completed with errors.",
             "resolved": "Indexing errors resolved.",
             "succeeded": "Indexing completed successfully.",
-            "queued": "Indexing queued.",
             "inProgress": "Indexing in progress.",
-            "canceled": "Indexing stopped."
+            "canceled": "Indexing canceled."
           },
           "doc_permission_sync": {
             "failed": "Permissions sync failed.",
@@ -3130,9 +3136,8 @@
             "errors": "Permissions synced with errors.",
             "resolved": "Permissions sync errors resolved.",
             "succeeded": "Permissions synced successfully.",
-            "queued": "Permissions sync queued.",
             "inProgress": "Permissions syncing.",
-            "canceled": "Permissions sync stopped."
+            "canceled": "Permissions sync canceled."
           },
           "group_sync": {
             "failed": "Group membership sync failed.",
@@ -3142,9 +3147,8 @@
             "errors": "Group membership synced with errors.",
             "resolved": "Group membership sync errors resolved.",
             "succeeded": "Group membership synced successfully.",
-            "queued": "Group membership sync queued.",
             "inProgress": "Group membership syncing.",
-            "canceled": "Group membership sync stopped."
+            "canceled": "Group membership sync canceled."
           },
           "pruning": {
             "failed": "Pruning failed.",
@@ -3154,9 +3158,8 @@
             "errors": "Pruning completed with errors.",
             "resolved": "Pruning errors resolved.",
             "succeeded": "Pruning completed successfully.",
-            "queued": "Pruning queued.",
             "inProgress": "Pruning in progress.",
-            "canceled": "Pruning stopped."
+            "canceled": "Pruning canceled."
           },
           "checks": {
             "failed": "Connector checks failed.",
@@ -3166,9 +3169,8 @@
             "errors": "Connector checks completed with errors.",
             "resolved": "Connector check errors resolved.",
             "succeeded": "Connector checks passed.",
-            "queued": "Connector checks queued.",
             "inProgress": "Connector checks running.",
-            "canceled": "Connector checks stopped."
+            "canceled": "Connector checks canceled."
           }
         },
         "description": {
@@ -3183,22 +3185,16 @@
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
           "indexingItems": "{count, plural, one {# item failed} other {# items failed}}",
-          "doc_permission_sync": "{count, plural, one {# doc failed to sync permissions} other {# docs failed to sync permissions}}",
-          "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",
           "resolved": "Resolved",
-          "resolvedDocs": "{count, plural, one {# item resolved} other {# items resolved}}",
           "superseded": "Superseded"
         },
         "more": "Show more",
         "empty": {
           "title": "No recent activity",
-          "resolved": "No resolved runs",
-          "filtered": "Nothing matches this search.",
-          "failures": "No failures",
-          "errors": "No errors",
-          "other": "No other runs"
+          "past": "Past Activities",
+          "filtered": "Nothing matches this search."
         },
         "loadError": {
           "title": "Couldn't load the activity."
@@ -3209,10 +3205,7 @@
             "placeholder": "Search items…"
           },
           "resolveAll": "Retry all",
-          "resolveAllTooltip": "Re-index every failed document of this run",
-          "resolveAllUnsupported": "This connector can't re-index single documents. Re-index the connector to retry them.",
           "resolveOne": "Retry this document",
-          "retry": "{count, plural, one {Retry # doc} other {Retry # docs}}",
           "more": "More",
           "less": "Less",
           "unknownDocument": "Unknown document",
@@ -3226,17 +3219,18 @@
           "runId": "Run ID: {id}"
         },
         "actions": {
-          "resolve": "Resolve"
+          "resolve": "Resolve",
+          "resolveWithoutRetry": "Resolve without Retry",
+          "retryDocs": "Retry Docs"
         },
         "resolveAll": {
-          "button": "Resolve all shown",
-          "title": "Resolve all shown runs?",
-          "description": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved. They keep their status and move under resolved.",
-          "fleetDescription": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved, on the connectors you operate. They keep their status and move under resolved.",
-          "confirm": "Resolve all"
-        },
-        "resolved": {
-          "label": "Resolved"
+          "button": "Resolve All",
+          "title": "Resolve all shown activities",
+          "body": "{count, plural, one {This resolves the # activity that matches the current filter: {failures} and {errors}. Onyx does not retry its failed items. The activity keeps its status and moves to Resolved.} other {This resolves the # activities that match the current filter: {failures} and {errors}. Onyx does not retry their failed items. The activities keep their status and move to Resolved.}}",
+          "body2": "A run that is still running can report new errors. They show as open again. You can retry a resolved document later from its failed documents list.",
+          "failures": "{count, plural, =0 {no failures} one {# failure} other {# failures}}",
+          "errors": "{count, plural, =0 {no runs with errors} one {# run with errors} other {# runs with errors}}",
+          "confirm": "Resolve All"
         }
       },
       "stageDetails": {
@@ -7480,7 +7474,7 @@
         "history": "Full Activity History",
         "viewLogs": "View Logs",
         "panel": {
-          "title": "Activity History",
+          "title": "Activities",
           "close": "Close Panel",
           "pairTitle": "{name} Activity History"
         }

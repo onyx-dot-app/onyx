@@ -46,6 +46,7 @@ import ThroughputChart, {
   PAIR_WINDOWS,
   type PickerWindow,
   type SliceRange,
+  type ThroughputActivityLinks,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 // Statuses a pair keeps until its first index succeeds, a failed first run included.
@@ -204,6 +205,8 @@ export interface StatusCardProps {
   /** The span of the chart the page is narrowed to: a click or drag on the chart picks one, the chip's X clears it. */
   range?: SliceRange | null;
   onRangeChange?: (range: SliceRange | null) => void;
+  /** Ties the chart to the page's activity panel. */
+  activityLinks?: ThroughputActivityLinks;
 }
 
 /** The pair at a glance: its indexing and permission sync statuses or its document access, then its documents and documents indexed over time. */
@@ -216,6 +219,7 @@ export default function StatusCard({
   onTimeWindowChange,
   range = null,
   onRangeChange,
+  activityLinks,
 }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const locale = useLocale();
@@ -474,6 +478,7 @@ export default function StatusCard({
                   range={timeWindow}
                   selection={range}
                   onRangeSelect={onRangeChange}
+                  {...activityLinks}
                 />
               </Section>
             )}

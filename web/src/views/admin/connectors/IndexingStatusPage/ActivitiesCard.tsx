@@ -14,6 +14,8 @@ import { Content, Section } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
 import { SvgActivity, SvgFileText } from "@opal/icons";
 import {
+  ALL_ACTIVITY,
+  runKey,
   useActivityItems,
   useResolveRunErrors,
 } from "@/lib/connectors/ccPair/hooks";
@@ -33,38 +35,36 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
   const t = useTranslations("admin.indexing.activities");
   const tActivity = useTranslations("admin.connector.activity");
   const { resolving, resolve, resolveRun } = useResolveRunErrors();
+  const feed = { enabled: true, pollMs: RUNS_POLL_MS };
   const failures = useActivityItems(
     "fleet",
     "failures",
     false,
-    "",
-    true,
-    RUNS_POLL_MS
+    ALL_ACTIVITY,
+    feed
   );
-  const errors = useActivityItems(
-    "fleet",
-    "errors",
-    false,
-    "",
-    true,
-    RUNS_POLL_MS
-  );
-  const groups = [failures, errors];
+  const errors = useActivityItems("fleet", "errors", false, ALL_ACTIVITY, feed);
+  const sections = [failures, errors];
   // Each feed is newest first, so one sort interleaves them.
   const items = useMemo(
     () =>
       [
-        ...failures.runs.map((item) => ({ group: "failures" as const, item })),
-        ...errors.runs.map((item) => ({ group: "errors" as const, item })),
+        ...failures.runs.map((item) => ({
+          section: "failures" as const,
+          item,
+        })),
+        ...errors.runs.map((item) => ({ section: "errors" as const, item })),
       ].sort((a, b) =>
         b.item.run.time_created.localeCompare(a.item.run.time_created)
       ),
     [failures.runs, errors.runs]
   );
-  const loading = groups.some((group) => group.isLoading && !group.loaded);
-  const failed = groups.some((group) => group.failed);
-  const empty = groups.every(
-    (group) => group.loaded && group.runs.length === 0
+  const loading = sections.some(
+    (section) => section.isLoading && !section.loaded
+  );
+  const failed = sections.some((section) => section.failed);
+  const empty = sections.every(
+    (section) => section.loaded && section.runs.length === 0
   );
 
   return (
@@ -145,12 +145,12 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
             className="max-h-44 @[38.5rem]/overview:max-h-none"
           >
             <Section alignItems="stretch" gap={1} height="fit">
-              {items.map(({ group, item }) => (
+              {items.map(({ section, item }) => (
                 <ActivityCard
-                  key={`${item.run.kind}-${item.run.attempt.id}`}
+                  key={runKey(item.run)}
                   ccPairId={item.ccPairId}
                   run={item.run}
-                  group={group}
+                  section={section}
                   closed={false}
                   connector={item.connector}
                   canResolve={item.canResolve}

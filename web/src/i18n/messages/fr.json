@@ -3099,15 +3099,22 @@
           "all": "Tous niveaux",
           "failures": "Échecs",
           "errors": "Erreurs",
-          "other": "Autres",
+          "running": "En cours",
+          "success": "Réussies",
+          "canceled": "Annulées",
           "resolved": "Résolu",
-          "toggle": "Filtres"
+          "connectors": "Connecteurs",
+          "connectorsLoading": "Chargement des connecteurs…",
+          "toggleShow": "Afficher les filtres",
+          "toggleHide": "Masquer les filtres"
         },
         "groups": {
           "failures": "{count, plural, =0 {Échecs} one {# échec} other {# échecs}}",
           "errors": "{count, plural, =0 {Erreurs} one {# erreur} other {# erreurs}}",
-          "other": "Autres",
-          "resolved": "{count, plural, one {# résolue} other {# résolues}}"
+          "running": "{count, number} en cours",
+          "resolved": "Résolues",
+          "success": "Réussies",
+          "canceled": "Annulées"
         },
         "title": {
           "indexing": {
@@ -3118,9 +3125,8 @@
             "errors": "Indexation terminée avec des erreurs.",
             "resolved": "Erreurs d'indexation résolues.",
             "succeeded": "Indexation terminée avec succès.",
-            "queued": "Indexation en file d'attente.",
             "inProgress": "Indexation en cours.",
-            "canceled": "Indexation arrêtée."
+            "canceled": "Indexation annulée."
           },
           "doc_permission_sync": {
             "failed": "La synchronisation des autorisations a échoué.",
@@ -3130,9 +3136,8 @@
             "errors": "Autorisations synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des autorisations résolues.",
             "succeeded": "Permissions synchronisées avec succès.",
-            "queued": "Synchronisation des permissions en file d'attente.",
             "inProgress": "Synchronisation des permissions en cours.",
-            "canceled": "Synchronisation des permissions arrêtée."
+            "canceled": "Synchronisation des permissions annulée."
           },
           "group_sync": {
             "failed": "La synchronisation des appartenances aux groupes a échoué.",
@@ -3142,9 +3147,8 @@
             "errors": "Appartenances aux groupes synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues.",
             "succeeded": "Appartenances aux groupes synchronisées avec succès.",
-            "queued": "Synchronisation des appartenances aux groupes en file d'attente.",
             "inProgress": "Synchronisation des appartenances aux groupes.",
-            "canceled": "Synchronisation des groupes arrêtée."
+            "canceled": "Synchronisation des groupes annulée."
           },
           "pruning": {
             "failed": "L'élagage a échoué.",
@@ -3154,9 +3158,8 @@
             "errors": "Élagage terminé avec des erreurs.",
             "resolved": "Erreurs d'élagage résolues.",
             "succeeded": "Élagage terminé avec succès.",
-            "queued": "Élagage en file d'attente.",
             "inProgress": "Élagage en cours.",
-            "canceled": "Élagage arrêté."
+            "canceled": "Élagage annulé."
           },
           "checks": {
             "failed": "Les vérifications du connecteur ont échoué.",
@@ -3166,9 +3169,8 @@
             "errors": "Vérifications du connecteur terminées avec des erreurs.",
             "resolved": "Erreurs des vérifications du connecteur résolues.",
             "succeeded": "Vérifications du connecteur réussies.",
-            "queued": "Vérifications du connecteur en file d'attente.",
             "inProgress": "Vérifications du connecteur en cours.",
-            "canceled": "Vérifications du connecteur arrêtées."
+            "canceled": "Vérifications du connecteur annulées."
           }
         },
         "description": {
@@ -3183,22 +3185,16 @@
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "indexingItems": "{count, plural, one {# élément en échec} other {# éléments en échec}}",
-          "doc_permission_sync": "{count, plural, one {Permissions de # document non synchronisées} other {Permissions de # documents non synchronisées}}",
-          "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
           "resolved": "Résolu",
-          "resolvedDocs": "{count, plural, one {# élément résolu} other {# éléments résolus}}",
           "superseded": "Remplacé"
         },
         "more": "Afficher plus",
         "empty": {
           "title": "Aucune activité récente",
-          "resolved": "Aucune exécution résolue",
-          "filtered": "Rien ne correspond à cette recherche.",
-          "failures": "Aucun échec",
-          "errors": "Aucune erreur",
-          "other": "Aucune autre exécution"
+          "past": "Activités passées",
+          "filtered": "Rien ne correspond à cette recherche."
         },
         "loadError": {
           "title": "Impossible de charger l'activité."
@@ -3209,10 +3205,7 @@
             "placeholder": "Rechercher des éléments…"
           },
           "resolveAll": "Tout réessayer",
-          "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
-          "resolveAllUnsupported": "Ce connecteur ne peut pas réindexer des documents individuels. Réindexez le connecteur pour les réessayer.",
           "resolveOne": "Réessayer ce document",
-          "retry": "{count, plural, one {Réessayer # document} other {Réessayer # documents}}",
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",
@@ -3226,17 +3219,18 @@
           "runId": "ID d'exécution : {id}"
         },
         "actions": {
-          "resolve": "Résoudre"
+          "resolve": "Résoudre",
+          "resolveWithoutRetry": "Résoudre sans relancer",
+          "retryDocs": "Relancer les documents"
         },
         "resolveAll": {
-          "button": "Résoudre tout l’affichage",
-          "title": "Résoudre toutes les exécutions affichées ?",
-          "description": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel. Elles conservent leur statut et passent dans les éléments résolus.",
-          "fleetDescription": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel, sur les connecteurs que vous gérez. Elles conservent leur statut et passent dans les éléments résolus.",
+          "button": "Tout résoudre",
+          "title": "Résoudre toutes les activités affichées",
+          "body": "{count, plural, one {Cette action résout # activité correspondant au filtre actuel : {failures} et {errors}. Onyx ne relance pas ses éléments en échec. L’activité conserve son statut et passe dans Résolues.} other {Cette action résout # activités correspondant au filtre actuel : {failures} et {errors}. Onyx ne relance pas leurs éléments en échec. Les activités conservent leur statut et passent dans Résolues.}}",
+          "body2": "Une exécution encore en cours peut signaler de nouvelles erreurs. Elles réapparaissent comme ouvertes. Vous pourrez relancer plus tard un document résolu depuis sa liste de documents en échec.",
+          "failures": "{count, plural, =0 {aucun échec} one {# échec} other {# échecs}}",
+          "errors": "{count, plural, =0 {aucune exécution avec erreurs} one {# exécution avec erreurs} other {# exécutions avec erreurs}}",
           "confirm": "Tout résoudre"
-        },
-        "resolved": {
-          "label": "Résolues"
         }
       },
       "stageDetails": {
@@ -7480,7 +7474,7 @@
         "history": "Historique complet de l'activité",
         "viewLogs": "Afficher les journaux",
         "panel": {
-          "title": "Historique de l'activité",
+          "title": "Activités",
           "close": "Fermer le panneau",
           "pairTitle": "Historique de l'activité de {name}"
         }

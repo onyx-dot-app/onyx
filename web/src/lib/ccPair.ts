@@ -89,6 +89,8 @@ export interface CCPairRunsMatchingFilter {
   since: string | null;
   until: string | null;
   kinds: CCPairRunKind[] | null;
+  /** The fleet route's pairs. Null or empty leaves the backend's scope, the pairs the caller operates. The pair routes reject it. */
+  cc_pair_ids: number[] | null;
 }
 
 export interface CCPairRunsResolveMatchingResponse {
