@@ -115,7 +115,7 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | Searches per question | 10 hybrid searches | The first search call runs 4–8 searches: the rephrased question, the LLM's queries, the original question, and up to 3 keyword queries. A second call runs 2–4. |
 | CPU per hybrid search | 0.0003 core-seconds × dimensions × millions of chunks | Fit from two single-shard benchmarks near 1.5 million chunks: 0.17 seconds at 384 dimensions and 0.48 seconds at 1,024 dimensions. Growth with chunk count is an estimate. |
 | CPU for search at peak | 50% | Leaves room for indexing, merges, and bursts. Above it, searches queue and then fail. |
-| vCPUs per data node | 1 per 8 GB of RAM | Memory-optimized nodes, such as Amazon `r8g`. |
+| vCPUs per data node | 1 per 8, 4, or 2 GB of RAM | Memory-optimized (`r8g`), general purpose (`m7g`), or compute-optimized (`c7g`) nodes. The calculator picks the type whose vCPUs carry the search load on the nodes the data needs. |
 | Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |
 | Shard size | 15 GB or less | Amazon OpenSearch Service recommends 10 GB to 30 GB per shard for search workloads. The calculator aims low so the index can grow without a change of shard count. |
 
@@ -193,19 +193,20 @@ the calculator plans for 24 million chunks.
 
 | Setup | Index size, one copy | Memory for vector search, one copy | Cluster | Onyx settings |
 | --- | --- | --- | --- | --- |
-| Granite (384 dimensions), 2 copies, no search load | 106 GB | 38 GB | 3 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 16 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Granite, 1 copy, no search load | 106 GB | 38 GB | 2 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
-| Same, with 1-bit quantization | 107 GB | 2.1 GB | 1 node, 16 GB RAM and 512 GB storage | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
-| Granite, 2 copies, 0.5 questions per second at peak | 106 GB | 38 GB | 4 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite (384 dimensions), 2 copies, no search load | 106 GB | 38 GB | 3 nodes, 8 vCPUs, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 2 vCPUs, 16 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite, 2 copies, 0.5 questions per second at peak | 106 GB | 38 GB | 3 nodes, 16 vCPUs, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 16 vCPUs, 32 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 
 The shard count makes the shard copies divide evenly over the nodes, so no node holds more than its share.
 1-bit quantization needs OpenSearch 3.6 or later. It stores vectors 32× smaller,
 so the memory for vector search drops about 18× in this example (the graph links stay the same size).
 Storage barely changes.
 
-At 0.5 questions per second, the searches need about 28 vCPUs at peak, so the cluster needs 4 nodes with 8 vCPUs each.
-1-bit quantization does not reduce this, because it saves memory, not search CPU.
+At 0.5 questions per second, the searches need about 28 vCPUs at peak.
+The 3 nodes that hold the data have 24 vCPUs as memory-optimized nodes,
+so the calculator picks general-purpose nodes with 16 vCPUs each. With 1-bit quantization, the data fits on 16 GB nodes,
+but 2 vCPUs per node is too few, so the calculator picks 32 GB nodes with 16 vCPUs.
 When search needs more nodes than there are shard copies, the calculator adds replicas,
 because a node without a shard copy does no search work.
 

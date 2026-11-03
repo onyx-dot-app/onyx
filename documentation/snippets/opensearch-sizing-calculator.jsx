@@ -64,8 +64,12 @@ export const OpenSearchSizingCalculator = () => {
   const MAX_EMPLOYEES = 10_000_000;
   const MAX_YEARS = 50;
   const NODE_RAM = [16, 32, 64];
-  // Memory-optimized nodes (r8g) have 8 GB of RAM per vCPU.
-  const VCPU_FOR_RAM = { 16: 2, 32: 4, 64: 8 };
+  // GB of RAM per vCPU by node family, most RAM per core first. On Graviton nodes 1 vCPU is 1 core.
+  const NODE_TYPES = [
+    { gbPerVcpu: 8, name: "memory-optimized", example: "r8g" },
+    { gbPerVcpu: 4, name: "general purpose", example: "m7g" },
+    { gbPerVcpu: 2, name: "compute-optimized", example: "c7g" },
+  ];
   // One question runs about 10 hybrid searches: 4-8 on the first search call, 2-4 on a second.
   const SEARCHES_PER_QUESTION = 10;
   // CPU seconds per hybrid search, per embedding dimension and million chunks. Fit from two
@@ -107,6 +111,7 @@ export const OpenSearchSizingCalculator = () => {
   const [peakQps, setPeakQps] = useState("0.5");
   const [nodeRamChoice, setNodeRamChoice] = useState("auto");
   const [nodeDiskChoice, setNodeDiskChoice] = useState("auto");
+  const [nodeTypeChoice, setNodeTypeChoice] = useState("auto");
   const [rebuildRoom, setRebuildRoom] = useState(true);
   const barRef = useRef(null);
   const dragRef = useRef(null);
@@ -232,20 +237,34 @@ export const OpenSearchSizingCalculator = () => {
   const layout = (c) => {
     const provision = (indexOneCopy * c * (rebuildRoom ? 2 : 1)) / DISK_FILL;
     const hotAll = hotOneCopy * c;
-    const searchNodesFor = (ram) => Math.ceil(vcpusForSearch / VCPU_FOR_RAM[ram]);
-    // Recommended memory is the smallest node size that fits on one node per copy;
-    // otherwise the largest, so the cluster adds nodes instead of growing nodes.
+    // Recommended memory is the smallest node size that fits the data and the search load on
+    // one node per copy; otherwise the largest, so the cluster adds nodes instead of growing
+    // nodes. Search assumes the chosen node type, or the one with the most vCPUs per GB.
     const baseNodes = Math.ceil(c / zones) * zones;
+    const fewestGbPerVcpu =
+      nodeTypeChoice === "auto" ? NODE_TYPES[NODE_TYPES.length - 1].gbPerVcpu : nodeTypeChoice;
     const nodesFor = (ram) =>
       Math.ceil(
-        Math.max(c, Math.ceil(hotAll / cacheFor(ram)), Math.ceil(provision / (MAX_DISK_FOR_RAM[ram] * 1e9)), searchNodesFor(ram)) / zones
+        Math.max(
+          c,
+          Math.ceil(hotAll / cacheFor(ram)),
+          Math.ceil(provision / (MAX_DISK_FOR_RAM[ram] * 1e9)),
+          Math.ceil(vcpusForSearch / (ram / fewestGbPerVcpu))
+        ) / zones
       ) * zones;
     const recommendedRam = NODE_RAM.find((r) => nodesFor(r) <= baseNodes) || NODE_RAM[NODE_RAM.length - 1];
     const nodeRam = nodeRamChoice === "auto" ? recommendedRam : nodeRamChoice;
     const heapGB = Math.min(nodeRam / 2, 31);
     const cachePerNode = (nodeRam - heapGB) * CACHE_SHARE_FOR_VECTORS * 1e9;
     const nodesForMemory = Math.ceil(hotAll / cachePerNode);
-    const nodesForSearch = searchNodesFor(nodeRam);
+    // Recommended vCPUs: the most RAM per core whose cores carry the search load on the nodes
+    // the data needs; otherwise the most cores per GB.
+    const dataNodes = Math.ceil(Math.max(c, nodesForMemory) / zones) * zones;
+    const searchNodesWith = (t) => Math.ceil(vcpusForSearch / (nodeRam / t.gbPerVcpu));
+    const recommendedType = NODE_TYPES.find((t) => searchNodesWith(t) <= dataNodes) || NODE_TYPES[NODE_TYPES.length - 1];
+    const nodeType = nodeTypeChoice === "auto" ? recommendedType : NODE_TYPES.find((t) => t.gbPerVcpu === nodeTypeChoice);
+    const vcpusPerNode = nodeRam / nodeType.gbPerVcpu;
+    const nodesForSearch = searchNodesWith(nodeType);
     // Recommended storage fills up at the same node count that memory, copies and search need.
     const maxDisk = MAX_DISK_FOR_RAM[nodeRam];
     const diskOptions = NODE_DISK.filter((d) => d <= maxDisk);
@@ -263,7 +282,10 @@ export const OpenSearchSizingCalculator = () => {
           : nodesForMemory > c
             ? "memory"
             : "copies";
-    return { provision, hotAll, recommendedRam, nodeRam, cachePerNode, nodesForSearch, diskOptions, recommendedDisk, nodeDisk, nodes, limit };
+    return {
+      provision, hotAll, recommendedRam, nodeRam, cachePerNode, recommendedType, nodeType, vcpusPerNode,
+      nodesForSearch, diskOptions, recommendedDisk, nodeDisk, nodes, limit,
+    };
   };
   // A search runs on one copy of every primary shard, so a node with no shard copy does no
   // search work. When search needs more nodes than the shards sized for data have copies,
@@ -272,9 +294,10 @@ export const OpenSearchSizingCalculator = () => {
   // Across 3 zones the copies stay a multiple of 3, one set in each zone.
   const searchCopies = Math.ceil(first.nodesForSearch / primariesForSize / zones) * zones;
   const effectiveCopies = Math.max(copies, searchCopies);
-  const { provision, hotAll, recommendedRam, nodeRam, cachePerNode, diskOptions, recommendedDisk, nodeDisk, nodes, limit } =
-    effectiveCopies > copies ? layout(effectiveCopies) : first;
-  const vcpusPerNode = VCPU_FOR_RAM[nodeRam];
+  const {
+    provision, hotAll, recommendedRam, nodeRam, cachePerNode, recommendedType, nodeType, vcpusPerNode,
+    diskOptions, recommendedDisk, nodeDisk, nodes, limit,
+  } = effectiveCopies > copies ? layout(effectiveCopies) : first;
   // Shards are whole units, so pick a primary count whose copies divide evenly over the
   // nodes. Then no node holds more than its share of the vectors and the data.
   const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
@@ -630,7 +653,7 @@ export const OpenSearchSizingCalculator = () => {
                   <option key={r} value={String(r)}>{r + " GB"}</option>
                 ))}
               </select>
-              <div className={hint}>Recommended memory is the smallest node that holds the data on the fewest nodes. 64 GB at most.</div>
+              <div className={hint}>Recommended memory is the smallest node that holds the data and the search load on the fewest nodes. 64 GB at most.</div>
             </div>
             <div className="space-y-1.5">
               <label htmlFor="os-disk" className={label}>Storage per data node</label>
@@ -647,6 +670,21 @@ export const OpenSearchSizingCalculator = () => {
               </select>
               <div className={hint}>Recommended storage fills up at the same node count that memory and search need.</div>
             </div>
+            <div className="space-y-1.5">
+              <label htmlFor="os-vcpu" className={label}>vCPUs per data node</label>
+              <select
+                id="os-vcpu"
+                value={nodeTypeChoice === "auto" ? "auto" : String(nodeType.gbPerVcpu)}
+                onChange={(e) => setNodeTypeChoice(e.target.value === "auto" ? "auto" : Number(e.target.value))}
+                className={input + " w-full"}
+              >
+                <option value="auto">{"Recommended (" + nodeRam / recommendedType.gbPerVcpu + ")"}</option>
+                {NODE_TYPES.map((t) => (
+                  <option key={t.gbPerVcpu} value={String(t.gbPerVcpu)}>{nodeRam / t.gbPerVcpu + " · " + t.name + " (" + t.example + ")"}</option>
+                ))}
+              </select>
+              <div className={hint}>Recommended vCPUs carry the peak search load on the nodes the data needs. Memory-optimized nodes have 8 GB of RAM per vCPU, general purpose 4, compute-optimized 2.</div>
+            </div>
           </div>
           <div className="space-y-1.5">
             <div className={label}>Room to rebuild the index</div>
@@ -658,7 +696,7 @@ export const OpenSearchSizingCalculator = () => {
         <div className={card + " h-fit space-y-4"}>
           <div className="text-lg font-semibold text-gray-900 dark:text-white">Cluster</div>
           <div className="rounded-xl bg-primary/10 p-4 dark:bg-primary-light/10">
-            <div className="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{nodes + (nodes === 1 ? " data node · " : " data nodes · ") + nodeRam + " GB RAM · " + fmtDisk(nodeDisk) + " storage each"}</div>
+            <div className="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{nodes + (nodes === 1 ? " data node · " : " data nodes · ") + vcpusPerNode + " vCPUs · " + nodeRam + " GB RAM · " + fmtDisk(nodeDisk) + " storage each"}</div>
             <div className={hint + " mt-1"}>
               {limit === "storage"
                 ? "Set by storage: the cluster needs " + fmtBytes(provision) + " of disk, and each node has " + fmtDisk(nodeDisk) + "."
@@ -688,7 +726,11 @@ export const OpenSearchSizingCalculator = () => {
             </div>
           ) : null}
           {limit === "search" ? (
-            <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">Search load sets the node count. Nodes with more vCPUs per GB of RAM, such as general-purpose (m8g) nodes, can carry the same load with fewer nodes.</div>
+            <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+              {nodeType.gbPerVcpu > NODE_TYPES[NODE_TYPES.length - 1].gbPerVcpu
+                ? "Search load sets the node count. Nodes with more vCPUs per GB of RAM carry the same load with fewer nodes."
+                : "Search load sets the node count, even with compute-optimized nodes. Each node adds vCPUs for search."}
+            </div>
           ) : null}
           {limit === "memory" && quant === "none" ? (
             <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">Memory sets the node count. 1-bit quantization (OpenSearch 3.6 or later) stores vectors 32× smaller.</div>
