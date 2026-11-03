@@ -151,14 +151,11 @@ export interface SettingsHeaderProps {
   stackActionsOnMobile?: boolean;
   /**
    * Renders a secondary Cancel as the first action. `true` goes back within
-   * the app (`clampedBack`); a function overrides the destination.
+   * the app (`clampedBack`), or to `/` when the page was not reached within
+   * it; a path does the same with that path as the fallback; a function
+   * replaces the action.
    */
-  cancel?: boolean | (() => void);
-  /**
-   * Where `cancel={true}` goes when the page was not reached within the app
-   * (a deep link, a new tab). Defaults to `/`.
-   */
-  cancelFallback?: string;
+  cancel?: boolean | string | (() => void);
   divider?: boolean;
 }
 
@@ -180,8 +177,7 @@ function SettingsHeader({
   children,
   actions,
   stackActionsOnMobile = false,
-  cancel,
-  cancelFallback = "/",
+  cancel = false,
   divider,
 }: SettingsHeaderProps) {
   const navigation = useNavigation();
@@ -198,11 +194,18 @@ function SettingsHeader({
   const onCancel =
     typeof cancel === "function"
       ? cancel
-      : cancel
-        ? () =>
-            // SAFETY: callers name a page of the app, like Opal's other hrefs.
-            navigation.clampedBack(cancelFallback as Route)
-        : undefined;
+      : cancel === false
+        ? undefined
+        : () =>
+            navigation.clampedBack(
+              // SAFETY: a path on this origin (not `//host`) is a page of the
+              // app; anything else falls back to the app's root.
+              (typeof cancel === "string" &&
+              cancel.startsWith("/") &&
+              !cancel.startsWith("//")
+                ? cancel
+                : "/") as Route
+            );
   const hasActions = !!onCancel || (!!actions && actions.length > 0);
   const isSticky = hasActions;
 

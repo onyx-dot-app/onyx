@@ -41,8 +41,7 @@ Headers are only sticky when `actions` is non-empty.
 | `onTitleChange`  | `(title: string) => void` | —       | Called when the user commits a title edit                                                                                                                 |
 | `actions`        | `ReactNode[]`             | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
 | `children`       | `ReactNode`               | —       | Content below the title row (e.g. search bar, filters)                                                                                                    |
-| `cancel`         | `boolean \| () => void`   | `false` | Render a secondary Cancel as the first action; `true` goes back within the app (`clampedBack`), a function overrides the destination |
-| `cancelFallback` | `string`                  | `"/"`   | Where `cancel={true}` goes when the page was not reached within the app (a deep link, a new tab) |
+| `cancel`         | `boolean \| string \| () => void` | `false` | Render a secondary Cancel as the first action. `true` goes back within the app, or to `/` from a page not reached within it; a path does the same with that path as the fallback; a function replaces the action |
 | `divider`        | `boolean`                 | `false` | Show a horizontal divider at the bottom of the header                                                                                                     |
 | `stackActionsOnMobile` | `boolean`               | `false` | Place actions below the title on a full-width row on narrow screens                                                                                       |
 
