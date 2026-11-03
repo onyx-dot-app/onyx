@@ -602,6 +602,43 @@ model server only, or use the `gke` module with `gpu_accelerator_count = 2`.
 Helm merges `resources` with the chart defaults, so the CPU and memory requests
 and limits stay.
 
+## Craft sandboxes on Firecracker
+
+Craft can run each sandbox as a Firecracker microVM instead of a pod. This
+needs `/dev/kvm` on the sandbox nodes. Set it when you create the pool:
+
+```hcl
+enable_sandbox_node_pool = true
+craft_sandbox_runtime    = "firecracker"
+```
+
+With `"firecracker"`, the `gke` module:
+
+- turns on nested virtualization for the sandbox pool;
+- sets `vm.max_map_count` to `1048576` (COS ships `65530`);
+- adds the label `onyx.app/kvm=true`;
+- keeps Shielded VM secure boot on.
+
+The default, `"pod"`, leaves the pool as it is. GCP turns on nested
+virtualization only when it creates a pool, so a change to
+`craft_sandbox_runtime` replaces the sandbox pool.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| Cluster | GKE Standard | GKE Autopilot |
+| Machine type | Intel `n2`, `c3` (default `n2-standard-8`) | `n2d`, `c2d`, `c3d`, `t2d` (AMD), `t2a` (Arm), `e2` |
+| Image | `COS_CONTAINERD` (module default) | — |
+| Pool | — | `sandbox_gvisor_enabled = true` |
+
+The module refuses a blocked machine type, and gVisor with Firecracker on the
+same pool. These setups must keep `craft_sandbox_runtime = "pod"`:
+
+- Autopilot. It blocks privileged pods and nested virtualization.
+- AMD or Arm machine types. GCP gives them no nested virtualization.
+- gVisor pools. A gVisor pod gets no `/dev/kvm`.
+
 ## Serving through an L7 load balancer (Cloud Armor)
 
 The chart exposes Onyx through ingress-nginx behind a Service of type

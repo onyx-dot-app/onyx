@@ -401,6 +401,42 @@ opensearch:
 Set `index_node_pool_enabled = false` if you would rather run the index on the
 system pool and skip this.
 
+## Craft sandboxes on Firecracker
+
+Craft can run each sandbox as a Firecracker microVM instead of a pod. This
+needs `/dev/kvm` on the sandbox nodes. Set it on the composition:
+
+```hcl
+enable_sandbox_node_pool = true
+craft_sandbox_runtime    = "firecracker"
+sandbox_node_vm_size     = "Standard_D8ds_v5"
+```
+
+With `"firecracker"`, the `aks` module:
+
+- sets the sandbox pool OS to `Ubuntu2404`;
+- adds the label `onyx.app/kvm=true`.
+
+The default, `"pod"`, leaves the pool as it is. A change to
+`craft_sandbox_runtime` rotates the sandbox pool.
+
+The module sets no `vm.max_map_count`. The Ubuntu 24.04 node image already
+uses `1048576`, and `azurerm` accepts no value above `262144`.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| VM size | Intel D or E, v5 to v7 (for example `Standard_D8ds_v5`, `Standard_D8ds_v7`) | sizes with `a` (AMD) or `p` (Arm) in the name, v4 and older |
+| OS | `Ubuntu2404` (set by the module) | — |
+| Pool | — | Pod Sandboxing (Kata) pools |
+
+The module refuses a blocked VM size. These setups must keep
+`craft_sandbox_runtime = "pod"`:
+
+- AMD or Arm VM sizes.
+- Kata (Pod Sandboxing) pools. Their pods get no `/dev/kvm`.
+
 ## Testing
 
 Every module has a `terraform test` suite that plans it against a mocked
