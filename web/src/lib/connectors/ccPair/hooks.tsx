@@ -431,8 +431,11 @@ function withNothingOpen(item: ActivityItem): ActivityItem {
 
 interface HeldRun {
   section: ActivitySection;
+  /** The run as last listed. */
   item: ActivityItem;
   index: number;
+  /** The section's total when the run was last listed. */
+  total: number;
 }
 
 /** Keeps a run whose card has a panel open in its list, where it stood, after a refresh drops it (its last open error resolved in that panel), until the panel closes. */
@@ -442,6 +445,25 @@ export function useHeldOpenRun(sections: ActivitySectionState[]) {
   const isHeld = (item: ActivityItem) => activityKey(item) === key;
   // A run that moved to another section (a running run that failed) keeps its card and its latest counts.
   const latest = sections.flatMap((state) => state.runs).find(isHeld);
+  const heldState =
+    held === null
+      ? undefined
+      : sections.find((state) => state.section === held.section);
+  const heldTotal = heldState?.total;
+  useEffect(() => {
+    if (latest === undefined || heldTotal === undefined) return;
+    setHeld((current) =>
+      current === null || activityKey(current.item) !== activityKey(latest)
+        ? current
+        : { ...current, item: latest, total: heldTotal }
+    );
+  }, [latest, heldTotal]);
+  // Gone from the loaded pages: newer runs that grew the section may have pushed it onto a page not loaded, so it keeps its last counts. Otherwise its last open error closed.
+  const pushedPast =
+    held !== null &&
+    heldState !== undefined &&
+    heldState.hasMore &&
+    heldState.total > held.total;
   const shown = sections.map((state) => {
     if (held === null) return state;
     if (state.section !== held.section) {
@@ -454,7 +476,7 @@ export function useHeldOpenRun(sections: ActivitySectionState[]) {
     runs.splice(
       Math.min(held.index, runs.length),
       0,
-      latest ?? withNothingOpen(held.item)
+      latest ?? (pushedPast ? held.item : withNothingOpen(held.item))
     );
     return { ...state, runs };
   });
@@ -464,10 +486,15 @@ export function useHeldOpenRun(sections: ActivitySectionState[]) {
       const same = current !== null && activityKey(current.item) === key;
       if (!open) return same ? null : current;
       if (same) return current;
-      const runs =
-        sections.find((state) => state.section === section)?.runs ?? [];
+      const state = sections.find((entry) => entry.section === section);
+      const runs = state?.runs ?? [];
       const index = runs.findIndex((run) => activityKey(run) === key);
-      return { section, item, index: Math.max(index, 0) };
+      return {
+        section,
+        item,
+        index: Math.max(index, 0),
+        total: state?.total ?? 0,
+      };
     });
   }
   return { sections: shown, hold, isHeld };
