@@ -49,6 +49,10 @@ export const OpenSearchSizingCalculator = () => {
     { key: "web", label: "Web pages", examples: "Websites, help centers", unit: "pages", ratio: 6 },
   ];
   const MAX_ITEMS = 10_000_000_000;
+  // From managed deployments, rounded up so that most estimates err on the high side.
+  const CHUNKS_PER_EMPLOYEE_YEAR = 1500;
+  const MAX_EMPLOYEES = 10_000_000;
+  const MAX_YEARS = 50;
   const NODE_RAM = [16, 32, 64];
   const NODE_DISK = [64, 128, 256, 512, 1000, 1500, 3000, 6000];
   // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large, r8g.xlarge and r8g.2xlarge.
@@ -72,6 +76,9 @@ export const OpenSearchSizingCalculator = () => {
     ].map(([key, count], k) => ({ id: k + 1, key, count, ratio: String(SOURCES.find((x) => x.key === key).ratio) }))
   );
   const [sourceToAdd, setSourceToAdd] = useState("pdfs");
+  const [employees, setEmployees] = useState("500");
+  const [years, setYears] = useState("5");
+  const [perEmployeeYear, setPerEmployeeYear] = useState(String(CHUNKS_PER_EMPLOYEE_YEAR));
   const [totalGB, setTotalGB] = useState(500);
   const [parts, setParts] = useState([0.05, 0.25, 0.15, 0.05, 0.15, 0.35]);
   const [growth, setGrowth] = useState(30);
@@ -158,8 +165,15 @@ export const OpenSearchSizingCalculator = () => {
   const sourceOf = (key) => SOURCES.find((x) => x.key === key);
   const singular = (unit) => unit.replace(/s$/, "");
   const sourceChunks = sourceRows.map((r) => clampNumber(r.count, MAX_ITEMS) * clampNumber(r.ratio, 1000));
+  const employeeCount = clampNumber(employees, MAX_EMPLOYEES);
+  const yearCount = clampNumber(years, MAX_YEARS);
+  const employeeRate = clampNumber(perEmployeeYear, 1_000_000);
   const chunksToday =
-    inputMode === "storage" ? (textGB * 1e9) / TEXT_PER_CHUNK : sourceChunks.reduce((a, b) => a + b, 0);
+    inputMode === "storage"
+      ? (textGB * 1e9) / TEXT_PER_CHUNK
+      : inputMode === "employees"
+        ? employeeCount * yearCount * employeeRate
+        : sourceChunks.reduce((a, b) => a + b, 0);
   const updateRow = (id, field, value) =>
     setSourceRows((rows) => rows.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
   const addRow = () => {
@@ -249,7 +263,7 @@ export const OpenSearchSizingCalculator = () => {
           <div className="text-lg font-semibold text-gray-900 dark:text-white">1. What your data needs</div>
           <div className="space-y-1.5">
             <div className={label}>Start from</div>
-            {segmented({ ariaLabel: "Start from", value: inputMode, onChange: setInputMode, options: [["storage", "Total storage"], ["sources", "Each source"]] })}
+            {segmented({ ariaLabel: "Start from", value: inputMode, onChange: setInputMode, options: [["storage", "Total storage"], ["sources", "Each source"], ["employees", "Employees"]] })}
           </div>
           {inputMode === "sources" ? (
             <div className="space-y-3">
@@ -313,6 +327,33 @@ export const OpenSearchSizingCalculator = () => {
                 <button type="button" onClick={addRow} className="rounded-lg border border-primary px-3 py-1.5 text-base text-primary dark:border-primary-light dark:text-primary-light">
                   Add source
                 </button>
+              </div>
+            </div>
+          ) : inputMode === "employees" ? (
+            <div className="space-y-4">
+              <div className={hint}>A quick first estimate. The sources a company connects matter more than its size, so use Each source when you know your item counts.</div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label htmlFor="os-employees" className={label}>Employees</label>
+                  <input id="os-employees" type="number" min="0" value={employees} onChange={(e) => setEmployees(e.target.value)} className={input + " w-full"} />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="os-years" className={label}>Years of history to index</label>
+                  <input id="os-years" type="number" min="0" max={MAX_YEARS} value={years} onChange={(e) => setYears(e.target.value)} className={input + " w-full"} />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  id="os-per-employee"
+                  type="number"
+                  min="0"
+                  step="100"
+                  aria-label="Chunks per employee per year"
+                  value={perEmployeeYear}
+                  onChange={(e) => setPerEmployeeYear(e.target.value)}
+                  className={input + " w-28"}
+                />
+                <span className={hint}>chunks per employee per year. Raise it if you index everyone's email.</span>
               </div>
             </div>
           ) : (
@@ -439,6 +480,13 @@ export const OpenSearchSizingCalculator = () => {
                         ["Total storage", fmtBytes(total * 1e9)],
                         ["× text share of the storage mix (" + (textShare * 100).toFixed(1) + "%)", fmtBytes(textGB * 1e9)],
                         ["÷ ~1,900 characters per chunk", fmtCount(chunksToday) + " chunks"],
+                      ]
+                    : inputMode === "employees"
+                    ? [
+                        [
+                          employeeCount.toLocaleString() + " employees × " + yearCount + " years × " + employeeRate.toLocaleString() + " per employee per year",
+                          fmtCount(chunksToday) + " chunks",
+                        ],
                       ]
                     : [
                         ...sourceRows.map((r, k) => {
