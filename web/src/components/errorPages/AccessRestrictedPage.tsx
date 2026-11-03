@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import { Button, Text, useCreateModal } from "@opal/components";
-import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import DowngradeToCommunityModal from "@/sections/modals/DowngradeToCommunityModal";
 import { useUser } from "@/providers/UserProvider";
 import { logout } from "@/lib/users/svc";
@@ -208,12 +207,14 @@ export default function AccessRestricted() {
         {richNodes(
           t.rich("needHelp.text", {
             discordLink: (chunks) => (
-              <InlineExternalLink
+              <a
                 className={linkClassName}
                 href="https://discord.gg/4NA5SbzrWb"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 {chunks}
-              </InlineExternalLink>
+              </a>
             ),
           })
         )}
