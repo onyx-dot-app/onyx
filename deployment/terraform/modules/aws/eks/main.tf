@@ -6,7 +6,33 @@ moved {
   to   = module.eks.module.eks_managed_node_group["sandbox"]
 }
 
+# Upstream v21 dropped enable_security_groups_for_pods (default true in v20),
+# so the cluster role keeps this policy through iam_role_additional_policies.
+moved {
+  from = module.eks.aws_iam_role_policy_attachment.this["AmazonEKSVPCResourceController"]
+  to   = module.eks.aws_iam_role_policy_attachment.additional["AmazonEKSVPCResourceController"]
+}
+
 locals {
+  # Upstream v21 changed these node group defaults. Pin the v20 values so the
+  # upgrade does not roll nodes, change AMIs or resize groups. A node group can
+  # still override any of them.
+  node_group_defaults = merge(
+    {
+      ami_type                       = "AL2023_x86_64_STANDARD"
+      enable_monitoring              = true
+      use_latest_ami_release_version = false
+      min_size                       = 0
+      iam_role_description           = ""
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 2
+      }
+    },
+    local.node_group_iam_role_settings,
+  )
+
   s3_bucket_arns = [for name in var.s3_bucket_names : {
     bucket_arn     = "arn:aws:s3:::${name}"
     bucket_objects = "arn:aws:s3:::${name}/*"
@@ -171,16 +197,16 @@ locals {
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.23"
 
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
+  name               = var.cluster_name
+  kubernetes_version = var.cluster_version
 
-  vpc_id                               = var.vpc_id
-  subnet_ids                           = var.subnet_ids
-  cluster_endpoint_public_access       = var.public_cluster_enabled
-  cluster_endpoint_private_access      = var.private_cluster_enabled
-  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  vpc_id                       = var.vpc_id
+  subnet_ids                   = var.subnet_ids
+  endpoint_public_access       = var.public_cluster_enabled
+  endpoint_private_access      = var.private_cluster_enabled
+  endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
   # By default the cluster-admin access entry and the KMS key administrator
   # are whoever runs Terraform, so an apply by a different principal moves
   # them. cluster_admin_principal_arn pins both. It reuses the module's own
@@ -205,18 +231,22 @@ module "eks" {
 
   iam_role_permissions_boundary = var.iam_role_permissions_boundary
   iam_role_path                 = var.iam_role_path
+  iam_role_additional_policies = {
+    AmazonEKSVPCResourceController = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSVPCResourceController"
+  }
 
   # Control plane logging
-  cluster_enabled_log_types              = var.cluster_enabled_log_types
+  enabled_log_types                      = var.cluster_enabled_log_types
   cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
 
   # Opt-in per cluster: adopts the VPC CNI addon and turns on NetworkPolicy
   # enforcement. Off by default so existing clusters' NetworkPolicies stay
   # inert (the cloud cluster has legacy policies of unknown effect).
-  cluster_addons = var.enable_network_policy ? {
+  addons = var.enable_network_policy ? {
     vpc-cni = {
       # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
       addon_version = var.vpc_cni_addon_version
+      most_recent   = false
       # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
       # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
       resolve_conflicts_on_create = "OVERWRITE"
@@ -227,19 +257,16 @@ module "eks" {
     }
   } : {}
 
-  eks_managed_node_group_defaults = merge(
-    { ami_type = "AL2023_x86_64_STANDARD" },
-    local.node_group_iam_role_settings,
-  )
-
   eks_managed_node_groups = {
-    for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups) : k => merge(v,
+    for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups) : k => merge(local.node_group_defaults, v,
       {
         instance_types = v.instance_types != null ? v.instance_types : (
           k == "main" ? var.main_node_instance_types :
           k == "vespa" ? var.vespa_node_instance_types :
           v.instance_types
         )
+        # Upstream v21 takes taints as a map. Accept the list form too.
+        taints = try({ for i, t in tolist(v.taints) : tostring(i) => t }, v.taints, null)
       },
       # Only add subnet_ids override for the document-index node group if specified
       k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {

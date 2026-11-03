@@ -50,7 +50,7 @@ data "aws_iam_policy_document" "opensearch_access" {
     actions = ["es:*"]
 
     resources = [
-      "arn:aws:es:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:domain/${var.name}/*"
+      "arn:aws:es:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:domain/${var.name}/*"
     ]
   }
 }
@@ -165,7 +165,7 @@ resource "aws_opensearch_domain" "main" {
   dynamic "log_publishing_options" {
     for_each = var.enable_logging ? ["INDEX_SLOW_LOGS", "SEARCH_SLOW_LOGS", "ES_APPLICATION_LOGS"] : []
     content {
-      cloudwatch_log_group_arn = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:${local.log_group_name}"
+      cloudwatch_log_group_arn = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:${local.log_group_name}"
       log_type                 = log_publishing_options.value
     }
   }
@@ -227,7 +227,7 @@ data "aws_iam_policy_document" "opensearch_log_policy" {
       "logs:CreateLogStream",
     ]
 
-    resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:${local.log_group_name}:*"]
+    resources = ["arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:${local.log_group_name}:*"]
   }
 }
 
