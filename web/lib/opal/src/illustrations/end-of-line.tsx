@@ -12,25 +12,25 @@ const SvgEndOfLine = ({ size, ...props }: IconProps) => (
   >
     <path
       d="M67.5 33.75H88.125C93.3027 33.75 97.5 29.5527 97.5 24.375C97.5 19.1973 93.3027 15 88.125 15H76.875C71.6973 15 67.5 19.1973 67.5 24.375V33.75ZM67.5 33.75H15M67.5 33.75V82.5"
-      stroke="#CCCCCC"
+      stroke="var(--border-02)"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M30 82.5H105"
-      stroke="#A4A4A4"
+      stroke="var(--border-03)"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M41.25 93.75H93.75"
-      stroke="#CCCCCC"
+      stroke="var(--border-02)"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M52.5 105H82.5"
-      stroke="#CCCCCC"
+      stroke="var(--border-02)"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
