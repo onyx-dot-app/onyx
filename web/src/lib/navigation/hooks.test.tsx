@@ -1,5 +1,5 @@
 import { renderHook } from "@tests/setup/test-utils";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 
 let mockPathname = "/app";
 let mockParams = new URLSearchParams();

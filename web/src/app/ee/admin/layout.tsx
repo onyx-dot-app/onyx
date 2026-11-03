@@ -11,5 +11,5 @@ export interface AdminLayoutProps {
 }
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {
-  return await AdminSSChrome({ children });
+  return await AdminSSChrome({ base: "/ee/admin", children });
 }

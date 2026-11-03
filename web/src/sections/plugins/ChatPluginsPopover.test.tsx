@@ -37,7 +37,7 @@ jest.mock("next/navigation", () => ({
       mockChatId ? `chatId=${mockChatId}` : `projectId=${mockProjectId}`
     ),
 }));
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
     agent: () => null,

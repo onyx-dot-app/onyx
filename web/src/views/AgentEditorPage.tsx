@@ -82,7 +82,7 @@ import { getActionIcon } from "@/lib/tools/utils";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { MCPTool } from "@/lib/mcp/types";
 import { MCPServerCard } from "@/lib/mcp/components";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,

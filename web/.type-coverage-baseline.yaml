@@ -84,7 +84,7 @@ packages:
   src/lib/opensearch-health: 100
   src/lib/permissions: 100
   src/lib/plugins: 99.7
-  src/lib/position: 100
+  src/lib/navigation: 100
   src/lib/projects: 99.7
   src/lib/search: 99.2
   src/lib/searchFilters: 98.1

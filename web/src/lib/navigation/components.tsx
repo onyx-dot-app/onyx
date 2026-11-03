@@ -1,0 +1,61 @@
+"use client";
+
+import type { ReactNode } from "react";
+import Link from "next/link";
+import type { Route } from "next";
+import {
+  type NavigationOptions,
+  useNavigation,
+  useRouteRendering,
+} from "@/lib/navigation/navigation";
+
+export interface PendingRouteProps {
+  /** The path of the layout that renders this, e.g. `/admin`. */
+  base: string;
+  /** The loader for the URL's page, shown until that page renders. */
+  loader: ReactNode;
+  children: ReactNode;
+}
+
+/**
+ * A layout's pages behind the URL: while the URL's route renders, its loader
+ * shows. The page being left stays mounted underneath, so going back to it
+ * finds it as it was (an unsaved draft included).
+ */
+export function PendingRoute({ base, loader, children }: PendingRouteProps) {
+  const rendering = useRouteRendering(base);
+  return (
+    <>
+      {rendering && loader}
+      <div className={rendering ? "hidden" : "contents"}>{children}</div>
+    </>
+  );
+}
+
+export interface NavLinkProps
+  extends
+    Omit<React.ComponentProps<typeof Link>, "href" | "replace">,
+    NavigationOptions {
+  href: Route;
+}
+
+/** A Next link whose plain click goes through `Navigation.go`. */
+export function NavLink({
+  href,
+  replace,
+  shallow,
+  onClick,
+  ...props
+}: NavLinkProps) {
+  const link = useNavigation().linkTo(href, { replace, shallow });
+  return (
+    <Link
+      {...props}
+      href={link.href}
+      onClick={(event) => {
+        onClick?.(event);
+        link.onClick(event);
+      }}
+    />
+  );
+}

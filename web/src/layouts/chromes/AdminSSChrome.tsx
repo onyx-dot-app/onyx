@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAdminAuth } from "@/lib/auth/svcSS";
-import AdminChrome from "@/layouts/chromes/AdminChrome";
+import AdminChrome, {
+  type AdminChromeProps,
+} from "@/layouts/chromes/AdminChrome";
 
-export interface AdminSSChromeProps {
+export interface AdminSSChromeProps extends Pick<AdminChromeProps, "base"> {
   children: React.ReactNode;
 }
 
-export default async function AdminSSChrome({ children }: AdminSSChromeProps) {
+export default async function AdminSSChrome({
+  base,
+  children,
+}: AdminSSChromeProps) {
   // Check authentication and admin role - data fetching is done client-side via SWR hooks
   const authResult = await requireAdminAuth();
 
@@ -19,6 +24,7 @@ export default async function AdminSSChrome({ children }: AdminSSChromeProps) {
   // Seed the client gate so a cold deep-link doesn't self-redirect before /api/me loads.
   return (
     <AdminChrome
+      base={base}
       initialAdminCapabilities={authResult.user?.admin_capabilities ?? []}
     >
       {children}

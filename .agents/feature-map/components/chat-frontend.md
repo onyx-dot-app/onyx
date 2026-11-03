@@ -127,7 +127,7 @@ queued messages, and known not to be incognito (or still empty). An incognito ch
 rebuilt from the server, so the tab holds its only copy. A dropped chat loads
 from the server again when the user opens it, so state kept only in the store
 does not survive it. Within `/app`,
-`web/src/lib/position/hooks.ts:AppPosition` switches views by writing the URL
+`web/src/lib/navigation/hooks.ts:AppPosition` switches views by writing the URL
 with the history API, not a server navigation; in-app links use its `linkTo*`
 props.
 

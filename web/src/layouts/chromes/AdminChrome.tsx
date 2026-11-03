@@ -1,12 +1,13 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
+import { IconLoader, PageLoader } from "@opal/loaders";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
-import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useAdminDocumentTitle } from "@/lib/app/hooks";
+import { PendingRoute } from "@/lib/navigation/components";
+import { useCurrentUrl, useNavigation } from "@/lib/navigation/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
@@ -26,22 +27,25 @@ import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 import { useTranslations } from "next-intl";
 
 export interface AdminChromeProps {
+  /** The path of the layout that renders the chrome. */
+  base: "/admin" | "/ee/admin";
   children: React.ReactNode;
   // Server-fetched seed (AdminSSChrome) used until /api/me loads client-side.
   initialAdminCapabilities: string[];
 }
 
 export default function AdminChrome({
+  base,
   children,
   initialAdminCapabilities,
 }: AdminChromeProps) {
   const t = useTranslations("common");
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
-  const pathname = usePathname();
+  const { pathname } = useCurrentUrl();
   const { vectorDbEnabled, isLoading, application_status } = useSettings();
   useAdminDocumentTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { adminCapabilities: liveAdminCapabilities, isUserLoading } = useUser();
 
   // Seed only in flight — otherwise logout would leave the page authorized by a stale seed.
@@ -61,12 +65,13 @@ export default function AdminChrome({
     if (!denied) return;
     // Some reach left → first permitted page; fully revoked → /app (else they'd bounce to an
     // admin page they still can't open).
-    router.replace(
+    navigation.go(
       (hasAnyAdminPermission(adminCapabilities)
         ? getFirstPermittedAdminRoute(adminCapabilities)
-        : "/app") as Route
+        : "/app") as Route,
+      { replace: true }
     );
-  }, [denied, router, adminCapabilities]);
+  }, [denied, navigation, adminCapabilities]);
 
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
@@ -116,7 +121,11 @@ export default function AdminChrome({
           </RootLayout.Header>
         )}
         <OpenSearchResourceBanner />
-        <RootLayout.MainContent>{content}</RootLayout.MainContent>
+        <RootLayout.MainContent>
+          <PendingRoute base={base} loader={<PageLoader />}>
+            {content}
+          </PendingRoute>
+        </RootLayout.MainContent>
       </RootLayout.App>
     </RootLayout.Root>
   );
