@@ -1,7 +1,7 @@
 #!/bin/sh
 # Checks whether this node can run Craft Firecracker sandboxes.
-# Rendered into the craft-fc-preflight ConfigMap. POSIX sh; needs coreutils
-# for `cp --reflink` and `stat -f`.
+# Rendered into the craft-fc-preflight ConfigMap. POSIX sh; needs awk, grep
+# and GNU coreutils (`cp --reflink`, `stat -f`, `mktemp`).
 #
 # Env:
 #   NODE_NAME           node name, for the log header
@@ -78,20 +78,19 @@ check_max_map_count() {
 
 check_filesystem() {
 	fstype=$(stat -f -c %T "$SCRATCH_DIR" 2>/dev/null)
-	if [ "$fstype" != "xfs" ]; then
-		warn filesystem "$SCRATCH_HOST_PATH is '${fstype:-unknown}', not XFS. The host agent will use an XFS loop file."
+	if ! probe=$(mktemp -d "$SCRATCH_DIR/reflink-probe.XXXXXX" 2>&1); then
+		fail filesystem "$SCRATCH_HOST_PATH is not writable or full (${probe##*: })"
 		return
 	fi
-	probe="$SCRATCH_DIR/reflink-probe.$$"
-	mkdir -p "$probe" || {
-		fail filesystem "$SCRATCH_HOST_PATH is XFS but is not writable"
-		return
-	}
-	if dd if=/dev/zero of="$probe/a" bs=64k count=16 2>/dev/null &&
-		cp --reflink=always "$probe/a" "$probe/b" 2>/dev/null; then
+	if ! err=$(dd if=/dev/zero of="$probe/a" bs=64k count=16 2>&1 >/dev/null); then
+		err=$(echo "$err" | grep -m 1 '^dd:')
+		fail filesystem "$SCRATCH_HOST_PATH is not writable or full (${err##*: })"
+	elif [ "$fstype" != "xfs" ]; then
+		warn filesystem "$SCRATCH_HOST_PATH is '${fstype:-unknown}', not XFS. The host agent will use an XFS loop file."
+	elif err=$(cp --reflink=always "$probe/a" "$probe/b" 2>&1); then
 		pass filesystem "$SCRATCH_HOST_PATH is XFS with reflink"
 	else
-		fail filesystem "$SCRATCH_HOST_PATH is XFS without reflink. Format it with 'mkfs.xfs -m reflink=1'."
+		fail filesystem "$SCRATCH_HOST_PATH is XFS without reflink (${err##*: }). Format it with 'mkfs.xfs -m reflink=1'."
 	fi
 	rm -rf "$probe"
 }

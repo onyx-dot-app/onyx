@@ -1994,8 +1994,9 @@ craft:
   # Craft Firecracker". Does not need ENABLE_CRAFT.
   firecrackerPreflight:
     enabled: false
-    # Image with POSIX sh and coreutils. Empty = the sandbox image, which the
-    # prepuller already keeps on sandbox nodes.
+    # Image with POSIX sh, awk, grep and GNU coreutils. Empty = the sandbox
+    # image. The prepuller only caches it when Craft and sandboxImagePrepull
+    # are on; otherwise the first preflight pod pulls it.
     image: ""
     # Extended resource of a KVM device plugin (for example
     # "devices.kubevirt.io/kvm"). Set it to run the check unprivileged.
