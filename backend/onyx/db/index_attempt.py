@@ -1,3 +1,5 @@
+import hashlib
+import struct
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import NamedTuple, TypeVarTuple
@@ -44,11 +46,14 @@ from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 # Bounds stored failure text; a raw upstream error body can run to megabytes.
 MAX_INDEX_ATTEMPT_ERROR_MESSAGE_CHARS = 10_000
+
+_DOCUMENT_ERROR_LOCK_NAMESPACE = "index_attempt_error"
 
 
 def get_last_attempt_for_cc_pair(
@@ -1281,6 +1286,19 @@ def _index_attempt_error(
     )
 
 
+def _lock_document_errors(
+    db_session: Session, cc_pair_id: int, document_id: str
+) -> None:
+    """Serializes close-and-insert for one document on one pair until the
+    transaction ends. Primary and secondary runs of a model rebuild can fail the
+    same document at once, and unserialized both close-older updates can run
+    before either insert, leaving both new errors open."""
+    key = f"{_DOCUMENT_ERROR_LOCK_NAMESPACE}:{get_current_tenant_id()}:{cc_pair_id}:{document_id}"
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    lock_id = struct.unpack("q", hashlib.sha256(key.encode()).digest()[:8])[0]
+    db_session.execute(select(func.pg_advisory_xact_lock(lock_id)))
+
+
 def create_index_attempt_error(
     index_attempt_id: int,
     connector_credential_pair_id: int,
@@ -1291,6 +1309,11 @@ def create_index_attempt_error(
     admin-resolved ones too, close with this run, since it failed the document
     again."""
     if failure.failed_document:
+        _lock_document_errors(
+            db_session,
+            connector_credential_pair_id,
+            failure.failed_document.document_id,
+        )
         resolve_index_attempt_errors_for_documents__no_commit(
             db_session,
             connector_credential_pair_id,

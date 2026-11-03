@@ -3,16 +3,20 @@ same document closes the older open ones (later_run), indexing the document or
 finishing the run clean closes them (later_run), and a successful retry closes
 the errors it was asked to retry (retry)."""
 
-from collections.abc import Generator
+import contextlib
+import threading
+from collections.abc import Collection, Generator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.docprocessing.tasks import check_indexing_completion
 from onyx.connectors.models import ConnectorFailure, DocumentFailure, EntityFailure
+from onyx.db import index_attempt as index_attempt_db
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import (
     create_index_attempt_error,
@@ -264,3 +268,63 @@ def test_ac2_a_successful_retry_closes_its_errors_with_the_retry_attempt(
     assert resolved_by in retry_attempt_ids
     assert resolved_at is not None
     _assert_open(db_session, still_failing)
+
+
+def test_ac1_concurrent_errors_on_one_document_leave_one_open(
+    db_session: Session,
+    isolated_engine: Engine,
+    pairs: tuple[ConnectorCredentialPair, ConnectorCredentialPair],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Primary and secondary runs of a model rebuild fail the same document at
+    once. Each writer waits after its close-older update for the other to reach
+    the same point. Unserialized, both updates run before either insert and both
+    errors stay open. Serialized, the second writer blocks on the lock, the first
+    writer's wait times out and it commits, and the second update closes its
+    error."""
+    pair, _ = pairs
+    primary_run = _attempt(db_session, pair)
+    secondary_run = _attempt(db_session, pair)
+    both_closed_older = threading.Barrier(2, timeout=3)
+    close_older = index_attempt_db.resolve_index_attempt_errors_for_documents__no_commit
+
+    def close_older_then_wait(
+        session: Session,
+        cc_pair_id: int,
+        document_ids: Collection[str],
+        resolved_by_index_attempt_id: int,
+    ) -> None:
+        close_older(session, cc_pair_id, document_ids, resolved_by_index_attempt_id)
+        with contextlib.suppress(threading.BrokenBarrierError):
+            both_closed_older.wait()
+
+    monkeypatch.setattr(
+        index_attempt_db,
+        "resolve_index_attempt_errors_for_documents__no_commit",
+        close_older_then_wait,
+    )
+
+    def file_error(attempt_id: int) -> int:
+        with Session(isolated_engine) as session:
+            return create_index_attempt_error(
+                attempt_id,
+                pair.id,
+                ConnectorFailure(
+                    failed_document=DocumentFailure(document_id="doc-x"),
+                    failure_message="doc-x failed",
+                ),
+                session,
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        error_ids = list(
+            pool.map(file_error, [primary_run.id, secondary_run.id], timeout=30)
+        )
+
+    db_session.expire_all()
+    open_ids = db_session.scalars(
+        select(IndexAttemptError.id).where(
+            IndexAttemptError.id.in_(error_ids), ~IndexAttemptError.is_resolved
+        )
+    ).all()
+    assert len(open_ids) == 1
