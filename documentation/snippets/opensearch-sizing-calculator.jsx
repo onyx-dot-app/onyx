@@ -109,14 +109,16 @@ export const OpenSearchSizingCalculator = () => {
     if (g >= 1) return g.toFixed(2) + " GB";
     return Math.max(1, Math.round(g * 1000)) + " MB";
   };
-  const fmtCount = (n) =>
-    n >= 1e9
-      ? (n / 1e9).toFixed(1) + "B"
-      : n >= 1e6
-        ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M"
-        : n >= 1e4
-          ? Math.round(n / 1e3) + "k"
-          : Math.round(n).toLocaleString();
+  // Picks each unit after rounding, so 999,600 shows as "1.0M", not "1000k".
+  const fmtCount = (n) => {
+    if (n < 1e4) return Math.round(n).toLocaleString();
+    const thousands = Math.round(n / 1e3);
+    if (thousands < 1000) return thousands + "k";
+    let millions = (n / 1e6).toFixed(1);
+    if (Number(millions) >= 10) millions = (n / 1e6).toFixed(0);
+    if (Number(millions) < 1000) return millions + "M";
+    return (n / 1e9).toFixed(1) + "B";
+  };
   const pct = (v) => Math.round(v * 100) + "%";
   const fmtDisk = (gb) => (gb < 1000 ? gb + " GB" : gb / 1000 + " TB");
 
