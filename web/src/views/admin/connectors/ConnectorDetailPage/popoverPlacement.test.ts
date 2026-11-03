@@ -1,4 +1,4 @@
-/** FE-10 rule 5.4: where the floating panels open by content width. */
+/** Where the floating panels open by content width. */
 import * as placement from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 
 type Panel = "failedDocs" | "stackTrace";
