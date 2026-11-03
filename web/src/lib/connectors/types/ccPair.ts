@@ -328,6 +328,11 @@ export interface CCPairRunsQuery {
   resolved: boolean | null;
 }
 
+export type IndexAttemptErrorResolvedReason =
+  | "retry"
+  | "later_run"
+  | "without_retry";
+
 export interface IndexAttemptError {
   id: number;
   connector_credential_pair_id: number;
@@ -342,7 +347,13 @@ export interface IndexAttemptError {
   failed_time_range_end: string | null;
 
   failure_message: string;
+  /** Closed by a run, a retry or a legacy resolve. A row resolved without retry keeps it false, so a retry by error id still takes it. */
   is_resolved: boolean;
+  /** How the error closed. `null` while open and on rows closed before reasons were recorded. */
+  resolved_reason: IndexAttemptErrorResolvedReason | null;
+  /** The run that closed it, for `later_run` and `retry`. Null once that run is deleted. */
+  resolved_by_index_attempt_id: number | null;
+  resolved_at: string | null;
 
   time_created: string;
 

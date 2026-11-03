@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -17,6 +16,7 @@ import {
   ALL_ACTIVITY,
   runKey,
   useActivityItems,
+  useHeldOpenRun,
   useResolveRunErrors,
 } from "@/lib/connectors/ccPair/hooks";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
@@ -34,7 +34,8 @@ export interface ActivitiesCardProps {
 export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
   const t = useTranslations("admin.indexing.activities");
   const tActivity = useTranslations("admin.connector.activity");
-  const { resolving, resolve, resolveRun } = useResolveRunErrors();
+  const { resolving, resolve, resolveRun, resolveWithoutRetry } =
+    useResolveRunErrors();
   const feed = { enabled: true, pollMs: RUNS_POLL_MS };
   const failures = useActivityItems(
     "fleet",
@@ -44,21 +45,15 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
     feed
   );
   const errors = useActivityItems("fleet", "errors", false, ALL_ACTIVITY, feed);
-  const sections = [failures, errors];
+  const { sections, hold } = useHeldOpenRun([failures, errors]);
   // Each feed is newest first, so one sort interleaves them.
-  const items = useMemo(
-    () =>
-      [
-        ...failures.runs.map((item) => ({
-          section: "failures" as const,
-          item,
-        })),
-        ...errors.runs.map((item) => ({ section: "errors" as const, item })),
-      ].sort((a, b) =>
-        b.item.run.time_created.localeCompare(a.item.run.time_created)
-      ),
-    [failures.runs, errors.runs]
-  );
+  const items = sections
+    .flatMap((state) =>
+      state.runs.map((item) => ({ section: state.section, item }))
+    )
+    .sort((a, b) =>
+      b.item.run.time_created.localeCompare(a.item.run.time_created)
+    );
   const loading = sections.some(
     (section) => section.isLoading && !section.loaded
   );
@@ -156,8 +151,12 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
                   canResolveRuns={item.canResolveRuns}
                   resolving={resolving}
                   onResolve={(errorIds) => void resolve(item, errorIds)}
+                  onResolveWithoutRetry={(errorIds) =>
+                    resolveWithoutRetry(item.ccPairId, errorIds)
+                  }
                   onResolveRun={() => void resolveRun(item)}
                   popoverPlacement="below"
+                  onPanelOpenChange={(open) => hold(section, item, open)}
                 />
               ))}
             </Section>

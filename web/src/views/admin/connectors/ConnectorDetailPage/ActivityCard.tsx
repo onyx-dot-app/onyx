@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -43,7 +50,10 @@ import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage
 import { closedBySupersede } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
-import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
+import {
+  usePopoverPlacement,
+  type PopoverPlacement,
+} from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 import { runKindLabelKey } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import {
   isActive,
@@ -218,32 +228,64 @@ interface PopoverChipProps {
   title: string | RichStr;
   /** What the chip opens. Without it the chip is plain. */
   popover: React.ReactNode | null;
-  /** Hangs the popover from the card rather than the chip. */
+  /** Hangs the popover from a span rather than the chip. */
   anchor: React.ReactNode;
+  open: boolean;
   onOpenChange: (open: boolean) => void;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
-/** A footer chip that opens its popover on click. */
+/** A footer chip that opens its popover on click and reads pressed while it is open. */
 function PopoverChip({
   icon,
   iconColor,
   title,
   popover,
   anchor,
+  open,
   onOpenChange,
+  ref,
 }: PopoverChipProps) {
   if (popover === null) {
     return <Tag icon={icon} iconColor={iconColor} title={title} />;
   }
   return (
-    <Popover onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger asChild>
-        <Tag icon={icon} iconColor={iconColor} title={title} onClick={NOOP} />
+        <Tag
+          ref={ref}
+          icon={icon}
+          iconColor={iconColor}
+          title={title}
+          aria-pressed={open}
+          onClick={NOOP}
+        />
       </Popover.Trigger>
       {anchor}
       {popover}
     </Popover>
   );
+}
+
+/** The stack trace's anchor beside the side panel, in `frame`'s coordinates: a zero-width line on the chip's text at the panel's edge, so the trace sits 4 px left of the panel with its header on the chip's text line. */
+function besideSidePanel(
+  chip: HTMLElement | null,
+  frame: HTMLElement | null
+): CSSProperties {
+  if (chip === null || frame === null) return {};
+  const origin = frame.getBoundingClientRect();
+  const text = (
+    chip.querySelector("[data-opal-content-title]") ?? chip
+  ).getBoundingClientRect();
+  const edge =
+    chip.closest("[data-side-panel]")?.getBoundingClientRect().left ??
+    text.left;
+  return {
+    left: edge - origin.left,
+    top: text.top - origin.top,
+    width: 0,
+    height: text.height,
+  };
 }
 
 export interface ActivityCardProps {
@@ -260,11 +302,13 @@ export interface ActivityCardProps {
   canResolveRuns: boolean;
   /** Resolves these errors of the run by a targeted reindex, or every open one when `null`. */
   onResolve: (errorIds: number[] | null) => void;
+  /** Closes these errors of the run without a reindex. Without it the failed documents list posts on its own. */
+  onResolveWithoutRetry?: (errorIds: number[]) => Promise<void>;
   /** Marks the run resolved without a reindex. */
   onResolveRun: () => void;
   /** A resolve is in flight, so the resolve actions wait for it. */
   resolving: boolean;
-  /** Where a pill's popover opens: beside the card, or below it with its end at the card's end. Default: beside. */
+  /** Overrides where every pill's popover opens. Without it the stack trace follows the content width, the failed documents open below, the checks beside. */
   popoverPlacement?: PopoverPlacement;
   /** The pointer entered or left the card. */
   onHoverChange?: (hovered: boolean) => void;
@@ -272,6 +316,8 @@ export interface ActivityCardProps {
   focused?: boolean;
   /** A hovered chart line holds the run, so the card takes its hover edge. */
   outlined?: boolean;
+  /** Tells the list a panel of this card opened or closed, so a refresh keeps the card while it is open. */
+  onPanelOpenChange?: (open: boolean) => void;
 }
 
 /** One run in an activity list: when, which kind or pair, how it stands in its section, its trace and failed items, and what the viewer may do about them. */
@@ -284,23 +330,45 @@ export default function ActivityCard({
   canResolve,
   canResolveRuns,
   onResolve,
+  onResolveWithoutRetry,
   onResolveRun,
   resolving,
-  popoverPlacement = "beside",
+  popoverPlacement,
   onHoverChange,
   focused = false,
   outlined = false,
+  onPanelOpenChange,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
   const rootRef = useRef<HTMLDivElement>(null);
-  // A popover below the card hangs from the card, not from its pill: a span
-  // covering the card is the anchor. It sits after the trigger in each
-  // popover so its ref registers last and stays the anchor.
-  const anchor = popoverPlacement === "below" && (
-    <Popover.Anchor asChild>
-      <span aria-hidden className="pointer-events-none absolute -inset-1" />
-    </Popover.Anchor>
-  );
+  const tracePlacement = usePopoverPlacement("stackTrace");
+  const placement = {
+    trace: popoverPlacement ?? tracePlacement,
+    docs: popoverPlacement ?? "below",
+    checks: popoverPlacement ?? "beside",
+  };
+  const frameRef = useRef<HTMLDivElement>(null);
+  const traceChipRef = useRef<HTMLButtonElement>(null);
+  const [traceAnchor, setTraceAnchor] = useState<CSSProperties>();
+  // A popover hangs from a span, not from its pill: below, a span covering
+  // the card; beside, the trace's line at the side panel's edge. It sits
+  // after the trigger in each popover so its ref registers last and stays the anchor.
+  function anchorFor(at: PopoverPlacement, beside?: CSSProperties) {
+    // Without a measured line a beside popover hangs from its pill.
+    if (at === "beside" && beside === undefined) return null;
+    return (
+      <Popover.Anchor asChild>
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute",
+            at === "below" && "-inset-1"
+          )}
+          style={at === "beside" ? beside : undefined}
+        />
+      </Popover.Anchor>
+    );
+  }
   const [hovered, setHovered] = useState(false);
   const [focusWithin, setFocusWithin] = useState(false);
   const [openPopover, setOpenPopover] = useState<"trace" | "items" | null>(
@@ -312,6 +380,20 @@ export default function ActivityCard({
     }
   }, [focused]);
   const selected = openPopover !== null;
+  const traceBeside = openPopover === "trace" && placement.trace === "beside";
+  // Measured on open and again when a resize moves the trace beside while it is open.
+  useLayoutEffect(() => {
+    if (!traceBeside) return;
+    setTraceAnchor(besideSidePanel(traceChipRef.current, frameRef.current));
+  }, [traceBeside]);
+  const reportPanelOpen = useEffectEvent((open: boolean) =>
+    onPanelOpenChange?.(open)
+  );
+  useEffect(() => {
+    if (!selected) return;
+    reportPanelOpen(true);
+    return () => reportPanelOpen(false);
+  }, [selected]);
   const togglePopover = (popover: "trace" | "items") => (open: boolean) =>
     setOpenPopover((current) =>
       open ? popover : current === popover ? null : current
@@ -343,6 +425,18 @@ export default function ActivityCard({
   const revealed = hovered || focusWithin || selected;
   const edged = hovered || selected || outlined;
   const lifted = selected || focused;
+  // A pruning run records how many documents failed, not which, so only index and check runs list them.
+  const listsItems =
+    entities > 0 && (run.kind === "indexing" || run.kind === "checks");
+  // A popover that unmounts never reports its close, so the card would stay selected. Only a checks run can lose its list: an index run's error count never drops.
+  useEffect(() => {
+    setOpenPopover((current) =>
+      (current === "trace" && trace === null) ||
+      (current === "items" && !listsItems)
+        ? null
+        : current
+    );
+  }, [trace, listsItems]);
   const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure, superseded or not, titles with the error's first sentence and describes with the rest. A run with errors reports what it still did.
@@ -374,17 +468,20 @@ export default function ActivityCard({
           <FailedDocsPopoverContent
             ccPairId={ccPairId}
             indexAttemptId={run.attempt.id}
-            canResolve={canResolve && openDocs > 0}
+            canResolve={canResolve}
+            canRetryAll={canResolve && openDocs > 0}
+            canResolveErrors={canResolveRuns}
             onResolve={onResolve}
+            onResolveWithoutRetry={onResolveWithoutRetry}
             resolving={resolving}
-            placement={popoverPlacement}
+            placement={placement.docs}
           />
         );
       case "checks":
         return (
           <CheckRunPopoverContent
             run={run.attempt}
-            placement={popoverPlacement}
+            placement={placement.checks}
           />
         );
       default:
@@ -448,7 +545,13 @@ export default function ActivityCard({
         padding={1}
         shadow={lifted ? "md" : "none"}
       >
-        <Section alignItems="stretch" gap={0} height="fit" className="relative">
+        <Section
+          ref={frameRef}
+          alignItems="stretch"
+          gap={0}
+          height="fit"
+          className="relative"
+        >
           <Section
             flexDirection="row"
             alignItems="start"
@@ -535,14 +638,16 @@ export default function ActivityCard({
                     {trace !== null && (
                       <PopoverChip
                         icon={SvgTextLines}
+                        ref={traceChipRef}
                         title={t("tags.stackTrace")}
-                        anchor={anchor}
+                        anchor={anchorFor(placement.trace, traceAnchor)}
+                        open={openPopover === "trace"}
                         onOpenChange={togglePopover("trace")}
                         popover={
                           <StackTracePopoverContent
                             runId={run.attempt.id}
                             trace={trace}
-                            placement={popoverPlacement}
+                            placement={placement.trace}
                           />
                         }
                       />
@@ -554,7 +659,12 @@ export default function ActivityCard({
                         title={t(entityLabelKey(run, chipKind), {
                           count: entities,
                         })}
-                        anchor={anchor}
+                        anchor={anchorFor(
+                          run.kind === "checks"
+                            ? placement.checks
+                            : placement.docs
+                        )}
+                        open={openPopover === "items"}
                         onOpenChange={togglePopover("items")}
                         popover={entityPopover()}
                       />

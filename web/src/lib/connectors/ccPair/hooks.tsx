@@ -7,6 +7,7 @@ import { toast } from "@opal/layouts";
 import useSWRInfinite from "swr/infinite";
 import {
   resolveCCPairRuns,
+  resolveErrorsWithoutRetry,
   resolveMatchingRuns,
   setCCPairStatus,
 } from "@/lib/ccPair";
@@ -360,34 +361,27 @@ export function useActivityItems(
   const canResolveRuns = pair?.canResolveRuns ?? null;
   const sectionFilter =
     ACTIVITY_SECTION_FILTER[section][closed ? "closed" : "open"];
-  const { q, range } = narrowing;
-  const ccPairIds = narrowing.ccPairIds.join(",");
-  const { data, error, isLoading, size, setSize, mutate } =
-    useSWRInfinite<FeedPage>(
-      (pageIndex, previous: FeedPage | null) => {
-        if (!enabled || sectionFilter === null) return null;
-        if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
-          return null;
-        }
-        const filter =
-          statusGroups === null
-            ? sectionFilter
-            : { ...sectionFilter, statusGroups };
-        return activityFeedKey(
-          ccPairId,
-          filter,
-          closed,
-          narrowing,
-          pageIndex,
-          ACTIVITY_PAGE_SIZE
-        );
-      },
-      errorHandlingFetcher,
-      { refreshInterval: pollMs, keepPreviousData: true }
-    );
-  useEffect(() => {
-    void setSize(1);
-  }, [q, range.since, range.until, ccPairIds, setSize]);
+  const pages = useLoadMorePages<FeedPage["items"][number]>(
+    (pageIndex) => {
+      if (!enabled || sectionFilter === null) return null;
+      const filter =
+        statusGroups === null
+          ? sectionFilter
+          : { ...sectionFilter, statusGroups };
+      return activityFeedKey(
+        ccPairId,
+        filter,
+        closed,
+        narrowing,
+        pageIndex,
+        ACTIVITY_PAGE_SIZE
+      );
+    },
+    feedRunKey,
+    ACTIVITY_PAGE_SIZE,
+    pollMs
+  );
+  const { mutate, items } = pages;
   useEffect(() => {
     const feed: ActivityFeed = {
       ccPairId,
@@ -400,40 +394,142 @@ export function useActivityItems(
       activityFeeds.delete(feed);
     };
   }, [ccPairId, mutate]);
-  // Polling shifts the offsets, so a run can land on two pages.
   const runs = useMemo(() => {
     const itemScope: ActivityScope =
       ccPairId === null || canResolve === null || canResolveRuns === null
         ? "fleet"
         : { ccPairId, canResolve, canResolveRuns };
-    const seen = new Set<string>();
-    return (data ?? []).flatMap((page) =>
-      page.items
-        .map((run) => itemOf(run, itemScope))
-        .filter((item) => {
-          const key = runKey(item.run);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-    );
-  }, [data, ccPairId, canResolve, canResolveRuns]);
-  const first = data?.[0];
-  const last = data?.[data.length - 1];
+    return items.map((run) => itemOf(run, itemScope));
+  }, [items, ccPairId, canResolve, canResolveRuns]);
   return {
     section,
     closed,
     runs,
-    total: first?.total_items ?? 0,
-    loaded: first !== undefined,
+    total: pages.first?.total_items ?? 0,
+    loaded: pages.first !== undefined,
+    failed: pages.failed,
+    isLoading: pages.isLoading,
+    hasMore: pages.hasMore,
+    more: pages.more,
+  };
+}
+
+function activityKey(item: ActivityItem): string {
+  return `${item.ccPairId}-${item.run.kind}-${item.run.attempt.id}`;
+}
+
+// The open feeds drop a run once nothing of it is open, so a held copy reads no open errors.
+function withNothingOpen(item: ActivityItem): ActivityItem {
+  if (item.run.kind !== "indexing") return item;
+  const attempt = {
+    ...item.run.attempt,
+    open_error_count: 0,
+    open_doc_error_count: 0,
+  };
+  return { ...item, run: { ...item.run, attempt } };
+}
+
+interface HeldRun {
+  section: ActivitySection;
+  item: ActivityItem;
+  index: number;
+}
+
+/** Keeps a run whose card has a panel open in its list, where it stood, after a refresh drops it (its last open error resolved in that panel), until the panel closes. */
+export function useHeldOpenRun(sections: ActivitySectionState[]) {
+  const [held, setHeld] = useState<HeldRun | null>(null);
+  const key = held === null ? null : activityKey(held.item);
+  const isHeld = (item: ActivityItem) => activityKey(item) === key;
+  // A run that moved to another section (a running run that failed) keeps its card and its latest counts.
+  const latest = sections.flatMap((state) => state.runs).find(isHeld);
+  const shown = sections.map((state) => {
+    if (held === null) return state;
+    if (state.section !== held.section) {
+      return state.runs.some(isHeld)
+        ? { ...state, runs: state.runs.filter((item) => !isHeld(item)) }
+        : state;
+    }
+    if (state.runs.some(isHeld)) return state;
+    const runs = [...state.runs];
+    runs.splice(
+      Math.min(held.index, runs.length),
+      0,
+      latest ?? withNothingOpen(held.item)
+    );
+    return { ...state, runs };
+  });
+  function hold(section: ActivitySection, item: ActivityItem, open: boolean) {
+    const key = activityKey(item);
+    setHeld((current) => {
+      const same = current !== null && activityKey(current.item) === key;
+      if (!open) return same ? null : current;
+      if (same) return current;
+      const runs =
+        sections.find((state) => state.section === section)?.runs ?? [];
+      const index = runs.findIndex((run) => activityKey(run) === key);
+      return { section, item, index: Math.max(index, 0) };
+    });
+  }
+  return { sections: shown, hold, isHeld };
+}
+
+function feedRunKey(run: FeedPage["items"][number]): string {
+  return runKey("cc_pair" in run ? run.run : run);
+}
+
+/** A paged list response: one page of items and the count across pages. */
+interface ListPage<Item> {
+  items: Item[];
+  total_items: number;
+}
+
+/** A list read page by page and polled: `more` loads the next page, and a new first-page key (a new query) starts over. A null key fetches nothing. */
+export function useLoadMorePages<Item>(
+  getKey: (pageIndex: number) => string | null,
+  keyOf: (item: Item) => string | number,
+  pageSize: number,
+  pollMs: number
+) {
+  const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite<
+    ListPage<Item>
+  >(
+    (pageIndex, previous: ListPage<Item> | null) => {
+      if (previous !== null && previous.items.length < pageSize) return null;
+      return getKey(pageIndex);
+    },
+    errorHandlingFetcher,
+    { refreshInterval: pollMs, keepPreviousData: true }
+  );
+  const firstKey = getKey(0);
+  useEffect(() => {
+    void setSize(1);
+  }, [firstKey, setSize]);
+  // Polling shifts the offsets, so an item can land on two pages.
+  const items = useMemo(() => {
+    const seen = new Set<string | number>();
+    return (data ?? []).flatMap((page) =>
+      page.items.filter((item) => {
+        const key = keyOf(item);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+    );
+  }, [data, keyOf]);
+  const first = data?.[0];
+  const last = data?.[data.length - 1];
+  return {
+    items,
+    first,
     failed: error !== undefined,
     isLoading,
     hasMore:
       first !== undefined &&
       last !== undefined &&
-      runs.length < first.total_items &&
-      last.items.length === ACTIVITY_PAGE_SIZE,
+      items.length < first.total_items &&
+      last.items.length === pageSize,
     more: () => void setSize(size + 1),
+    mutate,
   };
 }
 
@@ -634,7 +730,7 @@ function releaseRetry(runId: number, errorIds: number[] | null): void {
   if (held.size === 0) retryingByRun.delete(runId);
 }
 
-/** Resolves a run's document errors by a targeted reindex, or marks the run resolved, and refreshes every feed it appears in, one submit at a time. */
+/** Resolves a run's document errors by a targeted reindex or without one, or marks the run resolved, and refreshes every feed it appears in, one submit at a time. */
 export function useResolveRunErrors() {
   const tToasts = useTranslations("admin.connector.toasts");
   const [resolving, setResolving] = useState(false);
@@ -714,6 +810,21 @@ export function useResolveRunErrors() {
     }
   }
 
+  // Closes these errors without a reindex. Retry Doc still takes them.
+  async function resolveWithoutRetry(ccPairId: number, errorIds: number[]) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      await resolveErrorsWithoutRetry(ccPairId, errorIds);
+      await refreshFeeds([ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
   // Marks every open run of the level, or of every level, the panel lists under the narrowing resolved.
   async function resolveMatching(
     scope: ActivityScope,
@@ -746,7 +857,13 @@ export function useResolveRunErrors() {
     }
   }
 
-  return { resolving, resolve, resolveRun, resolveMatching };
+  return {
+    resolving,
+    resolve,
+    resolveRun,
+    resolveWithoutRetry,
+    resolveMatching,
+  };
 }
 
 // ---------------------------------------------------------------------------
