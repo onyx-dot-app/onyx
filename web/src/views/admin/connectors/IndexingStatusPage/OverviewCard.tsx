@@ -177,7 +177,8 @@ export default function OverviewCard({
                 range={timeWindow}
                 height={BARS_HEIGHT}
                 selection={range}
-                onRangeSelect={onRangeChange}
+                // The dimmed bars are the old window's, so they pick nothing until the new one lands.
+                onRangeSelect={stale ? undefined : onRangeChange}
               />
             )}
           </Section>

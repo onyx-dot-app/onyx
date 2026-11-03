@@ -696,6 +696,32 @@ describe("loading", () => {
     expect(bars(container)).toHaveLength(FIXTURE_BINS);
   });
 
+  it("ignores clicks on the old window's bars while a new window loads", async () => {
+    jest.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(0);
+    installChartLayout(600);
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input).includes("window=24h")
+        ? Promise.resolve(respond(throughputFixture({ docs: { 2: 40 } })))
+        : new Promise<Response>(() => {})
+    ) as unknown as typeof fetch;
+    const onRangeSelect = jest.fn();
+    const { container, rerender } = render(
+      <ThroughputChart ccPairId={7} range="24h" onRangeSelect={onRangeSelect} />
+    );
+    await waitFor(() => expect(bars(container)).toHaveLength(FIXTURE_BINS));
+
+    rerender(
+      <ThroughputChart ccPairId={7} range="7d" onRangeSelect={onRangeSelect} />
+    );
+    await waitFor(() =>
+      expect(isFaded(bars(container)[2]!, container)).toBe(true)
+    );
+    clickBar(bars(container)[2]!, 2);
+    fireEvent.keyDown(bars(container)[2]!, { key: "Enter" });
+
+    expect(onRangeSelect).not.toHaveBeenCalled();
+  });
+
   it("does not fetch while the chart is hidden at width 0", async () => {
     installChartLayout(0);
     const fetchMock = jest.fn(async () => respond(throughputFixture()));
