@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      pull-requests: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PREVIEW_BRANCH: docs-preview/pr-${{ github.event.pull_request.number }}

@@ -94,19 +94,28 @@ jobs:
           commit="$(git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit-tree "$tree" -m "docs: preview of #$PR_NUMBER at ${HEAD_SHA::7}")"
-          pr_state() { gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state; }
+          pr_info() { gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,headRefOid --jq '"\(.state) \(.headRefOid)"'; }
           # docs-preview-cleanup.yml deletes the branch once, when the pull request closes.
           # Do not push for a closed pull request, and undo a push that raced the close.
           # A plain assignment makes a failed lookup fail the step, not read as closed.
-          state="$(pr_state)"
+          info="$(pr_info)"
+          read -r state head <<<"$info"
           if [ "$state" != "OPEN" ]; then
             echo "The pull request is closed; no preview"
             echo "closed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # A run for an older commit must not replace a newer preview. A head change after
+          # this check is left alone: the build for the new head publishes over this one.
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "The pull request head moved to ${head::7}; no preview for ${HEAD_SHA::7}"
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gh auth setup-git
           git push -q --force "https://github.com/${GITHUB_REPOSITORY}.git" "$commit:refs/heads/$PREVIEW_BRANCH"
-          state="$(pr_state)"
+          info="$(pr_info)"
+          read -r state head <<<"$info"
           if [ "$state" != "OPEN" ]; then
             git push -q "https://github.com/${GITHUB_REPOSITORY}.git" --delete "$PREVIEW_BRANCH"
             echo "closed=true" >> "$GITHUB_OUTPUT"
@@ -145,7 +154,7 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
       - name: Comment the preview result
-        if: ${{ !cancelled() && steps.config.outputs.ready == 'true' && steps.push.outputs.closed != 'true' }}
+        if: ${{ !cancelled() && steps.config.outputs.ready == 'true' && steps.push.outputs.closed != 'true' && steps.push.outputs.outdated != 'true' }}
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
           PREVIEW_STATUS: ${{ steps.preview.outputs.status }}
