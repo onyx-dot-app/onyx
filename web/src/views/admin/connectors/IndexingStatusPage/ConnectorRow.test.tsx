@@ -1,4 +1,4 @@
-/** FE-1: a connector row on LineLayout, with a size-20 spinner tag, text-02 access icon and the SvgDocFile View Logs. */
+/** A connector row on LineLayout, with a size-20 spinner tag, text-02 access icon and the SvgDocFile View Logs. */
 import { render, screen } from "@tests/setup/test-utils";
 import { SvgAlertTriangle, SvgDocFile, SvgFileText } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -9,7 +9,8 @@ import {
 import { ValidSources } from "@/lib/connectors/types/source";
 import ConnectorRow from "@/views/admin/connectors/IndexingStatusPage/ConnectorRow";
 
-const BELOW_640 = String.raw`@max-\[(?:39\.9rem|639px)\]:`;
+// A line under 620 px, which is a card under 640 px once its border and padding are taken off.
+const BELOW_640 = String.raw`@max-\[(?:38\.75rem|620px)\]:`;
 
 const NOW = new Date().toISOString();
 
@@ -85,7 +86,7 @@ function referencePaths(Icon: IconFunctionComponent): string[] {
   return paths;
 }
 
-/** The nearest svg at or above `element`'s nearest ancestor that holds one. */
+/** The first svg inside the closest self-or-ancestor of `element` that holds one. */
 function nearestIcon(element: HTMLElement): SVGElement {
   let current: HTMLElement | null = element;
   while (current !== null && current.querySelector("svg") === null) {
@@ -120,7 +121,7 @@ describe("ConnectorRow on LineLayout", () => {
     const a = part(screen.getByText(ROW.name));
     const b = part(screen.getByText("Indexing"));
     const c = part(screen.getByText("42,918"));
-    const d = part(screen.getByRole("button", { name: "Manage" }));
+    const d = part(screen.getByRole("link", { name: "Manage" }));
 
     expect(a.parentElement).toBe(root);
     expect(a).toHaveClass("flex-1", "min-w-0");
