@@ -197,3 +197,20 @@ def test_a_delimiter_in_a_delivery_id_does_not_merge_two_changes(
     db_session.commit()
 
     assert len(created) == 2
+
+
+def test_a_long_delivery_id_still_stores_and_dedupes(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """The unique index has a size limit per entry. A provider id longer than
+    that must still store, and its redelivery must still collapse."""
+    event = ParsedEvent(document_id="doc-1", event_key="d" * 10_000)
+
+    assert record_events(db_session, cc_pair_id, SOURCE, [event])
+    db_session.commit()
+    assert record_events(db_session, cc_pair_id, SOURCE, [event]) == []
+    db_session.commit()
+
+    stored = get_event_by_key(db_session, cc_pair_id, event.resolved_event_key())
+    assert stored is not None
+    assert len(stored.event_key) < 100

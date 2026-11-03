@@ -38,17 +38,19 @@ def record_events(
     if not events:
         return []
 
+    # Keyed by the mapped columns, so a renamed or mistyped column is a type
+    # error rather than a runtime one.
     rows = [
         {
-            "connector_credential_pair_id": cc_pair_id,
-            "source": source,
-            "document_id": event.document_id,
-            "event_type": event.event_type,
-            "event_key": event.resolved_event_key(),
-            "file_id": event.file_id,
-            "payload": event.payload,
-            "occurred_at": event.occurred_at,
-            "status": ConnectorEventStatus.PENDING,
+            ConnectorEventInbox.connector_credential_pair_id: cc_pair_id,
+            ConnectorEventInbox.source: source,
+            ConnectorEventInbox.document_id: event.document_id,
+            ConnectorEventInbox.event_type: event.event_type,
+            ConnectorEventInbox.event_key: event.resolved_event_key(),
+            ConnectorEventInbox.file_id: event.file_id,
+            ConnectorEventInbox.payload: event.payload,
+            ConnectorEventInbox.occurred_at: event.occurred_at,
+            ConnectorEventInbox.status: ConnectorEventStatus.PENDING,
         }
         for event in events
     ]

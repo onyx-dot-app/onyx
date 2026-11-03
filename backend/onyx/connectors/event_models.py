@@ -58,16 +58,20 @@ class ParsedEvent(BaseModel):
         can report several documents, so the document is always part of the
         key. Without it a batch of changes would collapse to one row.
 
-        With no delivery id the key is a digest of the change itself, so a
-        redelivery collapses and a different change does not. Two changes
-        that match on document, type, time and payload are indistinguishable
-        and treated as one.
+        Either way the key is a fixed-length digest. With no delivery id it
+        is a digest of the change itself, so a redelivery collapses and a
+        different change does not. Two changes that match on document, type,
+        time and payload are indistinguishable and treated as one.
         """
         if self.event_key:
             # A JSON array, not a joined string: `("a:b", "c")` and
             # `("a", "b:c")` would share a delimiter-joined key and one of
-            # the two changes would be dropped as a duplicate.
-            return json.dumps([self.event_key, self.document_id])
+            # the two changes would be dropped as a duplicate. Hashed so a
+            # long provider id cannot exceed the unique index's entry size.
+            digest = hashlib.sha256(
+                json.dumps([self.event_key, self.document_id]).encode()
+            ).hexdigest()
+            return f"delivery:{digest}"
 
         stamp = self.occurred_at.isoformat() if self.occurred_at else ""
         digest = hashlib.sha256(
