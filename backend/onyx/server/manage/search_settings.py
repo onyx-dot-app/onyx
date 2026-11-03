@@ -68,6 +68,7 @@ from onyx.db.search_settings import (
     create_search_settings,
     delete_search_settings,
     find_unreclaimed_past_by_index_name,
+    full_run_pending_cc_pairs,
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
     get_search_settings_by_id,
@@ -232,6 +233,20 @@ def set_new_search_settings(
             OnyxErrorCode.CONFLICT,
             "A re-index is already in progress. Cancel it before starting a new one.",
         )
+
+    # A connector that crawls from the beginning or backfills during the port adds
+    # documents FUTURE's incremental catch-up never fetches, and the swap would wait
+    # on them forever. The connector endpoints refuse such runs once the reindex
+    # exists; refuse the reindex while one is already pending or running.
+    if search_settings_new.switchover_type != SwitchoverType.INSTANT:
+        pending_full_runs = full_run_pending_cc_pairs(db_session, search_settings.id)
+        if pending_full_runs:
+            names = ", ".join(f"'{name}'" for _, name in pending_full_runs[:5])
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                f"A full re-index or backfill is pending or running for {names}. "
+                "Wait for it to finish, or cancel it, before starting a re-index.",
+            )
 
     # Upgrade-only: a new target must be the PRESENT model or a selectable model.
     # Runs before anything below writes or commits.
