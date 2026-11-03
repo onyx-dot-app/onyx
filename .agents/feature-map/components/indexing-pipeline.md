@@ -275,7 +275,8 @@ the error type on purpose in auth code.
     checkpoint state.
 13. `future-attempts-first` **Do not starve FUTURE attempts of a finalizing
     reindex.** While a port-flow reindex is finalizing
-    (`db/port_attempt.py:reindex_finalizing`: every connector port succeeded),
+    (`db/port_attempt.py:reindex_finalizing`: every seeded connector port
+    succeeded),
     `background/celery/tasks/docfetching/task_creation_utils.py:docfetching_priority`
     queues FUTURE attempts of pairs with a document still pending for FUTURE at
     HIGH, other FUTURE attempts at MEDIUM and PRESENT refreshes at LOW, so a

@@ -113,7 +113,7 @@ set_new_search_settings        server/manage/search_settings.py
   create FUTURE row (use_port_flow), mark PRESENT for reclaim, seed poll cursors
 check_for_port / run_port_attempt          tasks/port/tasks.py
   copy PRESENT chunks to FUTURE, re-embedded (indexing/port_reembed.py), create-only
-  all connector ports SUCCESS -> finalizing  db/port_attempt.py:reindex_finalizing
+  all seeded connector ports SUCCESS -> finalizing  db/port_attempt.py:reindex_finalizing
 check_and_perform_index_swap               db/swap_index.py, run by check_for_indexing
   INSTANT: swap at once, the port keeps filling the live index
   REINDEX / ACTIVE_ONLY: swap when _port_swap_ready
@@ -124,8 +124,10 @@ check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
 
 The reindex never fetches sources again. It copies and re-embeds stored chunks
 (`document_index/opensearch/port_copy.py`), and connectors keep indexing new
-changes into both generations. Once every connector port succeeds, the reindex
-is finalizing. The swap then waits while any FUTURE index attempt of a required
+changes into both generations. Once every seeded connector port succeeds, the
+reindex is finalizing (`backend/onyx/db/reindex_hold.py` derives from attempt and
+port rows what each connector still owes the swap; a connector created or
+un-paused after the reindex began has no seed and does not end the phase). The swap then waits while any FUTURE index attempt of a required
 pair runs (`db/swap_index.py:_no_writer_left_in_flight`).
 [[indexing-pipeline#future-attempts-first]] keeps those attempts from waiting
 behind PRESENT refreshes. Reclaim waits `OLD_INDEX_RETENTION_HOURS` in SOAKING,
