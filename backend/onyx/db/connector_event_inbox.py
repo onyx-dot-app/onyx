@@ -1,9 +1,4 @@
-"""Reads and writes for `connector_event_inbox`.
-
-The webhook server records events here; a later drain claims them inside an
-ordinary docfetching run. This module owns the queries, so neither side builds
-SQL of its own.
-"""
+"""Reads and writes for `connector_event_inbox`."""
 
 from collections.abc import Sequence
 
@@ -26,20 +21,11 @@ def record_events(
     source: DocumentSource,
     events: Sequence[ParsedEvent],
 ) -> list[int]:
-    """Store events for one pair, skipping ones already recorded.
-
-    Returns the ids of the rows this call created. A redelivered webhook
-    conflicts on (pair, event_key) and is dropped, so the caller can answer
-    200 either way and the ids tell it what was genuinely new.
-
-    Does not commit: the caller decides the transaction boundary, so a route
-    that also writes the body to the file store can keep both in one unit.
-    """
+    """Store events for one pair, skipping redeliveries. Returns the ids of
+    the new rows. Does not commit."""
     if not events:
         return []
 
-    # Keyed by the mapped columns, so a renamed or mistyped column is a type
-    # error rather than a runtime one.
     rows = [
         {
             ConnectorEventInbox.connector_credential_pair_id: cc_pair_id,
@@ -76,12 +62,8 @@ def record_events(
 def get_event_by_key(
     db_session: Session, cc_pair_id: int, event_key: str
 ) -> ConnectorEventInbox | None:
-    """The row a given delivery produced.
-
-    `event_key` is the stored key, which is scoped to one document, so a
-    caller holding a provider's delivery id builds it with
-    `ParsedEvent.resolved_event_key()` rather than passing the id alone.
-    """
+    """`event_key` is `ParsedEvent.resolved_event_key()`, not a raw delivery
+    id."""
     return db_session.scalars(
         select(ConnectorEventInbox).where(
             ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
@@ -109,11 +91,7 @@ def count_events_by_status(
 def get_pending_events(
     db_session: Session, cc_pair_id: int, limit: int
 ) -> list[ConnectorEventInbox]:
-    """Pending rows for one pair, oldest first.
-
-    A read, not a claim: it takes no lock and sets no status. The drain adds
-    the locking claim when it lands.
-    """
+    """Pending rows for one pair, oldest first. Takes no lock."""
     return list(
         db_session.scalars(
             select(ConnectorEventInbox)

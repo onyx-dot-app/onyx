@@ -1,9 +1,4 @@
-"""The shape a source's webhook payload is parsed into.
-
-A source-specific parser turns a provider's POST body into `ParsedEvent`s.
-Everything downstream — deduplication, storage, the drain — works on this
-shape, so a new source adds a parser and nothing else.
-"""
+"""What a source's parser turns a webhook body into."""
 
 import hashlib
 import json
@@ -18,23 +13,16 @@ from onyx.db.enums import ConnectorEventType
 class ParsedEvent(BaseModel):
     """One document change a source reported, ready to store."""
 
-    # The source's own stable id for the document, which becomes Document.id.
     document_id: str
     event_type: ConnectorEventType = ConnectorEventType.UPSERT
 
-    # The provider's delivery id when it sends one. Unique per pair, so a
-    # redelivered webhook writes nothing. Falls back to a digest of the
-    # document and the event time, which collapses true redeliveries while
-    # keeping genuinely new changes distinct.
+    # The provider's delivery id, if it sends one.
     event_key: str = ""
 
-    # Source-specific extras the drain needs. Never the document body: that
-    # goes to the file store, and `file_id` points at it.
+    # Never the document body; `file_id` points at that.
     payload: dict[str, Any] | None = None
     file_id: str | None = None
 
-    # When the source says the change happened. Orders two events on one
-    # document; the row id breaks ties when a provider sends no timestamp.
     occurred_at: datetime | None = None
 
     @field_validator("document_id")
@@ -52,22 +40,14 @@ class ParsedEvent(BaseModel):
         return value
 
     def resolved_event_key(self) -> str:
-        """The key the unique constraint dedupes on, scoped to one document.
+        """The fixed-length key the inbox dedupes on.
 
-        A provider's delivery id usually covers the whole POST, and a POST
-        can report several documents, so the document is always part of the
-        key. Without it a batch of changes would collapse to one row.
-
-        Either way the key is a fixed-length digest. With no delivery id it
-        is a digest of the change itself, so a redelivery collapses and a
-        different change does not. Two changes that match on document, type,
-        time and payload are indistinguishable and treated as one.
+        A delivery id can cover a POST that reports several documents, so the
+        document is part of the key. Without a delivery id, the change itself
+        is the key.
         """
         if self.event_key:
-            # A JSON array, not a joined string: `("a:b", "c")` and
-            # `("a", "b:c")` would share a delimiter-joined key and one of
-            # the two changes would be dropped as a duplicate. Hashed so a
-            # long provider id cannot exceed the unique index's entry size.
+            # A JSON array, since a delimiter-joined pair is ambiguous.
             digest = hashlib.sha256(
                 json.dumps([self.event_key, self.document_id]).encode()
             ).hexdigest()
@@ -84,13 +64,8 @@ class ParsedEvent(BaseModel):
 
 
 class EventParseResult(BaseModel):
-    """What one webhook body yielded.
-
-    A provider may batch several changes into one POST, and may include
-    entries Onyx ignores. Keeping the ignored count separate lets the route
-    answer 200 for a body it understood but had nothing to do with, rather
-    than looking like a parser that silently dropped work.
-    """
+    """What one webhook body yielded. `ignored` counts entries the parser
+    understood and skipped on purpose."""
 
     events: list[ParsedEvent] = Field(default_factory=list)
     ignored: int = 0
