@@ -69,6 +69,10 @@ function navigate<T extends string>(
   }
   // Against the current URL, so a query-only href (`?a=1`) keeps the path.
   const target = new URL(href, window.location.href);
+  // A `javascript:` or `data:` URL would run, not navigate.
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    throw new Error(`Refusing to navigate to a ${target.protocol} URL`);
+  }
   // Another origin is not a page of this app, and history cannot hold it.
   if (target.origin !== window.location.origin) {
     if (replace) window.location.replace(target.href);
@@ -96,7 +100,9 @@ function navigate<T extends string>(
   else window.history.pushState(null, "", href);
   const queryOnly = target.pathname === herePathname;
   if (shallow && queryOnly && !routeNavigationInFlight) return;
-  routeNavigationInFlight = true;
+  // Only a new route renders later and clears the flag; a move within the
+  // route (query or hash) would leave it set.
+  if (!queryOnly) routeNavigationInFlight = true;
   callRouter(router, "replace", href, scroll);
 }
 
