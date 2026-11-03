@@ -2,7 +2,7 @@ import { MCP_INTERNAL_URL } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = {
-  params?: Promise<{
+  params: Promise<{
     path?: string[];
   }>;
 };

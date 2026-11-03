@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import exists
+from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
@@ -25,13 +26,16 @@ from onyx.db.enums import ProcessingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
+from onyx.db.models import HierarchyNodeByConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
+from onyx.db.models import Persona__HierarchyNode
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.db.persona import disable_search_for_personas_without_knowledge__no_commit
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -457,6 +461,44 @@ def delete_connector_credential_pair__no_commit(
     connector_id: int,
     credential_id: int,
 ) -> None:
+    # Deleting the pair cascades its hierarchy ownership rows, but leaves the
+    # folder records and saved tutor selections behind. Detach only selections
+    # owned by this pair that have no other connector to keep them available.
+    owned_node_ids = select(
+        HierarchyNodeByConnectorCredentialPair.hierarchy_node_id
+    ).where(
+        HierarchyNodeByConnectorCredentialPair.connector_id == connector_id,
+        HierarchyNodeByConnectorCredentialPair.credential_id == credential_id,
+    )
+    remaining_node_ids = select(
+        HierarchyNodeByConnectorCredentialPair.hierarchy_node_id
+    ).where(
+        or_(
+            HierarchyNodeByConnectorCredentialPair.connector_id != connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id != credential_id,
+        )
+    )
+    orphaned_selections = (
+        Persona__HierarchyNode.hierarchy_node_id.in_(owned_node_ids),
+        Persona__HierarchyNode.hierarchy_node_id.not_in(remaining_node_ids),
+    )
+    affected_persona_ids = list(
+        db_session.scalars(
+            select(Persona__HierarchyNode.persona_id)
+            .where(*orphaned_selections)
+            .distinct()
+        )
+    )
+    db_session.execute(
+        delete(Persona__HierarchyNode)
+        .where(*orphaned_selections)
+        .execution_options(synchronize_session=False)
+    )
+    disable_search_for_personas_without_knowledge__no_commit(
+        db_session=db_session,
+        persona_ids=affected_persona_ids,
+    )
+
     stmt = delete(ConnectorCredentialPair).where(
         ConnectorCredentialPair.connector_id == connector_id,
         ConnectorCredentialPair.credential_id == credential_id,

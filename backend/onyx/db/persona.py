@@ -4,6 +4,7 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import not_
@@ -27,8 +28,14 @@ from onyx.db.models import Document
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import HierarchyNode
+from onyx.db.models import HierarchyNodeByConnectorCredentialPair
 from onyx.db.models import Persona
+from onyx.db.models import Persona__Document
+from onyx.db.models import Persona__DocumentSet
+from onyx.db.models import Persona__HierarchyNode
+from onyx.db.models import Persona__Tool
 from onyx.db.models import Persona__User
+from onyx.db.models import Persona__UserFile
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import PersonaLabel
 from onyx.db.models import StarterMessage
@@ -38,6 +45,8 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserFile
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -45,6 +54,7 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.server.lti.constants import VIRTUAL_TUTOR_LABEL
+from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -95,6 +105,16 @@ def _resolve_and_validate_labels(
         )
 
     return labels
+
+
+def get_persona_label_names_by_ids(
+    db_session: Session, label_ids: list[int]
+) -> set[str]:
+    return set(
+        db_session.scalars(
+            select(PersonaLabel.name).where(PersonaLabel.id.in_(label_ids))
+        )
+    )
 
 
 def _add_user_filters(
@@ -285,11 +305,81 @@ def update_persona_access(
         mark_persona_user_files_for_sync(persona_id, db_session)
 
 
+def filter_orphaned_persona_hierarchy_node_ids(
+    db_session: Session,
+    persona_id: int,
+    hierarchy_node_ids: list[int],
+) -> list[int]:
+    """Omit previously saved folders that no connector owns anymore.
+
+    Keep newly submitted IDs and folders with any remaining connector ownership
+    so the caller can still validate course membership and access permissions.
+    This does not modify the database; the normal save persists the result.
+    """
+    if not hierarchy_node_ids:
+        return []
+
+    has_connector_owner = (
+        select(HierarchyNodeByConnectorCredentialPair.hierarchy_node_id)
+        .where(
+            HierarchyNodeByConnectorCredentialPair.hierarchy_node_id
+            == Persona__HierarchyNode.hierarchy_node_id
+        )
+        .exists()
+    )
+    orphaned_node_ids = set(
+        db_session.scalars(
+            select(Persona__HierarchyNode.hierarchy_node_id).where(
+                Persona__HierarchyNode.persona_id == persona_id,
+                Persona__HierarchyNode.hierarchy_node_id.in_(hierarchy_node_ids),
+                ~has_connector_owner,
+            )
+        ).all()
+    )
+    return [
+        node_id for node_id in hierarchy_node_ids if node_id not in orphaned_node_ids
+    ]
+
+
+def disable_search_for_personas_without_knowledge__no_commit(
+    db_session: Session,
+    persona_ids: Sequence[int],
+) -> None:
+    """Disable Search for assistants that must retain an explicit knowledge scope.
+
+    Empty knowledge lists mean unrestricted search, so apply this after
+    automatic cleanup or an LTI tutor save clears the last attachment.
+    """
+    if not persona_ids:
+        return
+
+    stmt = delete(Persona__Tool).where(
+        Persona__Tool.persona_id.in_(persona_ids),
+        Persona__Tool.tool_id.in_(
+            select(Tool.id).where(Tool.in_code_tool_id == SEARCH_TOOL_ID)
+        ),
+    )
+    for attachment in (
+        Persona__HierarchyNode,
+        Persona__Document,
+        Persona__DocumentSet,
+        Persona__UserFile,
+    ):
+        stmt = stmt.where(
+            ~select(attachment.persona_id)
+            .where(attachment.persona_id == Persona__Tool.persona_id)
+            .exists()
+        )
+    db_session.execute(stmt.execution_options(synchronize_session=False))
+
+
 def create_update_persona(
     persona_id: int | None,
     create_persona_request: PersonaUpsertRequest,
     user: User,
     db_session: Session,
+    *,
+    disable_search_if_unscoped: bool = False,
 ) -> FullPersonaSnapshot:
     """Higher level function than upsert_persona, although either is valid to use."""
     # Permission to actually use these is checked later
@@ -343,6 +433,13 @@ def create_update_persona(
             document_ids=create_persona_request.document_ids,
         )
 
+        if disable_search_if_unscoped:
+            disable_search_for_personas_without_knowledge__no_commit(
+                db_session=db_session,
+                persona_ids=[persona.id],
+            )
+            db_session.expire(persona, ["tools"])
+
         versioned_update_persona_access = fetch_versioned_implementation(
             "onyx.db.persona", "update_persona_access"
         )
@@ -382,6 +479,17 @@ def update_persona_shared(
     if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
         raise PermissionError("You don't have permission to modify this persona")
 
+    labels = None
+    if label_ids is not None:
+        labels = _resolve_and_validate_labels(label_ids, db_session)
+        old_names = {label.name for label in persona.labels}
+        new_names = {label.name for label in labels}
+        if old_names != new_names and VIRTUAL_TUTOR_LABEL in old_names | new_names:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Tutor course labels cannot be changed through sharing",
+            )
+
     versioned_update_persona_access = fetch_versioned_implementation(
         "onyx.db.persona", "update_persona_access"
     )
@@ -394,8 +502,7 @@ def update_persona_shared(
         group_ids=group_ids,
     )
 
-    if label_ids is not None:
-        labels = _resolve_and_validate_labels(label_ids, db_session)
+    if labels is not None:
         persona.labels.clear()
         persona.labels = labels
 
@@ -1375,11 +1482,31 @@ def update_persona_label(
     )
     if persona_label is None:
         raise ValueError(f"Persona label with ID {label_id} does not exist")
+    if persona_label.name != label_name:
+        _reject_tutor_label_mutation(db_session, label_id, label_name)
     persona_label.name = label_name
     db_session.commit()
 
 
+def _reject_tutor_label_mutation(
+    db_session: Session, label_id: int, new_name: str | None = None
+) -> None:
+    attached_personas = select(Persona.id).where(
+        Persona.labels.any(PersonaLabel.id == label_id)
+    )
+    if new_name != VIRTUAL_TUTOR_LABEL:
+        attached_personas = attached_personas.where(
+            Persona.labels.any(PersonaLabel.name == VIRTUAL_TUTOR_LABEL)
+        )
+    if db_session.scalar(attached_personas.limit(1)) is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Labels bound to a course tutor cannot be renamed or deleted",
+        )
+
+
 def delete_persona_label(label_id: int, db_session: Session) -> None:
+    _reject_tutor_label_mutation(db_session, label_id)
     db_session.query(PersonaLabel).filter(PersonaLabel.id == label_id).delete()
     db_session.commit()
 

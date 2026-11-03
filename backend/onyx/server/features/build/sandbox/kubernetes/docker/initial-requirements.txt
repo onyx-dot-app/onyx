@@ -1,4 +1,5 @@
 defusedxml>=0.7.1
+certifi>=2026.10.19
 google-genai>=1.0.0
 lxml>=5.0.0
 markitdown>=0.1.2
@@ -10,7 +11,7 @@ opencv-python>=4.11.0.86
 openpyxl>=3.1.5
 pandas==2.2.2
 pdfplumber>=0.11.7
-Pillow>=10.0.0
+Pillow>=13.0.0
 pydantic>=2.11.9
 python-pptx>=1.0.2
 scikit-image>=0.25.2

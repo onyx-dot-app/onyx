@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Protocol
 
+from httpx import TimeoutException
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
@@ -69,6 +70,7 @@ from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
+from onyx.llm.multi_llm import LLMTimeoutError
 from onyx.llm.utils import llm_response_to_string
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -85,6 +87,8 @@ from onyx.utils.timing import log_function_time
 
 
 logger = setup_logger()
+
+MAX_CONTEXTUAL_CHUNK_SUMMARY_WORKERS = 8
 
 
 class DocumentBatchPrepareContext(BaseModel):
@@ -624,11 +628,36 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     return indexed_documents
 
 
+def _document_summary_prompt_within_budget(
+    doc_tokens: list[int], tokenizer: BaseTokenizer, max_prompt_tokens: int
+) -> str:
+    prompt_overhead = len(tokenizer.encode(DOCUMENT_SUMMARY_PROMPT.format(document="")))
+    max_doc_tokens = max_prompt_tokens - prompt_overhead
+    if max_doc_tokens <= 0:
+        raise ValueError("Context window is too small for a document summary")
+
+    while True:
+        # Re-encode the formatted prompt: the document boundary and trim marker can
+        # tokenize differently from the document or template in isolation.
+        doc_content = (
+            tokenizer_trim_middle(doc_tokens, max_doc_tokens, tokenizer)
+            if max_doc_tokens >= 64
+            else tokenizer.decode(doc_tokens[:max_doc_tokens])
+        )
+        prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
+        excess_tokens = len(tokenizer.encode(prompt)) - max_prompt_tokens
+        if excess_tokens <= 0:
+            return prompt
+        max_doc_tokens -= excess_tokens
+        if max_doc_tokens <= 0:
+            raise ValueError("Context window is too small for a document summary")
+
+
 def add_document_summaries(
     chunks_by_doc: list[DocAwareChunk],
     llm: LLM,
     tokenizer: BaseTokenizer,
-    trunc_doc_tokens: int,
+    max_prompt_tokens: int,
 ) -> list[int] | None:
     """
     Adds a document summary to a list of chunks from the same document.
@@ -643,12 +672,12 @@ def add_document_summaries(
         return None
 
     doc_tokens = tokenizer.encode(chunks_by_doc[0].source_document.get_text_content())
-    doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
-
     # Apply prompt caching: cache the static prompt, document content is the suffix
     # Note: For document summarization, there's no cacheable prefix since the document changes
     # So we just pass the full prompt without caching
-    summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
+    summary_prompt = _document_summary_prompt_within_budget(
+        doc_tokens, tokenizer, max_prompt_tokens
+    )
     prompt_msg = UserMessage(content=summary_prompt)
 
     response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
@@ -726,7 +755,8 @@ def add_chunk_summaries(
             chunk.chunk_context = ""
 
     run_functions_tuples_in_parallel(
-        [(assign_context, (chunk,)) for chunk in chunks_by_doc]
+        [(assign_context, (chunk,)) for chunk in chunks_by_doc],
+        max_workers=MAX_CONTEXTUAL_CHUNK_SUMMARY_WORKERS,
     )
 
 
@@ -740,13 +770,18 @@ def add_contextual_summaries(
     Adds Document summary and chunk-within-document context to the chunks
     based on which environment variables are set.
     """
+    from litellm.exceptions import ContextWindowExceededError
+
     doc2chunks = defaultdict(list)
     for chunk in chunks:
         doc2chunks[chunk.source_document.id].append(chunk)
 
-    # The number of tokens allowed for the document when computing a document summary
-    trunc_doc_summary_tokens = llm.config.max_input_tokens - len(
-        tokenizer.encode(DOCUMENT_SUMMARY_PROMPT)
+    # The provider's context window includes output. Leave room for the response
+    # and for differences between the local and provider tokenizers.
+    max_prompt_tokens = (
+        llm.config.max_input_tokens
+        - MAX_CONTEXT_TOKENS
+        - max(64, llm.config.max_input_tokens // 100)
     )
 
     prompt_tokens = len(
@@ -754,20 +789,33 @@ def add_contextual_summaries(
     )
     # The number of tokens allowed for the document when computing a
     # "chunk in context of document" summary
-    trunc_doc_chunk_tokens = (
-        llm.config.max_input_tokens - prompt_tokens - chunk_token_limit
-    )
+    trunc_doc_chunk_tokens = max_prompt_tokens - prompt_tokens - chunk_token_limit
     for chunks_by_doc in doc2chunks.values():
         doc_tokens = None
-        if USE_DOCUMENT_SUMMARY:
-            doc_tokens = add_document_summaries(
-                chunks_by_doc, llm, tokenizer, trunc_doc_summary_tokens
-            )
+        try:
+            if USE_DOCUMENT_SUMMARY:
+                doc_tokens = add_document_summaries(
+                    chunks_by_doc, llm, tokenizer, max_prompt_tokens
+                )
 
-        if USE_CHUNK_SUMMARY:
-            add_chunk_summaries(
-                chunks_by_doc, llm, tokenizer, trunc_doc_chunk_tokens, doc_tokens
+            if USE_CHUNK_SUMMARY:
+                add_chunk_summaries(
+                    chunks_by_doc, llm, tokenizer, trunc_doc_chunk_tokens, doc_tokens
+                )
+        except (
+            ContextWindowExceededError,
+            LLMRateLimitError,
+            LLMTimeoutError,
+            TimeoutException,
+        ) as e:
+            logger.exception(
+                "Could not add contextual summaries to document %s: %s",
+                chunks_by_doc[0].source_document.id,
+                e,
             )
+            for chunk in chunks_by_doc:
+                chunk.doc_summary = ""
+                chunk.chunk_context = ""
 
     return chunks
 

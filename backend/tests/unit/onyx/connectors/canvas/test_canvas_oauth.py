@@ -288,9 +288,11 @@ def test_exchange_authorization_code_posts_code_grant(mock_post: MagicMock) -> N
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("api_version", ["/api/v1", "/api/quiz/v1"])
 @patch("onyx.connectors.canvas.client.rl_requests")
 def test_client_retries_once_with_refreshed_token_on_401(
     mock_requests: MagicMock,
+    api_version: str,
 ) -> None:
     mock_requests.get.side_effect = [
         _api_response(status_code=401, payload={"error": "Invalid access token"}),
@@ -303,7 +305,7 @@ def test_client_retries_once_with_refreshed_token_on_401(
         token_refresher=refresher,
     )
 
-    payload, _ = client.get("courses/1")
+    payload, _ = client.get("courses/1", api_version=api_version)
 
     assert payload == {"id": 1}
     refresher.assert_called_once()
@@ -311,6 +313,11 @@ def test_client_retries_once_with_refreshed_token_on_401(
     second_headers = mock_requests.get.call_args_list[1].kwargs["headers"]
     assert first_headers["Authorization"] == "Bearer access-1"
     assert second_headers["Authorization"] == "Bearer access-2"
+    assert mock_requests.get.call_count == 2
+    assert all(
+        request.args[0] == f"{CANVAS_URL}{api_version}/courses/1"
+        for request in mock_requests.get.call_args_list
+    )
     assert client.bearer_token == "access-2"
 
 
@@ -511,3 +518,15 @@ def test_connector_static_token_is_not_refreshed(
 
     assert provider.set_calls == []
     assert connector._refresh_access_token() is None
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/questions",
+        "url:GET|/api/quiz/v1/courses/:course_id/quizzes",
+        "url:GET|/api/quiz/v1/courses/:course_id/quizzes/:assignment_id/items",
+    ],
+)
+def test_required_scopes_allow_quiz_content(scope: str) -> None:
+    assert scope in oauth.CANVAS_OAUTH_REQUIRED_SCOPES

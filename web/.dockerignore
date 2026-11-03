@@ -2,5 +2,10 @@ node_modules
 .next
 /tests/
 
+# Co-located unit tests import helpers from /tests/, which is excluded above.
+# Keep them in the checkout for tsconfig.types.json, but out of next build.
+src/**/*.test.ts
+src/**/*.test.tsx
+
 # Explicitly include src/app/build (overrides .gitignore /build pattern)
 !src/app/build

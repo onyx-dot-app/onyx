@@ -23,11 +23,14 @@ from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
+from onyx.db.persona import fetch_persona_by_id_for_user
+from onyx.db.persona import filter_orphaned_persona_hierarchy_node_ids
 from onyx.db.persona import get_assistant_labels
 from onyx.db.persona import get_minimal_persona_snapshots_for_user
 from onyx.db.persona import get_minimal_persona_snapshots_paginated
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_persona_count_for_user
+from onyx.db.persona import get_persona_label_names_by_ids
 from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import get_persona_snapshots_paginated
 from onyx.db.persona import mark_persona_as_deleted
@@ -38,6 +41,8 @@ from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
@@ -49,6 +54,8 @@ from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.lti.constants import VIRTUAL_TUTOR_LABEL
+from onyx.server.lti.knowledge import validate_lti_course_knowledge_selection
 from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
@@ -57,6 +64,51 @@ from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _resolve_tutor_course(
+    request: PersonaUpsertRequest,
+    db_session: Session,
+    existing_label_names: set[str] | None = None,
+) -> str | None:
+    """Derive tutor scope from its labels, never solely from request context."""
+    requested_names = (
+        get_persona_label_names_by_ids(db_session, request.label_ids)
+        if request.label_ids is not None
+        else existing_label_names or set()
+    )
+    if existing_label_names and VIRTUAL_TUTOR_LABEL in existing_label_names:
+        if requested_names != existing_label_names:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "Tutor course labels cannot be changed"
+            )
+        label_names = existing_label_names
+    else:
+        label_names = requested_names
+
+    if VIRTUAL_TUTOR_LABEL not in label_names:
+        if request.lti_context_id is not None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "Course tutors require course labels"
+            )
+        return None
+
+    course_names = label_names - {VIRTUAL_TUTOR_LABEL}
+    if len(course_names) != 1:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "A tutor must have exactly one course label"
+        )
+    course_id = next(iter(course_names))
+    if request.lti_context_id is not None and request.lti_context_id != course_id:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED, "Tutor course context does not match its labels"
+        )
+    if request.document_set_ids or request.user_file_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Course tutors cannot use document sets or user files",
+        )
+    return course_id
 
 
 def _validate_user_knowledge_enabled(
@@ -305,12 +357,22 @@ def create_persona(
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
     _validate_vector_db_knowledge(persona_upsert_request)
+    lti_context_id = _resolve_tutor_course(persona_upsert_request, db_session)
+    if lti_context_id is not None:
+        validate_lti_course_knowledge_selection(
+            db_session=db_session,
+            course_id=lti_context_id,
+            user=user,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+            document_ids=persona_upsert_request.document_ids,
+        )
 
     persona_snapshot = create_update_persona(
         persona_id=None,
         create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
+        disable_search_if_unscoped=lti_context_id is not None,
     )
     mt_cloud_telemetry(
         tenant_id=tenant_id,
@@ -333,12 +395,44 @@ def update_persona(
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
     _validate_vector_db_knowledge(persona_upsert_request)
+    existing_persona = fetch_persona_by_id_for_user(db_session, persona_id, user)
+    lti_context_id = _resolve_tutor_course(
+        persona_upsert_request,
+        db_session,
+        {label.name for label in existing_persona.labels},
+    )
+    if lti_context_id is not None:
+        # None normally means "leave user files unchanged" during an update.
+        # Course tutors cannot retain attachments outside their course scope.
+        if persona_upsert_request.user_file_ids is None:
+            persona_upsert_request = persona_upsert_request.model_copy(
+                update={"user_file_ids": []}
+            )
+        # Old folder selections can outlive their connector. Drop only saved,
+        # unowned references before applying the normal course access checks.
+        hierarchy_node_ids = filter_orphaned_persona_hierarchy_node_ids(
+            db_session=db_session,
+            persona_id=persona_id,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+        )
+        persona_upsert_request = persona_upsert_request.model_copy(
+            update={"hierarchy_node_ids": hierarchy_node_ids}
+        )
+        validate_lti_course_knowledge_selection(
+            db_session=db_session,
+            course_id=lti_context_id,
+            user=user,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+            document_ids=persona_upsert_request.document_ids,
+        )
 
     persona_snapshot = create_update_persona(
         persona_id=persona_id,
         create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
+        # Empty LTI knowledge means no course content, never unrestricted search.
+        disable_search_if_unscoped=lti_context_id is not None,
     )
     return persona_snapshot
 

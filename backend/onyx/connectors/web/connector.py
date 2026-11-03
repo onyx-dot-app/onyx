@@ -1,3 +1,4 @@
+import hashlib
 import ipaddress
 import random
 import socket
@@ -36,6 +37,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
+from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
@@ -448,8 +450,11 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        lti_context_id: str | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> None:
+        self.base_url = base_url
+        self.lti_context_id = lti_context_id
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
@@ -679,6 +684,20 @@ class WebConnector(LoadConnector):
         session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
         session_ctx.initialize()
 
+        # Course websites need their own node and document IDs. A page may also
+        # be indexed by another course or a regular Web connector, while each
+        # document has only one parent hierarchy node in the database.
+        site_node: HierarchyNode | None = None
+        if self.lti_context_id is not None:
+            site_key = f"{self.lti_context_id}\x00{self.base_url}".encode()
+            site_node = HierarchyNode(
+                raw_node_id=f"lti_web_site:{hashlib.sha256(site_key).hexdigest()}",
+                display_name=self.base_url,
+                link=self.base_url,
+                node_type=HierarchyNodeType.SITE,
+            )
+        site_raw_node_id = site_node.raw_node_id if site_node else None
+
         while session_ctx.to_visit:
             initial_url = session_ctx.to_visit.pop()
             if initial_url in session_ctx.visited_links:
@@ -713,6 +732,15 @@ class WebConnector(LoadConnector):
                         continue
 
                     if result.doc:
+                        if site_raw_node_id is not None:
+                            document_key = (
+                                f"{site_raw_node_id}\x00{result.doc.id}".encode()
+                            )
+                            result.doc.id = f"lti_web_doc:{hashlib.sha256(document_key).hexdigest()}"
+                            result.doc.parent_hierarchy_raw_node_id = site_raw_node_id
+                            if site_node is not None:
+                                session_ctx.doc_batch.append(site_node)
+                                site_node = None
                         session_ctx.doc_batch.append(result.doc)
                 except Exception as e:
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"

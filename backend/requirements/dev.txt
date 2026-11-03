@@ -56,14 +56,15 @@ botocore==1.39.11
     #   aiobotocore
     #   boto3
     #   s3transfer
-brotli==1.2.0
+brotli==1.2.1
     # via onyx
 celery-types==0.19.0
-certifi==2025.11.12
+certifi==2026.10.19
     # via
     #   httpcore
     #   httpx
     #   kubernetes
+    #   onyx
     #   requests
     #   sentry-sdk
 cffi==2.0.0 ; implementation_name == 'pypy' or platform_python_implementation != 'PyPy'
@@ -280,8 +281,10 @@ pathspec==0.12.1
     #   hatchling
 pexpect==4.9.0 ; sys_platform != 'emscripten' and sys_platform != 'win32'
     # via ipython
-pillow==12.1.1
-    # via matplotlib
+pillow==13.0.0
+    # via
+    #   matplotlib
+    #   onyx
 platformdirs==4.5.0
     # via
     #   black

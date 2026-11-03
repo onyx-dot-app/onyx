@@ -21,10 +21,16 @@ async function extractErrorDetail(
 }
 
 export async function fetchHierarchyNodes(
-  source: ValidSources
+  source: ValidSources,
+  ltiCourseId?: string | null
 ): Promise<HierarchyNodesResponse> {
+  const prefix = ltiCourseId
+    ? `/api/auth/lti/course/${encodeURIComponent(
+        ltiCourseId
+      )}/knowledge/hierarchy-nodes`
+    : HIERARCHY_NODES_PREFIX;
   const response = await fetch(
-    `${HIERARCHY_NODES_PREFIX}?source=${encodeURIComponent(source)}`
+    `${prefix}?source=${encodeURIComponent(source)}`
   );
 
   if (!response.ok) {
@@ -39,9 +45,15 @@ export async function fetchHierarchyNodes(
 }
 
 export async function fetchHierarchyNodeDocuments(
-  request: HierarchyNodeDocumentsRequest
+  request: HierarchyNodeDocumentsRequest,
+  ltiCourseId?: string | null
 ): Promise<HierarchyNodeDocumentsResponse> {
-  const response = await fetch(`${HIERARCHY_NODES_PREFIX}/documents`, {
+  const prefix = ltiCourseId
+    ? `/api/auth/lti/course/${encodeURIComponent(
+        ltiCourseId
+      )}/knowledge/hierarchy-nodes`
+    : HIERARCHY_NODES_PREFIX;
+  const response = await fetch(`${prefix}/documents`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

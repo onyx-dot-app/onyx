@@ -28,6 +28,9 @@ from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.connectors.models import InputType
 from onyx.connectors.models import SlimDocument
+from onyx.db.connector_credential_pair import (
+    delete_connector_credential_pair__no_commit,
+)
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import HierarchyNodeType
@@ -47,6 +50,7 @@ from onyx.db.models import Credential
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.models import HierarchyNodeByConnectorCredentialPair
+from onyx.db.models import Persona
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.kg.models import KGStage
 
@@ -808,6 +812,73 @@ def test_multi_cc_pair_prevents_premature_deletion(db_session: Session) -> None:
     # All 3 nodes + SOURCE should still exist
     remaining = get_all_hierarchy_nodes_for_source(db_session, TEST_SOURCE)
     assert len(remaining) == 4
+
+
+def test_connector_deletion_removes_only_unowned_tutor_folder_selections(
+    db_session: Session,
+) -> None:
+    """Deleting a connector must not leave hidden folder selections on tutors.
+
+    A folder still owned by another connector keeps its saved selection, and
+    unrelated orphaned folders are outside this deletion's scope.
+    """
+    _cleanup_test_data(db_session)
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    pair_to_delete = _create_cc_pair(db_session)
+    remaining_pair = _create_cc_pair(db_session)
+    nodes = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=_make_hierarchy_nodes(),
+        source=TEST_SOURCE,
+        commit=True,
+    )
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[node.id for node in nodes],
+        connector_id=pair_to_delete.connector_id,
+        credential_id=pair_to_delete.credential_id,
+    )
+    shared_node = next(node for node in nodes if node.raw_node_id == CHANNEL_B_ID)
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[shared_node.id],
+        connector_id=remaining_pair.connector_id,
+        credential_id=remaining_pair.credential_id,
+    )
+    unrelated_node = DBHierarchyNode(
+        raw_node_id="unrelated-orphan",
+        display_name="Unrelated folder",
+        source=TEST_SOURCE,
+        node_type=HierarchyNodeType.FOLDER,
+    )
+    tutor = Persona(
+        name="Connector deletion regression tutor",
+        description="",
+        system_prompt="",
+        task_prompt="",
+        hierarchy_nodes=[*nodes, unrelated_node],
+    )
+    db_session.add(tutor)
+    db_session.commit()
+    tutor_id = tutor.id
+    kept_ids = {shared_node.id, unrelated_node.id}
+
+    try:
+        delete_connector_credential_pair__no_commit(
+            db_session=db_session,
+            connector_id=pair_to_delete.connector_id,
+            credential_id=pair_to_delete.credential_id,
+        )
+        db_session.commit()
+        db_session.expire_all()
+
+        updated_tutor = db_session.get(Persona, tutor_id)
+        assert updated_tutor is not None
+        assert {node.id for node in updated_tutor.hierarchy_nodes} == kept_ids
+    finally:
+        db_session.query(Persona).filter(Persona.id == tutor_id).delete()
+        db_session.commit()
+        _cleanup_test_data(db_session)
 
 
 def test_reparent_orphaned_children(db_session: Session) -> None:

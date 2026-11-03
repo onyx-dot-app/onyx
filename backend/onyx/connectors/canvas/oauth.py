@@ -60,6 +60,9 @@ CANVAS_OAUTH_REQUIRED_SCOPES: list[str] = [
     "url:GET|/api/v1/courses/:course_id/modules",
     "url:GET|/api/v1/courses/:course_id/modules/:module_id/items",
     "url:GET|/api/v1/courses/:course_id/quizzes",
+    "url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/questions",
+    "url:GET|/api/quiz/v1/courses/:course_id/quizzes",
+    "url:GET|/api/quiz/v1/courses/:course_id/quizzes/:assignment_id/items",
     "url:GET|/api/v1/courses/:course_id/discussion_topics",
     "url:GET|/api/v1/courses/:course_id/enrollments",
     # Signed download URL for course files. Needed because Canvas omits

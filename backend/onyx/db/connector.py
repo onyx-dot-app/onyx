@@ -2,6 +2,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import cast
+from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import exists
@@ -18,6 +19,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Credential
 from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
 from onyx.kg.models import KGConnectorData
@@ -148,40 +150,65 @@ def fetch_lti_course_website_cc_pairs(
     ]
 
 
-def fetch_lti_course_google_drive_cc_pair(
+def fetch_lti_course_google_drive_cc_pairs(
     db_session: Session,
     lti_context_id: str,
-) -> ConnectorCredentialPair | None:
-    """Return the active Google Drive cc-pair an instructor added for an LTI course."""
+    credential_owner_id: UUID | None = None,
+) -> list[ConnectorCredentialPair]:
+    """Return active Google Drive cc-pairs for an LTI course.
+
+    Each instructor owns a separate OAuth credential and connector. Callers that
+    manage an instructor's source must provide ``credential_owner_id``; course
+    knowledge aggregation intentionally omits it to include every instructor's
+    course-scoped source.
+    """
     stmt = (
         select(ConnectorCredentialPair)
         .join(Connector)
+        .join(Credential)
         .options(
             joinedload(ConnectorCredentialPair.connector),
             joinedload(ConnectorCredentialPair.credential),
         )
         .where(
             Connector.source == DocumentSource.GOOGLE_DRIVE,
+            Credential.is_lti_credential.is_(True),
+            ConnectorCredentialPair.creator_id == Credential.user_id,
             ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
         )
         .order_by(ConnectorCredentialPair.id.asc())
     )
+    if credential_owner_id is not None:
+        stmt = stmt.where(Credential.user_id == credential_owner_id)
 
     cc_pairs = db_session.scalars(stmt).unique().all()
-    for cc_pair in cc_pairs:
-        if cc_pair.connector is None:
-            continue
-        if (
+    return [
+        cc_pair
+        for cc_pair in cc_pairs
+        if cc_pair.connector is not None
+        and (
             str(
                 (cc_pair.connector.connector_specific_config or {}).get(
                     "lti_context_id"
                 )
             )
             == lti_context_id
-        ):
-            return cc_pair
+        )
+    ]
 
-    return None
+
+def fetch_lti_course_google_drive_cc_pair_for_user(
+    db_session: Session,
+    lti_context_id: str,
+    user_id: UUID,
+) -> ConnectorCredentialPair | None:
+    """Return the current user's active Google Drive source for an LTI course."""
+    cc_pairs = fetch_lti_course_google_drive_cc_pairs(
+        db_session=db_session,
+        lti_context_id=lti_context_id,
+        credential_owner_id=user_id,
+    )
+    return cc_pairs[0] if cc_pairs else None
 
 
 def connector_by_name_source_exists(

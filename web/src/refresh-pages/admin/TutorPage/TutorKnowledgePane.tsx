@@ -3,7 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { ContentAction, IllustrationContent } from "@opal/layouts";
+import { Button } from "@opal/components";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Card } from "@/refresh-components/cards";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -55,6 +56,9 @@ interface TutorKnowledgePaneProps {
   // course's subtree. When null the course hasn't been indexed yet, so the
   // Canvas tab shows an empty state rather than every Canvas course.
   canvasCourseNodeId: number | null;
+  ltiContextId: string | null;
+  knowledgeUrl?: string;
+  onSelectionPendingChange?: (pending: boolean) => void;
 }
 
 export default function TutorKnowledgePane({
@@ -65,9 +69,20 @@ export default function TutorKnowledgePane({
   initialAttachedDocuments,
   initialHierarchyNodes,
   canvasCourseNodeId,
+  ltiContextId,
+  knowledgeUrl,
+  onSelectionPendingChange,
 }: TutorKnowledgePaneProps) {
   const [activeSource, setActiveSource] = useState<ValidSources>(
     ValidSources.Canvas
+  );
+  const [isUpdatingSelection, setIsUpdatingSelection] = useState(false);
+  const handleSelectionPendingChange = useCallback(
+    (pending: boolean) => {
+      setIsUpdatingSelection(pending);
+      onSelectionPendingChange?.(pending);
+    },
+    [onSelectionPendingChange]
   );
   const initialSourceSelectionCounts = useMemo(
     () =>
@@ -166,11 +181,29 @@ export default function TutorKnowledgePane({
 
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-      <Content
+      <ContentAction
+        className="flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
         title="Knowledge"
-        description="Choose a source, then select the folders, files, or web pages this tutor should reference."
+        description={
+          knowledgeUrl
+            ? "Choose a source, then select what this tutor can reference. Add more content on the Knowledge page."
+            : "Choose a source, then select the folders, files, or web pages this tutor should reference."
+        }
         sizePreset="main-content"
         variant="section"
+        paddingVariant="fit"
+        rightChildren={
+          knowledgeUrl ? (
+            <Button
+              href={knowledgeUrl}
+              target="_self"
+              prominence="secondary"
+              size="sm"
+            >
+              Add or manage content
+            </Button>
+          ) : undefined
+        }
       />
 
       <Card alignItems="stretch">
@@ -187,6 +220,7 @@ export default function TutorKnowledgePane({
                   icon={sourceMetadata.icon}
                   onClick={() => setActiveSource(source)}
                   selected={isActive}
+                  disabled={isUpdatingSelection}
                   emphasized={isActive || selectionCount > 0}
                   aria-label={`tutor-knowledge-source-${source}`}
                   rightChildren={
@@ -225,10 +259,17 @@ export default function TutorKnowledgePane({
                 onDeselectSourceItems={handleDeselectSourceItems}
                 initialAttachedDocuments={initialAttachedDocuments}
                 onSelectionCountChange={handleSelectionCountChange}
+                onSelectionPendingChange={handleSelectionPendingChange}
                 hideRootNode={activeSource === ValidSources.Canvas}
                 restrictToRootNodeId={
                   activeSource === ValidSources.Canvas
                     ? canvasCourseNodeId
+                    : null
+                }
+                ltiCourseId={
+                  activeSource === ValidSources.GoogleDrive ||
+                  activeSource === ValidSources.Web
+                    ? ltiContextId
                     : null
                 }
               />
