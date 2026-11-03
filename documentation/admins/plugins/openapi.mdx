@@ -153,8 +153,9 @@ Before you export the schema:
 
 - Run the MCP server through mcpo with an API key. Use the server's setup instructions and mcpo's configuration guide.
 - For ctxd 0.1.16, add `"disabledTools": ["grep"]` to its mcpo server configuration. This example uses the read and path tools.
-- Give the bridge an address that the Onyx API server can reach. If Onyx runs in Docker,
-  a loopback address refers to its container.
+- Give the bridge a non-loopback address that the Onyx API server can reach.
+  The default **SSRF Protection** level blocks loopback addresses such as `127.0.0.1`,
+  even when both run on the same host. If Onyx runs in Docker, a loopback address refers to its container.
 - Share only source content that every user of the agent may read. The authorization header uses one shared credential.
 
 <Steps>
