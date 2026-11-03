@@ -899,7 +899,15 @@ export default function ThroughputChart({
   } else if (data === undefined) {
     body = <LineLoader lines={3} />;
   } else {
-    body = <ThroughputBars data={data} range={range} {...links} />;
+    body = (
+      <ThroughputBars
+        data={data}
+        range={range}
+        {...links}
+        // The dimmed bars are the old window's, so they pick nothing until the new one lands.
+        onRangeSelect={stale ? undefined : links.onRangeSelect}
+      />
+    );
   }
   return (
     // Measured before the first fetch, and kept, dimmed, while a new bar count or window loads.
