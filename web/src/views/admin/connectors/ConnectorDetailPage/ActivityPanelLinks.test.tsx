@@ -99,6 +99,17 @@ describe("useActivityChartLinks", () => {
     expect(result.current.chart.hoveredAttemptId).toBeNull();
   });
 
+  it("focuses a run for the page as a failure line click does", () => {
+    const onFocusAttempt = jest.fn();
+    const { result } = renderHook(() =>
+      useActivityChartLinks({ onFocusAttempt })
+    );
+
+    act(() => result.current.focusAttempt(12));
+    expect(onFocusAttempt).toHaveBeenCalledWith(12);
+    expect(result.current.panel.focusAttemptId).toBe(12);
+  });
+
   it("keeps a focused card's row lifted after the pointer hovers and leaves another card", () => {
     const { result } = renderHook(() => useActivityChartLinks());
 
@@ -297,6 +308,46 @@ describe("Chart focus on a failure outside the chart's span", () => {
     );
     expect(cardFor(old)).toBeNull();
     expect(onClearRange).not.toHaveBeenCalled();
+  });
+});
+
+describe("Focus on a run with open errors", () => {
+  it("brings back a level that lists the Errors section, and pages to the run", async () => {
+    const withErrors = Array.from({ length: 25 }, (_, index) =>
+      indexRun({
+        id: 400 + index,
+        status: "completed_with_errors",
+        minutesAgo: 10 + index,
+        openErrors: 2,
+      })
+    );
+    const target = withErrors[withErrors.length - 1]!;
+    installActivityFeed([FAILED, ...withErrors]);
+    const onFocusPair = jest.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ActivityPanel scope={PAIR} title="Activities" />
+    );
+    await waitFor(() => expect(cardFor(withErrors[0]!)).not.toBeNull());
+    expect(cardFor(target)).toBeNull();
+
+    // Failures alone hides the Errors section.
+    await user.click(screen.getByRole("button", { name: "Show Filters" }));
+    await pickLevel(user, "Failures");
+    await waitFor(() => expect(cardFor(withErrors[0]!)).toBeNull());
+
+    rerender(
+      <ActivityPanel
+        scope={PAIR}
+        title="Activities"
+        focusAttemptId={target.run.attempt.id}
+        onFocusPair={onFocusPair}
+      />
+    );
+
+    await waitFor(() => expect(cardFor(target)).not.toBeNull());
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(onFocusPair).toHaveBeenCalledWith(SALES_DRIVE.id);
   });
 });
 

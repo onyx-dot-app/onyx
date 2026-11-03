@@ -226,7 +226,7 @@ function sizedBox(control: HTMLElement): HTMLElement {
 
 /** The Time filter's trigger, whichever window it shows. */
 function timeFilter(): HTMLElement {
-  const labels = ["all", "h1", "h24", "d7", "d30"].map((id) =>
+  const labels = ["all", "h1", "h24", "d7"].map((id) =>
     copy(`${RUNS}.window.${id}`)
   );
   const matches = screen
@@ -259,9 +259,6 @@ describe("ConnectorRow expanded", () => {
     renderExpanded();
     await anyRuns();
 
-    expect(
-      screen.queryByPlaceholderText(copy(`${RUNS}.search.placeholder`))
-    ).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     timeFilter();
     expect(
@@ -307,6 +304,14 @@ describe("ConnectorRow expanded", () => {
             url.searchParams.getAll("kinds").join() === "doc_permission_sync"
         )
       ).toBe(true)
+    );
+    // The stub has no permission syncs, so a spinner could only be the running indexing run leaking past the filter.
+    await waitFor(() =>
+      expect(
+        screen
+          .queryAllByTestId("run-row")
+          .filter((line) => line.querySelector('svg[role="status"]') !== null)
+      ).toHaveLength(0)
     );
   });
 

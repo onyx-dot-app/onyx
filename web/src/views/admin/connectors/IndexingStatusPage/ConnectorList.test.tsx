@@ -157,9 +157,7 @@ describe("ConnectorList", () => {
 
     // Rows tag at 20, so the size-24 tags are the toolbar's pills.
     const pills = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        '.opal-auxiliary-tag[data-size="24"]'
-      )
+      document.querySelectorAll<HTMLElement>('.opal-badge[data-size="6"]')
     );
     const counts = pills.map((pill) =>
       Number((pill.textContent ?? "").replace(/[^\d]/g, ""))
