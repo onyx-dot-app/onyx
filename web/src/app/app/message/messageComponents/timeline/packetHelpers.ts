@@ -22,8 +22,7 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
 
 // Nested output shares its parent's group but does not end it.
 export const isNestedPacket = (packet: Packet): boolean =>
-  packet.placement.sub_turn_index !== undefined &&
-  packet.placement.sub_turn_index !== null;
+  packet.placement.sub_turn_index != null;
 
 export const isGroupEndPacket = (packet: Packet): boolean =>
   !isNestedPacket(packet) &&
