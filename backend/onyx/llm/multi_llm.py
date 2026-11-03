@@ -562,10 +562,6 @@ def _is_mistral_family_name(identity_names: list[str]) -> bool:
     )
 
 
-def _is_gemini_family_name(identity_names: list[str]) -> bool:
-    return any("gemini" in name.lower() for name in identity_names)
-
-
 def _gemini_compatible_tools(
     tools: list[dict[str, JsonValue]],
 ) -> list[dict[str, JsonValue]]:
@@ -573,7 +569,10 @@ def _gemini_compatible_tools(
     rejects other JSON Schema keywords (e.g. exclusiveMinimum) with a 400.
     LiteLLM's native Gemini route filters them to that subset, but
     OpenAI-compatible routes forward them as-is."""
-    from litellm.litellm_core_utils.prompt_templates.common_utils import unpack_defs
+    from litellm.litellm_core_utils.prompt_templates.common_utils import (
+        DEFS_MAX_INLINED_BYTES,
+        unpack_defs,
+    )
     from litellm.llms.vertex_ai.common_utils import filter_schema_fields
     from litellm.types.llms.vertex_ai import Schema
 
@@ -583,7 +582,11 @@ def _gemini_compatible_tools(
         function = tool.get("function")
         parameters = function.get("parameters") if isinstance(function, dict) else None
         if isinstance(function, dict) and isinstance(parameters, dict):
-            unpack_defs(parameters, parameters.pop("$defs", {}))
+            unpack_defs(
+                parameters,
+                parameters.pop("$defs", {}),
+                max_inlined_bytes=DEFS_MAX_INLINED_BYTES,
+            )
             function["parameters"] = filter_schema_fields(parameters, schema_fields)
     return sanitized
 
@@ -1344,7 +1347,7 @@ class LitellmLLM(LLM):
             if (
                 tools
                 and self._api_surface in OPENAI_COMPATIBLE_SURFACES
-                and _is_gemini_family_name(model_identity_names)
+                and any("gemini" in name.lower() for name in model_identity_names)
             ):
                 tools = _gemini_compatible_tools(tools)
 
