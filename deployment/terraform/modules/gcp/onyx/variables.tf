@@ -354,6 +354,12 @@ variable "enable_sandbox_node_pool" {
   default     = false
 }
 
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "How Craft sandboxes run on the sandbox pool: \"pod\" or \"firecracker\". See the gke module README for the node requirements."
+  default     = "pod"
+}
+
 variable "create_workload_namespace" {
   type        = bool
   description = "Create the namespace the workload service account lives in. Terraform has to make it: the Helm release that would otherwise is installed afterwards."
