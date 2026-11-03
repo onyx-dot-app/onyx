@@ -58,7 +58,24 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
           echo "branch=docs-preview/pr-$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
-      - if: steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
+      # An older build, failed or not, must not replace a newer preview or its comment.
+      # Compare builds, not the pull request head: a later commit that changes no docs
+      # starts no new build, and this build is then still the latest one.
+      - name: Check for a newer docs build
+        id: latest
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          newer="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/docs-preview.yml/runs" \
+            -f event=pull_request -f branch="$HEAD_BRANCH" -f per_page=50 \
+            --jq "[.workflow_runs[] | select(.id != $BUILD_RUN_ID and .created_at > \"$BUILD_CREATED_AT\")] | length")"
+          if [ "$newer" != "0" ]; then
+            echo "A newer docs build exists for this pull request; skipping ${HEAD_SHA::7}"
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: >-
+          steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
+          && steps.latest.outputs.outdated != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
         with:
           name: docs-preview
@@ -68,7 +85,9 @@ jobs:
 
       - name: Push the preview branch
         id: push
-        if: steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
+        if: >-
+          steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
+          && steps.latest.outputs.outdated != 'true'
         env:
           PREVIEW_BRANCH: ${{ steps.config.outputs.branch }}
         run: |
@@ -105,17 +124,6 @@ jobs:
           if [ "$state" != "OPEN" ]; then
             echo "The pull request is closed; no preview"
             echo "closed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # A run for an older build must not replace a newer preview. Compare builds, not the
-          # pull request head: a later commit that changes no docs starts no new build, and
-          # this build is then still the latest preview. A newer build after this check
-          # publishes over this one.
-          newer="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/docs-preview.yml/runs?event=pull_request&branch=$HEAD_BRANCH&per_page=50" \
-            --jq "[.workflow_runs[] | select(.id != $BUILD_RUN_ID and .created_at > \"$BUILD_CREATED_AT\")] | length")"
-          if [ "$newer" != "0" ]; then
-            echo "A newer docs build exists for this pull request; no preview for ${HEAD_SHA::7}"
-            echo "outdated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           gh auth setup-git
@@ -159,7 +167,7 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
       - name: Comment the preview result
-        if: ${{ !cancelled() && steps.config.outputs.ready == 'true' && steps.push.outputs.closed != 'true' && steps.push.outputs.outdated != 'true' }}
+        if: ${{ !cancelled() && steps.config.outputs.ready == 'true' && steps.latest.outputs.outdated != 'true' && steps.push.outputs.closed != 'true' }}
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
           PREVIEW_STATUS: ${{ steps.preview.outputs.status }}
