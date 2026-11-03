@@ -139,9 +139,12 @@ Most file bytes are images, fonts, and layout, and Onyx does not index them.
 
 | Part of each chunk | Size |
 | --- | --- |
-| Text, metadata, keyword index, and graph links | About 2,650 bytes |
+| Text, metadata, keyword index, and graph links | About 2,150 bytes |
 | Embedding vector | 4 bytes × dimensions |
 | Quantized vector (7-bit or 1-bit) | Adds 1 byte or 1 bit per dimension. The full vector stays on disk. |
+
+Indexes created by older Onyx versions also store a title vector and a second copy of the text.
+They use up to twice this storage until a reindex builds a new index.
 
 Each copy of the data uses this storage again. Keep room for a second index:
 a change of embedding model or quantization builds a new index while the old one serves search.
@@ -179,12 +182,12 @@ the calculator plans for 24 million chunks.
 
 | Setup | Index size, one copy | Memory for vector search, one copy | Cluster |
 | --- | --- | --- | --- |
-| Granite (384 dimensions), 2 copies | 106 GB | 37.8 GB | 3 nodes, 64 GB RAM and 256 GB storage each |
-| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 16 GB RAM and 512 GB storage each |
-| Granite, 1 copy (single node) | 106 GB | 37.8 GB | 2 nodes, 64 GB RAM and 256 GB storage each |
-| Same, with 1-bit quantization | 107 GB | 2.1 GB | 1 node, 16 GB RAM and 512 GB storage |
+| Granite (384 dimensions), 2 copies | 93 GB | 37.8 GB | 3 nodes, 64 GB RAM and 256 GB storage each |
+| Same, with 1-bit quantization | 94 GB | 2.1 GB | 2 nodes, 16 GB RAM and 256 GB storage each |
+| Granite, 1 copy (single node) | 93 GB | 37.8 GB | 2 nodes, 64 GB RAM and 128 GB storage each |
+| Same, with 1-bit quantization | 94 GB | 2.1 GB | 1 node, 16 GB RAM and 256 GB storage |
 
-All four use 8 primary shards: `OPENSEARCH_INDEX_NUM_SHARDS=8`.
+All four use 7 primary shards: `OPENSEARCH_INDEX_NUM_SHARDS=7`.
 1-bit quantization barely changes storage but cuts the memory need so much that smaller and fewer nodes are enough.
 
 ## Next Steps

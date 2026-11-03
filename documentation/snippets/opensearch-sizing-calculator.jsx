@@ -2,7 +2,9 @@ export const OpenSearchSizingCalculator = () => {
   // Bytes per chunk come from backend/onyx/document_index/opensearch/schema.py and a measured
   // 1.56M-chunk corpus. Model dimensions come from backend/onyx/configs/embedding_configs.py.
   const TEXT_PER_CHUNK = 1900;
-  const FIXED_BYTES = 2610;
+  // Measured 2,610 bytes on indices that also stored a copy of the content (about 500 bytes),
+  // which new indices no longer do.
+  const FIXED_BYTES = 2110;
   const GRAPH_BYTES = 40;
   const DELETED_OVERHEAD = 1.05;
   const DISK_FILL = 0.75;
