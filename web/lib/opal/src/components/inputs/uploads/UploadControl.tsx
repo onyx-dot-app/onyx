@@ -44,6 +44,8 @@ type UploadControlProps = UploadBaseProps & {
   dropToAdd: string;
   /** The copy while files are dragged over the control and it holds a value. */
   dropOverValue: string;
+  /** The trailing button's text; it opens the file picker. */
+  selectLabel: string;
   /** Receives the picked or dropped files that pass `accept` and the size limit. */
   onFiles: (files: File[]) => void;
   /** Clears the value: the ×, or Delete or Backspace on the control. */
@@ -57,8 +59,8 @@ type UploadControlProps = UploadBaseProps & {
  * `InputSingleUpload`'s control: the input chrome with no caret, showing one
  * value's label. A click focuses it, so a copied file can be pasted; a double
  * click (or Enter or Space) opens the file picker, and a file can be dropped
- * on it (see `useUploadTarget`). With a value, the × at the end, or Delete or
- * Backspace, clears it.
+ * on it (see `useUploadTarget`). The select button at the end also opens the
+ * picker. With a value, the × before it, or Delete or Backspace, clears it.
  */
 export default function UploadControl({
   variant = "primary",
@@ -72,6 +74,7 @@ export default function UploadControl({
   placeholder,
   dropToAdd,
   dropOverValue,
+  selectLabel,
   onFiles,
   onClear,
   onPasteText,
@@ -109,6 +112,13 @@ export default function UploadControl({
     <div
       {...getRootProps({ className: "opal-input-upload" })}
       data-drag={drag ?? undefined}
+      // Focus moving to the picker, or between the field and its buttons, is
+      // not the user leaving the field.
+      onBlur={(e: React.FocusEvent<HTMLDivElement>) => {
+        if (pickerOpenRef.current) return;
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        onBlur?.(e);
+      }}
     >
       {fileInput}
       <div className="opal-input" data-variant={variant}>
@@ -139,9 +149,6 @@ export default function UploadControl({
             if (!hasValue) return;
             e.preventDefault();
             onClear();
-          }}
-          onBlur={(e) => {
-            if (!pickerOpenRef.current) onBlur?.(e);
           }}
         >
           <div className="opal-input-leading-icon">
@@ -182,6 +189,15 @@ export default function UploadControl({
             aria-label={strings.clearFile}
           />
         )}
+        <Button
+          onClick={noProp(openFilePicker)}
+          type="button"
+          prominence="tertiary"
+          size="sm"
+          disabled={isNonEditable}
+        >
+          {selectLabel}
+        </Button>
       </div>
     </div>
   );

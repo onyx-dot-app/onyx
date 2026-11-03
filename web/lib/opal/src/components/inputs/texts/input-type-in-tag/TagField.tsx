@@ -105,8 +105,12 @@ interface TagFieldProps extends TagFieldBaseProps {
   /** Extra attributes on the text input (a select's combobox aria). */
   inputAriaProps?: React.AriaAttributes & { role?: React.AriaRole };
 
-  /** Trailing controls after the clear button (a select's chevron and dropdown). */
+  /** Trailing controls before the clear button (a select's chevron and dropdown). */
   children?: React.ReactNode;
+
+  /** A control after the clear button, so it keeps its place as the clear
+   * button comes and goes (an upload's select button). */
+  trailingAction?: React.ReactNode;
 
   /**
    * No text input: the chips are the whole field (a select's button
@@ -153,6 +157,7 @@ function TagField({
   onInputDoubleClick,
   inputAriaProps,
   children,
+  trailingAction,
   readOnly = false,
   triggerRef: triggerRefProp,
 }: TagFieldProps) {
@@ -394,7 +399,8 @@ function TagField({
         )}
       </div>
       {children}
-      {/* The clear action is always the field's last control. */}
+      {/* The clear action is the field's last control, but for a
+      trailingAction. */}
       {onClear !== undefined && !disabled && (
         <Button
           prominence="tertiary"
@@ -408,6 +414,7 @@ function TagField({
           }}
         />
       )}
+      {trailingAction}
     </div>
   );
 }

@@ -39,6 +39,10 @@ export type OpalStrings = {
   inputUploadDropToAdd: string;
   /** InputSingleUpload's copy while a file is dragged over it and it holds one. */
   inputUploadDropToReplace: string;
+  /** InputSingleUpload's trailing button, which opens the file picker. */
+  inputUploadSelect: string;
+  /** InputMultiUpload's trailing button, which opens the file picker. */
+  inputMultiUploadSelect: string;
   clearFilter: string;
   date: string;
   dateRange: string;
@@ -172,6 +176,8 @@ export const defaultOpalStrings: OpalStrings = {
   inputUploadAttached: "File attached",
   inputUploadDropToAdd: "Drop file here to add",
   inputUploadDropToReplace: "Drop here to replace file",
+  inputUploadSelect: "Select File",
+  inputMultiUploadSelect: "Select Files",
   clearFilter: "Clear filter",
   date: "Date",
   dateRange: "Date range",
