@@ -66,7 +66,10 @@ URL, because the URL often does not say the file type.
 
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin, Gmail and Chat clients from a `GoogleService` member, and impersonates
-the given user with a service-account key.
+the given user with a service-account key. The clients use the discovery documents
+bundled with `google-api-python-client`, so a new API method needs a newer pinned
+client. The gateway keeps one Drive client per thread (`threading.local`), because
+`googleapiclient` over `httplib2` is not thread safe.
 
 **Google Chat.** `connectors/google_chat/connector.py:GoogleChatConnector` takes a
 service-account key only. Its scopes are not in
@@ -75,10 +78,8 @@ Drive OAuth sign-in never asks for Chat access. It lists the named spaces as the
 primary admin, reads each space as one of its members, and makes one document per
 space per UTC day. It tries every joined, unsuspended member of a space, and
 skips a member Google refused with a 403 in an earlier space. Its slim listing
-raises when the directory or every member of a space is refused. The gateway
-keeps one Drive client
-per thread (`threading.local`), because `googleapiclient` over `httplib2` is
-not thread safe.
+raises when every member of a space is refused or none can read it, so one
+unreadable space stops the prune of the whole connector.
 
 ---
 

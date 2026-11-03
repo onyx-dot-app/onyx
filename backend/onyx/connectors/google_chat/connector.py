@@ -21,6 +21,7 @@ from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.google_chat.config import normalize_space_entry
 from onyx.connectors.google_chat.models import ChatSpace, ChatUser
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import (
@@ -74,13 +75,21 @@ _MEMBER_FIELDS = "nextPageToken,memberships(state,member(name))"
 _HUMAN_MEMBER_FILTER = 'member.type = "HUMAN"'
 _MESSAGE_FIELDS = (
     "nextPageToken,messages(name,createTime,lastUpdateTime,text,threadReply,"
-    "thread(name),sender(name,displayName,type),attachment(contentName))"
+    "thread(name),sender(name,displayName,type),attachment(contentName),"
+    "privateMessageViewer)"
 )
-# The slim pass skips the messages the main pass skips, so it reads their text.
-_SLIM_MESSAGE_FIELDS = "nextPageToken,messages(createTime,text,attachment(contentName))"
+# The slim pass skips the messages the main pass skips, so it reads the same
+# fields that decide it.
+_SLIM_MESSAGE_FIELDS = (
+    "nextPageToken,messages(createTime,text,attachment(contentName),"
+    "privateMessageViewer)"
+)
 _USER_FIELDS = "primaryEmail,name(fullName),suspended"
 # Refused readers named in the error of an unreadable space.
 _REFUSED_READERS_SHOWN = 3
+_UNREADABLE_CONSEQUENCE = (
+    "The space is not indexed, and pruning stops until a member can read it."
+)
 # Bounds the memory one day of a busy space holds.
 _MAX_MESSAGES_PER_DOCUMENT = 10_000
 _REPLY_INDENT = "    "
@@ -143,11 +152,34 @@ def _message_text(message: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
+def _is_indexed(message: dict[str, Any]) -> bool:
+    """Whether a message goes into the document of its day. A private message
+    from a Chat app is visible to one member only, who can be the reader, so
+    it is never indexed."""
+    return "privateMessageViewer" not in message and bool(_message_text(message))
+
+
 def _refresh_error_reason(error: RefreshError) -> str:
     # google-auth puts Google's message first and the raw response second.
     if error.args and isinstance(error.args[0], str):
         return error.args[0]
     return str(error)
+
+
+def _credential_error(
+    error: RefreshError,
+) -> InsufficientPermissionsError | CredentialInvalidError:
+    """The validation error for a token request that Google refused."""
+    if MISSING_SCOPES_ERROR_STR in str(error) or "unauthorized_client" in str(error):
+        return InsufficientPermissionsError(
+            "The service account is not authorized for the Google Chat "
+            "scopes. In the Google Admin console, grant domain-wide "
+            f"delegation for: {', '.join(GOOGLE_SCOPES[DocumentSource.GOOGLE_CHAT])}"
+        )
+    return CredentialInvalidError(
+        "Google rejected the service account credentials: "
+        f"{_refresh_error_reason(error)}"
+    )
 
 
 class GoogleChatConnector(
@@ -168,6 +200,8 @@ class GoogleChatConnector(
         # Emails of members Google refused to read a space as. Chat access is
         # set per user, so later spaces skip them instead of asking again.
         self._refused_readers: set[str] = set()
+        # Chat user resource names the directory refused to show.
+        self._hidden_users: set[str] = set()
 
     @property
     def creds(self) -> ServiceAccountCredentials:
@@ -217,10 +251,8 @@ class GoogleChatConnector(
     def _in_scope(self, space: ChatSpace) -> bool:
         if not self.spaces:
             return True
-        wanted: set[str] = {
-            entry.lower().removeprefix("spaces/") for entry in self.spaces
-        }
-        return bool(wanted & {space.space_id.lower(), space.display_name.lower()})
+        wanted: set[str] = {normalize_space_entry(entry) for entry in self.spaces}
+        return bool(wanted & {space.space_id.casefold(), space.display_name.casefold()})
 
     def _list_spaces(self, active_after: datetime | None) -> list[ChatSpace]:
         query: str = _SPACE_QUERY
@@ -243,9 +275,9 @@ class GoogleChatConnector(
     def _user(self, user_name: str) -> ChatUser | None:
         """The directory user behind a Chat user resource name (users/{id})."""
         if user_name not in self._users:
-            # Only a missing user is skipped: a refused directory read would
-            # leave every space without a reader, which a prune reads as every
-            # document deleted.
+            # A user the directory does not hold or will not show, such as an
+            # external member, has no email. A space left without a reader
+            # raises SpaceUnreadableError, so skipping never empties a space.
             try:
                 found: dict[str, Any] = next(
                     execute_single_retrieval(
@@ -255,16 +287,19 @@ class GoogleChatConnector(
                     )
                 )
             except HttpError as e:
-                if e.resp.status != 404:
+                if e.resp.status not in (403, 404):
                     raise
+                if e.resp.status == 403:
+                    self._hidden_users.add(user_name)
                 found = {}
             self._users[user_name] = (
                 ChatUser.from_directory(found) if found.get("primaryEmail") else None
             )
         return self._users[user_name]
 
-    def _reader_candidates(self, space: ChatSpace) -> Iterator[str]:
-        """Emails of the space's joined members who are active directory users."""
+    def _reader_candidates(self, space: ChatSpace, hidden: list[str]) -> Iterator[str]:
+        """Emails of the space's joined members who are active directory users.
+        Joined members the directory refused to show are added to `hidden`."""
         for membership in execute_paginated_retrieval(
             retrieval_function=self._admin_chat_service().spaces().members().list,  # ty: ignore[unresolved-attribute]
             list_key="memberships",
@@ -278,6 +313,8 @@ class GoogleChatConnector(
                 continue
             user_name: str = (membership.get("member") or {}).get("name", "")
             user: ChatUser | None = self._user(user_name) if user_name else None
+            if user_name in self._hidden_users:
+                hidden.append(user_name)
             if user is not None and not user.suspended:
                 yield user.email
 
@@ -295,7 +332,8 @@ class GoogleChatConnector(
         member or Google refuses every one, so a prune never reads the space
         as empty."""
         refused: list[str] = []
-        for reader in self._reader_candidates(space):
+        hidden: list[str] = []
+        for reader in self._reader_candidates(space, hidden):
             if reader in self._refused_readers:
                 refused.append(reader)
                 continue
@@ -339,11 +377,18 @@ class GoogleChatConnector(
             raise SpaceUnreadableError(
                 f"Google Chat refused all {len(refused)} joined, unsuspended "
                 f"members as the reader of {space.display_name} ({space.name}): "
-                f"{shown}"
+                f"{shown}. {_UNREADABLE_CONSEQUENCE}"
             )
+        hidden_detail: str = (
+            f" The directory refused to show {len(hidden)} of its members: they "
+            "are outside the organization, or the primary admin lacks the "
+            "Users > Read privilege."
+            if hidden
+            else ""
+        )
         raise SpaceUnreadableError(
-            f"Google Chat found no joined, unsuspended member to read "
-            f"{space.display_name} ({space.name}) as"
+            f"{space.display_name} ({space.name}) has no joined, unsuspended "
+            f"member to read it as.{hidden_detail} {_UNREADABLE_CONSEQUENCE}"
         )
 
     def _sender(self, message: dict[str, Any]) -> BasicExpertInfo:
@@ -420,7 +465,7 @@ class GoogleChatConnector(
                 if day is not None and day_messages and day_touched:
                     yield self._to_document(space, day, day_messages)
                 day, day_messages, day_touched = created_at.date(), [], False
-            if not _message_text(message):
+            if not _is_indexed(message):
                 continue
             day_touched = day_touched or start is None or created_at >= start
             if len(day_messages) < _MAX_MESSAGES_PER_DOCUMENT:
@@ -501,7 +546,7 @@ class GoogleChatConnector(
                     callback.progress(_SLIM_PROGRESS_LABEL, 1)
                 if (
                     window_start is None or _created_at(message) >= window_start
-                ) and _message_text(message):
+                ) and _is_indexed(message):
                     days.add(_created_at(message).date())
             yield [self._space_node(space)] + [
                 SlimDocument(
@@ -513,20 +558,8 @@ class GoogleChatConnector(
     def validate_connector_settings(self) -> None:
         try:
             spaces: list[ChatSpace] = self._list_spaces(active_after=None)
-            self._directory_service().users().get(  # ty: ignore[unresolved-attribute]
-                userKey=self.primary_admin_email, fields=_USER_FIELDS
-            ).execute()
         except RefreshError as e:
-            if MISSING_SCOPES_ERROR_STR in str(e) or "unauthorized_client" in str(e):
-                raise InsufficientPermissionsError(
-                    "The service account is not authorized for the Google Chat "
-                    "scopes. In the Google Admin console, grant domain-wide "
-                    f"delegation for: {', '.join(GOOGLE_SCOPES[DocumentSource.GOOGLE_CHAT])}"
-                ) from e
-            raise CredentialInvalidError(
-                "Google rejected the service account credentials: "
-                f"{_refresh_error_reason(e)}"
-            ) from e
+            raise _credential_error(e) from e
         except HttpError as e:
             if e.resp.status == 401:
                 raise CredentialInvalidError(
@@ -535,8 +568,36 @@ class GoogleChatConnector(
             if e.resp.status == 403:
                 raise InsufficientPermissionsError(
                     f"{self.primary_admin_email} cannot list Google Chat spaces. "
-                    "The primary admin must be a Google Workspace administrator "
-                    "with the Chat and spaces conversations privilege."
+                    "The Google Chat API must be enabled in the service account's "
+                    "Google Cloud project, and the primary admin needs an admin "
+                    "role with the Chat and spaces conversations privilege."
+                ) from e
+            raise
+        # Every reader is found through the directory, so a refusal here would
+        # leave every space unreadable.
+        try:
+            self._directory_service().users().get(  # ty: ignore[unresolved-attribute]
+                userKey=self.primary_admin_email, fields=_USER_FIELDS
+            ).execute()
+        except RefreshError as e:
+            raise _credential_error(e) from e
+        except HttpError as e:
+            if e.resp.status == 401:
+                raise CredentialInvalidError(
+                    "Google rejected the service account credentials."
+                ) from e
+            if e.resp.status == 403:
+                raise InsufficientPermissionsError(
+                    f"{self.primary_admin_email} cannot read the Google Workspace "
+                    "directory. The Admin SDK API must be enabled in the service "
+                    "account's Google Cloud project, and the primary admin needs "
+                    "an admin role with the Users > Read privilege."
+                ) from e
+            if e.resp.status == 404:
+                raise ConnectorValidationError(
+                    f"No Google Workspace user has the email {self.primary_admin_email}. "
+                    "Enter the email of a Google Workspace admin, not the service "
+                    "account email."
                 ) from e
             raise
         if self.spaces and not spaces:

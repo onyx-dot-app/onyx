@@ -5266,7 +5266,7 @@
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Importez ou collez la clé `.json` d’un compte de service Google avec délégation au niveau du domaine.",
-        "googleChatPrimaryAdmin": "Un administrateur Google Workspace disposant du privilège Chat et conversations dans les espaces. Onyx liste les espaces et leurs membres en tant que cet administrateur.",
+        "googleChatPrimaryAdmin": "Un administrateur Google Workspace disposant du privilège Utilisateurs > Lire et du privilège Chat et conversations dans les espaces. Onyx liste les espaces et leurs membres en tant que cet administrateur.",
         "googleChatServiceAccountKey": "Importez ou collez la clé `.json` d'un compte de service avec délégation au niveau du domaine pour les champs d'application Google Chat et Admin Directory du guide de configuration.",
         "confluencePersonalAccessToken": "Collez le [jeton d'accès personnel](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) de votre compte administrateur Confluence."
       },

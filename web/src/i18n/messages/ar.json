@@ -5266,7 +5266,7 @@
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق.",
-        "googleChatPrimaryAdmin": "مشرف Google Workspace لديه امتياز Chat ومحادثات المساحات. يعرض Onyx المساحات وأعضاءها بصفته هذا المشرف.",
+        "googleChatPrimaryAdmin": "مشرف Google Workspace لديه امتياز المستخدمون > قراءة وامتياز Chat ومحادثات المساحات. يعرض Onyx المساحات وأعضاءها بصفته هذا المشرف.",
         "googleChatServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة مع تفويض على مستوى النطاق لنطاقات Google Chat وAdmin Directory الواردة في دليل الإعداد.",
         "confluencePersonalAccessToken": "الصق [رمز الوصول الشخصي](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) من حساب مسؤول Confluence."
       },

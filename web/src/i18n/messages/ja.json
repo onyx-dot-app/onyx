@@ -5266,7 +5266,7 @@
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。",
-        "googleChatPrimaryAdmin": "Chat とスペースの会話の権限を持つ Google Workspace 管理者。Onyx はこの管理者としてスペースとそのメンバーを一覧表示します。",
+        "googleChatPrimaryAdmin": "ユーザー > 読み取りの権限と、Chat とスペースの会話の権限を持つ Google Workspace 管理者。Onyx はこの管理者としてスペースとそのメンバーを一覧表示します。",
         "googleChatServiceAccountKey": "セットアップ ガイドに記載された Google Chat と Admin Directory のスコープについて、ドメイン全体の委任が設定されたサービス アカウントの `.json` キーをアップロードまたは貼り付けてください。",
         "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。"
       },

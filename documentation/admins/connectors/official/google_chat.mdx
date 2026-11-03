@@ -8,14 +8,14 @@ description: "Access conversations from Google Chat spaces"
 The Google Chat connector indexes the messages of the named spaces in your Google Workspace.
 The messages of one space on one day (UTC) make one document, titled with the space name and the date.
 A document holds at most the first 10,000 messages of its day; later messages of that day are not indexed.
-In each document, a thread's replies are indented under the thread's first message of that day.
-Attachment names are indexed. Attachment content is not.
+In each document, the messages of a thread are kept together, in the order of the thread's first message that day,
+and replies are indented. Attachment names are indexed. Attachment content is not.
 
 | Content     | Notes                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------- |
 | Spaces      | Every named space in the organization, also spaces that no Onyx user is a member of.                   |
 | Scope       | Optional. Limit the index to specific spaces by name or by id.                                          |
-| Not indexed | Direct messages, group chats, and messages with neither text nor an attachment (for example, card-only messages from Chat apps). |
+| Not indexed | Direct messages, group chats, private messages that a Chat app shows to one member only, and messages with neither text nor an attachment (for example, card-only messages from Chat apps). |
 
 When a new message arrives, Onyx indexes the whole day of that message again.
 An edit or a deletion of an older message shows in the index only after a new message arrives on the same day.
@@ -39,6 +39,8 @@ It then reads the messages of each space as one of the space's members.
     - Click **+ ENABLE APIS AND SERVICES**.
     - Search for **Google Chat API** and click **ENABLE**.
     - Search for **Admin SDK API** and click **ENABLE**.
+    - Open the **Google Chat API**, go to its **Configuration** tab, and fill in **App name**, **Avatar URL**,
+    and **Description**. Turn off **Interactive features**, then click **Save**.
   </Step>
 
   <Step title="Create a service account">
@@ -99,4 +101,5 @@ It then reads the messages of each space as one of the space's members.
 | The service account is not authorized for the scopes        | Delegate all four scopes to the service account's **Unique ID**. A change to domain-wide delegation can take some minutes to apply.   |
 | The primary admin cannot list Google Chat spaces            | Give the primary admin the Google Chat privileges to manage Chat and spaces conversations, or use a super admin.                     |
 | No spaces match the **Spaces** entries                      | Use the exact space name or the space id from the space URL.                                                                          |
-| A space shows as an indexing error | Onyx reads a space as a member who has joined it and is not suspended. Make sure the space has such a member and that Google Chat is on for its members. |
+| A space shows as an indexing error | Onyx reads a space as a member who has joined it and is not suspended. Make sure the space has such a member and that Google Chat is on for its members. Until a member can read the space, pruning of the connector stops, so messages deleted in Google Chat stay in Onyx. |
+| The primary admin cannot read the directory | Give the primary admin's role the **Users > Read** privilege, and enable the Admin SDK API in the service account's Cloud project. |

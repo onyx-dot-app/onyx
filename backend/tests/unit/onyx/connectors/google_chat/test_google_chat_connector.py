@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -8,10 +9,17 @@ import httplib2
 import pytest
 from google.auth.exceptions import RefreshError
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.http import HttpMock, RequestMockBuilder
 
-from onyx.connectors.exceptions import CredentialInvalidError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.google_chat import connector as google_chat_module
+from onyx.connectors.google_chat.config import GoogleChatConnectorConfig
 from onyx.connectors.google_chat.connector import GoogleChatConnector
 from onyx.connectors.google_utils.resources import GoogleService
 from onyx.connectors.models import ConnectorFailure, Document, SlimDocument
@@ -145,6 +153,8 @@ class _FakeChat:
 
     def search(self, query: str, useAdminAccess: bool, **_: Any) -> _Request:
         assert useAdminAccess and self._user_email == _ADMIN
+        if self._world.search_error is not None:
+            return _Request(self._world.search_error)
         active_after: list[datetime] = _times(query, "lastActiveTime", ">")
         return _Request(
             {
@@ -164,7 +174,7 @@ class _FakeChat:
         self._world.readers.append(self._user_email)
         self._world.message_filters.append(filter)
         if self._user_email in self._world.refused_readers:
-            return _Request(_http_error(403))
+            return _Request(_http_error(self._world.refusal_status))
         after: list[datetime] = _times(filter or "", "createTime", ">")
         before: list[datetime] = _times(filter or "", "createTime", "<")
         return _Request(
@@ -201,7 +211,9 @@ class _World:
         self.readers: list[str] = []
         self.message_filters: list[str | None] = []
         self.refused_readers: set[str] = set()
+        self.refusal_status: int = 403
         self.directory_error: HttpError | None = None
+        self.search_error: HttpError | None = None
 
     def service(
         self, service: GoogleService, creds: Any, user_email: str | None = None
@@ -292,13 +304,22 @@ def test_poll_rebuilds_the_whole_day_of_each_new_message(world: _World) -> None:
     ]
 
 
-@pytest.mark.usefixtures("world")
-def test_space_filter_matches_display_name_or_id() -> None:
+def test_space_filter_matches_display_name_or_id(world: _World) -> None:
     by_name = _items(_connector(["engineering"]), 0, _ts("2026-10-30T00:00:00Z"))
-    by_id = _items(_connector(["RANDOM"]), 0, _ts("2026-10-30T00:00:00Z"))
+    by_id = _items(_connector(["spaces/random"]), 0, _ts("2026-10-30T00:00:00Z"))
 
     assert len(by_name) == 2
+    # Random has no messages, so only its reader shows it was in scope.
     assert by_id == []
+    assert world.readers == ["bob@acme.com", _ADMIN]
+
+
+def test_space_entries_are_stored_in_the_form_they_match_in() -> None:
+    config = GoogleChatConnectorConfig(
+        spaces=[" Engineering", "engineering", "spaces/AAAA", "  "]
+    )
+
+    assert config.spaces == ["aaaa", "engineering"]
 
 
 def test_next_member_reads_when_google_refuses_one(world: _World) -> None:
@@ -397,6 +418,48 @@ def test_slim_listing_reports_progress_per_message(world: _World) -> None:
 
 
 @pytest.mark.usefixtures("world")
+def test_private_messages_are_not_indexed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A Chat app's private reply is visible to Bob only, and Bob reads the space.
+    viewer: dict[str, Any] = {"privateMessageViewer": {"name": "users/2"}}
+    private_reply: dict[str, Any] = (
+        _message(
+            "p1", "2026-10-01T09:30:00Z", "t1", text="Only you can see this", reply=True
+        )
+        | viewer
+    )
+    private_only_day: dict[str, Any] = (
+        _message("p2", "2026-10-03T09:00:00Z", "t4", text="Your report is ready")
+        | viewer
+    )
+    eng: list[dict[str, Any]] = _MESSAGES["spaces/ENG"]
+    monkeypatch.setitem(
+        _MESSAGES,
+        "spaces/ENG",
+        eng[:2] + [private_reply] + eng[2:] + [private_only_day],
+    )
+    connector = _connector(["Engineering"])
+
+    documents = [
+        item
+        for item in _items(connector, 0, _ts("2026-10-30T00:00:00Z"))
+        if isinstance(item, Document)
+    ]
+    slim: set[str] = {
+        doc.id
+        for batch in connector.retrieve_all_slim_docs()
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    }
+
+    assert [document.id for document in documents] == [
+        "google_chat:spaces/ENG:2026-10-01",
+        "google_chat:spaces/ENG:2026-10-02",
+    ]
+    assert "Only you can see this" not in (documents[0].sections[0].text or "")
+    assert slim == {document.id for document in documents}
+
+
+@pytest.mark.usefixtures("world")
 def test_slim_listing_matches_indexed_documents() -> None:
     connector = _connector()
     indexed: set[str] = {
@@ -422,11 +485,126 @@ def test_slim_listing_raises_when_no_member_can_read(world: _World) -> None:
         list(_connector().retrieve_all_slim_docs())
 
 
-def test_refused_directory_read_raises(world: _World) -> None:
+def test_refused_directory_read_makes_spaces_unreadable(world: _World) -> None:
     world.directory_error = _http_error(403)
+
+    with pytest.raises(google_chat_module.SpaceUnreadableError, match="Users > Read"):
+        list(_connector().retrieve_all_slim_docs())
+
+
+def test_failed_directory_read_raises(world: _World) -> None:
+    world.directory_error = _http_error(500)
 
     with pytest.raises(HttpError):
         list(_connector().retrieve_all_slim_docs())
+
+
+def test_member_google_cannot_find_is_asked_again_in_later_spaces(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        _MEMBERS,
+        "spaces/ENG",
+        [
+            {"state": "JOINED", "member": {"name": "users/1"}},
+            {"state": "JOINED", "member": {"name": "users/2"}},
+        ],
+    )
+    world.refused_readers = {_ADMIN}
+    world.refusal_status = 404
+
+    _items(_connector(), 0, _ts("2026-10-30T00:00:00Z"))
+
+    # A 404 is about one space, so the admin is still tried in Random.
+    assert world.readers == [_ADMIN, "bob@acme.com", _ADMIN]
+
+
+@pytest.mark.usefixtures("world")
+def test_slim_listing_matches_a_poll_that_starts_mid_day() -> None:
+    connector = _connector()
+    start, end = _ts("2026-10-02T12:00:00Z"), _ts("2026-10-03T00:00:00Z")
+
+    indexed: set[str] = {
+        item.id for item in _items(connector, start, end) if isinstance(item, Document)
+    }
+    slim: set[str] = {
+        doc.id
+        for batch in connector.retrieve_all_slim_docs(start=start, end=end)
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    }
+
+    assert indexed == slim == {"google_chat:spaces/ENG:2026-10-02"}
+
+
+@pytest.mark.parametrize(
+    ("failing", "status", "error", "message"),
+    [
+        ("search", 403, InsufficientPermissionsError, "Chat and spaces conversations"),
+        ("directory", 403, InsufficientPermissionsError, "Users > Read"),
+        ("directory", 404, ConnectorValidationError, "not the service account"),
+        ("search", 401, CredentialInvalidError, "rejected"),
+    ],
+)
+def test_validation_names_the_refused_privilege(
+    world: _World,
+    failing: str,
+    status: int,
+    error: type[Exception],
+    message: str,
+) -> None:
+    if failing == "search":
+        world.search_error = _http_error(status)
+    else:
+        world.directory_error = _http_error(status)
+
+    with pytest.raises(error, match=message):
+        _connector().validate_connector_settings()
+
+
+@pytest.mark.usefixtures("world")
+def test_validation_passes_with_working_access() -> None:
+    _connector().validate_connector_settings()
+
+
+def test_connector_calls_exist_on_the_pinned_google_clients() -> None:
+    # The fakes above accept any call. Build the real clients from the
+    # discovery documents bundled with google-api-python-client instead, so a
+    # method or parameter the pinned client does not know fails here.
+    def ok(body: dict[str, Any]) -> tuple[httplib2.Response, str]:
+        return httplib2.Response({"status": 200}), json.dumps(body)
+
+    responses = RequestMockBuilder(
+        {
+            "chat.spaces.search": ok({"results": [{"space": _SPACES[0]}]}),
+            "chat.spaces.members.list": ok({"memberships": _MEMBERS["spaces/ENG"]}),
+            "chat.spaces.messages.list": ok({"messages": _MESSAGES["spaces/ENG"]}),
+            "directory.users.get": ok(_USERS["2"]),
+        },
+        check_unexpected=True,
+    )
+
+    def real_service(service: GoogleService, *_: Any, **__: Any) -> Any:
+        name, version = service.value
+        return build(
+            name,
+            version,
+            http=HttpMock(headers={"status": "200"}),
+            requestBuilder=responses,
+            static_discovery=True,
+        )
+
+    with patch.object(google_chat_module, "get_google_service", real_service):
+        connector = _connector()
+        connector.validate_connector_settings()
+        items = _items(connector, 0, _ts("2026-10-30T00:00:00Z"))
+        slim = list(connector.retrieve_all_slim_docs())
+
+    assert [item.id for item in items if isinstance(item, Document)] == [
+        "google_chat:spaces/ENG:2026-10-01",
+        "google_chat:spaces/ENG:2026-10-02",
+    ]
+    assert len(slim) == 1
 
 
 def test_key_google_refuses_is_an_invalid_credential() -> None:
