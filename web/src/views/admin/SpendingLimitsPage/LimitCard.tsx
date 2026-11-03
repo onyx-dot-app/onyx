@@ -22,7 +22,10 @@ import {
 } from "@opal/icons";
 import { richNodes } from "@opal/utils";
 import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
-import { saveSpendingLimitCard } from "@/lib/spendingLimits/svc";
+import {
+  resetSpendingLimitUsage,
+  saveSpendingLimitCard,
+} from "@/lib/spendingLimits/svc";
 import {
   LimitAction,
   type CardPath,
@@ -36,6 +39,7 @@ import {
   toCardDraft,
   toRequests,
   validateDraft,
+  withSavedFrom,
   type CardDraft,
   type DraftLimit,
 } from "@/views/admin/SpendingLimitsPage/draft";
@@ -178,6 +182,7 @@ export default function LimitCard({
   // New rows hold their errors back until edited.
   const [editedRows, setEditedRows] = useState<Set<number>>(() => new Set());
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   function newDraft(): CardDraft {
@@ -194,6 +199,9 @@ export default function LimitCard({
     setDraft(newDraft());
     setOpenModelRows(new Set());
   }, [signature]);
+  useEffect(() => {
+    setDraft((prev) => withSavedFrom(prev, card));
+  }, [card]);
 
   useEffect(() => {
     if (revealKey === undefined) return;
@@ -207,7 +215,9 @@ export default function LimitCard({
     (limit) => limit.action === LimitAction.BLOCK
   );
   const isEmpty = card.limits.length === 0;
-  const disabled = !canEdit || saving;
+  // A save replaces the limit rows, so it waits for a reset, and back.
+  const busy = saving || resetting;
+  const disabled = !canEdit || busy;
 
   function updateLimit(updated: DraftLimit) {
     setEditedRows((prev) => new Set(prev).add(updated.key));
@@ -275,29 +285,54 @@ export default function LimitCard({
     }
   }
 
+  async function resetUsage(cardPath: CardPath, limitId: number) {
+    setResetting(true);
+    try {
+      await resetSpendingLimitUsage(cardPath, limitId);
+      toast.success(t("row.resetUsage.done"));
+      onSaved();
+    } catch (error) {
+      toast.error(
+        t("row.resetUsage.failed", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
+    } finally {
+      setResetting(false);
+    }
+  }
+
   function setEnabled(enabled: boolean) {
     void save(enabled, toCardDraft(card));
   }
 
   function rows(limits: DraftLimit[]) {
-    return limits.map((limit) => (
-      <LimitRow
-        key={limit.key}
-        limit={limit}
-        error={
-          limit.saved !== null || editedRows.has(limit.key)
-            ? errors.get(limit.key)
-            : undefined
-        }
-        showUsage={showUsage}
-        modelOptions={modelOptions}
-        open={openModelRows.has(limit.key)}
-        disabled={disabled}
-        onOpen={() => openModelRow(limit.key)}
-        onChange={updateLimit}
-        onRemove={() => removeLimit(limit.key)}
-      />
-    ));
+    return limits.map((limit) => {
+      const savedId = limit.saved?.id;
+      return (
+        <LimitRow
+          key={limit.key}
+          limit={limit}
+          error={
+            limit.saved !== null || editedRows.has(limit.key)
+              ? errors.get(limit.key)
+              : undefined
+          }
+          showUsage={showUsage}
+          modelOptions={modelOptions}
+          open={openModelRows.has(limit.key)}
+          disabled={disabled}
+          onOpen={() => openModelRow(limit.key)}
+          onChange={updateLimit}
+          onRemove={() => removeLimit(limit.key)}
+          onResetUsage={
+            canEdit && path !== null && savedId !== undefined
+              ? () => void resetUsage(path, savedId)
+              : undefined
+          }
+        />
+      );
+    });
   }
 
   function addButton(label: string, isModelRow: boolean) {
@@ -451,7 +486,7 @@ export default function LimitCard({
             <Button
               rightIcon={SvgPlug}
               prominence="tertiary"
-              disabled={saving}
+              disabled={busy}
               onClick={() => setEnabled(true)}
             >
               {t("card.reenable")}
@@ -525,7 +560,7 @@ export default function LimitCard({
             size="md"
             tooltip={t("card.disable.tooltip")}
             aria-label={t("card.disable.tooltip")}
-            disabled={saving}
+            disabled={busy}
             onClick={() => setEnabled(false)}
           />
         )}
@@ -687,17 +722,11 @@ export default function LimitCard({
                 padding={4}
                 height="auto"
               >
-                <Button
-                  prominence="secondary"
-                  disabled={saving}
-                  onClick={cancel}
-                >
+                <Button prominence="secondary" disabled={busy} onClick={cancel}>
                   {t("card.cancel")}
                 </Button>
                 <Button
-                  disabled={
-                    !dirty || errors.size > 0 || saving || path === null
-                  }
+                  disabled={!dirty || errors.size > 0 || busy || path === null}
                   onClick={() => void save(draft.enabled, draft)}
                 >
                   {isNew ? t("card.create") : t("card.save")}

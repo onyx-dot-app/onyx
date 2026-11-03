@@ -11136,6 +11136,11 @@
           }
         },
         "nextReset": "Próximo reinicio",
+        "resetUsage": {
+          "label": "Reiniciar el uso del límite ahora",
+          "done": "Uso reiniciado. Este límite cuenta desde ahora hasta su próximo reinicio.",
+          "failed": "No se pudo reiniciar el uso: {error}"
+        },
         "remove": {
           "tooltip": "Quitar límite"
         },

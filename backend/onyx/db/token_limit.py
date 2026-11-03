@@ -1,18 +1,88 @@
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from uuid import UUID
 
-from sqlalchemy import Select, or_, select
+from pydantic import BaseModel
+from sqlalchemy import Select, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import TokenRateLimitAction, TokenRateLimitScope
-from onyx.db.models import TokenRateLimit, User__UserGroup
+from onyx.db.models import TokenRateLimit, TokenRateLimitUsageBaseline, User__UserGroup
 from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 TOKEN_RATE_LIMIT_BUCKET_INDEX = "uq_token_rate_limit_bucket"
+
+
+class UsageBaseline(BaseModel):
+    """Usage the reset day's bucket held when a limit was reset."""
+
+    tokens: float = 0.0
+    cost_cents: float = 0.0
+
+
+def usage_baseline(
+    limit: TokenRateLimit, baselines: Mapping[int, UsageBaseline]
+) -> UsageBaseline:
+    if limit.usage_reset_at is None:
+        return UsageBaseline()
+    return baselines.get(limit.id, UsageBaseline())
+
+
+def fetch_user_usage_baselines(
+    db_session: Session, user_id: UUID, limit_ids: Collection[int]
+) -> dict[int, UsageBaseline]:
+    if not limit_ids:
+        return {}
+    rows = db_session.execute(
+        select(
+            TokenRateLimitUsageBaseline.token_rate_limit_id,
+            TokenRateLimitUsageBaseline.tokens,
+            TokenRateLimitUsageBaseline.cost_cents,
+        ).where(
+            TokenRateLimitUsageBaseline.user_id == user_id,
+            TokenRateLimitUsageBaseline.token_rate_limit_id.in_(limit_ids),
+        )
+    ).all()
+    return {
+        limit_id: UsageBaseline(tokens=tokens, cost_cents=cost_cents)
+        for limit_id, tokens, cost_cents in rows
+    }
+
+
+def fetch_pool_usage_baselines(
+    db_session: Session, limits: Sequence[TokenRateLimit]
+) -> dict[int, UsageBaseline]:
+    """Each reset pool limit's baseline: the sum of the baselines of the users
+    the pool covers now, so it always matches the pool's usage query. The
+    workspace pool covers every user; a group pool its current members."""
+    limit_ids = [limit.id for limit in limits if limit.usage_reset_at is not None]
+    if not limit_ids:
+        return {}
+    baseline = TokenRateLimitUsageBaseline
+    is_member = exists().where(
+        User__UserGroup.user_id == baseline.user_id,
+        User__UserGroup.user_group_id == TokenRateLimit.user_group_id,
+    )
+    rows = db_session.execute(
+        select(
+            baseline.token_rate_limit_id,
+            func.sum(baseline.tokens),
+            func.sum(baseline.cost_cents),
+        )
+        .join(TokenRateLimit, TokenRateLimit.id == baseline.token_rate_limit_id)
+        .where(
+            baseline.token_rate_limit_id.in_(limit_ids),
+            or_(TokenRateLimit.user_group_id.is_(None), is_member),
+        )
+        .group_by(baseline.token_rate_limit_id)
+    ).all()
+    return {
+        limit_id: UsageBaseline(tokens=float(tokens), cost_cents=float(cost_cents))
+        for limit_id, tokens, cost_cents in rows
+    }
 
 
 def commit_token_rate_limit(db_session: Session) -> None:

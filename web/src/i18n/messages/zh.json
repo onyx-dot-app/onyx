@@ -11136,6 +11136,11 @@
           }
         },
         "nextReset": "下次重置",
+        "resetUsage": {
+          "label": "立即重置限额用量",
+          "done": "用量已重置。此限额从现在起计算，直到下次重置。",
+          "failed": "无法重置用量：{error}"
+        },
         "remove": {
           "tooltip": "移除上限"
         },

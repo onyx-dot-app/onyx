@@ -83,6 +83,23 @@ To remove a limit, click its remove icon and save the card.
 To pause all the limits on a card, open the card and click the **Turn off all limits** icon.
 The card keeps its limits and shows **Inactive limit**. To turn the limits on again, click **Re-enable**.
 
+## Reset a Limit's Usage
+
+To let users continue before a limit's next reset,
+open the card and click **Reset Limit Usage Now** under the limit's next reset time.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/spending_limits_reset.webp" alt="An open group limit card with the Reset Limit Usage Now link under the next reset time"/>
+
+The limit then counts usage from now until its next reset. Onyx keeps the usage records,
+so usage reports and exports do not change.
+
+If you save the card later, a limit keeps its reset only if you did not change its period or model.
+A limit with a new period or model starts again from the start of its period.
+
+A reset applies to everyone the limit covers. For a per-user limit, each user's usage counts from the time of the reset.
+
+Admins can reset any limit. Group managers can reset the limits on their group's **Shared Group Budget**.
+
 ## How Limits Combine
 
 Onyx checks these rules before each LLM request. The user must pass all of them:
@@ -123,6 +140,8 @@ which Onyx removed.
 | `PUT /admin/spending-limits/groups/{group_id}/pool` | Replaces a group's shared budget |
 | `PUT /admin/spending-limits/groups/{group_id}/per-member` | Replaces a group's per-member limit |
 | `DELETE /admin/spending-limits/groups/{group_id}` | Removes all of a group's limits |
+| `POST /admin/spending-limits/groups/{group_id}/pool/limits/{limit_id}/reset-usage` | Counts one group shared budget limit's usage from now and returns its card |
+| `POST /admin/spending-limits/limits/{limit_id}/reset-usage` | Counts any limit's usage from now and returns its card (admins only) |
 | `GET /admin/spending-limits/users/{user_id}/effective` | Shows the limits that apply to one user |
 
 A `PUT` replaces every limit on the card. Send `enabled` and the full list of `limits`. In each limit,

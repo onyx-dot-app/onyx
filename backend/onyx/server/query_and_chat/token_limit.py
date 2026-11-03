@@ -5,16 +5,18 @@ Two entry points share one strategy: `check_token_rate_limits` checks the
 all-models limits before a request runs, and `check_model_spend_limits` checks
 the limits on one model once the request has picked it."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from enum import Enum
 from math import ceil
 from threading import RLock
+from uuid import UUID
 
 from cachetools import TTLCache
 from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.configs.constants import (
@@ -25,13 +27,21 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.models import TokenRateLimit, User
-from onyx.db.token_limit import fetch_enforced_token_rate_limits
+from onyx.db.token_limit import (
+    UsageBaseline,
+    fetch_enforced_token_rate_limits,
+    fetch_pool_usage_baselines,
+    fetch_user_group_enforced_token_rate_limits,
+    fetch_user_usage_baselines,
+    usage_baseline,
+)
 from onyx.db.user_usage import (
     TokenUsageBucket,
+    get_limit_usage_start,
     get_period_window_reset,
-    get_period_window_start,
     get_total_cost_cents_buckets_since,
     get_total_token_buckets_since,
+    sum_limit_usage,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -97,6 +107,18 @@ class BudgetWindow(BaseModel):
     budget: float
     # Set when a group allowance, not the workspace default, supplied it.
     user_group_id: int | None = None
+    # The source row's usage reset; see TokenRateLimit.usage_reset_at.
+    usage_reset_at: datetime | None = None
+    # What the reset day's bucket held at the reset, in this window's unit.
+    usage_baseline: float = 0.0
+
+    def usage_start(self, now: datetime) -> datetime:
+        return get_limit_usage_start(now, self.period, self.usage_reset_at)
+
+    def used(self, buckets: Sequence[tuple[datetime, float]], now: datetime) -> float:
+        return sum_limit_usage(
+            buckets, now, self.period, self.usage_reset_at, self.usage_baseline
+        )
 
 
 class WindowUsage(BaseModel):
@@ -105,10 +127,15 @@ class WindowUsage(BaseModel):
 
 
 def budget_windows(
-    rate_limits: Sequence[TokenRateLimit], user_group_id: int | None = None
+    rate_limits: Sequence[TokenRateLimit],
+    user_group_id: int | None = None,
+    baselines: Mapping[int, UsageBaseline] | None = None,
 ) -> list[BudgetWindow]:
+    """`baselines`: reset baselines by limit id, the user's own for per-user
+    limits or the pool's sum. Without them a reset counts the whole reset day."""
     windows: list[BudgetWindow] = []
     for limit in rate_limits:
+        baseline = usage_baseline(limit, baselines or {})
         # A non-positive token budget only comes from legacy rows; never block on it.
         if limit.token_budget is not None and limit.token_budget > 0:
             windows.append(
@@ -117,6 +144,8 @@ def budget_windows(
                     unit=BudgetUnit.TOKENS,
                     budget=limit.token_budget * TOKEN_BUDGET_UNIT,
                     user_group_id=user_group_id,
+                    usage_reset_at=limit.usage_reset_at,
+                    usage_baseline=baseline.tokens,
                 )
             )
         if limit.cost_budget_cents is not None:
@@ -126,6 +155,8 @@ def budget_windows(
                     unit=BudgetUnit.COST,
                     budget=limit.cost_budget_cents,
                     user_group_id=user_group_id,
+                    usage_reset_at=limit.usage_reset_at,
+                    usage_baseline=baseline.cost_cents,
                 )
             )
     return windows
@@ -134,32 +165,58 @@ def budget_windows(
 def resolve_member_allowance(
     default_limits: list[TokenRateLimit],
     member_limits_by_group: dict[int, list[TokenRateLimit]],
+    user_baselines: Mapping[int, UsageBaseline] | None = None,
 ) -> list[BudgetWindow]:
     """The user's budget for each (period, unit): the largest among their
     groups that set it, else the workspace default. A group that doesn't set a
     bucket has no say in it."""
     allowance: dict[tuple[TokenRateLimitPeriod, BudgetUnit], BudgetWindow] = {}
     for group_id, limits in member_limits_by_group.items():
-        for window in budget_windows(limits, user_group_id=group_id):
+        for window in budget_windows(limits, group_id, user_baselines):
             key = (window.period, window.unit)
             current = allowance.get(key)
             if current is None or window.budget > current.budget:
                 allowance[key] = window
-    for window in budget_windows(default_limits):
+    for window in budget_windows(default_limits, None, user_baselines):
         allowance.setdefault((window.period, window.unit), window)
     return list(allowance.values())
+
+
+def fetch_member_allowance(
+    db_session: Session, user_id: UUID, model_configuration_id: int | None
+) -> list[BudgetWindow]:
+    """The user's per-user allowance (`resolve_member_allowance`), with the
+    user's reset baselines."""
+    defaults = list(
+        fetch_enforced_token_rate_limits(
+            db_session, TokenRateLimitScope.USER, model_configuration_id
+        )
+    )
+    members = fetch_user_group_enforced_token_rate_limits(
+        db_session,
+        user_id,
+        TokenRateLimitScope.USER_GROUP_MEMBER,
+        model_configuration_id,
+    )
+    # Only a reset row has baselines; most checks skip the query.
+    limit_ids = [
+        limit.id
+        for limit in [*defaults, *(row for rows in members.values() for row in rows)]
+        if limit.usage_reset_at is not None
+    ]
+    return resolve_member_allowance(
+        defaults,
+        members,
+        fetch_user_usage_baselines(db_session, user_id, limit_ids),
+    )
 
 
 def usage_cutoff(
     now: datetime, windows: Sequence[BudgetWindow], unit: BudgetUnit
 ) -> datetime | None:
-    """Earliest window start among the unit's budgets, so one fetch covers
+    """Earliest usage start among the unit's budgets, so one fetch covers
     every window; None when no budget uses the unit."""
-    starts = [
-        get_period_window_start(now, window.period)
-        for window in windows
-        if window.unit == unit
-    ]
+    starts = [window.usage_start(now) for window in windows if window.unit == unit]
     return min(starts) if starts else None
 
 
@@ -176,9 +233,7 @@ def exhausted_windows(
     exhausted: list[tuple[BudgetWindow, datetime]] = []
     for window in windows:
         buckets = usage.tokens if window.unit == BudgetUnit.TOKENS else usage.cost_cents
-        cutoff = get_period_window_start(now, window.period)
-        used = sum(amount for start, amount in buckets if start >= cutoff)
-        if used >= window.budget:
+        if window.used(buckets, now) >= window.budget:
             exhausted.append((window, get_period_window_reset(now, window.period)))
     return exhausted
 
@@ -223,10 +278,13 @@ Workspace pool
 
 def _user_is_rate_limited_by_global(model_configuration_id: int | None) -> None:
     with get_session_with_current_tenant() as db_session:
-        windows = budget_windows(
+        limits = list(
             fetch_enforced_token_rate_limits(
                 db_session, TokenRateLimitScope.GLOBAL, model_configuration_id
             )
+        )
+        windows = budget_windows(
+            limits, None, fetch_pool_usage_baselines(db_session, limits)
         )
         if not windows:
             return

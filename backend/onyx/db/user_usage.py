@@ -4,12 +4,12 @@ A window rollup: rows accumulate in place per (user, window,
 model, flow, provider, incognito), not an append-only per-call ledger."""
 
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, insert, literal, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
 from onyx.db.models import (
     USAGE_MODEL_CONFIGURATION_KEY,
     TokenRateLimit,
+    TokenRateLimitUsageBaseline,
     User,
     User__UserGroup,
     UserUsage,
@@ -57,6 +58,59 @@ def get_period_window_start(now: datetime, period: TokenRateLimitPeriod) -> date
     return today.replace(day=1)
 
 
+def get_usage_bucket_start(dt: datetime) -> datetime:
+    return get_window_start(dt, USER_USAGE_BUCKET_SECONDS)
+
+
+def _reset_bucket_in_period(
+    now: datetime, period: TokenRateLimitPeriod, usage_reset_at: datetime | None
+) -> datetime | None:
+    """The bucket that holds the limit's usage reset, when the reset is in the
+    current period."""
+    if usage_reset_at is None:
+        return None
+    reset_bucket = get_usage_bucket_start(usage_reset_at)
+    return (
+        reset_bucket if reset_bucket >= get_period_window_start(now, period) else None
+    )
+
+
+def get_limit_usage_start(
+    now: datetime, period: TokenRateLimitPeriod, usage_reset_at: datetime | None
+) -> datetime:
+    """Earliest bucket that counts toward a limit: its current period's start,
+    or the bucket of a usage reset in the period."""
+    return _reset_bucket_in_period(
+        now, period, usage_reset_at
+    ) or get_period_window_start(now, period)
+
+
+def sum_limit_usage(
+    buckets: Iterable[tuple[datetime, float]],
+    now: datetime,
+    period: TokenRateLimitPeriod,
+    usage_reset_at: datetime | None,
+    baseline: float,
+) -> float:
+    """Usage that counts toward a limit this period. After a reset, the reset
+    day's bucket counts only what it gained since the reset: `baseline` is
+    what it held at the reset."""
+    start = get_limit_usage_start(now, period, usage_reset_at)
+    reset_bucket = _reset_bucket_in_period(now, period, usage_reset_at)
+    used = 0.0
+    reset_day = 0.0
+    for bucket_start, amount in buckets:
+        if bucket_start < start:
+            continue
+        if bucket_start == reset_bucket:
+            reset_day += amount
+        else:
+            used += amount
+    if reset_bucket is None:
+        return used + reset_day
+    return used + max(0.0, reset_day - baseline)
+
+
 def get_period_window_reset(now: datetime, period: TokenRateLimitPeriod) -> datetime:
     window_start = get_period_window_start(now, period)
     if period == TokenRateLimitPeriod.DAILY:
@@ -71,8 +125,11 @@ def get_period_window_reset(now: datetime, period: TokenRateLimitPeriod) -> date
 def period_fetch_cutoff(
     now: datetime, rate_limits: Sequence[TokenRateLimit]
 ) -> datetime:
-    """Earliest window start across the limits, so one fetch covers every window."""
-    return min(get_period_window_start(now, limit.period) for limit in rate_limits)
+    """Earliest usage start across the limits, so one fetch covers every window."""
+    return min(
+        get_limit_usage_start(now, limit.period, limit.usage_reset_at)
+        for limit in rate_limits
+    )
 
 
 def token_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
@@ -313,7 +370,18 @@ def get_usage_reset_window_start(
 
 
 def reset_user_usage(db_session: Session, user_id: str, window_start: datetime) -> int:
-    """Clear a user's usage within the active enforcement window."""
+    """Clear a user's usage within the active enforcement window, with the
+    user's limit-reset baselines for buckets in it: a baseline must not be
+    subtracted again from usage that is gone."""
+    reset_in_window = select(TokenRateLimit.id).where(
+        TokenRateLimit.usage_reset_at >= window_start
+    )
+    db_session.execute(
+        delete(TokenRateLimitUsageBaseline).where(
+            TokenRateLimitUsageBaseline.user_id == user_id,
+            TokenRateLimitUsageBaseline.token_rate_limit_id.in_(reset_in_window),
+        )
+    )
     result = cast(
         CursorResult[Any],
         db_session.execute(
@@ -540,3 +608,71 @@ def get_group_token_buckets_since(
             )
         )
     return result
+
+
+class PoolUsageBuckets(BaseModel):
+    tokens: list[tuple[datetime, float]]
+    cost_cents: list[tuple[datetime, float]]
+
+
+def get_pool_usage_buckets_since(
+    db_session: Session,
+    cutoff: datetime,
+    model_configuration_id: int | None,
+    user_group_id: int | None,
+) -> PoolUsageBuckets:
+    """Per-bucket usage of the workspace pool, or of one group's pool."""
+    if user_group_id is None:
+        token_rows = get_total_token_buckets_since(
+            db_session, cutoff, model_configuration_id
+        )
+        cost = get_total_cost_cents_buckets_since(
+            db_session, cutoff, model_configuration_id
+        )
+    else:
+        token_rows = get_group_token_buckets_since(
+            db_session, [user_group_id], cutoff, model_configuration_id
+        ).get(user_group_id, [])
+        cost = get_group_cost_cents_buckets_since(
+            db_session, [user_group_id], cutoff, model_configuration_id
+        ).get(user_group_id, [])
+    return PoolUsageBuckets(
+        tokens=[(bucket.window_start, float(bucket.tokens)) for bucket in token_rows],
+        cost_cents=cost,
+    )
+
+
+def insert_user_usage_baselines__no_commit(
+    db_session: Session,
+    token_rate_limit_id: int,
+    bucket_start: datetime,
+    model_configuration_id: int | None,
+) -> None:
+    """Store every user's usage in one bucket as the limit's reset baselines.
+    Every user, not only those the limit covers now: one who joins a group
+    later still has their pre-reset usage subtracted."""
+    query = (
+        select(
+            literal(token_rate_limit_id),
+            UserUsage.user_id,
+            func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
+            func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
+        )
+        .where(
+            *_model_clause(model_configuration_id),
+            UserUsage.window_start == bucket_start,
+            UserUsage.user_id.is_not(None),
+        )
+        .group_by(UserUsage.user_id)
+    )
+    db_session.execute(
+        insert(TokenRateLimitUsageBaseline).from_select(
+            [
+                TokenRateLimitUsageBaseline.token_rate_limit_id,
+                TokenRateLimitUsageBaseline.user_id,
+                TokenRateLimitUsageBaseline.tokens,
+                TokenRateLimitUsageBaseline.cost_cents,
+            ],
+            query,
+        )
+    )

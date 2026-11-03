@@ -16,7 +16,9 @@ from ee.onyx.db.token_limit import (
     fetch_card_token_rate_limits,
     fetch_groups_with_token_rate_limits,
     fetch_model_configuration_names,
+    fetch_token_rate_limit,
     replace_card_token_rate_limits,
+    reset_token_rate_limit_usage,
 )
 from ee.onyx.server.query_and_chat.token_limit import is_shared_spend_principal
 from ee.onyx.server.spending_limits.models import (
@@ -30,7 +32,10 @@ from ee.onyx.server.spending_limits.models import (
     SpendingLimitView,
 )
 from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
+from onyx.auth.scoped_permissions import (
+    assert_manages_group,
+    assert_within_scope,
+)
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
     TokenRateLimitAction,
@@ -39,15 +44,17 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import TokenRateLimit, User
-from onyx.db.token_limit import fetch_token_rate_limits_applying_to_user
+from onyx.db.token_limit import (
+    fetch_pool_usage_baselines,
+    fetch_token_rate_limits_applying_to_user,
+    usage_baseline,
+)
 from onyx.db.user_group import assert_group_config_is_editable
 from onyx.db.user_usage import (
-    get_group_cost_cents_buckets_since,
-    get_group_token_buckets_since,
+    get_limit_usage_start,
     get_period_window_reset,
-    get_period_window_start,
-    get_total_cost_cents_buckets_since,
-    get_total_token_buckets_since,
+    get_pool_usage_buckets_since,
+    sum_limit_usage,
 )
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -78,23 +85,21 @@ def _model_names(
 def _pool_usage(
     db_session: Session, limit: TokenRateLimit, now: datetime
 ) -> tuple[int, float]:
-    """Tokens and cents the pool has used in the limit's current period."""
-    start = get_period_window_start(now, limit.period)
-    if limit.user_group_id is None:
-        tokens = get_total_token_buckets_since(
-            db_session, start, limit.model_configuration_id
-        )
-        cost = get_total_cost_cents_buckets_since(
-            db_session, start, limit.model_configuration_id
-        )
-    else:
-        tokens = get_group_token_buckets_since(
-            db_session, [limit.user_group_id], start, limit.model_configuration_id
-        ).get(limit.user_group_id, [])
-        cost = get_group_cost_cents_buckets_since(
-            db_session, [limit.user_group_id], start, limit.model_configuration_id
-        ).get(limit.user_group_id, [])
-    return sum(bucket.tokens for bucket in tokens), sum(c for _, c in cost)
+    """Tokens and cents that count toward the pool limit this period."""
+    usage = get_pool_usage_buckets_since(
+        db_session,
+        get_limit_usage_start(now, limit.period, limit.usage_reset_at),
+        limit.model_configuration_id,
+        limit.user_group_id,
+    )
+    baseline = usage_baseline(limit, fetch_pool_usage_baselines(db_session, [limit]))
+    tokens = sum_limit_usage(
+        usage.tokens, now, limit.period, limit.usage_reset_at, baseline.tokens
+    )
+    cost_cents = sum_limit_usage(
+        usage.cost_cents, now, limit.period, limit.usage_reset_at, baseline.cost_cents
+    )
+    return int(tokens), cost_cents
 
 
 def _card(
@@ -289,6 +294,51 @@ def delete_group_spending_limits(
     assert_group_config_is_editable(db_session, group_id, "set spending limits on")
     delete_group_token_rate_limits(db_session, group_id)
     invalidate_any_rate_limit_exists_cache()
+
+
+def _reset_usage(db_session: Session, limit: TokenRateLimit) -> SpendingLimitCard:
+    scope, group_id = limit.scope, limit.user_group_id
+    reset_token_rate_limit_usage(db_session, limit, datetime.now(timezone.utc))
+    return _card(db_session, scope, group_id)
+
+
+@router.post("/groups/{group_id}/pool/limits/{limit_id}/reset-usage")
+def reset_group_pool_limit_usage(
+    group_id: int,
+    limit_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> SpendingLimitCard:
+    """Count one group pool limit's usage from now until its next reset.
+    Usage rows stay, so history and exports are unchanged."""
+    _authorize_group_write(user, db_session, group_id)
+    limit = fetch_token_rate_limit(db_session, limit_id)
+    if (
+        limit is None
+        or limit.scope != TokenRateLimitScope.USER_GROUP
+        or limit.user_group_id != group_id
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Spending limit {limit_id} not found in group {group_id}'s pool",
+        )
+    return _reset_usage(db_session, limit)
+
+
+@router.post("/limits/{limit_id}/reset-usage")
+def reset_spending_limit_usage(
+    limit_id: int,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SpendingLimitCard:
+    """Count any limit's usage from now until its next reset. Group managers
+    use the group pool route."""
+    limit = fetch_token_rate_limit(db_session, limit_id)
+    if limit is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Spending limit {limit_id} not found")
+    return _reset_usage(db_session, limit)
 
 
 """

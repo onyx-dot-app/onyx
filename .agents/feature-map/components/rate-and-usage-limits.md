@@ -116,6 +116,28 @@ only the GLOBAL pools ([[#shared-principals-global-only]]). Every write calls
 reaches the client as a `StreamingError` whose `details` carry the 429's
 `extra` (`backend/onyx/chat/errors.py:chat_error`).
 
+**Usage reset.** A reset sets `token_rate_limit.usage_reset_at` to now and
+snapshots what the current daily usage bucket holds. It does not delete usage
+rows, so history and exports stay. Every limit stores one
+`token_rate_limit_usage_baseline` row per user with usage in that bucket, every
+user, not only those it covers now. A per-user limit subtracts the user's own
+row. A pool subtracts the sum over the users it covers now
+(`backend/onyx/db/token_limit.py:fetch_pool_usage_baselines`), so the baseline
+always matches the pool's usage query when members join or leave. Deleting a
+user's usage (`POST /admin/usage/reset`) deletes their baselines for resets in
+that window. A limit then counts the buckets after the reset day in full, and
+the reset day's bucket minus the baseline, clamped at 0. Earlier buckets drop out. One helper does this math
+(`backend/onyx/db/user_usage.py:sum_limit_usage`), and `BudgetWindow` carries
+the reset and baseline into enforcement, pool usage on the cards and the Usage
+tab budget. A per-user check without the user's baselines counts the whole
+reset day, so a missed lookup blocks too early, never too late. A reset in an
+earlier period changes nothing. Group managers reset their group's pool limits
+through `POST /groups/{group_id}/pool/limits/{limit_id}/reset-usage`; every
+other limit resets through the admin-only
+`POST /limits/{limit_id}/reset-usage`. The reset takes the card lock, and a
+card replace keeps a current reset and its baselines on the new row for the
+same bucket (`backend/ee/onyx/db/token_limit.py:replace_card_token_rate_limits`).
+
 **Tenant usage limits.** These are synchronous counters on `tenant_usage`. Each
 check reads the trial status and a per-tenant override from the control plane
 (`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h), then

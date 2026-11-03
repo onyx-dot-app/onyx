@@ -11136,6 +11136,11 @@
           }
         },
         "nextReset": "Próxima redefinição",
+        "resetUsage": {
+          "label": "Redefinir o uso do limite agora",
+          "done": "Uso redefinido. Este limite conta a partir de agora até a próxima redefinição.",
+          "failed": "Não foi possível redefinir o uso: {error}"
+        },
         "remove": {
           "tooltip": "Remover limite"
         },
