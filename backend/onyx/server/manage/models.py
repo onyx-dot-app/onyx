@@ -13,6 +13,7 @@ from onyx.db.enums import (
     SSOProviderType,
     SupportedLanguage,
     ThemePreference,
+    VectorQuantization,
 )
 from onyx.db.memory import MAX_MEMORIES_PER_USER
 from onyx.db.models import AllowedAnswerFilters, ChannelConfig, User
@@ -643,3 +644,22 @@ class CCPairIdsBackfillStatus(BaseModel):
 
 class CCPairAccessModeUpdateRequest(BaseModel):
     mode: CCPairAccessMode
+
+
+class VectorQuantizationLevelSupport(BaseModel):
+    """Whether the OpenSearch cluster can index one vector quantization level."""
+
+    vector_quantization: VectorQuantization
+    supported: bool
+    # "major.minor" of the oldest OpenSearch that can index this level, or None
+    # when any version can.
+    min_opensearch_version: str | None
+
+
+class VectorQuantizationSupport(BaseModel):
+    """The cluster's OpenSearch version and the quantization levels it supports.
+    A null version means the cluster does not report one, so nothing is
+    restricted."""
+
+    opensearch_version: str | None
+    levels: list[VectorQuantizationLevelSupport]

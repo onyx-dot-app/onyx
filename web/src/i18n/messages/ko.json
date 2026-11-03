@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "커밋"
+      },
+      "commitDate": {
+        "label": "커밋 날짜"
+      },
+      "instanceUrl": {
+        "label": "인스턴스 URL"
+      },
+      "label": "정보",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "사용할 수 없음",
+      "version": {
+        "label": "버전"
+      }
+    },
     "accountFallback": {
       "label": "계정"
     },
@@ -2217,8 +2236,9 @@
         "title": "채팅 이름 지정 모델"
       },
       "searchDecisionModel": {
-        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다. 결정 모델은 한 번의 호출로 순위를 매깁니다. 언어 모델은 이전처럼 선택합니다.",
-        "title": "검색 결정 모델"
+        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다. 판단 모델은 한 번의 호출로 순위를 매깁니다. 언어 모델은 이전처럼 선택합니다.",
+        "title": "검색 판단 모델",
+        "decisionSection": "판단 모델"
       },
       "taskModels": {
         "loadFailed": "작업 모델을 불러오지 못했습니다",
@@ -2399,7 +2419,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "채팅 이름 생성 모델을 업데이트하지 못했습니다",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
-        "searchDecisionUpdateFailed": "검색 결정 모델을 업데이트하지 못했습니다",
+        "searchDecisionUpdateFailed": "검색 판단 모델을 업데이트하지 못했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "systemPromptUpdateFailed": "시스템 프롬프트를 업데이트하지 못했습니다",
         "toolsUpdateFailed": "도구를 업데이트하지 못했습니다",
@@ -7293,6 +7313,7 @@
       },
       "vectorQuantization": {
         "description": "문서 벡터를 더 적은 비트로 저장하여 벡터 검색의 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다. 이 설정만 변경하면 저장된 벡터로 인덱스를 다시 구축하며, 다시 임베딩하지 않습니다.",
+        "needsVersion": "OpenSearch {version} 이상 필요",
         "none": {
           "description": "32비트 전체 정밀도.",
           "label": "없음"
@@ -7305,7 +7326,8 @@
           "description": "벡터 검색 메모리 사용량 약 4배 감소. 검색 품질 저하가 거의 없습니다.",
           "label": "7비트"
         },
-        "title": "벡터 양자화"
+        "title": "벡터 양자화",
+        "unsupportedTooltip": "이 클러스터는 OpenSearch {current}을(를) 실행 중입니다. 이 수준을 사용하려면 OpenSearch를 {version} 이상으로 업그레이드하세요."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {이 커넥터는 삭제됩니다} other {이 # 개의 커넥터는 삭제됩니다}}",
@@ -12075,9 +12097,6 @@
         "builtin": {
           "label": "기본 제공"
         },
-        "custom": {
-          "label": "사용자 지정"
-        },
         "invalid": {
           "label": "잘못됨"
         },
@@ -12089,6 +12108,12 @@
         },
         "unavailable": {
           "label": "사용 불가 - 클릭하여 자세히 보기"
+        },
+        "shared": {
+          "label": "공유됨"
+        },
+        "organization": {
+          "label": "조직"
         }
       },
       "toggle": {
@@ -13280,14 +13305,14 @@
           "title": "내 조직"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "편집"
+          "canEdit": {
+            "label": "편집 가능"
+          },
+          "canUse": {
+            "label": "사용 가능"
           },
           "removeAccess": {
             "label": "액세스 제거"
-          },
-          "viewAndChat": {
-            "label": "보기 및 채팅"
           }
         },
         "privateOption": {
@@ -16721,6 +16746,9 @@
         },
         "webSearch": {
           "label": "웹 검색"
+        },
+        "skills": {
+          "label": "스킬"
         }
       },
       "sections": {
@@ -17034,6 +17062,9 @@
         "inspectFailed": "스킬 번들을 검사하지 못했습니다",
         "saveFailed": "스킬을 저장하지 못했습니다",
         "saved": "\"{name}\"을(를) 저장했습니다"
+      },
+      "creationAccess": {
+        "title": "액세스"
       }
     },
     "modals": {
@@ -17072,6 +17103,13 @@
           "singleSkill": "한 번에 스킬 하나만 업로드하세요.",
           "title": "파일 요구 사항",
           "zip": "ZIP 파일에는 SKILL.md 파일이 있어야 합니다."
+        },
+        "batch": {
+          "title": "업로드할 스킬의 액세스",
+          "selected": "{count, plural, one {스킬 번들 #개 선택됨} other {스킬 번들 #개 선택됨}}",
+          "result": "{imported, plural, one {스킬 #개 가져옴} other {스킬 #개 가져옴}}. {failed, plural, one {#개 실패} other {#개 실패}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "여러 ZIP 파일을 선택하여 스킬을 함께 가져오세요. 각 ZIP에는 스킬 하나가 포함되어야 합니다."
         }
       },
       "importGithub": {
@@ -17148,6 +17186,11 @@
         "unavailableFallback": "이 스킬은 가져올 수 없습니다.",
         "unavailableTag": {
           "label": "가져올 수 없음"
+        },
+        "sharing": {
+          "title": "가져올 스킬의 액세스",
+          "configureButton": "액세스 설정",
+          "description": "이 액세스 설정은 선택한 {count, plural, one {스킬 #개} other {스킬 #개}} 모두에 적용됩니다."
         }
       },
       "nameConflict": {
@@ -17212,9 +17255,7 @@
         },
         "ownerLabel": "소유자",
         "permissionMenu": {
-          "ariaLabel": "{name}의 접근 권한 변경",
-          "canUse": "사용 가능",
-          "canEdit": "편집 가능"
+          "ariaLabel": "{name}의 접근 권한 변경"
         },
         "saveButton": {
           "label": "저장"
@@ -17256,11 +17297,15 @@
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
+      },
+      "tabs": {
+        "details": "세부 정보",
+        "sharing": "공유"
       }
     },
     "page": {
       "browse": {
-        "title": "스킬 둘러보기"
+        "title": "스킬 선택"
       },
       "countSeparator": {
         "label": "{count, plural, one {스킬} other {스킬}}"
@@ -17288,8 +17333,8 @@
           "title": "일치하는 스킬 없음"
         },
         "noSkills": {
-          "description": "아직 공유된 사용자 지정 스킬이 없으며 구성된 기본 제공 스킬도 없습니다.",
-          "title": "사용 가능한 스킬 없음"
+          "title": "아직 사용자 지정 스킬이 없습니다",
+          "description": "스킬을 만들거나 가져와 라이브러리에 추가하세요."
         }
       },
       "focusedApp": {
@@ -17326,6 +17371,9 @@
         "disableFailed": "{name}을(를) 비활성화하지 못했습니다",
         "enableFailed": "{name}을(를) 활성화하지 못했습니다",
         "refreshFailed": "{name}이(가) 업데이트되었지만 스킬 목록을 새로고침할 수 없습니다."
+      },
+      "builtins": {
+        "title": "기본 제공 스킬 ({count, number})"
       }
     },
     "sections": {
@@ -17381,6 +17429,34 @@
           "readFailed": "업로드한 파일을 읽지 못했습니다."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {조직의 모든 사용자가 이 스킬에 액세스할 수 있습니다.} other {조직의 모든 사용자가 이 스킬들에 액세스할 수 있습니다.}}",
+      "selected": "{users, plural, one {#명} other {#명}} 및 {groups, plural, one {#개 그룹} other {#개 그룹}}과 공유되었습니다.",
+      "private": "{count, plural, one {나만 이 스킬에 액세스할 수 있습니다.} other {나만 이 스킬들에 액세스할 수 있습니다.}}"
+    },
+    "bulk": {
+      "adminDescription": "조직 전체의 스킬과 액세스를 관리합니다.",
+      "selectAll": "표시된 모든 사용자 지정 스킬 선택",
+      "selected": "{count, plural, one {#개 선택됨} other {#개 선택됨}}",
+      "share": "공유",
+      "enable": "내 스킬 활성화",
+      "disable": "내 스킬 비활성화",
+      "delete": "삭제",
+      "selectSkill": "{name} 선택",
+      "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
+      "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",
+      "partialFailure": "{count, plural, one {스킬 #개를 업데이트하지 못했습니다} other {스킬 #개를 업데이트하지 못했습니다}}",
+      "deleteTitle": "{count, plural, one {스킬 #개를 삭제할까요?} other {스킬 #개를 삭제할까요?}}",
+      "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
+      "shareTitle": "{count, plural, one {스킬 #개의 액세스 업데이트} other {스킬 #개의 액세스 업데이트}}",
+      "shareDescription": "선택한 모든 스킬에 변경 사항을 적용합니다. 변경하지 않은 설정은 현재 값을 유지합니다.",
+      "unchanged": "변경하지 않음",
+      "everyone": "조직의 모든 사용자",
+      "invitedOnly": "초대한 사용자 및 그룹",
+      "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
+      "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
+      "moreActions": "추가 작업"
     }
   },
   "opensearchHealth": {

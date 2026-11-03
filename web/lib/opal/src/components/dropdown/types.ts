@@ -95,7 +95,6 @@ export interface DropdownRowProps {
   "data-index": number;
   tabIndex: -1;
   onClick: (event: React.MouseEvent) => void;
-  onMouseDown: (event: React.MouseEvent) => void;
 }
 
 /**

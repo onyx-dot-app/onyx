@@ -68,6 +68,7 @@ jest.mock("@/lib/searchSettings/hooks", () => ({
   }),
   useSecondarySearchSettings: () => ({ data: null }),
   useReindexProgress: () => ({ data: mockReindexProgress }),
+  useVectorQuantizationSupport: () => ({ data: undefined, isLoading: false }),
   useConfiguredEmbeddingProviders: () => ({
     data: mockState.configuredProviders,
   }),

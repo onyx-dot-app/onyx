@@ -60,7 +60,7 @@ packages:
   src/lib: 99.2
   src/lib/agents: 99.3
   src/lib/analytics: 99.4
-  src/lib/app: 100
+  src/lib/app: 99.9
   src/lib/auth: 98.3
   src/lib/banner: 99.3
   src/lib/billing: 100
@@ -129,7 +129,7 @@ packages:
   src/sections/oauth-provider: 100
   src/sections/plugins: 99.8
   src/sections/settings: 100
-  src/sections/sidebar: 99.3
+  src/sections/sidebar: 99.2
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4

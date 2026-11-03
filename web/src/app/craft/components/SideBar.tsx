@@ -25,7 +25,7 @@ import {
 } from "@opal/layouts";
 import { richNodes } from "@opal/utils";
 import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { AccountPopover } from "@/lib/app/components";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";

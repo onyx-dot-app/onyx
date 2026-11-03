@@ -25,6 +25,7 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
       llmGateway: t("adminNav.items.llmGateway.label"),
       craftAccess: t("adminNav.items.craftAccess.label"),
       craftApps: t("adminNav.items.craftApps.label"),
+      skills: t("adminNav.items.skills.label"),
       craftPreferences: t("adminNav.items.craftPreferences.label"),
       customAnalytics: t("adminNav.items.customAnalytics.label"),
       agents: t("adminNav.items.agents.label"),

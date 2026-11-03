@@ -1,6 +1,6 @@
 // The chip shows a skeleton while unresolved and "Anonymous" only when resolved signed-out.
 import { render, screen } from "@tests/setup/test-utils";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
+import AccountPopover from "@/lib/app/components/AccountPopover";
 import { useUser } from "@/providers/UserProvider";
 import { User } from "@/lib/types";
 
@@ -11,7 +11,7 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/app",
   useSearchParams: () => new URLSearchParams(),
 }));
-jest.mock("@/sections/sidebar/NotificationsPopover", () => ({
+jest.mock("@/lib/app/components/NotificationsPopover", () => ({
   __esModule: true,
   default: () => null,
 }));

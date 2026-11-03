@@ -292,6 +292,75 @@ describe("SimpleModelSelector", () => {
     }
   });
 
+  test("decisionSection: a decision match still searches the server for language models", async () => {
+    jest.useFakeTimers();
+    const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
+    const modelPaging: ModelPaging = {
+      hasMore: true,
+      isLoading: false,
+      loadMore: jest.fn().mockResolvedValue(true),
+      search: jest.fn().mockResolvedValue(true),
+      searchHasMore: false,
+      loadMoreSearch: jest.fn().mockResolvedValue(undefined),
+    };
+    const decisionProviders: ModelOptionProvider[] = [
+      {
+        id: 1,
+        name: "OpenAI",
+        provider: "openai",
+        model_configurations: [
+          {
+            id: 13,
+            name: "gpt-6-luna",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+            effectiveDisplayName: "GPT-6 Luna",
+          },
+        ],
+      },
+    ];
+    const handleDecision = jest.fn();
+    try {
+      render(
+        <SimpleModelSelector
+          providers={providers}
+          value={null}
+          onChange={jest.fn()}
+          modelPaging={modelPaging}
+          decisionSection={{
+            title: "Decision Models",
+            providers: decisionProviders,
+            selected: false,
+            onChange: handleDecision,
+          }}
+        />
+      );
+      await user.click(screen.getByRole("combobox"));
+      // The lone provider keeps its header under the decision section.
+      expect(screen.getByText("OpenAI")).toBeInTheDocument();
+      await user.type(screen.getByRole("textbox", { name: "Search" }), "luna");
+      jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
+      // Only the decision copy is loaded; the language copy may be on a later page.
+      expect(modelPaging.search).toHaveBeenCalledWith("luna");
+
+      // A header match is not a row match, so the server is still asked.
+      const search = screen.getByRole("textbox", { name: "Search" });
+      await user.clear(search);
+      await user.type(search, "openai");
+      jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
+      expect(modelPaging.search).toHaveBeenCalledWith("openai");
+      await user.clear(search);
+      await user.type(search, "luna");
+
+      await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
+      expect(handleDecision).toHaveBeenCalledWith(13);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test("renders an empty list without options", async () => {
     const user = setupUser();
     render(

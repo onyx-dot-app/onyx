@@ -161,6 +161,7 @@ export const SWR_KEYS = {
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
   reindexProgress: "/api/search-settings/reindex-progress",
+  vectorQuantizationSupport: "/api/search-settings/vector-quantization-support",
   reindexErrors: "/api/search-settings/reindex-errors",
   ccPairIdsBackfillProgress:
     "/api/search-settings/cc-pair-ids-backfill-progress",

@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "Commit"
+      },
+      "commitDate": {
+        "label": "Commit-Datum"
+      },
+      "instanceUrl": {
+        "label": "Instanz-URL"
+      },
+      "label": "Info",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "Nicht verfügbar",
+      "version": {
+        "label": "Version"
+      }
+    },
     "accountFallback": {
       "label": "Konto"
     },
@@ -2218,7 +2237,8 @@
       },
       "searchDecisionModel": {
         "description": "Wählt gefundene Dokumente aus und entscheidet, wie viel Kontext hinzukommt. Ein Entscheidungsmodell ordnet sie in einem Aufruf. Ein Sprachmodell wählt sie wie bisher aus.",
-        "title": "Such-Entscheidungsmodell"
+        "title": "Such-Entscheidungsmodell",
+        "decisionSection": "Entscheidungsmodelle"
       },
       "taskModels": {
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
@@ -7293,6 +7313,7 @@
       },
       "vectorQuantization": {
         "description": "Speichern Sie Dokumentvektoren mit weniger Bits, damit die Vektorsuche weniger Speicher benötigt. Weniger Bits können die Suchqualität verringern. Wenn Sie nur diese Einstellung ändern, wird der Index aus den gespeicherten Vektoren neu aufgebaut, ohne erneutes Embedding.",
+        "needsVersion": "Erfordert OpenSearch {version}+",
         "none": {
           "description": "Volle 32-Bit-Genauigkeit.",
           "label": "Keine"
@@ -7305,7 +7326,8 @@
           "description": "Etwa 4-mal weniger Speicher für die Vektorsuche. Fast kein Verlust an Suchqualität.",
           "label": "7 Bit"
         },
-        "title": "Vektorquantisierung"
+        "title": "Vektorquantisierung",
+        "unsupportedTooltip": "Dieser Cluster läuft mit OpenSearch {current}. Aktualisieren Sie OpenSearch auf {version} oder höher, um diese Stufe zu verwenden."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Dieser Konnektor wird gelöscht} other {Diese # Konnektoren werden gelöscht}}",
@@ -12075,9 +12097,6 @@
         "builtin": {
           "label": "Integriert"
         },
-        "custom": {
-          "label": "Benutzerdefiniert"
-        },
         "invalid": {
           "label": "Ungültig"
         },
@@ -12089,6 +12108,12 @@
         },
         "unavailable": {
           "label": "Nicht verfügbar - klicken Sie, um mehr zu erfahren"
+        },
+        "shared": {
+          "label": "Geteilt"
+        },
+        "organization": {
+          "label": "Organisation"
         }
       },
       "toggle": {
@@ -13280,14 +13305,14 @@
           "title": "Ihre Organisation"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Bearbeiten"
+          "canEdit": {
+            "label": "Kann bearbeiten"
+          },
+          "canUse": {
+            "label": "Kann verwenden"
           },
           "removeAccess": {
             "label": "Zugriff entfernen"
-          },
-          "viewAndChat": {
-            "label": "Ansehen & Chatten"
           }
         },
         "privateOption": {
@@ -16721,6 +16746,9 @@
         },
         "webSearch": {
           "label": "Websuche"
+        },
+        "skills": {
+          "label": "Skills"
         }
       },
       "sections": {
@@ -17034,6 +17062,9 @@
         "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
         "saveFailed": "Skill konnte nicht gespeichert werden",
         "saved": "„{name}“ gespeichert"
+      },
+      "creationAccess": {
+        "title": "Zugriff"
       }
     },
     "modals": {
@@ -17072,6 +17103,13 @@
           "singleSkill": "Laden Sie jeweils nur einen Skill hoch.",
           "title": "Dateianforderungen",
           "zip": "ZIP-Dateien müssen eine SKILL.md-Datei enthalten."
+        },
+        "batch": {
+          "title": "Zugriff auf hochgeladene Skills",
+          "selected": "{count, plural, one {# Skill-Paket ausgewählt} other {# Skill-Pakete ausgewählt}}",
+          "result": "{imported, plural, one {# Skill importiert} other {# Skills importiert}}. {failed, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "Wählen Sie mehrere ZIP-Dateien aus, um Skills gemeinsam zu importieren. Jede ZIP-Datei muss einen Skill enthalten."
         }
       },
       "importGithub": {
@@ -17148,6 +17186,11 @@
         "unavailableFallback": "Dieser Skill kann nicht importiert werden.",
         "unavailableTag": {
           "label": "Nicht importierbar"
+        },
+        "sharing": {
+          "title": "Zugriff auf importierte Skills",
+          "configureButton": "Zugriff konfigurieren",
+          "description": "Diese Zugriffseinstellungen gelten für {count, plural, one {den ausgewählten Skill} other {alle # ausgewählten Skills}}."
         }
       },
       "nameConflict": {
@@ -17212,9 +17255,7 @@
         },
         "ownerLabel": "Eigentümer",
         "permissionMenu": {
-          "ariaLabel": "Zugriff für {name} aktualisieren",
-          "canUse": "Kann verwenden",
-          "canEdit": "Kann bearbeiten"
+          "ariaLabel": "Zugriff für {name} aktualisieren"
         },
         "saveButton": {
           "label": "Speichern"
@@ -17256,11 +17297,15 @@
       },
       "placeholders": {
         "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
+      },
+      "tabs": {
+        "details": "Details",
+        "sharing": "Freigabe"
       }
     },
     "page": {
       "browse": {
-        "title": "Skills durchsuchen"
+        "title": "Skills auswählen"
       },
       "countSeparator": {
         "label": "{count, plural, one {Skill} other {Skills}}"
@@ -17288,8 +17333,8 @@
           "title": "Keine passenden Skills"
         },
         "noSkills": {
-          "description": "Es wurden noch keine benutzerdefinierten Skills mit Ihnen geteilt und es sind keine integrierten Skills konfiguriert.",
-          "title": "Keine Skills verfügbar"
+          "title": "Noch keine benutzerdefinierten Skills",
+          "description": "Erstellen oder importieren Sie einen Skill, um ihn Ihrer Bibliothek hinzuzufügen."
         }
       },
       "focusedApp": {
@@ -17326,6 +17371,9 @@
         "disableFailed": "{name} konnte nicht deaktiviert werden",
         "enableFailed": "{name} konnte nicht aktiviert werden",
         "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden."
+      },
+      "builtins": {
+        "title": "Integrierte Skills ({count, number})"
       }
     },
     "sections": {
@@ -17381,6 +17429,34 @@
           "readFailed": "Der Upload konnte nicht gelesen werden."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Alle in der Organisation können auf diesen Skill zugreifen.} other {Alle in der Organisation können auf diese Skills zugreifen.}}",
+      "selected": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
+      "private": "{count, plural, one {Nur Sie können auf diesen Skill zugreifen.} other {Nur Sie können auf diese Skills zugreifen.}}"
+    },
+    "bulk": {
+      "adminDescription": "Skills und Zugriff in Ihrer Organisation verwalten.",
+      "selectAll": "Alle sichtbaren benutzerdefinierten Skills auswählen",
+      "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
+      "share": "Teilen",
+      "enable": "Für mich aktivieren",
+      "disable": "Für mich deaktivieren",
+      "delete": "Löschen",
+      "selectSkill": "{name} auswählen",
+      "updated": "{count, plural, one {# Skill aktualisiert} other {# Skills aktualisiert}}",
+      "failed": "Skills konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
+      "partialFailure": "{count, plural, one {# Skill konnte nicht aktualisiert werden} other {# Skills konnten nicht aktualisiert werden}}",
+      "deleteTitle": "{count, plural, one {# Skill löschen?} other {# Skills löschen?}}",
+      "deleteDescription": "{count, plural, one {Der ausgewählte Skill wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Skills werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
+      "shareTitle": "{count, plural, one {Zugriff für # Skill aktualisieren} other {Zugriff für # Skills aktualisieren}}",
+      "shareDescription": "Diese Änderungen auf jeden ausgewählten Skill anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
+      "unchanged": "Unverändert lassen",
+      "everyone": "Alle in der Organisation",
+      "invitedOnly": "Eingeladene Personen und Gruppen",
+      "addAccessDescription": "Diese Personen und Gruppen zu jedem ausgewählten Skill hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
+      "apply": "{count, plural, one {Auf # Skill anwenden} other {Auf # Skills anwenden}}",
+      "moreActions": "Weitere Aktionen"
     }
   },
   "opensearchHealth": {
