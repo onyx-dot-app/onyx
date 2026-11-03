@@ -15,18 +15,22 @@ function Page() {
   const [restartSkipped, setRestartSkipped] = useState(false);
   // Dev StrictMode re-runs the effect, whose second run must not see its own claim.
   const restartStarted = useRef(false);
+  // `go` drops `?error` from the URL before the login page renders; stay blank
+  // until it does.
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     if (!isStale || restartStarted.current) return;
     if (claimSsoRestart()) {
       restartStarted.current = true;
+      setRestarting(true);
       navigation.go(loginPath(), { replace: true });
       return;
     }
     setRestartSkipped(true);
   }, [isStale, navigation]);
 
-  if (isStale && !restartSkipped) return null;
+  if (restarting || (isStale && !restartSkipped)) return null;
   return <AuthErrorContent message={error} />;
 }
 
