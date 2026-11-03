@@ -7,11 +7,8 @@ import { useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useAdminDocumentTitle } from "@/lib/app/hooks";
 import { PendingRoute } from "@/lib/navigation/components";
-import {
-  useCurrentPathname,
-  useNavigation,
-  useRouteRendering,
-} from "@/lib/navigation/navigation";
+import { usePathname } from "next/navigation";
+import { useNavigation, useRouteRendering } from "@/lib/navigation/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
@@ -43,7 +40,7 @@ export default function AdminChrome({
   const t = useTranslations("common");
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
-  const pathname = useCurrentPathname();
+  const pathname = usePathname();
   // The proxy serves the EE pages under /admin/… URLs, but a direct visit to
   // /ee/admin/… keeps that URL.
   const base = pathname.startsWith("/ee/admin") ? "/ee/admin" : "/admin";

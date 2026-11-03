@@ -7,7 +7,7 @@ import {
   type NavigationOptions,
   useNavigation,
   useRouteRendering,
-} from "@/lib/navigation/navigation";
+} from "@/lib/navigation/hooks";
 
 export interface PendingRouteProps {
   /** The path of the layout that renders this, e.g. `/admin`. */
