@@ -50,9 +50,8 @@ export const OpenSearchSizingCalculator = () => {
   ];
   const MAX_ITEMS = 10_000_000_000;
   const MAX_RATIO = 1000;
-  // From managed deployments, rounded up so that most estimates err on the high side.
-  const CHUNKS_PER_EMPLOYEE_YEAR = 1500;
-  // What the default rate assumes for one employee in one year: [type, items × chunks per item, chunks].
+  // What one employee adds in one year: [type, items × chunks per item, chunks]. The sum, 1,500,
+  // is the high end of managed deployments, so that most estimates err on the high side.
   const EMPLOYEE_YEAR_BREAKDOWN = [
     ["Files: documents, slides, PDFs, sheets", "50 × 10", 500],
     ["Email threads, for part of the company", "100 × 4", 400],
@@ -61,6 +60,7 @@ export const OpenSearchSizingCalculator = () => {
     ["Wiki pages", "25 × 4", 100],
     ["Other: CRM records, calls, web pages", "", 100],
   ];
+  const CHUNKS_PER_EMPLOYEE_YEAR = EMPLOYEE_YEAR_BREAKDOWN.reduce((a, [, , n]) => a + n, 0);
   const MAX_EMPLOYEES = 10_000_000;
   const MAX_YEARS = 50;
   const NODE_RAM = [16, 32, 64];
@@ -180,7 +180,10 @@ export const OpenSearchSizingCalculator = () => {
   const MAX_EMPLOYEE_RATE = 1_000_000;
   const employeeRate = clampNumber(perEmployeeYear, MAX_EMPLOYEE_RATE);
   // Inputs keep what the user types, but never more than the maximum the math uses.
-  const capped = (value, max) => (Number(value) > max ? String(max) : value);
+  const capped = (value, max) => {
+    const n = Number(value);
+    return n < 0 ? "0" : n > max ? String(max) : value;
+  };
   const chunksToday =
     inputMode === "storage"
       ? (textGB * 1e9) / TEXT_PER_CHUNK
@@ -389,7 +392,7 @@ export const OpenSearchSizingCalculator = () => {
                     ))}
                   </tbody>
                 </table>
-                <div className={hint + " mt-2"}>If your company differs, change the rate by the difference. For example, indexing everyone's email adds about 4,000.</div>
+                <div className={hint + " mt-2"}>If your company differs, change the rate by the difference. For example, if every employee's email is indexed, email is about 4,000 instead of 400, so the rate becomes about 5,100.</div>
               </details>
             </div>
           ) : (
