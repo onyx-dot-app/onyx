@@ -183,7 +183,7 @@ describe("RunRow on LineLayout", () => {
   });
 });
 
-// FE-7 run-line content. Copy comes from the English catalog by key, so a missing key fails as missing copy.
+// Run-line content. Copy comes from the English catalog by key, so a missing key fails as missing copy.
 
 const MINUTE_MS = 60_000;
 // A fixed past start, so a finished run's figures do not depend on the clock.

@@ -1,4 +1,4 @@
-/** FE-7: a run line's stage details and check results open inline under the line in the runs list, one at a time. */
+/** A run line's stage details and check results open inline under the line in the runs list, one at a time. */
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import type {
   CCPairRun,
@@ -49,7 +49,7 @@ const CHECKS_HINT = copy("admin.connector.runs.actions.checks");
 const CLOSE_STAGES = copy("admin.connector.stageDetails.close");
 const CLOSE_CHECKS = copy("admin.connector.runs.checkResults.close");
 
-// Spec order of the stage lines.
+// Pipeline order of the stage lines.
 const BUCKET_LABELS = [
   "fetchSource",
   "batchPreProcessing",
@@ -433,10 +433,9 @@ describe("RunRow inline details (FE-7)", () => {
       copy("admin.connector.stageDetails.laterCanceled")
     );
     expect(follows(screen.getByText(BUCKET_LABELS[1]!), canceled)).toBe(true);
-    // Stages that never ran are not listed (a folded divider may keep them hidden).
+    // Stages that never ran are not listed.
     for (const label of BUCKET_LABELS.slice(2)) {
-      const line = screen.queryByText(label);
-      if (line !== null) expect(line).not.toBeVisible();
+      expect(screen.queryByText(label)).toBeNull();
     }
   });
 });
