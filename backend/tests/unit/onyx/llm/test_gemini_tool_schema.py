@@ -144,6 +144,31 @@ def test_gemini_on_openai_compatible_converts_nullable_any_of() -> None:
     }
 
 
+def test_gemini_on_openai_compatible_converts_type_arrays() -> None:
+    tool = _tool(
+        "grep",
+        {
+            "type": "object",
+            "properties": {
+                "path": {"type": ["string", "null"]},
+                "value": {"type": ["string", "integer"]},
+            },
+        },
+    )
+
+    parameters = _sent_parameters(
+        LlmProviderNames.OPENAI_COMPATIBLE, "gemini-3.8-flash", tool
+    )
+
+    assert parameters == {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "nullable": True},
+            "value": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+        },
+    }
+
+
 def test_gemini_on_openai_compatible_forwards_unparseable_schema() -> None:
     boolean_subschema: dict[str, JsonValue] = {
         "type": "object",

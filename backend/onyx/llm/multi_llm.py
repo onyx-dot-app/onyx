@@ -562,6 +562,30 @@ def _is_mistral_family_name(identity_names: list[str]) -> bool:
     )
 
 
+def _convert_type_arrays(schema: JsonValue) -> None:
+    """Gemini takes one `type` per schema, so rewrite JSON Schema type arrays
+    (e.g. ["string", "null"]) as `nullable` plus a single type or `anyOf`."""
+    if isinstance(schema, list):
+        for item in schema:
+            _convert_type_arrays(item)
+        return
+    if not isinstance(schema, dict):
+        return
+    for value in schema.values():
+        _convert_type_arrays(value)
+    type_value = schema.get("type")
+    if not isinstance(type_value, list):
+        return
+    types = [t for t in type_value if isinstance(t, str) and t != "null"]
+    if len(types) < len(type_value):
+        schema["nullable"] = True
+    if len(types) == 1:
+        schema["type"] = types[0]
+    elif types:
+        del schema["type"]
+        schema["anyOf"] = [{"type": t} for t in types]
+
+
 def _gemini_compatible_tools(
     tools: list[dict[str, JsonValue]],
 ) -> list[dict[str, JsonValue]]:
@@ -594,11 +618,12 @@ def _gemini_compatible_tools(
                     parameters.pop("$defs", {}),
                     max_inlined_bytes=DEFS_MAX_INLINED_BYTES,
                 )
+                _convert_type_arrays(parameters)
                 convert_anyof_null_to_nullable(parameters)
                 process_items(parameters)
                 add_object_type(parameters)
                 function["parameters"] = filter_schema_fields(parameters, schema_fields)
-            except (AttributeError, TypeError, ValueError) as e:
+            except (AttributeError, RecursionError, TypeError, ValueError) as e:
                 # Schemas the LiteLLM helpers cannot parse (e.g. boolean
                 # subschemas) go to the provider unchanged.
                 logger.warning("Could not convert tool schema for Gemini: %s", e)
