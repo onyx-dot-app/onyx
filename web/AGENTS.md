@@ -66,6 +66,17 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 - **Open popups inside the click.** Call `window.open("about:blank")` in the event handler, then
   set its `location` after the `await`. Popup blockers and the desktop app block a `window.open`
   that runs after an `await`.
+- **All navigation goes through `@opal/navigation`.** Never import `next/navigation` or `next/link`
+  outside it, and never write `window.location` or call the router's or `history`'s
+  `push`/`replace`/`back`. `useNavigation()` gives `go`, `linkTo`, `clampedBack`, `refresh`,
+  `prefetch`, `load` and `reload`; `NavLink` replaces `next/link`; `usePathname`, `useSearchParams`,
+  `useParams`, `redirect` and `notFound` are re-exported from it; `loadPage` is for code outside a
+  component; `useAppPosition()` from `@/lib/navigation/hooks` covers `/app` positions. `go` writes
+  the URL at once and then asks Next for the page, so the tabs and the page's loader
+  (`PendingRoute`) follow the click; `clampedBack(fallback)` never leaves the app. oxlint
+  `navigation/no-naked-navigation` enforces this. Files that broke it when it landed are in its
+  baseline in `.oxlintrc.json`, where they only warn. Migrate a file when you edit it, and never
+  add one.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 

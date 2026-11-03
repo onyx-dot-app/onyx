@@ -65,7 +65,7 @@ import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/navigation/hooks";
-import { PendingRoute } from "@/lib/navigation/components";
+import { PendingRoute } from "@opal/navigation";
 import { PageLoader } from "@opal/loaders";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";

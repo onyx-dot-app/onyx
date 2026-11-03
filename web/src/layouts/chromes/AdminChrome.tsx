@@ -6,9 +6,12 @@ import type { Route } from "next";
 import { useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useAdminDocumentTitle } from "@/lib/app/hooks";
-import { PendingRoute } from "@/lib/navigation/components";
-import { usePathname } from "next/navigation";
-import { useNavigation, useRouteRendering } from "@/lib/navigation/hooks";
+import {
+  PendingRoute,
+  useNavigation,
+  usePathname,
+  useRouteRendering,
+} from "@opal/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
