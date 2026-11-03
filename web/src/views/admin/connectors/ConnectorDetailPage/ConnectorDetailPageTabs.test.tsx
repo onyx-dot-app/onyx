@@ -426,6 +426,36 @@ describe("connector page tabs", () => {
     expect(within(panel).getByTestId("connector-runs")).toBeInTheDocument();
   });
 
+  it("a same-page link to ?tab=indexing, and Back from it, switch the tab without a remount", async () => {
+    const view = await renderPage();
+    await loaded();
+    expect(tab(TAB_CONFIGURATIONS)).toHaveAttribute("aria-selected", "true");
+    const rerenderAt = async (query: string) => {
+      mockQuery = new URLSearchParams(query);
+      const params = Promise.resolve({ ccPairId: String(CC_PAIR_ID) });
+      await act(async () => {
+        view.rerender(
+          <Suspense fallback={null}>
+            <ConnectorDetailPage params={params} />
+          </Suspense>
+        );
+      });
+    };
+
+    await rerenderAt("tab=indexing");
+    await waitFor(() =>
+      expect(tab(TAB_INDEXING)).toHaveAttribute("aria-selected", "true")
+    );
+    expect(
+      within(panelOf(tab(TAB_INDEXING))).getByTestId("connector-runs")
+    ).toBeInTheDocument();
+
+    await rerenderAt("");
+    await waitFor(() =>
+      expect(tab(TAB_CONFIGURATIONS)).toHaveAttribute("aria-selected", "true")
+    );
+  });
+
   it("before the first run starts the Indexing tab is disabled with the tooltip Available after the first run starts.", async () => {
     const user = setupUser();
     await renderPage({ pair: ccPair(NEVER_RUN), runs: [] });
