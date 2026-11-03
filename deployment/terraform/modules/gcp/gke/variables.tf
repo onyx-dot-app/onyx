@@ -380,6 +380,30 @@ variable "sandbox_gvisor_enabled" {
   default     = false
 }
 
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "How Craft sandboxes run on the sandbox pool. \"pod\" is one container per sandbox. \"firecracker\" turns on nested virtualization so the pool can run Firecracker microVMs, and needs an Intel n2 or c3 machine type."
+  default     = "pod"
+
+  validation {
+    condition     = contains(["pod", "firecracker"], var.craft_sandbox_runtime)
+    error_message = "craft_sandbox_runtime must be \"pod\" or \"firecracker\"."
+  }
+
+  # GCP offers nested virtualization on Intel types only. n2d, c2d, t2d and
+  # t2a (AMD and Arm) and e2 have none, and c3d is AMD.
+  validation {
+    condition     = var.craft_sandbox_runtime != "firecracker" || can(regex("^(n2|c3)-", var.sandbox_node_machine_type))
+    error_message = "craft_sandbox_runtime = \"firecracker\" needs an Intel n2 or c3 sandbox_node_machine_type, such as n2-standard-8. Other types have no /dev/kvm; keep craft_sandbox_runtime = \"pod\" on them."
+  }
+
+  # A gVisor pool runs pods under its own kernel, which gives them no /dev/kvm.
+  validation {
+    condition     = var.craft_sandbox_runtime != "firecracker" || !var.sandbox_gvisor_enabled
+    error_message = "craft_sandbox_runtime = \"firecracker\" cannot be used with sandbox_gvisor_enabled. Turn one of them off."
+  }
+}
+
 # --- Workload identity -------------------------------------------------------
 # GKE federates a Kubernetes service account straight to IAM, so there is no
 # Google service account to impersonate. Grant roles to the
