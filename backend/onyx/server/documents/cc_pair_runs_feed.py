@@ -60,6 +60,7 @@ def run_item(
             open_errors = open_counts.get(run_id, OpenErrorCounts())
             return CCPairIndexRun(
                 time_created=attempt.time_created,
+                is_retry=attempt.targeted_reindex_job_id is not None,
                 attempt=IndexAttemptSnapshot.from_index_attempt_db_model(
                     attempt,
                     error_count=error_counts.get(run_id, 0),
