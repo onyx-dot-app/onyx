@@ -164,6 +164,40 @@ variable "restrict_storage_to_cluster" {
   default     = false
 }
 
+variable "enable_sandbox_archive_storage" {
+  type        = bool
+  description = "Create a storage account for Craft sandbox session archives, encrypted with its own Key Vault key. No identity gets a data role on it."
+  default     = false
+}
+
+variable "sandbox_archive_storage_account_name" {
+  type        = string
+  description = "Name of the sandbox archive storage account. Null derives one from the name, workspace and a short digest. The Key Vault is named kv-<first 13 characters of this name><8-character digest of it>."
+  default     = null
+}
+
+variable "sandbox_archive_expiration_days" {
+  type        = number
+  description = "Days after which sandbox archives are deleted. Blob soft delete keeps a deleted blob recoverable for 7 more days."
+  default     = 30
+
+  validation {
+    condition     = var.sandbox_archive_expiration_days >= 1
+    error_message = "sandbox_archive_expiration_days must be at least 1."
+  }
+}
+
+variable "sandbox_archive_noncurrent_expiration_days" {
+  type        = number
+  description = "Days to keep overwritten sandbox archive versions"
+  default     = 7
+
+  validation {
+    condition     = var.sandbox_archive_noncurrent_expiration_days >= 1
+    error_message = "sandbox_archive_noncurrent_expiration_days must be at least 1."
+  }
+}
+
 # --- Postgres ----------------------------------------------------------------
 
 variable "postgres_sku_name" {

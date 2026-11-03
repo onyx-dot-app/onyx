@@ -6,9 +6,13 @@ locals {
   cluster_name       = "${var.name}-${local.workspace}"
   bucket_name        = "${var.name}-file-store-${local.workspace}"
   upload_bucket_name = "${var.name}-file-uploads-${local.workspace}"
-  redis_name         = "${var.name}-redis-${local.workspace}"
-  postgres_name      = "${var.name}-postgres-${local.workspace}"
-  opensearch_name    = var.opensearch_domain_name != null ? var.opensearch_domain_name : "${var.name}-opensearch-${local.workspace}"
+  sandbox_archive_bucket_name = coalesce(
+    var.sandbox_archive_bucket_name,
+    "${var.name}-sandbox-archive-${local.workspace}",
+  )
+  redis_name      = "${var.name}-redis-${local.workspace}"
+  postgres_name   = "${var.name}-postgres-${local.workspace}"
+  opensearch_name = var.opensearch_domain_name != null ? var.opensearch_domain_name : "${var.name}-opensearch-${local.workspace}"
 
   vpc_id          = var.create_vpc ? module.vpc[0].vpc_id : var.vpc_id
   private_subnets = var.create_vpc ? module.vpc[0].private_subnets : var.private_subnets
@@ -214,6 +218,35 @@ module "s3_upload" {
   tags                        = local.merged_tags
   s3_vpc_endpoint_id          = var.create_vpc ? module.vpc[0].s3_vpc_endpoint_id : var.s3_vpc_endpoint_id
   additional_policy_documents = var.s3_upload_additional_policy_documents
+}
+
+# Craft sandbox session archives. Not added to s3_bucket_names and given no
+# VPC endpoint grant: no node or pod role can reach it. The api_server will
+# hand out presigned URLs instead.
+# The archive's expiry rules must never land on the file store or upload bucket.
+resource "terraform_data" "sandbox_archive_bucket_name_check" {
+  count = var.enable_sandbox_archive_bucket ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = !contains([local.bucket_name, local.upload_bucket_name], local.sandbox_archive_bucket_name)
+      error_message = "sandbox_archive_bucket_name must differ from the file store and upload bucket names. The archive expires objects after sandbox_archive_expiration_days."
+    }
+  }
+}
+
+module "s3_sandbox_archive" {
+  count  = var.enable_sandbox_archive_bucket ? 1 : 0
+  source = "../s3"
+
+  bucket_name    = local.sandbox_archive_bucket_name
+  tags           = local.merged_tags
+  create_kms_key = true
+
+  expiration_days                        = var.sandbox_archive_expiration_days
+  noncurrent_expiration_days             = var.sandbox_archive_noncurrent_expiration_days
+  abort_incomplete_multipart_upload_days = 7
+  transition_to_ia                       = false
 }
 
 module "eks" {

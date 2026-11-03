@@ -147,6 +147,45 @@ variable "transition_to_cool_days" {
   }
 }
 
+variable "create_customer_managed_key" {
+  type        = bool
+  description = "Encrypt the account with a key of its own: creates a Key Vault (purge protection on), an RSA key with automatic rotation, and a user-assigned identity that may only wrap and unwrap with it. The identity running Terraform gets key management rights on the vault."
+  default     = false
+}
+
+variable "key_vault_name" {
+  type        = string
+  description = "Name of the Key Vault that create_customer_managed_key creates. Null derives kv-<first 13 characters of storage_account_name><8-character digest of it>. Purge protection keeps the name taken for the retention period after a destroy."
+  default     = null
+
+  validation {
+    condition     = var.key_vault_name == null || can(regex("^[a-zA-Z](-?[a-zA-Z0-9])+$", var.key_vault_name)) && length(coalesce(var.key_vault_name, "x")) >= 3 && length(coalesce(var.key_vault_name, "x")) <= 24
+    error_message = "key_vault_name must be 3-24 letters, digits and single hyphens, start with a letter and end with a letter or digit."
+  }
+}
+
+variable "key_vault_soft_delete_retention_days" {
+  type        = number
+  description = "Days a deleted Key Vault and its keys stay recoverable. Purge protection blocks an early purge."
+  default     = 90
+
+  validation {
+    condition     = var.key_vault_soft_delete_retention_days >= 7 && var.key_vault_soft_delete_retention_days <= 90
+    error_message = "key_vault_soft_delete_retention_days must be between 7 and 90 (Azure limit)."
+  }
+}
+
+variable "key_rotation_period" {
+  type        = string
+  description = "ISO 8601 duration after which the customer-managed key rotates, for example P90D"
+  default     = "P90D"
+
+  validation {
+    condition     = can(regex("^P[0-9]+[DMY]$", var.key_rotation_period))
+    error_message = "key_rotation_period must be an ISO 8601 duration in days, months or years, such as P90D."
+  }
+}
+
 variable "allowed_subnet_ids" {
   type        = list(string)
   description = "Subnets allowed to reach the account. Each needs the Microsoft.Storage service endpoint. Leaving this and allowed_source_ips empty keeps the account reachable from any network and gated on Entra ID alone."

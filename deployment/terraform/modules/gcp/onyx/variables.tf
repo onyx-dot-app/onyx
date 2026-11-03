@@ -158,6 +158,40 @@ variable "bucket_force_destroy" {
   default     = false
 }
 
+variable "enable_sandbox_archive_bucket" {
+  type        = bool
+  description = "Create a bucket for Craft sandbox session archives, encrypted with its own Cloud KMS key. Enables the Cloud KMS API when enable_project_apis is on. No workload identity gets access to it."
+  default     = false
+}
+
+variable "sandbox_archive_bucket_name" {
+  type        = string
+  description = "Name of the sandbox archive bucket. Null derives one from the name, workspace and a short digest. Also names the key ring, which Cloud KMS never deletes."
+  default     = null
+}
+
+variable "sandbox_archive_expiration_days" {
+  type        = number
+  description = "Days after which sandbox archives are deleted"
+  default     = 30
+
+  validation {
+    condition     = var.sandbox_archive_expiration_days >= 1 && floor(var.sandbox_archive_expiration_days) == var.sandbox_archive_expiration_days
+    error_message = "sandbox_archive_expiration_days must be a whole number of at least 1."
+  }
+}
+
+variable "sandbox_archive_noncurrent_expiration_days" {
+  type        = number
+  description = "Days to keep overwritten or deleted sandbox archive versions"
+  default     = 7
+
+  validation {
+    condition     = var.sandbox_archive_noncurrent_expiration_days >= 1 && floor(var.sandbox_archive_noncurrent_expiration_days) == var.sandbox_archive_noncurrent_expiration_days
+    error_message = "sandbox_archive_noncurrent_expiration_days must be a whole number of at least 1."
+  }
+}
+
 # --- Postgres ----------------------------------------------------------------
 
 variable "postgres_tier" {
