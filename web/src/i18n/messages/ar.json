@@ -2980,6 +2980,7 @@
           "all": "كل الأنواع",
           "indexing": "فهرسة المستندات",
           "backfill": "ملء المستندات السابقة",
+          "retry": "فهرسة المستندات - إعادة المحاولة",
           "doc_permission_sync": "مزامنة الأذونات",
           "group_sync": "مزامنة عضوية المجموعات",
           "pruning": "تقليم المستندات",
@@ -2987,9 +2988,10 @@
         },
         "detail": {
           "queued": "في قائمة الانتظار",
+          "starting": "بدء المزامنة",
           "running": "قيد التشغيل",
           "rate": "{rate} مستند/دقيقة",
-          "finished": "{time} ({duration})",
+          "runtime": "مدة التشغيل {duration}",
           "rateFinished": "{rate} مستند/دقيقة ({duration})",
           "membershipRate": "{rate} عضوية/دقيقة",
           "membershipRateFinished": "{rate} عضوية/دقيقة ({duration})"
@@ -2998,6 +3000,7 @@
           "stages": "عرض مقاييس المراحل",
           "cancel": "إلغاء",
           "logs": "عرض السجلات",
+          "noLogs": "لم تُسجَّل أي سجلات",
           "checks": "عرض نتائج الفحوصات"
         },
         "warnings": {
@@ -3243,6 +3246,9 @@
         "calls": "الدفعات",
         "averageTime": "متوسط الوقت",
         "maxTime": "أقصى وقت",
+        "noDocs": "لم يكتمل فهرسة أي مستند",
+        "laterCanceled": "أُلغيت المراحل اللاحقة",
+        "retry": "إعادة المحاولة",
         "uneven": {
           "tooltip": "تتفاوت أوقات الدفعات كثيرًا في هذه المرحلة"
         },

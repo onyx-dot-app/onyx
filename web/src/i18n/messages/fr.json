@@ -2980,6 +2980,7 @@
           "all": "Tous les types",
           "indexing": "Index des documents",
           "backfill": "Rattrapage des documents",
+          "retry": "Index des documents - Nouvelle tentative",
           "doc_permission_sync": "Synchronisation des autorisations",
           "group_sync": "Synchronisation des membres des groupes",
           "pruning": "Élagage des documents",
@@ -2987,9 +2988,10 @@
         },
         "detail": {
           "queued": "En file d'attente",
+          "starting": "Démarrage de la synchronisation",
           "running": "En cours",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({duration})",
+          "runtime": "Durée d'exécution {duration}",
           "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} adhésions/min",
           "membershipRateFinished": "{rate} adhésions/min ({duration})"
@@ -2998,6 +3000,7 @@
           "stages": "Voir les métriques par étape",
           "cancel": "Annuler",
           "logs": "Voir les journaux",
+          "noLogs": "Aucun journal enregistré",
           "checks": "Voir les résultats des vérifications"
         },
         "warnings": {
@@ -3243,6 +3246,9 @@
         "calls": "Lots",
         "averageTime": "Temps moyen",
         "maxTime": "Temps max",
+        "noDocs": "Aucun document n'a terminé l'indexation",
+        "laterCanceled": "Étapes suivantes annulées",
+        "retry": "Réessayer",
         "uneven": {
           "tooltip": "Les temps par lot varient fortement pour cette étape"
         },

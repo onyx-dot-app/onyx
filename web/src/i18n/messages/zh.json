@@ -2980,6 +2980,7 @@
           "all": "所有类型",
           "indexing": "文档索引",
           "backfill": "文档回填",
+          "retry": "文档索引 - 重试",
           "doc_permission_sync": "权限同步",
           "group_sync": "群组成员同步",
           "pruning": "文档清理",
@@ -2987,9 +2988,10 @@
         },
         "detail": {
           "queued": "排队中",
+          "starting": "正在开始同步",
           "running": "运行中",
           "rate": "{rate} 文档/分钟",
-          "finished": "{time}（{duration}）",
+          "runtime": "运行时长 {duration}",
           "rateFinished": "{rate} 文档/分钟（{duration}）",
           "membershipRate": "{rate} 成员关系/分钟",
           "membershipRateFinished": "{rate} 成员关系/分钟（{duration}）"
@@ -2998,6 +3000,7 @@
           "stages": "查看阶段指标",
           "cancel": "取消",
           "logs": "查看日志",
+          "noLogs": "未记录日志",
           "checks": "查看检查结果"
         },
         "warnings": {
@@ -3243,6 +3246,9 @@
         "calls": "批次",
         "averageTime": "平均时间",
         "maxTime": "最长时间",
+        "noDocs": "没有文档完成索引",
+        "laterCanceled": "后续阶段已取消",
+        "retry": "重试",
         "uneven": {
           "tooltip": "此阶段各批次耗时差异很大"
         },

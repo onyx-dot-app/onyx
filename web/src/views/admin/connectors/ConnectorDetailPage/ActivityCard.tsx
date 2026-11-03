@@ -46,9 +46,9 @@ import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPa
 import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 import { runKindLabelKey } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import {
-  RUN_KIND_ICONS,
   isActive,
   runErrorMessage,
+  runKindIcon,
   runMinutes,
   runMoved,
   runTrace,
@@ -244,7 +244,7 @@ export default function ActivityCard({
   );
   const IdentityIcon =
     connector === undefined
-      ? RUN_KIND_ICONS[run.kind]
+      ? runKindIcon(run)
       : getSourceMetadata(connector.source).icon;
   const identity =
     connector === undefined

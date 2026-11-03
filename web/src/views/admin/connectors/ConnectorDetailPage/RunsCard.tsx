@@ -107,7 +107,7 @@ export interface RunsCardProps {
   /** A chart span that narrows the list inside the shared window. The shared picker shows it, and its X calls `onClearRange`. */
   range?: SliceRange | null;
   onClearRange?: () => void;
-  /** Called when a row's stage or checks popover opens or closes, so the page can step back around it. */
+  /** Called when a run line's stage details or check results open or close, so the page can step back around it. */
   onFocusChange?: (focused: boolean) => void;
 }
 

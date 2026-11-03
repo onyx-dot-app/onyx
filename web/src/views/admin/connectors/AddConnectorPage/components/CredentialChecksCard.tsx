@@ -186,8 +186,15 @@ const ROW_HOVER_GROUP = "check-log";
 
 interface CheckLogProps extends CheckActions {
   check: CheckLine;
+  /** A finished check with details or docs folds open to show them. */
+  withDetails: boolean;
 }
-function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
+function CheckLog({
+  check,
+  withDetails,
+  onSkipCheck,
+  onRunCheck,
+}: CheckLogProps) {
   const t = useTranslations("admin.connectorChecks");
   const [expanded, setExpanded] = useState(false);
   const { variant, icon, detail, font, color } = CHECK_LOGS[check.state];
@@ -209,7 +216,9 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     ),
   ];
   const expandable: boolean =
-    finished && (detailTexts.length > 0 || check.docs_link !== null);
+    withDetails &&
+    finished &&
+    (detailTexts.length > 0 || check.docs_link !== null);
   // Expected: queued, or waiting on a field.
   const expected: boolean =
     check.state === "pending" || check.state === "waiting";
@@ -391,8 +400,14 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
 interface CheckGroupProps extends CheckActions {
   label: (typeof GROUPS)[number]["label"];
   checks: CheckLine[];
+  withDetails: boolean;
 }
-function CheckGroup({ label, checks, ...actions }: CheckGroupProps) {
+function CheckGroup({
+  label,
+  checks,
+  withDetails,
+  ...actions
+}: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
@@ -410,6 +425,7 @@ function CheckGroup({ label, checks, ...actions }: CheckGroupProps) {
           <CheckLog
             key={`${check.capability}:${check.check_id}`}
             check={check}
+            withDetails={withDetails}
             {...actions}
           />
         ))}
@@ -420,9 +436,15 @@ function CheckGroup({ label, checks, ...actions }: CheckGroupProps) {
 
 export interface CheckLineGroupsProps extends CheckActions {
   lines: CheckLine[];
+  /** Finished checks fold open to their details and docs. @default true */
+  withDetails?: boolean;
 }
 /** The lines grouped by outcome, blocking failures first. Empty groups are left out. */
-export function CheckLineGroups({ lines, ...actions }: CheckLineGroupsProps) {
+export function CheckLineGroups({
+  lines,
+  withDetails = true,
+  ...actions
+}: CheckLineGroupsProps) {
   const groups = useMemo(
     () =>
       GROUPS.map((group) => ({
@@ -440,6 +462,7 @@ export function CheckLineGroups({ lines, ...actions }: CheckLineGroupsProps) {
           key={group.label}
           label={group.label}
           checks={group.checks}
+          withDetails={withDetails}
           {...actions}
         />
       ))}

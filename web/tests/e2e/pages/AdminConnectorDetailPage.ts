@@ -19,7 +19,7 @@ export class AdminConnectorDetailPage {
   readonly timeWindowPicker: Locator;
   /** The run list's time filter, shared with the status card's window. */
   readonly runsTimeFilter: Locator;
-  /** The logs action of every run that has logs, newest first. */
+  /** The enabled logs action of every run that recorded a trace or message, newest first. Each run line has one, disabled when there is nothing to open. */
   readonly runLogsButtons: Locator;
   /** The run list's empty state, shown once the feed has loaded with no runs. */
   readonly noRunsMessage: Locator;
@@ -49,7 +49,10 @@ export class AdminConnectorDetailPage {
     this.runsTimeFilter = this.runsSection
       .getByRole("button", { name: /Last \d+ (hours|days)|All time/ })
       .first();
-    this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
+    this.runLogsButtons = page.getByRole("button", {
+      name: "View Logs",
+      disabled: false,
+    });
     this.noRunsMessage = page.getByText("No recent indexing runs", {
       exact: true,
     });

@@ -224,9 +224,16 @@ export function attemptStatusTag(
   }
 }
 
-/** Key under `admin.connector.runs.kinds`. A backfill reads apart from the pair's regular indexing. */
-export function runKindLabelKey(run: CCPairRun): CCPairRunKind | "backfill" {
-  return run.kind === "indexing" && run.attempt.is_backfill
-    ? "backfill"
-    : run.kind;
+/** An index run that retries a pair's failed documents. */
+export function isRetryRun(run: CCPairRun): boolean {
+  return run.kind === "indexing" && run.is_retry === true;
+}
+
+/** Key under `admin.connector.runs.kinds`. Backfills and retries read apart from the pair's regular indexing. */
+export function runKindLabelKey(
+  run: CCPairRun
+): CCPairRunKind | "backfill" | "retry" {
+  if (run.kind !== "indexing") return run.kind;
+  if (isRetryRun(run)) return "retry";
+  return run.attempt.is_backfill ? "backfill" : run.kind;
 }
