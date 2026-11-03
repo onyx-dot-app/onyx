@@ -31,6 +31,21 @@ export const OpenSearchSizingCalculator = () => {
     { name: "OpenAI text-embedding-3-large", dims: 3072 },
     { name: "Gemini embedding-001", dims: 3072 },
   ];
+  // Starting estimates of chunks per item, until measured on real deployments.
+  const SOURCES = [
+    { key: "gdrive", label: "Google Drive", unit: "files", ratio: 6 },
+    { key: "sharepoint", label: "SharePoint and OneDrive", unit: "files", ratio: 6 },
+    { key: "box", label: "Box and Dropbox", unit: "files", ratio: 6 },
+    { key: "upload", label: "Uploaded files", unit: "files", ratio: 6 },
+    { key: "confluence", label: "Confluence", unit: "pages", ratio: 4 },
+    { key: "wiki", label: "Notion and other wikis", unit: "pages", ratio: 3 },
+    { key: "issues", label: "Jira, Linear and GitHub issues", unit: "issues", ratio: 1.5 },
+    { key: "tickets", label: "Zendesk and other tickets", unit: "tickets", ratio: 2 },
+    { key: "chat", label: "Slack and Teams", unit: "messages", ratio: 0.5 },
+    { key: "email", label: "Gmail and Outlook", unit: "emails", ratio: 1.2 },
+    { key: "web", label: "Websites", unit: "pages", ratio: 3 },
+  ];
+  const MAX_ITEMS = 10_000_000_000;
   const NODE_RAM = [16, 32, 64];
   const NODE_DISK = [64, 128, 256, 512, 1000, 1500, 3000, 6000];
   // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large, r8g.xlarge and r8g.2xlarge.
@@ -41,6 +56,14 @@ export const OpenSearchSizingCalculator = () => {
     3: "One copy in each of 3 availability zones. Survives a zone outage.",
   };
 
+  const [inputMode, setInputMode] = useState("storage");
+  const [sourceRows, setSourceRows] = useState([
+    { id: 1, key: "gdrive", count: "2000000", ratio: "6" },
+    { id: 2, key: "confluence", count: "20000", ratio: "4" },
+    { id: 3, key: "issues", count: "50000", ratio: "1.5" },
+    { id: 4, key: "chat", count: "2000000", ratio: "0.5" },
+  ]);
+  const [sourceToAdd, setSourceToAdd] = useState("sharepoint");
   const [totalGB, setTotalGB] = useState(500);
   const [parts, setParts] = useState([0.06, 0.3, 0.06, 0.18, 0.4]);
   const [growth, setGrowth] = useState(30);
@@ -120,7 +143,24 @@ export const OpenSearchSizingCalculator = () => {
   const textShare = PARTS.reduce((a, p, k) => a + (parts[k] * p.textShare) / 100, 0);
   const indexableGB = total * indexableShare;
   const textGB = total * textShare;
-  const chunksToday = (textGB * 1e9) / TEXT_PER_CHUNK;
+  const clampNumber = (v, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(0, n)) : 0;
+  };
+  const sourceOf = (key) => SOURCES.find((x) => x.key === key);
+  const singular = (unit) => unit.replace(/s$/, "");
+  const sourceChunks = sourceRows.map((r) => clampNumber(r.count, MAX_ITEMS) * clampNumber(r.ratio, 1000));
+  const chunksToday =
+    inputMode === "storage" ? (textGB * 1e9) / TEXT_PER_CHUNK : sourceChunks.reduce((a, b) => a + b, 0);
+  const updateRow = (id, field, value) =>
+    setSourceRows((rows) => rows.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  const addRow = () => {
+    const src = sourceOf(sourceToAdd);
+    setSourceRows((rows) => [
+      ...rows,
+      { id: Math.max(0, ...rows.map((r) => r.id)) + 1, key: src.key, count: "1000", ratio: String(src.ratio) },
+    ]);
+  };
   const chunks = chunksToday * (1 + growth / 100);
   const quantBytes = quant === "sq7" ? dims : quant === "sq1" ? dims / 8 : 0;
   const bytesPerChunk = (FIXED_BYTES + GRAPH_BYTES + 4 * dims + quantBytes) * DELETED_OVERHEAD;
@@ -166,7 +206,6 @@ export const OpenSearchSizingCalculator = () => {
   const hint = "text-sm text-gray-500 dark:text-gray-400";
   const input =
     "rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-1.5 text-base tabular-nums text-gray-900 dark:text-gray-100";
-  const big = "text-2xl font-semibold tabular-nums text-gray-900 dark:text-white";
   const seg = (active) =>
     "px-3 py-1.5 text-base border-r last:border-r-0 border-gray-200 dark:border-white/10 " +
     (active
@@ -200,6 +239,73 @@ export const OpenSearchSizingCalculator = () => {
       <div className="grid gap-4">
         <div className={card + " space-y-5"}>
           <div className="text-lg font-semibold text-gray-900 dark:text-white">1. What your data needs</div>
+          <div className="space-y-1.5">
+            <div className={label}>Start from</div>
+            {segmented({ ariaLabel: "Start from", value: inputMode, onChange: setInputMode, options: [["storage", "Total storage"], ["sources", "Each source"]] })}
+          </div>
+          {inputMode === "sources" ? (
+            <div className="space-y-3">
+              <div className={hint}>Enter the item count from each tool's admin console. The chunks per item are estimates; change them if you know your data.</div>
+              {sourceRows.map((r, k) => {
+                const src = sourceOf(r.key);
+                return (
+                  <div key={r.id} className="space-y-2 rounded-xl border border-gray-200 p-3 dark:border-white/10">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 text-base text-gray-900 dark:text-gray-100">{src.label}</div>
+                      <button
+                        type="button"
+                        aria-label={"Remove " + src.label}
+                        onClick={() => setSourceRows((rows) => rows.filter((x) => x.id !== r.id))}
+                        className="h-7 w-7 shrink-0 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
+                        <input
+                          id={"os-src-count-" + r.id}
+                          type="number"
+                          min="0"
+                          aria-label={src.label + " " + src.unit}
+                          value={r.count}
+                          onChange={(e) => updateRow(r.id, "count", e.target.value)}
+                          className={input + " min-w-0 flex-1"}
+                        />
+                        <span className={hint + " shrink-0"}>{src.unit}</span>
+                      </div>
+                      <div className="flex flex-1 basis-48 items-center gap-2">
+                        <span className={hint}>×</span>
+                        <input
+                          id={"os-src-ratio-" + r.id}
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          aria-label={"Chunks per " + singular(src.unit)}
+                          value={r.ratio}
+                          onChange={(e) => updateRow(r.id, "ratio", e.target.value)}
+                          className={input + " w-20 shrink-0"}
+                        />
+                        <span className={hint}>{"per " + singular(src.unit)}</span>
+                        <span className="ml-auto whitespace-nowrap text-base tabular-nums text-gray-900 dark:text-gray-100">{"= " + fmtCount(sourceChunks[k]) + " chunks"}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex flex-wrap items-center gap-2">
+                <select id="os-src-add" aria-label="Source to add" value={sourceToAdd} onChange={(e) => setSourceToAdd(e.target.value)} className={input + " min-w-0 flex-1"}>
+                  {SOURCES.map((x) => (
+                    <option key={x.key} value={x.key}>{x.label + " (" + x.unit + ")"}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={addRow} className="rounded-lg border border-primary px-3 py-1.5 text-base text-primary dark:border-primary-light dark:text-primary-light">
+                  Add source
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
           <div className="space-y-1.5">
             <label htmlFor="os-total" className={label}>Total storage</label>
             <div className="flex items-center gap-2">
@@ -268,6 +374,8 @@ export const OpenSearchSizingCalculator = () => {
               <div><div className={hint}>Text</div><div className="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{fmtBytes(textGB * 1e9)}</div></div>
             </div>
           </div>
+          </>
+          )}
           <div className="space-y-1.5">
             <label htmlFor="os-growth" className={label}>Growth to plan for</label>
             <div className="flex items-center gap-3">
@@ -315,9 +423,22 @@ export const OpenSearchSizingCalculator = () => {
             <table className="mt-2 w-full text-sm">
               <tbody>
                 {[
-                  ["Total storage", fmtBytes(total * 1e9)],
-                  ["× text share of the storage mix (" + (textShare * 100).toFixed(1) + "%)", fmtBytes(textGB * 1e9)],
-                  ["÷ ~1,900 characters per chunk", fmtCount(chunksToday) + " chunks"],
+                  ...(inputMode === "storage"
+                    ? [
+                        ["Total storage", fmtBytes(total * 1e9)],
+                        ["× text share of the storage mix (" + (textShare * 100).toFixed(1) + "%)", fmtBytes(textGB * 1e9)],
+                        ["÷ ~1,900 characters per chunk", fmtCount(chunksToday) + " chunks"],
+                      ]
+                    : [
+                        ...sourceRows.map((r, k) => {
+                          const src = sourceOf(r.key);
+                          return [
+                            src.label + ": " + clampNumber(r.count, MAX_ITEMS).toLocaleString() + " " + src.unit + " × " + clampNumber(r.ratio, 1000),
+                            fmtCount(sourceChunks[k]) + " chunks",
+                          ];
+                        }),
+                        ["Sum of sources", fmtCount(chunksToday) + " chunks"],
+                      ]),
                   ["× growth (" + growth + "%)", fmtCount(chunks) + " chunks"],
                   ["× " + Math.round(bytesPerChunk).toLocaleString() + " B per chunk (" + dims + " dims)", fmtBytes(indexOneCopy)],
                   ["RAM: chunks × " + Math.round(hotPerChunk).toLocaleString() + " B", fmtBytes(hotOneCopy)],

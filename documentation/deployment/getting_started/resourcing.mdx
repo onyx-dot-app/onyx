@@ -95,7 +95,8 @@ The other Onyx components keep the sizes in the tables above.
 ### Sizing Calculator
 
 Use the calculator to estimate the OpenSearch storage, memory, and cluster size for your data.
-Step 1 estimates what your data needs. Step 2 puts that data on OpenSearch nodes.
+Step 1 estimates what your data needs. Start from your total storage, or from the item count of each source,
+such as 2 million Google Drive files. Step 2 puts that data on OpenSearch nodes.
 
 <OpenSearchSizingCalculator />
 
@@ -106,6 +107,7 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | Value | Estimate | Basis |
 | --- | --- | --- |
 | Text per GB of storage | 40% for text files, 12% for office files, 4% for PDFs and slides, 5% for code | Estimate. Onyx indexes only the documentation files in a code repository. |
+| Chunks per item | 6 per file, 4 per Confluence page, 3 per wiki or web page, 2 per ticket, 1.5 per issue, 1.2 per email, 0.5 per chat message | Estimate. Onyx makes one document from each Slack or Teams thread, so the replies in a thread share chunks. A message outside a thread uses one chunk. Change the value if you know your data. |
 | Memory for vector search | Node RAM minus the JVM heap | The heap uses half of the RAM, at most 31 GB. The calculator counts 80% of the rest for vectors. |
 | Memory per data node | 64 GB or less | The JVM heap stops at about 31 GB. For more data, add nodes instead of larger nodes. |
 | Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |
