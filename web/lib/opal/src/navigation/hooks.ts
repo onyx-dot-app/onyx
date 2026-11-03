@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useTransition } from "react";
 import type { Route } from "next";
 import {
   usePathname,
@@ -46,6 +46,14 @@ function urlKey(pathname: string, search: URLSearchParams): string {
 // go through the router too, or the earlier page would land after it.
 let routeNavigationInFlight = false;
 
+// The same for a router request that changes only the query, which renders
+// no new route: it runs in a transition (`useNavigation`), and counts here
+// until that transition ends.
+let queryRequestsInFlight = 0;
+
+/** Runs a router request in the calling `useNavigation`'s transition. */
+type QueryRequestRunner = (request: () => void) => void;
+
 // Each history entry `go` creates records its depth into the app in
 // `history.state`: 1 for the first page reached from a load, 2 for the next.
 // An entry `go` did not create (a page load, a typed URL, a link from another
@@ -63,7 +71,8 @@ function currentDepth(): number {
 
 // Next writes its own history state when it commits a navigation, which drops
 // the depth. The last `go` keeps it here, and `useRouteRendering` writes it
-// back after the commit.
+// back after the commit. Back or Forward clears it, so it never lands on
+// another entry with the same URL.
 let depthStamp: { href: string; depth: number } | null = null;
 
 function restoreDepth() {
@@ -96,6 +105,7 @@ function callRouter<T extends string>(
 
 function navigate<T extends string>(
   router: Router,
+  runQueryRequest: QueryRequestRunner,
   href: Route<T>,
   { replace = false, shallow = false, scroll }: NavigationOptions = {}
 ) {
@@ -139,13 +149,21 @@ function navigate<T extends string>(
   else window.history.pushState(state, "", href);
   depthStamp = { href: window.location.href, depth };
   const queryOnly = target.pathname === herePathname;
-  if (shallow && queryOnly && !routeNavigationInFlight) return;
   // Any router request can land after a later shallow switch, so a shallow
-  // switch goes through the router too until the route renders. A move of the
-  // hash alone requests nothing.
-  const hashOnly = queryOnly && target.search === hereSearch;
-  if (!hashOnly) routeNavigationInFlight = true;
-  callRouter(router, "replace", href, scroll);
+  // switch goes through the router too while one is in flight.
+  const requestInFlight = routeNavigationInFlight || queryRequestsInFlight > 0;
+  if (shallow && queryOnly && !requestInFlight) return;
+  if (!queryOnly) {
+    routeNavigationInFlight = true;
+    callRouter(router, "replace", href, scroll);
+    return;
+  }
+  // A move of the hash alone requests nothing that could land late.
+  if (target.search === hereSearch) {
+    callRouter(router, "replace", href, scroll);
+    return;
+  }
+  runQueryRequest(() => callRouter(router, "replace", href, scroll));
 }
 
 function isOtherOrigin(href: string): boolean {
@@ -196,14 +214,17 @@ function isPlainClick(event: React.MouseEvent<HTMLElement>): boolean {
 }
 
 export class Navigation {
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private runQueryRequest: QueryRequestRunner
+  ) {}
 
   // Generic like Next's `router.push`, so a dynamic path such as
   // `/craft/v1/tasks/${id}` type-checks against its route.
 
   /** Goes to a page of the app. */
   go<T extends string>(href: Route<T>, options?: NavigationOptions) {
-    navigate(this.router, href, options);
+    navigate(this.router, this.runQueryRequest, href, options);
   }
 
   /**
@@ -229,7 +250,7 @@ export class Navigation {
           return;
         }
         event.preventDefault();
-        navigate(this.router, href, options);
+        navigate(this.router, this.runQueryRequest, href, options);
       },
     };
   }
@@ -264,22 +285,47 @@ export class Navigation {
       window.history.back();
       return;
     }
-    navigate(this.router, fallback, { replace: true });
+    navigate(this.router, this.runQueryRequest, fallback, {
+      replace: true,
+    });
   }
 }
 
 export function useNavigation(): Navigation {
   const router = useRouter();
-  return useMemo(() => new Navigation(router), [router]);
+  const [isPending, startTransition] = useTransition();
+  // This hook's query requests still counted in `queryRequestsInFlight`.
+  const pendingQueryRequests = useRef(0);
+  const navigation = useMemo(
+    () =>
+      new Navigation(router, (request) => {
+        pendingQueryRequests.current += 1;
+        queryRequestsInFlight += 1;
+        startTransition(request);
+      }),
+    [router]
+  );
+  useEffect(() => {
+    if (isPending) return;
+    queryRequestsInFlight -= pendingQueryRequests.current;
+    pendingQueryRequests.current = 0;
+  }, [isPending]);
+  // Unmounting mid-request stops counting it.
+  useEffect(
+    () => () => {
+      queryRequestsInFlight -= pendingQueryRequests.current;
+      pendingQueryRequests.current = 0;
+    },
+    []
+  );
+  return navigation;
 }
 
 /**
- * Whether the URL is ahead of the route Next renders: `go()` wrote the URL of
- * a page that has not rendered yet. Call it in a component that the layout at
- * `base` renders (e.g. the chrome), so the rendered segments are read below it.
+ * A pathname's segments, each decoded (a malformed one stays as it is). An
+ * encoded `/` stays inside its segment, so `a%2Fb` is not `a/b`.
  */
-/** A pathname with each segment decoded; a malformed one stays as it is. */
-function decodePathname(pathname: string): string {
+function pathSegments(pathname: string): string {
   return pathname
     .split("/")
     .map((segment) => {
@@ -289,9 +335,14 @@ function decodePathname(pathname: string): string {
         return segment;
       }
     })
-    .join("/");
+    .join("\u0000");
 }
 
+/**
+ * Whether the URL is ahead of the route Next renders: `go()` wrote the URL of
+ * a page that has not rendered yet. Call it in a component that the layout at
+ * `base` renders (e.g. the chrome), so the rendered segments are read below it.
+ */
 export function useRouteRendering(base: string): boolean {
   const pathname = usePathname();
   // The rendered tree's segments, which follow the router, not the URL.
@@ -302,9 +353,8 @@ export function useRouteRendering(base: string): boolean {
   const renderedPathname =
     segments.length > 0 ? `${base}/${segments.join("/")}` : base;
   // Segments may come decoded while the URL keeps `%31`, so compare both
-  // decoded.
-  const rendering =
-    decodePathname(renderedPathname) !== decodePathname(pathname);
+  // decoded, segment by segment.
+  const rendering = pathSegments(renderedPathname) !== pathSegments(pathname);
   useEffect(() => {
     if (!rendering) routeNavigationInFlight = false;
   }, [rendering]);
@@ -312,5 +362,12 @@ export function useRouteRendering(base: string): boolean {
   useEffect(() => {
     if (!rendering) restoreDepth();
   });
+  useEffect(() => {
+    const forget = () => {
+      depthStamp = null;
+    };
+    window.addEventListener("popstate", forget);
+    return () => window.removeEventListener("popstate", forget);
+  }, []);
   return rendering;
 }
