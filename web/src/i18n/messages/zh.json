@@ -12639,6 +12639,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "用户已停止生成"
+        },
+        "timedOut": {
+          "text": "回复已达到时间限制，因此已停止。"
         }
       },
       "codeBlock": {

@@ -478,6 +478,11 @@ const AgentMessage = React.memo(function AgentMessage({
               {t("agentMessage.stoppedGeneration.text")}
             </Text>
           )}
+        {stopPacketSeen && stopReason === StopReason.TIMED_OUT && (
+          <Text as="p" font="secondary-body" color="text-04">
+            {t("agentMessage.timedOut.text")}
+          </Text>
+        )}
       </div>
 
       {/* Feedback buttons - only show when streaming and rendering complete */}

@@ -535,3 +535,22 @@ describe("usePacketProcessor", () => {
     });
   });
 });
+
+test("a stop after a retracted answer completes without a hidden renderer", () => {
+  const packets = [createMessageStartPacket({ turn_index: 0 })];
+  const { result, rerender } = renderHook(
+    ({ packets }) => usePacketProcessor(packets, 1),
+    { initialProps: { packets } }
+  );
+  expect(result.current.displayGroups).toHaveLength(1);
+  rerender({
+    packets: [
+      ...packets,
+      createSearchToolStartPacket({ turn_index: 1 }),
+      createStopPacket(StopReason.USER_CANCELLED),
+    ],
+  });
+  expect(result.current.finalAnswerComing).toBe(false);
+  expect(result.current.displayGroups).toEqual([]);
+  expect(result.current.isComplete).toBe(true);
+});

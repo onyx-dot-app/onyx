@@ -966,7 +966,7 @@ class RunCoordination:
         run = agent.start(
             messages=messages,
             max_steps=max_steps,
-            _deadline_at=deadline_at,
+            deadline_at=deadline_at,
             coordinator=self.coordinator,
             cancellation=CancellationSignal(),
             parent_run_id=self.run.id,

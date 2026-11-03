@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.models import CompactionCheckpoint, RunStatus
+from onyx.agents.models import CompactionCheckpoint, RunFailureKind, RunStatus
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
     HistoryLink,
@@ -1227,8 +1227,15 @@ def translate_db_message_to_chat_message_detail(
         if chat_message.request_params is not None
         else None
     )
+    deadline_cancelled = (
+        chat_message.response_status == RunStatus.CANCELLED
+        and chat_message.response_failure is not None
+        and chat_message.response_failure.kind == RunFailureKind.DEADLINE
+    )
     error_info = (
-        chat_error(chat_message.response_failure)
+        None
+        if deadline_cancelled
+        else chat_error(chat_message.response_failure)
         if chat_message.response_failure is not None
         else StreamingError(error=chat_message.error)
         if chat_message.error is not None

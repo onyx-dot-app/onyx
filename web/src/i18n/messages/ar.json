@@ -12639,6 +12639,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "أوقف المستخدم التوليد"
+        },
+        "timedOut": {
+          "text": "توقف الرد لأنه بلغ الحد الزمني."
         }
       },
       "codeBlock": {

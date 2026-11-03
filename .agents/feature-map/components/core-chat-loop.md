@@ -88,7 +88,7 @@ _stream_chat_turn               ChatTurnExecution.run                ChatTurnExe
     clear_stop, admission.publish   admission every 5 s; owner         ChatRunStore (content kept) or
     publish IDs to ChatDelivery     leases every 10 s (content kept)     persistence view; register saved agents
     start control thread          _poll_responses: outcomes, idle      Agent.start(background=False)
-  yield from ChatStream (reader)  all drained: OverallStop (user Stop)   ResponsePresenter -> Emitter -> ChatDelivery
+  yield from ChatStream (reader)  all drained: OverallStop (user Stop or deadline)   ResponsePresenter -> Emitter -> ChatDelivery
                                     delivery.finish, admission.release RunStore.save -> ChatResponsePersistence
 ```
 
@@ -158,7 +158,9 @@ cancel the turn. A normal end sends one `OverallStop(finished)` per model from
 events, and at least every 250 ms. It checks Stop on each wake while the turn is
 not cancelled, refreshes the admission lease every 5 s, and lets each
 `ChatRunStore` renew its owner leases every 10 s. After
-`CHAT_EXECUTION_TIMEOUT_S` it cancels the turn. When no response worker and no
+`CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
+`DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
+preparation that has not started a run. When no response worker and no
 owned run remains, it finishes delivery and then releases the admission. A child
 run's owner lease also keeps the turn and its admission alive. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
@@ -215,26 +217,29 @@ termination grace period is much shorter, so it ends running turns first
    the session keeps content. Do not move reservation later.
 8. `disconnect-is-not-stop` **Disconnect is not stop.** A disconnect never
    cancels. The turn's `CancellationSignal` is cancelled by the user's stop key
-   (`chat/stop_signal_checker.py:request_stop`), the execution deadline, a lost
+   (`chat/stop_signal_checker.py:request_stop`), the deadline backstop, a lost
    admission, a control or response-polling failure, or a failed worker.
+   The execution deadline cancels each response run first. The turn cancels
+   remaining work 30 seconds later.
    `ChatRunStore.poll_control` cancels one run when its owner lease is lost or
    its `chat_response_stop:<id>` key is set. Cancellation reaches every run,
    child and tool, and `ChatTurnExecution._publish` drops packets after it. It
-   does not interrupt a blocked provider read or a running tool; the turn keeps
-   its admission until they return. The stop key is per stream ID, so a late
+   does not forcibly interrupt blocked provider reads or tools that ignore their
+   cancellation signal; the turn keeps its admission until owned work drains. The stop key is per stream ID, so a late
    stop cannot cancel the next message when the caller passes `stream_id`, as
    the web client does. Without `stream_id`, Stop targets the stream in flight
    at request time. Replay shows `user_cancelled` from the saved
    `RunStatus.CANCELLED`; only legacy rows match the stop sentence by text
-   ([[chat-persistence]]).
-9. `non-user-cancel` **Only a user Stop sends a final stop packet.** The control
-   thread publishes `OverallStop(stop_reason="user_cancelled")` after all work
-   drains only when the user's stop key cancelled the turn. The presenter's own
-   `OverallStop` is dropped after any cancel, and `AgentCancelled` publishes no
-   error. So a deadline, a lost admission or a control failure ends the live
-   stream with no stop packet and no error, but the saved row still ends with
-   "Generation was stopped by the user." and replays as `user_cancelled`. A new
-   cancellation cause must decide what the user sees.
+   ([[chat-persistence]]), except a saved `DEADLINE` failure replays as `timed_out`.
+9. `non-user-cancel` **Deadlines have their own stop reason.** Response runs
+   cancel themselves at the turn deadline and save `RunFailureKind.DEADLINE`.
+   `chat/presentation.py:overall_stop` maps that failure to `timed_out` for live
+   and replayed responses. The turn sends a fallback stop after draining when
+   preparation times out or the user stops, only for models without a delivered stop.
+   The fallback uses each saved response outcome, so a later Stop cannot replace
+   an earlier response deadline. The first cancellation reason wins.
+   Lost admission and control failures still
+   end without a live stop packet; they are not classified as deadlines.
 10. `stop-before-launch` **Stop does nothing before launch.** During setup the
     fence holds no stream ID, and launch clears any earlier stop key for the
     stream ID. A client must wait for the message-ID packet before it sends
@@ -306,7 +311,8 @@ termination grace period is much shorter, so it ends running turns first
   in tools" (`chat/execution.py:create_chat_agent`). See the "Force a tool call"
   recipe in [[tools-framework]].
 - **Stop waits for blocked work.** Cancellation takes effect when a provider
-  read returns or times out, and a running tool keeps going until it returns.
+  read returns or times out. Tools that honor `ToolInvocation.cancellation` can
+  stop earlier; tools that ignore it keep running until they return.
   Slow cache calls on the control thread also delay the next Stop check.
 - **Anonymous users cannot stop.** `stop_chat_session` uses
   `require_permission(Permission.WRITE_CHAT)` without `allow_anonymous`, so an
@@ -365,8 +371,8 @@ termination grace period is much shorter, so it ends running turns first
   completion failed", "Chat session admission was lost", "Chat ownership control
   failed", "Response ownership renewal failed", "Failed to read agent Stop
   request", "Response persistence exceeded its wait bound" and "Chat turn
-  exceeded its execution deadline". A deadline or a lost admission ends the
-  stream with no stop packet ([[#non-user-cancel]]). In the tenant's cache, the
+  passed its deadline". A deadline sends `timed_out`; lost admission can end
+  the stream with no stop packet ([[#non-user-cancel]]). In the tenant's cache, the
   session owner key is `chatprocessing_owner_<session_id>`, the processing fence
   is `chatprocessing_fence_<session_id>` (it holds the stream ID), and the stop
   key is `chatsessionstop_fence_<session_id>_<stream_id>`. Each owned run also
