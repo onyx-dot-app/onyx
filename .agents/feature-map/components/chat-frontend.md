@@ -233,6 +233,11 @@ up its own branding.
 
 ## Contracts and traps
 
+`scroll-follow-intent` **Content growth must not cancel following.**
+`sections/chat/ChatScrollContainer.tsx` keeps following intent across the typewriter drain and spacer smooth-scroll pauses.
+When either pause ends, catch up only if auto-scroll is enabled and the user has not scrolled away.
+Content observers update visual scroll state without treating layout growth as a user scroll.
+
 1. `packet-list-append-only` **A message's packet list is append-only.**
    `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:processPackets`
    resets only when the list gets shorter or the `nodeId` changes. Otherwise it
