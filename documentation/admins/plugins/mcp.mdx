@@ -26,15 +26,15 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
   <Step title="Open the MCP catalog">
     Go to **Admin Panel → Plugins**, click **Add**, then select **MCP**.
 
-    <img className="rounded-image" src="/assets/admins/plugins/add_mcp_catalog.webp" alt="The MCP catalog with Slack, HubSpot, Asana, Linear, Notion, Sentry, Atlassian, and Add custom MCP server"/>
+    <img className="rounded-image" src="/assets/admins/plugins/add_mcp_catalog.webp" alt="The MCP catalog with Linear, Notion, Sentry, Atlassian, and Add custom MCP server"/>
 
     Select a catalog entry to fill in the server name and URL for that vendor.
     Select **Add custom MCP server** for any other server.
   </Step>
 
   <Step title="Enter the server details">
-    Enter a **Server Name** and the **MCP Server URL**.
-    Onyx checks the server and shows the authentication method and connection transport that it detects.
+    Enter a **Server Name** and the **MCP Server URL**. Onyx checks the server and shows the authentication method,
+    connection transport, and client metadata document support that it detects.
 
     <img className="rounded-image" src="/assets/admins/plugins/mcp_custom_filled.webp" alt="The Add MCP Server dialog after Onyx detects no authentication and the Streamable HTTP transport"/>
 
@@ -47,7 +47,7 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
 
     | Setting | Effect |
     | --- | --- |
-    | **Access control** | **Public** lets all users use the server. **User groups** limits it to the groups you select. Group-restricted servers require a **Business** or **Enterprise** plan. A Group Manager must select at least one group they manage. |
+    | **Access control** | **Organization** lets all users use the server. **User groups** limits it to the groups you select. Group-restricted servers require a **Business** or **Enterprise** plan. A Group Manager must select at least one group they manage. |
     | **Enable in default Chat** | Makes the tools available in chats without a custom agent. |
     | **Enable for Craft** | Makes the tools available in Craft sessions and scheduled tasks. This switch shows only when Craft is enabled. |
   </Step>
@@ -86,7 +86,7 @@ OAuth is the best choice for most hosted vendor servers, such as Linear, Notion,
 | --- | --- |
 | **Set up automatically** | Onyx registers an OAuth client with the server's published settings. Use this when the server supports dynamic client registration. |
 | **Use your own OAuth client** | Enter a client ID from your provider. Add a client secret only if the provider requires it. |
-| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. Turn this off if your Onyx instance is private. Onyx then uses automatic client registration. |
+| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. Onyx checks this when it checks the server, and turns this setting off when the provider cannot fetch the document. Onyx then tries automatic client registration. If the connection still fails with a client metadata error, turn this setting off and connect again. |
 
 If you create your own OAuth client, set its redirect URI to:
 
