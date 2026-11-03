@@ -340,3 +340,31 @@ describe("AC-6: card actions", () => {
     ).toBeNull();
   });
 });
+
+describe("hover", () => {
+  it("ends a hovered card's hover when the card unmounts under the pointer", async () => {
+    installActivityFeed([FAILED_NO_DOCS]);
+    const user = userEvent.setup();
+    const onHoverAttempt = jest.fn();
+    const onHoverPair = jest.fn();
+    const { unmount } = render(
+      <ActivityPanel
+        scope={PAIR}
+        title="Activities"
+        onHoverAttempt={onHoverAttempt}
+        onHoverPair={onHoverPair}
+      />
+    );
+    const card = await shownCard(FAILED_NO_DOCS);
+    await user.hover(card);
+    expect(onHoverAttempt).toHaveBeenLastCalledWith(
+      FAILED_NO_DOCS.run.attempt.id
+    );
+    expect(onHoverPair).toHaveBeenLastCalledWith(SALES_DRIVE.id);
+
+    // A resolved card leaves its feed without a pointer leave.
+    unmount();
+    expect(onHoverAttempt).toHaveBeenLastCalledWith(null);
+    expect(onHoverPair).toHaveBeenLastCalledWith(null);
+  });
+});

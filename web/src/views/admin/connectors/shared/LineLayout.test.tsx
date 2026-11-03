@@ -1,4 +1,4 @@
-/** One flex line (A, B, a third column of C and a 64 px D) with per-variant minimums below 640 px, pinned by class since jsdom has no layout. */
+/** One flex line (A, B, a third column of C and D) with per-variant minimums and wrap order below 640 px, pinned by class since jsdom has no layout. */
 import { render, screen } from "@tests/setup/test-utils";
 import LineLayout from "@/views/admin/connectors/shared/LineLayout";
 
@@ -153,4 +153,70 @@ describe("LineLayout", () => {
       ).toBe(true);
     }
   );
+
+  describe("stat", () => {
+    function renderStat(c: string | null) {
+      render(
+        <LineLayout
+          variant="stat"
+          a={<span>part-a</span>}
+          b={<span>part-b</span>}
+          c={c === null ? null : <span>{c}</span>}
+          d={<span>part-d</span>}
+        />
+      );
+      const third = screen
+        .getByText("part-a")
+        .closest(".flex-row")!
+        .querySelector<HTMLElement>(":scope > .basis-1\\/3")!;
+      function part(marker: string): HTMLElement {
+        let element: HTMLElement = screen.getByText(marker);
+        while (
+          element.parentElement !== third &&
+          element.parentElement !== third.parentElement
+        ) {
+          element = element.parentElement!;
+        }
+        return element;
+      }
+      return { third, part };
+    }
+
+    it("puts A, C and D on line 1 and B alone on line 2 below 640", () => {
+      const { third, part } = renderStat("part-c");
+
+      expect(hasClass(third, `${BELOW_640}contents`)).toBe(true);
+      expect(hasClass(part("part-a"), `${BELOW_640}order-1`)).toBe(true);
+      expect(hasClass(part("part-c"), `${BELOW_640}order-2`)).toBe(true);
+      expect(hasClass(part("part-d"), `${BELOW_640}order-3`)).toBe(true);
+      expect(hasClass(part("part-b"), `${BELOW_640}order-4`)).toBe(true);
+      expect(hasClass(part("part-b"), `${BELOW_640}basis-full`)).toBe(true);
+      // A stat's A keeps its 188 px floor with no basis, so C fits beside it.
+      expect(
+        hasClass(
+          part("part-a"),
+          `${BELOW_640}basis-\\[calc\\(100%-[^\\]]+\\)\\]`
+        )
+      ).toBe(false);
+    });
+
+    it("pads its parts 8 across and 4 down", () => {
+      const { part } = renderStat("part-c");
+
+      for (const marker of ["part-a", "part-b", "part-c"]) {
+        expect(part(marker)).toHaveStyle({ padding: "0.25rem" });
+        expect(part(marker)).toHaveClass("mx-1");
+      }
+    });
+
+    it("sizes D to its control, 4 px inside the end, and drops an empty C so D ends the third", () => {
+      const { third, part } = renderStat(null);
+      const d = part("part-d");
+
+      expect(d).toHaveClass("w-fit", "pe-1");
+      expect(d).not.toHaveClass("w-16");
+      expect(third.children).toHaveLength(1);
+      expect(third).toHaveClass("justify-end");
+    });
+  });
 });
