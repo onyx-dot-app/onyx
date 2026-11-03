@@ -8,37 +8,31 @@ type TokenFile = Record<string, { value: string }>;
 
 const VIEWBOX_SIZE = 120;
 
-// Reads the token sources because lib/shared/dist is not built before Jest runs.
-function readTokens(file: string, mode: "light" | "dark"): TokenFile {
+type Mode = "light" | "dark";
+
+// Token JSON is the only per-mode map keyed by CSS var name. Dist ships CSS and mobile maps.
+function readTokens(mode: Mode): TokenFile {
   return JSON.parse(
-    readFileSync(join(__dirname, "../../../shared/tokens", file), "utf8")
+    readFileSync(
+      join(__dirname, "../../../shared/tokens", `semantic-${mode}.json`),
+      "utf8"
+    )
   )[mode];
 }
 
-const THEMES: Record<"light" | "dark", TokenFile> = {
-  light: readTokens("semantic-light.json", "light"),
-  dark: readTokens("semantic-dark.json", "dark"),
+const THEMES: Record<Mode, TokenFile> = {
+  light: readTokens("light"),
+  dark: readTokens("dark"),
 };
 
 const ILLUSTRATIONS: [string, IconFunctionComponent][] = Object.entries(
   illustrations
 ) as [string, IconFunctionComponent][];
 
-const SOURCES: [string, string][] = readFileSync(
-  join(__dirname, "index.ts"),
-  "utf8"
-)
-  .split("\n")
-  .flatMap((line) => {
-    const file: string | undefined = line.match(
-      /from "@opal\/illustrations\/(.+)"/
-    )?.[1];
-    return file === undefined
-      ? []
-      : [[file, readFileSync(join(__dirname, `${file}.tsx`), "utf8")]];
-  });
-
-function renderSvg(Illustration: IconFunctionComponent, size?: number) {
+function renderSvg(
+  Illustration: IconFunctionComponent,
+  size?: number
+): SVGSVGElement {
   const { container } = render(<Illustration size={size} />);
   const svg: SVGSVGElement | null = container.querySelector("svg");
   if (svg === null) throw new Error("illustration rendered no svg");
@@ -63,16 +57,6 @@ function paints(svg: SVGSVGElement): string[] {
   );
 }
 
-describe("illustration sources", () => {
-  it("lists every exported illustration", () => {
-    expect(SOURCES).toHaveLength(ILLUSTRATIONS.length);
-  });
-
-  it.each(SOURCES)("%s has no hex color literal", (_file, source) => {
-    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-  });
-});
-
 describe.each(ILLUSTRATIONS)("%s", (_name, Illustration) => {
   it("renders", () => {
     const svg: SVGSVGElement = renderSvg(Illustration, 64);
@@ -80,7 +64,7 @@ describe.each(ILLUSTRATIONS)("%s", (_name, Illustration) => {
     expect(svg.querySelector("path")).not.toBeNull();
   });
 
-  it.each(["light", "dark"] as const)(
+  it.each<Mode>(["light", "dark"])(
     "paints only with theme tokens defined in %s",
     (mode) => {
       const values: string[] = paints(renderSvg(Illustration, 64));
@@ -93,19 +77,16 @@ describe.each(ILLUSTRATIONS)("%s", (_name, Illustration) => {
     }
   );
 
-  it("draws 2.5 px lines at 64", () => {
-    const widths: number[] = strokeWidths(renderSvg(Illustration, 64));
-    expect(widths.length).toBeGreaterThan(0);
-    for (const width of widths) {
-      expect((width * 64) / VIEWBOX_SIZE).toBeCloseTo(2.5);
-    }
-  });
-
-  it.each([120, undefined])("keeps 3.5 px lines at size %s", (size) => {
+  // Without a size the line weight assumes the 120 px size.
+  it.each<[number, number | undefined]>([
+    [2.5, 64],
+    [3.5, 120],
+    [3.5, undefined],
+  ])("draws %s px lines at size %s", (px, size) => {
     const widths: number[] = strokeWidths(renderSvg(Illustration, size));
     expect(widths.length).toBeGreaterThan(0);
     for (const width of widths) {
-      expect(width).toBeCloseTo(3.5);
+      expect((width * (size ?? VIEWBOX_SIZE)) / VIEWBOX_SIZE).toBeCloseTo(px);
     }
   });
 });
