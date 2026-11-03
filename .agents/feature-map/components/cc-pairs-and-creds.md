@@ -48,7 +48,20 @@
   `?tab=indexing`.
 - **An admin opens a pair.** The connector page
   (`web/src/views/admin/connectors/ConnectorDetailPage/index.tsx`) shows the
-  status cards over two tabs. Connector Configurations holds the account, index
+  status cards over two tabs. The Indexing card
+  (`web/src/views/admin/connectors/ConnectorDetailPage/StatusCard.tsx`) shows
+  the pair's status, the stage hint while it indexes, hints to the latest prune
+  and check runs, the open-error count and the indexed count. It shows no
+  estimate bar, no document types and no size. Its status tag and the prune
+  and check hints go to the Indexing tab at that run
+  (`?tab=indexing&run=<id>&run_kind=<kind>`), and the stage hint opens the
+  live run's stage details on the card. Its error count focuses the latest
+  index run's card in the Activities panel. The panel opens by default only
+  when the pair has open errors, and the admin's choice holds for the session
+  (`useActivityPanelOpen`). The panel button hides and shows the panel beside
+  the column, and goes when the panel stacks under it. A pair with Sync access whose source syncs document permissions also
+  gets a Permissions Sync card: the sync's status, the documents synced and,
+  for a source that syncs groups, the group memberships. Connector Configurations holds the account, index
   configurations, sharing and schedule. Indexing holds the documents-indexed
   chart, hidden when its window has no indexing, and the run list. The Indexing
   tab stays disabled until the pair has an index attempt or indexed documents,

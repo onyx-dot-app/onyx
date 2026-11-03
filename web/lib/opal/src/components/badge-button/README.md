@@ -20,7 +20,7 @@ Every `Badge` prop except `ref`, plus:
 import { BadgeButton } from "@opal/components";
 import { SvgAlertTriangle, SvgXOctagon } from "@opal/icons";
 
-<BadgeButton icon={SvgAlertTriangle} title="3" color="warning" textColor="text-04" tooltip="View Errors" onClick={openErrors} />
+<BadgeButton icon={SvgAlertTriangle} title="3" color="warning" titleColor="text-04" tooltip="View Errors" onClick={openErrors} />
 
-<BadgeButton icon={SvgXOctagon} title="4" color="error" textColor="text-04" size={6} tooltip="4 failed" pressed={failedOnly} onClick={toggleFailed} />
+<BadgeButton icon={SvgXOctagon} title="4" color="error" titleColor="text-04" size={6} tooltip="4 failed" pressed={failedOnly} onClick={toggleFailed} />
 ```

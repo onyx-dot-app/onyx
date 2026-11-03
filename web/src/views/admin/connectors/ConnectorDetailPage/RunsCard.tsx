@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { richNodes } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -50,9 +50,11 @@ import {
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import RunRow, {
   RUN_KIND_ICONS,
+  hasInlineDetails,
   runErrorText,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import { useFocusedRow } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import type { RunRef } from "@/views/admin/connectors/ConnectorDetailPage/runLink";
 
 const PAGE_SIZE = 10;
 // A row's run list is a glance, and the connector page holds the rest.
@@ -98,6 +100,8 @@ export interface RunsCardProps {
   onFocusChange?: (focused: boolean) => void;
   /** The index attempt of the activity the page's panel points at: its run line lifts. */
   liftedAttemptId?: number | null;
+  /** A run to open, such as one a link points at. A list that misses it widens to that kind over all time. Each new object opens it again. */
+  openRun?: RunRef | null;
 }
 
 /** The empty list at the design's 64 px illustration. */
@@ -133,6 +137,7 @@ export default function RunsCard({
   range = null,
   onClearRange,
   liftedAttemptId = null,
+  openRun = null,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
@@ -244,10 +249,32 @@ export default function RunsCard({
       ...(data?.items ?? []).filter((run) => !runningKeys.has(runKey(run))),
     ].slice(0, pageSize);
   }, [runningFirst, runningData, data, pageSize]);
-  const { retain } = focus;
+  const { retain, setOpen } = focus;
   useEffect(() => {
     if (data !== undefined) retain(items.map(runKey));
   }, [data, items, retain]);
+  // A focused row with no details has no control to close it, so a link to one only selects the tab.
+  const openedRun = useRef<RunRef | null>(null);
+  const revealedRun = useRef<RunRef | null>(null);
+  useEffect(() => {
+    if (openRun === null || openedRun.current === openRun) return;
+    if (data === undefined || isLoading) return;
+    const run = items.find(
+      (item) => item.kind === openRun.kind && item.attempt.id === openRun.id
+    );
+    if (run !== undefined) {
+      openedRun.current = openRun;
+      if (hasInlineDetails(run)) setOpen(runKey(run), true);
+      return;
+    }
+    // Links point at a kind's latest run, so its kind over all time lists it first.
+    if (revealedRun.current === openRun) return;
+    revealedRun.current = openRun;
+    setKind(openRun.kind);
+    setStatusGroup(null);
+    setPage(1);
+    setWidened(true);
+  }, [openRun, data, isLoading, items, setOpen]);
 
   function pickWindow(next: PickerWindow) {
     // Picking the same window again still leaves the widened view.

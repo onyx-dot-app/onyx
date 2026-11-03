@@ -31,6 +31,7 @@ import {
 } from "@/lib/connectors/ccPair/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { RUNS_POLL_MS } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import { runHref } from "@/views/admin/connectors/ConnectorDetailPage/runLink";
 import {
   PLACEMENT_PROPS,
   type PopoverPlacement,
@@ -63,12 +64,6 @@ const GROUP_ORDER = {
 
 function errorKey(error: IndexAttemptError): number {
   return error.id;
-}
-
-/** The Indexing tab at one index run. The page reads `run=<id>` with `run_kind=<kind>`, indexing when absent, because attempt ids are unique only per kind. */
-function indexRunHref(ccPairId: number, attemptId: number): Route {
-  // SAFETY: /admin/connector/[id] is a page. Typed routes do not type the query string.
-  return `/admin/connector/${ccPairId}?tab=indexing&run=${attemptId}&run_kind=indexing` as Route;
 }
 
 interface RowIconButtonProps {
@@ -175,7 +170,9 @@ function FailedDocActions({
           <RowIconButton
             icon={SvgExternalLink}
             label={t("docs.resolvedByLaterRun")}
-            {...navigation.linkTo(indexRunHref(ccPairId, closingRun))}
+            {...navigation.linkTo(
+              runHref(ccPairId, { id: closingRun, kind: "indexing" })
+            )}
           />
         </Section>
       );
