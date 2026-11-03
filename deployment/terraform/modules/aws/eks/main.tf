@@ -23,7 +23,6 @@ locals {
       enable_monitoring              = true
       use_latest_ami_release_version = false
       min_size                       = 0
-      iam_role_description           = ""
       metadata_options = {
         http_endpoint               = "enabled"
         http_tokens                 = "required"
