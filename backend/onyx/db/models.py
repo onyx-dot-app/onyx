@@ -8068,57 +8068,47 @@ class SSOProvider(Base):
 
 
 class ConnectorEventInbox(Base):
-    """One pending document change pushed to Onyx by an event-based connector.
+    """One document change pushed by an event source.
 
-    The webhook server writes a row per event; a later drain claims rows inside
-    an ordinary docfetching run and yields the documents they describe. A row
-    completes only once the index attempt that claimed it succeeds, so nothing
-    is acknowledged before it is durable.
+    The webhook server writes it; a docfetching run claims it. It completes
+    only once the claiming index attempt succeeds.
     """
 
     __tablename__ = "connector_event_inbox"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
-    # Decides the ACL and the document attribution, so an event that resolves
-    # to no pair is rejected at the edge rather than stored.
     connector_credential_pair_id: Mapped[int] = mapped_column(
         ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
         nullable=False,
     )
-    # Denormalised from the pair's connector: lets a consumer route a row to
-    # its handler without a join. Immutable for a pair, so it cannot drift.
+    # Denormalised from the pair's connector to route a row without a join.
     source: Mapped[DocumentSource] = mapped_column(
         Enum(DocumentSource, native_enum=False), nullable=False
     )
 
-    # The source's own stable id, which becomes Document.id.
     document_id: Mapped[str] = mapped_column(String, nullable=False)
     event_type: Mapped[ConnectorEventType] = mapped_column(
         Enum(ConnectorEventType, native_enum=False, name="connectoreventtype"),
         nullable=False,
     )
-    # The provider's delivery id, or one the parser derives. Unique per pair,
-    # so a redelivered webhook writes nothing.
+    # Unique per pair, so a redelivered webhook writes nothing.
     event_key: Mapped[str] = mapped_column(String, nullable=False)
 
-    # The stored body. NULL on a delete. RESTRICT so file store cleanup cannot
-    # strand a pending row.
+    # NULL on a delete. RESTRICT so file store cleanup cannot strand a row.
     file_id: Mapped[str | None] = mapped_column(
         ForeignKey("file_record.file_id", ondelete="RESTRICT"), nullable=True
     )
-    # Source-specific extras the handler needs. Never the document body.
+    # Never the document body; that is in the file store.
     payload: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
 
     status: Mapped[ConnectorEventStatus] = mapped_column(
         Enum(ConnectorEventStatus, native_enum=False, name="connectoreventstatus"),
         nullable=False,
         default=ConnectorEventStatus.PENDING,
-        # `.name`: a non-native Enum column stores the member name, as every
-        # other enum column in this schema does.
+        # A non-native Enum column stores the member name.
         server_default=ConnectorEventStatus.PENDING.name,
     )
-    # The attempt that claimed the row; how the event is acknowledged.
     index_attempt_id: Mapped[int | None] = mapped_column(
         ForeignKey("index_attempt.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -8131,8 +8121,8 @@ class ConnectorEventInbox(Base):
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Source event time, which orders two events on one document. NULL when the
-    # provider sends none; `id` then orders them.
+    # Orders two events on one document. NULL when the provider sends none;
+    # `id` orders them then.
     occurred_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -8154,27 +8144,22 @@ class ConnectorEventInbox(Base):
     )
 
     __table_args__ = (
-        # Idempotent receipt: the writer inserts ON CONFLICT DO NOTHING.
         UniqueConstraint(
             "connector_credential_pair_id",
             "event_key",
             name="uq_connector_event_inbox_pair_event_key",
         ),
-        # The claim query's index. A claim is always for one pair, in id
-        # order, so the scan stops at the claim's limit with no sort.
         Index(
             "ix_connector_event_inbox_claim",
             "connector_credential_pair_id",
             "id",
             postgresql_where=text("status = 'PENDING'"),
         ),
-        # Collapsing several events for one document.
         Index(
             "ix_connector_event_inbox_pair_document",
             "connector_credential_pair_id",
             "document_id",
         ),
-        # Per-pair backlog counts and drain checks.
         Index(
             "ix_connector_event_inbox_pair_status",
             "connector_credential_pair_id",
