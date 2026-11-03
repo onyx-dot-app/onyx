@@ -1,8 +1,11 @@
+import asyncio
 from collections.abc import Coroutine
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp import ClientSession
+from mcp.types import CallToolResult, TextContent
 
 from onyx.server.features.mcp import client
 from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
@@ -116,3 +119,17 @@ def test_runtime_keeps_raw_unauthorized_response(
         client._call_mcp_client_function_sync(operation, "https://mcp.example.com")
     assert error.value is upstream
     assert client.has_unauthorized_response(error.value)
+
+
+def test_call_tool_preserves_server_error_flag() -> None:
+    result = CallToolResult(
+        content=[TextContent(type="text", text="Tool request failed")], isError=True
+    )
+    session = AsyncMock(spec=ClientSession)
+    session.call_tool.return_value = result
+
+    received = asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
+
+    assert received is result
+    session.initialize.assert_awaited_once()
+    session.call_tool.assert_awaited_once_with("lookup", {"id": 1})

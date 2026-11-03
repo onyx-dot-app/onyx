@@ -19,6 +19,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolInvocation, ToolResult
@@ -369,9 +370,11 @@ class TestMCPPassThroughOAuth:
             connection_headers: dict[str, str],
             transport: MCPTransport,  # noqa: ARG001
             auth: Any = None,  # noqa: ARG001
-        ) -> str:
+        ) -> CallToolResult:
             captured_headers.update(connection_headers)
-            return json.dumps(mocked_response)
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(mocked_response))]
+            )
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",

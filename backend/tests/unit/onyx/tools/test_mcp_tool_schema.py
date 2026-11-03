@@ -13,6 +13,7 @@ a JSON-Schema-valid `parameters` dict with a `properties` key.
 from unittest.mock import patch
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 
 from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
@@ -228,7 +229,9 @@ class TestMCPToolLLMNames:
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value='{"ok": true}',
+            return_value=CallToolResult(
+                content=[TextContent(type="text", text='{"ok": true}')]
+            ),
         ) as mock_call_mcp_tool:
             mcp_tool.run(
                 ToolInvocation(
