@@ -281,6 +281,28 @@ A bucket with uniform access, public access prevention, versioning, and a
 lifecycle rule for old versions. It grants the workload identity principal
 object access and the narrow read that Onyx needs at startup.
 
+`create_kms_key` (default off) creates a Cloud KMS key ring and key named after
+the bucket, in the bucket's location, with 90-day rotation. It grants only the
+project's GCS service agent use of the key. Cloud KMS never deletes key rings,
+so the name stays taken after a destroy. `expiration_days` (default off)
+deletes live objects after that many days.
+
+#### Sandbox archive bucket
+
+`onyx` creates a second `gcs` bucket when `enable_sandbox_archive_bucket` is
+true. It holds Craft sandbox session archives:
+
+- Its own Cloud KMS key (`create_kms_key = true`). The composition enables the
+  Cloud KMS API when `enable_project_apis` is on
+- Public access prevention, uniform access, versioning
+- Objects expire after `sandbox_archive_expiration_days` (default 30).
+  Noncurrent versions expire after `sandbox_archive_noncurrent_expiration_days`
+  (default 7)
+- No workload identity gets access. The api_server will hand out signed URLs
+
+Outputs: `sandbox_archive_bucket_name`, `sandbox_archive_kms_key_name` (null
+when off).
+
 ### `cloud-armor`
 
 A backend security policy with the OWASP Core Rule Set at sensitivity 1, an API
