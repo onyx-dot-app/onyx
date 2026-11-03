@@ -203,7 +203,7 @@ export const OpenSearchSizingCalculator = () => {
           <div className="space-y-1.5">
             <label htmlFor="os-total" className={label}>Total storage</label>
             <div className="flex items-center gap-2">
-              <input id="os-total" type="number" min="1" max="10000000" step="10" value={totalGB} onChange={(e) => setTotalGB(e.target.value)} className={input + " w-32"} />
+              <input id="os-total" type="number" min="1" max="10000000" step="10" value={totalGB} onChange={(e) => setTotalGB(Number(e.target.value) > MAX_TOTAL_GB ? String(MAX_TOTAL_GB) : e.target.value)} className={input + " w-32"} />
               <span className={hint}>GB</span>
             </div>
           </div>
