@@ -64,6 +64,15 @@ export const OpenSearchSizingCalculator = () => {
   const MAX_EMPLOYEES = 10_000_000;
   const MAX_YEARS = 50;
   const NODE_RAM = [16, 32, 64];
+  // Memory-optimized nodes (r8g) have 8 GB of RAM per vCPU.
+  const VCPU_FOR_RAM = { 16: 2, 32: 4, 64: 8 };
+  // One question runs about 10 hybrid searches: 4-8 on the first search call, 2-4 on a second.
+  const SEARCHES_PER_QUESTION = 10;
+  // CPU seconds per hybrid search, per embedding dimension and million chunks. Fit from two
+  // single-shard benchmarks near 1.5M chunks: 0.17 s at 384 dims and 0.48 s at 1024 dims.
+  const SEARCH_CPU_PER_DIM_MILLION = 0.0003;
+  const SEARCH_CPU_TARGET = 0.5;
+  const MAX_QPS = 10_000;
   const NODE_DISK = [64, 128, 256, 512, 1000, 1500, 3000, 6000];
   // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large, r8g.xlarge and r8g.2xlarge.
   const MAX_DISK_FOR_RAM = { 16: 1500, 32: 3000, 64: 6000 };
@@ -95,6 +104,7 @@ export const OpenSearchSizingCalculator = () => {
   const [modelIndex, setModelIndex] = useState(0);
   const [quant, setQuant] = useState("none");
   const [copies, setCopies] = useState(2);
+  const [peakQps, setPeakQps] = useState("0.5");
   const [nodeRamChoice, setNodeRamChoice] = useState("auto");
   const [nodeDiskChoice, setNodeDiskChoice] = useState("auto");
   const [rebuildRoom, setRebuildRoom] = useState(true);
@@ -120,6 +130,7 @@ export const OpenSearchSizingCalculator = () => {
     return (n / 1e9).toFixed(1) + "B";
   };
   const pct = (v) => Math.round(v * 100) + "%";
+  const fmtVcpus = (v) => (v < 10 ? v.toFixed(1) : String(Math.round(v))) + " vCPUs";
   const fmtDisk = (gb) => (gb < 1000 ? gb + " GB" : gb / 1000 + " TB");
 
   // Boundary i sits between part i and part i+1. The last boundary sets the
@@ -213,36 +224,63 @@ export const OpenSearchSizingCalculator = () => {
 
   // Step 2: lay the copies out on nodes.
   const zones = copies === 3 ? 3 : 1;
-  const allCopies = indexOneCopy * copies;
-  const provision = (allCopies * (rebuildRoom ? 2 : 1)) / DISK_FILL;
-  const hotAll = hotOneCopy * copies;
-  // Recommended memory is the smallest node size that fits on one node per copy;
-  // otherwise the largest, so the cluster adds nodes instead of growing nodes.
+  const qps = clampNumber(peakQps, MAX_QPS);
+  const searchCpuSeconds = SEARCH_CPU_PER_DIM_MILLION * dims * (chunks / 1e6);
+  const vcpusForSearch = (qps * SEARCHES_PER_QUESTION * searchCpuSeconds) / SEARCH_CPU_TARGET;
+  const primariesForSize = Math.max(1, Math.ceil(indexOneCopy / SHARD_BYTES));
   const cacheFor = (ram) => (ram - Math.min(ram / 2, 31)) * CACHE_SHARE_FOR_VECTORS * 1e9;
-  const baseNodes = Math.ceil(copies / zones) * zones;
-  const nodesFor = (ram) =>
-    Math.ceil(Math.max(copies, Math.ceil(hotAll / cacheFor(ram)), Math.ceil(provision / (MAX_DISK_FOR_RAM[ram] * 1e9))) / zones) * zones;
-  const recommendedRam = NODE_RAM.find((r) => nodesFor(r) <= baseNodes) || NODE_RAM[NODE_RAM.length - 1];
-  const nodeRam = nodeRamChoice === "auto" ? recommendedRam : nodeRamChoice;
-  const heapGB = Math.min(nodeRam / 2, 31);
-  const cachePerNode = (nodeRam - heapGB) * CACHE_SHARE_FOR_VECTORS * 1e9;
-  const nodesForMemory = Math.ceil(hotAll / cachePerNode);
-  // Recommended storage fills up at the same node count that memory and copies need.
-  const maxDisk = MAX_DISK_FOR_RAM[nodeRam];
-  const diskOptions = NODE_DISK.filter((d) => d <= maxDisk);
-  const nodesWithoutStorage = Math.ceil(Math.max(copies, nodesForMemory) / zones) * zones;
-  const neededPerNode = provision / 1e9 / nodesWithoutStorage;
-  const recommendedDisk = diskOptions.find((d) => d >= neededPerNode) || maxDisk;
-  const nodeDisk = nodeDiskChoice === "auto" ? recommendedDisk : Math.min(nodeDiskChoice, maxDisk);
-  const nodesForStorage = Math.ceil(provision / (nodeDisk * 1e9));
-  const nodes = Math.ceil(Math.max(copies, nodesForMemory, nodesForStorage) / zones) * zones;
-  const limit = nodes > nodesWithoutStorage ? "storage" : nodesForMemory > copies ? "memory" : "copies";
+  const layout = (c) => {
+    const provision = (indexOneCopy * c * (rebuildRoom ? 2 : 1)) / DISK_FILL;
+    const hotAll = hotOneCopy * c;
+    const searchNodesFor = (ram) => Math.ceil(vcpusForSearch / VCPU_FOR_RAM[ram]);
+    // Recommended memory is the smallest node size that fits on one node per copy;
+    // otherwise the largest, so the cluster adds nodes instead of growing nodes.
+    const baseNodes = Math.ceil(c / zones) * zones;
+    const nodesFor = (ram) =>
+      Math.ceil(
+        Math.max(c, Math.ceil(hotAll / cacheFor(ram)), Math.ceil(provision / (MAX_DISK_FOR_RAM[ram] * 1e9)), searchNodesFor(ram)) / zones
+      ) * zones;
+    const recommendedRam = NODE_RAM.find((r) => nodesFor(r) <= baseNodes) || NODE_RAM[NODE_RAM.length - 1];
+    const nodeRam = nodeRamChoice === "auto" ? recommendedRam : nodeRamChoice;
+    const heapGB = Math.min(nodeRam / 2, 31);
+    const cachePerNode = (nodeRam - heapGB) * CACHE_SHARE_FOR_VECTORS * 1e9;
+    const nodesForMemory = Math.ceil(hotAll / cachePerNode);
+    const nodesForSearch = searchNodesFor(nodeRam);
+    // Recommended storage fills up at the same node count that memory, copies and search need.
+    const maxDisk = MAX_DISK_FOR_RAM[nodeRam];
+    const diskOptions = NODE_DISK.filter((d) => d <= maxDisk);
+    const nodesWithoutStorage = Math.ceil(Math.max(c, nodesForMemory, nodesForSearch) / zones) * zones;
+    const neededPerNode = provision / 1e9 / nodesWithoutStorage;
+    const recommendedDisk = diskOptions.find((d) => d >= neededPerNode) || maxDisk;
+    const nodeDisk = nodeDiskChoice === "auto" ? recommendedDisk : Math.min(nodeDiskChoice, maxDisk);
+    const nodesForStorage = Math.ceil(provision / (nodeDisk * 1e9));
+    const nodes = Math.ceil(Math.max(c, nodesForMemory, nodesForStorage, nodesForSearch) / zones) * zones;
+    const limit =
+      nodes > nodesWithoutStorage
+        ? "storage"
+        : nodesForSearch > Math.max(c, nodesForMemory)
+          ? "search"
+          : nodesForMemory > c
+            ? "memory"
+            : "copies";
+    return { provision, hotAll, recommendedRam, nodeRam, cachePerNode, nodesForSearch, diskOptions, recommendedDisk, nodeDisk, nodes, limit };
+  };
+  // A search runs on one copy of every primary shard, so a node with no shard copy does no
+  // search work. When search needs more nodes than the shards sized for data have copies,
+  // add replicas: they change without a reindex, and every copy serves searches.
+  const first = layout(copies);
+  // Across 3 zones the copies stay a multiple of 3, one set in each zone.
+  const searchCopies = Math.ceil(first.nodesForSearch / primariesForSize / zones) * zones;
+  const effectiveCopies = Math.max(copies, searchCopies);
+  const { provision, hotAll, recommendedRam, nodeRam, cachePerNode, diskOptions, recommendedDisk, nodeDisk, nodes, limit } =
+    effectiveCopies > copies ? layout(effectiveCopies) : first;
+  const vcpusPerNode = VCPU_FOR_RAM[nodeRam];
   // Shards are whole units, so pick a primary count whose copies divide evenly over the
   // nodes. Then no node holds more than its share of the vectors and the data.
   const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
-  const primaryStep = nodes / gcd(copies, nodes);
+  const primaryStep = nodes / gcd(effectiveCopies, nodes);
   const primaries =
-    Math.ceil(Math.max(1, Math.ceil(indexOneCopy / SHARD_BYTES), Math.ceil(nodes / copies)) / primaryStep) * primaryStep;
+    Math.ceil(Math.max(primariesForSize, Math.ceil(nodes / effectiveCopies)) / primaryStep) * primaryStep;
 
   const card = "rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-transparent p-5";
   const label = "text-base font-medium text-gray-900 dark:text-gray-200";
@@ -564,6 +602,20 @@ export const OpenSearchSizingCalculator = () => {
             {segmented({ ariaLabel: "Copies of the data", value: copies, onChange: setCopies, options: [[1, "1"], [2, "2"], [3, "3"]] })}
             <div className={hint}>{COPY_HINT[copies]}</div>
           </div>
+          <div className="space-y-1.5">
+            <label htmlFor="os-qps" className={label + " block"}>Peak questions per second</label>
+            <input
+              id="os-qps"
+              type="number"
+              min="0"
+              max={MAX_QPS}
+              step="0.1"
+              value={peakQps}
+              onChange={(e) => setPeakQps(capped(e.target.value, MAX_QPS))}
+              className={input + " w-32"}
+            />
+            <div className={hint}>Questions to Onyx at the busiest time. Each question runs about 10 searches. As a guide, 100 active users ask about 1 question every 2 minutes each, or about 1 per second together.</div>
+          </div>
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label htmlFor="os-node" className={label}>Memory per data node</label>
@@ -593,7 +645,7 @@ export const OpenSearchSizingCalculator = () => {
                   <option key={d} value={String(d)}>{fmtDisk(d)}</option>
                 ))}
               </select>
-              <div className={hint}>Recommended storage fills up at the same node count that memory needs.</div>
+              <div className={hint}>Recommended storage fills up at the same node count that memory and search need.</div>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -612,20 +664,32 @@ export const OpenSearchSizingCalculator = () => {
                 ? "Set by storage: the cluster needs " + fmtBytes(provision) + " of disk, and each node has " + fmtDisk(nodeDisk) + "."
                 : limit === "memory"
                 ? "Set by memory: the vectors need " + fmtBytes(hotAll) + " of file cache, and each node has about " + fmtBytes(cachePerNode) + "."
-                : "Set by the copy count: " + copies + (copies === 1 ? " copy needs" : " copies need") + " at least " + copies + (copies === 1 ? " node" : " nodes") + (zones === 3 ? ", one in each zone" : "") + "."}
+                : limit === "search"
+                ? "Set by search load: peak searches need " + fmtVcpus(vcpusForSearch) + " at 50% CPU, and each node has " + vcpusPerNode + " vCPUs."
+                : "Set by the copy count: " + effectiveCopies + (effectiveCopies === 1 ? " copy needs" : " copies need") + " at least " + effectiveCopies + (effectiveCopies === 1 ? " node" : " nodes") + (zones === 3 ? ", one in each zone" : "") + "."}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {stat({ value: fmtBytes(provision), text: "storage to provision, all nodes" })}
             {stat({ value: fmtBytes(provision / nodes), text: "storage needed per node" })}
             {stat({ value: fmtBytes(hotAll), text: "RAM for vector search, all copies" })}
+            {stat({ value: fmtVcpus(vcpusForSearch), text: "for search at peak, " + vcpusPerNode * nodes + " in the cluster" })}
             {stat({ value: String(primaries), text: "primary shards" })}
+            {stat({ value: String(effectiveCopies), text: effectiveCopies === 1 ? "copy of the data" : "copies of the data" })}
           </div>
           <div className="space-y-1.5">
             <div className={label}>Onyx settings</div>
-            <pre className="overflow-x-auto rounded-lg bg-gray-50 p-3 font-mono text-sm text-gray-900 dark:bg-white/5 dark:text-gray-100">{"OPENSEARCH_INDEX_NUM_SHARDS=" + primaries + "\nOPENSEARCH_INDEX_NUM_REPLICAS=" + (copies - 1)}</pre>
+            <pre className="overflow-x-auto rounded-lg bg-gray-50 p-3 font-mono text-sm text-gray-900 dark:bg-white/5 dark:text-gray-100">{"OPENSEARCH_INDEX_NUM_SHARDS=" + primaries + "\nOPENSEARCH_INDEX_NUM_REPLICAS=" + (effectiveCopies - 1)}</pre>
             <div className={hint}>Set these before the first indexing run. Onyx fixes the shard count when it creates the index.</div>
           </div>
+          {effectiveCopies > copies ? (
+            <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+              {"Search load needs " + first.nodesForSearch + " nodes, but " + primariesForSize + (primariesForSize === 1 ? " primary shard" : " primary shards") + " × " + copies + (copies === 1 ? " copy" : " copies") + " gives only " + primariesForSize * copies + " shard copies, and a node with no shard copy does no search work. The calculator raises the copies to " + effectiveCopies + (zones === 3 ? ", a multiple of 3 for the 3 zones" : "") + ". Each copy needs its own memory and disk. Replicas can change later without a reindex."}
+            </div>
+          ) : null}
+          {limit === "search" ? (
+            <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">Search load sets the node count. Nodes with more vCPUs per GB of RAM, such as general-purpose (m8g) nodes, can carry the same load with fewer nodes.</div>
+          ) : null}
           {limit === "memory" && quant === "none" ? (
             <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">Memory sets the node count. 1-bit quantization (OpenSearch 3.6 or later) stores vectors 32× smaller.</div>
           ) : null}

@@ -96,7 +96,8 @@ The other Onyx components keep the sizes in the tables above.
 
 Use the calculator to estimate the OpenSearch storage, memory, and cluster size for your data.
 Step 1 estimates what your data needs. Start from your total storage, from the item count of each source,
-such as 2 million Google Docs, or from your number of employees. Step 2 puts that data on OpenSearch nodes.
+such as 2 million Google Docs, or from your number of employees.
+Step 2 puts that data on OpenSearch nodes and sizes them for your peak search load.
 
 <OpenSearchSizingCalculator />
 
@@ -111,6 +112,10 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | Chunks per employee per year | 1,500 | Estimate from managed deployments, which range from about 200 to 1,500. Each year, one employee adds about 50 files (500 chunks), 100 email threads (400), 300 chat threads (300), 50 tickets (100), 25 wiki pages (100), and 100 chunks from other sources. If every employee's email is indexed, email is about 4,000 chunks instead of 400, so the rate becomes about 5,100. Older years usually add less than recent ones, so a long history errs on the high side. |
 | Memory for vector search | Node RAM minus the JVM heap | The heap uses half of the RAM, at most 31 GB. The calculator counts 80% of the rest for vectors. |
 | Memory per data node | 64 GB or less | The JVM heap stops at about 31 GB. For more data, add nodes instead of larger nodes. |
+| Searches per question | 10 hybrid searches | The first search call runs 4–8 searches: the rephrased question, the LLM's queries, the original question, and up to 3 keyword queries. A second call runs 2–4. |
+| CPU per hybrid search | 0.0003 core-seconds × dimensions × millions of chunks | Fit from two single-shard benchmarks near 1.5 million chunks: 0.17 seconds at 384 dimensions and 0.48 seconds at 1,024 dimensions. Growth with chunk count is an estimate. |
+| CPU for search at peak | 50% | Leaves room for indexing, merges, and bursts. Above it, searches queue and then fail. |
+| vCPUs per data node | 1 per 8 GB of RAM | Memory-optimized nodes, such as Amazon `r8g`. |
 | Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |
 | Shard size | 15 GB or less | Amazon OpenSearch Service recommends 10 GB to 30 GB per shard for search workloads. The calculator aims low so the index can grow without a change of shard count. |
 
@@ -176,26 +181,33 @@ GET _cat/indices/danswer_chunk*?v&h=index,docs.count,pri.store.size,store.size
 | Search is slow and JVM heap use is low | Add memory or data nodes, or use 1-bit quantization (OpenSearch 3.6 or later), which stores vectors 32× smaller |
 | JVM heap use stays above 75%, or requests fail with `CircuitBreakingException` | Raise the heap, up to 50% of the node's RAM and at most 31 GB. Raise the container memory limit too. |
 | Shards grow above 30 GB | Plan a reindex with a higher `OPENSEARCH_INDEX_NUM_SHARDS` |
+| CPU stays above 50% at peak, the search queue grows, or searches are rejected | Add replicas and data nodes. Each replica serves searches, and replicas change without a reindex. |
 
 You can add data nodes, storage, memory, and replicas later without a reindex.
 The number of primary shards is fixed when Onyx creates the index. To change it, Onyx must build a new index.
 
 ### Example
 
-500 GB of storage with the default storage mix holds about 35 GB of text, or 18.5 million chunks. With 30% growth,
+500 GB of storage with the default storage mix holds about 35 GB of text, or 18.6 million chunks. With 30% growth,
 the calculator plans for 24 million chunks.
 
 | Setup | Index size, one copy | Memory for vector search, one copy | Cluster | Onyx settings |
 | --- | --- | --- | --- | --- |
-| Granite (384 dimensions), 2 copies | 106 GB | 37.8 GB | 3 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite (384 dimensions), 2 copies, no search load | 106 GB | 38 GB | 3 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 | Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 16 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Granite, 1 copy | 106 GB | 37.8 GB | 2 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
+| Granite, 1 copy, no search load | 106 GB | 38 GB | 2 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
 | Same, with 1-bit quantization | 107 GB | 2.1 GB | 1 node, 16 GB RAM and 512 GB storage | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
+| Granite, 2 copies, 0.5 questions per second at peak | 106 GB | 38 GB | 4 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 
 The shard count makes the shard copies divide evenly over the nodes, so no node holds more than its share.
 1-bit quantization needs OpenSearch 3.6 or later. It stores vectors 32× smaller,
 so the memory for vector search drops about 18× in this example (the graph links stay the same size).
 Storage barely changes.
+
+At 0.5 questions per second, the searches need about 28 vCPUs at peak, so the cluster needs 4 nodes with 8 vCPUs each.
+1-bit quantization does not reduce this, because it saves memory, not search CPU.
+When search needs more nodes than there are shard copies, the calculator adds replicas,
+because a node without a shard copy does no search work.
 
 Onyx applies both settings when it creates an index. To change the replica count of an existing index,
 update the index setting `number_of_replicas` in OpenSearch.
