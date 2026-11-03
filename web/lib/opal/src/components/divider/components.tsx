@@ -260,6 +260,9 @@ function FoldableDivider({
                   data-position="start"
                   data-open={isOpen}
                   data-folded-chevron={foldedChevron}
+                  // The header is the control; a nested button would be
+                  // flattened inside its role="button".
+                  aria-hidden
                 >
                   <Button
                     icon={SvgChevronDown}
@@ -288,7 +291,11 @@ function FoldableDivider({
               </div>
               <div className="opal-divider-line" />
               {chevronPosition === "end" && (
-                <div className="opal-divider-chevron" data-open={isOpen}>
+                <div
+                  className="opal-divider-chevron"
+                  data-open={isOpen}
+                  aria-hidden
+                >
                   <Button
                     icon={SvgChevronRight}
                     size="sm"
