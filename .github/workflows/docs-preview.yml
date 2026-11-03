@@ -25,6 +25,9 @@ jobs:
       && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The Mintlify key for docs-publish lives in the protected release environment. This
+    # job reads its own copy from the docs-preview environment.
+    environment: docs-preview
     permissions:
       contents: read
       pull-requests: write
@@ -40,7 +43,7 @@ jobs:
         id: preview
         run: |
           if [ -z "$MINTLIFY_PROJECT_ID" ] || [ -z "$MINTLIFY_API_KEY" ]; then
-            echo "::warning::Mintlify is not configured; no preview was built"
+            echo "::warning::Set MINTLIFY_API_KEY and MINTLIFY_PROJECT_ID in the docs-preview environment to build previews"
             echo "status=skipped" >> "$GITHUB_OUTPUT"
             exit 0
           fi
