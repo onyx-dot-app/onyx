@@ -33,12 +33,12 @@ export const OpenSearchSizingCalculator = () => {
     { name: "Gemini embedding-001", dims: 3072 },
   ];
   // Mean chunks per item across Onyx Cloud tenants (November 2026), rounded. Spreadsheets are an
-  // estimate: Onyx caps a workbook at 24 chunks, and most measured sheets predate that cap.
+  // estimate: Onyx caps a workbook at 24 chunks, and sheets indexed under the cap average 3.6.
   const SOURCES = [
     { key: "docs", label: "Documents", examples: "Google Docs, Word", unit: "files", ratio: 7 },
     { key: "pdfs", label: "PDFs", examples: "From any drive or upload", unit: "files", ratio: 12 },
     { key: "slides", label: "Slide decks", examples: "Google Slides, PowerPoint", unit: "files", ratio: 9 },
-    { key: "sheets", label: "Spreadsheets", examples: "Google Sheets, Excel. Onyx indexes at most 24 chunks per file.", unit: "files", ratio: 20 },
+    { key: "sheets", label: "Spreadsheets", examples: "Google Sheets, Excel. Onyx indexes at most 24 chunks per file.", unit: "files", ratio: 10 },
     { key: "images", label: "Images", examples: "Photos, screenshots", unit: "files", ratio: 1 },
     { key: "wiki", label: "Wiki pages", examples: "Confluence, Notion", unit: "pages", ratio: 4 },
     { key: "tickets", label: "Tickets and issues", examples: "Jira, Zendesk, GitHub", unit: "tickets", ratio: 2 },
