@@ -108,6 +108,9 @@ func TestStackProvider_infraPortsAndEnv(t *testing.T) {
 }
 
 func TestStackProvider_composeUpWritesPortsAndExcludesLocalModel(t *testing.T) {
+	// The shell's image overrides would skip the model server pin and pull.
+	t.Setenv("IMAGE_TAG", "")
+	t.Setenv("ONYX_MODEL_SERVER_IMAGE", "")
 	root, calls := stackTestRepo(t)
 	stack, provider := openStack(nil)
 

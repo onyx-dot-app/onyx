@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "Commit"
+      },
+      "commitDate": {
+        "label": "Fecha del commit"
+      },
+      "instanceUrl": {
+        "label": "URL de la instancia"
+      },
+      "label": "Acerca de",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "No disponible",
+      "version": {
+        "label": "Versión"
+      }
+    },
     "accountFallback": {
       "label": "Cuenta"
     },
@@ -2221,7 +2240,8 @@
       },
       "searchDecisionModel": {
         "description": "Selecciona los documentos recuperados y decide cuánto contexto agregar. Un modelo de decisión los clasifica en una sola llamada. Un modelo de lenguaje los selecciona como antes.",
-        "title": "Modelo de decisión de búsqueda"
+        "title": "Modelo de decisión de búsqueda",
+        "decisionSection": "Modelos de decisión"
       },
       "taskModels": {
         "loadFailed": "No se pudieron cargar los modelos de tareas",
@@ -7316,6 +7336,7 @@
       },
       "vectorQuantization": {
         "description": "Almacena los vectores de los documentos con menos bits para que la búsqueda vectorial use menos memoria. Menos bits pueden reducir la calidad de la búsqueda. Si solo cambias este ajuste, el índice se reconstruye a partir de los vectores almacenados, sin volver a generar embeddings.",
+        "needsVersion": "Requiere OpenSearch {version}+",
         "none": {
           "description": "Precisión completa de 32 bits.",
           "label": "Ninguna"
@@ -7328,7 +7349,8 @@
           "description": "Unas 4 veces menos memoria para la búsqueda vectorial. Casi sin pérdida de calidad de búsqueda.",
           "label": "7 bits"
         },
-        "title": "Cuantización de vectores"
+        "title": "Cuantización de vectores",
+        "unsupportedTooltip": "Este clúster usa OpenSearch {current}. Actualiza OpenSearch a {version} o posterior para usar este nivel."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Este conector se eliminará} other {Estos # conectores se eliminarán}}",
@@ -12098,9 +12120,6 @@
         "builtin": {
           "label": "Integrada"
         },
-        "custom": {
-          "label": "Personalizada"
-        },
         "invalid": {
           "label": "No válida"
         },
@@ -12112,6 +12131,12 @@
         },
         "unavailable": {
           "label": "No disponible: haz clic para más información"
+        },
+        "shared": {
+          "label": "Compartido"
+        },
+        "organization": {
+          "label": "Organización"
         }
       },
       "toggle": {
@@ -13303,14 +13328,14 @@
           "title": "Tu organización"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Editar"
+          "canEdit": {
+            "label": "Puede editar"
+          },
+          "canUse": {
+            "label": "Puede usar"
           },
           "removeAccess": {
             "label": "Quitar acceso"
-          },
-          "viewAndChat": {
-            "label": "Ver y chatear"
           }
         },
         "privateOption": {
@@ -16744,6 +16769,9 @@
         },
         "webSearch": {
           "label": "Búsqueda web"
+        },
+        "skills": {
+          "label": "Habilidades"
         }
       },
       "sections": {
@@ -17057,6 +17085,9 @@
         "inspectFailed": "No se pudo inspeccionar el paquete de la habilidad",
         "saveFailed": "No se pudo guardar la habilidad",
         "saved": "Se guardó \"{name}\""
+      },
+      "creationAccess": {
+        "title": "Acceso"
       }
     },
     "modals": {
@@ -17095,6 +17126,13 @@
           "singleSkill": "Sube una habilidad cada vez.",
           "title": "Requisitos del archivo",
           "zip": "Los archivos ZIP deben contener un archivo SKILL.md."
+        },
+        "batch": {
+          "title": "Acceso a habilidades subidas",
+          "selected": "{count, plural, one {# paquete de habilidad seleccionado} other {# paquetes de habilidades seleccionados}}",
+          "result": "{imported, plural, one {# habilidad importada} other {# habilidades importadas}}. {failed, plural, one {# fallo} other {# fallos}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "Selecciona varios archivos ZIP para importar habilidades juntas. Cada ZIP debe contener una habilidad."
         }
       },
       "importGithub": {
@@ -17171,6 +17209,11 @@
         "unavailableFallback": "Esta habilidad no se puede importar.",
         "unavailableTag": {
           "label": "No se puede importar"
+        },
+        "sharing": {
+          "title": "Acceso a habilidades importadas",
+          "configureButton": "Configurar acceso",
+          "description": "Estos ajustes de acceso se aplican a {count, plural, one {la habilidad seleccionada} other {las # habilidades seleccionadas}}."
         }
       },
       "nameConflict": {
@@ -17235,9 +17278,7 @@
         },
         "ownerLabel": "Propietario",
         "permissionMenu": {
-          "ariaLabel": "Actualizar el acceso de {name}",
-          "canUse": "Puede usar",
-          "canEdit": "Puede editar"
+          "ariaLabel": "Actualizar el acceso de {name}"
         },
         "saveButton": {
           "label": "Guardar"
@@ -17279,11 +17320,15 @@
       },
       "placeholders": {
         "githubRepository": "propietario/repositorio o https://github.com/propietario/repositorio"
+      },
+      "tabs": {
+        "details": "Detalles",
+        "sharing": "Compartir"
       }
     },
     "page": {
       "browse": {
-        "title": "Explorar habilidades"
+        "title": "Seleccionar habilidades"
       },
       "countSeparator": {
         "label": "{count, plural, one {Habilidad} other {Habilidades}}"
@@ -17311,8 +17356,8 @@
           "title": "No hay habilidades coincidentes"
         },
         "noSkills": {
-          "description": "Aún no se han compartido habilidades personalizadas contigo y no hay habilidades integradas configuradas.",
-          "title": "No hay habilidades disponibles"
+          "title": "Aún no hay habilidades personalizadas",
+          "description": "Crea o importa una habilidad para añadirla a tu biblioteca."
         }
       },
       "focusedApp": {
@@ -17349,6 +17394,9 @@
         "disableFailed": "No se pudo desactivar {name}",
         "enableFailed": "No se pudo activar {name}",
         "refreshFailed": "{name} se actualizó, pero no se pudo actualizar la lista de habilidades."
+      },
+      "builtins": {
+        "title": "Habilidades integradas ({count, number})"
       }
     },
     "sections": {
@@ -17404,6 +17452,34 @@
           "readFailed": "No se pudo leer el archivo subido."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Todos en la organización pueden acceder a esta habilidad.} other {Todos en la organización pueden acceder a estas habilidades.}}",
+      "selected": "Compartido con {users, plural, one {# persona} other {# personas}} y {groups, plural, one {# grupo} other {# grupos}}.",
+      "private": "{count, plural, one {Solo tú puedes acceder a esta habilidad.} other {Solo tú puedes acceder a estas habilidades.}}"
+    },
+    "bulk": {
+      "adminDescription": "Gestiona las habilidades y el acceso en toda tu organización.",
+      "selectAll": "Seleccionar todas las habilidades personalizadas visibles",
+      "selected": "{count, plural, one {# seleccionada} other {# seleccionadas}}",
+      "share": "Compartir",
+      "enable": "Activar para mí",
+      "disable": "Desactivar para mí",
+      "delete": "Eliminar",
+      "selectSkill": "Seleccionar {name}",
+      "updated": "{count, plural, one {# habilidad actualizada} other {# habilidades actualizadas}}",
+      "failed": "No se pudieron actualizar las habilidades. Inténtalo de nuevo.",
+      "partialFailure": "{count, plural, one {No se pudo actualizar # habilidad} other {No se pudieron actualizar # habilidades}}",
+      "deleteTitle": "{count, plural, one {¿Eliminar # habilidad?} other {¿Eliminar # habilidades?}}",
+      "deleteDescription": "{count, plural, one {Esto elimina la habilidad seleccionada para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina las # habilidades seleccionadas para todas las personas con acceso. Esta acción no se puede deshacer.}}",
+      "shareTitle": "{count, plural, one {Actualizar acceso para # habilidad} other {Actualizar acceso para # habilidades}}",
+      "shareDescription": "Aplica estos cambios a cada habilidad seleccionada. Los ajustes que no cambies conservan sus valores actuales.",
+      "unchanged": "Mantener sin cambios",
+      "everyone": "Todos en la organización",
+      "invitedOnly": "Personas y grupos invitados",
+      "addAccessDescription": "Añade estas personas y grupos a cada habilidad seleccionada. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
+      "apply": "{count, plural, one {Aplicar a # habilidad} other {Aplicar a # habilidades}}",
+      "moreActions": "Más acciones"
     }
   },
   "opensearchHealth": {

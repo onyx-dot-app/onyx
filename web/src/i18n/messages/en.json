@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "Commit"
+      },
+      "commitDate": {
+        "label": "Commit Date"
+      },
+      "instanceUrl": {
+        "label": "Instance URL"
+      },
+      "label": "About",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "Not available",
+      "version": {
+        "label": "Version"
+      }
+    },
     "accountFallback": {
       "label": "Account"
     },
@@ -2221,7 +2240,8 @@
       },
       "searchDecisionModel": {
         "description": "Selects retrieved documents and decides how much context to add. A decision model ranks them in one call. A language model selects them as before.",
-        "title": "Search Decision Model"
+        "title": "Search Decision Model",
+        "decisionSection": "Decision Models"
       },
       "taskModels": {
         "loadFailed": "Could not load task models",
@@ -7316,6 +7336,7 @@
       },
       "vectorQuantization": {
         "description": "Store document vectors with fewer bits so vector search uses less memory. Fewer bits can lower search quality. Changing only this setting rebuilds the index from the stored vectors, without re-embedding.",
+        "needsVersion": "Needs OpenSearch {version}+",
         "none": {
           "description": "Full 32-bit precision.",
           "label": "None"
@@ -7328,7 +7349,8 @@
           "description": "About 4x less vector search memory. Almost no loss in search quality.",
           "label": "7-bit"
         },
-        "title": "Vector Quantization"
+        "title": "Vector Quantization",
+        "unsupportedTooltip": "This cluster runs OpenSearch {current}. Upgrade OpenSearch to {version} or later to use this level."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {This connector will be deleted} other {These # connectors will be deleted}}",
@@ -12098,9 +12120,6 @@
         "builtin": {
           "label": "Built-in"
         },
-        "custom": {
-          "label": "Custom"
-        },
         "invalid": {
           "label": "Invalid"
         },
@@ -12112,6 +12131,12 @@
         },
         "unavailable": {
           "label": "Unavailable - click to learn more"
+        },
+        "shared": {
+          "label": "Shared"
+        },
+        "organization": {
+          "label": "Organization"
         }
       },
       "toggle": {
@@ -13303,14 +13328,14 @@
           "title": "Your Organization"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Edit"
+          "canEdit": {
+            "label": "Can edit"
+          },
+          "canUse": {
+            "label": "Can use"
           },
           "removeAccess": {
             "label": "Remove Access"
-          },
-          "viewAndChat": {
-            "label": "View & Chat"
           }
         },
         "privateOption": {
@@ -16744,6 +16769,9 @@
         },
         "webSearch": {
           "label": "Web Search"
+        },
+        "skills": {
+          "label": "Skills"
         }
       },
       "sections": {
@@ -17057,6 +17085,9 @@
         "inspectFailed": "Failed to inspect skill bundle",
         "saveFailed": "Failed to save skill",
         "saved": "Saved \"{name}\""
+      },
+      "creationAccess": {
+        "title": "Access"
       }
     },
     "modals": {
@@ -17095,6 +17126,13 @@
           "singleSkill": "Upload one skill at a time.",
           "title": "File requirements",
           "zip": "ZIP files must contain a SKILL.md file."
+        },
+        "batch": {
+          "title": "Access for Uploaded Skills",
+          "selected": "{count, plural, one {# skill bundle selected} other {# skill bundles selected}}",
+          "result": "{imported, plural, one {# skill imported} other {# skills imported}}. {failed, plural, one {# failed} other {# failed}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "Select multiple ZIP files to import skills together. Each ZIP must contain one skill."
         }
       },
       "importGithub": {
@@ -17171,6 +17209,11 @@
         "unavailableFallback": "This skill cannot be imported.",
         "unavailableTag": {
           "label": "Can't import"
+        },
+        "sharing": {
+          "title": "Access for Imported Skills",
+          "configureButton": "Configure access",
+          "description": "These access settings apply to all {count, plural, one {# selected skill} other {# selected skills}}."
         }
       },
       "nameConflict": {
@@ -17235,9 +17278,7 @@
         },
         "ownerLabel": "Owner",
         "permissionMenu": {
-          "ariaLabel": "Update access for {name}",
-          "canUse": "Can use",
-          "canEdit": "Can edit"
+          "ariaLabel": "Update access for {name}"
         },
         "saveButton": {
           "label": "Save"
@@ -17279,11 +17320,15 @@
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"
+      },
+      "tabs": {
+        "details": "Details",
+        "sharing": "Sharing"
       }
     },
     "page": {
       "browse": {
-        "title": "Browse skills"
+        "title": "Select skills"
       },
       "countSeparator": {
         "label": "{count, plural, one {Skill} other {Skills}}"
@@ -17311,8 +17356,8 @@
           "title": "No matching skills"
         },
         "noSkills": {
-          "description": "No custom skills have been shared with you yet, and no built-ins are configured.",
-          "title": "No skills available"
+          "title": "No custom skills yet",
+          "description": "Create or import a skill to add it to your library."
         }
       },
       "focusedApp": {
@@ -17349,6 +17394,9 @@
         "disableFailed": "Failed to disable {name}",
         "enableFailed": "Failed to enable {name}",
         "refreshFailed": "{name} was updated, but the skill list could not be refreshed."
+      },
+      "builtins": {
+        "title": "Built-in skills ({count, number})"
       }
     },
     "sections": {
@@ -17404,6 +17452,34 @@
           "readFailed": "Could not read the upload."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Everyone in the organization can access this skill.} other {Everyone in the organization can access these skills.}}",
+      "selected": "Shared with {users, plural, one {# person} other {# people}} and {groups, plural, one {# group} other {# groups}}.",
+      "private": "{count, plural, one {Only you can access this skill.} other {Only you can access these skills.}}"
+    },
+    "bulk": {
+      "adminDescription": "Manage skills and access across your organization.",
+      "selectAll": "Select all visible custom skills",
+      "selected": "{count, plural, one {# selected} other {# selected}}",
+      "share": "Share",
+      "enable": "Enable for me",
+      "disable": "Disable for me",
+      "delete": "Delete",
+      "selectSkill": "Select {name}",
+      "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
+      "failed": "Could not update skills. Try again.",
+      "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
+      "deleteTitle": "{count, plural, one {Delete # skill?} other {Delete # skills?}}",
+      "deleteDescription": "{count, plural, one {This deletes the selected skill for everyone who has access. This cannot be undone.} other {This deletes all # selected skills for everyone who has access. This cannot be undone.}}",
+      "shareTitle": "{count, plural, one {Update Access for # Skill} other {Update Access for # Skills}}",
+      "shareDescription": "Apply these changes to every selected skill. Settings left unchanged keep their current values.",
+      "unchanged": "Keep unchanged",
+      "everyone": "Everyone in the organization",
+      "invitedOnly": "Invited people and groups",
+      "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
+      "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
+      "moreActions": "More actions"
     }
   },
   "opensearchHealth": {

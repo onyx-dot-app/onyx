@@ -13,6 +13,7 @@ import {
 import { useUser } from "@/providers/UserProvider";
 import { loginPath } from "@/lib/auth/paths";
 import {
+  Button,
   Dropdown,
   LineItemButton,
   SidebarTab,
@@ -21,27 +22,27 @@ import {
   type DropdownView,
 } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
+import NotificationsPopover from "@/lib/app/components/NotificationsPopover";
 import {
   SvgBell,
+  SvgChevronLeft,
   SvgExternalLink,
   SvgHelpCircle,
+  SvgInfo,
   SvgLogOut,
   SvgSliders,
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content, toast, useSidebarFolded } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { ContentAction, Section, toast, useSidebarFolded } from "@opal/layouts";
 import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
-import { SvgOnyxLogo } from "@opal/logos";
 import { SidebarLoader } from "@opal/loaders";
-import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
+import { AboutDetails } from "@/lib/app/components/AboutDetails";
 
 interface SettingsItemsProps {
   undismissedCount: number;
@@ -62,6 +63,7 @@ function useSettingsItems({
     user?.is_anonymous_user || checkUserIsNoAuthUser(user?.id ?? "");
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
   const showLogin = isAnonymousUser;
+  const userRowRef = useRef<HTMLDivElement>(null);
 
   const query = searchParams?.toString();
   const currentUrl = query ? `${pathname}?${query}` : pathname;
@@ -94,16 +96,26 @@ function useSettingsItems({
     {
       kind: "custom",
       id: "user-email",
-      disabled: true,
+      keepOpen: true,
+      // ArrowRight moves focus to the About button; Enter then presses it.
+      onSecondary: () =>
+        userRowRef.current?.querySelector<HTMLElement>("button")?.focus(),
       render: ({ props }) => (
-        <div {...props} className="p-2">
-          <Content
+        <div {...props} ref={userRowRef}>
+          <ContentAction
             sizePreset="main-ui"
             title={
               userResolution === "unavailable"
                 ? t("profileUnavailable.title")
                 : getUserEmail(user)
             }
+            // 4px around the 28px button: concentric in the 36px row.
+            rightChildren={
+              <Section width="fit" height="fit" padding={1}>
+                <AboutButton />
+              </Section>
+            }
+            center
           />
         </div>
       ),
@@ -135,7 +147,9 @@ function useSettingsItems({
               title={t("notifications.label")}
               rightChildren={
                 undismissedCount ? (
-                  <SvgNotificationBubble count={undismissedCount} />
+                  <Section width="fit" height="fit" padding={1}>
+                    <SvgNotificationBubble count={undismissedCount} />
+                  </Section>
                 ) : undefined
               }
               {...props}
@@ -164,58 +178,91 @@ function useSettingsItems({
               },
             ]
           : []),
-        ...(showLogin
-          ? [
-              {
-                kind: "action" as const,
-                id: "log-in",
-                icon: SvgUser,
-                title: t("logIn.label"),
-                onSelect: handleLogin,
-              },
-            ]
-          : []),
-        ...(showLogout
-          ? [
-              {
-                kind: "action" as const,
-                id: "log-out",
-                icon: SvgLogOut,
-                danger: true,
-                title: t("signOut.label"),
-                onSelect: handleLogout,
-              },
-            ]
-          : []),
       ],
     },
-    {
-      kind: "group",
-      items: [
-        {
-          kind: "custom",
-          id: "version",
-          disabled: true,
-          render: ({ props }) => (
-            <div {...props} className="p-2">
-              <Content
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
-                orientation="reverse"
-                icon={SvgOnyxLogo}
-                title={markdown(
-                  `[Onyx ${
-                    settings.version ?? "dev"
-                  }](https://docs.onyx.app/changelog)`
-                )}
-              />
-            </div>
-          ),
-        },
-      ],
-    },
+    ...(showLogin || showLogout
+      ? [
+          {
+            kind: "group" as const,
+            items: [
+              ...(showLogin
+                ? [
+                    {
+                      kind: "action" as const,
+                      id: "log-in",
+                      icon: SvgUser,
+                      title: t("logIn.label"),
+                      onSelect: handleLogin,
+                    },
+                  ]
+                : []),
+              ...(showLogout
+                ? [
+                    {
+                      kind: "action" as const,
+                      id: "log-out",
+                      icon: SvgLogOut,
+                      danger: true,
+                      title: t("signOut.label"),
+                      onSelect: handleLogout,
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
   ];
+}
+
+/** Opens the about page, beside the user's email. */
+function AboutButton() {
+  const t = useTranslations("accountPopover");
+  const views = useDropdownViews();
+  return (
+    <Button
+      icon={SvgInfo}
+      prominence="tertiary"
+      size="md"
+      tooltip={t("about.label")}
+      aria-label={t("about.label")}
+      onClick={() => views.push("about")}
+    />
+  );
+}
+
+/** The about page: a back row, then the build's details. */
+function useAboutView(): DropdownView {
+  const t = useTranslations("accountPopover");
+  const detailsRef = useRef<HTMLDivElement>(null);
+  // ArrowRight on the details row moves focus to its first link; Tab then
+  // walks the rest, as on the notifications page.
+  const focusDetails = () =>
+    detailsRef.current?.querySelector<HTMLElement>("a")?.focus();
+  return {
+    // Wider than the menu, so long values (a URL, a ref) fit on one line.
+    width: 80,
+    items: [
+      {
+        kind: "action",
+        id: "about-back",
+        icon: SvgChevronLeft,
+        title: t("about.label"),
+        onSelect: (views) => views.pop(),
+      },
+      {
+        kind: "custom",
+        id: "about-details",
+        keepOpen: true,
+        onSecondary: focusDetails,
+        render: ({ props }) => (
+          <div {...props} ref={detailsRef}>
+            <AboutDetails />
+          </div>
+        ),
+      },
+    ],
+  };
 }
 
 interface NotificationsPageProps {
@@ -268,6 +315,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
     setMenuOpen(state);
   };
   const items = useSettingsItems({ undismissedCount });
+  const aboutView = useAboutView();
   // ArrowRight on the page row moves focus into it; Tab then walks its
   // controls. Not on activation: a click on a control inside the page
   // bubbles to the row, and must not pull focus off that control.
@@ -334,7 +382,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
         // list must not add a second cap around it.
         maxHeight="none"
         items={items}
-        views={{ notifications: notificationsView }}
+        views={{ notifications: notificationsView, about: aboutView }}
       />
     </Dropdown>
   );

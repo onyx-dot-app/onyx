@@ -40,6 +40,50 @@ describe("ShareSkillModal", () => {
     mockUpdateSkillShares.mockReset().mockResolvedValue({});
   });
 
+  it("keeps sharing edits while switching between the details and sharing tabs", async () => {
+    mockLoadSkill.mockImplementation(async (url: string) => ({
+      ...customFixture({ user_permission: "OWNER" }),
+      ...(url.endsWith("/preview")
+        ? { instructions_markdown: "Use the team workflow." }
+        : {}),
+    }));
+    const user = setupUser();
+    const onClose = jest.fn();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        initialTab="details"
+        open
+        onClose={onClose}
+        onSaved={jest.fn()}
+      />
+    );
+    await screen.findByText("Use the team workflow.");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await user.click(screen.getByRole("tab", { name: "Sharing" }));
+    await user.click(screen.getByRole("button", { name: "Required" }));
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByText("Use the team workflow.")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Sharing" }));
+    expect(screen.getByRole("button", { name: "Required" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({ installation_policy: "REQUIRED" })
+      )
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("saves an admin's installation policy without changing sharing", async () => {
     const user = setupUser();
     render(

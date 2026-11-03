@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "コミット"
+      },
+      "commitDate": {
+        "label": "コミット日時"
+      },
+      "instanceUrl": {
+        "label": "インスタンス URL"
+      },
+      "label": "情報",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "利用できません",
+      "version": {
+        "label": "バージョン"
+      }
+    },
     "accountFallback": {
       "label": "アカウント"
     },
@@ -2220,8 +2239,9 @@
         "title": "チャット命名モデル"
       },
       "searchDecisionModel": {
-        "description": "取得したドキュメントを選び、追加するコンテキストの量を決めます。判定モデルは1回の呼び出しで順位付けします。言語モデルは従来どおり選択します。",
-        "title": "検索判定モデル"
+        "description": "取得したドキュメントを選び、追加するコンテキストの量を決めます。判断モデルは1回の呼び出しで順位付けします。言語モデルは従来どおり選択します。",
+        "title": "検索判断モデル",
+        "decisionSection": "判断モデル"
       },
       "taskModels": {
         "loadFailed": "タスクモデルを読み込めませんでした",
@@ -2402,7 +2422,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
-        "searchDecisionUpdateFailed": "検索判定モデルを更新できませんでした",
+        "searchDecisionUpdateFailed": "検索判断モデルを更新できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
         "toolsUpdateFailed": "ツールの更新に失敗しました",
@@ -7316,6 +7336,7 @@
       },
       "vectorQuantization": {
         "description": "ドキュメントのベクトルを少ないビット数で保存し、ベクトル検索のメモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。この設定のみを変更した場合、保存済みのベクトルからインデックスを再構築し、再埋め込みは行いません。",
+        "needsVersion": "OpenSearch {version} 以降が必要",
         "none": {
           "description": "32 ビットの完全な精度。",
           "label": "なし"
@@ -7328,7 +7349,8 @@
           "description": "ベクトル検索のメモリ使用量が約 4 分の 1。検索品質はほぼ低下しません。",
           "label": "7 ビット"
         },
-        "title": "ベクトル量子化"
+        "title": "ベクトル量子化",
+        "unsupportedTooltip": "このクラスターは OpenSearch {current} で動作しています。このレベルを使用するには、OpenSearch を {version} 以降にアップグレードしてください。"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {このコネクタは削除されます} other {これら # 個のコネクタは削除されます}}",
@@ -12098,9 +12120,6 @@
         "builtin": {
           "label": "組み込み"
         },
-        "custom": {
-          "label": "カスタム"
-        },
         "invalid": {
           "label": "無効"
         },
@@ -12112,6 +12131,12 @@
         },
         "unavailable": {
           "label": "利用できません - クリックして詳細を表示"
+        },
+        "shared": {
+          "label": "共有"
+        },
+        "organization": {
+          "label": "組織"
         }
       },
       "toggle": {
@@ -13303,14 +13328,14 @@
           "title": "所属組織"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "編集"
+          "canEdit": {
+            "label": "編集可能"
+          },
+          "canUse": {
+            "label": "使用可能"
           },
           "removeAccess": {
             "label": "アクセス権を削除"
-          },
-          "viewAndChat": {
-            "label": "閲覧とチャット"
           }
         },
         "privateOption": {
@@ -16744,6 +16769,9 @@
         },
         "webSearch": {
           "label": "Web 検索"
+        },
+        "skills": {
+          "label": "スキル"
         }
       },
       "sections": {
@@ -17057,6 +17085,9 @@
         "inspectFailed": "スキルバンドルの検査に失敗しました",
         "saveFailed": "スキルの保存に失敗しました",
         "saved": "「{name}」を保存しました"
+      },
+      "creationAccess": {
+        "title": "アクセス権"
       }
     },
     "modals": {
@@ -17095,6 +17126,13 @@
           "singleSkill": "スキルは一度に 1 つずつアップロードしてください。",
           "title": "ファイルの要件",
           "zip": "ZIP ファイルには SKILL.md ファイルを含める必要があります。"
+        },
+        "batch": {
+          "title": "アップロードするスキルのアクセス権",
+          "selected": "{count, plural, one {# 件のスキルバンドルを選択中} other {# 件のスキルバンドルを選択中}}",
+          "result": "{imported, plural, one {# 件のスキルをインポートしました} other {# 件のスキルをインポートしました}}。{failed, plural, one {# 件が失敗しました} other {# 件が失敗しました}}。",
+          "failure": "{name}: {reason}",
+          "requirement": "複数の ZIP ファイルを選択すると、スキルをまとめてインポートできます。各 ZIP にはスキルを 1 件含めてください。"
         }
       },
       "importGithub": {
@@ -17171,6 +17209,11 @@
         "unavailableFallback": "このスキルはインポートできません。",
         "unavailableTag": {
           "label": "インポート不可"
+        },
+        "sharing": {
+          "title": "インポートするスキルのアクセス権",
+          "configureButton": "アクセス権を設定",
+          "description": "これらのアクセス設定は、選択した{count, plural, one {# 件のスキル} other {# 件のスキル}}すべてに適用されます。"
         }
       },
       "nameConflict": {
@@ -17235,9 +17278,7 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "{name} のアクセス権を更新",
-          "canUse": "使用可能",
-          "canEdit": "編集可能"
+          "ariaLabel": "{name} のアクセス権を更新"
         },
         "saveButton": {
           "label": "保存"
@@ -17279,11 +17320,15 @@
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
+      },
+      "tabs": {
+        "details": "詳細",
+        "sharing": "共有"
       }
     },
     "page": {
       "browse": {
-        "title": "スキルを閲覧"
+        "title": "スキルを選択"
       },
       "countSeparator": {
         "label": "{count, plural, one {スキル} other {スキル}}"
@@ -17311,8 +17356,8 @@
           "title": "一致するスキルがありません"
         },
         "noSkills": {
-          "description": "まだ共有されたカスタムスキルはなく、組み込みスキルも設定されていません。",
-          "title": "利用可能なスキルがありません"
+          "title": "カスタムスキルはまだありません",
+          "description": "スキルを作成またはインポートしてライブラリに追加してください。"
         }
       },
       "focusedApp": {
@@ -17349,6 +17394,9 @@
         "disableFailed": "{name}を無効にできませんでした",
         "enableFailed": "{name}を有効にできませんでした",
         "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。"
+      },
+      "builtins": {
+        "title": "組み込みスキル（{count, number}）"
       }
     },
     "sections": {
@@ -17404,6 +17452,34 @@
           "readFailed": "アップロードされたファイルを読み込めませんでした。"
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {組織内の全員がこのスキルにアクセスできます。} other {組織内の全員がこれらのスキルにアクセスできます。}}",
+      "selected": "{users, plural, one {# 人のユーザー} other {# 人のユーザー}}と{groups, plural, one {# 個のグループ} other {# 個のグループ}}に共有されています。",
+      "private": "{count, plural, one {このスキルにアクセスできるのは自分だけです。} other {これらのスキルにアクセスできるのは自分だけです。}}"
+    },
+    "bulk": {
+      "adminDescription": "組織全体のスキルとアクセス権を管理します。",
+      "selectAll": "表示中のカスタムスキルをすべて選択",
+      "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
+      "share": "共有",
+      "enable": "自分用に有効化",
+      "disable": "自分用に無効化",
+      "delete": "削除",
+      "selectSkill": "{name} を選択",
+      "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
+      "failed": "スキルを更新できませんでした。もう一度お試しください。",
+      "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",
+      "deleteTitle": "{count, plural, one {# 件のスキルを削除しますか？} other {# 件のスキルを削除しますか？}}",
+      "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したスキルを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のスキルをすべて削除します。この操作は元に戻せません。}}",
+      "shareTitle": "{count, plural, one {# 件のスキルのアクセス権を更新} other {# 件のスキルのアクセス権を更新}}",
+      "shareDescription": "選択したすべてのスキルに変更を適用します。変更しない設定は現在の値を維持します。",
+      "unchanged": "変更しない",
+      "everyone": "組織内の全員",
+      "invitedOnly": "招待されたユーザーとグループ",
+      "addAccessDescription": "選択したすべてのスキルに、これらのユーザーとグループを追加します。指定したユーザーとグループには選択した権限が設定されます。それ以外のユーザーの現在のアクセス権は変わりません。",
+      "apply": "{count, plural, one {# 件のスキルに適用} other {# 件のスキルに適用}}",
+      "moreActions": "その他の操作"
     }
   },
   "opensearchHealth": {

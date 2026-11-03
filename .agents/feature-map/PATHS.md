@@ -137,7 +137,7 @@ covers new files that match it.
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
 | `backend/onyx/db/input_prompt.py`, `backend/onyx/db/user_preferences.py`, `backend/onyx/server/features/input_prompt/` | chat-preferences |
-| `backend/onyx/server/settings/api.py`, `backend/onyx/server/settings/models.py`, `backend/onyx/server/settings/store.py` | chat-preferences |
+| `backend/onyx/server/settings/api.py`, `backend/onyx/server/settings/models.py`, `backend/onyx/server/settings/store.py`, `backend/onyx/server/settings/build_info.py` | chat-preferences |
 | `backend/onyx/db/hierarchy.py`, `backend/onyx/server/features/hierarchy/`, `backend/ee/onyx/db/hierarchy.py` | agents-personas, access-control |
 
 ## Backend: platform
@@ -251,7 +251,7 @@ covers new files that match it.
 | `web/src/app/app/`, `web/src/views/AppPage.tsx` | chat-frontend |
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts` | chat-frontend |
-| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
+| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
@@ -270,7 +270,7 @@ covers new files that match it.
 | `web/src/lib/tools/components/ToolsPopover.tsx` | plugins, chat-frontend |
 | `web/src/lib/onboarding/` | chat-frontend |
 | `web/src/views/AgentEditorPage.tsx`, `web/src/views/AgentsNavigationPage.tsx`, `web/src/sections/agents/` | agents-personas |
-| `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/sections/sidebar/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
+| `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/lib/app/components/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
 | `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts` | mobile-app, streaming-protocol |
@@ -290,6 +290,7 @@ covers new files that match it.
 | `web/src/app/craft/v1/apps/`, `web/src/lib/externalApps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
 | `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
 | `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx` | skills |
+| `web/src/app/admin/skills/` | skills |
 | `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/sections/cards/SkillCard.tsx`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
 
 ## Frontend: admin and platform
@@ -338,7 +339,7 @@ covers new files that match it.
 | `web/src/app/ee/admin/performance/`, `web/src/app/ee/admin/export-logs/`, `web/src/app/admin/tracing/`, `web/src/app/admin/systeminfo/`, `web/src/views/admin/TracingPage/`, `web/src/views/admin/WorkspaceAnalyticsPage/`, `web/src/views/admin/CostOverridesPanel.tsx`, `web/src/views/admin/PerUserUsagePanel.tsx`, `web/src/views/admin/SystemUsagePanel.tsx` | observability |
 | `web/src/sections/usage/`, `web/src/lib/usage/`, `web/src/lib/tracing/` | observability |
 | `web/src/lib/analytics/` | observability, editions-and-gating |
-| `web/src/app/ee/admin/theme/`, `web/src/lib/app/components.tsx`, `web/src/lib/analytics/shared.tsx` | whitelabelling-and-theme |
+| `web/src/app/ee/admin/theme/`, `web/src/lib/app/components/Logo.tsx`, `web/src/lib/app/components/LanguageSelect.tsx`, `web/src/lib/analytics/shared.tsx` | whitelabelling-and-theme |
 | `web/src/app/admin/web-search/`, `web/src/views/admin/WebSearchPage/`, `web/src/lib/webSearch/` | web-search |
 | `web/src/app/admin/image-generation/`, `web/src/views/admin/ImageGenerationPage/` | image-generation |
 | `web/src/app/admin/code-interpreter/`, `web/src/views/admin/CodeInterpreterPage/`, `web/src/hooks/useCodeInterpreter.ts` | code-execution |
@@ -369,12 +370,15 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/server/middleware/api_prefix.py` | Removes the API prefix from a request path for the middlewares that match on routes. |
 | `backend/onyx/server/manage/get_state.py`, `backend/onyx/server/manage/models.py`, `backend/onyx/server/models.py`, `backend/onyx/server/utils.py`, `backend/onyx/server/utils_vector_db.py` | Health, version and auth-type probes, and models and helpers that many routes share. |
 | `deployment/` | Deployment files. Read the component of the service you deploy. |
+| `backend/Dockerfile`, `backend/Dockerfile.model_server`, `web/Dockerfile` | Image builds. `.github/workflows/deployment.yml` sets their build args, such as the version and the git details on the About page. |
 | `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | Reverse-proxy templates. The `cli/` copies are generated: run `ods generate-compose --write` after you change `deployment/data/nginx/`. |
 | `cli/` | The Onyx CLI client. Only its packet parser has an owner (streaming-protocol). |
 | `tools/`, `backend/scripts/`, `backend/requirements/` | Developer tooling and dependency files. |
+| `web/.oxlintrc.json` | Lint config for `web/`, with the design-system and layout baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
 | `.github/` | CI. Read the workflow. |
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
-| `web/src/lib/admin-routes.ts`, `web/src/app/admin/layout.tsx` | The admin route list and the admin shell. A new admin route needs its own row above. |
+| `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, the sidebar that filters it by permission and feature flag, its labels, and the admin shell. A new admin route needs its own row above. |
+| `web/src/lib/swr-keys.ts` | The SWR cache keys of the whole app. A key belongs to the component that fetches it; invalidate through the key, never a string literal. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
 | `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

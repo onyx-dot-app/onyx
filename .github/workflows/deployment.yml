@@ -38,6 +38,7 @@ jobs:
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
+      commit-date: ${{ steps.commit-date.outputs.commit-date }}
     steps:
       - name: Checkout (for git tags)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -45,6 +46,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Read the commit date
+        id: commit-date
+        run: echo "commit-date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
 
       # Routing lives in tools/ods next to this workflow, so build ods from the
       # same commit: a pinned release would lag behind the outputs used here.
@@ -1138,6 +1143,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1159,6 +1167,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -1234,6 +1245,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1255,6 +1269,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge

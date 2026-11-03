@@ -28,7 +28,7 @@ import {
 import { Tier } from "@/lib/tiers/types";
 import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
 import useFilter from "@/hooks/useFilter";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { AccountPopover } from "@/lib/app/components";
 import {
   BETA_SECTION_IDS,
   buildItems,
