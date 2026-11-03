@@ -35,18 +35,18 @@ export const OpenSearchSizingCalculator = () => {
   // Starting estimates of chunks per item, until measured on real deployments.
   // Mean chunks per item across Onyx Cloud tenants (November 2026).
   const SOURCES = [
-    { key: "docs", label: "Documents", examples: "Google Docs, Word", unit: "files", ratio: 7.5 },
-    { key: "pdfs", label: "PDFs", examples: "From any drive or upload", unit: "files", ratio: 11.5 },
+    { key: "docs", label: "Documents", examples: "Google Docs, Word", unit: "files", ratio: 7 },
+    { key: "pdfs", label: "PDFs", examples: "From any drive or upload", unit: "files", ratio: 12 },
     { key: "slides", label: "Slide decks", examples: "Google Slides, PowerPoint", unit: "files", ratio: 9 },
-    { key: "sheets", label: "Spreadsheets", examples: "Google Sheets, Excel. Sizes vary a lot.", unit: "files", ratio: 240 },
+    { key: "sheets", label: "Spreadsheets", examples: "Google Sheets, Excel. Onyx indexes at most 24 chunks per file.", unit: "files", ratio: 20 },
     { key: "images", label: "Images", examples: "Photos, screenshots", unit: "files", ratio: 1 },
-    { key: "wiki", label: "Wiki pages", examples: "Confluence, Notion", unit: "pages", ratio: 3.7 },
-    { key: "tickets", label: "Tickets and issues", examples: "Jira, Zendesk, GitHub", unit: "tickets", ratio: 1.9 },
-    { key: "chat", label: "Chat threads", examples: "Slack, Teams. A message outside a thread is one thread.", unit: "threads", ratio: 1.1 },
-    { key: "email", label: "Email threads", examples: "Gmail, Outlook. A single email is one thread.", unit: "threads", ratio: 4.3 },
-    { key: "crm", label: "CRM records", examples: "Salesforce, HubSpot", unit: "records", ratio: 4.3 },
+    { key: "wiki", label: "Wiki pages", examples: "Confluence, Notion", unit: "pages", ratio: 4 },
+    { key: "tickets", label: "Tickets and issues", examples: "Jira, Zendesk, GitHub", unit: "tickets", ratio: 2 },
+    { key: "chat", label: "Chat threads", examples: "Slack, Teams. A message outside a thread is one thread.", unit: "threads", ratio: 1 },
+    { key: "email", label: "Email threads", examples: "Gmail, Outlook. A single email is one thread.", unit: "threads", ratio: 4 },
+    { key: "crm", label: "CRM records", examples: "Salesforce, HubSpot", unit: "records", ratio: 4 },
     { key: "calls", label: "Call transcripts", examples: "Gong, Fireflies", unit: "calls", ratio: 12 },
-    { key: "web", label: "Web pages", examples: "Websites, help centers", unit: "pages", ratio: 5.6 },
+    { key: "web", label: "Web pages", examples: "Websites, help centers", unit: "pages", ratio: 6 },
   ];
   const MAX_ITEMS = 10_000_000_000;
   const NODE_RAM = [16, 32, 64];
@@ -291,7 +291,7 @@ export const OpenSearchSizingCalculator = () => {
                           id={"os-src-ratio-" + r.id}
                           type="number"
                           min="0"
-                          step="0.1"
+                          step="1"
                           aria-label={"Chunks per " + singular(src.unit)}
                           value={r.ratio}
                           onChange={(e) => updateRow(r.id, "ratio", e.target.value)}
