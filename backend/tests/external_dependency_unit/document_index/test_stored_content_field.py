@@ -104,9 +104,11 @@ def test_new_index_does_not_store_content(
 
     index_name: str = f"test_stored_content_{uuid.uuid4().hex[:8]}"
     document_index: OpenSearchDocumentIndex = _document_index(index_name)
-    document_index.verify_and_create_index_if_necessary(embedding_dim=EMBEDDING_DIM)
     with OpenSearchIndexClient(index_name=index_name) as client:
         try:
+            document_index.verify_and_create_index_if_necessary(
+                embedding_dim=EMBEDDING_DIM
+            )
             content_field: dict[str, Any] | None = client.get_field_mapping(
                 CONTENT_FIELD_NAME
             )
@@ -131,11 +133,11 @@ def test_index_with_stored_content_still_starts(
     index_name: str = f"test_stored_content_{uuid.uuid4().hex[:8]}"
     document_index: OpenSearchDocumentIndex = _document_index(index_name)
     with OpenSearchIndexClient(index_name=index_name) as client:
-        client.create_index(
-            mappings=_stored_content_mappings(),
-            settings=DocumentSchema.get_index_settings_based_on_environment(),
-        )
         try:
+            client.create_index(
+                mappings=_stored_content_mappings(),
+                settings=DocumentSchema.get_index_settings_based_on_environment(),
+            )
             # Startup applies the current mapping; it must not raise.
             document_index.verify_and_create_index_if_necessary(
                 embedding_dim=EMBEDDING_DIM

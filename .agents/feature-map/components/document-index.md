@@ -193,8 +193,9 @@ it deletes the old one.
    index, but a changed field type fails there and needs a reindex. Chunks
    written before the change have no value for the new field. OpenSearch also
    rejects a change to a field's parameters, such as `store` or a vector
-   encoder, so index setup copies the old value back into the expected mapping
-   for indices that have it; a reindex applies the new value.
+   encoder. Index setup keeps two known older values: `store: true` on
+   `content`, and the 7-bit encoder without `confidence_interval`. Any other
+   parameter change fails setup and needs a reindex.
 9. `swap-one-commit` **Swap both statuses in one commit.**
    `db/swap_index.py:_perform_index_swap` uses
    `db/search_settings.py:update_search_settings_status__no_commit` twice and
