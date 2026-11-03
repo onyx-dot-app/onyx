@@ -15,7 +15,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockDeleteUserSkill = jest.fn();
 const mockRouterReplace = jest.fn();
-const mockRouterPush = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
 const mockMutate = jest.fn();
@@ -74,8 +73,8 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   usePathname: () => "/craft/v1/skills/new",
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({
-    push: mockRouterPush,
     replace: mockRouterReplace,
   }),
 }));
@@ -128,7 +127,7 @@ describe("SkillEditorPage", () => {
     mockDeleteUserSkill.mockReset();
     mockDeleteUserSkill.mockResolvedValue(undefined);
     mockRouterReplace.mockReset();
-    mockRouterPush.mockReset();
+    window.history.replaceState(null, "", "/");
     mockGetSkillCreationDraft.mockReset();
     mockDiscardSkillCreationDraft.mockReset();
     mockMutate.mockReset();
@@ -347,7 +346,7 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
@@ -357,7 +356,7 @@ describe("SkillEditorPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
   });
 
   it("confirms before leaving an existing skill with unsaved changes", async () => {
@@ -379,10 +378,10 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
     expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
   });
 
@@ -405,7 +404,7 @@ describe("SkillEditorPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/admin/craft/apps?editAppId=42"
     );
   });
@@ -446,7 +445,7 @@ describe("SkillEditorPage", () => {
     await waitFor(() =>
       expect(mockDeleteUserSkill).toHaveBeenCalledWith(skill.id)
     );
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
 
     await act(async () => {
       appRefresh.resolve();
@@ -454,7 +453,7 @@ describe("SkillEditorPage", () => {
     });
 
     await waitFor(() =>
-      expect(mockRouterPush).toHaveBeenCalledWith(
+      expect(mockRouterReplace).toHaveBeenCalledWith(
         "/admin/craft/apps?editAppId=42"
       )
     );
@@ -468,7 +467,7 @@ describe("SkillEditorPage", () => {
     render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/admin/craft/apps?editAppId=42"
     );
   });

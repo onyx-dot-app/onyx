@@ -223,6 +223,7 @@ const discoveredTool: ToolSnapshot = {
 
 beforeEach(() => {
   sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
   mockUserId = "admin-user";
   mockSavedServer = undefined;
   jest.clearAllMocks();

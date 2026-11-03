@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import {
@@ -576,8 +576,6 @@ function GeneralSettings() {
     [updateUserChatBackground, setTheme, updateUserThemePreference]
   );
   const { refreshChatSessions } = useChatSessions();
-  const router = useRouter();
-  const pathname = usePathname();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
@@ -614,7 +612,7 @@ function GeneralSettings() {
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, refreshChatSessions, t]);
+  }, [refreshChatSessions, t]);
 
   return (
     <>
@@ -1953,6 +1951,7 @@ function LLMGatewaySettings() {
 
 function AccountsAccessSettings() {
   const t = useTranslations("settings");
+  const navigation = useNavigation();
   const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -2457,7 +2456,10 @@ function AccountsAccessSettings() {
                     <Text font="secondary-body" color="text-03">
                       {t("apiKeys.upsell.description")}
                     </Text>
-                    <Button prominence="secondary" href="/admin/billing">
+                    <Button
+                      prominence="secondary"
+                      {...navigation.linkTo("/admin/billing")}
+                    >
                       {t("apiKeys.upsell.upgradeButton")}
                     </Button>
                   </Section>

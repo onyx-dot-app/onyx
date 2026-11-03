@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useNavigation } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Button } from "@opal/components";
@@ -9,14 +9,17 @@ import { SvgArrowLeft } from "@opal/icons";
 export interface BackButtonProps {
   behaviorOverride?: () => void;
   routerOverride?: Route;
+  /** Where Back goes when the previous page is not in the app. */
+  fallback?: Route;
 }
 
 export default function BackButton({
   behaviorOverride,
   routerOverride,
+  fallback = "/app",
 }: BackButtonProps) {
   const t = useTranslations("common.backButton");
-  const router = useRouter();
+  const navigation = useNavigation();
 
   return (
     <Button
@@ -26,9 +29,9 @@ export default function BackButton({
         if (behaviorOverride) {
           behaviorOverride();
         } else if (routerOverride) {
-          router.push(routerOverride);
+          navigation.go(routerOverride);
         } else {
-          router.back();
+          navigation.clampedBack(fallback);
         }
       }}
     >

@@ -1,12 +1,12 @@
 import { SWR_KEYS } from "@/lib/swr-keys";
-const mockPush = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ replace: mockReplace }),
 }));
 
 import { Form, Formik } from "formik";
@@ -124,7 +124,8 @@ beforeEach(() => {
   workspaceTier = Tier.BUSINESS;
   craftAvailable = false;
   defaultToolIds = [42, 99];
-  mockPush.mockClear();
+  mockReplace.mockClear();
+  window.history.replaceState(null, "", "/");
   serverRecord = configuredServer;
   saveResponse = async () => new Response(JSON.stringify(serverRecord));
   availableGroups = [
@@ -420,7 +421,7 @@ describe("inline server configuration", () => {
     await user.click(chat);
     await user.click(craft);
     expect(savedRequests).toEqual([]);
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
     await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(true));
     await user.click(
       screen.getByRole("button", {
@@ -473,7 +474,7 @@ describe("inline server configuration", () => {
     await user.click(
       await screen.findByRole("switch", { name: "Enable in default Chat" })
     );
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(savedRequests).toEqual([]);
     await user.click(
       screen.getByRole("button", {
@@ -481,7 +482,7 @@ describe("inline server configuration", () => {
       })
     );
     await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.stringContaining("enable_chat_intent=")
       )
     );
@@ -749,7 +750,7 @@ describe("inline server configuration", () => {
       })
     );
     expect(savedRequests).toEqual([]);
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   test.each(["", "not-a-url", "ftp://example.com/mcp"])(

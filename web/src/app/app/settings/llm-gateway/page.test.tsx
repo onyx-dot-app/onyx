@@ -37,6 +37,7 @@ const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
 describe("LLMGatewayPage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     jest.clearAllMocks();
     mockUseTierAtLeast.mockReturnValue(true);
     mockUseSettings.mockReturnValue({ isLoading: false } as ReturnType<

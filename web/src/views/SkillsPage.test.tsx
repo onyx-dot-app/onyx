@@ -16,7 +16,7 @@ const mockDeleteUserSkill = jest.fn();
 const mockRefresh = jest.fn();
 const mockMutate = jest.fn();
 const mockToastError = jest.fn();
-const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
 const mockUseUserSkills = jest.fn();
 const mockStageSkillCreationDraft = jest.fn();
 const mockSearchParamsGet = jest.fn();
@@ -31,9 +31,14 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useRouter: () => ({ push: mockRouterPush }),
+  useRouter: () => ({ replace: mockRouterReplace }),
   usePathname: () => "/craft/v1/skills",
-  useSearchParams: () => ({ get: mockSearchParamsGet }),
+  useSearchParams: () => {
+    const externalAppId: unknown = mockSearchParamsGet("externalAppId");
+    return new URLSearchParams(
+      typeof externalAppId === "string" ? { externalAppId } : {}
+    );
+  },
 }));
 
 jest.mock("@/hooks/useUserSkills", () => ({
@@ -209,7 +214,8 @@ describe("SkillsPage preference toggles", () => {
     });
     mockMutate.mockReset();
     mockBulkUpdateSkills.mockReset();
-    mockRouterPush.mockReset();
+    mockRouterReplace.mockReset();
+    window.history.replaceState(null, "", "/");
     mockSearchParamsGet.mockReset();
     mockSearchParamsGet.mockReturnValue(null);
     mockStageSkillCreationDraft.mockReset();
@@ -618,7 +624,7 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("button", { name: "Continue upload" }));
 
     expect(mockStageSkillCreationDraft).toHaveBeenCalledWith({ draft: true });
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/craft/v1/skills/new?draft=draft-id"
     );
     expect(mockRefresh).not.toHaveBeenCalled();

@@ -30,7 +30,6 @@ import {
   ChatExportFormat,
 } from "@/lib/chat/exportChatSession";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import { useRouter } from "next/navigation";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
@@ -65,7 +64,7 @@ import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/navigation/hooks";
-import { PendingRoute } from "@opal/navigation";
+import { PendingRoute, useNavigation } from "@opal/navigation";
 import { PageLoader } from "@opal/loaders";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -117,7 +116,7 @@ function Header() {
     refreshChatSessions,
     removeSession,
   } = useChatSessions();
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
@@ -188,7 +187,7 @@ function Header() {
       }
       removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
-      router.replace("/app");
+      navigation.go("/app", { replace: true });
       setDeleteModalOpen(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
@@ -199,7 +198,7 @@ function Header() {
     refreshChatSessions,
     removeSession,
     fetchProjects,
-    router,
+    navigation,
   ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
@@ -232,14 +231,14 @@ function Header() {
     setIncognitoEnabled(false);
     setCurrentMessageFiles([]);
     if (sessionId) {
-      router.replace("/app");
+      navigation.go("/app", { replace: true });
     }
   }, [
     currentChatSessionId,
     setIncognitoEnabled,
     setCurrentMessageFiles,
     removeSession,
-    router,
+    navigation,
   ]);
 
   const handleExport = useCallback(

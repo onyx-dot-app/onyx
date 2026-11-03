@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
@@ -9,7 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
@@ -130,7 +130,7 @@ export default function NotificationsPopover({
   onShowBuildIntro,
 }: NotificationsPopoverProps) {
   const t = useTranslations("sidebar");
-  const router = useRouter();
+  const navigation = useNavigation();
   const {
     notifications,
     undismissedCount,
@@ -197,9 +197,9 @@ export default function NotificationsPopover({
       if (!isExternalLink(link)) {
         onNavigate();
       }
-      openNotificationLink(link, router);
+      openNotificationLink(link, navigation);
     },
-    [handleDismiss, onNavigate, onShowBuildIntro, router]
+    [handleDismiss, onNavigate, onShowBuildIntro, navigation]
   );
 
   const getState = useCallback(

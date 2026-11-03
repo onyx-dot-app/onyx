@@ -24,6 +24,7 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   usePathname: () => mockPathname,
+  useSearchParams: () => new URLSearchParams(),
 }));
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
