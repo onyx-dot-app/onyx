@@ -1,6 +1,5 @@
 /** The chart's links to the activity panel: a failure line click focuses its run, a hovered activity keeps its line and draws a dashed guide, and a hovered line reports the runs that started in its slice. */
-import { render } from "@tests/setup/test-utils";
-import userEvent from "@testing-library/user-event";
+import { render, setupUser } from "@tests/setup/test-utils";
 import { ThroughputBars } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import {
   installChartLayout,
@@ -9,10 +8,6 @@ import {
   throughputFixture,
   usesToken,
 } from "@tests/setup/throughputChartTestUtils";
-
-jest.mock("recharts", () =>
-  jest.requireActual("@tests/setup/throughputChartTestUtils").mockRecharts()
-);
 
 beforeEach(() => installChartLayout(600));
 afterEach(() => resetChartLayout());
@@ -58,7 +53,7 @@ function dashedGuide(container: HTMLElement): Element | null {
 describe("AC-4: failure line focuses its activity", () => {
   it("AC-4: a click on a failure line focuses that run", async () => {
     const onFocusAttempt = jest.fn();
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = render(
       <ThroughputBars data={data} range="24h" onFocusAttempt={onFocusAttempt} />
     );
@@ -99,7 +94,7 @@ describe("AC-6: hover links", () => {
 
   it("AC-6: hovering a status line reports the runs of that kind that started in its slice, and leaving it clears them", async () => {
     const onHoverLine = jest.fn();
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = render(
       <ThroughputBars data={data} range="24h" onHoverLine={onHoverLine} />
     );
