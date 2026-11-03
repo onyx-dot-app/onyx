@@ -562,6 +562,9 @@ def _is_mistral_family_name(identity_names: list[str]) -> bool:
     )
 
 
+_JSON_SCHEMA_LITERAL_KEYS = frozenset({"const", "default", "enum", "examples"})
+
+
 def _convert_type_arrays(schema: JsonValue) -> None:
     """Gemini takes one `type` per schema, so rewrite JSON Schema type arrays
     (e.g. ["string", "null"]) as `nullable` plus a single type or `anyOf`."""
@@ -571,8 +574,9 @@ def _convert_type_arrays(schema: JsonValue) -> None:
         return
     if not isinstance(schema, dict):
         return
-    for value in schema.values():
-        _convert_type_arrays(value)
+    for key, value in schema.items():
+        if key not in _JSON_SCHEMA_LITERAL_KEYS:
+            _convert_type_arrays(value)
     type_value = schema.get("type")
     if not isinstance(type_value, list):
         return
@@ -581,8 +585,9 @@ def _convert_type_arrays(schema: JsonValue) -> None:
         schema["nullable"] = True
     if len(types) == 1:
         schema["type"] = types[0]
-    elif types:
-        del schema["type"]
+        return
+    del schema["type"]
+    if types and "anyOf" not in schema:
         schema["anyOf"] = [{"type": t} for t in types]
 
 

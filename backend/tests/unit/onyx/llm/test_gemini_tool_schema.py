@@ -152,6 +152,16 @@ def test_gemini_on_openai_compatible_converts_type_arrays() -> None:
             "properties": {
                 "path": {"type": ["string", "null"]},
                 "value": {"type": ["string", "integer"]},
+                "unset": {"type": ["null"]},
+                "either": {
+                    "type": ["string", "integer"],
+                    "anyOf": [{"type": "string", "minLength": 1}],
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["a", "b"],
+                    "default": {"type": ["a", "b"]},
+                },
             },
         },
     )
@@ -165,6 +175,13 @@ def test_gemini_on_openai_compatible_converts_type_arrays() -> None:
         "properties": {
             "path": {"type": "string", "nullable": True},
             "value": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            "unset": {"type": "object", "nullable": True},
+            "either": {"anyOf": [{"type": "string", "minLength": 1}]},
+            "mode": {
+                "type": "string",
+                "enum": ["a", "b"],
+                "default": {"type": ["a", "b"]},
+            },
         },
     }
 
