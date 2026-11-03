@@ -341,12 +341,12 @@ downloaded file with
     proves who sent the body, not that every field in it is safe: a handler
     that fetches the URL as given turns the docfetching worker into an SSRF
     tool against everything the cluster can reach, and indexes the answer.
-    A handler that follows a pushed URL must pin it to the provider's own
-    https host, drop the credential before any redirect to another host, and
-    fetch every hop through `onyx/utils/url.py:ssrf_safe_get` so none of them
+    A handler that follows a pushed URL must pin the first hop to the
+    provider's own https host, send the credential only there, and fetch
+    every redirect through `onyx/utils/url.py:ssrf_safe_get` so no later hop
     can resolve to a private address.
-    `connectors/zoom/client.py` does this for its transcript download; copy
-    it.
+    `connectors/zoom/client.py:download_transcript_vtt` does this: the host
+    allowlist checks the first hop, and `ssrf_safe_get` follows the redirect.
 
 ---
 
