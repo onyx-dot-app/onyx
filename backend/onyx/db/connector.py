@@ -168,17 +168,21 @@ def create_connector(
 
 
 def _settle_event_input_type(connector_data: ConnectorBase) -> None:
-    """An event source has one valid input type, settled by the source
-    registering a webhook spec.
-
-    Deciding it here covers every route that writes a connector, so no caller
-    tracks the same list in its own language. A pair stored as `poll` would
-    never drain its queue and would look healthy doing it, whether it was
-    created that way or edited into it.
-    """
+    """A source with a webhook spec is always EVENT: as `poll` it would never
+    drain its queue. Decided here so every route that writes a connector
+    agrees."""
     load_event_sources()
-    if webhook_source_for(connector_data.source) is not None:
-        connector_data.input_type = InputType.EVENT
+    if webhook_source_for(connector_data.source) is None:
+        return
+    if connector_data.input_type != InputType.EVENT:
+        logger.info(
+            "Storing %s connector %r as %s, not the requested %s",
+            connector_data.source.value,
+            connector_data.name,
+            InputType.EVENT.value,
+            connector_data.input_type.value,
+        )
+    connector_data.input_type = InputType.EVENT
 
 
 def update_connector(

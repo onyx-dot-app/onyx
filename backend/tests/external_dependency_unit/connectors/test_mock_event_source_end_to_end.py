@@ -1,18 +1,11 @@
-"""The pipeline end to end, through the paths production uses.
-
-The other event tests build a spec in a fixture and call the drain
-directly, which skips two joints: the loader that registers a source, and
-the factory that picks the drain for an `EVENT` pair. This drives both.
-
-A delivery arrives at the real webhook app, is verified, parsed and stored;
-then a connector built the way `run_docfetching` builds one claims the rows
-and yields the documents. Nothing here constructs a spec or a connector by
-hand.
-"""
+"""The pipeline end to end, through the paths production uses: the loader
+registers the source, the real webhook app stores a delivery, and the
+factory builds the drain that indexes it."""
 
 import json
 import sys
 from collections.abc import Generator
+from types import ModuleType
 from unittest.mock import patch
 
 import pytest
@@ -27,9 +20,14 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import unregister_event_handler
+from onyx.connectors.event_inbox.handlers import (
+    get_event_handler,
+    register_event_handler,
+    unregister_event_handler,
+)
 from onyx.connectors.event_inbox.source_registry import (
     get_webhook_source,
+    register_webhook_source,
     unregister_webhook_source,
     webhook_callback_url,
     webhook_source_for,
@@ -44,8 +42,12 @@ from onyx.db.enums import (
     ConnectorEventStatus,
 )
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential, IndexAttempt
-from onyx.server.documents.models import ConnectorBase, EventSourceSnapshot
-from tests.external_dependency_unit.connectors import mock_event_source
+from onyx.server.documents.connector import get_event_sources
+from onyx.server.documents.models import ConnectorBase
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+from tests.external_dependency_unit.connectors import (
+    mock_event_source_protocol as mock_event_source,
+)
 
 MODULE = "tests.external_dependency_unit.connectors.mock_event_source"
 SECRET = "mock-webhook-secret"
@@ -53,22 +55,18 @@ SECRET = "mock-webhook-secret"
 
 @pytest.fixture
 def loaded_source(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
-    """Register the source the way a deployment does, through the loader.
-
-    Importing this module anywhere registers it, and this file imports it
-    for its constants, so both the registration and the cached import are
-    cleared first: otherwise the loader would be a no-op and the test would
-    pass without it. A source registers once per process, so the cached
-    module must go too.
-    """
+    """Register the source through the loader, then restore whatever held
+    the source before. The cached module goes too: a module registers once
+    per process."""
     owner = webhook_source_for(mock_event_source.SOURCE)
+    handler = get_event_handler(mock_event_source.SOURCE)
+    cached: ModuleType | None = sys.modules.pop(MODULE, None)
     if owner is not None:
         unregister_webhook_source(owner.slug)
     unregister_event_handler(mock_event_source.SOURCE)
-    sys.modules.pop(MODULE, None)
 
-    monkeypatch.setattr(sources_module, "_loaded", False)
     monkeypatch.setattr(sources_module, "EVENT_SOURCE_MODULES", (MODULE,))
+    sources_module.reset_event_sources()
     sources_module.load_event_sources()
     try:
         yield
@@ -76,16 +74,19 @@ def loaded_source(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None
         unregister_webhook_source(mock_event_source.SLUG)
         unregister_event_handler(mock_event_source.SOURCE)
         sys.modules.pop(MODULE, None)
+        sources_module.reset_event_sources()
+        if owner is not None:
+            register_webhook_source(owner)
+        if handler is not None:
+            register_event_handler(mock_event_source.SOURCE, handler)
+        if cached is not None:
+            sys.modules[MODULE] = cached
 
 
 @pytest.fixture
 def client(loaded_source: None) -> TestClient:  # noqa: ARG001
-    """The real webhook app, with a throwaway metrics registry.
-
-    The instrumentator registers on the global one when the middleware
-    stack is built, so sharing it with another instrumented test raises on
-    duplicate timeseries.
-    """
+    """The real webhook app, with its own metrics registry so it does not
+    clash with another instrumented test."""
     from onyx.webhook_server import api as webhook_api
 
     isolated = Instrumentator(registry=CollectorRegistry())
@@ -101,21 +102,15 @@ def event_pair(
     db_session: Session,
     loaded_source: None,  # noqa: ARG001
 ) -> Generator[ConnectorCredentialPair, None, None]:
-    """A pair created the way the admin API creates one.
-
-    `input_type` is deliberately POLL here: the backend decides it from the
-    registry, and this proves it.
-    """
+    """A pair created the way the admin API creates one. POLL on purpose:
+    the backend decides the input type."""
     created = create_connector(
         db_session=db_session,
         connector_data=ConnectorBase(
             name="mock-event-source",
             source=mock_event_source.SOURCE,
             input_type=InputType.POLL,
-            # A real event pair carries the source's settings. They are not
-            # the drain's: with a non-empty config, building the source's
-            # connector from them would fail, which is what makes the
-            # factory's event branch load-bearing.
+            # The source's own config, which the drain cannot be built from.
             connector_specific_config={
                 "mock_server_host": "localhost",
                 "mock_server_port": 8080,
@@ -305,24 +300,38 @@ def test_health_still_answers_while_a_source_is_registered(
     assert client.get("/health").status_code == 200
 
 
-def test_the_admin_sees_a_url_for_every_endpoint(
+def test_the_admin_sees_each_endpoint_and_whether_it_receives(
+    db_session: Session,
     loaded_source: None,  # noqa: ARG001
 ) -> None:
-    """An admin pastes one URL per endpoint into the provider's console, so
-    the snapshot must list them all rather than the slug alone."""
-    spec = get_webhook_source(mock_event_source.SLUG)
-    assert spec is not None
+    """One URL per endpoint, since an admin pastes each into the provider's
+    console, and `receiving` flips once an event pair exists."""
+    admin = create_test_user(db_session, "event-sources-admin", is_admin=True)
+    try:
+        before = [
+            snapshot.model_dump(mode="json")
+            for snapshot in get_event_sources(admin, db_session)
+        ]
+    finally:
+        delete_test_user(db_session, admin)
 
-    snapshot = EventSourceSnapshot(
-        source=spec.source,
-        callback_urls=[
-            webhook_callback_url(spec.slug, endpoint) for endpoint in spec.endpoints
-        ],
-        receiving=False,
-    )
+    assert before == [
+        {
+            "source": mock_event_source.SOURCE.value,
+            "callback_urls": [webhook_callback_url(mock_event_source.SLUG)],
+            "receiving": False,
+        }
+    ]
 
-    assert len(snapshot.callback_urls) == len(spec.endpoints)
-    assert all(
-        url.endswith(f"/webhook/{spec.slug}{endpoint}")
-        for url, endpoint in zip(snapshot.callback_urls, spec.endpoints, strict=True)
-    )
+
+def test_the_admin_sees_a_set_up_source_as_receiving(
+    db_session: Session,
+    event_pair: ConnectorCredentialPair,  # noqa: ARG001
+) -> None:
+    admin = create_test_user(db_session, "event-sources-admin", is_admin=True)
+    try:
+        snapshots = get_event_sources(admin, db_session)
+    finally:
+        delete_test_user(db_session, admin)
+
+    assert [snapshot.receiving for snapshot in snapshots] == [True]
