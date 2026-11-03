@@ -104,13 +104,13 @@ from onyx.db.index_attempt import (
     create_index_attempt_error,
     get_active_index_attempts_without_task,
     get_index_attempt,
-    get_index_attempt_errors_for_cc_pair,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
     mark_attempt_succeeded,
+    resolve_index_attempt_entity_errors__no_commit,
     resolve_index_attempt_errors_for_documents,
 )
 from onyx.db.index_attempt_metrics import (
@@ -526,22 +526,6 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
-def _resolve_indexing_entity_errors(
-    cc_pair_id: int,
-    db_session: Session,
-) -> None:
-    unresolved_errors = get_index_attempt_errors_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        unresolved_only=True,
-        db_session=db_session,
-    )
-    for error in unresolved_errors:
-        if error.entity_id:
-            error.is_resolved = True
-            db_session.add(error)
-    db_session.commit()
-
-
 def check_indexing_completion(
     index_attempt_id: int,
     coordination_status: CoordinationStatus,
@@ -695,10 +679,12 @@ def check_indexing_completion(
                 logger.info(
                     "Resolving indexing entity errors for attempt %s", index_attempt_id
                 )
-                _resolve_indexing_entity_errors(
-                    cc_pair_id=attempt.connector_credential_pair_id,
+                resolve_index_attempt_entity_errors__no_commit(
                     db_session=db_session,
+                    cc_pair_id=attempt.connector_credential_pair_id,
+                    resolved_by_index_attempt_id=index_attempt_id,
                 )
+                db_session.commit()
 
     # Clean up FileStore storage (still needed for document batches during transition)
     try:
@@ -2111,6 +2097,7 @@ def _docprocessing_task(
                     for document in documents
                     if document.id not in failed_document_ids
                 ],
+                resolved_by_index_attempt_id=index_attempt_id,
             )
 
         # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.

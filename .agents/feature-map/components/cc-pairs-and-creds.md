@@ -117,7 +117,8 @@ which masks when the caller passes `mask_credential_prefix`.
 **Run feed.** `db/cc_pair_runs.py:get_cc_pair_run_page` unions index attempts,
 doc permission syncs, group syncs, prunes and check runs into one page, newest
 first. A queued run is in the `scheduled` group, apart from `running`. Both
-stay in every time window, and neither is superseded or resolvable. A
+stay in every time window, and neither is superseded. A queued run is not
+resolvable, and a running run is resolvable only when it is an index run. A
 targeted reindex (Retry) attempt is an index run marked `is_retry`, listed once
 under the current model. It does not supersede a full run, does not make the
 pair indexing, and is not the pair's latest attempt. A failed run is
@@ -257,14 +258,19 @@ on the admin routes.
   own credentials (`ConnectorCredentialPair` docstring).
 - **The pause route returns at once.** It sets signals and lets running tasks
   stop themselves, so the admin does not wait on a worker.
-- **Resolving a run leaves its error rows open.** Resolution adds a
-  `CCPairRunResolution` row and keeps `IndexAttemptError.is_resolved` false,
-  because the poll cursor and the targeted reindex (Retry) read that flag.
-  A reader that counts open errors must also exclude resolved runs, as
-  `db/index_attempt.py:get_open_error_counts_for_index_attempts` does with
-  `run_is_resolved`. Resolution clears the repeated-error flag and alert when
-  the pair's latest failed attempt is resolved, but keeps the pair's status,
-  so a Cloud auto-pause stays.
+- **Resolve without retry keeps `is_resolved` false.** Resolving a run adds a
+  `CCPairRunResolution` row and marks the errors the run filed so far
+  `resolved_reason = without_retry`. `POST /admin/cc-pair/{id}/errors/resolve`
+  does the same for chosen errors. Both keep `IndexAttemptError.is_resolved`
+  false, because the poll cursor and the targeted reindex (Retry) read that
+  flag. An open error has neither (`db/cc_pair_run_resolution.py:index_attempt_error_is_open`).
+  A run indexing the document, a newer error on it (`later_run`) or a Retry
+  (`retry`) sets `is_resolved` and records the closing attempt. A running
+  index run can be resolved: any open error on it, or its ending FAILED after
+  the resolution, reopens it (`run_is_resolved`, `get_resolution_times`),
+  and resolving it again moves the resolution's time. Resolution clears the
+  repeated-error flag and alert when the pair's latest failed attempt is
+  resolved, but keeps the pair's status, so a Cloud auto-pause stays.
 
 ---
 
@@ -274,9 +280,6 @@ on the admin routes.
   `backend/onyx/server/documents/connector.py:update_connector_from_model`
   checks credential bindings but does not call `validate_ccpair_for_user`. A
   bad config fails at the next index attempt.
-- **The errors route's open filter shows errors of a resolved run.**
-  `db/index_attempt.py:_cc_pair_errors` filters on `is_resolved` alone, so it
-  lists errors that the attempt's open-error count leaves out.
 - **`check_deletion_attempt_is_allowed` gates nothing.** Its only caller,
   `backend/onyx/server/documents/connector.py:get_currently_failed_indexing_status`, uses it
   to fill `is_deletable` for display. The real guard against deleting a pair

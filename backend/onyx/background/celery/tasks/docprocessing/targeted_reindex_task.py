@@ -21,7 +21,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexAttemptErrorResolvedReason, IndexingStatus
 from onyx.db.index_attempt import (
     create_index_attempt_errors__no_commit,
     resolve_index_attempt_errors_for_documents__no_commit,
@@ -29,6 +29,7 @@ from onyx.db.index_attempt import (
 from onyx.db.models import IndexAttempt, TargetedReindexJobTarget
 from onyx.db.targeted_reindex import (
     get_index_attempts_for_targeted_reindex_job,
+    get_retry_attempt_ids_by_cc_pair,
     get_targeted_reindex_job,
     get_targets_for_job,
     resolve_failure_derived_targets,
@@ -233,20 +234,26 @@ def run_targeted_reindex(
             #    (cc_pair, doc) pairs that actually landed. Errors
             #    whose target failed to land stay open so the admin can
             #    retry.
-            resolved_count, summary = resolve_failure_derived_targets(
-                db_session, targeted_reindex_job_id, landed_keys
+            retry_attempt_ids = get_retry_attempt_ids_by_cc_pair(
+                db_session, targeted_reindex_job_id
             )
-            # A landed document closes every open error it has on the pair, as
-            # a full run does, including those an earlier retry filed.
+            resolved_count, summary = resolve_failure_derived_targets(
+                db_session, targeted_reindex_job_id, landed_keys, retry_attempt_ids
+            )
+            # A landed document closes every open error it has on the pair as a
+            # retry, including those an earlier retry filed.
             for cc_pair_id in by_cc_pair:
+                landed_doc_ids = [
+                    doc_id for pair_id, doc_id in landed_keys if pair_id == cc_pair_id
+                ]
+                if not landed_doc_ids:
+                    continue
                 resolve_index_attempt_errors_for_documents__no_commit(
                     db_session,
                     cc_pair_id,
-                    [
-                        doc_id
-                        for pair_id, doc_id in landed_keys
-                        if pair_id == cc_pair_id
-                    ],
+                    landed_doc_ids,
+                    retry_attempt_ids[cc_pair_id],
+                    IndexAttemptErrorResolvedReason.RETRY,
                 )
 
             still_failing_count = len(failed_keys)
