@@ -358,6 +358,53 @@ the previous default, set the value explicitly before applying.
 **The Craft sandbox node group's key changed** from `craft_sandbox` to `sandbox`.
 A `moved` block handles the relabel, so the group is not recreated.
 
+### AWS provider 6 and EKS module v21
+
+The modules now need AWS provider `~> 6.33`. The `eks` module uses
+`terraform-aws-modules/eks/aws` `~> 21.23` (was `~> 20.0`). Provider 6.33 and
+EKS module 21.23 are the first versions with the nested-virtualization launch
+template option.
+
+Before you upgrade:
+
+1. Allow `hashicorp/aws` `~> 6.33` in your root module.
+2. Run `terraform init -upgrade` to update `.terraform.lock.hcl`.
+3. Run `terraform plan` and check that it replaces nothing.
+
+**The inputs of these modules did not change.** The `eks` module maps its inputs
+to the renamed upstream inputs:
+
+| Upstream v20 input | Upstream v21 input |
+|---|---|
+| `cluster_name` | `name` |
+| `cluster_version` | `kubernetes_version` |
+| `cluster_endpoint_public_access` | `endpoint_public_access` |
+| `cluster_endpoint_private_access` | `endpoint_private_access` |
+| `cluster_endpoint_public_access_cidrs` | `endpoint_public_access_cidrs` |
+| `cluster_enabled_log_types` | `enabled_log_types` |
+| `cluster_addons` | `addons` |
+| `eks_managed_node_group_defaults` | removed; the `eks` module merges defaults into each group |
+| `enable_security_groups_for_pods` | removed; the `eks` module attaches `AmazonEKSVPCResourceController` itself |
+
+**The `eks` module keeps the v20 node group defaults.** Upstream v21 changed
+them, which would roll every node. The module pins the v20 values: IMDS hop
+limit 2, detailed monitoring on, no automatic move to the latest AMI release,
+and `min_size` 0. The Craft sandbox group keeps hop limit 1.
+
+**Expected plan changes:**
+- One move: the cluster role's `AmazonEKSVPCResourceController` attachment.
+- In-place tag updates: upstream v21 no longer adds the
+  `terraform-aws-modules = "eks"` tag to the cluster and its KMS key.
+- The `vpc` flow log now sets `log_destination`, because provider 6 removed
+  `log_group_name`. The value is the ARN the flow log already has, so the plan
+  must not replace it.
+
+**If you pass your own `eks_managed_node_groups`:** upstream v21 types each
+group, so every attribute must exist in the v21 node group object. Rename
+`cluster_version` to `kubernetes_version`. Remove `platform`, `schedules`,
+`create_schedule`, `elastic_gpu_specifications`, `elastic_inference_accelerator`,
+`placement_group_az` and `placement_group_strategy`. `taints` can be a list or a map.
+
 ## Installing the Onyx Helm chart (after Terraform)
 Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.
 
