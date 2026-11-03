@@ -401,6 +401,24 @@ variable "craft_sandbox_node_disk_size_gb" {
   default     = 200
 }
 
+variable "craft_sandbox_node_disk_iops" {
+  type        = number
+  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. 6000 is the tested value for Firecracker sandboxes."
+  default     = 3000
+}
+
+variable "craft_sandbox_node_disk_throughput" {
+  type        = number
+  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. 500 is the tested value for Firecracker sandboxes."
+  default     = 125
+}
+
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "How Craft sandboxes run: \"pod\" (default) or \"firecracker\". \"firecracker\" needs Intel c8i, m8i or r8i (or -flex) or Intel .metal craft_sandbox_node_instance_types. The eks module checks the types."
+  default     = "pod"
+}
+
 # OpenSearch Configuration Variables
 variable "enable_opensearch" {
   type        = bool
