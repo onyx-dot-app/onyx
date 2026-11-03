@@ -87,7 +87,7 @@ export const OpenSearchSizingCalculator = () => {
       }
       const lo = i ? cumulative(prev, i - 1) : 0;
       const hi = cumulative(prev, i + 1);
-      const at = Math.round(Math.min(hi, Math.max(lo, x)) * 100) / 100;
+      const at = Math.min(hi, Math.max(lo, Math.round(x * 100) / 100));
       next[i] = at - lo;
       next[i + 1] = hi - at;
       return next;
@@ -152,8 +152,10 @@ export const OpenSearchSizingCalculator = () => {
   const nodesForStorage = Math.ceil(provision / (nodeDisk * 1e9));
   const nodes = Math.ceil(Math.max(copies, nodesForMemory, nodesForStorage) / zones) * zones;
   const limit = nodes > nodesWithoutStorage ? "storage" : nodesForMemory > copies ? "memory" : "copies";
-  let primaries = Math.max(1, Math.ceil(indexOneCopy / SHARD_BYTES));
-  if (primaries * copies < nodes) primaries = Math.ceil(nodes / copies);
+  // Shards are whole units, so pick a primary count whose copies divide evenly over the
+  // nodes. Then no node holds more than its share of the vectors and the data.
+  let primaries = Math.max(1, Math.ceil(indexOneCopy / SHARD_BYTES), Math.ceil(nodes / copies));
+  while ((primaries * copies) % nodes !== 0) primaries++;
 
   const card = "rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-transparent p-5";
   const label = "text-base font-medium text-gray-900 dark:text-gray-200";
@@ -291,7 +293,7 @@ export const OpenSearchSizingCalculator = () => {
               <div className="space-y-1.5">
                 <div className={label}>Vector quantization</div>
                 {segmented({ ariaLabel: "Vector quantization", value: quant, onChange: setQuant, options: [["none", "None"], ["sq7", "7-bit"], ["sq1", "1-bit"]] })}
-                <div className={hint}>Quantization cuts the memory that search needs. It adds a little storage, because the full vectors stay on disk.</div>
+                <div className={hint}>Quantization cuts the memory that search needs. It adds a little storage, because the full vectors stay on disk. 1-bit needs OpenSearch 3.6 or later.</div>
               </div>
             </div>
           </details>
@@ -398,7 +400,7 @@ export const OpenSearchSizingCalculator = () => {
             <div className={hint}>Set these before the first indexing run. Onyx fixes the shard count when it creates the index.</div>
           </div>
           {limit === "memory" && quant === "none" ? (
-            <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">Memory sets the node count. 1-bit quantization cuts the vector memory by about 32×.</div>
+            <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">Memory sets the node count. 1-bit quantization (OpenSearch 3.6 or later) stores vectors 32× smaller.</div>
           ) : null}
           {limit === "storage" ? (
             <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">Storage sets the node count. Larger disks per node need fewer nodes. Without room to rebuild, the cluster needs half the storage.</div>

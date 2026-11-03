@@ -168,7 +168,7 @@ GET _cat/indices/danswer_chunk*?v&h=index,docs.count,pri.store.size,store.size
 | Signal | Action |
 | --- | --- |
 | Disk use on a node is above 75% | Add storage or data nodes |
-| Search is slow and JVM heap use is low | Add memory or data nodes, or use 1-bit quantization to cut vector memory by about 32× |
+| Search is slow and JVM heap use is low | Add memory or data nodes, or use 1-bit quantization (OpenSearch 3.6 or later), which stores vectors 32× smaller |
 | JVM heap use stays above 75%, or requests fail with `CircuitBreakingException` | Raise the heap, up to 50% of the node's RAM and at most 31 GB. Raise the container memory limit too. |
 | Shards grow above 30 GB | Plan a reindex with a higher `OPENSEARCH_INDEX_NUM_SHARDS` |
 
@@ -180,15 +180,20 @@ The number of primary shards is fixed when Onyx creates the index. To change it,
 500 GB of storage with the default storage mix holds about 35 GB of text, or 18.5 million chunks. With 30% growth,
 the calculator plans for 24 million chunks.
 
-| Setup | Index size, one copy | Memory for vector search, one copy | Cluster |
-| --- | --- | --- | --- |
-| Granite (384 dimensions), 2 copies | 93 GB | 37.8 GB | 3 nodes, 64 GB RAM and 256 GB storage each |
-| Same, with 1-bit quantization | 94 GB | 2.1 GB | 2 nodes, 16 GB RAM and 256 GB storage each |
-| Granite, 1 copy (single node) | 93 GB | 37.8 GB | 2 nodes, 64 GB RAM and 128 GB storage each |
-| Same, with 1-bit quantization | 94 GB | 2.1 GB | 1 node, 16 GB RAM and 256 GB storage |
+| Setup | Index size, one copy | Memory for vector search, one copy | Cluster | Onyx settings |
+| --- | --- | --- | --- | --- |
+| Granite (384 dimensions), 2 copies | 93 GB | 37.8 GB | 3 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Same, with 1-bit quantization | 94 GB | 2.1 GB | 2 nodes, 16 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=7`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite, 1 copy | 93 GB | 37.8 GB | 2 nodes, 64 GB RAM and 128 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
+| Same, with 1-bit quantization | 94 GB | 2.1 GB | 1 node, 16 GB RAM and 256 GB storage | `OPENSEARCH_INDEX_NUM_SHARDS=7`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
 
-All four use 7 primary shards: `OPENSEARCH_INDEX_NUM_SHARDS=7`.
-1-bit quantization barely changes storage but cuts the memory need so much that smaller and fewer nodes are enough.
+The shard count makes the shard copies divide evenly over the nodes, so no node holds more than its share.
+1-bit quantization needs OpenSearch 3.6 or later. It stores vectors 32× smaller,
+so the memory for vector search drops about 18× in this example (the graph links stay the same size).
+Storage barely changes.
+
+Onyx applies both settings when it creates an index. To change the replica count of an existing index,
+update the index setting `number_of_replicas` in OpenSearch.
 
 ## Next Steps
 
