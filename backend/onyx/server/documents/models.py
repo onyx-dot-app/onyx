@@ -819,6 +819,14 @@ class CCPairRunsResolvableCountResponse(BaseModel):
     count: int
 
 
+class IndexAttemptErrorsResolveRequest(BaseModel):
+    error_ids: list[int] = Field(min_length=1, max_length=CC_PAIR_RUN_BATCH_MAX)
+
+
+class IndexAttemptErrorsResolveResponse(BaseModel):
+    resolved_count: int
+
+
 class CCPairRef(BaseModel):
     """A pair named in a fleet-wide feed."""
 

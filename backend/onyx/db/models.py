@@ -98,6 +98,7 @@ from onyx.db.enums import (
     HookFailStrategy,
     HookPoint,
     IncognitoRecordMode,
+    IndexAttemptErrorResolvedReason,
     IndexingMode,
     IndexingStatus,
     IndexModelStatus,
@@ -2833,6 +2834,7 @@ class IndexAttempt(Base):
         "IndexAttemptError",
         back_populates="index_attempt",
         cascade="all, delete-orphan",
+        foreign_keys="IndexAttemptError.index_attempt_id",
     )
 
     stage_metrics: Mapped[list["IndexAttemptStageMetric"]] = relationship(
@@ -3174,6 +3176,24 @@ class IndexAttemptError(Base):
 
     failure_message: Mapped[str] = mapped_column(Text)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Null while open and on rows older than the column.
+    resolved_reason: Mapped[IndexAttemptErrorResolvedReason | None] = mapped_column(
+        Enum(
+            IndexAttemptErrorResolvedReason,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    # The run that closed the error, null when an admin resolved it. SET NULL,
+    # since the error belongs to its own attempt and outlives the closing one.
+    resolved_by_index_attempt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     error_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -3183,15 +3203,26 @@ class IndexAttemptError(Base):
     )
 
     # This is the reverse side of the relationship
-    index_attempt = relationship("IndexAttempt", back_populates="error_rows")
+    index_attempt = relationship(
+        "IndexAttempt",
+        back_populates="error_rows",
+        foreign_keys=[index_attempt_id],
+    )
 
-    # Each docprocessing batch resolves its documents' open errors.
     __table_args__ = (
+        # Each docprocessing batch resolves its documents' open errors.
         Index(
             "ix_index_attempt_errors_unresolved_cc_pair_document",
             "connector_credential_pair_id",
             "document_id",
             postgresql_where=text("NOT is_resolved"),
+        ),
+        # Backs the SET NULL when an attempt is deleted. Partial, since open and
+        # admin-resolved rows hold null.
+        Index(
+            "ix_index_attempt_errors_resolved_by_index_attempt_id",
+            "resolved_by_index_attempt_id",
+            postgresql_where=text("resolved_by_index_attempt_id IS NOT NULL"),
         ),
     )
 

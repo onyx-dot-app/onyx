@@ -30,7 +30,10 @@ from onyx.connectors.capability_checks.registry import has_named_capability_chec
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.pairing_access import validate_pairing_access
-from onyx.db.cc_pair_run_resolution import resolve_runs__no_commit
+from onyx.db.cc_pair_run_resolution import (
+    resolve_errors_without_retry__no_commit,
+    resolve_runs__no_commit,
+)
 from onyx.db.cc_pair_runs import (
     count_matching_runs,
     get_resolvable_runs,
@@ -134,6 +137,8 @@ from onyx.server.documents.models import (
     ConnectorCredentialPairIdentifier,
     ConnectorCredentialPairMetadata,
     DocumentSyncStatus,
+    IndexAttemptErrorsResolveRequest,
+    IndexAttemptErrorsResolveResponse,
     IndexAttemptSnapshot,
     IndexAttemptStageMetricSnapshot,
     IndexAttemptStageMetricsResponse,
@@ -378,8 +383,9 @@ def resolve_cc_pair_runs(
     db_session: Session = Depends(get_session),
 ) -> CCPairRunsResolveResponse:
     """Marks failed runs, or runs with open document errors, of the pair's feed
-    resolved. They keep their status; the feed moves them out of the open
-    failures and errors. Takes the targeted reindex's permissions."""
+    resolved and closes their errors so far without retry. They keep their
+    status; the feed moves them out of the open failures and errors. Takes the
+    targeted reindex's permissions."""
     cc_pair = _get_operated_cc_pair_or_raise(cc_pair_id, db_session, user)
     wanted = list(dict.fromkeys((run.kind, run.attempt_id) for run in request.runs))
     run_filter = CCPairRunFilter(
@@ -402,7 +408,7 @@ def resolve_cc_pair_runs(
             OnyxErrorCode.INVALID_INPUT,
             "Only this connector's failed runs or runs with open errors resolve.",
         )
-    resolved_count = resolve_runs__no_commit(db_session, resolvable, user.id)
+    resolved_count = len(resolve_runs__no_commit(db_session, resolvable, user.id))
     db_session.commit()
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
@@ -1240,6 +1246,34 @@ def get_cc_pair_indexing_errors(
         ],
         total_items=total_count,
     )
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/errors/resolve")
+def resolve_cc_pair_indexing_errors(
+    cc_pair_id: int,
+    request: IndexAttemptErrorsResolveRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> IndexAttemptErrorsResolveResponse:
+    """Resolves the pair's chosen open errors without retry and returns how
+    many it resolved. The errors leave the open list, and a Retry still takes
+    them. Takes the run resolve's permissions."""
+    _get_operated_cc_pair_or_raise(cc_pair_id, db_session, user)
+    resolved_ids = resolve_errors_without_retry__no_commit(
+        db_session, cc_pair_id, set(request.error_ids)
+    )
+    db_session.commit()
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"resolved_error_ids": resolved_ids},
+    )
+    return IndexAttemptErrorsResolveResponse(resolved_count=len(resolved_ids))
 
 
 def authorize_pairing(
