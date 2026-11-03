@@ -22,6 +22,11 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/craft/v1/tasks/task-id",
 }));
 
+beforeEach(() => {
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/craft/v1/tasks/task-id");
+});
+
 const task: ScheduledTaskDetail = {
   id: "task-id",
   name: "Daily report",
