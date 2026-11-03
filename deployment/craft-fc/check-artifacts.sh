@@ -2,7 +2,7 @@
 # Checks an exported craft-fc-artifacts image tree.
 # Usage: check-artifacts.sh <dir containing craft-fc/>
 #
-# - vmlinux is an x86_64 ELF file.
+# - vmlinux is an x86_64 ELF file with the kernel release from KERNEL_TAG.
 # - vmlinux.config has every line of kernel/config-fragment.
 # - firecracker and jailer match the SHA256SUMS of the upstream release. The
 #   release tarball is downloaded again here, so this does not trust the build.
@@ -12,6 +12,10 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="${1:?usage: check-artifacts.sh <export dir>}/craft-fc"
 fc_version="$(sed -n 's/^ARG FC_VERSION=//p' "${here}/Dockerfile.artifacts")"
 fc_tarball_sha256="$(sed -n 's/^ARG FC_TARBALL_SHA256=//p' "${here}/Dockerfile.artifacts")"
+kernel_tag="$(sed -n 's/^ARG KERNEL_TAG=//p' "${here}/Dockerfile.artifacts")"
+kernel_release="${kernel_tag#microvm-kernel-}"
+kernel_release="${kernel_release%%-*}"
+fragment="${here}/kernel/config-fragment"
 failed=0
 
 pass() { echo "PASS $*"; }
@@ -24,7 +28,8 @@ sha256() {
 }
 
 for f in vmlinux vmlinux.config firecracker jailer SOURCE.md \
-  licenses/linux/COPYING licenses/firecracker/LICENSE licenses/firecracker/NOTICE; do
+  licenses/linux/COPYING licenses/linux/GPL-2.0 licenses/linux/Linux-syscall-note \
+  licenses/firecracker/LICENSE licenses/firecracker/NOTICE licenses/firecracker/THIRD-PARTY; do
   if [ -s "${root}/${f}" ]; then pass "${f} exists"; else fail "${f} is missing or empty"; fi
 done
 
@@ -36,13 +41,27 @@ else
   fail "vmlinux is not an x86_64 ELF file (header ${header})"
 fi
 
-while IFS= read -r line; do
-  if grep -qxF "${line}" "${root}/vmlinux.config"; then
-    pass "config: ${line}"
-  else
-    fail "config does not have: ${line}"
-  fi
-done < <(grep -E '^(CONFIG_[A-Z0-9_]+=|# CONFIG_[A-Z0-9_]+ is not set$)' "${here}/kernel/config-fragment")
+# The banner has the release, then " (" and the build user.
+if LC_ALL=C grep -aqF "Linux version ${kernel_release} (" "${root}/vmlinux"; then
+  pass "vmlinux is kernel release ${kernel_release}"
+else
+  fail "vmlinux is not kernel release ${kernel_release}"
+fi
+
+checked=0
+if [ -s "${fragment}" ]; then
+  while IFS= read -r line; do
+    checked=$((checked + 1))
+    if grep -qxF "${line}" "${root}/vmlinux.config"; then
+      pass "config: ${line}"
+    else
+      fail "config does not have: ${line}"
+    fi
+  done < <(grep -E '^(CONFIG_[A-Z0-9_]+=|# CONFIG_[A-Z0-9_]+ is not set$)' "${fragment}" || true)
+fi
+if [ "${checked}" -eq 0 ]; then
+  fail "kernel/config-fragment is missing or has no config lines"
+fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT

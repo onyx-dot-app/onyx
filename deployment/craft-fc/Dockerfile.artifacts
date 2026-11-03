@@ -75,12 +75,15 @@ COPY kernel/config-fragment /src/config-fragment
 
 # olddefconfig silently drops a fragment setting whose dependencies are not met,
 # so check that every fragment line is in the final .config.
+# LOCALVERSION is set but empty, so the release is 6.18.25, not 6.18.25+ (the
+# "+" marks a git tree that is not at a release tag).
 FROM kernel-source AS kernel
 ARG BUILDARCH
+ARG KERNEL_TAG
 WORKDIR /src/linux
 RUN set -eux; \
     if [ "${BUILDARCH}" != "amd64" ]; then export CROSS_COMPILE=x86_64-linux-gnu-; fi; \
-    export ARCH=x86_64 KBUILD_BUILD_USER=onyx KBUILD_BUILD_HOST=craft-fc-artifacts; \
+    export ARCH=x86_64 KBUILD_BUILD_USER=onyx KBUILD_BUILD_HOST=craft-fc-artifacts LOCALVERSION=; \
     mkdir -p /build; \
     scripts/kconfig/merge_config.sh -m -O /build /src/fc-base.config /src/config-fragment; \
     make -s O=/build olddefconfig; \
@@ -95,8 +98,11 @@ RUN set -eux; \
     install -m 0644 COPYING /out/licenses/linux/COPYING; \
     install -m 0644 LICENSES/preferred/GPL-2.0 /out/licenses/linux/GPL-2.0; \
     install -m 0644 LICENSES/exceptions/Linux-syscall-note /out/licenses/linux/Linux-syscall-note; \
-    make -s O=/build kernelrelease > /out/kernelrelease
+    make -s O=/build kernelrelease > /out/kernelrelease; \
+    want="${KERNEL_TAG#microvm-kernel-}"; \
+    test "$(cat /out/kernelrelease)" = "${want%%-*}"
 
+# The build scripts are part of the complete corresponding source.
 FROM kernel-source AS source-bundle
 ARG KERNEL_TAG
 WORKDIR /src/linux
@@ -104,6 +110,8 @@ RUN set -eux; \
     mkdir -p /out; \
     git archive --format=tar --prefix="linux-${KERNEL_TAG}/" HEAD | xz -T0 -6 > "/out/linux-${KERNEL_TAG}.tar.xz"; \
     cp /src/fc-base.config /src/config-fragment /out/
+COPY Dockerfile.artifacts check-artifacts.sh /out/build/
+COPY kernel/config-fragment /out/build/kernel/config-fragment
 
 FROM builder AS manifest
 ARG KERNEL_TAG
@@ -111,6 +119,8 @@ ARG KERNEL_COMMIT
 ARG KERNEL_REPO
 ARG FC_VERSION
 ARG FC_BASE_CONFIG
+# The onyx commit that has these build files. CI passes github.sha.
+ARG ONYX_COMMIT=unknown
 COPY --from=kernel /out/kernelrelease /tmp/kernelrelease
 COPY kernel/config-fragment /tmp/config-fragment
 RUN set -eux; \
@@ -127,8 +137,10 @@ RUN set -eux; \
       echo "- Base config: https://github.com/firecracker-microvm/firecracker/blob/${FC_VERSION}/${FC_BASE_CONFIG}"; \
       echo "- Full config used: vmlinux.config (also at /proc/config.gz in the guest)"; \
       echo "- Complete corresponding source: the image with the same tag plus the suffix \"-source\"."; \
-      echo "  It holds linux-${KERNEL_TAG}.tar.xz, the base config and the fragment below."; \
-      echo "- Build: deployment/craft-fc/Dockerfile.artifacts in https://github.com/onyx-dot-app/onyx"; \
+      echo "  It holds linux-${KERNEL_TAG}.tar.xz, the base config, the fragment below and"; \
+      echo "  the build files (build/)."; \
+      echo "- Build files: https://github.com/onyx-dot-app/onyx/tree/${ONYX_COMMIT}/deployment/craft-fc"; \
+      echo "  (onyx commit ${ONYX_COMMIT})"; \
       echo; \
       echo "Our config fragment:"; \
       echo; \

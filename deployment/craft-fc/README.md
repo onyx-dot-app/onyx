@@ -60,8 +60,9 @@ docker buildx build --platform linux/amd64 -f Dockerfile.artifacts \
 ```
 
 `check-artifacts.sh` downloads the Firecracker release again and compares the
-binaries with its `SHA256SUMS`. It also checks the vmlinux ELF header and the
-config fragment.
+binaries with its `SHA256SUMS`. It also checks the vmlinux ELF header, the
+kernel release (`6.18.25`, with no `+`), the license files and the config
+fragment.
 
 ## CI and publishing
 
@@ -73,8 +74,11 @@ To publish, run the workflow manually on `main`. The publish job:
 
 - uses the `release` environment and the Docker Hub credentials that
   `deployment.yml` uses;
-- pushes `<tag>-source` first, then `<tag>`;
-- stops if either tag already exists. A published tag never changes.
+- stops if either tag already exists, or if it cannot tell. A published tag
+  never changes;
+- pushes both images by digest only, with no tag;
+- pulls those digests and runs the same checks on them;
+- tags the checked digests: `<tag>-source` first, then `<tag>`.
 
 If you change `kernel/config-fragment` but not the versions, set the `revision`
 input (for example `r2`). The tag then becomes `<tag>-r2`.
@@ -82,12 +86,13 @@ input (for example `r2`). The tag then becomes `<tag>-r2`.
 ## GPL-2.0 source obligation
 
 The guest kernel is GPL-2.0. Each published `vmlinux` must have its complete
-corresponding source next to it. The publish job pushes the source as the
-`<tag>-source` image before it pushes the binary. That image has:
+corresponding source next to it. The publish job tags the source as the
+`<tag>-source` image before it tags the binary. That image has:
 
 - `linux-<kernel tag>.tar.xz`, a `git archive` of the pinned commit;
 - `fc-base.config` and `config-fragment`;
-- `SOURCE.md`.
+- `build/`: `Dockerfile.artifacts`, `check-artifacts.sh` and the fragment;
+- `SOURCE.md`, with a link to the onyx commit that built the image.
 
 Do not copy `vmlinux` to another registry, bucket or release page without its
 `-source` image or an equivalent copy of the source.
@@ -103,7 +108,18 @@ Do not copy `vmlinux` to another registry, bucket or release page without its
 ## Boot test
 
 The CI build does not boot the kernel, because CI runners have no `/dev/kvm`.
-Before you publish a new kernel, boot it on a KVM host with the new `vmlinux`
-as the guest kernel. Use the Firecracker bench kit `cold` command
-(`fc-host.py cold <id>`). Do the same test with Firecracker `restore` after a
-Firecracker version change.
+Before you publish a new kernel, boot it on a KVM host: an Intel `.metal`
+instance, or a `c8i`/`m8i`/`r8i` instance with nested virtualization.
+
+1. Copy `vmlinux`, `firecracker` and `jailer` from the image to the host.
+2. Start a microVM with `firecracker --no-api --config-file vm.json`. In
+   `vm.json`, set `boot-source.kernel_image_path` to this `vmlinux` and
+   `boot_args` to `console=ttyS0 reboot=k panic=1`. Use an ext4 root drive with
+   an init that you can log in to or that prints to the console.
+3. In the guest, check:
+   - `uname -r` prints `6.18.25`;
+   - `zcat /proc/config.gz` has every line of `kernel/config-fragment`;
+   - `misc` is in `/proc/cgroups`;
+   - the console shows no `panic`, `Oops` or `BUG`.
+4. After a Firecracker version change, also create a snapshot of a running
+   microVM and restore it.
