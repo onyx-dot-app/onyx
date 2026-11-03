@@ -644,6 +644,11 @@ class JiraConnector(
         # the document belongs directly under the project in the hierarchy
         return project_key
 
+    def _issue_for_document(self, issue: JiraIssue) -> JiraIssue:
+        """The issue to build the document from. Subclasses can drop content
+        that must not be indexed."""
+        return issue
+
     def _extra_issue_metadata(
         self,
         issue: JiraIssue,  # noqa: ARG002
@@ -820,7 +825,7 @@ class JiraConnector(
 
         if document := process_jira_issue(
             jira_base_url=self.jira_base,
-            issue=issue,
+            issue=self._issue_for_document(issue),
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,

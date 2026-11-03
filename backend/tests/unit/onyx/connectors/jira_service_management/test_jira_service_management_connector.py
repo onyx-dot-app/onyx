@@ -29,6 +29,8 @@ from onyx.connectors.jira_service_management.connector import (
     METADATA_SLA_BREACHED,
     JiraServiceManagementConnector,
     extract_jsm_metadata,
+    is_internal_comment,
+    without_internal_comments,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError, Document
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
@@ -158,7 +160,7 @@ def test_extract_jsm_metadata_handles_missing_and_malformed_fields() -> None:
     assert METADATA_REQUEST_TYPE not in metadata
     assert METADATA_REQUEST_STATUS not in metadata
     assert metadata["sla_time_to_resolution"] == "breached"
-    assert metadata["sla_time_to_approve"] == "ongoing"
+    assert metadata["sla_time_to_approve"] == "unknown"
     assert metadata[METADATA_SLA_BREACHED] == ["Time to resolution"]
 
 
@@ -356,3 +358,81 @@ def test_validate_without_credentials() -> None:
 
     with pytest.raises(ConnectorMissingCredentialError):
         jsm.validate_connector_settings()
+
+
+def test_extract_jsm_metadata_reads_status_without_request_type() -> None:
+    """Moved requests can carry ``currentStatus`` without ``requestType``."""
+    issue = _raw_request(
+        "HELP-4",
+        extra_fields={"customfield_1": {"currentStatus": {"status": "Resolved"}}},
+    )
+
+    metadata = extract_jsm_metadata(issue)
+
+    assert metadata[METADATA_REQUEST_STATUS] == "Resolved"
+    assert METADATA_REQUEST_TYPE not in metadata
+
+
+def _comment(body: str, **extra: Any) -> dict[str, Any]:
+    return {"body": body, "author": {"emailAddress": "agent@example.com"}, **extra}
+
+
+@pytest.mark.parametrize(
+    "comment,internal",
+    [
+        (_comment("public", jsdPublic=True), False),
+        (_comment("note", jsdPublic=False), True),
+        (
+            _comment(
+                "note",
+                properties=[{"key": "sd.public.comment", "value": {"internal": True}}],
+            ),
+            True,
+        ),
+        (
+            _comment(
+                "public",
+                properties=[{"key": "sd.public.comment", "value": {"internal": False}}],
+            ),
+            False,
+        ),
+        (_comment("plain jira comment"), False),
+    ],
+)
+def test_is_internal_comment(comment: dict[str, Any], internal: bool) -> None:
+    assert is_internal_comment(comment) is internal
+
+
+def test_without_internal_comments_keeps_issue_untouched_when_all_public() -> None:
+    issue = _raw_request("HELP-5")
+    issue["fields"]["comment"]["comments"] = [_comment("hi", jsdPublic=True)]
+
+    assert without_internal_comments(issue) is issue
+    assert without_internal_comments({"key": "HELP-5"}) == {"key": "HELP-5"}
+
+
+def test_internal_notes_are_not_indexed(
+    connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    issue = _raw_request("HELP-6")
+    issue["fields"]["comment"]["comments"] = [
+        _comment("Customer reply: still broken", jsdPublic=True),
+        _comment("INTERNAL: customer is on the risk list", jsdPublic=False),
+    ]
+    mock_source_operations.search_issues.side_effect = [[issue], []]
+
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    documents = [
+        item
+        for output in outputs
+        for item in output.items
+        if isinstance(item, Document)
+    ]
+
+    assert len(documents) == 1
+    text = documents[0].sections[0].text or ""
+    assert "Customer reply: still broken" in text
+    assert "INTERNAL" not in text
+    # The raw issue is not mutated.
+    assert len(issue["fields"]["comment"]["comments"]) == 2

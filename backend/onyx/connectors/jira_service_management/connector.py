@@ -43,12 +43,69 @@ _FRIENDLY = "friendly"
 _SLA_BREACHED = "breached"
 _SLA_MET = "met"
 _SLA_ONGOING = "ongoing"
+_SLA_UNKNOWN = "unknown"
+
+_COMMENT = "comment"
+_COMMENTS = "comments"
+# Jira Cloud marks each JSM comment as public (shared with customers) or an
+# internal note with ``jsdPublic``. Server / Data Center (and older Cloud
+# payloads) carry the same flag in the ``sd.public.comment`` property.
+_JSD_PUBLIC = "jsdPublic"
+_PROPERTIES = "properties"
+_PROPERTY_KEY = "key"
+_PROPERTY_VALUE = "value"
+_SD_PUBLIC_COMMENT = "sd.public.comment"
+_INTERNAL = "internal"
 
 
 def _is_request_type_value(value: Any) -> bool:
     """The "Customer Request Type" custom field (``com.atlassian.servicedesk:
     vp-origin``) holds an object with a ``requestType`` entry."""
     return isinstance(value, dict) and isinstance(value.get(_REQUEST_TYPE), dict)
+
+
+def _is_request_status_value(value: Any) -> bool:
+    """Moved requests can keep ``currentStatus`` without a ``requestType``."""
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get(_CURRENT_STATUS), dict)
+        and not _is_sla_value(value)
+    )
+
+
+def is_internal_comment(comment: dict[str, Any]) -> bool:
+    """Whether a JSM comment is an internal note (agents only)."""
+    if comment.get(_JSD_PUBLIC) is False:
+        return True
+    for prop in comment.get(_PROPERTIES) or []:
+        if not isinstance(prop, dict) or prop.get(_PROPERTY_KEY) != _SD_PUBLIC_COMMENT:
+            continue
+        value: Any = prop.get(_PROPERTY_VALUE)
+        if isinstance(value, dict) and value.get(_INTERNAL) is True:
+            return True
+    return False
+
+
+def without_internal_comments(issue: dict[str, Any]) -> dict[str, Any]:
+    """A copy of ``issue`` without internal notes; public comments are kept."""
+    fields: Any = issue.get(_FIELDS)
+    if not isinstance(fields, dict):
+        return issue
+    comment_field: Any = fields.get(_COMMENT)
+    if not isinstance(comment_field, dict):
+        return issue
+    comments: Any = comment_field.get(_COMMENTS)
+    if not isinstance(comments, list):
+        return issue
+    public = [
+        c for c in comments if not (isinstance(c, dict) and is_internal_comment(c))
+    ]
+    if len(public) == len(comments):
+        return issue
+    return {
+        **issue,
+        _FIELDS: {**fields, _COMMENT: {**comment_field, _COMMENTS: public}},
+    }
 
 
 def _is_sla_value(value: Any) -> bool:
@@ -85,7 +142,8 @@ def _sla_summary(sla: dict[str, Any]) -> tuple[str, bool]:
         if isinstance(last, dict) and last.get(_BREACHED):
             return _SLA_BREACHED, True
         return _SLA_MET, False
-    return _SLA_ONGOING, False
+    # No cycle has started yet (e.g. the SLA's start condition is not met).
+    return _SLA_UNKNOWN, False
 
 
 def _sla_metadata_key(sla_name: str) -> str:
@@ -102,10 +160,10 @@ def extract_jsm_metadata(issue: dict[str, Any]) -> dict[str, str | list[str]]:
 
     breached_slas: list[str] = []
     for value in fields.values():
-        if _is_request_type_value(value):
-            request_type_name: Any = value[_REQUEST_TYPE].get(_NAME)
-            if request_type_name:
-                metadata[METADATA_REQUEST_TYPE] = str(request_type_name)
+        if _is_request_type_value(value) or _is_request_status_value(value):
+            request_type: Any = value.get(_REQUEST_TYPE)
+            if isinstance(request_type, dict) and request_type.get(_NAME):
+                metadata[METADATA_REQUEST_TYPE] = str(request_type[_NAME])
             current_status: Any = value.get(_CURRENT_STATUS)
             if isinstance(current_status, dict) and current_status.get(_STATUS):
                 metadata[METADATA_REQUEST_STATUS] = str(current_status[_STATUS])
@@ -147,6 +205,10 @@ class JiraServiceManagementConnector(JiraConnector):
             jql_query=None,
             scoped_token=scoped_token,
         )
+
+    def _issue_for_document(self, issue: dict[str, Any]) -> dict[str, Any]:
+        # Internal notes are agent-only and must not leak into the index.
+        return without_internal_comments(issue)
 
     def _extra_issue_metadata(
         self, issue: dict[str, Any]
