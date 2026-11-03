@@ -18,6 +18,10 @@ import {
   type CCPairThroughputResponse,
 } from "@/lib/connectors/types";
 import englishMessages from "@/i18n/messages/en.json";
+import {
+  installChartLayout,
+  resetChartLayout,
+} from "@tests/setup/throughputChartTestUtils";
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -348,10 +352,10 @@ async function settle() {
   }
 }
 
-// ── Tabs (AC-1, AC-2) ───────────────────────────────────────────────────────
+// ── Tabs ────────────────────────────────────────────────────────────────────
 
-describe("connector page tabs (FE-5)", () => {
-  it("AC-1: opens on Connector Configurations, which holds the Account, Index Configurations, Sharing and Schedule sections", async () => {
+describe("connector page tabs", () => {
+  it("opens on Connector Configurations, which holds the Account, Index Configurations, Sharing and Schedule sections", async () => {
     await renderPage();
     await loaded();
     const configurations = await screen.findByRole("tab", {
@@ -375,7 +379,7 @@ describe("connector page tabs (FE-5)", () => {
     expect(within(panel).queryByTestId("connector-runs")).toBeNull();
   });
 
-  it("AC-1: the tabs sit in one tab list, Connector Configurations first", async () => {
+  it("the tabs sit in one tab list, Connector Configurations first", async () => {
     await renderPage();
     await loaded();
     const list = await screen.findByRole("tablist");
@@ -386,7 +390,7 @@ describe("connector page tabs (FE-5)", () => {
     ]);
   });
 
-  it("AC-1: a click on Indexing shows the Document Indexing and Indexing Runs cards in place of the configuration sections", async () => {
+  it("a click on Indexing shows the Document Indexing and Indexing Runs cards in place of the configuration sections", async () => {
     const user = setupUser();
     await renderPage();
     await loaded();
@@ -405,7 +409,7 @@ describe("connector page tabs (FE-5)", () => {
     ).toBeNull();
   });
 
-  it("AC-1: ?tab=indexing opens the page on the Indexing tab", async () => {
+  it("?tab=indexing opens the page on the Indexing tab", async () => {
     await renderPage({ query: "tab=indexing" });
     await loaded();
     const indexing = await screen.findByRole("tab", {
@@ -422,7 +426,7 @@ describe("connector page tabs (FE-5)", () => {
     expect(within(panel).getByTestId("connector-runs")).toBeInTheDocument();
   });
 
-  it("AC-2: before the first run starts the Indexing tab is disabled with the tooltip Available after the first run starts.", async () => {
+  it("before the first run starts the Indexing tab is disabled with the tooltip Available after the first run starts.", async () => {
     const user = setupUser();
     await renderPage({ pair: ccPair(NEVER_RUN), runs: [] });
     await loaded();
@@ -438,7 +442,7 @@ describe("connector page tabs (FE-5)", () => {
     expect(tooltip).toHaveTextContent(copy(TAB_INDEXING_DISABLED));
   });
 
-  it("AC-2: an indexed pair's Indexing tab is enabled", async () => {
+  it("an indexed pair's Indexing tab is enabled", async () => {
     await renderPage();
     await loaded();
     const indexing = await screen.findByRole("tab", {
@@ -447,7 +451,7 @@ describe("connector page tabs (FE-5)", () => {
     expect(indexing).toBeEnabled();
   });
 
-  it("AC-2: before the first run starts, ?tab=indexing falls back to Connector Configurations", async () => {
+  it("before the first run starts, ?tab=indexing falls back to Connector Configurations", async () => {
     await renderPage({
       pair: ccPair(NEVER_RUN),
       runs: [],
@@ -477,10 +481,14 @@ describe("connector page tabs (FE-5)", () => {
   });
 });
 
-// ── Indexing tab content (AC-3) ─────────────────────────────────────────────
+// ── Indexing tab content ────────────────────────────────────────────────────
 
-describe("connector page Indexing tab (FE-5)", () => {
-  it("AC-3: Document Indexing heads the chart card, then Indexing Runs heads the runs card, both under the Indexing tab", async () => {
+describe("connector page Indexing tab", () => {
+  // The chart fetches once its width is measured, which jsdom never lays out.
+  beforeEach(() => installChartLayout(600));
+  afterEach(resetChartLayout);
+
+  it("Document Indexing heads the chart card, then Indexing Runs heads the runs card, both under the Indexing tab", async () => {
     await renderPage({ query: "tab=indexing" });
     await loaded();
     const indexing = await screen.findByRole("tab", {
@@ -497,7 +505,7 @@ describe("connector page Indexing tab (FE-5)", () => {
     expect(follows(runsHeading, runsCard)).toBe(true);
   });
 
-  it("AC-3: the chart leaves the status card for the Indexing tab", async () => {
+  it("the chart leaves the status card for the Indexing tab", async () => {
     await renderPage({ query: "tab=indexing" });
     await loaded();
     const indexing = await screen.findByRole("tab", {
@@ -518,7 +526,7 @@ describe("connector page Indexing tab (FE-5)", () => {
     ).toBeNull();
   });
 
-  it("AC-3 (rule 4.3): with no throughput data in the window the chart card is hidden and the runs card stays", async () => {
+  it("with no throughput data in the window the chart card is hidden and the runs card stays", async () => {
     await renderPage({ query: "tab=indexing", chartData: false });
     await loaded();
     const indexing = await screen.findByRole("tab", {
@@ -543,7 +551,7 @@ describe("connector page Indexing tab (FE-5)", () => {
     expect(within(panel).getByTestId("connector-runs")).toBeInTheDocument();
   });
 
-  it("AC-3: with no runs in the window the runs card shows the long-wait illustration at 64 over No recent indexing runs", async () => {
+  it("with no runs in the window the runs card shows the long-wait illustration at 64 over No recent indexing runs", async () => {
     await renderPage({
       query: "tab=indexing",
       runs: [],
@@ -591,7 +599,7 @@ describe("connector page Indexing tab (FE-5)", () => {
   });
 });
 
-// ── Manage Index menu (AC-4) ────────────────────────────────────────────────
+// ── Manage Index menu ───────────────────────────────────────────────────────
 
 /** Opens Manage Index and returns its items in order, by their titles. */
 async function openMenu(): Promise<HTMLElement[]> {
@@ -637,8 +645,8 @@ function expectNoDisconnect(items: HTMLElement[]) {
   }
 }
 
-describe("Manage Index menu by state (FE-5)", () => {
-  it("AC-4: an active permission-synced pair reads Update Index, Sync Permissions, Full Re-index, Pause Indexing & Syncs, divider, Delete Connector", async () => {
+describe("Manage Index menu by state", () => {
+  it("an active permission-synced pair reads Update Index, Sync Permissions, Full Re-index, Pause Indexing & Syncs, divider, Delete Connector", async () => {
     await renderPage();
     const items = await openMenu();
     expectItems(items, [
@@ -653,7 +661,7 @@ describe("Manage Index menu by state (FE-5)", () => {
     expectNoDisconnect(items);
   });
 
-  it("AC-4: an active pair without permission sync has no Sync Permissions", async () => {
+  it("an active pair without permission sync has no Sync Permissions", async () => {
     await renderPage({ pair: ccPair(PUBLIC) });
     const items = await openMenu();
     expectItems(items, [
@@ -665,7 +673,7 @@ describe("Manage Index menu by state (FE-5)", () => {
     expectDeleteLast(items);
   });
 
-  it("AC-4: an indexing pair keeps the active order", async () => {
+  it("an indexing pair keeps the active order", async () => {
     await renderPage({ pair: ccPair({ indexing: true }) });
     const items = await openMenu();
     expectItems(items, [
@@ -679,7 +687,7 @@ describe("Manage Index menu by state (FE-5)", () => {
     expectNoDisconnect(items);
   });
 
-  it("AC-4: a failed pair keeps the active order", async () => {
+  it("a failed pair keeps the active order", async () => {
     await renderPage({
       pair: ccPair({
         in_repeated_error_state: true,
@@ -697,7 +705,7 @@ describe("Manage Index menu by state (FE-5)", () => {
     expectDeleteLast(items);
   });
 
-  it("AC-4: a paused pair reads Resume Indexing & Syncs, divider, Delete Connector, and no Disconnect", async () => {
+  it("a paused pair reads Resume Indexing & Syncs, divider, Delete Connector, and no Disconnect", async () => {
     await renderPage({
       pair: ccPair({ status: ConnectorCredentialPairStatus.PAUSED }),
     });
@@ -707,14 +715,14 @@ describe("Manage Index menu by state (FE-5)", () => {
     expectNoDisconnect(items);
   });
 
-  it("AC-4: before the first index starts there is no Update Index or Full Re-index", async () => {
+  it("before the first index starts there is no Update Index or Full Re-index", async () => {
     await renderPage({ pair: ccPair(NEVER_RUN), runs: [] });
     const items = await openMenu();
     expectItems(items, [MENU.syncPermissions, MENU.pause, MENU.delete]);
     expectDeleteLast(items);
   });
 
-  it("AC-4: a held pair before its first index also offers Start Indexing", async () => {
+  it("a held pair before its first index also offers Start Indexing", async () => {
     await renderPage({
       pair: ccPair({
         ...NEVER_RUN,
@@ -731,7 +739,7 @@ describe("Manage Index menu by state (FE-5)", () => {
     expectDeleteLast(items);
   });
 
-  it("AC-6: the changed and new menu copy reads as the spec says", () => {
+  it("the changed and new menu copy reads as the spec says", () => {
     expect(copy(MENU.delete)).toBe("Delete Connector");
     expect(copy(MENU.deleteDescription)).toBe(
       "Permanently remove all indexed docs."
@@ -750,7 +758,7 @@ describe("Manage Index menu by state (FE-5)", () => {
   });
 });
 
-// ── Layout (AC-5) ───────────────────────────────────────────────────────────
+// ── Layout ──────────────────────────────────────────────────────────────────
 
 /** `@max-[51rem]:flex-col` and the like: a container query that stacks below roughly 816 px. */
 const STACK_BELOW_816 = /^@max-\[([\d.]+)(rem|px)\](\/[\w-]+)?:flex-col$/;
@@ -762,8 +770,8 @@ function stackBreakpointPx(className: string): number | null {
   return match[2] === "rem" ? value * 16 : value;
 }
 
-describe("connector page layout (FE-5)", () => {
-  it("AC-5: below 816 px content width the column and the Activities panel stack, by a container query, with the panel last", async () => {
+describe("connector page layout", () => {
+  it("below 816 px content width the column and the Activities panel stack, by a container query, with the panel last", async () => {
     await renderPage();
     await loaded();
     const tabs = await screen.findByRole("tablist");
@@ -798,7 +806,7 @@ describe("connector page layout (FE-5)", () => {
       element: HTMLElement;
       name: string | undefined;
     };
-    // Today's viewport rule is gone: the content width decides.
+    // The content width decides, not the viewport.
     expect(element.className).not.toMatch(/max-lg:flex-col/);
 
     const containerClass =
