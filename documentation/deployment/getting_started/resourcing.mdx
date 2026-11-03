@@ -108,7 +108,7 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | --- | --- | --- |
 | Text per GB of storage | 40% for text files, 12% for office files, 8% for email, 5% for code, 4% for PDFs and slides | Estimate. Most mailbox storage is attachments and HTML. Onyx indexes only the documentation files in a code repository. |
 | Chunks per item | 7 per document, 12 per PDF, 9 per slide deck, 20 per spreadsheet, 1 per image, 4 per wiki page, 2 per ticket, 1 per chat thread, 4 per email thread, 4 per CRM record, 12 per call, 6 per web page | Mean across Onyx Cloud tenants. Most items are smaller, but large ones set the total. Onyx indexes at most 24 chunks of a spreadsheet, so the spreadsheet value is set near that limit. Onyx makes one document from each chat or email thread. Change the value if you know your data. |
-| Chunks per employee per year | 1,500 | Estimate from managed deployments, which range from about 200 to 1,500. The sources a company connects change it most, and email adds the most. |
+| Chunks per employee per year | 1,500 | Estimate from managed deployments, which range from about 200 to 1,500. Each year, one employee adds about 50 files (500 chunks), 100 email threads (400), 300 chat threads (300), 50 tickets (100), 25 wiki pages (100), and 100 chunks from other sources. Indexing everyone's email adds about 4,000. |
 | Memory for vector search | Node RAM minus the JVM heap | The heap uses half of the RAM, at most 31 GB. The calculator counts 80% of the rest for vectors. |
 | Memory per data node | 64 GB or less | The JVM heap stops at about 31 GB. For more data, add nodes instead of larger nodes. |
 | Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |

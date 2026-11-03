@@ -51,6 +51,15 @@ export const OpenSearchSizingCalculator = () => {
   const MAX_ITEMS = 10_000_000_000;
   // From managed deployments, rounded up so that most estimates err on the high side.
   const CHUNKS_PER_EMPLOYEE_YEAR = 1500;
+  // What the default rate assumes for one employee in one year: [type, items × chunks per item, chunks].
+  const EMPLOYEE_YEAR_BREAKDOWN = [
+    ["Files: documents, slides, PDFs, sheets", "50 × 10", 500],
+    ["Email threads, for part of the company", "100 × 4", 400],
+    ["Chat threads", "300 × 1", 300],
+    ["Tickets and issues", "50 × 2", 100],
+    ["Wiki pages", "25 × 4", 100],
+    ["Other: CRM records, calls, web pages", "", 100],
+  ];
   const MAX_EMPLOYEES = 10_000_000;
   const MAX_YEARS = 50;
   const NODE_RAM = [16, 32, 64];
@@ -353,8 +362,23 @@ export const OpenSearchSizingCalculator = () => {
                   onChange={(e) => setPerEmployeeYear(e.target.value)}
                   className={input + " w-28"}
                 />
-                <span className={hint}>chunks per employee per year. Raise it if you index everyone's email.</span>
+                <span className={hint}>chunks per employee per year</span>
               </div>
+              <details className="text-sm">
+                <summary className="cursor-pointer font-medium text-gray-900 dark:text-gray-200">{"What " + CHUNKS_PER_EMPLOYEE_YEAR.toLocaleString() + " includes"}</summary>
+                <table className="mt-2 w-full text-sm">
+                  <tbody>
+                    {EMPLOYEE_YEAR_BREAKDOWN.map(([type, items, n]) => (
+                      <tr key={type} className="border-t border-gray-200 dark:border-white/10">
+                        <td className="py-1.5 pr-2 text-gray-700 dark:text-gray-300">{type}</td>
+                        <td className="whitespace-nowrap py-1.5 pr-2 text-right tabular-nums text-gray-500 dark:text-gray-400">{items}</td>
+                        <td className="py-1.5 text-right tabular-nums text-gray-900 dark:text-gray-100">{n.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className={hint + " mt-2"}>Add or remove the rows that do not match your company. Indexing everyone's email adds about 4,000.</div>
+              </details>
             </div>
           ) : (
           <>
