@@ -567,13 +567,18 @@ def _gemini_compatible_tools(
 ) -> list[dict[str, JsonValue]]:
     """Gemini parses function parameters as its OpenAPI Schema subset and
     rejects other JSON Schema keywords (e.g. exclusiveMinimum) with a 400.
-    LiteLLM's native Gemini route filters them to that subset, but
+    LiteLLM's native Gemini route normalizes them to that subset, but
     OpenAI-compatible routes forward them as-is."""
     from litellm.litellm_core_utils.prompt_templates.common_utils import (
         DEFS_MAX_INLINED_BYTES,
         unpack_defs,
     )
-    from litellm.llms.vertex_ai.common_utils import filter_schema_fields
+    from litellm.llms.vertex_ai.common_utils import (
+        add_object_type,
+        convert_anyof_null_to_nullable,
+        filter_schema_fields,
+        process_items,
+    )
     from litellm.types.llms.vertex_ai import Schema
 
     schema_fields = set(get_type_hints(Schema))
@@ -587,6 +592,9 @@ def _gemini_compatible_tools(
                 parameters.pop("$defs", {}),
                 max_inlined_bytes=DEFS_MAX_INLINED_BYTES,
             )
+            convert_anyof_null_to_nullable(parameters)
+            process_items(parameters)
+            add_object_type(parameters)
             function["parameters"] = filter_schema_fields(parameters, schema_fields)
     return sanitized
 

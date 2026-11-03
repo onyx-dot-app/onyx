@@ -124,6 +124,27 @@ def test_gemini_on_openai_compatible_inlines_defs() -> None:
     }
 
 
+def test_gemini_on_openai_compatible_converts_nullable_any_of() -> None:
+    tool: dict[str, Any] = {
+        "type": "function",
+        "function": {
+            "name": "read",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]}
+                },
+            },
+        },
+    }
+
+    sent = _sent_tools(LlmProviderNames.OPENAI_COMPATIBLE, "gemini-3.8-flash", [tool])
+
+    assert sent[0]["function"]["parameters"]["properties"] == {
+        "limit": {"anyOf": [{"type": "integer", "nullable": True}]}
+    }
+
+
 @pytest.mark.parametrize(
     ("model_provider", "model_name"),
     [
