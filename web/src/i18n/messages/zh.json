@@ -7462,37 +7462,26 @@
       }
     },
     "indexing": {
+      "addConnector": "添加连接器",
       "connectorCreated": {
         "toast": "已成功创建连接器"
       },
       "overview": {
-        "connectors": {
-          "caption": "索引中 / 活跃",
-          "label": "连接器"
-        },
-        "documents": {
-          "caption": "索引中",
-          "label": "文档",
-          "tooltip": "将每个连接器的文档数相加，因此两个连接器都包含的文档会计两次。"
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "无法加载概览。",
-        "processed": {
-          "caption": "时间范围内已处理",
-          "label": "文档",
-          "tooltip": "这是估算值，因为每次运行的数量会平均分摊到其运行时间内。运行每处理一次文档就计一次，包括失败的文档，因此可能超过索引中的文档数。"
-        }
+        "activeConnectors": "活跃连接器",
+        "pausedConnectors": "已暂停的连接器",
+        "indexingConnectors": "正在索引的连接器",
+        "loadError": "无法加载概览。"
       },
       "activities": {
         "title": "活动",
-        "history": "完整活动历史",
-        "viewLogs": "查看日志",
         "panel": {
           "title": "活动",
           "close": "关闭面板",
           "pairTitle": "{name} 的活动历史"
+        },
+        "panelButton": {
+          "show": "显示活动",
+          "hide": "隐藏活动"
         }
       },
       "list": {

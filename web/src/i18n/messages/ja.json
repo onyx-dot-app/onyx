@@ -7462,37 +7462,26 @@
       }
     },
     "indexing": {
+      "addConnector": "コネクタを追加",
       "connectorCreated": {
         "toast": "コネクターを作成しました"
       },
       "overview": {
-        "connectors": {
-          "caption": "インデックス中 / 有効",
-          "label": "コネクタ"
-        },
-        "documents": {
-          "caption": "インデックス内",
-          "label": "ドキュメント",
-          "tooltip": "各コネクタのドキュメント数を合計するため、2 つのコネクタが持つドキュメントは 2 回数えられます。"
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "概要を読み込めませんでした。",
-        "processed": {
-          "caption": "期間内に処理",
-          "label": "ドキュメント",
-          "tooltip": "推定値です。各実行の件数は実行時間全体に均等に配分されます。ドキュメントは実行が処理するたびに数えられ、失敗したものも含まれるため、インデックス内のドキュメント数を超えることがあります。"
-        }
+        "activeConnectors": "アクティブなコネクタ",
+        "pausedConnectors": "一時停止中のコネクタ",
+        "indexingConnectors": "インデックス中のコネクタ",
+        "loadError": "概要を読み込めませんでした。"
       },
       "activities": {
         "title": "アクティビティ",
-        "history": "アクティビティ履歴をすべて表示",
-        "viewLogs": "ログを表示",
         "panel": {
           "title": "アクティビティ",
           "close": "パネルを閉じる",
           "pairTitle": "{name} のアクティビティ履歴"
+        },
+        "panelButton": {
+          "show": "アクティビティを表示",
+          "hide": "アクティビティを非表示"
         }
       },
       "list": {

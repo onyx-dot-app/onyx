@@ -7462,37 +7462,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Add Connector",
       "connectorCreated": {
         "toast": "Connector created successfully"
       },
       "overview": {
-        "connectors": {
-          "caption": "Indexing / active",
-          "label": "Connectors"
-        },
-        "documents": {
-          "caption": "In the index",
-          "label": "Documents",
-          "tooltip": "Adds up each connector's documents, so a document that two connectors hold counts twice."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "The overview could not load.",
-        "processed": {
-          "caption": "Processed in time range",
-          "label": "Documents",
-          "tooltip": "An estimate, since each run's count is spread evenly over the time it ran. A document counts each time a run processes it, failed ones included, so this can be more than the documents in the index."
-        }
+        "activeConnectors": "Active connectors",
+        "pausedConnectors": "Paused connectors",
+        "indexingConnectors": "Indexing connectors",
+        "loadError": "The overview could not load."
       },
       "activities": {
         "title": "Activities",
-        "history": "Full Activity History",
-        "viewLogs": "View Logs",
         "panel": {
           "title": "Activities",
           "close": "Close Panel",
           "pairTitle": "{name} Activity History"
+        },
+        "panelButton": {
+          "show": "Show Activities",
+          "hide": "Hide Activities"
         }
       },
       "list": {

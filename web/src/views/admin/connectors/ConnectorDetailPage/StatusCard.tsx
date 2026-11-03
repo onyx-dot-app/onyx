@@ -38,6 +38,7 @@ import {
   useSyncRateLabel,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
+import { LineFigure } from "@/views/admin/connectors/shared/LineLayout";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
@@ -85,15 +86,9 @@ interface FigureStatBlockProps {
   label: string | RichStr;
 }
 export function FigureStatBlock({ value, label }: FigureStatBlockProps) {
-  const locale = useLocale();
   return (
     <StatBlock fixed>
-      <Text font="main-content-emphasis" color="text-04">
-        {value.toLocaleString(locale)}
-      </Text>
-      <Text font="secondary-body" color="text-03">
-        {label}
-      </Text>
+      <LineFigure value={value} label={label} />
     </StatBlock>
   );
 }

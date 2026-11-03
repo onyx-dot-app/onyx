@@ -982,11 +982,17 @@ export interface ActivityPanelLinks {
   onHoverAttempt: (attemptId: number | null) => void;
   focusAttemptId: number | null;
   outlinedAttemptIds: number[];
+  /** A hovered card's connector, or null once the pointer leaves the card. */
+  onHoverPair: (ccPairId: number | null) => void;
+  /** The focused card's connector, or null once the focus ends. */
+  onFocusPair: (ccPairId: number | null) => void;
 }
 
 export interface ActivityChartLinks {
   chart: ThroughputActivityLinks;
   panel: ActivityPanelLinks;
+  /** The connector whose card is hovered or focused, for a page that lifts its row. */
+  liftedPairId: number | null;
 }
 
 export interface ActivityChartLinksOptions {
@@ -1001,6 +1007,9 @@ export function useActivityChartLinks({
   const [hoveredAttemptId, setHoveredAttemptId] = useState<number | null>(null);
   const [focusAttemptId, setFocusAttemptId] = useState<number | null>(null);
   const [outlinedAttemptIds, setOutlinedAttemptIds] = useState<number[]>([]);
+  // Apart, so leaving a hovered card keeps a focused card's lift.
+  const [hoveredPairId, setHoveredPairId] = useState<number | null>(null);
+  const [focusedPairId, setFocusedPairId] = useState<number | null>(null);
   return {
     chart: {
       hoveredAttemptId,
@@ -1019,7 +1028,10 @@ export function useActivityChartLinks({
       },
       focusAttemptId,
       outlinedAttemptIds,
+      onHoverPair: setHoveredPairId,
+      onFocusPair: setFocusedPairId,
     },
+    liftedPairId: hoveredPairId ?? focusedPairId,
   };
 }
 

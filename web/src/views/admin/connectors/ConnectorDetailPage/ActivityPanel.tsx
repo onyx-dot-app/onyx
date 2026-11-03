@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
@@ -71,6 +71,7 @@ import {
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import { BESIDE } from "@/views/admin/connectors/shared/PanelPageBody";
 
 const LOADER_ROWS = 2;
 
@@ -152,15 +153,12 @@ const HEADER_COUNT_SWR = {
 // Finished runs with nothing to resolve list after Resolved. Running runs, which can still report errors, list before it.
 const SETTLED: ActivitySection[] = ["success", "canceled"];
 
-export interface ActivityCountTagsProps {
+interface ActivityCountTagsProps {
   failures: number;
   errors: number;
 }
-/** The failed runs and the runs with document errors, as two counts. A zero count shows no tag. */
-export function ActivityCountTags({
-  failures,
-  errors,
-}: ActivityCountTagsProps) {
+/** The failed runs and the runs with document errors, as two counts for the panel header. A zero count shows no tag. */
+function ActivityCountTags({ failures, errors }: ActivityCountTagsProps) {
   const t = useTranslations("admin.connector.activity");
   const format = useFormatter();
   return (
@@ -252,7 +250,21 @@ function BlockList({
   onPanelOpenChange,
 }: BlockListProps) {
   const t = useTranslations("admin.connector.activity");
-  const { onHoverAttempt, focusAttemptId = null, outlinedAttemptIds } = links;
+  const {
+    onHoverAttempt,
+    focusAttemptId = null,
+    outlinedAttemptIds,
+    onHoverPair,
+  } = links;
+  // A hovered card marks its run on the chart (index runs only) and its connector's row.
+  function hoverChange(item: ActivityItem, charted: boolean) {
+    const marksRun = charted && onHoverAttempt !== undefined;
+    if (!marksRun && onHoverPair === undefined) return undefined;
+    return (hovered: boolean) => {
+      if (marksRun) onHoverAttempt(hovered ? item.run.attempt.id : null);
+      onHoverPair?.(hovered ? item.ccPairId : null);
+    };
+  }
   return (
     <Section
       alignItems="stretch"
@@ -292,11 +304,7 @@ function BlockList({
                 ? undefined
                 : (open) => onPanelOpenChange(item, section, open)
             }
-            onHoverChange={
-              charted && onHoverAttempt !== undefined
-                ? (hovered) => onHoverAttempt(hovered ? attempt.id : null)
-                : undefined
-            }
+            onHoverChange={hoverChange(item, charted)}
             focused={charted && focusAttemptId === attempt.id}
             outlined={
               charted && (outlinedAttemptIds ?? []).includes(attempt.id)
@@ -433,26 +441,11 @@ export interface ActivityPanelProps extends Partial<ActivityPanelLinks> {
   range?: SliceRange | null;
   /** Drops `range`, from the empty panel's "Past Activities". */
   onClearRange?: () => void;
-  /** Keeps the card in view under the page header while the column beside it scrolls. Beside the column at the viewport's lg only. */
+  /** Keeps the card in view under the page header while the column beside it scrolls. */
   sticky?: boolean;
-  /** The classes that size the card beside the column, each under the breakpoint that puts it there. */
-  beside?: ActivityPanelBeside;
   className?: string;
   ref?: React.Ref<HTMLDivElement>;
 }
-
-export interface ActivityPanelBeside {
-  /** On the panel: its width cap, and the size containment that makes it stretch to the column's height. */
-  panel: string;
-  /** On the card's wrapper: its cap at the panel's height, so a long list scrolls inside the card. */
-  body: string;
-}
-
-// The status page puts the panel beside its column from the viewport's lg up.
-const BESIDE_AT_LG: ActivityPanelBeside = {
-  panel: "lg:w-100 lg:shrink-0 lg:h-auto lg:self-stretch lg:contain-size",
-  body: "lg:max-h-full",
-};
 
 /** The scope's runs by level, in sections: open failures, open errors, running, the level's resolved runs a toggle away, then successes and cancels. */
 export default function ActivityPanel({
@@ -462,13 +455,11 @@ export default function ActivityPanel({
   range = null,
   onClearRange,
   sticky = false,
-  beside = BESIDE_AT_LG,
   className,
   ref,
-  onHoverAttempt,
-  focusAttemptId = null,
-  outlinedAttemptIds = [],
+  ...links
 }: ActivityPanelProps) {
+  const focusAttemptId = links.focusAttemptId ?? null;
   const t = useTranslations("admin.connector.activity");
   const tPanel = useTranslations("admin.indexing.activities.panel");
   const [searchInput, setSearchInput] = useState("");
@@ -588,9 +579,20 @@ export default function ActivityPanel({
     searchInput === "" &&
     search === "" &&
     ccPairIds.length === 0;
-  const focusListed = focusFeed.runs.some(
-    ({ run }) => run.kind === "indexing" && run.attempt.id === focusAttemptId
+  const focusedPairId =
+    focusFeed.runs.find(
+      ({ run }) => run.kind === "indexing" && run.attempt.id === focusAttemptId
+    )?.ccPairId ?? null;
+  const focusListed = focusedPairId !== null;
+  // A focused card lifts its connector's row like a hovered one, until the focus ends.
+  const reportFocusedPair = useEffectEvent((ccPairId: number | null) =>
+    links.onFocusPair?.(ccPairId)
   );
+  useEffect(() => {
+    if (focusedPairId === null) return;
+    reportFocusedPair(focusedPairId);
+    return () => reportFocusedPair(null);
+  }, [focusedPairId]);
   const rangeSet = range !== null;
   useEffect(() => {
     if (focusAttemptId === null || focusListed) return;
@@ -730,11 +732,8 @@ export default function ActivityPanel({
   const filterToggleLabel = t(
     filtersOpen ? "filter.toggleHide" : "filter.toggleShow"
   );
-  const links = { onHoverAttempt, focusAttemptId, outlinedAttemptIds };
   const LevelIcon = LEVELS[level].icon;
 
-  // Beside the main column the panel stretches to the column's height under size
-  // containment, so a long list scrolls inside the card and a short one stays short.
   return (
     <Section
       ref={ref}
@@ -742,20 +741,18 @@ export default function ActivityPanel({
       alignItems="stretch"
       width="full"
       height="fit"
-      className={cn(beside.panel, className)}
+      className={cn(BESIDE.panel, className)}
       data-testid="connector-activity"
       // The stack trace opens beside this edge.
       data-side-panel=""
     >
-      {/* 1.5rem and 6rem match SettingsLayouts.Body's pt-6 and pt-6 + pb-18, so the page's end never pushes the title out of view. */}
       <Section
         alignItems="stretch"
         height="fit"
         className={cn(
           "min-h-0",
-          beside.body,
-          sticky &&
-            "lg:sticky lg:top-[calc(var(--settings-header-height,0px)_+_1.5rem)] lg:max-h-[min(100%,calc(var(--settings-scroll-height)_-_var(--settings-header-height,0px)_-_6rem))]"
+          BESIDE.panelBody,
+          sticky && BESIDE.panelSticky
         )}
       >
         <Card

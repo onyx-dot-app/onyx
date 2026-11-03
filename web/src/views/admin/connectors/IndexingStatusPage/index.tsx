@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
+import { Button, SelectButton } from "@opal/components";
 import { Section, SettingsLayouts } from "@opal/layouts";
-import { cn } from "@opal/utils";
+import { SvgPanelRight, SvgPlus } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { LARGE_BREAKPOINT_PX } from "@/lib/constants";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import type {
   CCPairFullInfo,
   IndexingConnectorRow,
@@ -19,31 +21,65 @@ import {
   useActivityPanelOpen,
 } from "@/lib/connectors/ccPair/hooks";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
-import ActivitiesCard from "@/views/admin/connectors/IndexingStatusPage/ActivitiesCard";
 import ConnectorList from "@/views/admin/connectors/IndexingStatusPage/ConnectorList";
 import OverviewCard from "@/views/admin/connectors/IndexingStatusPage/OverviewCard";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import PanelPageBody, {
+  BESIDE,
+  isStacked,
+} from "@/views/admin/connectors/shared/PanelPageBody";
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
-// Tailwind's lg breakpoint, from which the history panel sits beside the list.
-const SIDE_BY_SIDE_QUERY = `(min-width: ${LARGE_BREAKPOINT_PX}px)`;
-
-/** Stacked on a narrow screen, the history sits above the list and out of view, so it scrolls there. */
+/** Stacked, the history sits under the list and out of view, so it scrolls there. */
 export function revealHistory(panel: HTMLDivElement | null) {
-  if (panel === null || window.matchMedia(SIDE_BY_SIDE_QUERY).matches) return;
+  if (panel === null || !isStacked(panel)) return;
   panel.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+interface StackedPanelToggleProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+/** Shows or hides the history from the end of the list, where the stacked panel sits, since the counts card's button goes when stacked. */
+function StackedPanelToggle({ open, onOpenChange }: StackedPanelToggleProps) {
+  const t = useTranslations("admin.indexing.activities");
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="end"
+      height="fit"
+      className={BESIDE.hiddenBeside}
+    >
+      <SelectButton
+        icon={SvgPanelRight}
+        size="md"
+        state={open ? "selected" : "empty"}
+        tooltip={t(open ? "panelButton.hide" : "panelButton.show")}
+        onClick={() => onOpenChange(!open)}
+      >
+        {t("panel.title")}
+      </SelectButton>
+    </Section>
+  );
 }
 
 interface PairActivityPanelProps {
   row: IndexingConnectorRow;
   onClose: () => void;
+  onHoverPair: (ccPairId: number | null) => void;
   ref: React.Ref<HTMLDivElement>;
 }
 
 /** The history panel on one connector's runs, opened from its row. */
-function PairActivityPanel({ row, onClose, ref }: PairActivityPanelProps) {
+function PairActivityPanel({
+  row,
+  onClose,
+  onHoverPair,
+  ref,
+}: PairActivityPanelProps) {
   const t = useTranslations("admin.indexing");
   // The row does not say whether its source resolves errors one by one, so the pair's details do.
   const { data: ccPair } = useSWR<CCPairFullInfo>(
@@ -61,16 +97,20 @@ function PairActivityPanel({ row, onClose, ref }: PairActivityPanelProps) {
       }}
       title={t("activities.panel.pairTitle", { name: row.name })}
       onClose={onClose}
+      onHoverPair={onHoverPair}
       sticky
-      className="max-lg:order-first"
       ref={ref}
     />
   );
 }
 
-/** Every connector's indexing at a glance: the fleet's throughput and newest failures, then each connector with its latest run. */
+/** Every connector's indexing at a glance: the fleet's counts and throughput, then each connector with its latest run, beside the fleet's activities. */
 export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
+  // The catalog's route needs global connector management, which a scoped manager does not hold.
+  const { isGlobalHolder: canAddConnector } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
   // One connector's history takes the fleet's place while it is open.
   const [pairHistory, setPairHistory] = useState<IndexingConnectorRow | null>(
     null
@@ -96,11 +136,21 @@ export default function IndexingStatusPage() {
     );
     setRange(null);
   }
+  // Hiding from the panel button drops a pair's history and the span too, so the button reopens the fleet.
+  function setHistoryOpen(open: boolean) {
+    if (open) {
+      showFleetHistory();
+      return;
+    }
+    setPairHistory(null);
+    fleetPanel.setOpen(false);
+    setRange(null);
+  }
   // A failure line focuses its card in the fleet's history, so the history opens.
   const activityLinks = useActivityChartLinks({
     onFocusAttempt: showFleetHistory,
   });
-  // A connector's open popover steps the overview and the Activities card back with the other connectors.
+  // A connector's open popover steps the overview back with the other connectors.
   const [listFocused, setListFocused] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   // What the history shows: the fleet over a span, or one connector. A new subject brings the panel into view.
@@ -116,80 +166,37 @@ export default function IndexingStatusPage() {
     }
   }, [subject]);
 
-  // The history panel takes the Activities card's place and widens the page to fit beside the column.
   return (
-    <SettingsLayouts.Root width={historyOpen ? "xl" : "md"}>
-      <SettingsLayouts.Header icon={route.icon} title={t("title")} />
-      <SettingsLayouts.Body>
-        <Section
-          flexDirection="row"
-          alignItems="start"
-          gap={4}
-          height="fit"
-          className="max-lg:flex-col"
-        >
-          <Section
-            alignItems="stretch"
-            gap={4}
-            height="fit"
-            className="min-w-0 flex-1"
-          >
-            {/* The overview takes the wider share. Both wrap to full width on a narrow screen. Side by side, the overview sets the row's height and starts at its top, so it never floats while the Activities card's minimum holds the row during the overview's load or error. */}
-            <Section
-              flexDirection="row"
-              alignItems="stretch"
-              gap={2}
-              height="fit"
-              wrap
-              className={cn("@container/overview", focusDimClass(listFocused))}
-            >
-              <Section
-                justifyContent="start"
-                alignItems="stretch"
-                width="auto"
-                height="auto"
-                className="min-w-80 grow-[8] basis-0"
-              >
-                <OverviewCard
-                  range={range}
-                  onRangeChange={(picked) => {
-                    setRange(picked);
-                    if (picked !== null) showFleetHistory();
-                  }}
-                  activityLinks={activityLinks.chart}
-                />
-              </Section>
-              {/* At 38.5rem (both min widths plus the gap) the cards sit side by side, and size containment lets a long feed scroll inside at the overview's height instead of stretching the row. The minimum keeps the card usable while the overview shows only a loader or an error. */}
-              {!historyOpen && (
-                <Section
-                  alignItems="stretch"
-                  width="auto"
-                  height="auto"
-                  className="min-w-72 grow-[5] basis-0 @[38.5rem]/overview:contain-size @[38.5rem]/overview:min-h-64"
+    <SettingsLayouts.Root width="xl" narrowGutters>
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={t("title")}
+        divider
+        actions={
+          canAddConnector
+            ? [
+                // The catalog page is where a connector is added.
+                <Button
+                  key="add"
+                  icon={SvgPlus}
+                  href={ADMIN_ROUTES.CONNECTORS.path}
                 >
-                  <ActivitiesCard onOpenHistory={showFleetHistory} />
-                </Section>
-              )}
-            </Section>
-            <ConnectorList
-              onViewLogs={togglePairHistory}
-              onFocusChange={setListFocused}
-            />
-          </Section>
-          {/* Stacked on a narrow screen, the history keeps the Activities card's place above the list. */}
-          {history === "fleet" ? (
+                  {t("addConnector")}
+                </Button>,
+              ]
+            : undefined
+        }
+      />
+      <PanelPageBody
+        panel={
+          history === "fleet" ? (
             <ActivityPanel
               scope="fleet"
               title={t("activities.panel.title")}
-              onClose={() => {
-                fleetPanel.setOpen(false);
-                setRange(null);
-              }}
               range={range}
               onClearRange={() => setRange(null)}
               {...activityLinks.panel}
               sticky
-              className="max-lg:order-first"
               ref={panelRef}
             />
           ) : (
@@ -198,12 +205,31 @@ export default function IndexingStatusPage() {
                 key={history.cc_pair_id}
                 row={history}
                 onClose={() => setPairHistory(null)}
+                onHoverPair={activityLinks.panel.onHoverPair}
                 ref={panelRef}
               />
             )
-          )}
-        </Section>
-      </SettingsLayouts.Body>
+          )
+        }
+      >
+        <OverviewCard
+          range={range}
+          onRangeChange={(picked) => {
+            setRange(picked);
+            if (picked !== null) showFleetHistory();
+          }}
+          activityLinks={activityLinks.chart}
+          panelOpen={historyOpen}
+          onPanelOpenChange={setHistoryOpen}
+          className={focusDimClass(listFocused)}
+        />
+        <ConnectorList
+          onViewLogs={togglePairHistory}
+          onFocusChange={setListFocused}
+          liftedCcPairId={historyOpen ? activityLinks.liftedPairId : null}
+        />
+        <StackedPanelToggle open={historyOpen} onOpenChange={setHistoryOpen} />
+      </PanelPageBody>
     </SettingsLayouts.Root>
   );
 }

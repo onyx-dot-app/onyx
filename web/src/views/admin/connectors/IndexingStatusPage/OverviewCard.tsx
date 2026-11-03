@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
-import { Card, MessageCard, Text, Tooltip } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { Card, MessageCard, SelectButton } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
+import { SvgPanelRight } from "@opal/icons";
 import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -19,64 +20,14 @@ import {
   type ThroughputActivityLinks,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import { useThroughputData } from "@/lib/connectors/hooks";
+import LineLayout, {
+  LineFigure,
+} from "@/views/admin/connectors/shared/LineLayout";
+import { BESIDE } from "@/views/admin/connectors/shared/PanelPageBody";
 
 const WINDOWS: readonly CCPairThroughputWindow[] = ["1h", "24h", "7d"];
 
 const BARS_HEIGHT = 120;
-
-interface StatProps {
-  value: number;
-  /** The total `value` is part of, such as the active pairs for the indexing ones. */
-  whole?: number;
-  caption: string | RichStr;
-  label: string | RichStr;
-  /** Explains the figure on hover. */
-  tooltip?: string;
-}
-/** A figure, over its total when it has one, above a two-line label. */
-function Stat({ value, whole, caption, label, tooltip }: StatProps) {
-  const t = useTranslations("admin.indexing.overview");
-  const format = useFormatter();
-  return (
-    <Tooltip tooltip={tooltip} side="top">
-      <Section
-        alignItems="start"
-        justifyContent="start"
-        gap={1}
-        padding={2}
-        width="auto"
-        height="fit"
-        className="min-w-32"
-      >
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          alignItems="end"
-          gap={0}
-          width="fit"
-          height="fit"
-        >
-          <Text font="main-ui-action" color="text-04">
-            {format.number(value)}
-          </Text>
-          {whole !== undefined && (
-            <Text font="main-ui-body" color="text-04">
-              {t("ratio.whole", { whole: format.number(whole) })}
-            </Text>
-          )}
-        </Section>
-        <Section alignItems="start" gap={0} width="fit" height="fit">
-          <Text font="secondary-body" color="text-03">
-            {caption}
-          </Text>
-          <Text font="secondary-body" color="text-03">
-            {label}
-          </Text>
-        </Section>
-      </Section>
-    </Tooltip>
-  );
-}
 
 export interface OverviewCardProps {
   /** The span of the chart the page is narrowed to. A new window clears it. */
@@ -84,15 +35,23 @@ export interface OverviewCardProps {
   onRangeChange: (range: SliceRange | null) => void;
   /** Ties the chart to the page's activity panel. */
   activityLinks?: ThroughputActivityLinks;
+  panelOpen: boolean;
+  onPanelOpenChange: (open: boolean) => void;
+  className?: string;
 }
 
-/** Every readable connector at a glance: how many index now, the documents they hold, and documents indexed over time. */
+/** The fleet's counts card with the Activities panel button, over the graph card with the window picker and chart. Both are stat lines, so their figures start over the connector rows' columns. */
 export default function OverviewCard({
   range,
   onRangeChange,
   activityLinks,
+  panelOpen,
+  onPanelOpenChange,
+  className,
 }: OverviewCardProps) {
   const t = useTranslations("admin.indexing.overview");
+  const tStats = useTranslations("admin.connector.statusCard.documents");
+  const tPanel = useTranslations("admin.indexing.activities.panelButton");
   const [timeWindow, setTimeWindow] = useState<CCPairThroughputWindow>("1h");
   const { ref, data, error, stale } =
     useThroughputData<IndexingOverviewResponse>((bins, tzOffsetMinutes) =>
@@ -103,92 +62,97 @@ export default function OverviewCard({
     setTimeWindow(picked);
     onRangeChange(null);
   }
-  if (error !== undefined) {
-    return <MessageCard variant="error" title={t("loadError")} />;
+  const panelLabel = tPanel(panelOpen ? "hide" : "show");
+  const paused = data?.paused_connectors;
+  // After a load error the figures show dashes, even over a kept earlier response, and the message in the graph card's place explains them.
+  const failed = error !== undefined;
+  function figure(value: number | undefined, label: string | RichStr) {
+    if (failed) return <LineFigure value={null} label={label} />;
+    if (value !== undefined) return <LineFigure value={value} label={label} />;
+    return <LineLoader lines={2} />;
   }
 
   return (
-    // Fills the row beside the Activities card, so the two cards share one height.
-    <Card
-      border="solid"
-      rounding={4}
-      padding={2}
-      height="full"
+    <Section
+      alignItems="stretch"
+      gap={2}
+      height="fit"
+      className={className}
       data-testid="indexing-overview"
     >
-      {/* A new window or bar count keeps the last figures, dimmed, until its response lands. */}
-      <Section
-        alignItems="stretch"
-        gap={1}
-        height="fit"
-        className={cn(stale && "opacity-50")}
-      >
-        {data === undefined ? (
-          <LineLoader lines={3} />
-        ) : (
-          <Section
-            flexDirection="row"
-            alignItems="start"
-            justifyContent="start"
-            gap={1}
-            height="fit"
-            wrap
-          >
-            <Stat
-              value={data.indexing_connectors}
-              whole={data.active_connectors}
-              caption={t("connectors.caption")}
-              label={t("connectors.label")}
-            />
-            <Stat
-              value={data.total_docs_indexed}
-              caption={t("documents.caption")}
-              label={t("documents.label")}
-              tooltip={t("documents.tooltip")}
-            />
-            <Stat
-              value={data.recent_docs_indexed}
-              caption={t("processed.caption")}
-              label={t("processed.label")}
-              tooltip={t("processed.tooltip")}
-            />
-            <Section
-              flexDirection="row"
-              justifyContent="end"
-              alignItems="center"
-              gap={1}
-              width="auto"
-              height="fit"
-              className="grow basis-0"
-              wrap
-            >
-              <ThroughputWindowPicker
-                windows={WINDOWS}
-                value={timeWindow}
-                onChange={changeWindow}
-                selection={range}
-                onClearSelection={() => onRangeChange(null)}
+      <Card border="solid" rounding={4} padding={2}>
+        <LineLayout
+          variant="stat"
+          a={figure(data?.active_connectors, t("activeConnectors"))}
+          b={figure(data?.total_docs_indexed, tStats("totalLabel"))}
+          c={
+            paused === undefined ? null : (
+              <LineFigure
+                value={failed ? null : paused}
+                label={t("pausedConnectors")}
               />
+            )
+          }
+          d={
+            // The 36 px cell with D's end padding. Stacked, the panel sits under the list with its own toggle, so the button goes.
+            <div className={cn(BESIDE.hiddenStacked, "ps-1 py-1")}>
+              <SelectButton
+                icon={SvgPanelRight}
+                size="md"
+                state={panelOpen ? "selected" : "empty"}
+                tooltip={panelLabel}
+                aria-label={panelLabel}
+                onClick={() => onPanelOpenChange(!panelOpen)}
+              />
+            </div>
+          }
+        />
+      </Card>
+      {failed ? (
+        <MessageCard variant="error" title={t("loadError")} />
+      ) : (
+        <Card border="solid" rounding={4} padding={2}>
+          {/* A new window or bar count dims only this card until its response lands; the counts above do not depend on it. */}
+          <Section
+            alignItems="stretch"
+            gap={0}
+            height="fit"
+            className={cn(stale && "opacity-50")}
+          >
+            <LineLayout
+              variant="stat"
+              a={figure(data?.indexing_connectors, t("indexingConnectors"))}
+              b={figure(data?.recent_docs_indexed, tStats("recentLabel"))}
+              c={null}
+              d={
+                <ThroughputWindowPicker
+                  windows={WINDOWS}
+                  value={timeWindow}
+                  onChange={changeWindow}
+                  selection={range}
+                  onClearSelection={() => onRangeChange(null)}
+                />
+              }
+            />
+            {/* The frame stays while loading, so the chart's width sets the bar count of the first fetch. */}
+            <Section padding={2} alignItems="stretch" height="fit">
+              <Section ref={ref} alignItems="stretch" height="fit">
+                {data !== undefined && (
+                  <ThroughputBars
+                    data={data.throughput}
+                    range={timeWindow}
+                    height={BARS_HEIGHT}
+                    selection={range}
+                    // The dimmed bars are the old window's, so they pick nothing until the new one lands.
+                    onRangeSelect={stale ? undefined : onRangeChange}
+                    {...activityLinks}
+                  />
+                )}
+              </Section>
             </Section>
           </Section>
-        )}
-        {/* The card's frame stays while loading, so the chart's width sets the bar count of the first fetch. */}
-        <Section padding={2} alignItems="stretch" height="fit">
-          <Section ref={ref} alignItems="stretch" height="fit">
-            {data !== undefined && (
-              <ThroughputBars
-                data={data.throughput}
-                range={timeWindow}
-                height={BARS_HEIGHT}
-                selection={range}
-                // The dimmed bars are the old window's, so they pick nothing until the new one lands.
-                onRangeSelect={stale ? undefined : onRangeChange}
-                {...activityLinks}
-              />
-            )}
-          </Section>
-        </Section>
-      </Section>
-    </Card>
+        </Card>
+      )}
+    </Section>
   );
 }

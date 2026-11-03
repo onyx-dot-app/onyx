@@ -1,9 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useFormatter } from "next-intl";
 import { Section } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { OverflowText } from "@opal/components";
+import { OverflowText, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import type { StatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
@@ -11,44 +12,80 @@ import type { StatusTag } from "@/views/admin/connectors/ConnectorDetailPage/sta
 /** Hides content once the line wraps. The query root sits 18 px inside a 640 px column when a run line's list is padded 4 px, so 620 px of line is a column under 640. More list padding wraps a 640 px column. */
 export const LINE_NARROW_HIDDEN = "@max-[38.75rem]:hidden";
 
-/** A connector row and a run line differ only in their narrow-card minimums and action spacing. */
-export type LineVariant = "row" | "run";
+/** A connector row and a run line differ only in their narrow-card minimums and action spacing. A stat line holds figures over labels, its D sized to its control. */
+export type LineVariant = "row" | "run" | "stat";
 
-// Below 640 px A's basis leaves room only for D, so B and C wrap under them. On a card the parts' own 8 px padding is the line gap, a run line adds 4 px.
+interface VariantClasses {
+  a: string;
+  b: string;
+  c: string;
+  d: string;
+  third: string;
+  /** Margin on A, B and C, for an inline inset larger than the block padding. */
+  part: string;
+  padding: 1 | 2;
+  cAlign: "start" | "end";
+  dGap: 1 | 2;
+}
+
+// Row and run lines wrap to A + D over B + C: below 640 px A's basis leaves room only for D. On a card the parts' own 8 px padding is the line gap, a run line adds 4 px.
 const VARIANT_CLASSES = {
   row: {
-    a: "@max-[38.75rem]:min-w-[17.5rem] @max-[38.75rem]:basis-[calc(100%-4rem)]",
-    bc: "",
-    d: "pe-1",
+    a: "@max-[38.75rem]:order-1 @max-[38.75rem]:min-w-[17.5rem] @max-[38.75rem]:basis-[calc(100%-4rem)]",
+    b: "@max-[38.75rem]:order-3 @max-[38.75rem]:min-w-[11.75rem]",
+    c: "@max-[38.75rem]:order-4 @max-[38.75rem]:min-w-[11.75rem] @max-[38.75rem]:max-w-[17.5rem]",
+    d: "w-16 pe-1 @max-[38.75rem]:order-2",
+    third: "",
+    part: "",
+    padding: 2,
+    cAlign: "end",
     dGap: 1,
   },
   run: {
     // A run line's A splits into time and type, so it has no 280 px floor.
-    a: "@max-[38.75rem]:basis-[calc(100%-5.625rem)]",
-    bc: "@max-[38.75rem]:mt-1",
+    a: "@max-[38.75rem]:order-1 @max-[38.75rem]:basis-[calc(100%-5.625rem)]",
+    b: "@max-[38.75rem]:order-3 @max-[38.75rem]:min-w-[11.75rem] @max-[38.75rem]:mt-1",
+    c: "@max-[38.75rem]:order-4 @max-[38.75rem]:min-w-[11.75rem] @max-[38.75rem]:max-w-[17.5rem] @max-[38.75rem]:mt-1",
     // Run-line actions fill the design's padded 64 px cell, 8 px apart.
-    d: "ps-0.5 pe-1.5 py-1.5 @max-[38.75rem]:min-w-[5.625rem]",
+    d: "w-16 ps-0.5 pe-1.5 py-1.5 @max-[38.75rem]:order-2 @max-[38.75rem]:min-w-[5.625rem]",
+    third: "",
+    part: "",
+    padding: 2,
+    cAlign: "end",
     dGap: 2,
   },
-} satisfies Record<
-  LineVariant,
-  { a: string; bc: string; d: string; dGap: 1 | 2 }
->;
+  // A stat card keeps C and its control on line 1 below 640 px and gives B line 2, so its button or picker stays top right. Parts pad 8 across and 4 down, the 188 and 280 px minimums include the margin.
+  stat: {
+    a: "@max-[38.75rem]:order-1 @max-[38.75rem]:min-w-[11.25rem]",
+    b: "@max-[38.75rem]:order-4 @max-[38.75rem]:basis-full @max-[38.75rem]:min-w-[17rem] @max-[38.75rem]:mt-1",
+    c: "@max-[38.75rem]:order-2 @max-[38.75rem]:min-w-[11.25rem]",
+    // Sized to its control, which ends 4 px inside the card.
+    d: "w-fit pe-1 @max-[38.75rem]:order-3",
+    // A brushed span's picker label can outgrow 208 px, so the third grows instead of overlapping B.
+    third: "min-w-fit",
+    part: "mx-1",
+    padding: 1,
+    cAlign: "start",
+    dGap: 1,
+  },
+} satisfies Record<LineVariant, VariantClasses>;
 
 export interface LineLayoutProps {
   a: ReactNode;
   b: ReactNode;
+  /** A stat line leaves C out when it is null, so D takes the whole third. */
   c: ReactNode;
   d: ReactNode;
   variant: LineVariant;
 }
 
 /**
- * The three-column line shared by connector rows and run lines: A and B split the width, C and a 64 px D share a third capped at 208 px.
- * Below 640 px of card it wraps to A + D over B + C, keeping the actions top right.
+ * The three-column line shared by connector rows, run lines and stat cards: A and B split the width, C and D share a third capped at 208 px.
+ * Below 640 px of card it wraps by variant, keeping the actions top right.
  */
 export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
-  const variantClasses = VARIANT_CLASSES[variant];
+  const variantClasses: VariantClasses = VARIANT_CLASSES[variant];
+  const showsC = variant !== "stat" || c !== null;
   // A container query cannot measure its own element, so the parts query this wrapper.
   return (
     <div className="@container w-full">
@@ -63,10 +100,11 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
         <Section
           alignItems="start"
           gap={1}
-          padding={2}
+          padding={variantClasses.padding}
           height="fit"
           className={cn(
-            "min-w-0 flex-1 @max-[38.75rem]:order-1",
+            "min-w-0 flex-1",
+            variantClasses.part,
             variantClasses.a
           )}
         >
@@ -75,42 +113,45 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
         <Section
           alignItems="start"
           gap={1}
-          padding={2}
+          padding={variantClasses.padding}
           height="fit"
           className={cn(
-            "min-w-0 flex-1 @max-[38.75rem]:order-3 @max-[38.75rem]:min-w-[11.75rem]",
-            variantClasses.bc
+            "min-w-0 flex-1",
+            variantClasses.part,
+            variantClasses.b
           )}
         >
           {b}
         </Section>
-        {/* A fixed third (flex-none would reset the basis) at the design's 208 px; below 640 px it dissolves so D and C take separate lines. */}
+        {/* A fixed third (flex-none would reset the basis) at the design's 208 px; below 640 px it dissolves so C and D wrap as the line's own parts. */}
         <Section
           flexDirection="row"
+          justifyContent="end"
           alignItems="start"
           gap={0}
           height="fit"
-          className="max-w-[13rem] shrink-0 basis-1/3 @max-[38.75rem]:contents"
+          className={cn(
+            "max-w-[13rem] shrink-0 basis-1/3 @max-[38.75rem]:contents",
+            variantClasses.third
+          )}
         >
-          <Section
-            alignItems="end"
-            gap={1}
-            padding={2}
-            height="fit"
-            className={cn(
-              "min-w-0 flex-1 @max-[38.75rem]:order-4 @max-[38.75rem]:min-w-[11.75rem] @max-[38.75rem]:max-w-[17.5rem]",
-              variantClasses.bc
-            )}
-          >
-            {c}
-          </Section>
+          {showsC && (
+            <Section
+              alignItems={variantClasses.cAlign}
+              gap={1}
+              padding={variantClasses.padding}
+              height="fit"
+              className={cn(
+                "min-w-0 flex-1",
+                variantClasses.part,
+                variantClasses.c
+              )}
+            >
+              {c}
+            </Section>
+          )}
           {/* 64 px holds two 24 px actions with a run line's gap and padding. */}
-          <div
-            className={cn(
-              "w-16 shrink-0 @max-[38.75rem]:order-2",
-              variantClasses.d
-            )}
-          >
+          <div className={cn("shrink-0", variantClasses.d)}>
             <Section
               flexDirection="row"
               justifyContent="end"
@@ -123,6 +164,30 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
         </Section>
       </Section>
     </div>
+  );
+}
+
+// A figure that failed to load, so the line keeps its height and does not read as empty.
+const NO_FIGURE = "—";
+
+export interface LineFigureProps {
+  /** Null shows a dash. */
+  value: number | null;
+  label: string | RichStr;
+}
+
+/** A count over its label, for a part that stacks them. */
+export function LineFigure({ value, label }: LineFigureProps) {
+  const format = useFormatter();
+  return (
+    <>
+      <Text font="main-content-emphasis" color="text-04">
+        {value === null ? NO_FIGURE : format.number(value)}
+      </Text>
+      <Text font="secondary-body" color="text-03">
+        {label}
+      </Text>
+    </>
   );
 }
 

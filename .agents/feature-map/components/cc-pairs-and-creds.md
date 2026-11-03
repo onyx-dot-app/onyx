@@ -22,6 +22,18 @@
   attempt, resolve failed runs, and delete it. A pause stops new work and keeps
   what is indexed. A delete removes the documents that only this pair indexed,
   in the background, and keeps documents that another pair also indexes.
+- **An admin watches every pair.** The status page
+  (`web/src/views/admin/connectors/IndexingStatusPage/index.tsx`) has Add
+  Connector in its header. Its column holds a counts card (active, total
+  documents, paused) with the Activities panel button, a graph card with the
+  time picker and the fleet's chart, then the connector list. The fleet's
+  Activities panel sits beside the column, open by default only when its
+  Errors level has items. Hidden, the column centers. Below 816 px of content
+  the panel goes under the column, through the same container query as the
+  connector page (`web/src/views/admin/connectors/shared/PanelPageBody.tsx`),
+  and an Activities toggle at the end of the list replaces the counts card's
+  button. Hovering an activity, or focusing one from the chart, lifts its
+  connector's row.
 - **An admin opens a pair.** The connector page
   (`web/src/views/admin/connectors/ConnectorDetailPage/index.tsx`) shows the
   status cards over two tabs. Connector Configurations holds the account, index

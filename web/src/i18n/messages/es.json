@@ -7462,37 +7462,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Añadir conector",
       "connectorCreated": {
         "toast": "El conector se creó correctamente"
       },
       "overview": {
-        "connectors": {
-          "caption": "Indexando / activos",
-          "label": "Conectores"
-        },
-        "documents": {
-          "caption": "En el índice",
-          "label": "Documentos",
-          "tooltip": "Suma los documentos de cada conector, así que un documento que tienen dos conectores cuenta dos veces."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "No se pudo cargar el resumen.",
-        "processed": {
-          "caption": "Procesados en el intervalo",
-          "label": "Documentos",
-          "tooltip": "Una estimación, ya que el recuento de cada ejecución se reparte por igual a lo largo de su duración. Un documento cuenta cada vez que una ejecución lo procesa, incluidos los fallidos, así que la cifra puede superar los documentos del índice."
-        }
+        "activeConnectors": "Conectores activos",
+        "pausedConnectors": "Conectores pausados",
+        "indexingConnectors": "Conectores indexando",
+        "loadError": "No se pudo cargar el resumen."
       },
       "activities": {
         "title": "Actividades",
-        "history": "Historial completo de actividad",
-        "viewLogs": "Ver registros",
         "panel": {
           "title": "Actividades",
           "close": "Cerrar panel",
           "pairTitle": "Historial de actividad de {name}"
+        },
+        "panelButton": {
+          "show": "Mostrar actividades",
+          "hide": "Ocultar actividades"
         }
       },
       "list": {

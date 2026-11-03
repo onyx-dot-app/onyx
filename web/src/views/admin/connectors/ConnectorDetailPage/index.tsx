@@ -31,7 +31,7 @@ import {
   toast,
 } from "@opal/layouts";
 import { CardLoader, IconLoader } from "@opal/loaders";
-import { cn, markdown } from "@opal/utils";
+import { markdown } from "@opal/utils";
 import { SvgPlugBroken } from "@opal/illustrations";
 import {
   SvgArrowLeft,
@@ -81,9 +81,8 @@ import IndexConfigurationsSection from "@/views/admin/connectors/ConnectorDetail
 import SharingSettingsSection from "@/views/admin/connectors/ConnectorDetailPage/SharingSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/ConnectorDetailPage/ScheduleSection";
 import IndexingTab from "@/views/admin/connectors/ConnectorDetailPage/IndexingTab";
-import ActivityPanel, {
-  type ActivityPanelBeside,
-} from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
+import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
+import PanelPageBody from "@/views/admin/connectors/shared/PanelPageBody";
 import { useAdminTopBar } from "@/layouts/chromes/AdminTopBarSlot";
 import {
   pickWindow,
@@ -308,14 +307,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
     return (
       <SettingsLayouts.Root width="xl" narrowGutters>
         <BackToConnectors />
-        <PageBody>
+        <PanelPageBody>
           <ConnectorTabs
             value="configurations"
             onValueChange={selectTab}
             loading
           />
           <CardLoader descriptionLines={2} />
-        </PageBody>
+        </PanelPageBody>
       </SettingsLayouts.Root>
     );
   }
@@ -545,7 +544,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         }
       />
 
-      <PageBody
+      <PanelPageBody
         panel={
           // Always shown: this page has no control to reopen a hidden panel.
           <ActivityPanel
@@ -557,7 +556,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
             title={tActivities("title")}
             range={sliceRange}
             onClearRange={clearRange}
-            beside={BESIDE.panel}
             {...activityLinks.panel}
           />
         }
@@ -640,58 +638,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
             />
           </Tabs.Content>
         </ConnectorTabs>
-      </PageBody>
+      </PanelPageBody>
     </SettingsLayouts.Root>
-  );
-}
-
-interface PageBodyProps {
-  children: ReactNode;
-  panel?: ReactNode;
-}
-
-/**
- * The body's layout on its @container: the panel beside the column from 816 px
- * of content, the design's stack point, and under it below. Tailwind reads
- * whole class literals, so each class spells the width out.
- */
-const BESIDE = {
-  row: "@max-[51rem]:flex-col @max-[51rem]:items-stretch",
-  // 640 px is the design's column width beside the panel. Stacked, it takes the full width.
-  column: "@min-[51rem]:max-w-[40rem]",
-  panel: {
-    panel:
-      "@min-[51rem]:w-100 @min-[51rem]:shrink-0 @min-[51rem]:h-auto @min-[51rem]:self-stretch @min-[51rem]:contain-size",
-    body: "@min-[51rem]:max-h-full",
-  } satisfies ActivityPanelBeside,
-};
-
-/** The column and the Activities panel beside it, the panel under the column below 816 px of content. */
-function PageBody({ children, panel }: PageBodyProps) {
-  return (
-    <SettingsLayouts.Body>
-      <Section height="fit" className="@container">
-        <Section
-          flexDirection="row"
-          alignItems="start"
-          justifyContent="center"
-          gap={4}
-          height="fit"
-          className={BESIDE.row}
-        >
-          {/* min-w-0 lets the column shrink under long content. */}
-          <Section
-            alignItems="stretch"
-            gap={6}
-            height="fit"
-            className={cn("min-w-0 flex-1", BESIDE.column)}
-          >
-            {children}
-          </Section>
-          {panel}
-        </Section>
-      </Section>
-    </SettingsLayouts.Body>
   );
 }
 

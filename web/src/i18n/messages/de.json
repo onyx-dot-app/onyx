@@ -7462,37 +7462,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Konnektor hinzufügen",
       "connectorCreated": {
         "toast": "Konnektor erfolgreich erstellt"
       },
       "overview": {
-        "connectors": {
-          "caption": "Indexierend / aktiv",
-          "label": "Konnektoren"
-        },
-        "documents": {
-          "caption": "Im Index",
-          "label": "Dokumente",
-          "tooltip": "Summiert die Dokumente jedes Konnektors, daher zählt ein Dokument, das zwei Konnektoren enthalten, doppelt."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "Die Übersicht konnte nicht geladen werden.",
-        "processed": {
-          "caption": "Im Zeitraum verarbeitet",
-          "label": "Dokumente",
-          "tooltip": "Ein Schätzwert, da die Zahl jedes Laufs gleichmäßig über seine Laufzeit verteilt wird. Ein Dokument zählt jedes Mal, wenn ein Lauf es verarbeitet, auch fehlgeschlagene, daher kann die Zahl größer sein als die Dokumente im Index."
-        }
+        "activeConnectors": "Aktive Konnektoren",
+        "pausedConnectors": "Pausierte Konnektoren",
+        "indexingConnectors": "Indexierende Konnektoren",
+        "loadError": "Die Übersicht konnte nicht geladen werden."
       },
       "activities": {
         "title": "Aktivitäten",
-        "history": "Vollständiger Aktivitätsverlauf",
-        "viewLogs": "Logs anzeigen",
         "panel": {
           "title": "Aktivitäten",
           "close": "Bereich schließen",
           "pairTitle": "Aktivitätsverlauf von {name}"
+        },
+        "panelButton": {
+          "show": "Aktivitäten anzeigen",
+          "hide": "Aktivitäten ausblenden"
         }
       },
       "list": {
