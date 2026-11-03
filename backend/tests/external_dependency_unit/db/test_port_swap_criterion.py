@@ -62,6 +62,7 @@ from onyx.db.models import (
     Credential,
     DocumentByConnectorCredentialPair,
     IndexAttempt,
+    IndexAttemptError,
     PortAttempt,
     SearchSettings,
     UserFile,
@@ -932,10 +933,127 @@ def test_swap_clears_hashes_of_a_pair_future_could_not_catch_up_with(
     _clear_verification_backoff(future_id)
     with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
-    swap_index._clear_hashes_future_skipped__no_commit(db_session, future_ss, [cc_pair])
+    swap_index._clear_what_future_missed__no_commit(db_session, future_ss, [cc_pair])
     db_session.commit()
     db_session.expire_all()
     assert doc.content_hash is None
+
+
+def test_swap_ignores_pending_flags_of_a_pair_future_could_not_catch_up_with(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A document PRESENT wrote for a pair after its port is flagged as pending
+    for FUTURE by the metadata sync. Nothing clears the flag once the pair is
+    paused, so the swap must not wait for it; it drops the flag with the hash."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    since, completed = _seed_and_port(db_session, cc_pair, future_id)
+    _present_attempt(
+        db_session,
+        cc_pair,
+        status=IndexingStatus.SUCCESS,
+        ended=completed + timedelta(minutes=5),
+    )
+    (doc_id,) = db_session.scalars(
+        select(DocumentByConnectorCredentialPair.id).where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+    ).all()
+    mark_document_synced_secondary_pending(doc_id, db_session)
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None
+    doc.content_hash = "written-during-the-reindex"
+    doc.last_modified = since + timedelta(minutes=1)
+    db_session.commit()
+
+    # Active, the pair still has to catch up.
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+    cc_pair.status = ConnectorCredentialPairStatus.PAUSED
+    db_session.commit()
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+    swap_index._clear_what_future_missed__no_commit(db_session, future_ss, [cc_pair])
+    db_session.commit()
+    db_session.expire_all()
+    assert doc.content_hash is None
+    assert doc.secondary_only_sync_pending is False
+
+
+def test_swap_clears_hashes_of_documents_future_attempts_failed_on(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A FUTURE poll that completed with errors moved the cursor past the
+    documents it failed on and still counts as caught up. The swap forgets their
+    hashes, resolved or not, so Retry or the next fetch re-indexes them; other
+    documents keep theirs."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    since, completed = _seed_and_port(db_session, cc_pair, future_id)
+    failed_id, kept_id = seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=f"{_VERIFY_DOC_PREFIX}err-"
+    )
+    for doc_id in (failed_id, kept_id):
+        doc = db_session.get(DbDocument, doc_id)
+        assert doc is not None
+        doc.content_hash = "hash"
+        # Older than the reindex: the pair-scoped reset would not touch it.
+        doc.last_modified = since - timedelta(minutes=1)
+    present_end = completed + timedelta(minutes=5)
+    _present_attempt(
+        db_session, cc_pair, status=IndexingStatus.SUCCESS, ended=present_end
+    )
+    attempt = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=future_id,
+        status=IndexingStatus.COMPLETED_WITH_ERRORS,
+        from_beginning=False,
+        poll_range_end=present_end,
+        time_started=present_end + timedelta(minutes=1),
+        time_finished=present_end + timedelta(minutes=1),
+    )
+    db_session.add(attempt)
+    db_session.flush()
+    error = IndexAttemptError(
+        index_attempt_id=attempt.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id=failed_id,
+        failure_message="embedding failed",
+        # Resolved by a later PRESENT run; FUTURE still lacks that version.
+        is_resolved=True,
+    )
+    db_session.add(error)
+    db_session.commit()
+    try:
+        _clear_verification_backoff(future_id)
+        with patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=[]
+        ):
+            assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+        swap_index._clear_what_future_missed__no_commit(
+            db_session, future_ss, [cc_pair]
+        )
+        db_session.commit()
+        hashes = dict(
+            db_session.execute(
+                select(DbDocument.id, DbDocument.content_hash).where(
+                    DbDocument.id.in_([failed_id, kept_id])
+                )
+            )
+            .tuples()
+            .all()
+        )
+        assert hashes == {failed_id: None, kept_id: "hash"}
+    finally:
+        db_session.rollback()
+        db_session.delete(error)
+        db_session.commit()
 
 
 def test_sampler_skips_a_scope_with_no_snapshot_bound(

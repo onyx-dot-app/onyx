@@ -62,6 +62,8 @@ class PairCatchUpState(BaseModel):
     since: datetime
     # A PRESENT attempt is running, or is queued with a task (it will write).
     present_active: bool
+    # A FUTURE catch-up attempt is running, or is queued with a task.
+    future_active: bool
     # When the pair's last terminal PRESENT attempt ended (targeted re-index excluded:
     # it writes both indexes). None when PRESENT never ran.
     last_present_end: datetime | None
@@ -103,8 +105,9 @@ class PairCatchUpState(BaseModel):
 
     @property
     def abandoned(self) -> bool:
-        """Catch-up gave up on this pair: the swap no longer waits for it."""
-        if not self.needs_catch_up:
+        """Catch-up gave up on this pair: the swap no longer waits for it. Not
+        while an attempt runs: it may still catch up, and the swap waits for it."""
+        if not self.needs_catch_up or self.future_active:
             return False
         if self.future_failed_streak >= REINDEX_HOLD_MAX_FUTURE_FAILURES:
             return True
@@ -132,6 +135,7 @@ class PairCatchUpState(BaseModel):
         return (
             self.needs_catch_up
             and not self.present_active
+            and not self.future_active
             and not self.abandoned
             and (self.retry_after is None or self.now >= self.retry_after)
         )
@@ -266,7 +270,7 @@ def _pair_states(
         )
         if cc_pair_id is not None
     }
-    present_active_expr = or_(
+    active_attempt_expr = or_(
         IndexAttempt.status == IndexingStatus.IN_PROGRESS,
         and_(
             IndexAttempt.status == IndexingStatus.NOT_STARTED,
@@ -281,7 +285,7 @@ def _pair_states(
                 func.max(IndexAttempt.end_time).filter(
                     IndexAttempt.targeted_reindex_job_id.is_(None)
                 ),
-                func.bool_or(present_active_expr),
+                func.bool_or(active_attempt_expr),
             )
             .where(
                 IndexAttempt.search_settings_id == present_id,
@@ -297,6 +301,13 @@ def _pair_states(
         IndexAttempt.is_synthetic_seed.is_(False),
         IndexAttempt.is_backfill.is_(False),
         IndexAttempt.targeted_reindex_job_id.is_(None),
+    )
+    future_active_ids = set(
+        db_session.scalars(
+            select(IndexAttempt.connector_credential_pair_id)
+            .where(catch_up_attempt, active_attempt_expr)
+            .distinct()
+        )
     )
     future_rows = {
         cc_pair_id: (covered_through, last_success_end)
@@ -384,6 +395,7 @@ def _pair_states(
             push_based=connector_id == 0 or source == DocumentSource.INGESTION_API,
             since=since,
             present_active=present_active,
+            future_active=cc_pair_id in future_active_ids,
             last_present_end=last_present_end,
             port_completed_at=port_completed_at,
             future_covered_through=covered_through,

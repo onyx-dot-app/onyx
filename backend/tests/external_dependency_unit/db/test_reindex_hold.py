@@ -438,6 +438,57 @@ def test_abandon_after_the_hold_age_cap(
         assert state.reset_hashes_at_swap is True
 
 
+def test_running_catch_up_attempt_is_not_abandoned(
+    db_session: Session, pair_and_future: tuple[ConnectorCredentialPair, SearchSettings]
+) -> None:
+    """An attempt that still runs may catch up, and the swap waits for it, so
+    the pair is not abandoned, or alerted, until the attempt ends."""
+    pair, future = pair_and_future
+    _seed(db_session, pair, future.id)
+    port = _success_port(db_session, pair, future.id)
+    assert port.time_completed is not None
+    completed = port.time_completed
+    _attempt(
+        db_session,
+        pair,
+        _present_id(db_session),
+        status=IndexingStatus.SUCCESS,
+        ended=completed + timedelta(minutes=1),
+    )
+    for n in (1, 2, 3):
+        _attempt(
+            db_session,
+            pair,
+            future.id,
+            status=IndexingStatus.FAILED,
+            created=completed + timedelta(minutes=n),
+            ended=completed + timedelta(minutes=n, seconds=30),
+        )
+    assert _state(db_session, pair, future).abandoned is True
+
+    running = _attempt(
+        db_session,
+        pair,
+        future.id,
+        status=IndexingStatus.IN_PROGRESS,
+        created=completed + timedelta(minutes=4),
+        celery_task_id="catch-up",
+    )
+    state = _state(db_session, pair, future)
+    assert state.future_active is True
+    assert state.abandoned is False
+    assert state.catch_up_due is False
+    with patch.object(reindex_hold_db, "REINDEX_HOLD_MAX_SECONDS", 0):
+        assert _state(db_session, pair, future).abandoned is False
+
+    running.status = IndexingStatus.FAILED
+    running.time_finished = completed + timedelta(minutes=5)
+    db_session.commit()
+    state = _state(db_session, pair, future)
+    assert state.future_active is False
+    assert state.abandoned is True
+
+
 def test_retry_after_backs_off_from_the_last_failure(
     db_session: Session, pair_and_future: tuple[ConnectorCredentialPair, SearchSettings]
 ) -> None:

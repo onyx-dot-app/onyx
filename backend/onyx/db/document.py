@@ -51,6 +51,8 @@ from onyx.db.models import (
     Credential,
     DocumentByConnectorCredentialPair,
     FileRecord,
+    IndexAttempt,
+    IndexAttemptError,
     User,
 )
 from onyx.db.models import Document as DbDocument
@@ -1535,6 +1537,56 @@ def clear_content_hash_for_cc_pair_since__no_commit(
         update(DbDocument)
         .where(DbDocument.id.in_(doc_ids), DbDocument.last_modified >= since)
         .values(content_hash=None)
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
+
+
+def clear_content_hash_for_failed_documents__no_commit(
+    db_session: Session, search_settings_id: int
+) -> int:
+    """Forget what the index holds for every document an index attempt on these
+    search settings failed on, resolved or not. The attempt moved the pair's
+    cursor past the document, so nothing fetches it again until the source
+    changes it or an admin retries it, and a NULL hash makes that fetch index
+    it. Resolution is per pair, so a PRESENT attempt that indexed the document
+    later resolves the error while FUTURE still lacks that version. Used at a
+    reindex swap for the FUTURE settings. Caller commits."""
+    failed_ids = (
+        select(IndexAttemptError.document_id)
+        .join(IndexAttempt, IndexAttempt.id == IndexAttemptError.index_attempt_id)
+        .where(
+            IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttemptError.document_id.isnot(None),
+        )
+    )
+    result = db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(failed_ids), DbDocument.content_hash.isnot(None))
+        .values(content_hash=None)
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
+
+
+def clear_secondary_only_sync_pending_for_cc_pair__no_commit(
+    db_session: Session, connector_id: int, credential_id: int
+) -> int:
+    """Drop the deferred-FUTURE-write flag of this cc_pair's documents. Used at
+    a reindex swap for a pair FUTURE could not catch up with: FUTURE never gets
+    those writes, so the flag would never clear; the next poll on the new
+    PRESENT fetches the documents instead. Caller commits."""
+    doc_ids = select(DocumentByConnectorCredentialPair.id).where(
+        DocumentByConnectorCredentialPair.connector_id == connector_id,
+        DocumentByConnectorCredentialPair.credential_id == credential_id,
+    )
+    result = db_session.execute(
+        update(DbDocument)
+        .where(
+            DbDocument.id.in_(doc_ids),
+            DbDocument.secondary_only_sync_pending.is_(True),
+        )
+        .values(secondary_only_sync_pending=False)
         .execution_options(synchronize_session=False)
     )
     return int(result.rowcount)  # ty: ignore[unresolved-attribute]

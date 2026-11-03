@@ -137,9 +137,12 @@ window ends past its port and PRESENT's last run
 behind PRESENT refreshes. A paused pair cannot run FUTURE attempts, and a pair
 whose FUTURE attempts end without success `REINDEX_HOLD_MAX_FUTURE_FAILURES`
 times in a row after its port, or stays behind for `REINDEX_HOLD_MAX_SECONDS`,
-is abandoned: the swap proceeds, clears the content hash of what PRESENT wrote
-during the reindex so the next poll re-indexes it, and admins get a
-`REINDEX_CATCH_UP_ABANDONED` alert. The
+is abandoned: the swap proceeds, clears the content hash and the pending-sync
+flag of what PRESENT wrote during the reindex so the next poll re-indexes it,
+and admins get a `REINDEX_CATCH_UP_ABANDONED` alert. The swap also clears the
+content hash of every document a FUTURE attempt failed on: such an attempt
+completes with errors, moves the cursor and counts as caught up, and the hash
+would make Retry skip the document. The
 reindex-progress endpoint reports `finalizing`, `catching_up` and `abandoned`.
 Reclaim waits `OLD_INDEX_RETENTION_HOURS` in SOAKING,
 then requires the new index to be not red and to answer a count query
@@ -249,10 +252,14 @@ it deletes the old one.
     three in step: a PRESENT writer the gate does not see, or a FUTURE poll the
     beat never starts, leaves a document stale in the new index for good,
     because `content_hash` then says it is current. A paused or abandoned pair
-    is exempt and gets
-    `backend/onyx/db/document.py:clear_content_hash_for_cc_pair_since__no_commit` at the swap
-    instead. A pair created or un-paused after the reindex began has no seed:
-    its port gates the swap but does not end the hold.
+    is exempt: its pending-sync flags do not hold the swap, and it gets
+    `backend/onyx/db/document.py:clear_content_hash_for_cc_pair_since__no_commit` and
+    `backend/onyx/db/document.py:clear_secondary_only_sync_pending_for_cc_pair__no_commit`
+    at the swap instead. A pair with a running FUTURE attempt is never
+    abandoned. Documents a FUTURE attempt failed on get
+    `backend/onyx/db/document.py:clear_content_hash_for_failed_documents__no_commit` at
+    the swap, resolved or not. A pair created or un-paused after the reindex
+    began has no seed: its port gates the swap but does not end the hold.
 
 ## Decisions
 

@@ -74,6 +74,7 @@ def _pair_state(
         "push_based": False,
         "since": now - timedelta(hours=2),
         "present_active": False,
+        "future_active": False,
         "last_present_end": now - timedelta(minutes=30),
         "port_completed_at": now - timedelta(hours=1),
         "future_covered_through": None,
@@ -247,5 +248,17 @@ def test_abandoned_catch_up_alerts_admins_once_per_reindex(
     _alert_abandoned_catch_up(
         db_session,
         ReindexHoldState(future_id=future.id + 1, finalizing=True, pairs=hold.pairs),
+    )
+    assert len(alerts()) == 2
+
+    # A pair whose catch-up attempt still runs is not abandoned, so no alert.
+    running = _pair_state(
+        db_session, pair.id, future_failed_streak=3, future_active=True
+    )
+    _alert_abandoned_catch_up(
+        db_session,
+        ReindexHoldState(
+            future_id=future.id + 2, finalizing=True, pairs={pair.id: running}
+        ),
     )
     assert len(alerts()) == 2
