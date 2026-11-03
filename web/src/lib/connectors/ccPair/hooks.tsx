@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import useSWR, { mutate } from "swr";
+import useSWR, { mutate, type SWRConfiguration } from "swr";
 import { toast } from "@opal/layouts";
 import useSWRInfinite from "swr/infinite";
 import {
@@ -12,6 +12,10 @@ import {
 } from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import type {
+  HoveredLine,
+  ThroughputActivityLinks,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import type {
   CCPairFullInfo,
   CCPairRun,
@@ -119,11 +123,17 @@ export function useStatusChange(
 // useActivityItems
 // ---------------------------------------------------------------------------
 
-/** Which level of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
-export type ActivityGroup = "failures" | "errors" | "other";
+/** Which section of an activity panel a run sits in. A queued run has nothing to report yet, so it sits in none. */
+export type ActivitySection =
+  | "failures"
+  | "errors"
+  | "running"
+  | "success"
+  | "canceled";
 
-interface ActivityGroupQuery {
-  statusGroups: CCPairRunStatusGroup[] | null;
+/** How one section narrows the runs feed. */
+export interface ActivityRunsFilter {
+  statusGroups: CCPairRunStatusGroup[];
   errors: CCPairRunErrors | null;
   superseded: boolean | null;
   resolved: boolean | null;
@@ -131,9 +141,27 @@ interface ActivityGroupQuery {
 
 const NOT_FAILED: CCPairRunStatusGroup[] = ["running", "succeeded", "canceled"];
 
-/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or a newer succeeded or failed run of its kind followed it,
- * a closed error run was resolved, had all its document errors resolved, or a newer succeeded or failed run followed it on a kind other than indexing, and nothing in "other" is open, so it has no closed runs. */
-const ACTIVITY_GROUP_QUERY = {
+/** A section of runs with no errors recorded, which hold nothing to resolve. */
+function cleanRuns(group: CCPairRunStatusGroup): SectionFilter {
+  return {
+    open: {
+      statusGroups: [group],
+      errors: "none",
+      superseded: null,
+      resolved: null,
+    },
+    closed: null,
+  };
+}
+
+interface SectionFilter {
+  open: ActivityRunsFilter;
+  /** The resolved or superseded runs, null for a section that holds nothing to resolve. */
+  closed: ActivityRunsFilter | null;
+}
+
+/** Each section's open runs and its closed (resolved or superseded) ones. */
+export const ACTIVITY_SECTION_FILTER = {
   failures: {
     open: {
       statusGroups: ["failed"],
@@ -162,19 +190,26 @@ const ACTIVITY_GROUP_QUERY = {
       resolved: true,
     },
   },
-  other: {
-    open: {
-      statusGroups: NOT_FAILED,
-      errors: "none",
-      superseded: null,
-      resolved: null,
-    },
-    closed: null,
-  },
-} satisfies Record<
-  ActivityGroup,
-  { open: ActivityGroupQuery; closed: ActivityGroupQuery | null }
->;
+  running: cleanRuns("running"),
+  success: cleanRuns("succeeded"),
+  canceled: cleanRuns("canceled"),
+} satisfies Record<ActivitySection, SectionFilter>;
+
+/** The sections the activity panel's default level (Errors) lists. */
+export const DEFAULT_ACTIVITY_SECTIONS = [
+  "failures",
+  "errors",
+] as const satisfies readonly ActivitySection[];
+
+/** Whether the section's runs carry failures or errors a viewer can inspect and resolve. */
+export function sectionResolves(section: ActivitySection): boolean {
+  return ACTIVITY_SECTION_FILTER[section].closed !== null;
+}
+
+/** A run's identity across kinds, since attempt ids repeat between kinds. */
+export function runKey(run: CCPairRun): string {
+  return `${run.kind}-${run.attempt.id}`;
+}
 
 const ACTIVITY_PAGE_SIZE = 20;
 
@@ -187,7 +222,7 @@ export type ActivityScope =
 export interface ActivityItem {
   ccPairId: number;
   run: CCPairRun;
-  /** Set when the feed spans pairs, so the card names the pair. */
+  /** Set when the feed spans pairs, so the card shows the pair. */
   connector: CCPairRef | undefined;
   /** The viewer may re-fetch single documents of the run's pair. */
   canResolve: boolean;
@@ -195,12 +230,12 @@ export interface ActivityItem {
   canResolveRuns: boolean;
 }
 
-export interface ActivityGroupState {
-  group: ActivityGroup;
-  /** Lists the level's resolved and superseded runs rather than its open ones. */
+export interface ActivitySectionState {
+  section: ActivitySection;
+  /** Lists the section's resolved and superseded runs rather than its open ones. */
   closed: boolean;
   runs: ActivityItem[];
-  /** Runs in the group, loaded or not. */
+  /** Runs in the section, loaded or not. */
   total: number;
   loaded: boolean;
   failed: boolean;
@@ -256,53 +291,101 @@ export interface ActivityTimeRange {
   until: string | null;
 }
 
-const ALL_TIME: ActivityTimeRange = { since: null, until: null };
+/** What narrows every section of a panel alike. */
+export interface ActivityNarrowing {
+  /** Matched against error messages. */
+  q: string;
+  range: ActivityTimeRange;
+  /** The fleet's pairs. Empty leaves the backend's scope: readable on the feed, operated on the batch routes. A pair's feed ignores it. */
+  ccPairIds: readonly number[];
+}
 
-/** One activity level of the scope, its open runs or its `closed` ones, polled while `enabled`. `more` loads the next page and a new search starts over. */
+export const ALL_ACTIVITY: ActivityNarrowing = {
+  q: "",
+  range: { since: null, until: null },
+  ccPairIds: [],
+};
+
+function scopePairId(scope: ActivityScope): number | null {
+  return scope === "fleet" ? null : scope.ccPairId;
+}
+
+/** The feed URL of one page of a section's runs. */
+function activityFeedKey(
+  ccPairId: number | null,
+  filter: ActivityRunsFilter,
+  closed: boolean,
+  narrowing: ActivityNarrowing,
+  pageNum: number,
+  pageSize: number
+): string {
+  const query: CCPairRunsQuery = {
+    pageNum,
+    pageSize,
+    since: narrowing.range.since,
+    until: narrowing.range.until,
+    kinds: null,
+    q: narrowing.q,
+    ...filter,
+    // A search finds superseded runs too, under their open section. The closed feed keeps its superseded ones.
+    superseded: narrowing.q && !closed ? null : filter.superseded,
+  };
+  return ccPairId === null
+    ? SWR_KEYS.indexMonitoringRuns(query, narrowing.ccPairIds)
+    : SWR_KEYS.ccPairRuns(ccPairId, query);
+}
+
+export interface ActivityItemsOptions {
+  /** Fetches nothing while false. */
+  enabled: boolean;
+  pollMs: number;
+  /** Narrows the section's status groups further. Default: the section's own. */
+  statusGroups?: CCPairRunStatusGroup[] | null;
+}
+
+/** One section of the scope, its open runs or its `closed` ones. `more` loads the next page and a new narrowing starts over. */
 export function useActivityItems(
   scope: ActivityScope,
-  group: ActivityGroup,
+  section: ActivitySection,
   closed: boolean,
-  q: string,
-  enabled: boolean,
-  pollMs: number,
-  range: ActivityTimeRange = ALL_TIME
-): ActivityGroupState {
-  const { since, until } = range;
-  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  narrowing: ActivityNarrowing,
+  { enabled, pollMs, statusGroups = null }: ActivityItemsOptions
+): ActivitySectionState {
+  const ccPairId = scopePairId(scope);
   const pair = scope === "fleet" ? null : scope;
   // Primitives, so a scope rebuilt every render does not remap the runs.
   const canResolve = pair?.canResolve ?? null;
   const canResolveRuns = pair?.canResolveRuns ?? null;
-  const groupQuery = ACTIVITY_GROUP_QUERY[group][closed ? "closed" : "open"];
+  const sectionFilter =
+    ACTIVITY_SECTION_FILTER[section][closed ? "closed" : "open"];
+  const { q, range } = narrowing;
+  const ccPairIds = narrowing.ccPairIds.join(",");
   const { data, error, isLoading, size, setSize, mutate } =
     useSWRInfinite<FeedPage>(
       (pageIndex, previous: FeedPage | null) => {
-        if (!enabled || groupQuery === null) return null;
+        if (!enabled || sectionFilter === null) return null;
         if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
           return null;
         }
-        const query: CCPairRunsQuery = {
-          pageNum: pageIndex,
-          pageSize: ACTIVITY_PAGE_SIZE,
-          since,
-          until,
-          kinds: null,
-          q,
-          ...groupQuery,
-          // A search finds superseded runs too, under their open level. The closed feed keeps its superseded ones.
-          superseded: q && !closed ? null : groupQuery.superseded,
-        };
-        return ccPairId === null
-          ? SWR_KEYS.indexMonitoringRuns(query)
-          : SWR_KEYS.ccPairRuns(ccPairId, query);
+        const filter =
+          statusGroups === null
+            ? sectionFilter
+            : { ...sectionFilter, statusGroups };
+        return activityFeedKey(
+          ccPairId,
+          filter,
+          closed,
+          narrowing,
+          pageIndex,
+          ACTIVITY_PAGE_SIZE
+        );
       },
       errorHandlingFetcher,
       { refreshInterval: pollMs, keepPreviousData: true }
     );
   useEffect(() => {
     void setSize(1);
-  }, [q, since, until, setSize]);
+  }, [q, range.since, range.until, ccPairIds, setSize]);
   useEffect(() => {
     const feed: ActivityFeed = {
       ccPairId,
@@ -326,7 +409,7 @@ export function useActivityItems(
       page.items
         .map((run) => itemOf(run, itemScope))
         .filter((item) => {
-          const key = `${item.run.kind}-${item.run.attempt.id}`;
+          const key = runKey(item.run);
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
@@ -336,7 +419,7 @@ export function useActivityItems(
   const first = data?.[0];
   const last = data?.[data.length - 1];
   return {
-    group,
+    section,
     closed,
     runs,
     total: first?.total_items ?? 0,
@@ -350,6 +433,47 @@ export function useActivityItems(
       last.items.length === ACTIVITY_PAGE_SIZE,
     more: () => void setSize(size + 1),
   };
+}
+
+/** How many open runs the sections list together under the narrowing, read from one single-run page each, or null until known. Disabled, it fetches nothing. A failed read stays null and SWR retries it. */
+export function useActivityRunsCount(
+  scope: ActivityScope,
+  sections: readonly ActivitySection[],
+  narrowing: ActivityNarrowing,
+  enabled: boolean,
+  config: Pick<SWRConfiguration, "refreshInterval" | "keepPreviousData"> = {},
+  /** Narrows the errors section's status groups, as a level's feed does. */
+  errorStatusGroups: CCPairRunStatusGroup[] | null = null
+): number | null {
+  const ccPairId = scopePairId(scope);
+  const keys = enabled
+    ? sections.map((section) =>
+        activityFeedKey(
+          ccPairId,
+          section === "errors" && errorStatusGroups !== null
+            ? {
+                ...ACTIVITY_SECTION_FILTER.errors.open,
+                statusGroups: errorStatusGroups,
+              }
+            : ACTIVITY_SECTION_FILTER[section].open,
+          false,
+          narrowing,
+          0,
+          1
+        )
+      )
+    : null;
+  const { data } = useSWR<number>(
+    keys === null ? null : SWR_KEYS.activityRunsCount(keys),
+    async ([, ...urls]: readonly string[]) => {
+      const pages = await Promise.all(
+        urls.map((url) => errorHandlingFetcher<FeedPage>(url))
+      );
+      return pages.reduce((sum, page) => sum + page.total_items, 0);
+    },
+    config
+  );
+  return data ?? null;
 }
 
 /** Refetches the fleet feed and the given pairs' feeds. */
@@ -366,8 +490,9 @@ function refreshFeeds(ccPairIds: number[]) {
   return Promise.all([
     mutate(
       (key) =>
-        typeof key === "string" &&
-        prefixes.some((prefix) => key.startsWith(prefix))
+        (typeof key === "string" &&
+          prefixes.some((prefix) => key.startsWith(prefix))) ||
+        (Array.isArray(key) && key[0] === SWR_KEYS.activityRunsCountTag)
     ),
     ...Array.from(activityFeeds)
       .filter(
@@ -377,16 +502,16 @@ function refreshFeeds(ccPairIds: number[]) {
   ]);
 }
 
-/** How many open runs of the level, or of every level when `level` is null, the batch resolve would mark for the search, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */
+/** How many open runs of the level, or of every level when `level` is null, the batch resolve would mark under the narrowing, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */
 export function useResolvableRunsCount(
   scope: ActivityScope,
   enabled: boolean,
   level: CCPairRunLevel | null,
-  q: string,
-  timeRange: ActivityTimeRange,
+  narrowing: ActivityNarrowing,
   pollMs: number
 ): { count: number; isLoading: boolean } {
-  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const ccPairId = scopePairId(scope);
+  const { q, range } = narrowing;
   const { data, isLoading } = useSWR<{ count: number }>(
     !enabled
       ? null
@@ -394,15 +519,16 @@ export function useResolvableRunsCount(
         ? SWR_KEYS.indexMonitoringResolvableRunsCount(
             level,
             q,
-            timeRange.since,
-            timeRange.until
+            range.since,
+            range.until,
+            narrowing.ccPairIds
           )
         : SWR_KEYS.ccPairResolvableRunsCount(
             ccPairId,
             level,
             q,
-            timeRange.since,
-            timeRange.until
+            range.since,
+            range.until
           ),
     errorHandlingFetcher,
     { refreshInterval: pollMs, keepPreviousData: true }
@@ -522,23 +648,27 @@ export function useResolveRunErrors() {
     }
   }
 
-  // Marks every open run of the level, or of every level, the panel lists for the search resolved.
+  // Marks every open run of the level, or of every level, the panel lists under the narrowing resolved.
   async function resolveMatching(
     scope: ActivityScope,
     level: CCPairRunLevel | null,
-    q: string,
-    timeRange: ActivityTimeRange
+    narrowing: ActivityNarrowing
   ) {
     if (resolving) return;
     setResolving(true);
-    const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+    const ccPairId = scopePairId(scope);
+    const { q, range } = narrowing;
     try {
       const result = await resolveMatchingRuns(ccPairId, {
         level,
         q: q || null,
-        since: timeRange.since,
-        until: timeRange.until,
+        since: range.since,
+        until: range.until,
         kinds: null,
+        cc_pair_ids:
+          ccPairId === null && narrowing.ccPairIds.length > 0
+            ? [...narrowing.ccPairIds]
+            : null,
       });
       toast.success(tToasts("runsResolved", { count: result.resolved_count }));
       await refreshFeeds(ccPairId === null ? result.cc_pair_ids : [ccPairId]);
@@ -582,4 +712,99 @@ export function useLatestCCPairRun(
     errorHandlingFetcher,
     { refreshInterval: pollMs }
   );
+}
+
+function panelOpenKey(scope: ActivityScope): string {
+  return `onyx.activityPanel.open.${scope === "fleet" ? "fleet" : scope.ccPairId}`;
+}
+
+function readPanelChoice(key: string): boolean | null {
+  try {
+    const stored = window.sessionStorage.getItem(key);
+    return stored === null ? null : stored === "true";
+  } catch {
+    return null;
+  }
+}
+
+export interface ActivityPanelOpen {
+  open: boolean;
+  /** Holds for the rest of the session. */
+  setOpen: (open: boolean) => void;
+}
+
+/** Whether the scope's activity panel shows: the admin's choice this session, else open once the default level holds an open item, running runs with errors included. */
+export function useActivityPanelOpen(scope: ActivityScope): ActivityPanelOpen {
+  const key = panelOpenKey(scope);
+  // Read after mount: the server renders without storage, so a first render that read it would not hydrate.
+  const [choice, setChoice] = useState<boolean | null>(null);
+  useEffect(() => {
+    setChoice(readPanelChoice(key));
+  }, [key]);
+  // Settled once from the first count, so a revalidation never opens or closes the panel under the admin.
+  const [byDefault, setByDefault] = useState<boolean | null>(null);
+  const count = useActivityRunsCount(
+    scope,
+    DEFAULT_ACTIVITY_SECTIONS,
+    ALL_ACTIVITY,
+    byDefault === null && choice === null
+  );
+  useEffect(() => {
+    if (count !== null && byDefault === null) setByDefault(count > 0);
+  }, [count, byDefault]);
+  function setOpen(open: boolean) {
+    setChoice(open);
+    try {
+      window.sessionStorage.setItem(key, String(open));
+    } catch {
+      // Without storage the choice holds until the page unloads.
+    }
+  }
+  return { open: choice ?? byDefault ?? false, setOpen };
+}
+
+/** What the chart and an activity panel on one page tell each other. */
+export interface ActivityPanelLinks {
+  onHoverAttempt: (attemptId: number | null) => void;
+  focusAttemptId: number | null;
+  outlinedAttemptIds: number[];
+}
+
+export interface ActivityChartLinks {
+  chart: ThroughputActivityLinks;
+  panel: ActivityPanelLinks;
+}
+
+export interface ActivityChartLinksOptions {
+  /** Runs as a failure line focuses its card, such as to open the panel that lists it. */
+  onFocusAttempt?: (attemptId: number) => void;
+}
+
+/** One page's chart and activity panel, linked: a hovered card marks its run on the chart, a failure line click focuses its card, a hovered line outlines its runs' cards. */
+export function useActivityChartLinks({
+  onFocusAttempt,
+}: ActivityChartLinksOptions = {}): ActivityChartLinks {
+  const [hoveredAttemptId, setHoveredAttemptId] = useState<number | null>(null);
+  const [focusAttemptId, setFocusAttemptId] = useState<number | null>(null);
+  const [outlinedAttemptIds, setOutlinedAttemptIds] = useState<number[]>([]);
+  return {
+    chart: {
+      hoveredAttemptId,
+      onFocusAttempt: (attemptId: number) => {
+        onFocusAttempt?.(attemptId);
+        setFocusAttemptId(attemptId);
+      },
+      onHoverLine: (line: HoveredLine | null) =>
+        setOutlinedAttemptIds(line?.attemptIds ?? []),
+    },
+    panel: {
+      onHoverAttempt: (attemptId: number | null) => {
+        setHoveredAttemptId(attemptId);
+        // The focus lift ends once the pointer leaves a card, so it does not hold for the page's life.
+        if (attemptId === null) setFocusAttemptId(null);
+      },
+      focusAttemptId,
+      outlinedAttemptIds,
+    },
+  };
 }

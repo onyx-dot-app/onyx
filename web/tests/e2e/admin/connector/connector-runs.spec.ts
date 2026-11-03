@@ -193,7 +193,7 @@ test.describe("Connector runs", () => {
     await detail.expectRunsVisible();
     await expect(detail.runKindFilter).toBeVisible();
     await detail.expectActivityShows(MOCK_DOC_ERROR_MESSAGE);
-    await detail.expectActivityGroups(["2 Failures"]);
+    await detail.expectActivitySections(["2 Failures"]);
 
     const docModal = await detail.openRunLogs(
       0,

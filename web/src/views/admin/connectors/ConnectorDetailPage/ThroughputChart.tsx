@@ -517,6 +517,12 @@ interface ThroughputLinkProps {
   onHoverLine?: (line: HoveredLine | null) => void;
 }
 
+/** The links a chart keeps with the activity panel beside it. */
+export type ThroughputActivityLinks = Pick<
+  ThroughputLinkProps,
+  "hoveredAttemptId" | "onFocusAttempt" | "onHoverLine"
+>;
+
 export interface ThroughputBarsProps extends ThroughputLinkProps {
   data: CCPairThroughputResponse;
   range: CCPairThroughputWindow;

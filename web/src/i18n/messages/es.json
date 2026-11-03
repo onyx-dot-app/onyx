@@ -3098,15 +3098,22 @@
           "all": "Cualquier nivel",
           "failures": "Fallos",
           "errors": "Errores",
-          "other": "Otros",
+          "running": "En ejecución",
+          "success": "Correctas",
+          "canceled": "Canceladas",
           "resolved": "Resuelto",
-          "toggle": "Filtros"
+          "connectors": "Conectores",
+          "connectorsLoading": "Cargando conectores…",
+          "toggleShow": "Mostrar filtros",
+          "toggleHide": "Ocultar filtros"
         },
         "groups": {
           "failures": "{count, plural, =0 {Fallos} one {# fallo} other {# fallos}}",
           "errors": "{count, plural, =0 {Errores} one {# error} other {# errores}}",
-          "other": "Otros",
-          "resolved": "{count, plural, one {# resuelto} other {# resueltos}}"
+          "running": "{count, number} en ejecución",
+          "resolved": "Resueltas",
+          "success": "Correctas",
+          "canceled": "Canceladas"
         },
         "title": {
           "indexing": {
@@ -3117,9 +3124,8 @@
             "errors": "Indexación completada con errores.",
             "resolved": "Errores de indexación resueltos.",
             "succeeded": "Indexación completada correctamente.",
-            "queued": "Indexación en cola.",
             "inProgress": "Indexación en curso.",
-            "canceled": "Indexación detenida."
+            "canceled": "Indexación cancelada."
           },
           "doc_permission_sync": {
             "failed": "La sincronización de permisos falló.",
@@ -3129,9 +3135,8 @@
             "errors": "Permisos sincronizados con errores.",
             "resolved": "Errores de sincronización de permisos resueltos.",
             "succeeded": "Permisos sincronizados correctamente.",
-            "queued": "Sincronización de permisos en cola.",
             "inProgress": "Sincronizando permisos.",
-            "canceled": "Sincronización de permisos detenida."
+            "canceled": "Sincronización de permisos cancelada."
           },
           "group_sync": {
             "failed": "La sincronización de membresías de grupo falló.",
@@ -3141,9 +3146,8 @@
             "errors": "Membresías de grupo sincronizadas con errores.",
             "resolved": "Errores de sincronización de membresías de grupo resueltos.",
             "succeeded": "Membresías de grupo sincronizadas correctamente.",
-            "queued": "Sincronización de membresías de grupo en cola.",
             "inProgress": "Sincronizando membresías de grupo.",
-            "canceled": "Sincronización de grupos detenida."
+            "canceled": "Sincronización de grupos cancelada."
           },
           "pruning": {
             "failed": "La depuración falló.",
@@ -3153,9 +3157,8 @@
             "errors": "Depuración completada con errores.",
             "resolved": "Errores de depuración resueltos.",
             "succeeded": "Depuración completada correctamente.",
-            "queued": "Depuración en cola.",
             "inProgress": "Depuración en curso.",
-            "canceled": "Depuración detenida."
+            "canceled": "Depuración cancelada."
           },
           "checks": {
             "failed": "Las comprobaciones del conector fallaron.",
@@ -3165,9 +3168,8 @@
             "errors": "Comprobaciones del conector completadas con errores.",
             "resolved": "Errores de las comprobaciones del conector resueltos.",
             "succeeded": "Comprobaciones del conector superadas.",
-            "queued": "Comprobaciones del conector en cola.",
             "inProgress": "Comprobaciones del conector en curso.",
-            "canceled": "Comprobaciones del conector detenidas."
+            "canceled": "Comprobaciones del conector canceladas."
           }
         },
         "description": {
@@ -3182,22 +3184,16 @@
           "stackTrace": "Seguimiento de pila",
           "indexing": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
           "indexingItems": "{count, plural, one {# elemento falló} other {# elementos fallaron}}",
-          "doc_permission_sync": "{count, plural, one {Permisos de # documento sin sincronizar} other {Permisos de # documentos sin sincronizar}}",
-          "group_sync": "{count, plural, one {# grupo no se sincronizó} other {# grupos no se sincronizaron}}",
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
           "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
           "resolved": "Resuelto",
-          "resolvedDocs": "{count, plural, one {# elemento resuelto} other {# elementos resueltos}}",
           "superseded": "Reemplazado"
         },
         "more": "Mostrar más",
         "empty": {
           "title": "No hay actividad reciente",
-          "resolved": "Sin ejecuciones resueltas",
-          "filtered": "Nada coincide con esta búsqueda.",
-          "failures": "Sin fallos",
-          "errors": "Sin errores",
-          "other": "No hay otras ejecuciones"
+          "past": "Actividades anteriores",
+          "filtered": "Nada coincide con esta búsqueda."
         },
         "loadError": {
           "title": "No se pudo cargar la actividad."
@@ -3208,10 +3204,7 @@
             "placeholder": "Buscar elementos…"
           },
           "resolveAll": "Reintentar todos",
-          "resolveAllTooltip": "Reindexar todos los documentos fallidos de esta ejecución",
-          "resolveAllUnsupported": "Este conector no puede reindexar documentos individuales. Reindexa el conector para reintentarlos.",
           "resolveOne": "Reintentar este documento",
-          "retry": "{count, plural, one {Reintentar # documento} other {Reintentar # documentos}}",
           "more": "Más",
           "less": "Menos",
           "unknownDocument": "Documento desconocido",
@@ -3225,17 +3218,18 @@
           "runId": "ID de ejecución: {id}"
         },
         "actions": {
-          "resolve": "Resolver"
+          "resolve": "Resolver",
+          "resolveWithoutRetry": "Resolver sin reintentar",
+          "retryDocs": "Reintentar documentos"
         },
         "resolveAll": {
-          "button": "Resolver todo lo mostrado",
-          "title": "¿Resolver todas las ejecuciones mostradas?",
-          "description": "Esto marca como {count, plural, one {resuelta # ejecución} other {resueltas # ejecuciones}} que coinciden con el filtro actual. Conservan su estado y pasan a la sección de resueltas.",
-          "fleetDescription": "Esto marca como {count, plural, one {resuelta # ejecución} other {resueltas # ejecuciones}} que coinciden con el filtro actual, en los conectores que usted gestiona. Conservan su estado y pasan a la sección de resueltas.",
+          "button": "Resolver todo",
+          "title": "Resolver todas las actividades mostradas",
+          "body": "{count, plural, one {Esto resuelve # actividad que coincide con el filtro actual: {failures} y {errors}. Onyx no reintenta sus elementos fallidos. La actividad conserva su estado y pasa a Resueltas.} other {Esto resuelve # actividades que coinciden con el filtro actual: {failures} y {errors}. Onyx no reintenta sus elementos fallidos. Las actividades conservan su estado y pasan a Resueltas.}}",
+          "body2": "Una ejecución que sigue en curso puede notificar errores nuevos. Se muestran de nuevo como abiertos. Puede reintentar más tarde un documento resuelto desde su lista de documentos fallidos.",
+          "failures": "{count, plural, =0 {ningún fallo} one {# fallo} other {# fallos}}",
+          "errors": "{count, plural, =0 {ninguna ejecución con errores} one {# ejecución con errores} other {# ejecuciones con errores}}",
           "confirm": "Resolver todo"
-        },
-        "resolved": {
-          "label": "Resueltos"
         }
       },
       "stageDetails": {
@@ -7446,7 +7440,7 @@
         "history": "Historial completo de actividad",
         "viewLogs": "Ver registros",
         "panel": {
-          "title": "Historial de actividad",
+          "title": "Actividades",
           "close": "Cerrar panel",
           "pairTitle": "Historial de actividad de {name}"
         }

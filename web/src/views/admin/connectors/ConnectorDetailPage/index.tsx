@@ -54,7 +54,10 @@ import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
-import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
+import {
+  useActivityChartLinks,
+  useStatusChange,
+} from "@/lib/connectors/ccPair/hooks";
 import { can } from "@/lib/permissions/resource-actions";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -112,6 +115,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   );
   // A picked span of the chart brushes it and narrows the runs and activity to it.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
+  const activityLinks = useActivityChartLinks();
+  const clearRange = () => setSliceRange(null);
   // The span belongs to the old chart, so a new window drops it.
   const changeWindow = (picked: PickerWindow) => {
     setTimeWindow(pickWindow(picked));
@@ -506,6 +511,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               onTimeWindowChange={changeWindow}
               range={sliceRange}
               onRangeChange={setSliceRange}
+              activityLinks={activityLinks.chart}
             />
             {takesCredential && (
               <PairChecksCard
@@ -544,9 +550,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
               onSharedWindowChange={changeWindow}
               onFocusChange={setRunFocus}
               range={sliceRange}
-              onClearRange={() => setSliceRange(null)}
+              onClearRange={clearRange}
             />
           </Section>
+          {/* Always shown: this page has no control to reopen a hidden panel. */}
           <ActivityPanel
             scope={{
               ccPairId: ccPair.id,
@@ -554,8 +561,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
               canResolveRuns: canOperate,
             }}
             title={tActivities("title")}
-            foldFilters
             range={sliceRange}
+            onClearRange={clearRange}
+            {...activityLinks.panel}
           />
         </Section>
       </SettingsLayouts.Body>
