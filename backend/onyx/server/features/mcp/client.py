@@ -29,9 +29,13 @@ from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
+from onyx.utils.threadpool_concurrency import (
+    run_async_sync_no_cancel,
+    run_until_cancelled,
+)
 
 logger = setup_logger()
 
@@ -179,13 +183,21 @@ def _call_mcp_client_function_sync(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    cancellation: CancellationSignal | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
         function, server_url, connection_headers, transport, auth, **kwargs
     )
     try:
-        return run_async_sync_no_cancel(run_client_function())
+        if cancellation is None:
+            return run_async_sync_no_cancel(run_client_function())
+        return run_until_cancelled(
+            run_client_function(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
     except Exception as e:
         logger.error("Failed to call MCP client function: %s", e)
         if isinstance(e, ExceptionGroup):
@@ -260,14 +272,16 @@ def call_mcp_tool(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    cancellation: CancellationSignal | None = None,
 ) -> CallToolResult:
-    """Call a tool and preserve the server's result, including its error flag."""
+    """Call a tool until it completes or the caller cancels the request."""
     return _call_mcp_client_function_sync(
         _call_mcp_tool(tool_name, arguments),
         server_url,
         connection_headers,
         transport,
         auth,
+        cancellation=cancellation,
     )
 
 

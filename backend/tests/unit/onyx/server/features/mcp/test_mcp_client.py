@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from collections.abc import Coroutine
 from typing import Any
 from unittest.mock import AsyncMock
@@ -7,6 +8,7 @@ import pytest
 from mcp import ClientSession
 from mcp.types import CallToolResult, TextContent
 
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp import client
 from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 
@@ -133,3 +135,40 @@ def test_call_tool_preserves_server_error_flag() -> None:
     assert received is result
     session.initialize.assert_awaited_once()
     session.call_tool.assert_awaited_once_with("lookup", {"id": 1})
+
+
+def test_cancellation_stops_a_running_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    cancellation = CancellationSignal()
+    stopped = threading.Event()
+    started = threading.Event()
+
+    async def slow_call() -> None:
+        try:
+            started.set()
+            await asyncio.sleep(30)
+        finally:
+            stopped.set()
+
+    async def operation(_session: ClientSession) -> None:
+        raise AssertionError("the runner is replaced")
+
+    monkeypatch.setattr(
+        client,
+        "_create_mcp_client_function_runner",
+        lambda *_args, **_kwargs: slow_call,
+    )
+
+    def stop_running_request() -> None:
+        if started.wait(5):
+            cancellation.cancel()
+
+    stopper = threading.Thread(target=stop_running_request)
+    stopper.start()
+    with pytest.raises(AgentCancelled):
+        client._call_mcp_client_function_sync(
+            operation, "https://mcp.example.com/mcp", cancellation=cancellation
+        )
+    stopper.join(5)
+    assert not stopper.is_alive()
+    assert stopped.is_set()
+    assert not cancellation._callbacks
