@@ -66,12 +66,23 @@ jobs:
           # The artifact must describe the run that triggered this workflow.
           [ "$(jq -r '.pr_number' "$in/meta.json")" = "$PR_NUMBER" ]
           [ "$(jq -r '.head_sha' "$in/meta.json")" = "$HEAD_SHA" ]
+          # Accept only regular files and folders under documentation/. Links or other
+          # paths could reach files outside the tree. Here-strings avoid pipefail races.
+          listing="$(tar -tvzf "$in/documentation.tar.gz")"
+          names="$(tar -tzf "$in/documentation.tar.gz")"
+          if grep -qv '^[-d]' <<<"$listing" \
+            || grep -qvE '^documentation(/|$)' <<<"$names" \
+            || grep -qE '(^|/)(\.\.?|\.git)(/|$)' <<<"$names"; then
+            echo "::error::The docs artifact has an entry that is not a file or folder under documentation/"
+            exit 1
+          fi
           work="$RUNNER_TEMP/docs-tree"
           mkdir -p "$work"
-          tar -xzf "$in/documentation.tar.gz" -C "$work" --no-same-owner --no-same-permissions
-          cd "$work"
+          tar -xzf "$in/documentation.tar.gz" -C "$work" --no-same-owner --no-same-permissions documentation
+          # Keep git metadata outside the unpacked tree, so no config from the archive applies.
+          export GIT_DIR="$RUNNER_TEMP/preview.git"
           git init -q
-          git add -f documentation
+          git -c core.hooksPath=/dev/null -c core.fsmonitor=false --work-tree="$work" add -f -- "$work/documentation"
           tree="$(git write-tree)"
           commit="$(git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
