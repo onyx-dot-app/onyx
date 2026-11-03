@@ -300,8 +300,9 @@ export default function useChatController({
     const isOnChatPage = pathname === "/app";
 
     if (isOnChatPage && !navigatingAway.current) {
-      // SAFETY: buildChatUrl with search=false builds `/app?...`.
-      navigation.go(newUrl as Route, { scroll: false });
+      // SAFETY: buildChatUrl with search=false builds `/app?...`. AppPage
+      // renders the query itself, so writing the URL is the whole switch.
+      navigation.go(newUrl as Route, { scroll: false, shallow: true });
     }
 
     // Refresh sidebar - the chat was already optimistically added via addPendingChatSession
