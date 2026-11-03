@@ -193,18 +193,20 @@ def _prune(
     cc_pair: ConnectorCredentialPair,
     status: SyncStatus,
     started: datetime,
-) -> None:
-    db_session.add(
-        SyncRecord(
-            entity_id=cc_pair.id,
-            sync_type=SyncType.PRUNING,
-            sync_status=status,
-            num_docs_synced=0,
-            sync_start_time=started,
-            sync_end_time=started + timedelta(minutes=1),
-        )
+    num_docs_failed: int = 0,
+) -> SyncRecord:
+    record = SyncRecord(
+        entity_id=cc_pair.id,
+        sync_type=SyncType.PRUNING,
+        sync_status=status,
+        num_docs_synced=0,
+        num_docs_failed=num_docs_failed,
+        sync_start_time=started,
+        sync_end_time=started + timedelta(minutes=1),
     )
+    db_session.add(record)
     db_session.commit()
+    return record
 
 
 def _failed_check(
@@ -705,6 +707,54 @@ def test_a_failed_prune_or_check_ranks_a_connector_third(
         indexed.name: 0,
         check_resolved.name: 0,
         prune_fixed.name: 0,
+    }
+
+
+def test_a_prune_that_could_not_remove_documents_ranks_a_connector_third(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    open_items = _create_cc_pair(db_session, prefix, "z prune items open")
+    indexed = _create_cc_pair(db_session, prefix, "a indexed")
+    superseded = _create_cc_pair(db_session, prefix, "x prune items superseded")
+    resolved = _create_cc_pair(db_session, prefix, "y prune items resolved")
+    for cc_pair in (open_items, indexed, superseded, resolved):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+    _prune(db_session, open_items, SyncStatus.SUCCESS, now, num_docs_failed=2)
+    # A newer prune that succeeded closes the older prune's item errors.
+    _prune(
+        db_session,
+        superseded,
+        SyncStatus.SUCCESS,
+        now - timedelta(hours=2),
+        num_docs_failed=2,
+    )
+    _prune(db_session, superseded, SyncStatus.SUCCESS, now - timedelta(hours=1))
+    resolved_prune = _prune(
+        db_session, resolved, SyncStatus.SUCCESS, now, num_docs_failed=2
+    )
+    resolve_runs__no_commit(
+        db_session, {(CCPairRunKind.PRUNING, resolved_prune.id): resolved.id}, None
+    )
+    db_session.commit()
+
+    response = _connectors(db_session, prefix)
+
+    assert [row.name for row in response.items] == [
+        open_items.name,
+        indexed.name,
+        superseded.name,
+        resolved.name,
+    ]
+    rows = {row.name: row for row in response.items}
+    assert rows[open_items.name].status == IndexingConnectorStatus.INDEXED
+    open_counts = {name: row.open_error_count for name, row in rows.items()}
+    assert open_counts == {
+        open_items.name: 1,
+        indexed.name: 0,
+        superseded.name: 0,
+        resolved.name: 0,
     }
 
 
