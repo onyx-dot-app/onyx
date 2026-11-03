@@ -1,0 +1,95 @@
+name: Docs Preview
+
+# Mintlify previews pull requests only when they target its deployment branch, docs/live
+# (see docs-publish.yml). Docs pull requests target main, so this workflow asks Mintlify to
+# build a preview of the pull request branch and links it in a pull request comment.
+concurrency:
+  group: Docs-Preview-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "documentation/**"
+      - ".github/workflows/docs-preview.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  docs-preview:
+    # Fork pull requests get no secrets, and Mintlify does not preview forked branches.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+      MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Build the Mintlify preview
+        id: preview
+        run: |
+          if [ -z "$MINTLIFY_PROJECT_ID" ] || [ -z "$MINTLIFY_API_KEY" ]; then
+            echo "::warning::Mintlify is not configured; no preview was built"
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          api="https://api.mintlify.com/v1/project"
+          # Only members of the Onyx Mintlify organization can open the preview.
+          body="$(jq -n --arg branch "$BRANCH" '{branch: $branch, auth: {type: "mintlify"}}')"
+          response="$(curl -fsS -X POST -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+            -H "Content-Type: application/json" -d "$body" "$api/preview/$MINTLIFY_PROJECT_ID")"
+          status_id="$(jq -r '.statusId' <<<"$response")"
+          echo "url=$(jq -r '.previewUrl' <<<"$response")" >> "$GITHUB_OUTPUT"
+          status="timeout"
+          for _ in $(seq 1 40); do
+            status="$(curl -fsS -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+              "$api/update-status/$status_id" | jq -r '.status')"
+            echo "Mintlify preview: $status"
+            case "$status" in
+              success | failure) break ;;
+            esac
+            sleep 15
+          done
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the preview link
+        if: steps.preview.outputs.status != 'skipped'
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          PREVIEW_STATUS: ${{ steps.preview.outputs.status }}
+        run: |
+          case "$PREVIEW_STATUS" in
+            success) state="✅ Ready" ;;
+            failure) state="❌ Build failed" ;;
+            *) state="⏳ Still building" ;;
+          esac
+          marker="<!-- docs-preview -->"
+          comment="$marker
+          **Docs Preview** (Mintlify, visible to the Onyx Mintlify organization)
+
+          | Status | Preview | Commit | Updated |
+          | --- | --- | --- | --- |
+          | $state | $PREVIEW_URL | \`${HEAD_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+          # --paginate: on a long pull request the marker can sit past the first page.
+          existing="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)"
+          if [ -n "$existing" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing" --method PATCH --field body="$comment"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$comment"
+          fi
+          if [ "$PREVIEW_STATUS" = "failure" ]; then
+            echo "::error::The Mintlify preview build failed"
+            exit 1
+          fi
