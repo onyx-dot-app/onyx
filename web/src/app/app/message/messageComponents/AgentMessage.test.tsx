@@ -485,3 +485,229 @@ test.each([
     await waitFor(() => expect(renderComplete()).toBe(true));
   }
 );
+
+test("generated images from earlier tool steps lead the answer once", async () => {
+  seedSessionAwaitingAnswer();
+  const image = {
+    file_id: "generated-1",
+    url: "/api/chat/file/generated-1",
+    revised_prompt: "An onyx stone",
+  };
+  const packets: Packet[] = [
+    {
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.IMAGE_GENERATION_TOOL_START },
+    },
+    {
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.IMAGE_GENERATION_TOOL_DELTA,
+        images: [image, image],
+      },
+    },
+    { placement: { turn_index: 0 }, obj: { type: PacketType.SECTION_END } },
+    {
+      placement: { turn_index: 1 },
+      obj: { type: PacketType.SEARCH_TOOL_START },
+    },
+    { placement: { turn_index: 1 }, obj: { type: PacketType.SECTION_END } },
+    ...answerPackets.map((packet) => ({
+      ...packet,
+      placement: { turn_index: 2 },
+    })),
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    const answer = await screen.findByText("A quick answer.");
+    const images = screen.getAllByRole("img", { name: "Chat attachment" });
+    expect(images).toHaveLength(1);
+    expect(images[0]).toHaveAttribute("src", image.url);
+    expect(images[0]?.compareDocumentPosition(answer)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    await waitFor(() => expect(renderComplete()).toBe(true));
+  } finally {
+    view.unmount();
+    useChatSessionStore.setState({
+      currentSessionId: null,
+      sessions: new Map(),
+    });
+  }
+});
+
+function generatedImageStep(turnIndex: number, fileId: string): Packet[] {
+  return [
+    {
+      placement: { turn_index: turnIndex },
+      obj: { type: PacketType.IMAGE_GENERATION_TOOL_START },
+    },
+    {
+      placement: { turn_index: turnIndex },
+      obj: {
+        type: PacketType.IMAGE_GENERATION_TOOL_DELTA,
+        images: [
+          {
+            file_id: fileId,
+            url: `/api/chat/file/${fileId}`,
+            revised_prompt: "An onyx stone",
+          },
+        ],
+      },
+    },
+    {
+      placement: { turn_index: turnIndex },
+      obj: { type: PacketType.SECTION_END },
+    },
+  ];
+}
+
+test.each([
+  {
+    scenario: "cancellation without answer text",
+    cancelled: true,
+    repeated: false,
+  },
+  {
+    scenario: "a second image generation step",
+    cancelled: false,
+    repeated: false,
+  },
+  {
+    scenario: "the same image in a later generation step",
+    cancelled: false,
+    repeated: true,
+  },
+])(
+  "retains generated images after $scenario",
+  async ({ cancelled, repeated }) => {
+    seedSessionAwaitingAnswer();
+    const initialPackets = generatedImageStep(0, "first-image");
+    const renderMessage = (packets: Packet[]) => (
+      <AgentMessage
+        rawPackets={packets}
+        packetCount={packets.length}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    const view = render(renderMessage(initialPackets));
+    try {
+      expect(
+        await screen.findByRole("img", { name: "Chat attachment" })
+      ).toHaveAttribute("src", "/api/chat/file/first-image");
+      expect(renderComplete()).toBe(false);
+      const finalPackets: Packet[] = cancelled
+        ? [
+            ...initialPackets,
+            {
+              placement: { turn_index: 1 },
+              obj: {
+                type: PacketType.STOP,
+                stop_reason: StopReason.USER_CANCELLED,
+              },
+            },
+          ]
+        : [
+            ...initialPackets,
+            ...generatedImageStep(1, repeated ? "first-image" : "second-image"),
+            ...answerPackets.map((packet) => ({
+              ...packet,
+              placement: { turn_index: 2 },
+            })),
+          ];
+      view.rerender(renderMessage(finalPackets));
+      const images = await screen.findAllByRole("img", {
+        name: "Chat attachment",
+      });
+      expect(images).toHaveLength(cancelled || repeated ? 1 : 2);
+      expect(images[0]).toHaveAttribute("src", "/api/chat/file/first-image");
+      if (cancelled) {
+        expect(screen.queryByText("A quick answer.")).not.toBeInTheDocument();
+      } else {
+        if (!repeated) {
+          expect(images[1]).toHaveAttribute(
+            "src",
+            "/api/chat/file/second-image"
+          );
+        }
+        const answer = await screen.findByText("A quick answer.");
+        for (const image of images) {
+          expect(image.compareDocumentPosition(answer)).toBe(
+            Node.DOCUMENT_POSITION_FOLLOWING
+          );
+        }
+      }
+      await waitFor(() => expect(renderComplete()).toBe(true));
+    } finally {
+      view.unmount();
+      useChatSessionStore.setState({
+        currentSessionId: null,
+        sessions: new Map(),
+      });
+    }
+  }
+);
+
+test("generated images remain visible when another tool follows answer text", async () => {
+  seedSessionAwaitingAnswer();
+  const initialPackets = generatedImageStep(0, "retained-image");
+  const renderMessage = (packets: Packet[]) => (
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  const view = render(renderMessage(initialPackets));
+  try {
+    const image = await screen.findByRole("img", { name: "Chat attachment" });
+    const withAnswer = [
+      ...initialPackets,
+      ...answerPackets.slice(0, 2).map((packet) => ({
+        ...packet,
+        placement: { turn_index: 1 },
+      })),
+    ];
+    view.rerender(renderMessage(withAnswer));
+    await screen.findByText("A quick answer.");
+    expect(image).toBeVisible();
+
+    const withLaterTool: Packet[] = [
+      ...withAnswer,
+      {
+        placement: { turn_index: 2 },
+        obj: { type: PacketType.SEARCH_TOOL_START },
+      },
+    ];
+    view.rerender(renderMessage(withLaterTool));
+    await waitFor(() => {
+      expect(screen.getAllByRole("img", { name: "Chat attachment" })).toEqual([
+        image,
+      ]);
+      expect(image).toBeVisible();
+    });
+    expect(renderComplete()).toBe(false);
+  } finally {
+    view.unmount();
+    useChatSessionStore.setState({
+      currentSessionId: null,
+      sessions: new Map(),
+    });
+  }
+});

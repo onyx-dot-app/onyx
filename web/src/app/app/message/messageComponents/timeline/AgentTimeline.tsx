@@ -86,8 +86,6 @@ export interface AgentTimelineProps {
   "data-testid"?: string;
   /** Processing duration in seconds (for completed messages) */
   processingDurationSeconds?: number;
-  /** Whether image generation is in progress */
-  isGeneratingImage?: boolean;
   /** Number of images generated */
   generatedImageCount?: number;
   /** Tool processing duration from backend (via MESSAGE_START packet) */
@@ -112,7 +110,6 @@ function areAgentTimelinePropsEqual(
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.chatState === next.chatState &&
-    prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration
   );
@@ -129,15 +126,13 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   buttonTitle,
   "data-testid": testId,
   processingDurationSeconds,
-  isGeneratingImage = false,
   generatedImageCount = 0,
   toolProcessingDuration,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
-    stopReason,
-    isGeneratingImage
+    stopReason
   );
 
   // Memoized metrics derived from turn groups
@@ -232,7 +227,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepIsResearchAgent,
     parallelActiveStepSupportsCollapsedStreaming,
     parallelActiveStepHasCollapsedContent,
-    isGeneratingImage,
     finalAnswerComing,
   });
 
@@ -358,7 +352,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     );
   }
 
-  // Display content only (no timeline steps) - but show header for image generation
+  // Display content only (no timeline steps)
   if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
     return <TimelineContainer agent={chatState.agent} />;
   }

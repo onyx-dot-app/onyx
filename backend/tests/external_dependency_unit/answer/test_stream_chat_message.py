@@ -1,6 +1,7 @@
 """Chat streams preserve final content, tool results, and execution identities."""
 
 import json
+from contextlib import nullcontext
 from unittest.mock import patch
 
 import pytest
@@ -152,11 +153,17 @@ def test_stream_chat_with_search_and_openurl_tools(
     assert len(llm.requests) == 3
 
 
+@pytest.mark.parametrize("image_succeeds", [True, False])
 def test_image_generation_tool(
-    db_session: Session, make_test_user: MakeTestUser
+    db_session: Session, make_test_user: MakeTestUser, image_succeeds: bool
 ) -> None:
     user = make_test_user("stream_image")
     session = create_chat_session(db_session, user)
+    answer = (
+        "Here is the image."
+        if image_succeeds
+        else "Image generation failed; here is what I found."
+    )
     llm = ScriptedLLM(
         [
             Delta(
@@ -166,28 +173,67 @@ def test_image_generation_tool(
                     )
                 ]
             ),
-            Delta(content="Here is the image."),
+            Delta(
+                tool_calls=[tool_call("web_search", "web", '{"queries":["rockets"]}')]
+            ),
+            Delta(content=answer),
         ],
         max_input_tokens=128000,
     )
     with (
         patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         use_mock_image_generation_provider() as provider,
+        use_mock_web_provider(db_session) as web,
+        (
+            nullcontext()
+            if image_succeeds
+            else patch(
+                "tests.external_dependency_unit.mock_image_provider.MockImageGenerationProvider.generate_image",
+                side_effect=RuntimeError("Image provider unavailable"),
+            )
+        ) as failed_generation,
     ):
+        web.add_results(
+            "rockets",
+            [
+                MockWebSearchResult(
+                    title="Rockets",
+                    link="https://rockets.example.com",
+                    snippet="Rockets fly.",
+                )
+            ],
+        )
         provider.add_image(
             "iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAAVElEQVR42u3WwQkAIAwDQOP+O9cN+lJUuHylcFApyWhTVc1rkkOzczwZLCwsrN9YuXXH+1lLxMLCwtpz5XV5fwsLC0uX1+WxsLCwdHldHgsLC+uxLK9hJFqMAN43AAAAAElFTkSuQmCC",
             0,
         )
         parts = list(submit_query("Draw a dog on a rocketship", session.id, user))
-    assert final_answer(parts) == "Here is the image."
+    assert final_answer(parts) == answer
     images = [
         part.obj.images
         for part in parts
         if isinstance(part, Packet) and isinstance(part.obj, ImageGenerationFinal)
     ]
-    assert len(images) == 1
-    assert len(images[0]) == 1
-    assert images[0][0].url == "/api/chat/file/123"
+    if image_succeeds:
+        assert len(images) == 1
+        assert len(images[0]) == 1
+        assert images[0][0].url == "/api/chat/file/123"
+    else:
+        assert failed_generation is not None
+        failed_generation.assert_called_once()
+        assert not images
+    # The image does not end the turn: the next step still offers tools.
+    assert len(llm.requests) == 3
+    assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.AUTO
+    assert "web_search" in {
+        tool["function"]["name"] for tool in llm.requests[1]["tools"]
+    }
+    assert any(
+        isinstance(part, Packet)
+        and isinstance(part.obj, SearchToolDocumentsDelta)
+        and any(doc.link == "https://rockets.example.com" for doc in part.obj.documents)
+        for part in parts
+    )
 
 
 def test_parallel_internal_and_web_search_tool_calls(

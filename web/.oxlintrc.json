@@ -370,7 +370,6 @@
         "src/app/app/message/messageComponents/IoBlockLabel.tsx",
         "src/app/app/message/messageComponents/MessageToolbar.tsx",
         "src/app/app/message/messageComponents/renderers/CustomToolRenderer.tsx",
-        "src/app/app/message/messageComponents/renderers/ImageToolRenderer.tsx",
         "src/app/app/message/messageComponents/timeline/AgentTimeline.tsx",
         "src/app/app/message/messageComponents/timeline/ParallelTimelineTabs.tsx",
         "src/app/app/message/messageComponents/timeline/StepContainer.tsx",

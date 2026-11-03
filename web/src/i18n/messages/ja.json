@@ -12794,6 +12794,9 @@
         },
         "generatingStatus": {
           "text": "画像を生成中..."
+        },
+        "stoppedStatus": {
+          "text": "画像の生成を停止しました"
         }
       },
       "memoizedLink": {

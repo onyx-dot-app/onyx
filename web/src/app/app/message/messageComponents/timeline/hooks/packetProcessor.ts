@@ -7,7 +7,7 @@ import {
   SearchToolDocumentsDelta,
   FetchToolDocuments,
   Stop,
-  ImageGenerationToolDelta,
+  GeneratedImage,
   MessageStart,
   ToolCallArgumentDelta,
   isCodeInterpreterToolType,
@@ -53,8 +53,7 @@ export interface ProcessorState {
   displayGroupKeys: Set<string>;
 
   // Image generation status
-  isGeneratingImage: boolean;
-  generatedImageCount: number;
+  generatedImages: GeneratedImage[];
 
   // Streaming status
   finalAnswerComing: boolean;
@@ -92,8 +91,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     groupKeysWithSectionEnd: new Set(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
-    isGeneratingImage: false,
-    generatedImageCount: 0,
+    generatedImages: [],
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
@@ -164,8 +162,6 @@ function hasContentPackets(packets: Packet[]): boolean {
 const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
   PacketType.MESSAGE_DELTA,
-  PacketType.IMAGE_GENERATION_TOOL_START,
-  PacketType.IMAGE_GENERATION_TOOL_DELTA,
 ]);
 
 // ============================================================================
@@ -231,6 +227,24 @@ function handleDocumentPacket(state: ProcessorState, packet: Packet): void {
         }
       }
     }
+  }
+}
+
+function handleImagePacket(state: ProcessorState, packet: Packet): void {
+  if (packet.obj.type !== PacketType.IMAGE_GENERATION_TOOL_DELTA) {
+    return;
+  }
+  const delta = packet.obj;
+  const seenFileIds = new Set(state.generatedImages.map((i) => i.file_id));
+  const newImages: GeneratedImage[] = [];
+  for (const image of delta.images ?? []) {
+    if (seenFileIds.has(image.file_id)) continue;
+    seenFileIds.add(image.file_id);
+    newImages.push(image);
+  }
+  if (newImages.length > 0) {
+    // A new array, so memoized consumers see the change
+    state.generatedImages = [...state.generatedImages, ...newImages];
   }
 }
 
@@ -342,16 +356,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     }
   }
 
-  // Track image generation for header display (regardless of group position)
-  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
-    state.isGeneratingImage = true;
-  }
-
-  // Count generated images from DELTA packets
-  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA) {
-    const delta = packet.obj as ImageGenerationToolDelta;
-    state.generatedImageCount += delta.images?.length ?? 0;
-  }
+  handleImagePacket(state, packet);
 
   // Handle specific packet types
   handleCitationPacket(state, packet);

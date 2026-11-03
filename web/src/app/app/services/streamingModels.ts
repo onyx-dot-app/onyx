@@ -151,7 +151,7 @@ export interface SearchToolDocumentsDelta extends BaseObj {
 
 export type ImageShape = "square" | "landscape" | "portrait";
 
-interface GeneratedImage {
+export interface GeneratedImage {
   file_id: string;
   url: string;
   revised_prompt: string;

@@ -12794,6 +12794,9 @@
         },
         "generatingStatus": {
           "text": "正在生成图片..."
+        },
+        "stoppedStatus": {
+          "text": "图片生成已停止"
         }
       },
       "memoizedLink": {

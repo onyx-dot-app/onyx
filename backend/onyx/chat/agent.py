@@ -47,7 +47,6 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
-from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -125,7 +124,6 @@ class ChatAgent(Agent, RestorableFeature):
             for number, doc in self.citation_processor.citation_to_doc.items()
         }
         self.has_called_search_tool = False
-        self.ran_image_gen = False
         self.persona = persona
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
@@ -166,7 +164,6 @@ class ChatAgent(Agent, RestorableFeature):
             gathered_documents=self.gathered_documents,
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
-            ran_image_gen=self.ran_image_gen,
             search_context=self.search_context,
         )
 
@@ -193,11 +190,9 @@ class ChatAgent(Agent, RestorableFeature):
         self.gathered_documents = saved.gathered_documents
         self.chat_files = [file.restore() for file in saved.chat_files]
         self.has_called_search_tool = saved.has_called_search_tool
-        self.ran_image_gen = saved.ran_image_gen
 
     def _update_tool_context(
         self,
-        message: AssistantMessage,
         responses: list[ToolResultMessage],
     ) -> None:
         """Apply accepted tool results to the next request's context policy."""
@@ -221,9 +216,6 @@ class ChatAgent(Agent, RestorableFeature):
                 for number in data.citation_mapping:
                     if source := self.citation_processor.citation_to_doc.get(number):
                         self.citation_mapping[number] = source.document_id
-        self.ran_image_gen = self.ran_image_gen or any(
-            call.name in STOPPING_TOOLS_NAMES for call in message.tool_calls
-        )
 
     def _tool_context(self) -> ToolContext:
         """Read feature state that advances only after a completed step."""
@@ -249,10 +241,9 @@ class ChatAgent(Agent, RestorableFeature):
                 if isinstance(message, AssistantMessage):
                     assistant = message
                 elif isinstance(message, ToolResultMessage) and assistant is not None:
-                    self._update_tool_context(assistant, [message])
-            # Query expansion and stopping tools apply to the current turn only.
+                    self._update_tool_context([message])
+            # Query expansion applies to the current turn only.
             self.has_called_search_tool = False
-            self.ran_image_gen = False
         results = [
             message
             for message in state.messages
@@ -265,7 +256,7 @@ class ChatAgent(Agent, RestorableFeature):
             if not tools:
                 raise ValueError(f"Tool {self.forced_tool_id} not found")
             tool_choice = ToolChoiceOptions.REQUIRED
-        elif state.step.is_last or self.ran_image_gen:
+        elif state.step.is_last:
             tools = []
             tool_choice = ToolChoiceOptions.NONE
         prompt = build_chat_prompt(
@@ -317,7 +308,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.search_context = update_search_context(
             self.search_context, result.tool_results
         )
-        self._update_tool_context(result.message, result.tool_results)
+        self._update_tool_context(result.tool_results)
         if not result.message.tool_calls or result.step.is_last:
             self._validate_answer(result)
         return bool(result.message.tool_calls) and not (
