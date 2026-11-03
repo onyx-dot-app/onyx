@@ -2,9 +2,10 @@
 
 **Import:** `import { useNavigation, NavLink, PendingRoute, usePathname } from "@opal/navigation";`
 
-All of the app's navigation lives here. Outside Opal, nothing imports
-`next/navigation` or `next/link`, writes `window.location`, or calls the router's
-or `history`'s `push` / `replace` / `back` (oxlint
+All of the app's navigation lives here. Outside this module, nothing imports
+`next/navigation` or `next/link`, writes `window.location`, links to a page with
+a static `href`, or calls the router's `push` / `replace` / `back` or `history`'s
+`pushState` / `replaceState` / `back` (oxlint
 `navigation/no-naked-navigation`).
 
 Next's `router.push` changes the URL only when the next page can render, so the
@@ -34,7 +35,7 @@ navigation.go(`/admin/groups/${id}`, { replace: true, scroll: false });
 | --- | --- |
 | `go(href, options?)` | Goes to a page of the app: the URL first, then the page. |
 | `linkTo(href, options?)` | `{ href, onClick }` for a link, a `Button` or a sidebar tab. A plain click goes through `go`; a modified click, `target="_blank"`, `download` and another origin keep the browser's behavior. |
-| `clampedBack(fallback)` | Goes back when the previous history entry is a page of the app, and otherwise to `fallback` (replacing this entry), so it never leaves the app. |
+| `clampedBack(fallback)` | Goes back when this history entry was made by `go` (see "clampedBack and history"), and otherwise to `fallback` (replacing this entry), so it never leaves the app. |
 | `refresh()` | Renders the current page's server components again, with fresh data. |
 | `prefetch(href)` | Fetches a page's shell (down to its `loading.tsx`) ahead of a click. |
 | `load(url, { replace? })` | A full page load: another origin, a backend route (`/api/…`), or a reset of the app's state. `loadPage` does the same outside a component. |

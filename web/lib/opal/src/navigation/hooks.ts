@@ -116,6 +116,7 @@ function navigate<T extends string>(
     return;
   }
   const herePathname = window.location.pathname;
+  const hereSearch = window.location.search;
   const here = urlKey(
     herePathname,
     new URLSearchParams(window.location.search)
@@ -139,9 +140,11 @@ function navigate<T extends string>(
   depthStamp = { href: window.location.href, depth };
   const queryOnly = target.pathname === herePathname;
   if (shallow && queryOnly && !routeNavigationInFlight) return;
-  // Only a new route renders later and clears the flag; a move within the
-  // route (query or hash) would leave it set.
-  if (!queryOnly) routeNavigationInFlight = true;
+  // Any router request can land after a later shallow switch, so a shallow
+  // switch goes through the router too until the route renders. A move of the
+  // hash alone requests nothing.
+  const hashOnly = queryOnly && target.search === hereSearch;
+  if (!hashOnly) routeNavigationInFlight = true;
   callRouter(router, "replace", href, scroll);
 }
 

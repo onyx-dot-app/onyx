@@ -9,7 +9,7 @@ import { useSidebarFolded } from "@opal/layouts/sidebar/context";
 import { Text, Tooltip } from "@opal/components";
 import useOverflow from "@opal/hooks/useOverflow";
 import { cn } from "@opal/utils";
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -200,7 +200,7 @@ function SidebarTab({
   when it has a tooltip to show. */
   const overlay =
     !disabled && href ? (
-      <Link
+      <NavLink
         href={href as Route}
         scroll={false}
         onClick={onClick}

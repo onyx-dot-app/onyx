@@ -28,4 +28,4 @@ export {
   notFound,
   RedirectType,
   type ReadonlyURLSearchParams,
-} from "next/navigation";
+} from "@opal/navigation/next";

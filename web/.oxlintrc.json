@@ -117,7 +117,7 @@
       // @opal/navigation is where navigation lives, and tests use paths as
       // data.
       "files": [
-        "lib/**",
+        "lib/opal/src/navigation/**",
         "**/*.test.ts",
         "**/*.test.tsx",
         "**/*.spec.ts",

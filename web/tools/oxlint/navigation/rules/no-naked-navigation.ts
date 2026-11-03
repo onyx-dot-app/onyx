@@ -30,13 +30,15 @@ function staticPrefix(node: StringLike | null | undefined): string | null {
 }
 
 /**
- * A page of this app, e.g. `/admin/users`: not `//host/…`, and not a backend
- * route (`/api/…`), which a link downloads or loads in full.
+ * A link to a page of this app: a path (`/admin/users`), a query (`?a=1`), a
+ * hash (`#top`) or a relative path. Not another site (`//host`, `https:`),
+ * a backend route (`/api/…`, which a link downloads or loads in full), or
+ * another scheme (`mailto:`, `tel:`).
  */
 function isAppPagePath(path: string): boolean {
-  return (
-    path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/api/")
-  );
+  if (path === "" || path.startsWith("//")) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return false;
+  return !path.startsWith("/api/");
 }
 
 interface NodeLike {
@@ -47,10 +49,12 @@ interface NodeLike {
   property?: NodeLike;
 }
 
-/** `location` or `window.location` (also `globalThis.location`). */
+/**
+ * `window.location` or `globalThis.location`. A bare `location` may be a local
+ * (a test's stub), so it is not matched.
+ */
 function isLocation(node: NodeLike | undefined): boolean {
   if (!node) return false;
-  if (node.type === "Identifier") return node.name === "location";
   return (
     node.type === "MemberExpression" &&
     !node.computed &&
@@ -99,7 +103,7 @@ export const noNakedNavigationRule = defineRule({
         "`{{call}}` skips @opal/navigation. Use `useNavigation().go(…)`, or `clampedBack(fallback)` for back.",
       location:
         "Writing `window.location` skips @opal/navigation. Use `useNavigation().load()` or `reload()` (or `loadPage()` outside a component) for a full page load, or `go()` for a page of the app.",
-      href: "`href` to `{{path}}` skips @opal/navigation, so the URL and the loader wait for the page to render. Spread `useNavigation().linkTo(…)` (or a `useAppPosition().linkTo…()`), or use `NavLink`.",
+      href: "`href` to `{{path}}` skips the URL-first switch of @opal/navigation, so the URL, the tabs and the loader do not move with the click. Spread `useNavigation().linkTo(…)` (or a `useAppPosition().linkTo…()`), or use `NavLink`.",
     },
   },
   createOnce(context) {
@@ -112,14 +116,11 @@ export const noNakedNavigationRule = defineRule({
       },
       AssignmentExpression(node) {
         const left = node.left as NodeLike;
-        // `window.location = …` or `window.location.href = …`.
+        // `window.location = …`, or a write to any of its parts (`href`,
+        // `pathname`, `search`, `hash`).
         const writesLocation =
           isLocation(left) ||
-          (left.type === "MemberExpression" &&
-            !left.computed &&
-            left.property?.type === "Identifier" &&
-            left.property.name === "href" &&
-            isLocation(left.object));
+          (left.type === "MemberExpression" && isLocation(left.object));
         if (writesLocation) context.report({ node, messageId: "location" });
       },
       CallExpression(node) {

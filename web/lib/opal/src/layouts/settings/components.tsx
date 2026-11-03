@@ -1,6 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import type { Route } from "next";
+import { useNavigation } from "@opal/navigation/hooks";
+import { usePathname } from "@opal/navigation/next";
 import { cn } from "@opal/utils";
 import { Divider, Button, Presence, Spacer } from "@opal/components";
 import type { TagProps } from "@opal/components";
@@ -177,7 +179,8 @@ function SettingsHeader({
   cancel,
   divider,
 }: SettingsHeaderProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
+  const pathname = usePathname();
   const strings = useOpalStrings();
   const [showShadow, setShowShadow] = useState(false);
   const { setPageTitle } = useContext(SettingsPageContext);
@@ -192,7 +195,12 @@ function SettingsHeader({
     typeof cancel === "function"
       ? cancel
       : cancel
-        ? () => router.back()
+        ? () =>
+            // Back within the app; from a page opened directly, the page
+            // above this one. SAFETY: a parent path of a page is a page.
+            navigation.clampedBack(
+              (pathname.slice(0, pathname.lastIndexOf("/")) || "/") as Route
+            )
         : undefined;
   const hasActions = !!onCancel || (!!actions && actions.length > 0);
   const isSticky = hasActions;
