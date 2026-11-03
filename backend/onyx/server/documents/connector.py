@@ -136,6 +136,7 @@ from onyx.db.models import (
     IndexingStatus,
     User,
 )
+from onyx.db.search_settings import raise_if_port_reindex_in_progress
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_limits import (
@@ -2135,6 +2136,11 @@ def connector_run_once(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "Connection not found for current user's permissions",
             )
+
+    # A crawl from the beginning cannot start while a reindex builds FUTURE; an
+    # incremental run can.
+    if run_info.from_beginning:
+        raise_if_port_reindex_in_progress(db_session)
 
     try:
         num_triggers = trigger_indexing_for_cc_pair(

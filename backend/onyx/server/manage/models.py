@@ -614,9 +614,15 @@ class UnstructuredApiKeyRequest(BaseModel):
 
 class ReindexProgress(ReindexProgressCounts):
     """Port progress, and whether the port re-embeds chunks or copies their
-    stored vectors."""
+    stored vectors. `finalizing`: every connector's port is SUCCESS, PRESENT
+    indexing is held and FUTURE catches up; `catching_up` connectors still owe
+    the swap a catch-up poll; `abandoned` connectors could not catch up, so the
+    swap proceeds without them and their changes land on their next sync."""
 
     reembeds: bool
+    finalizing: bool = False
+    catching_up: int = 0
+    abandoned: int = 0
 
 
 class CCPairIdsBackfillStatus(BaseModel):

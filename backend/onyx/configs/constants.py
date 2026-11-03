@@ -368,6 +368,7 @@ class NotificationType(str, Enum):
     SYSTEM_ANNOUNCEMENT = "system_announcement"  # admin-authored site-wide banner
     CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
     CONNECTOR_INVALID = "connector_invalid"
+    REINDEX_CATCH_UP_ABANDONED = "reindex_catch_up_abandoned"
     LICENSE_EXPIRY_WARNING = "license_expiry_warning"
     SCHEDULED_TASK_FAILED = "scheduled_task_failed"
     SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"

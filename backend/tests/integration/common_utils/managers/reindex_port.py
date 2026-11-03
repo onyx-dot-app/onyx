@@ -230,12 +230,13 @@ class ReindexPortManager:
         user_performing_action: DATestUser,
         timeout: float = MAX_DELAY,
     ) -> ReindexProgress:
-        """Poll /reindex-progress until every in-scope port unit is done.
+        """Poll /reindex-progress until every in-scope port unit is done and no
+        connector is still catching up.
 
-        Returns when all units are `completed` (swap imminent) OR when the port target
-        disappears (`total==0`) because the swap already promoted the FUTURE. Raises on
-        a FAILED/PAUSED unit -- unexpected in a happy-path reindex -- surfacing
-        /reindex-errors for diagnosis.
+        Returns when all units are `completed` and `catching_up` is 0 (swap imminent)
+        OR when the port target disappears (`total==0`) because the swap already
+        promoted the FUTURE. Raises on a FAILED/PAUSED unit -- unexpected in a
+        happy-path reindex -- surfacing /reindex-errors for diagnosis.
         """
         start = time.monotonic()
         while True:
@@ -250,6 +251,7 @@ class ReindexPortManager:
                 and progress.completed == progress.total
                 and progress.in_progress == 0
                 and progress.waiting == 0
+                and progress.catching_up == 0
             )
             if progress.total == 0 or all_done:
                 return progress

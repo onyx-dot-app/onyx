@@ -1097,6 +1097,18 @@ PORT_SWAP_VERIFY_DOCS_PER_UNIT = _non_negative_int_env(
 PORT_SWAP_VERIFY_RETRY_DELAY_S = _non_negative_int_env(
     "PORT_SWAP_VERIFY_RETRY_DELAY_S", 300
 )
+# Reindex hold: once every connector's port is SUCCESS, PRESENT indexing stops and FUTURE
+# catches up on what PRESENT indexed during the port. A cc_pair whose FUTURE attempts end
+# without success this many times in a row after its port is abandoned: the swap stops
+# waiting for it and its documents are re-indexed by the next poll after the swap.
+REINDEX_HOLD_MAX_FUTURE_FAILURES = max(
+    1, _non_negative_int_env("REINDEX_HOLD_MAX_FUTURE_FAILURES", 3)
+)
+# A cc_pair still catching up this long after its port completed (or after its last
+# FUTURE success) is abandoned the same way.
+REINDEX_HOLD_MAX_SECONDS = _non_negative_int_env(
+    "REINDEX_HOLD_MAX_SECONDS", 24 * 60 * 60
+)
 
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
 # Master switch: when False the reclaim beat task and every dispatched task no-op.

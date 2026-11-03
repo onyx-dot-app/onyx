@@ -21,7 +21,13 @@ from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
 )
 from onyx.db.enums import IndexModelStatus, PortAttemptStatus, SwitchoverType
-from onyx.db.models import ConnectorCredentialPair, PortAttempt, SearchSettings, User
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    PortAttempt,
+    SearchSettings,
+    User,
+)
 from onyx.db.user_file import fetch_port_scope_user_ids
 from onyx.utils.logger import setup_logger
 
@@ -199,19 +205,35 @@ def _latest_port_status_by_user(
     }
 
 
-def _latest_port_status_by_cc_pair(
+class LatestPortRow(BaseModel):
+    """The latest port attempt of one cc_pair: its status and when it was created and
+    ended. `time_completed` is None while it is active."""
+
+    status: PortAttemptStatus
+    time_created: datetime
+    time_completed: datetime | None
+
+
+def latest_port_by_cc_pair(
     db_session: Session,
     search_settings_id: int,
     cc_pair_ids: Collection[int],
-) -> dict[int, PortAttemptStatus]:
-    """Latest attempt status per cc_pair (connector twin of _latest_port_status_by_user);
+) -> dict[int, LatestPortRow]:
+    """Latest attempt per cc_pair (connector twin of _latest_port_status_by_user);
     cc_pairs with no attempt are absent."""
     if not cc_pair_ids:
         return {}
     return {
-        cc_pair_id: status
-        for cc_pair_id, status in db_session.execute(
-            select(PortAttempt.cc_pair_id, PortAttempt.status)
+        cc_pair_id: LatestPortRow(
+            status=status, time_created=time_created, time_completed=time_completed
+        )
+        for cc_pair_id, status, time_created, time_completed in db_session.execute(
+            select(
+                PortAttempt.cc_pair_id,
+                PortAttempt.status,
+                PortAttempt.time_created,
+                PortAttempt.time_completed,
+            )
             .where(
                 PortAttempt.search_settings_id == search_settings_id,
                 PortAttempt.cc_pair_id.in_(cc_pair_ids),
@@ -227,20 +249,64 @@ def _latest_port_status_by_cc_pair(
     }
 
 
-def _reindex_port_scope(
-    db_session: Session, search_settings_id: int
-) -> tuple[list[int], list[UUID]]:
-    """cc_pairs + users the port processes for this FUTURE settings (active-only iff
-    ACTIVE_ONLY switchover). Shared so progress counts and error rows can't drift."""
+def _latest_port_status_by_cc_pair(
+    db_session: Session,
+    search_settings_id: int,
+    cc_pair_ids: Collection[int],
+) -> dict[int, PortAttemptStatus]:
+    """Latest attempt status per cc_pair; cc_pairs with no attempt are absent."""
+    return {
+        cc_pair_id: row.status
+        for cc_pair_id, row in latest_port_by_cc_pair(
+            db_session, search_settings_id, cc_pair_ids
+        ).items()
+    }
+
+
+def reindex_port_cc_pair_ids(db_session: Session, search_settings_id: int) -> list[int]:
+    """cc_pairs the port processes for this FUTURE settings (active-only iff
+    ACTIVE_ONLY switchover)."""
     settings = db_session.get(SearchSettings, search_settings_id)
     active_only = (
         settings is not None and settings.switchover_type == SwitchoverType.ACTIVE_ONLY
     )
-    cc_pair_ids = fetch_indexable_standard_connector_credential_pair_ids(
+    return fetch_indexable_standard_connector_credential_pair_ids(
         db_session, active_cc_pairs_only=active_only
     )
+
+
+def _reindex_port_scope(
+    db_session: Session, search_settings_id: int
+) -> tuple[list[int], list[UUID]]:
+    """cc_pairs + users the port processes for this FUTURE settings. Shared so
+    progress counts and error rows can't drift."""
+    cc_pair_ids = reindex_port_cc_pair_ids(db_session, search_settings_id)
     user_ids = fetch_port_scope_user_ids(db_session)
     return cc_pair_ids, user_ids
+
+
+def reindex_hold_cc_pair_ids(
+    db_session: Session, search_settings_id: int, cc_pair_ids: Collection[int]
+) -> list[int]:
+    """The cc_pairs whose ports decide the finalizing phase: those of `cc_pair_ids`
+    that were seeded when the reindex was created. A cc_pair created or un-paused
+    later has no seed; its port still gates the swap, but it does not end the
+    phase, so PRESENT indexing does not resume for everyone while it is copied.
+    A FUTURE with no seeds at all (created before seeds existed) uses the whole scope."""
+    if not cc_pair_ids:
+        return []
+    seeded = set(
+        db_session.scalars(
+            select(IndexAttempt.connector_credential_pair_id).where(
+                IndexAttempt.search_settings_id == search_settings_id,
+                IndexAttempt.is_synthetic_seed.is_(True),
+                IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
+            )
+        )
+    )
+    if not seeded:
+        return list(cc_pair_ids)
+    return [cc_pair_id for cc_pair_id in cc_pair_ids if cc_pair_id in seeded]
 
 
 def connector_ports_complete(
@@ -258,10 +324,11 @@ def connector_ports_complete(
 
 
 def reindex_finalizing(db_session: Session, future: SearchSettings | None) -> bool:
-    """The finalizing phase of a port-flow reindex: every connector's port is SUCCESS
-    and only the FUTURE index attempts still have to catch up on documents indexed
-    during the port. The indexing scheduler puts them first in this phase. INSTANT
-    swaps before the port, so it has no such phase."""
+    """The finalizing phase of a port-flow reindex: every seeded connector's port is
+    SUCCESS and only the FUTURE index attempts still have to catch up on documents
+    indexed during the port. PRESENT indexing stops in this phase (the reindex hold,
+    `onyx.db.reindex_hold`) and FUTURE attempts go first. INSTANT swaps before the
+    port, so it has no such phase."""
     if (
         future is None
         or future.status != IndexModelStatus.FUTURE
@@ -269,8 +336,9 @@ def reindex_finalizing(db_session: Session, future: SearchSettings | None) -> bo
         or future.switchover_type == SwitchoverType.INSTANT
     ):
         return False
-    cc_pair_ids, _ = _reindex_port_scope(db_session, future.id)
-    return connector_ports_complete(db_session, future.id, cc_pair_ids)
+    cc_pair_ids = reindex_port_cc_pair_ids(db_session, future.id)
+    hold_ids = reindex_hold_cc_pair_ids(db_session, future.id, cc_pair_ids)
+    return connector_ports_complete(db_session, future.id, hold_ids)
 
 
 class ReindexProgressCounts(BaseModel):

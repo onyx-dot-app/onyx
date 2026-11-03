@@ -16,6 +16,8 @@ from onyx.db.models import (
     IndexReclaimStatus,
     SearchSettings,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )
@@ -185,6 +187,40 @@ def get_search_settings_by_id(
     db_session: Session, search_settings_id: int
 ) -> SearchSettings | None:
     return db_session.get(SearchSettings, search_settings_id)
+
+
+def lock_search_settings_for_share(
+    db_session: Session, search_settings_id: int
+) -> SearchSettings | None:
+    """The row under a share lock (SELECT ... FOR SHARE) until the transaction ends.
+    A swap's status flip waits for every holder, so a caller that reads `status`
+    here either commits before the flip or sees the post-flip status. Readers do
+    not block each other."""
+    return (
+        db_session.execute(
+            select(SearchSettings)
+            .where(SearchSettings.id == search_settings_id)
+            .with_for_update(read=True)
+        )
+        .scalars()
+        .first()
+    )
+
+
+REINDEX_BLOCKS_FULL_RUN_MESSAGE = (
+    "A re-index of the search index is in progress. Full re-index and backfill "
+    "requests are blocked until it completes."
+)
+
+
+def raise_if_port_reindex_in_progress(db_session: Session) -> None:
+    """Refuse an admin action that would make PRESENT crawl from the beginning or
+    backfill while a port-flow reindex builds a FUTURE index. Such a run adds
+    documents with old source timestamps that FUTURE's incremental catch-up never
+    fetches, and the swap would wait on them forever. INSTANT has no FUTURE after
+    its promotion, and a legacy FUTURE crawls from scratch, so neither is blocked."""
+    if active_secondary_port_target(db_session) is not None:
+        raise OnyxError(OnyxErrorCode.CONFLICT, REINDEX_BLOCKS_FULL_RUN_MESSAGE)
 
 
 def active_secondary_port_target(db_session: Session) -> SearchSettings | None:

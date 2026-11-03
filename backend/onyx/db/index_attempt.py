@@ -273,11 +273,12 @@ def create_synthetic_seed_attempt(
 ) -> int:
     """Insert a SUCCESS IndexAttempt with no connector run (the reindex port's
     resume marker). It carries PRESENT's poll cursor so the FUTURE
-    connector-incremental resumes from there. time_started == time_created (both
-    func.now() in one statement) so the swap criterion's "real attempt after the
-    port" comparison is well-defined for the run that later supersedes the seed.
-    Excluded from the latest/count helpers via ignore_synthetic_seed. Flushes to
-    populate the returned id but does not commit; the caller commits."""
+    connector-incremental resumes from there, and its time_created marks when the
+    reindex began for the pair: the reindex hold treats PRESENT writes after it as
+    needing a FUTURE catch-up (onyx.db.reindex_hold). time_started == time_created
+    (both func.now() in one statement) so end_time is well-defined. Excluded from
+    the latest/count helpers via ignore_synthetic_seed. Flushes to populate the
+    returned id but does not commit; the caller commits."""
     db_now = func.now()
     seed = IndexAttempt(
         connector_credential_pair_id=connector_credential_pair_id,

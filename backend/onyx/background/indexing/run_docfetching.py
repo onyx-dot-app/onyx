@@ -137,6 +137,19 @@ def _get_backfill_window(attempt: IndexAttempt) -> tuple[datetime, datetime]:
     return attempt.poll_range_start, attempt.poll_range_end
 
 
+def _consumes_indexing_trigger(index_attempt: IndexAttempt) -> bool:
+    """Whether this attempt serves the pair's manual indexing trigger. A backfill
+    does not. Neither does a FUTURE attempt: the trigger is meant for the current
+    index, and a reindex hold keeps it pending until after the swap."""
+    search_settings = index_attempt.search_settings
+    return (
+        not index_attempt.is_backfill
+        and search_settings is not None
+        and search_settings.status == IndexModelStatus.PRESENT
+        and index_attempt.connector_credential_pair.indexing_trigger is not None
+    )
+
+
 def _get_incremental_window_start(
     db_session: Session,
     index_attempt: IndexAttempt,
@@ -608,11 +621,9 @@ def connector_document_extraction(
         )
 
         # Clear the indexing trigger if it was set, to prevent duplicate indexing
-        # attempts. A backfill does not serve the trigger, so it leaves it set.
-        if (
-            not index_attempt.is_backfill
-            and index_attempt.connector_credential_pair.indexing_trigger is not None
-        ):
+        # attempts. A backfill or a FUTURE attempt does not serve the trigger, so
+        # it leaves it set.
+        if _consumes_indexing_trigger(index_attempt):
             logger.info(
                 "Clearing indexing trigger: cc_pair=%s trigger=%s",
                 index_attempt.connector_credential_pair.id,

@@ -63,6 +63,7 @@ from onyx.db.port_attempt import (
     has_active_port_attempts,
     port_backfill_has_pending_work,
 )
+from onyx.db.reindex_hold import full_run_pending_cc_pairs, get_reindex_hold_state
 from onyx.db.search_settings import (
     clear_reclaim_intent__no_commit,
     create_search_settings,
@@ -232,6 +233,20 @@ def set_new_search_settings(
             OnyxErrorCode.CONFLICT,
             "A re-index is already in progress. Cancel it before starting a new one.",
         )
+
+    # A connector that crawls from the beginning or backfills during the port adds
+    # documents FUTURE's incremental catch-up never fetches, and the swap would wait
+    # on them forever. The connector endpoints refuse such runs once the reindex
+    # exists; refuse the reindex while one is already pending or running.
+    if search_settings_new.switchover_type != SwitchoverType.INSTANT:
+        pending_full_runs = full_run_pending_cc_pairs(db_session, search_settings.id)
+        if pending_full_runs:
+            names = ", ".join(f"'{name}'" for _, name in pending_full_runs[:5])
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                f"A full re-index or backfill is pending or running for {names}. "
+                "Wait for it to finish, or cancel it, before starting a re-index.",
+            )
 
     # Upgrade-only: a new target must be the PRESENT model or a selectable model.
     # Runs before anything below writes or commits.
@@ -887,8 +902,13 @@ def get_reindex_progress(
             reembeds=True,
         )
     counts: ReindexProgressCounts = get_reindex_progress_counts(db_session, target.id)
+    hold = get_reindex_hold_state(db_session, target)
     return ReindexProgress(
-        **counts.model_dump(), reembeds=_port_reembeds(db_session, target)
+        **counts.model_dump(),
+        reembeds=_port_reembeds(db_session, target),
+        finalizing=hold.finalizing,
+        catching_up=len(hold.catching_up_ids),
+        abandoned=len(hold.abandoned_ids),
     )
 
 

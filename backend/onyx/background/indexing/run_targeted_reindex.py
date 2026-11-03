@@ -39,6 +39,7 @@ from onyx.db.models import (
     IndexAttempt,
     TargetedReindexJobTarget,
 )
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.targeted_reindex import targets_to_connector_failures
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.staging import (
@@ -159,6 +160,11 @@ def _flush_batch(
         request_id=metadata.request_id,
         adapter=adapter,
         skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
+        written_search_settings_id=search_settings.id,
+        # While a reindex builds, the PRESENT twin leaves the row's hash alone:
+        # if the FUTURE twin fails, a stamped hash would make the poll after the
+        # swap skip the document and leave the old version in the new index.
+        stamp_content_hash=get_secondary_search_settings(db_session) is None,
     )
 
     failed_ids: set[str] = set()

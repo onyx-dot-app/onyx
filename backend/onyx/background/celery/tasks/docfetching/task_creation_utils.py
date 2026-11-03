@@ -70,7 +70,8 @@ def docfetching_priority(
     search_settings: SearchSettings,
 ) -> OnyxCeleryPriority:
     """First-time indexing goes before refreshes of indexed connectors. While a
-    port-flow reindex finalizes, FUTURE attempts go before PRESENT refreshes, and
+    port-flow reindex finalizes, FUTURE attempts go before PRESENT refreshes (no
+    new PRESENT attempt starts then, so LOW only orders ones already queued), and
     FUTURE attempts of connectors with docs pending for FUTURE go first: the swap
     waits on them. Priority only orders the queue, it does not interrupt a running
     attempt."""
