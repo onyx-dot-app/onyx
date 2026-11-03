@@ -244,6 +244,31 @@ A storage account and a private container. Shared access keys are off by
 default: Onyx authenticates with `DefaultAzureCredential`, so no key has to
 exist.
 
+`create_customer_managed_key` (default off) encrypts the account with a key of
+its own. It creates a Key Vault with purge protection, an RSA 3072 key with
+automatic rotation (`key_rotation_period`, default `P90D`), and a user-assigned
+identity that may only wrap and unwrap with the key. The vault uses access
+policies, and the identity running Terraform gets key management rights.
+Purge protection keeps the vault name taken for
+`key_vault_soft_delete_retention_days` (default 90) after a destroy.
+
+#### Sandbox archive storage
+
+`onyx` creates a separate storage account when
+`enable_sandbox_archive_storage` is true. It holds Craft sandbox session
+archives in the `sandbox-archives` container:
+
+- Its own Key Vault key (`create_customer_managed_key = true`)
+- No anonymous access, no shared keys, versioning on
+- Blobs expire after `sandbox_archive_expiration_days` (default 30). Old
+  versions expire after `sandbox_archive_noncurrent_expiration_days` (default 7)
+- No identity gets a data role. The api_server will hand out SAS URLs
+- Follows `restrict_storage_to_cluster` like the file store account
+
+Outputs: `sandbox_archive_storage_account_name`,
+`sandbox_archive_container_name`, `sandbox_archive_key_vault_key_id` (null when
+off).
+
 ### `waf`
 
 A regional WAF policy carrying the OWASP Core Rule Set, the Microsoft bot
