@@ -313,6 +313,21 @@ def _convert_onyx_chunk_to_opensearch_document(
     )
 
 
+def _with_stored_content(mappings: dict[str, Any]) -> dict[str, Any]:
+    """A copy of the mappings with the content field stored separately, as
+    indices created before it was dropped have it."""
+    return {
+        **mappings,
+        "properties": {
+            **mappings["properties"],
+            CONTENT_FIELD_NAME: {
+                **mappings["properties"][CONTENT_FIELD_NAME],
+                "store": True,
+            },
+        },
+    }
+
+
 def _with_vector_encoder(
     mappings: dict[str, Any], encoder: dict[str, Any]
 ) -> dict[str, Any]:
@@ -459,6 +474,13 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     expected_mappings = _with_vector_encoder(
                         expected_mappings, legacy_encoder
                     )
+                content_field: dict[str, Any] | None = self._client.get_field_mapping(
+                    CONTENT_FIELD_NAME
+                )
+                if content_field is not None and content_field.get("store"):
+                    # OpenSearch cannot change an existing field's store
+                    # setting, so keep the stored copy until a reindex drops it.
+                    expected_mappings = _with_stored_content(expected_mappings)
                 # Ensure schema is up to date by applying the current mappings.
                 try:
                     self._client.put_mapping(expected_mappings)

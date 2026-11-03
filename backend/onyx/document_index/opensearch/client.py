@@ -823,18 +823,23 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         logger.debug("Successfully put mappings for index %s.", self._index_name)
 
-    def get_vector_field_encoder(self, field_name: str) -> dict[str, Any] | None:
-        """Returns the encoder of a knn_vector field's HNSW method.
-
-        Returns None when the field is not mapped or has no encoder.
-        """
+    def get_field_mapping(self, field_name: str) -> dict[str, Any] | None:
+        """Returns the index's mapping of a top-level field, or None when the
+        field is not mapped."""
         mappings: dict[str, Any] = self._client.indices.get_mapping(
             index=self._index_name
         )
         properties: dict[str, Any] = (
             mappings.get(self._index_name, {}).get("mappings", {}).get("properties", {})
         )
-        field: dict[str, Any] | None = properties.get(field_name)
+        return properties.get(field_name)
+
+    def get_vector_field_encoder(self, field_name: str) -> dict[str, Any] | None:
+        """Returns the encoder of a knn_vector field's HNSW method.
+
+        Returns None when the field is not mapped or has no encoder.
+        """
+        field: dict[str, Any] | None = self.get_field_mapping(field_name)
         if field is None:
             return None
         encoder: dict[str, Any] | None = (

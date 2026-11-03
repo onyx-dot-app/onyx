@@ -191,7 +191,10 @@ it deletes the old one.
    (`document_index/opensearch/opensearch_document_index.py:OpenSearchDocumentIndex.verify_and_create_index_if_necessary`,
    run by `setup.py:setup_document_index`) adds a new field to an existing
    index, but a changed field type fails there and needs a reindex. Chunks
-   written before the change have no value for the new field.
+   written before the change have no value for the new field. OpenSearch also
+   rejects a change to a field's parameters, such as `store` or a vector
+   encoder, so index setup copies the old value back into the expected mapping
+   for indices that have it; a reindex applies the new value.
 9. `swap-one-commit` **Swap both statuses in one commit.**
    `db/swap_index.py:_perform_index_swap` uses
    `db/search_settings.py:update_search_settings_status__no_commit` twice and
