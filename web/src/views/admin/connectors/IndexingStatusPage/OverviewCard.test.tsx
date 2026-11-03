@@ -48,7 +48,12 @@ it("asks for the overview with the chart's bar count and the browser's clock", a
   global.fetch = fetchMock as unknown as typeof fetch;
 
   const { container } = render(
-    <OverviewCard range={null} onRangeChange={() => {}} />
+    <OverviewCard
+      range={null}
+      onRangeChange={() => {}}
+      panelOpen={false}
+      onPanelOpenChange={() => {}}
+    />
   );
 
   await waitFor(() =>

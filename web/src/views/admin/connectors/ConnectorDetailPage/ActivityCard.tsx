@@ -401,6 +401,13 @@ export default function ActivityCard({
     reportPanelOpen(true);
     return () => reportPanelOpen(false);
   }, [selected]);
+  // Reported from the hover state, so a card that unmounts under the pointer (resolved out of its feed) still ends its hover.
+  const reportHover = useEffectEvent((on: boolean) => onHoverChange?.(on));
+  useEffect(() => {
+    if (!hovered) return;
+    reportHover(true);
+    return () => reportHover(false);
+  }, [hovered]);
   const togglePopover = (popover: "trace" | "items") => (open: boolean) =>
     setOpenPopover((current) =>
       open ? popover : current === popover ? null : current
@@ -528,14 +535,8 @@ export default function ActivityCard({
         "rounded-08 -outline-offset-1",
         edged && ["outline-1 outline-solid", style.outline]
       )}
-      onPointerEnter={() => {
-        setHovered(true);
-        onHoverChange?.(true);
-      }}
-      onPointerLeave={() => {
-        setHovered(false);
-        onHoverChange?.(false);
-      }}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
       onFocus={() => setFocusWithin(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {

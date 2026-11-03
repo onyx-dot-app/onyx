@@ -63,6 +63,8 @@ export interface ConnectorRowProps {
   dimmed: boolean;
   /** Called when this connector's stage popover, or one of its runs' popovers, opens or closes. */
   onFocusChange: (ccPairId: number, focused: boolean) => void;
+  /** One of this connector's activities is hovered in the panel. */
+  lifted?: boolean;
 }
 
 /** One connector in the status page's list: what it is, how its latest run stands, and the documents it holds. */
@@ -73,6 +75,7 @@ export default function ConnectorRow({
   onViewLogs,
   dimmed,
   onFocusChange,
+  lifted = false,
 }: ConnectorRowProps) {
   const t = useTranslations("admin.indexing.list");
   const navigation = useNavigation();
@@ -203,7 +206,7 @@ export default function ConnectorRow({
             border="solid"
             rounding={4}
             padding={0}
-            shadow={expanded || focused ? "sm" : "none"}
+            shadow={expanded || focused || lifted ? "sm" : "none"}
             data-testid={`indexing-connector-${row.cc_pair_id}`}
           >
             <Section alignItems="stretch" gap={0} height="fit">

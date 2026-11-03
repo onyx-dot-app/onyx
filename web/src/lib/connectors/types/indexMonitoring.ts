@@ -20,6 +20,8 @@ export interface IndexingOverviewResponse {
   recent_docs_indexed: number;
   /** The sum of each pair's documents, so a document two pairs hold counts twice. */
   total_docs_indexed: number;
+  /** Optional: a backend that does not report it leaves Paused off the status page. */
+  paused_connectors?: number;
   throughput: CCPairThroughputResponse;
 }
 

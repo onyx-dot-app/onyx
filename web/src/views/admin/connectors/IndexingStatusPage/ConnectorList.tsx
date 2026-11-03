@@ -92,11 +92,14 @@ export interface ConnectorListProps {
   onViewLogs: (row: IndexingConnectorRow) => void;
   /** Called when a connector's popover opens or closes, so the page can step back around the list. */
   onFocusChange?: (focused: boolean) => void;
+  /** The connector whose activity is hovered in the panel, so its row lifts. */
+  liftedCcPairId?: number | null;
 }
 
 export default function ConnectorList({
   onViewLogs,
   onFocusChange,
+  liftedCcPairId = null,
 }: ConnectorListProps) {
   const t = useTranslations("admin.indexing.list");
   const tBadges = useTranslations("admin.status.badges");
@@ -273,6 +276,7 @@ export default function ConnectorList({
               onViewLogs={() => onViewLogs(row)}
               dimmed={focus.isDimmed(row.cc_pair_id)}
               onFocusChange={focus.setOpen}
+              lifted={row.cc_pair_id === liftedCcPairId}
             />
           ))}
           {data?.federated_connectors.map((connector) => (

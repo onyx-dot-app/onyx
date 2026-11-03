@@ -7428,37 +7428,26 @@
       }
     },
     "indexing": {
+      "addConnector": "커넥터 추가",
       "connectorCreated": {
         "toast": "커넥터를 생성했습니다"
       },
       "overview": {
-        "connectors": {
-          "caption": "인덱싱 중 / 활성",
-          "label": "커넥터"
-        },
-        "documents": {
-          "caption": "인덱스에 있음",
-          "label": "문서",
-          "tooltip": "각 커넥터의 문서 수를 더하므로 두 커넥터에 있는 문서는 두 번 계산됩니다."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "개요를 불러올 수 없습니다.",
-        "processed": {
-          "caption": "기간 내 처리됨",
-          "label": "문서",
-          "tooltip": "추정치입니다. 각 실행의 수는 실행 시간 전체에 고르게 나누어집니다. 문서는 실행이 처리할 때마다 계산되며 실패한 문서도 포함되므로 인덱스에 있는 문서 수보다 많을 수 있습니다."
-        }
+        "activeConnectors": "활성 커넥터",
+        "pausedConnectors": "일시 중지된 커넥터",
+        "indexingConnectors": "인덱싱 중인 커넥터",
+        "loadError": "개요를 불러올 수 없습니다."
       },
       "activities": {
         "title": "활동",
-        "history": "전체 활동 기록",
-        "viewLogs": "로그 보기",
         "panel": {
           "title": "활동",
           "close": "패널 닫기",
           "pairTitle": "{name} 활동 기록"
+        },
+        "panelButton": {
+          "show": "활동 표시",
+          "hide": "활동 숨기기"
         }
       },
       "list": {
