@@ -1,9 +1,8 @@
-/** The throughput chart: local-time labels, a bin count from its width, a y floor of 100, three status lines per bar from each slice's runs, and a brush that narrows the activity feed in place of a zoom. */
+/** The throughput chart: local-time labels, a bin count from its width, a y floor of 100, three status lines per bar from each slice's runs, and a brush that narrows the activity feed. */
 import { useState } from "react";
 import { createFormatter } from "next-intl";
-import { fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { render } from "@tests/setup/test-utils";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { render, setupUser } from "@tests/setup/test-utils";
 import type { CCPairThroughputResponse } from "@/lib/connectors/types/ccPair";
 import ThroughputChart, {
   ThroughputBars,
@@ -24,10 +23,6 @@ import {
   throughputFixture,
   usesToken,
 } from "@tests/setup/throughputChartTestUtils";
-
-jest.mock("recharts", () =>
-  jest.requireActual("@tests/setup/throughputChartTestUtils").mockRecharts()
-);
 
 const originalFetch = global.fetch;
 
@@ -275,7 +270,7 @@ describe("AC-3: status lines", () => {
         ],
       },
     });
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = render(<ThroughputBars data={counted} range="24h" />);
     const failed = statusLines(container).find((line) =>
       usesToken(line, FAILED_TOKEN)
@@ -423,7 +418,7 @@ describe("AC-5: brush time filter", () => {
 
     rerender(<ThroughputBars data={data} range="24h" selection={selection} />);
 
-    // No zoom: every bin of the window still draws.
+    // A selection fades the bars outside it and still draws every bin.
     const drawn = bars(container);
     expect(drawn).toHaveLength(FIXTURE_BINS);
     expect(container.innerHTML).toContain(BRUSH_TOKEN);
@@ -433,5 +428,283 @@ describe("AC-5: brush time filter", () => {
     for (const index of [0, 1, 5, 9, FIXTURE_BINS - 1]) {
       expect(isFaded(drawn[index]!, container)).toBe(true);
     }
+  });
+});
+
+describe("flat fallback", () => {
+  it("draws a response without slices as equal bars with no status lines", () => {
+    installChartLayout(600);
+    const { slices: _slices, ...flat } = throughputFixture({
+      docs: { 0: 7, 59: 9 },
+    });
+
+    const { container } = render(<ThroughputBars data={flat} range="24h" />);
+
+    expect(bars(container)).toHaveLength(FIXTURE_BINS);
+    expect(bars(container)[0]?.getAttribute("aria-label")).toContain(
+      "7 documents"
+    );
+    expect(statusLines(container)).toHaveLength(0);
+  });
+});
+
+/** Gives every tooltip card, and any other element sized to its content, 150 px inside the 600 px chart. */
+function sizeContentBoxes() {
+  const measured = Element.prototype.getBoundingClientRect;
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    const box = measured.call(this);
+    return this.classList.contains("w-max")
+      ? ({ ...box, width: 150, right: box.left + 150 } as DOMRect)
+      : box;
+  };
+}
+
+/** The left edge the browser resolves from the card's clamped inline start inside a parent this wide. */
+function resolvedStart(element: HTMLElement, parentWidth: number): number {
+  const match =
+    /clamp\(0px, calc\(([\d.]+)% - ([\d.]+)px\), calc\(100% - ([\d.]+)px\)\)/.exec(
+      element.style.insetInlineStart
+    );
+  if (match === null) {
+    throw new Error(`unclamped start: ${element.style.insetInlineStart}`);
+  }
+  const [at, half, width] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return Math.min(
+    Math.max(0, (at / 100) * parentWidth - half),
+    parentWidth - width
+  );
+}
+
+describe("tooltips and keyboard", () => {
+  const data = throughputFixture({ docs: { 0: 7, 1: 4, 30: 12, 59: 9 } });
+
+  it.each([
+    [0, "7 documents", 0],
+    [30, "12 documents", 230],
+    [59, "9 documents", 450],
+  ])("keeps bar %i's tooltip inside the chart", async (index, title, start) => {
+    installChartLayout(600);
+    sizeContentBoxes();
+    const user = setupUser();
+    const { container } = render(<ThroughputBars data={data} range="24h" />);
+
+    await user.hover(bars(container)[index]!);
+
+    const card = (await screen.findByText(title)).closest<HTMLElement>(
+      ".w-max"
+    );
+    expect(card).not.toBeNull();
+    expect(resolvedStart(card!, 600)).toBe(start);
+  });
+
+  it("a keyboard user tabs to a bar, reads its tooltip, moves with the arrows and picks it with Enter", async () => {
+    installChartLayout(600);
+    const onRangeSelect = jest.fn();
+    const user = setupUser();
+    const { container } = render(
+      <ThroughputBars data={data} range="24h" onRangeSelect={onRangeSelect} />
+    );
+
+    await user.tab();
+    expect(bars(container)[0]).toHaveFocus();
+    expect(document.body.textContent).toContain("7 documents");
+
+    await user.keyboard("{ArrowRight}");
+    expect(bars(container)[1]).toHaveFocus();
+    expect(bars(container)[1]).toHaveAttribute("tabindex", "0");
+    expect(bars(container)[0]).toHaveAttribute("tabindex", "-1");
+    expect(document.body.textContent).toContain("4 documents");
+    expect(document.body.textContent).not.toContain("7 documents");
+
+    await user.keyboard("{Enter}");
+    expectRange(
+      onRangeSelect.mock.calls.at(-1)?.[0],
+      sliceStart(1),
+      sliceEnd(1)
+    );
+  });
+
+  it("a screen reader's bare click picks a bar, and a pointer click picks once", () => {
+    installChartLayout(600);
+    const onRangeSelect = jest.fn();
+    const { container } = render(
+      <ThroughputBars data={data} range="24h" onRangeSelect={onRangeSelect} />
+    );
+
+    fireEvent.click(bars(container)[2]!);
+    expect(onRangeSelect).toHaveBeenCalledTimes(1);
+    expectRange(onRangeSelect.mock.calls[0]?.[0], sliceStart(2), sliceEnd(2));
+
+    clickBar(bars(container)[4]!, 4);
+    expect(onRangeSelect).toHaveBeenCalledTimes(2);
+    expectRange(onRangeSelect.mock.calls[1]?.[0], sliceStart(4), sliceEnd(4));
+  });
+
+  it("keeps one bar in the tab order when fewer bars replace the focused one", async () => {
+    installChartLayout(600);
+    const user = setupUser();
+    const { container, rerender } = render(
+      <ThroughputBars data={data} range="24h" />
+    );
+    await user.tab();
+    for (let step = 0; step < 20; step += 1) {
+      await user.keyboard("{ArrowRight}");
+    }
+    expect(bars(container)[20]).toHaveFocus();
+
+    const fewer = { ...data, slices: data.slices?.slice(0, 12) };
+    rerender(<ThroughputBars data={fewer} range="24h" />);
+
+    const stops = bars(container).filter(
+      (bar) => bar.getAttribute("tabindex") === "0"
+    );
+    expect(bars(container)).toHaveLength(12);
+    expect(stops).toEqual([bars(container)[11]]);
+  });
+
+  it("keeps keyboard focus when a poll moves every slice's bounds", async () => {
+    installChartLayout(600);
+    const user = setupUser();
+    const { container, rerender } = render(
+      <ThroughputBars data={data} range="all" />
+    );
+    await user.tab();
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");
+    const focused = bars(container)[3];
+    expect(focused).toHaveFocus();
+
+    const shift = (iso: string) =>
+      new Date(Date.parse(iso) + 60_000).toISOString();
+    const moved = {
+      ...data,
+      window_start: shift(data.window_start),
+      window_end: shift(data.window_end),
+      slices: data.slices?.map((slice) => ({
+        ...slice,
+        start: shift(slice.start),
+        end: shift(slice.end),
+      })),
+    };
+    rerender(<ThroughputBars data={moved} range="all" />);
+
+    expect(bars(container)[3]).toBe(focused);
+    expect(focused).toHaveFocus();
+  });
+
+  it("a failed run spanning slices is one tab stop, where it began", () => {
+    installChartLayout(600);
+    const run = { attempt_id: 601, status: "failed", resolved: false } as const;
+    const spanning = throughputFixture({
+      runs: { 5: [run], 6: [run], 7: [run] },
+    });
+    const { container } = render(
+      <ThroughputBars data={spanning} range="24h" />
+    );
+    const failed = statusLines(container).filter((line) =>
+      usesToken(line, FAILED_TOKEN)
+    );
+    expect(failed).toHaveLength(3);
+    expect(failed.map((line) => line.getAttribute("tabindex"))).toEqual([
+      "0",
+      "-1",
+      "-1",
+    ]);
+  });
+
+  it("a failure line's tooltip counts only open runs, and shows on keyboard focus", async () => {
+    installChartLayout(600);
+    const counted = throughputFixture({
+      runs: {
+        5: [
+          { attempt_id: 501, status: "failed", resolved: false },
+          { attempt_id: 503, status: "failed", resolved: false },
+          { attempt_id: 507, status: "failed", resolved: true },
+          { attempt_id: 504, status: "completed_with_errors", resolved: false },
+          { attempt_id: 505, status: "completed_with_errors", resolved: false },
+          { attempt_id: 506, status: "completed_with_errors", resolved: false },
+          { attempt_id: 508, status: "completed_with_errors", resolved: true },
+        ],
+      },
+    });
+    const { container } = render(<ThroughputBars data={counted} range="24h" />);
+    const failed = statusLines(container).find((line) =>
+      usesToken(line, FAILED_TOKEN)
+    );
+    expect(failed).toBeDefined();
+
+    failed!.focus();
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("2 failures, 3 errors")
+    );
+  });
+
+  it("an activity hovered outside the window fades no line and draws no guide", () => {
+    installChartLayout(600);
+    const { container } = render(
+      <ThroughputBars
+        data={throughputFixture({
+          runs: {
+            2: [{ attempt_id: 201, status: "in_progress", resolved: false }],
+            5: [{ attempt_id: 501, status: "failed", resolved: false }],
+          },
+        })}
+        range="24h"
+        hoveredAttemptId={999}
+      />
+    );
+
+    expect(statusLines(container)).toHaveLength(2);
+    for (const line of statusLines(container)) {
+      expect(isFaded(line, container)).toBe(false);
+    }
+    expect(container.querySelector('[class*="dashed"]')).toBeNull();
+  });
+});
+
+describe("loading", () => {
+  function respond(body: unknown): Response {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  it("keeps the last bars, dimmed, while a new window loads", async () => {
+    jest.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(0);
+    installChartLayout(600);
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input).includes("window=24h")
+        ? Promise.resolve(respond(throughputFixture({ docs: { 2: 40 } })))
+        : new Promise<Response>(() => {})
+    ) as unknown as typeof fetch;
+    const { container, rerender } = render(
+      <ThroughputChart ccPairId={7} range="24h" />
+    );
+    await waitFor(() => expect(bars(container)).toHaveLength(FIXTURE_BINS));
+    expect(isFaded(bars(container)[2]!, container)).toBe(false);
+
+    rerender(<ThroughputChart ccPairId={7} range="7d" />);
+
+    await waitFor(() =>
+      expect(isFaded(bars(container)[2]!, container)).toBe(true)
+    );
+    expect(bars(container)).toHaveLength(FIXTURE_BINS);
+  });
+
+  it("does not fetch while the chart is hidden at width 0", async () => {
+    installChartLayout(0);
+    const fetchMock = jest.fn(async () => respond(throughputFixture()));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<ThroughputChart ccPairId={7} range="24h" />);
+    // SWR fetches from its mount effect, so flushing effects is enough.
+    await act(async () => {});
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
