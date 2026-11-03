@@ -1,5 +1,5 @@
-/** FE-10: the failed documents panel over a faked `/errors` and `errors/resolve`, and the chips that open the floating panels. */
-import { render, screen, waitFor, within } from "@tests/setup/test-utils";
+/** The failed documents panel over a faked `/errors` and `errors/resolve`, and the chips that open the floating panels. */
+import { act, render, screen, waitFor, within } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import { Button, Popover } from "@opal/components";
 import englishMessages from "@/i18n/messages/en.json";
@@ -18,15 +18,6 @@ const CC_PAIR_ID = SALES_DRIVE.id;
 const ATTEMPT_ID = 101;
 const LATER_RUN_ID = 999;
 
-type ResolvedReason = "retry" | "later_run" | "without_retry";
-
-/** `/errors` rows with PR 4's provenance fields. */
-type ErrorRow = IndexAttemptError & {
-  resolved_reason: ResolvedReason | null;
-  resolved_by_index_attempt_id: number | null;
-  resolved_at: string | null;
-};
-
 const NOW = Date.now();
 const minutesAgo = (minutes: number) =>
   new Date(NOW - minutes * 60_000).toISOString();
@@ -34,8 +25,8 @@ const minutesAgo = (minutes: number) =>
 function errorRow(
   id: number,
   minutes: number,
-  fields: Partial<ErrorRow> & { failure_message: string }
-): ErrorRow {
+  fields: Partial<IndexAttemptError> & { failure_message: string }
+): IndexAttemptError {
   return {
     id,
     connector_credential_pair_id: CC_PAIR_ID,
@@ -71,7 +62,7 @@ const OPEN_ENTITY = errorRow(3, 3, {
   entity_id: "mailbox-1",
   failure_message: "Mailbox unavailable.",
 });
-// Resolved without retry: is_resolved stays false (D-17).
+// Resolved without retry: is_resolved stays false.
 const WITHOUT_RETRY_NEW = errorRow(4, 4, {
   document_id: "doc-c",
   failure_message: "Rate limited on doc-c.",
@@ -99,7 +90,7 @@ const RETRIED = errorRow(6, 6, {
   resolved_reason: "retry",
   resolved_at: minutesAgo(1),
 });
-// Resolved before PR 4 recorded a reason.
+// Resolved with no reason recorded.
 const LEGACY = errorRow(8, 0.5, {
   document_id: "doc-g",
   failure_message: "Legacy failure on doc-g.",
@@ -117,7 +108,7 @@ const ALL_ROWS = [
   LEGACY,
 ];
 
-const isOpen = (row: ErrorRow) =>
+const isOpen = (row: IndexAttemptError) =>
   !row.is_resolved && row.resolved_reason === null;
 
 interface FakeRequest {
@@ -128,8 +119,8 @@ interface FakeRequest {
 
 let originalFetch: typeof fetch | undefined;
 
-/** Serves `/errors` and `errors/resolve` the way the backend does (PR 4) until the test ends. */
-function installErrorsRoute(seed: ErrorRow[]) {
+/** Serves `/errors` and `errors/resolve` the way the backend does until the test ends. */
+function installErrorsRoute(seed: IndexAttemptError[]) {
   const rows = seed.map((row) => ({ ...row }));
   const requests: FakeRequest[] = [];
   originalFetch = global.fetch;
@@ -212,7 +203,12 @@ afterEach(() => {
 });
 
 function renderPanel(
-  overrides: { canResolve?: boolean; onResolve?: jest.Mock } = {}
+  overrides: {
+    canResolve?: boolean;
+    canRetryAll?: boolean;
+    canResolveErrors?: boolean;
+    onResolve?: jest.Mock;
+  } = {}
 ) {
   const onResolve = overrides.onResolve ?? jest.fn();
   render(
@@ -224,6 +220,8 @@ function renderPanel(
         ccPairId={CC_PAIR_ID}
         indexAttemptId={ATTEMPT_ID}
         canResolve={overrides.canResolve ?? true}
+        canRetryAll={overrides.canRetryAll}
+        canResolveErrors={overrides.canResolveErrors}
         onResolve={onResolve}
         resolving={false}
         placement="below"
@@ -235,12 +233,12 @@ function renderPanel(
 
 const panel = () => screen.getByRole("dialog");
 
-async function shownMessage(row: ErrorRow): Promise<HTMLElement> {
+async function shownMessage(row: IndexAttemptError): Promise<HTMLElement> {
   return waitFor(() => within(panel()).getByText(row.failure_message));
 }
 
 /** The largest element around `row`'s message that holds no other row's message. */
-function rowOf(row: ErrorRow): HTMLElement {
+function rowOf(row: IndexAttemptError): HTMLElement {
   const root = panel();
   const message = within(root).getByText(row.failure_message);
   const others = ALL_ROWS.filter((other) => other.id !== row.id)
@@ -389,6 +387,40 @@ describe("AC-4: row actions", () => {
   });
 });
 
+describe("AC-4: what the card allows", () => {
+  it("AC-4: without open documents on the run, Retry All Docs is hidden and rows keep their actions", async () => {
+    installErrorsRoute(ALL_ROWS);
+    const user = userEvent.setup();
+    renderPanel({ canRetryAll: false });
+    await shownMessage(OPEN_TITLED);
+
+    expect(
+      within(panel()).queryByRole("button", { name: "Retry All Docs" })
+    ).toBeNull();
+    const row = rowOf(OPEN_TITLED);
+    await user.hover(row);
+    expect(
+      within(row).getByRole("button", { name: "Retry Doc" })
+    ).toBeInTheDocument();
+  });
+
+  it("AC-4: a viewer who cannot resolve errors sees Retry Doc only on an open row", async () => {
+    installErrorsRoute(ALL_ROWS);
+    const user = userEvent.setup();
+    renderPanel({ canResolveErrors: false });
+    await shownMessage(OPEN_TITLED);
+    const row = rowOf(OPEN_TITLED);
+    await user.hover(row);
+
+    expect(
+      within(row).getByRole("button", { name: "Retry Doc" })
+    ).toBeInTheDocument();
+    expect(
+      within(row).queryByRole("button", { name: "Resolve without Retry" })
+    ).toBeNull();
+  });
+});
+
 // ── AC-5: resolved groups ─────────────────────────────────────────────────
 
 describe("AC-5: resolved groups", () => {
@@ -397,7 +429,7 @@ describe("AC-5: resolved groups", () => {
     renderPanel();
     await shownMessage(RETRIED);
 
-    const message = (row: ErrorRow) =>
+    const message = (row: IndexAttemptError) =>
       within(panel()).getByText(row.failure_message);
     const order = [
       OPEN_TITLED,
@@ -521,5 +553,291 @@ describe("AC-1: the chip that opened a panel shows selected", () => {
     await user.click(traceChip);
     await screen.findByRole("dialog");
     expect(traceChip).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+// ── AC-2: the stack trace follows the content width while open ────────────
+
+describe("AC-2: a stack trace opened below moves beside on a resize", () => {
+  const PAIR: ActivityScope = {
+    ccPairId: SALES_DRIVE.id,
+    canResolve: true,
+    canResolveRuns: true,
+  };
+  const FAILED = indexRun({
+    id: ATTEMPT_ID,
+    status: "failed",
+    minutesAgo: 4,
+    errorMsg: "Service unavailable.",
+    trace: "Traceback: service unavailable",
+  });
+  const originalObserver = global.ResizeObserver;
+  const originalWidth = window.innerWidth;
+  const observers = new Set<() => void>();
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = jest.fn();
+    window.sessionStorage.clear();
+    global.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        observers.add(() => callback([], this as unknown as ResizeObserver));
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    global.ResizeObserver = originalObserver;
+    window.innerWidth = originalWidth;
+    observers.clear();
+  });
+
+  it("AC-2: widening past 1024 while the trace is open measures its anchor at the side panel's edge", async () => {
+    window.innerWidth = 800;
+    installActivityFeed([FAILED]);
+    const user = userEvent.setup();
+    const { container } = render(
+      <ActivityPanel scope={PAIR} title="Activities" />
+    );
+    const traceChip = await screen.findByRole("button", {
+      name: englishMessages.admin.connector.activity.tags.stackTrace,
+    });
+    await user.click(traceChip);
+    await screen.findByRole("dialog");
+
+    const sidePanel =
+      container.querySelector<HTMLElement>("[data-side-panel]")!;
+    jest
+      .spyOn(sidePanel, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(600, 0, 400, 900));
+    window.innerWidth = 1280;
+    act(() => observers.forEach((notify) => notify()));
+
+    // The beside anchor is a zero-width line at the side panel's left edge.
+    await waitFor(() => {
+      const line = Array.from(
+        container.querySelectorAll<HTMLElement>("span[aria-hidden]")
+      ).find((span) => span.style.width === "0px");
+      expect(line?.style.left).toBe("600px");
+    });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+// ── AC-5: the list once nothing is open ───────────────────────────────────
+
+describe("AC-5: the list once its last open error is resolved", () => {
+  const PAIR: ActivityScope = {
+    ccPairId: SALES_DRIVE.id,
+    canResolve: true,
+    canResolveRuns: true,
+  };
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = jest.fn();
+    window.sessionStorage.clear();
+  });
+
+  // A failed run stays under Failures; a run that completed with errors leaves the open feed with its last open error.
+  it.each(["failed", "completed_with_errors"] as const)(
+    "AC-5: resolving the only open error of a %s run keeps the panel open with the row under Resolved Errors",
+    async (status) => {
+      const RUN = indexRun({
+        id: ATTEMPT_ID,
+        status,
+        minutesAgo: 4,
+        errorMsg: status === "failed" ? "Service unavailable." : null,
+        openErrors: 1,
+      });
+      const feed = installActivityFeed([RUN]);
+      const feedFetch = global.fetch;
+      const route = installErrorsRoute([OPEN_UNTITLED]);
+      const errorsFetch = global.fetch;
+      // One backend: the resolve also clears the run's open counts in the feed.
+      global.fetch = jest.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const path = new URL(String(input), "http://localhost").pathname;
+          if (!path.includes("/errors")) return feedFetch(input, init);
+          const response = await errorsFetch(input, init);
+          if (path.endsWith("/errors/resolve") && RUN.run.kind === "indexing") {
+            RUN.errors = "closed";
+            RUN.run.attempt.open_error_count = 0;
+            RUN.run.attempt.open_doc_error_count = 0;
+          }
+          return response;
+        }
+      ) as typeof fetch;
+      const user = userEvent.setup();
+      render(<ActivityPanel scope={PAIR} title="Activities" />);
+
+      await user.click(
+        await screen.findByRole("button", { name: /\d+ docs? failed/ })
+      );
+      await shownMessage(OPEN_UNTITLED);
+      const row = rowOf(OPEN_UNTITLED);
+      await user.hover(row);
+      const feedReads = feed.calls("GET", "/runs").length;
+      await user.click(
+        within(row).getByRole("button", { name: "Resolve without Retry" })
+      );
+
+      await waitFor(() =>
+        expect(
+          route.posts(`/cc-pair/${CC_PAIR_ID}/errors/resolve`)
+        ).toHaveLength(1)
+      );
+      // The feed has reread the run with no open errors.
+      await waitFor(() =>
+        expect(feed.calls("GET", "/runs").length).toBeGreaterThan(feedReads)
+      );
+      await waitFor(() =>
+        expect(
+          precedes(
+            divider(),
+            within(panel()).getByText(OPEN_UNTITLED.failure_message)
+          )
+        ).toBe(true)
+      );
+      // With nothing open the chip cannot tell documents from sources, so it counts items.
+      expect(
+        screen.getByRole("button", { name: /\d+ items? failed/ })
+      ).toHaveAttribute("aria-pressed", "true");
+
+      // Nothing of the run is open, so the bulk retry leaves.
+      await waitFor(() =>
+        expect(
+          within(panel()).queryByRole("button", { name: "Retry All Docs" })
+        ).toBeNull()
+      );
+
+      // Closing the panel lets the next read drop a run with nothing open.
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: /\d+ items? failed/ }) === null
+        ).toBe(status !== "failed")
+      );
+    }
+  );
+  it("AC-5: with Resolved shown, a run whose last open error resolves keeps its open card and panel", async () => {
+    const RUN = indexRun({
+      id: ATTEMPT_ID,
+      status: "completed_with_errors",
+      minutesAgo: 4,
+      openErrors: 1,
+    });
+    const feed = installActivityFeed([RUN]);
+    const feedFetch = global.fetch;
+    const route = installErrorsRoute([OPEN_UNTITLED]);
+    const errorsFetch = global.fetch;
+    // The resolve closes the run, so the next read lists it under Resolved.
+    global.fetch = jest.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(String(input), "http://localhost").pathname;
+        if (!path.includes("/errors")) return feedFetch(input, init);
+        const response = await errorsFetch(input, init);
+        if (path.endsWith("/errors/resolve") && RUN.run.kind === "indexing") {
+          RUN.errors = "closed";
+          RUN.run.attempt.open_error_count = 0;
+          RUN.run.attempt.open_doc_error_count = 0;
+        }
+        return response;
+      }
+    ) as typeof fetch;
+    const user = userEvent.setup();
+    render(<ActivityPanel scope={PAIR} title="Activities" />);
+    await user.click(
+      await screen.findByRole("button", { name: /^(Show Filters|Filters)$/ })
+    );
+    await user.click(await screen.findByRole("button", { name: /^Resolved$/ }));
+
+    await user.click(
+      await screen.findByRole("button", { name: /\d+ docs? failed/ })
+    );
+    await shownMessage(OPEN_UNTITLED);
+    const row = rowOf(OPEN_UNTITLED);
+    await user.hover(row);
+    const feedReads = feed.calls("GET", "/runs").length;
+    await user.click(
+      within(row).getByRole("button", { name: "Resolve without Retry" })
+    );
+    await waitFor(() =>
+      expect(route.posts(`/cc-pair/${CC_PAIR_ID}/errors/resolve`)).toHaveLength(
+        1
+      )
+    );
+    await waitFor(() =>
+      expect(feed.calls("GET", "/runs").length).toBeGreaterThan(feedReads)
+    );
+
+    await waitFor(() =>
+      expect(
+        precedes(
+          divider(),
+          within(panel()).getByText(OPEN_UNTITLED.failure_message)
+        )
+      ).toBe(true)
+    );
+    const chips = screen.getAllByRole("button", { name: /\d+ items? failed/ });
+    expect(chips).toHaveLength(1);
+    expect(chips[0]).toHaveAttribute("aria-pressed", "true");
+  });
+  it("AC-5: a running run that fails while its panel is open keeps one card and Retry All Docs", async () => {
+    const RUN = indexRun({
+      id: ATTEMPT_ID,
+      status: "in_progress",
+      minutesAgo: 4,
+      openErrors: 2,
+    });
+    const feed = installActivityFeed([RUN]);
+    const feedFetch = global.fetch;
+    const route = installErrorsRoute([OPEN_TITLED, OPEN_UNTITLED]);
+    const errorsFetch = global.fetch;
+    // The run fails between reads, so the next read lists it under Failures with one document still open.
+    global.fetch = jest.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(String(input), "http://localhost").pathname;
+        if (!path.includes("/errors")) return feedFetch(input, init);
+        const response = await errorsFetch(input, init);
+        if (path.endsWith("/errors/resolve") && RUN.run.kind === "indexing") {
+          RUN.group = "failed";
+          RUN.run.attempt.status = "failed";
+          RUN.run.attempt.open_error_count = 1;
+          RUN.run.attempt.open_doc_error_count = 1;
+        }
+        return response;
+      }
+    ) as typeof fetch;
+    const user = userEvent.setup();
+    render(<ActivityPanel scope={PAIR} title="Activities" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /\d+ docs? failed/ })
+    );
+    await shownMessage(OPEN_UNTITLED);
+    const row = rowOf(OPEN_UNTITLED);
+    await user.hover(row);
+    const feedReads = feed.calls("GET", "/runs").length;
+    await user.click(
+      within(row).getByRole("button", { name: "Resolve without Retry" })
+    );
+    await waitFor(() =>
+      expect(route.posts(`/cc-pair/${CC_PAIR_ID}/errors/resolve`)).toHaveLength(
+        1
+      )
+    );
+
+    await waitFor(() =>
+      expect(feed.calls("GET", "/runs").length).toBeGreaterThan(feedReads)
+    );
+    expect(
+      screen.getAllByRole("button", { name: /\d+ docs? failed/ })
+    ).toHaveLength(1);
+    expect(
+      within(panel()).getByRole("button", { name: "Retry All Docs" })
+    ).toBeInTheDocument();
   });
 });
