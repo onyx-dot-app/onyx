@@ -25,11 +25,13 @@ export interface NavigationOptions {
    * needs no router round trip: writing the URL is the whole switch.
    */
   shallow?: boolean;
+  /** `false` keeps the scroll position, as for a tab or a query edit. */
+  scroll?: boolean;
 }
 
 /** Props for a link: spread them on an anchor, a `Button` or a sidebar tab. */
-export interface LinkProps {
-  href: Route;
+export interface LinkProps<T extends string = string> {
+  href: Route<T>;
   onClick: (event: React.MouseEvent<HTMLElement>) => void;
 }
 
@@ -45,19 +47,22 @@ function urlKey(pathname: string, search: URLSearchParams): string {
 // go through the router too, or the earlier page would land after it.
 let routeNavigationInFlight = false;
 
-function navigate(
+function navigate<T extends string>(
   router: Router,
-  href: Route,
-  { replace = false, shallow = false }: NavigationOptions = {}
+  href: Route<T>,
+  { replace = false, shallow = false, scroll }: NavigationOptions = {}
 ) {
+  const routerOptions = scroll === undefined ? undefined : { scroll };
   if (typeof window === "undefined") {
-    if (replace) router.replace(href);
-    else router.push(href);
+    if (replace) router.replace(href, routerOptions);
+    else router.push(href, routerOptions);
     return;
   }
-  const target = new URL(href, window.location.origin);
+  // Against the current URL, so a query-only href (`?a=1`) keeps the path.
+  const target = new URL(href, window.location.href);
+  const herePathname = window.location.pathname;
   const here = urlKey(
-    window.location.pathname,
+    herePathname,
     new URLSearchParams(window.location.search)
   );
   // Already there: a second entry for the same URL would make Back look like
@@ -69,16 +74,21 @@ function navigate(
   // API.
   if (replace) window.history.replaceState(null, "", href);
   else window.history.pushState(null, "", href);
-  const queryOnly = target.pathname === window.location.pathname;
+  const queryOnly = target.pathname === herePathname;
   if (shallow && queryOnly && !routeNavigationInFlight) return;
   routeNavigationInFlight = true;
-  router.replace(href);
+  router.replace(href, routerOptions);
 }
 
-/** Whether a click is a plain left click, which a link may take over. */
+/**
+ * Whether a click is a plain left click on a link that opens in this tab,
+ * which a link may take over.
+ */
 function isPlainClick(event: React.MouseEvent<HTMLElement>): boolean {
+  const target = event.currentTarget.getAttribute("target");
   return (
     !event.defaultPrevented &&
+    (target === null || target === "_self") &&
     event.button === 0 &&
     !event.metaKey &&
     !event.ctrlKey &&
@@ -90,8 +100,11 @@ function isPlainClick(event: React.MouseEvent<HTMLElement>): boolean {
 export class Navigation {
   constructor(private router: Router) {}
 
+  // Generic like Next's `router.push`, so a dynamic path such as
+  // `/craft/v1/tasks/${id}` type-checks against its route.
+
   /** Goes to a page of the app. */
-  go(href: Route, options?: NavigationOptions) {
+  go<T extends string>(href: Route<T>, options?: NavigationOptions) {
     navigate(this.router, href, options);
   }
 
@@ -100,7 +113,10 @@ export class Navigation {
    * still works) and a click handler that sends a plain click through `go`.
    * A caller with its own click handling calls `onClick` first.
    */
-  linkTo(href: Route, options?: NavigationOptions): LinkProps {
+  linkTo<T extends string>(
+    href: Route<T>,
+    options?: NavigationOptions
+  ): LinkProps<T> {
     return {
       href,
       onClick: (event) => {
@@ -122,7 +138,7 @@ export class Navigation {
     this.router.refresh();
   }
 
-  prefetch(href: Route) {
+  prefetch<T extends string>(href: Route<T>) {
     this.router.prefetch(href);
   }
 
@@ -158,12 +174,23 @@ export interface CurrentUrl {
 }
 
 export function useCurrentUrl(): CurrentUrl {
-  const pathname = usePathname();
+  // Null outside the app router, e.g. in a test without a router.
+  const pathname = usePathname() ?? "";
   const readonlyParams = useSearchParams();
+  const query = readonlyParams?.toString() ?? "";
   return useMemo(() => {
-    const searchParams = new URLSearchParams(readonlyParams.toString());
+    const searchParams = new URLSearchParams(query);
     return { pathname, searchParams, href: urlKey(pathname, searchParams) };
-  }, [pathname, readonlyParams]);
+  }, [pathname, query]);
+}
+
+/**
+ * The current pathname alone. Prefer it to `useCurrentUrl` when the query is
+ * not needed: reading the query makes a statically rendered page need a
+ * Suspense boundary.
+ */
+export function useCurrentPathname(): string {
+  return usePathname() ?? "";
 }
 
 /**

@@ -27,15 +27,12 @@ import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 import { useTranslations } from "next-intl";
 
 export interface AdminChromeProps {
-  /** The path of the layout that renders the chrome. */
-  base: "/admin" | "/ee/admin";
   children: React.ReactNode;
   // Server-fetched seed (AdminSSChrome) used until /api/me loads client-side.
   initialAdminCapabilities: string[];
 }
 
 export default function AdminChrome({
-  base,
   children,
   initialAdminCapabilities,
 }: AdminChromeProps) {
@@ -122,7 +119,9 @@ export default function AdminChrome({
         )}
         <OpenSearchResourceBanner />
         <RootLayout.MainContent>
-          <PendingRoute base={base} loader={<PageLoader />}>
+          {/* The EE pages render under /ee/admin, but the proxy rewrites
+              them there, so their URLs are /admin/… too. */}
+          <PendingRoute base="/admin" loader={<PageLoader />}>
             {content}
           </PendingRoute>
         </RootLayout.MainContent>

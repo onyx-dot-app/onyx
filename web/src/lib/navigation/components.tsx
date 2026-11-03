@@ -32,21 +32,21 @@ export function PendingRoute({ base, loader, children }: PendingRouteProps) {
   );
 }
 
-export interface NavLinkProps
+export interface NavLinkProps<T extends string = string>
   extends
     Omit<React.ComponentProps<typeof Link>, "href" | "replace">,
     NavigationOptions {
-  href: Route;
+  href: Route<T>;
 }
 
 /** A Next link whose plain click goes through `Navigation.go`. */
-export function NavLink({
+export function NavLink<T extends string>({
   href,
   replace,
   shallow,
   onClick,
   ...props
-}: NavLinkProps) {
+}: NavLinkProps<T>) {
   const link = useNavigation().linkTo(href, { replace, shallow });
   return (
     <Link
