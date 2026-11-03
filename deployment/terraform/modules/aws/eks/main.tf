@@ -143,6 +143,11 @@ locals {
     }
   } : {}
 
+  craft_sandbox_firecracker = var.craft_sandbox_runtime == "firecracker"
+  craft_sandbox_metal = alltrue([
+    for t in var.craft_sandbox_node_instance_types : strcontains(t, ".metal")
+  ])
+
   # Optional dedicated Craft sandbox node group. Sandbox pods pin here
   # via nodeSelector onyx.app/workload=sandbox + toleration of the workload taint.
   # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
@@ -150,15 +155,16 @@ locals {
   # stops being the binding scheduling dimension (each sandbox pod reserves ~5.5Gi
   # eph; the AMI default ~20Gi caps a node at ~3 sandboxes vs ~7 by CPU).
   craft_sandbox_node_groups = var.enable_craft ? {
-    sandbox = {
+    sandbox = merge({
       name           = "sandbox-node-group"
       instance_types = var.craft_sandbox_node_instance_types
       min_size       = var.craft_sandbox_node_min_size
       max_size       = var.craft_sandbox_node_max_size
       desired_size   = var.craft_sandbox_node_desired_size
-      labels = {
-        "onyx.app/workload" = "sandbox"
-      }
+      labels = merge(
+        { "onyx.app/workload" = "sandbox" },
+        local.craft_sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
+      )
       taints = [
         {
           key    = "workload"
@@ -179,8 +185,8 @@ locals {
             volume_type           = "gp3"
             encrypted             = true
             delete_on_termination = true
-            iops                  = 3000
-            throughput            = 125
+            iops                  = var.craft_sandbox_node_disk_iops
+            throughput            = var.craft_sandbox_node_disk_throughput
           }
         }
       }
@@ -190,7 +196,15 @@ locals {
         "k8s.io/cluster-autoscaler/enabled"             = "true"
         "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
       }
-    }
+      },
+      # Firecracker needs /dev/kvm. Non-metal Intel types get it from nested
+      # virtualization on the launch template. A spot reclaim kills every
+      # microVM on the node, so the group stays on-demand.
+      local.craft_sandbox_firecracker ? { capacity_type = "ON_DEMAND" } : {},
+      local.craft_sandbox_firecracker && !local.craft_sandbox_metal ? {
+        cpu_options = { nested_virtualization = "enabled" }
+      } : {},
+    )
   } : {}
 }
 
