@@ -2003,6 +2003,10 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
+# Where providers reach the webhook server. Set it when the API and web hosts
+# differ: the Helm webhook ingress is on `ingress.api.host`.
+WEBHOOK_PUBLIC_URL = os.environ.get("WEBHOOK_PUBLIC_URL") or WEB_DOMAIN
+
 # Global limit on indexing embedding requests (see embedding_rate_limit.py).
 # The window is stored in Redis, one entry per request, so the request count
 # is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.
