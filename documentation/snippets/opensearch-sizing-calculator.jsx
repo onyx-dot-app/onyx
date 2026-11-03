@@ -363,6 +363,7 @@ export const OpenSearchSizingCalculator = () => {
                 <div className="space-y-1.5">
                   <label htmlFor="os-years" className={label}>Years of history to index</label>
                   <input id="os-years" type="number" min="0" max={MAX_YEARS} value={years} onChange={(e) => setYears(capped(e.target.value, MAX_YEARS))} className={input + " w-full"} />
+                  <div className={hint}>Older years usually add less, so this estimate errs on the high side.</div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
