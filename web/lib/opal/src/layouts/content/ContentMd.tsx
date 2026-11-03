@@ -23,7 +23,7 @@ type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
 type ContentMdSuffix = "optional" | (string & {});
 
-type ContentMdTag = BadgeProps & { tooltip?: string };
+type ContentMdTag = Omit<BadgeProps, "tooltip"> & { tooltip?: string };
 
 interface ContentMdPresetConfig {
   /** Opal font name for the title. */

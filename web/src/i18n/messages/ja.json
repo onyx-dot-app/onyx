@@ -3038,16 +3038,12 @@
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
-        "search": {
-          "placeholder": "実行エラーを検索…"
-        },
         "window": {
           "label": "期間",
           "all": "全期間",
           "h1": "過去 1 時間",
           "h24": "過去 24 時間",
-          "d7": "過去 7 日間",
-          "d30": "過去 30 日間"
+          "d7": "過去 7 日間"
         },
         "statusGroups": {
           "label": "ステータス",
@@ -3058,7 +3054,8 @@
           "canceled": "キャンセル済み"
         },
         "loadError": {
-          "title": "実行を読み込めませんでした。"
+          "title": "実行を読み込めませんでした。",
+          "retry": "再試行"
         },
         "empty": {
           "title": "最近のインデックス実行はありません",
@@ -7495,16 +7492,17 @@
         "counts": {
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
           "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
+          "syncing": "{count, plural, other {# 件のコネクタが同期中}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
           "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
           "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",
           "deleting": "{count, plural, other {# 件のコネクタを削除中}}"
         },
         "access": {
-          "public": "組織",
-          "private": "非公開",
-          "sync": "自動同期",
-          "sync_restricted": "自動同期（制限付き）"
+          "public": "組織全体に公開",
+          "private": "{count, plural, =0 {非公開} other {# 個のグループと共有}}",
+          "sync": "権限を自動同期",
+          "sync_restricted": "権限を自動同期"
         },
         "detail": {
           "queued": "キューの {position, selectordinal, other {#}} 番目",
@@ -7513,7 +7511,7 @@
         },
         "docs": {
           "label": "ドキュメント",
-          "processed": "{count, number} 件処理済み",
+          "processed": "最近 {count, number} 件処理済み",
           "processedTooltip": {
             "running": "現在の実行がこれまでに処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられるため、コネクタのドキュメント数を超えることがあります。",
             "finished": "前回の実行が処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられ、その後に削除されたドキュメントはコネクタの件数から外れるため、コネクタのドキュメント数を超えることがあります。"
@@ -7524,6 +7522,8 @@
           "manageFederated": "フェデレーテッドコネクタを管理",
           "expand": "詳細を表示",
           "collapse": "詳細を隠す",
+          "viewErrors": "エラーを表示",
+          "viewAllRuns": "すべての実行を表示",
           "pause": "一時停止",
           "resume": "再開"
         },
@@ -7536,7 +7536,8 @@
           "filteredTitle": "これらのフィルターに一致するコネクタはありません。"
         },
         "loadError": "コネクタを読み込めませんでした。",
-        "units": "{count, plural, other {件のコネクタ}}"
+        "units": "{count, plural, other {件のコネクタ}}",
+        "sourceGroup": "{source}（{count, number}）"
       },
       "title": "コネクタのインデックス状況"
     },

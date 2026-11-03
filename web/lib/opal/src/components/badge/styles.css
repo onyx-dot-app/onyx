@@ -25,6 +25,12 @@
   padding: 0.25rem;
 }
 
+/* A pressed filter badge rings itself in its colour: its own tint covers the
+   selected surface behind it. */
+.opal-badge[data-pressed] {
+  box-shadow: inset 0 0 0 1px var(--opal-badge-icon-color);
+}
+
 /* The title takes the pill's text colour, and the icon --opal-badge-icon-color,
    set inline from the tag's colour. [data-size] outranks the `.interactive`
    Content rules, so a tag inside an interactive row keeps its own colours. */

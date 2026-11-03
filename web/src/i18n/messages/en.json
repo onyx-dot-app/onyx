@@ -3038,16 +3038,12 @@
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}",
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
-        "search": {
-          "placeholder": "Search run errors…"
-        },
         "window": {
           "label": "Time range",
           "all": "All time",
           "h1": "Last hour",
           "h24": "Last 24 hours",
-          "d7": "Last 7 days",
-          "d30": "Last 30 days"
+          "d7": "Last 7 days"
         },
         "statusGroups": {
           "label": "Status",
@@ -3058,7 +3054,8 @@
           "canceled": "Canceled"
         },
         "loadError": {
-          "title": "Couldn't load the runs."
+          "title": "Couldn't load the runs.",
+          "retry": "Retry"
         },
         "empty": {
           "title": "No recent indexing runs",
@@ -7495,16 +7492,17 @@
         "counts": {
           "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
           "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
+          "syncing": "{count, plural, one {# connector syncing} other {# connectors syncing}}",
           "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
           "paused": "{count, plural, one {# connector paused} other {# connectors paused}}",
           "scheduled": "{count, plural, one {# connector scheduled} other {# connectors scheduled}}",
           "deleting": "{count, plural, one {# connector deleting} other {# connectors deleting}}"
         },
         "access": {
-          "public": "Organization",
-          "private": "Private",
-          "sync": "Auto-sync",
-          "sync_restricted": "Auto-sync, restricted"
+          "public": "Public to your organization",
+          "private": "{count, plural, =0 {Private} one {Shared with # group} other {Shared with # groups}}",
+          "sync": "Auto-sync permissions",
+          "sync_restricted": "Auto-sync permissions"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} in queue",
@@ -7513,7 +7511,7 @@
         },
         "docs": {
           "label": "docs",
-          "processed": "{count, number} processed",
+          "processed": "{count, number} recently processed",
           "processedTooltip": {
             "running": "Documents the current run has processed so far, failed ones included. A document the run processes twice counts twice, so this can be more than the connector's documents.",
             "finished": "Documents the last run processed, failed ones included. A document the run processed twice counts twice, and documents removed since then no longer count for the connector, so this can be more than the connector's documents."
@@ -7524,6 +7522,8 @@
           "manageFederated": "Manage federated connector",
           "expand": "View Details",
           "collapse": "Hide Details",
+          "viewErrors": "View Errors",
+          "viewAllRuns": "View All Runs",
           "pause": "Pause",
           "resume": "Resume"
         },
@@ -7536,7 +7536,8 @@
           "filteredTitle": "No connectors match these filters."
         },
         "loadError": "Couldn't load the connectors.",
-        "units": "{count, plural, one {connector} other {connectors}}"
+        "units": "{count, plural, one {connector} other {connectors}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "Connector Indexing Status"
     },

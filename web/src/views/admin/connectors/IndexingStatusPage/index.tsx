@@ -146,10 +146,21 @@ export default function IndexingStatusPage() {
     fleetPanel.setOpen(false);
     setRange(null);
   }
-  // A failure line focuses its card in the fleet's history, so the history opens.
+  // A failure line or View Errors focuses a card in the fleet's history, so the history opens.
   const activityLinks = useActivityChartLinks({
     onFocusAttempt: showFleetHistory,
   });
+  // The row's count adds open prune and check runs to its latest run's errors. A latest run with open errors is focused in the fleet's history, and otherwise the pair's history lists the runs that count.
+  function focusErrors(row: IndexingConnectorRow) {
+    setRange(null);
+    const attempt = row.latest_index_attempt;
+    if (attempt !== null && attempt.open_error_count > 0) {
+      activityLinks.focusAttempt(attempt.id);
+      return;
+    }
+    adminPicked.current = true;
+    setPairHistory(row);
+  }
   // A connector's open popover steps the overview back with the other connectors.
   const [listFocused, setListFocused] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -225,6 +236,7 @@ export default function IndexingStatusPage() {
         />
         <ConnectorList
           onViewLogs={togglePairHistory}
+          onFocusError={focusErrors}
           onFocusChange={setListFocused}
           liftedCcPairId={historyOpen ? activityLinks.liftedPairId : null}
         />

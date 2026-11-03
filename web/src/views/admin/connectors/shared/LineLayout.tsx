@@ -28,12 +28,12 @@ interface VariantClasses {
   dGap: 1 | 2;
 }
 
-// Row and run lines wrap to A + D over B + C: below 640 px A's basis leaves room only for D. On a card the parts' own 8 px padding is the line gap, a run line adds 4 px.
+// Row and run lines wrap to A + D over B + C: below 640 px A's basis leaves room only for D. The parts' own 8 px padding is the line gap, which the design widens by 4 px on a run line and narrows by 4 px on a row.
 const VARIANT_CLASSES = {
   row: {
     a: "@max-[38.75rem]:order-1 @max-[38.75rem]:min-w-[17.5rem] @max-[38.75rem]:basis-[calc(100%-4rem)]",
-    b: "@max-[38.75rem]:order-3 @max-[38.75rem]:min-w-[11.75rem]",
-    c: "@max-[38.75rem]:order-4 @max-[38.75rem]:min-w-[11.75rem] @max-[38.75rem]:max-w-[17.5rem]",
+    b: "@max-[38.75rem]:order-3 @max-[38.75rem]:min-w-[11.75rem] @max-[38.75rem]:-mt-1",
+    c: "@max-[38.75rem]:order-4 @max-[38.75rem]:min-w-[11.75rem] @max-[38.75rem]:max-w-[17.5rem] @max-[38.75rem]:-mt-1",
     d: "w-16 pe-1 @max-[38.75rem]:order-2",
     third: "",
     part: "",
@@ -196,13 +196,13 @@ export interface LineTagsProps {
   children?: ReactNode;
 }
 
-/** B's first line: the 20 px status tag, then the line's hints and counts. */
+/** B's first line: the 20 px status tag, then the line's hints and counts, 8 apart. */
 export function LineTags({ tag, children }: LineTagsProps) {
   return (
     <Section
       flexDirection="row"
       justifyContent="start"
-      gap={1}
+      gap={2}
       width="fit"
       height="fit"
     >

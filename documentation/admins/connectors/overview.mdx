@@ -50,7 +50,7 @@ User Groups need a Business plan or higher.
 **Sync with the source**: Onyx copies the permissions from the source.
 Each user only sees documents they can open in the source.
 You can also **Restrict Access to Groups** so that only members of selected groups see the documents.
-Synced permissions still apply. The Indexing Status page shows this as **Auto-sync, restricted**.
+Synced permissions still apply. The Indexing Status page shows both as **Auto-sync permissions**.
 
 You can change the access type later from the Connector's page.
 A change starts a re-index so that search results reflect the new access.
@@ -116,7 +116,8 @@ Set a start date when you create the connector if you only need recent content, 
 ## Managing Existing Connectors
 
 To see your existing Connectors, open the **Admin Panel** and click **Indexing Status** in the sidebar.
-This page shows each Connector, its status, access type, document count, and when it was last indexed.
+This page groups Connectors by source. Each row shows the Connector's status, who can see its documents,
+its document count, and how many documents its last run processed.
 Click **Add Connector** at the top of the page to add a Connector.
 
 Two cards are above the list:
@@ -126,6 +127,11 @@ Two cards are above the list:
 - The graph card shows the Connectors that are indexing, the documents processed recently,
   and a chart of the documents processed in the selected time window.
   Select bars on the chart to show only the activities in that time range.
+
+The pills above the list count the Connectors in each status. Click a pill to show only that status.
+Click the error count on a row to show its errors in the **Activities** panel.
+Click **View Details** on a row to see its running and latest runs, six at most, with filters for time range,
+run type and status. **View All Runs** opens the Indexing tab of the Connector's page.
 
 The **Activities** panel next to the list shows the indexing activity of all Connectors.
 It opens automatically when there are errors. Click the panel button on the counts card to show or hide it.

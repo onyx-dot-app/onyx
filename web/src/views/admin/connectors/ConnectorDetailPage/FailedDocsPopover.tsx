@@ -29,19 +29,18 @@ import {
   useResolveRunErrors,
 } from "@/lib/connectors/ccPair/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  RUNS_POLL_MS,
-  SEARCH_DELAY_MS,
-} from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import { RUNS_POLL_MS } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import {
   PLACEMENT_PROPS,
   type PopoverPlacement,
 } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
+import {
+  SEARCH_DELAY_MS,
+  SEARCH_MAX_LENGTH,
+} from "@/views/admin/connectors/shared/search";
 
 // The errors route's largest page: `/errors` orders by time only, so the groups sort within what is loaded.
 const PAGE_SIZE = 100;
-// The errors route refuses a longer search.
-const SEARCH_MAX_LENGTH = 200;
 const CLAMPED_LINES = 5;
 // Hidden until the row is hovered or focused. Touch screens always show it.
 const ON_ROW_HOVER =
