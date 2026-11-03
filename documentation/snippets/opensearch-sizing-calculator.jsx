@@ -14,7 +14,7 @@ export const OpenSearchSizingCalculator = () => {
 
   const PARTS = [
     // One blue scale from the docs primary: darker means more text per GB.
-    { label: "Text", sub: "wiki, tickets, chat", textShare: 40, color: "#003F8F", ink: "#FFFFFF" },
+    { label: "Text", sub: "wiki, tickets, chat, call transcripts", textShare: 40, color: "#003F8F", ink: "#FFFFFF" },
     { label: "Office files", sub: "Word, Excel, Google Docs", textShare: 12, color: "#0057C7", ink: "#FFFFFF" },
     { label: "Email", sub: "mailboxes with attachments", textShare: 8, color: "#0069ED", ink: "#FFFFFF" },
     { label: "Code", sub: "READMEs and docs only", textShare: 5, color: "#4D9CFF", ink: "#0B2A55" },
