@@ -26,7 +26,7 @@ jobs:
         run: |
           # GitHub answers a missing ref with "Reference does not exist". Other errors fail the job.
           if ! out="$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH" 2>&1)"; then
-            if grep -q "HTTP 404\|HTTP 422" <<<"$out"; then
+            if grep -q "Reference does not exist" <<<"$out"; then
               echo "No preview branch"
             else
               echo "$out"
