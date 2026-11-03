@@ -255,7 +255,7 @@ test("the Plugins flyout stays horizontal while toggling and searches its own ro
   expect(toggle).not.toBeChecked();
   expect(screen.getByTestId("tool-options")).toBeVisible();
   await user.type(
-    screen.getByRole("textbox", { name: "Search plugins" }),
+    screen.getByRole("searchbox", { name: "Search plugins" }),
     "Reports"
   );
   expect(
@@ -274,7 +274,9 @@ test("keyboard navigation returns from the flyout before dismissing Actions", as
   const row = screen.getByRole("button", { name: "Plugins" });
   act(() => row.focus());
   await user.keyboard("{ArrowRight}");
-  expect(screen.getByRole("textbox", { name: "Search plugins" })).toHaveFocus();
+  expect(
+    screen.getByRole("searchbox", { name: "Search plugins" })
+  ).toHaveFocus();
   await user.keyboard("{ArrowLeft}");
   expect(row).toHaveFocus();
   expect(

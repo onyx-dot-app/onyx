@@ -330,7 +330,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(0));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT Legacy"
     );
 
@@ -353,7 +353,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(0));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT-6 Luna"
     );
     await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
@@ -383,7 +383,7 @@ describe("ChatTaskModelSettings", () => {
     const selector = taskSelector(0);
     await user.click(selector);
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT-6 Luna"
     );
     await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
@@ -422,7 +422,7 @@ describe("ChatTaskModelSettings", () => {
     const selector = taskSelector(1);
     await user.click(selector);
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Search Mini"
     );
     await user.click(screen.getByRole("option", { name: /Search Mini/ }));
@@ -448,7 +448,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(1));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Decision Model A"
     );
     await user.click(screen.getByRole("option", { name: /Decision Model A/ }));
@@ -470,7 +470,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(1));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Search Mini"
     );
     await user.click(screen.getByRole("option", { name: /Search Mini/ }));
@@ -497,7 +497,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(1));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Decision Model A"
     );
     await user.click(screen.getByRole("option", { name: /Decision Model A/ }));
@@ -518,7 +518,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(1));
     // A search opens every provider divider.
-    await user.type(screen.getByRole("textbox", { name: "Search" }), "Luna");
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "Luna");
     const options = screen
       .getAllByRole("option")
       .map((option) => option.textContent ?? "");
@@ -538,7 +538,7 @@ describe("ChatTaskModelSettings", () => {
     await renderTaskModels();
 
     await user.click(taskSelector(1));
-    await user.type(screen.getByRole("textbox", { name: "Search" }), "Luna");
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "Luna");
     const lunaOptions = screen.getAllByRole("option", { name: /GPT-6 Luna/ });
     const languageCopy = lunaOptions.find(
       (option) => !option.textContent?.includes("Decision")

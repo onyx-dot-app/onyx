@@ -438,7 +438,9 @@ test("filters by description and URL and clears a search without losing either r
   render(<PluginsPage />);
   await screen.findByRole("link", { name: "Manage Workspace MCP" });
   const user = setupUser();
-  const search = screen.getByRole("textbox", { name: copy.search.placeholder });
+  const search = screen.getByRole("searchbox", {
+    name: copy.search.placeholder,
+  });
   await user.type(search, "weekly");
   expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
   expect(

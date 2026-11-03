@@ -242,7 +242,7 @@ test("search matches descriptions and URLs and can clear an empty result", async
   render(<MemberPluginsPage />);
   await screen.findByRole("button", { name: "View Linear" });
   const user = setupUser();
-  const search = screen.getByRole("textbox", { name: "Search plugins" });
+  const search = screen.getByRole("searchbox", { name: "Search plugins" });
   await user.type(search, "weekly");
   expect(
     screen.getByRole("button", { name: "View Reports API" })

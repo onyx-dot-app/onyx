@@ -133,7 +133,9 @@ export default function InputTypeIn({
 
       <input
         ref={ref}
-        type="text"
+        // Chrome ignores autocomplete="off" when it guesses a text field takes
+        // a saved card; it does not offer cards in search fields.
+        type={searchIcon ? "search" : "text"}
         // dir="auto": typed text decides the direction so punctuation sits on the
         // correct side. While empty it inherits the page direction (see styles.css).
         dir="auto"

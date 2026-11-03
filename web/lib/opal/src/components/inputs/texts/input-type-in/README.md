@@ -12,7 +12,7 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 | `variant`       | `InputVariants`         | `"primary"` | Visual state                                                                                 |
 | `prefixText`    | `string`                | —           | Non-editable prefix rendered before the input (e.g. `"https://"`)                            |
 | `leftChildren`  | `ReactNode`             | —           | Content before the text, after `prefixText` (e.g. a chosen value shown as a tag)             |
-| `searchIcon`    | `boolean`               | `false`     | Show a search icon on the left                                                               |
+| `searchIcon`    | `boolean`               | `false`     | Show a search icon on the left and render a native `type="search"` field                     |
 | `icon`          | `IconFunctionComponent` | —           | Leading icon after the search icon (a select's chosen option icon)                           |
 | `rightChildren` | `ReactNode`             | —           | Custom content rendered to the right of the input; suppresses the built-in clear button      |
 | `clearButton`   | `boolean`               | `false`     | Show the clear (×) button when the field has a value; suppressed when `rightChildren` is set |

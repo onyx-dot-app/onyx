@@ -464,7 +464,7 @@ describe("detail modal", () => {
       "true"
     );
     expect(await findToolsPreview()).toBeInTheDocument();
-    const search = screen.getByRole("textbox", { name: "Search tools" });
+    const search = screen.getByRole("searchbox", { name: "Search tools" });
     await user.type(search, "missing endpoint");
     expect(screen.queryByText("listReleases")).not.toBeInTheDocument();
     expect(screen.getByText("No tools found")).toBeVisible();
