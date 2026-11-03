@@ -7,6 +7,7 @@ constraint, which a mock cannot show.
 
 import threading
 from collections.abc import Generator
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session
@@ -15,6 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_models import ParsedEvent
 from onyx.connectors.models import InputType
 from onyx.db.connector_event_inbox import (
+    MAX_EVENT_ATTEMPTS,
     claim_events,
     count_events_by_status,
     get_event_by_key,
@@ -34,8 +36,10 @@ from onyx.db.enums import (
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
+    ConnectorEventInbox,
     Credential,
     IndexAttempt,
+    IndexAttemptError,
 )
 
 SOURCE = DocumentSource.MOCK_CONNECTOR
@@ -69,8 +73,11 @@ def cc_pair_id(db_session: Session) -> Generator[int, None, None]:
         # A failed test leaves the session unusable, and the deletes below
         # would then raise and mask it.
         db_session.rollback()
-        # Attempts first: the pair's FK on index_attempt is NOT NULL, so the
-        # ORM's SET NULL on delete would fail instead of cascading.
+        # Errors, then attempts: the pair's FK on index_attempt is NOT NULL,
+        # so the ORM's SET NULL on delete would fail instead of cascading.
+        db_session.query(IndexAttemptError).filter_by(
+            connector_credential_pair_id=pair.id
+        ).delete()
         db_session.query(IndexAttempt).filter_by(
             connector_credential_pair_id=pair.id
         ).delete()
@@ -264,20 +271,18 @@ def test_a_second_claim_waits_and_never_splits_a_document(
     db_session.commit()
 
     engine = SqlEngine.get_engine()
-    claimed_b: list[str] = []
+    claimed_b: list[tuple[list[str], int]] = []
     with Session(engine) as session_a:
-        claimed_a = [
-            event.document_id
-            for event in claim_events(session_a, cc_pair_id, first_attempt, limit=1)
-        ]
+        winners_a, ids_a = claim_events(session_a, cc_pair_id, first_attempt, limit=1)
+        claimed_a = ([event.document_id for event in winners_a], len(ids_a))
 
         def claim_second() -> None:
             with Session(engine) as session_b:
-                claimed_b.extend(
-                    event.document_id
-                    for event in claim_events(
-                        session_b, cc_pair_id, second_attempt, limit=10
-                    )
+                winners_b, ids_b = claim_events(
+                    session_b, cc_pair_id, second_attempt, limit=10
+                )
+                claimed_b.append(
+                    ([event.document_id for event in winners_b], len(ids_b))
                 )
                 session_b.commit()
 
@@ -289,8 +294,9 @@ def test_a_second_claim_waits_and_never_splits_a_document(
         waiter.join(timeout=10)
         assert not waiter.is_alive()
 
-    assert claimed_a == ["doc-a", "doc-a"]
-    assert claimed_b == ["doc-b"]
+    # Both of doc-a's rows go to the first attempt, which yields one.
+    assert claimed_a == (["doc-a"], 2)
+    assert claimed_b == [(["doc-b"], 1)]
 
 
 def test_claiming_stamps_the_attempt_and_counts_the_try(
@@ -305,16 +311,17 @@ def test_claiming_stamps_the_attempt_and_counts_the_try(
     attempt_id = _attempt(db_session, cc_pair_id)
     db_session.commit()
 
-    claimed = claim_events(db_session, cc_pair_id, attempt_id, limit=10)
+    claimed, claimed_ids = claim_events(db_session, cc_pair_id, attempt_id, limit=10)
     db_session.commit()
 
     assert len(claimed) == 1
+    assert claimed_ids == [claimed[0].id]
     assert claimed[0].status == ConnectorEventStatus.IN_PROGRESS
     assert claimed[0].index_attempt_id == attempt_id
     assert claimed[0].attempt_count == 1
 
     # A claimed row is no longer available to the next claimer.
-    assert claim_events(db_session, cc_pair_id, attempt_id, limit=10) == []
+    assert claim_events(db_session, cc_pair_id, attempt_id, limit=10) == ([], [])
 
 
 def test_completing_a_row_stamps_when_it_settled(
@@ -329,7 +336,7 @@ def test_completing_a_row_stamps_when_it_settled(
     attempt_id = _attempt(db_session, cc_pair_id)
     db_session.commit()
 
-    claimed = claim_events(db_session, cc_pair_id, attempt_id, limit=10)
+    claimed, _ = claim_events(db_session, cc_pair_id, attempt_id, limit=10)
     mark_events_completed(db_session, [event.id for event in claimed])
     db_session.commit()
 
@@ -374,3 +381,83 @@ def test_two_sweeps_do_not_undo_each_other(
     assert first == (0, 3)
     # The second sweep saw nothing to settle rather than releasing them again.
     assert second == (0, 0)
+
+
+def test_a_long_backlog_loads_only_its_winner(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """Every row of the document is claimed, but only the newest is loaded."""
+    record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key=f"k-{i}") for i in range(50)],
+    )
+    attempt_id = _attempt(db_session, cc_pair_id)
+    db_session.commit()
+
+    winners, claimed_ids = claim_events(db_session, cc_pair_id, attempt_id, limit=1)
+    db_session.commit()
+
+    assert len(claimed_ids) == 50
+    assert [event.id for event in winners] == [max(claimed_ids)]
+    assert count_events_by_status(db_session, cc_pair_id) == {
+        ConnectorEventStatus.IN_PROGRESS: 50
+    }
+
+
+def test_a_partly_failed_attempt_retries_only_its_failed_documents(
+    db_session: Session, cc_pair_id: int
+) -> None:
+    """One bad document must not loop the pair or redo documents that
+    stored, and its retries are bounded."""
+    record_events(
+        db_session,
+        cc_pair_id,
+        SOURCE,
+        [
+            ParsedEvent(document_id="doc-ok", event_key="k-ok"),
+            ParsedEvent(document_id="doc-bad", event_key="k-bad"),
+        ],
+    )
+    db_session.commit()
+
+    for attempt_number in range(1, MAX_EVENT_ATTEMPTS + 1):
+        db_session.query(ConnectorEventInbox).filter_by(
+            connector_credential_pair_id=cc_pair_id,
+            status=ConnectorEventStatus.PENDING,
+        ).update({"available_at": datetime(2020, 1, 1, tzinfo=timezone.utc)})
+        attempt_id = _attempt(db_session, cc_pair_id)
+        claim_events(db_session, cc_pair_id, attempt_id, limit=10)
+        db_session.add(
+            IndexAttemptError(
+                index_attempt_id=attempt_id,
+                connector_credential_pair_id=cc_pair_id,
+                document_id="doc-bad",
+                failure_message="embedding failed",
+            )
+        )
+        db_session.query(IndexAttempt).filter_by(id=attempt_id).update(
+            {"status": IndexingStatus.COMPLETED_WITH_ERRORS}
+        )
+        db_session.commit()
+        settle_events_from_finished_attempts(db_session, cc_pair_id)
+        db_session.commit()
+
+        bad = (
+            db_session.query(ConnectorEventInbox)
+            .filter_by(connector_credential_pair_id=cc_pair_id, document_id="doc-bad")
+            .one()
+        )
+        ok = (
+            db_session.query(ConnectorEventInbox)
+            .filter_by(connector_credential_pair_id=cc_pair_id, document_id="doc-ok")
+            .one()
+        )
+        assert ok.status == ConnectorEventStatus.COMPLETED
+        assert ok.attempt_count == 1
+        if attempt_number < MAX_EVENT_ATTEMPTS:
+            assert bad.status == ConnectorEventStatus.PENDING
+            assert bad.available_at > datetime.now(timezone.utc)
+        else:
+            assert bad.status == ConnectorEventStatus.FAILED

@@ -1,7 +1,6 @@
 """The drain: the one connector every event source shares. It claims its
 pair's rows from `connector_event_inbox` inside an ordinary docfetching run."""
 
-from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any
 
@@ -29,31 +28,9 @@ from onyx.db.connector_event_inbox import (
     superseded_by_newer_events,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ConnectorEventInbox
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _superseded(events: list[ConnectorEventInbox]) -> set[int]:
-    """Row ids that a later change to the same document in this batch
-    replaces. `upsert_documents` keeps the first entry per id, so yielding
-    both would store the older one."""
-    by_document: dict[str, list[ConnectorEventInbox]] = defaultdict(list)
-    for event in events:
-        by_document[event.document_id].append(event)
-
-    kept = {_latest(group).id for group in by_document.values()}
-    return {event.id for event in events} - kept
-
-
-def _latest(group: list[ConnectorEventInbox]) -> ConnectorEventInbox:
-    """Event time decides when every change has one; a missing time means
-    the provider sent none, not that the change is old. Otherwise arrival
-    (id) order decides."""
-    if all(event.occurred_at is not None for event in group):
-        return max(group, key=lambda event: (event.occurred_at, event.id))
-    return max(group, key=lambda event: event.id)
 
 
 def _secrets_for(db_session: Session, cc_pair_id: int) -> Mapping[str, str]:
@@ -128,7 +105,7 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
         # the network, and the generator suspends at every yield.
         with get_session_with_current_tenant() as db_session:
             settle_events_from_finished_attempts(db_session, self._cc_pair_id)
-            events = claim_events(
+            events, claimed_ids = claim_events(
                 db_session,
                 cc_pair_id=self._cc_pair_id,
                 index_attempt_id=self._index_attempt_id,
@@ -137,8 +114,8 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             db_session.commit()
 
             secrets = _secrets_for(db_session, self._cc_pair_id) if events else {}
-            superseded = _superseded(events) | superseded_by_newer_events(
-                db_session, self._cc_pair_id, events
+            superseded = superseded_by_newer_events(
+                db_session, self._cc_pair_id, events, claimed_ids
             )
 
         for event in events:
@@ -174,9 +151,9 @@ class EventInboxConnector(CheckpointedConnector[EventInboxCheckpoint]):
             if document is not None:
                 yield document
 
-        drained += len(events)
+        drained += len(claimed_ids)
         return EventInboxCheckpoint(
             # A claim can exceed the limit, since it takes whole documents.
-            has_more=len(events) >= self.batch_size,
+            has_more=len(claimed_ids) >= self.batch_size,
             drained=drained,
         )

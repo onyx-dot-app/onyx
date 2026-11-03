@@ -3,7 +3,19 @@
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import (
+    BigInteger,
+    ColumnElement,
+    and_,
+    any_,
+    bindparam,
+    case,
+    func,
+    or_,
+    select,
+    update,
+)
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -20,6 +32,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     ConnectorEventInbox,
     IndexAttempt,
+    IndexAttemptError,
 )
 from onyx.utils.logger import setup_logger
 
@@ -130,8 +143,10 @@ def superseded_by_newer_events(
     db_session: Session,
     cc_pair_id: int,
     events: Sequence[ConnectorEventInbox],
+    claimed_ids: Sequence[int],
 ) -> set[int]:
     """Ids of these events that a change taken by an earlier claim overtakes.
+    `claimed_ids` is every row of the current claim, which does not count.
 
     Uses the same order as a batch: event time, then id, when every taken row
     for the document has a time; otherwise arrival order.
@@ -146,7 +161,7 @@ def superseded_by_newer_events(
         ConnectorEventInbox.status.in_(
             [ConnectorEventStatus.IN_PROGRESS, ConnectorEventStatus.COMPLETED]
         ),
-        ConnectorEventInbox.id.notin_([event.id for event in events]),
+        ~_id_in(claimed_ids),
     )
     summary = {
         row.document_id: row
@@ -198,10 +213,14 @@ def claim_events(
     cc_pair_id: int,
     index_attempt_id: int,
     limit: int,
-) -> list[ConnectorEventInbox]:
-    """Claim up to `limit` due rows for one attempt, plus the other due rows
-    of each document they belong to, so one document is never split across
-    batches or attempts.
+) -> tuple[list[ConnectorEventInbox], list[int]]:
+    """Claim the due rows of the documents among the first `limit` due rows,
+    so one document is never split across batches or attempts.
+
+    Returns each claimed document's winning change and the ids of every row
+    claimed. Only the winners are loaded, so a document with a long backlog
+    costs one row in memory. The winner is the newest by event time when
+    every change has one, else the latest to arrive.
 
     Claims for one pair are serialized until the caller commits. Marks each
     row IN_PROGRESS and stamps the attempt, which later settles it.
@@ -214,40 +233,73 @@ def claim_events(
         ConnectorEventInbox.status == ConnectorEventStatus.PENDING,
         ConnectorEventInbox.available_at <= func.now(),
     )
-    rows = list(
+    documents = set(
         db_session.scalars(
-            select(ConnectorEventInbox)
+            select(ConnectorEventInbox.document_id)
             .where(*due)
             .order_by(ConnectorEventInbox.id)
             .limit(limit)
-            .with_for_update()
         )
     )
-    if rows:
-        taken = {row.id for row in rows}
-        rows.extend(
-            db_session.scalars(
-                select(ConnectorEventInbox)
-                .where(
-                    *due,
-                    ConnectorEventInbox.document_id.in_(
-                        {row.document_id for row in rows}
-                    ),
-                    ConnectorEventInbox.id.notin_(taken),
-                )
-                .order_by(ConnectorEventInbox.id)
-                .with_for_update()
+    if not documents:
+        return [], []
+
+    claimed_ids = list(
+        db_session.scalars(
+            update(ConnectorEventInbox)
+            .where(*due, ConnectorEventInbox.document_id.in_(documents))
+            .values(
+                status=ConnectorEventStatus.IN_PROGRESS,
+                index_attempt_id=index_attempt_id,
+                attempt_count=ConnectorEventInbox.attempt_count + 1,
             )
+            .returning(ConnectorEventInbox.id)
         )
-        rows.sort(key=lambda row: row.id)
+    )
 
-    for row in rows:
-        row.status = ConnectorEventStatus.IN_PROGRESS
-        row.index_attempt_id = index_attempt_id
-        row.attempt_count += 1
+    claimed = (
+        select(
+            ConnectorEventInbox.id,
+            ConnectorEventInbox.document_id,
+            ConnectorEventInbox.occurred_at,
+            func.bool_and(ConnectorEventInbox.occurred_at.is_not(None))
+            .over(partition_by=ConnectorEventInbox.document_id)
+            .label("all_dated"),
+        )
+        .where(_id_in(claimed_ids))
+        .subquery()
+    )
+    ranked = select(
+        claimed.c.id,
+        func.row_number()
+        .over(
+            partition_by=claimed.c.document_id,
+            order_by=(
+                case((claimed.c.all_dated, claimed.c.occurred_at)).desc().nulls_last(),
+                claimed.c.id.desc(),
+            ),
+        )
+        .label("rank"),
+    ).subquery()
+    winners = list(
+        db_session.scalars(
+            select(ConnectorEventInbox)
+            .where(
+                ConnectorEventInbox.id.in_(
+                    select(ranked.c.id).where(ranked.c.rank == 1)
+                )
+            )
+            .order_by(ConnectorEventInbox.id)
+        )
+    )
+    return winners, claimed_ids
 
-    db_session.flush()
-    return rows
+
+def _id_in(ids: Sequence[int]) -> ColumnElement[bool]:
+    """`id = ANY(:ids)`: one array parameter, however many ids."""
+    return ConnectorEventInbox.id == any_(
+        bindparam("ids", list(ids), type_=postgresql.ARRAY(BigInteger))
+    )
 
 
 def mark_events_completed(db_session: Session, event_ids: Sequence[int]) -> None:
@@ -335,8 +387,13 @@ def mark_events_failed(
 def settle_events_from_finished_attempts(
     db_session: Session, cc_pair_id: int
 ) -> tuple[int, int]:
-    """Settle claimed rows on their attempt's outcome: complete them if it
-    succeeded, release them if it ended otherwise or no longer exists.
+    """Settle claimed rows on their attempt's outcome.
+
+    Rows of a successful attempt complete. A COMPLETED_WITH_ERRORS attempt
+    completes the rows whose documents stored, and retries the rest with the
+    usual attempt limit and backoff, so one bad document cannot loop the
+    pair. Rows of an attempt that ended otherwise, or no longer exists, go
+    back to the queue.
 
     The run cannot settle its own rows, because the runner stores documents
     after the generator returns. Returns (completed, released). Does not
@@ -344,7 +401,12 @@ def settle_events_from_finished_attempts(
     """
     # Skip what another sweep holds, so two sweeps never release one claim.
     claimed = (
-        select(ConnectorEventInbox.id, IndexAttempt.status)
+        select(
+            ConnectorEventInbox.id,
+            ConnectorEventInbox.document_id,
+            IndexAttempt.id,
+            IndexAttempt.status,
+        )
         .outerjoin(
             IndexAttempt, ConnectorEventInbox.index_attempt_id == IndexAttempt.id
         )
@@ -354,26 +416,59 @@ def settle_events_from_finished_attempts(
         )
         .with_for_update(skip_locked=True, of=ConnectorEventInbox)
     )
+    rows = db_session.execute(claimed).tuples().all()
+
+    partial_attempts = {
+        attempt_id
+        for _, _, attempt_id, status in rows
+        if status == IndexingStatus.COMPLETED_WITH_ERRORS
+    }
+    failed_documents = _failed_documents(db_session, partial_attempts)
 
     to_complete: list[int] = []
+    to_retry: list[tuple[int, str]] = []
     to_release: list[int] = []
     orphaned: list[int] = []
-    for event_id, attempt_status in db_session.execute(claimed).tuples().all():
-        if attempt_status is None:
+    for event_id, document_id, attempt_id, attempt_status in rows:
+        if attempt_status is None or attempt_id is None:
             orphaned.append(event_id)
         elif attempt_status == IndexingStatus.SUCCESS:
             to_complete.append(event_id)
+        elif attempt_status == IndexingStatus.COMPLETED_WITH_ERRORS:
+            failed = failed_documents.get(attempt_id, set())
+            if None in failed or document_id in failed:
+                to_retry.append((event_id, "the document failed to index"))
+            else:
+                to_complete.append(event_id)
         elif attempt_status.is_terminal():
             to_release.append(event_id)
 
     mark_events_completed(db_session, to_complete)
+    retry_or_fail_events(db_session, to_retry)
     release_events_to_pending(
         db_session, to_release, error="the claiming attempt did not finish"
     )
     release_events_to_pending(
         db_session, orphaned, error="the claiming attempt no longer exists"
     )
-    return len(to_complete), len(to_release) + len(orphaned)
+    return len(to_complete), len(to_retry) + len(to_release) + len(orphaned)
+
+
+def _failed_documents(
+    db_session: Session, attempt_ids: set[int]
+) -> dict[int, set[str | None]]:
+    """Per attempt, the documents it recorded an error for. None stands for
+    an error tied to no document, which could be any of them."""
+    failed: dict[int, set[str | None]] = {}
+    if not attempt_ids:
+        return failed
+    for attempt_id, document_id in db_session.execute(
+        select(IndexAttemptError.index_attempt_id, IndexAttemptError.document_id)
+        .where(IndexAttemptError.index_attempt_id.in_(attempt_ids))
+        .distinct()
+    ).tuples():
+        failed.setdefault(attempt_id, set()).add(document_id)
+    return failed
 
 
 def event_pair_has_work(db_session: Session, cc_pair_id: int) -> bool:

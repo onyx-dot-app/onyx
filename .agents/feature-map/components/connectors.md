@@ -141,8 +141,9 @@ keyed `(pair, event_key)` so a redelivery writes nothing, and
 inside an ordinary docfetching run. A claim takes every due row of each
 document it touches, not a flat row count, and claims for one pair are
 serialized, so one document never splits across batches or attempts. The
-drain keeps only the newest change per document, in a batch and against
-rows earlier claims took (`superseded_by_newer_events`). An event pair has no poll interval:
+drain keeps only the newest change per document: `claim_events` picks it in
+SQL and loads only the winners, and `superseded_by_newer_events` checks it
+against rows earlier claims took. An event pair has no poll interval:
 `background/celery/tasks/docprocessing/utils.py:should_index` runs it when
 its inbox holds a due or unsettled row (`event_pair_has_work`), whatever its
 `refresh_freq`. After a failed attempt it waits a fixed backoff before the
@@ -163,7 +164,9 @@ claim session closes before any handler runs, and why a failed handler
 returns to the queue with backoff until `MAX_EVENT_ATTEMPTS`, then fails: a
 timeout is not a payload the next run will also reject. A claim whose index
 attempt was deleted is released for the same reason -- nothing else would
-ever settle it, and `claim_events` reads only PENDING rows.
+ever settle it, and `claim_events` reads only PENDING rows. An attempt that
+ends `COMPLETED_WITH_ERRORS` completes the rows whose documents stored and
+retries the rest the same bounded way, by its `IndexAttemptError` rows.
 
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
