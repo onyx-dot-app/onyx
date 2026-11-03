@@ -1,37 +1,20 @@
-"""Coverage for the fleet feed's pair filter and the queued group: `cc_pair_ids`
-narrows the fleet feed, its resolvable count and its batch resolve to the named
-pairs the caller can read, and a queued (NOT_STARTED) index attempt sits in the
-`scheduled` group on both feeds, stays in every window, is never superseded and
-never resolvable."""
+"""The fleet feed's `cc_pair_ids` narrows its list, count and resolve to the
+named pairs the caller can read, and a queued attempt is `scheduled` on both feeds."""
 
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import InputType
-from onyx.db.enums import (
-    AccessType,
-    CCPairRunStatusGroup,
-    ConnectorCredentialPairStatus,
-    IndexingStatus,
-)
+from onyx.db.enums import AccessType, CCPairRunStatusGroup, IndexingStatus
 from onyx.db.models import (
-    Connector,
     ConnectorCredentialPair,
-    Credential,
     IndexAttempt,
     IndexAttemptError,
     User,
 )
-from onyx.db.search_settings import get_current_search_settings
-from onyx.server.documents.cc_pair import (
-    get_cc_pair_runs,
-    get_resolvable_cc_pair_runs_count,
-)
+from onyx.server.documents.cc_pair import get_resolvable_cc_pair_runs_count
 from onyx.server.documents.index_monitoring import (
     get_indexing_runs,
     get_resolvable_indexing_runs_count,
@@ -40,89 +23,28 @@ from onyx.server.documents.index_monitoring import (
 from onyx.server.documents.models import (
     CCPairRunLevel,
     CCPairRunsResolveMatchingRequest,
-    CCPairRunsResponse,
     IndexingRunsResponse,
 )
-from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
+from tests.external_dependency_unit.indexing.run_feed_records import (
+    RunFeedRecords,
+    make_index_attempt,
+    read_pair_feed,
+    run_mark,
+)
 
 # The perm sync kinds come from the EE-only sync_params helpers.
 pytestmark = pytest.mark.usefixtures("enable_ee")
 
 _T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-_SCHEDULED = "scheduled"
 
 
 def _mark() -> str:
-    """Earlier runs leave rows behind, so each test marks its runs and searches by it."""
-    return f"feed-filters-{uuid4().hex}"
-
-
-def _group_count(counts: Mapping[CCPairRunStatusGroup, int], name: str) -> int | None:
-    return next((count for group, count in counts.items() if group.value == name), None)
-
-
-class _Pairs:
-    """Creates pairs and tears down them, their attempts and their owners."""
-
-    def __init__(self, db_session: Session) -> None:
-        self.db_session = db_session
-        self.pairs: list[ConnectorCredentialPair] = []
-        self.users: list[User] = []
-
-    def user(self, prefix: str, is_admin: bool = False) -> User:
-        user = create_test_user(self.db_session, prefix, is_admin=is_admin)
-        self.users.append(user)
-        return user
-
-    def pair(
-        self, name: str, access_type: AccessType, creator: User
-    ) -> ConnectorCredentialPair:
-        connector = Connector(
-            name="Feed Filters Connector",
-            source=DocumentSource.GOOGLE_DRIVE,
-            input_type=InputType.POLL,
-            connector_specific_config={},
-            refresh_freq=None,
-        )
-        self.db_session.add(connector)
-        self.db_session.flush()
-        credential = Credential(
-            credential_json={}, user_id=creator.id, admin_public=True
-        )
-        self.db_session.add(credential)
-        self.db_session.flush()
-        pair = ConnectorCredentialPair(
-            connector_id=connector.id,
-            credential_id=credential.id,
-            name=name,
-            status=ConnectorCredentialPairStatus.ACTIVE,
-            access_type=access_type,
-            creator_id=creator.id,
-        )
-        self.db_session.add(pair)
-        self.db_session.commit()
-        self.pairs.append(pair)
-        return pair
-
-    def cleanup(self) -> None:
-        self.db_session.rollback()
-        for pair in self.pairs:
-            # IndexAttemptError has no FK cascade, so its rows go first.
-            for model in (IndexAttemptError, IndexAttempt):
-                self.db_session.query(model).filter(
-                    model.connector_credential_pair_id == pair.id
-                ).delete(synchronize_session="fetch")
-            self.db_session.commit()
-            cleanup_cc_pair(self.db_session, pair)
-        for user in self.users:
-            delete_test_user(self.db_session, user)
-        self.db_session.commit()
+    return run_mark("feed-filters")
 
 
 @pytest.fixture
-def made(db_session: Session) -> Generator[_Pairs, None, None]:
-    pairs = _Pairs(db_session)
+def made(db_session: Session) -> Generator[RunFeedRecords, None, None]:
+    pairs = RunFeedRecords(db_session)
     yield pairs
     pairs.cleanup()
 
@@ -134,20 +56,9 @@ def _index_attempt(
     status: IndexingStatus,
     mark: str,
 ) -> IndexAttempt:
-    queued = status == IndexingStatus.NOT_STARTED
-    attempt = IndexAttempt(
-        connector_credential_pair_id=cc_pair.id,
-        search_settings_id=get_current_search_settings(db_session).id,
-        from_beginning=False,
-        status=status,
-        error_msg=mark,
-        time_started=None if queued else _T0 + timedelta(minutes=minutes),
+    return make_index_attempt(
+        db_session, cc_pair, _T0 + timedelta(minutes=minutes), status, mark
     )
-    db_session.add(attempt)
-    db_session.flush()
-    attempt.time_created = _T0 + timedelta(minutes=minutes)
-    db_session.commit()
-    return attempt
 
 
 def _doc_error(db_session: Session, attempt: IndexAttempt, mark: str) -> None:
@@ -203,32 +114,8 @@ def _fleet_resolvable(
     ).count
 
 
-def _pair_feed(
-    db_session: Session,
-    user: User,
-    cc_pair: ConnectorCredentialPair,
-    since: datetime | None = None,
-    status_groups: list[CCPairRunStatusGroup] | None = None,
-) -> CCPairRunsResponse:
-    return get_cc_pair_runs(
-        cc_pair_id=cc_pair.id,
-        page_num=0,
-        page_size=10,
-        since=since,
-        until=None,
-        kinds=None,
-        status_groups=status_groups,
-        q=None,
-        errors=None,
-        superseded=None,
-        resolved=None,
-        user=user,
-        db_session=db_session,
-    )
-
-
-def test_ac1_fleet_feed_lists_and_counts_only_the_named_pairs(
-    db_session: Session, made: _Pairs
+def test_fleet_feed_lists_and_counts_only_the_named_pairs(
+    db_session: Session, made: RunFeedRecords
 ) -> None:
     admin = made.user("feed_filters_admin", is_admin=True)
     mark = _mark()
@@ -255,8 +142,8 @@ def test_ac1_fleet_feed_lists_and_counts_only_the_named_pairs(
     assert everything.total_items == 4
 
 
-def test_ac1_fleet_resolve_marks_only_the_named_pairs_runs(
-    db_session: Session, made: _Pairs
+def test_fleet_resolve_marks_only_the_named_pairs_runs(
+    db_session: Session, made: RunFeedRecords
 ) -> None:
     admin = made.user("feed_filters_admin", is_admin=True)
     mark = _mark()
@@ -288,8 +175,8 @@ def test_ac1_fleet_resolve_marks_only_the_named_pairs_runs(
     assert [item.run.attempt.id for item in still_open.items] == [left_open.id]
 
 
-def test_ac1_fleet_resolvable_count_counts_only_the_named_pairs(
-    db_session: Session, made: _Pairs
+def test_fleet_resolvable_count_counts_only_the_named_pairs(
+    db_session: Session, made: RunFeedRecords
 ) -> None:
     admin = made.user("feed_filters_admin", is_admin=True)
     mark = _mark()
@@ -306,7 +193,7 @@ def test_ac1_fleet_resolvable_count_counts_only_the_named_pairs(
 
 @pytest.fixture
 def scoped_pairs(
-    made: _Pairs,
+    made: RunFeedRecords,
 ) -> tuple[User, ConnectorCredentialPair, ConnectorCredentialPair]:
     """A scoped user who operates their own private pair, and another owner's
     private pair the scoped user cannot read."""
@@ -317,7 +204,7 @@ def scoped_pairs(
     return scoped, operated, hidden
 
 
-def test_ac2_fleet_feed_drops_a_named_pair_the_caller_cannot_read(
+def test_fleet_feed_drops_a_named_pair_the_caller_cannot_read(
     db_session: Session,
     scoped_pairs: tuple[User, ConnectorCredentialPair, ConnectorCredentialPair],
 ) -> None:
@@ -340,9 +227,9 @@ def test_ac2_fleet_feed_drops_a_named_pair_the_caller_cannot_read(
     assert all(count == 0 for count in unreadable_only.status_counts.values())
 
 
-def test_ac2_fleet_resolve_and_count_ignore_a_named_pair_the_caller_cannot_read(
+def test_fleet_resolve_and_count_ignore_a_named_pair_the_caller_cannot_read(
     db_session: Session,
-    made: _Pairs,
+    made: RunFeedRecords,
     scoped_pairs: tuple[User, ConnectorCredentialPair, ConnectorCredentialPair],
 ) -> None:
     scoped, operated, hidden = scoped_pairs
@@ -378,8 +265,8 @@ def test_ac2_fleet_resolve_and_count_ignore_a_named_pair_the_caller_cannot_read(
     assert _fleet_resolvable(db_session, scoped, mark, [operated.id, hidden.id]) == 1
 
 
-def test_ac3_a_queued_attempt_is_scheduled_not_running_on_both_feeds(
-    db_session: Session, made: _Pairs
+def test_a_queued_attempt_is_scheduled_not_running_on_both_feeds(
+    db_session: Session, made: RunFeedRecords
 ) -> None:
     admin = made.user("feed_filters_admin", is_admin=True)
     mark = _mark()
@@ -387,21 +274,21 @@ def test_ac3_a_queued_attempt_is_scheduled_not_running_on_both_feeds(
     running = _index_attempt(db_session, cc_pair, 0, IndexingStatus.IN_PROGRESS, mark)
     queued = _index_attempt(db_session, cc_pair, 1, IndexingStatus.NOT_STARTED, mark)
 
-    pair_feed = _pair_feed(db_session, admin, cc_pair)
+    pair_feed = read_pair_feed(db_session, admin, cc_pair)
 
-    assert _group_count(pair_feed.status_counts, _SCHEDULED) == 1
+    assert pair_feed.status_counts[CCPairRunStatusGroup.SCHEDULED] == 1
     assert pair_feed.status_counts[CCPairRunStatusGroup.RUNNING] == 1
 
     fleet_feed = _fleet(db_session, admin, mark)
 
-    assert _group_count(fleet_feed.status_counts, _SCHEDULED) == 1
+    assert fleet_feed.status_counts[CCPairRunStatusGroup.SCHEDULED] == 1
     assert fleet_feed.status_counts[CCPairRunStatusGroup.RUNNING] == 1
 
-    scheduled_group = CCPairRunStatusGroup(_SCHEDULED)
-    scheduled_only = _pair_feed(
+    scheduled_group = CCPairRunStatusGroup.SCHEDULED
+    scheduled_only = read_pair_feed(
         db_session, admin, cc_pair, status_groups=[scheduled_group]
     )
-    running_only = _pair_feed(
+    running_only = read_pair_feed(
         db_session, admin, cc_pair, status_groups=[CCPairRunStatusGroup.RUNNING]
     )
     fleet_scheduled = _fleet(db_session, admin, mark, status_groups=[scheduled_group])
@@ -412,8 +299,8 @@ def test_ac3_a_queued_attempt_is_scheduled_not_running_on_both_feeds(
     assert [item.run.attempt.id for item in fleet_scheduled.items] == [queued.id]
 
 
-def test_ac4_a_queued_attempt_older_than_the_window_is_still_listed(
-    db_session: Session, made: _Pairs
+def test_a_queued_attempt_older_than_the_window_is_still_listed(
+    db_session: Session, made: RunFeedRecords
 ) -> None:
     admin = made.user("feed_filters_admin", is_admin=True)
     mark = _mark()
@@ -422,15 +309,17 @@ def test_ac4_a_queued_attempt_older_than_the_window_is_still_listed(
     queued = _index_attempt(db_session, cc_pair, 1, IndexingStatus.NOT_STARTED, mark)
     recent = _index_attempt(db_session, cc_pair, 20, IndexingStatus.FAILED, mark)
 
-    response = _pair_feed(db_session, admin, cc_pair, since=_T0 + timedelta(minutes=15))
+    response = read_pair_feed(
+        db_session, admin, cc_pair, since=_T0 + timedelta(minutes=15)
+    )
 
-    assert _group_count(response.status_counts, _SCHEDULED) == 1
+    assert response.status_counts[CCPairRunStatusGroup.SCHEDULED] == 1
     assert [run.attempt.id for run in response.items] == [recent.id, queued.id]
     assert response.status_counts[CCPairRunStatusGroup.SUCCEEDED] == 0
 
 
-def test_ac5_a_queued_attempt_is_never_superseded_or_resolvable(
-    db_session: Session, made: _Pairs
+def test_a_queued_attempt_is_never_superseded_or_resolvable(
+    db_session: Session, made: RunFeedRecords
 ) -> None:
     admin = made.user("feed_filters_admin", is_admin=True)
     mark = _mark()
@@ -439,9 +328,9 @@ def test_ac5_a_queued_attempt_is_never_superseded_or_resolvable(
     _doc_error(db_session, queued, mark)
     _index_attempt(db_session, cc_pair, 10, IndexingStatus.SUCCESS, mark)
 
-    feed = _pair_feed(db_session, admin, cc_pair)
+    feed = read_pair_feed(db_session, admin, cc_pair)
 
-    assert _group_count(feed.status_counts, _SCHEDULED) == 1
+    assert feed.status_counts[CCPairRunStatusGroup.SCHEDULED] == 1
     queued_run = next(run for run in feed.items if run.attempt.id == queued.id)
     assert queued_run.superseded is False
 
@@ -465,15 +354,15 @@ def test_ac5_a_queued_attempt_is_never_superseded_or_resolvable(
     assert resolved.resolved_count == 0
 
 
-def test_ac9_feed_json_carries_the_scheduled_count_and_is_retry(
-    db_session: Session, made: _Pairs
+def test_feed_json_carries_the_scheduled_count_and_is_retry(
+    db_session: Session, made: RunFeedRecords
 ) -> None:
     admin = made.user("feed_filters_admin", is_admin=True)
     mark = _mark()
     cc_pair = made.pair("Feed Filters Shape", AccessType.PUBLIC, admin)
     _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS, mark)
 
-    body = _pair_feed(db_session, admin, cc_pair).model_dump(mode="json")
+    body = read_pair_feed(db_session, admin, cc_pair).model_dump(mode="json")
 
-    assert body["status_counts"].get(_SCHEDULED) == 0
+    assert body["status_counts"].get(CCPairRunStatusGroup.SCHEDULED.value) == 0
     assert body["items"][0].get("is_retry") is False
