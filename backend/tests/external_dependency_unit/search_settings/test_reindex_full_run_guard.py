@@ -8,6 +8,7 @@ pending (see `raise_if_port_reindex_in_progress` and `full_run_pending_cc_pairs`
 from collections.abc import Generator
 
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.connectors.edit_plan.apply import _ensure_no_full_run_during_reindex
@@ -144,4 +145,11 @@ def test_full_run_pending_cc_pairs(
         db_session.commit()
         assert pending() == []
     finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(IndexAttempt).where(
+                IndexAttempt.connector_credential_pair_id == pair.id
+            )
+        )
+        db_session.commit()
         cleanup_cc_pair(db_session, pair)
