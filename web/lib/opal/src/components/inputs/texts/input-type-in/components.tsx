@@ -89,6 +89,7 @@ export default function InputTypeIn({
   value,
   onChange,
   name,
+  type = "text",
   ...props
 }: InputTypeInProps) {
   const strings = useOpalStrings();
@@ -135,7 +136,7 @@ export default function InputTypeIn({
         ref={ref}
         // Chrome ignores autocomplete="off" when it guesses a text field takes
         // a saved card; it does not offer cards in search fields.
-        type={searchIcon ? "search" : "text"}
+        type={searchIcon ? "search" : type}
         // dir="auto": typed text decides the direction so punctuation sits on the
         // correct side. While empty it inherits the page direction (see styles.css).
         dir="auto"

@@ -45,3 +45,11 @@ it("renders a native search field with the search icon", () => {
     "search"
   );
 });
+
+it("keeps the search type when a caller passes type with the search icon", () => {
+  render(<InputTypeIn searchIcon type="text" aria-label="Search" />);
+  expect(screen.getByRole("searchbox", { name: "Search" })).toHaveAttribute(
+    "type",
+    "search"
+  );
+});
