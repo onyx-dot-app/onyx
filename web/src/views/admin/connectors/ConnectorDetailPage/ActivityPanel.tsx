@@ -442,6 +442,8 @@ export interface ActivityPanelProps extends Partial<ActivityPanelLinks> {
   onClearRange?: () => void;
   /** Keeps the card in view under the page header while the column beside it scrolls. */
   sticky?: boolean;
+  /** Counts asks to show the open errors with no index run to focus. Each resets the level, search and connectors as a focus does. */
+  errorsRequest?: number;
   className?: string;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -454,6 +456,7 @@ export default function ActivityPanel({
   range = null,
   onClearRange,
   sticky = false,
+  errorsRequest = 0,
   className,
   ref,
   ...links
@@ -568,9 +571,8 @@ export default function ActivityPanel({
   };
   // The run count each section's page was last asked at for a focus, so one page loads at a time.
   const focusPagedAt = useRef<Partial<Record<ActivitySection, number>>>({});
-  // Each focus request names an index run with open failures or errors, so it shows the level, search and connectors that list both open sections, then pages to it.
-  useEffect(() => {
-    if (focusAttemptId === null) return;
+  // A focus request names an index run with open failures or errors, and an errors request any open error, so each shows the level, search and connectors that list both open sections, and a focus then pages to its run.
+  const revealOpenSections = useEffectEvent(() => {
     focusPagedAt.current = {};
     setLevel((current) => {
       const { sections }: LevelConfig = LEVELS[current];
@@ -580,7 +582,13 @@ export default function ActivityPanel({
     });
     setSearchInput("");
     setCcPairIds([]);
+  });
+  useEffect(() => {
+    if (focusAttemptId !== null) revealOpenSections();
   }, [focusAttemptId, focusRequest]);
+  useEffect(() => {
+    if (errorsRequest > 0) revealOpenSections();
+  }, [errorsRequest]);
   const focusRevealed =
     FOCUS_SECTIONS.every(isShown) &&
     searchInput === "" &&

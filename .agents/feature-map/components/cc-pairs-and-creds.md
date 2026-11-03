@@ -61,7 +61,8 @@
   (`useActivityPanelOpen`). The panel button hides and shows the panel beside
   the column, and goes when the panel stacks under it. A pair with Sync access whose source syncs document permissions also
   gets a Permissions Sync card: the sync's status, the documents synced and,
-  for a source that syncs groups, the group memberships. Connector Configurations holds the account, index
+  for a source that syncs groups, the group memberships. Its View Errors opens the panel with its level,
+  search and connectors reset to list the open errors. Connector Configurations holds the account, index
   configurations, sharing and schedule. Indexing holds the documents-indexed
   chart, hidden when its window has no indexing, and the run list. The Indexing
   tab stays disabled until the pair has an index attempt or indexed documents,

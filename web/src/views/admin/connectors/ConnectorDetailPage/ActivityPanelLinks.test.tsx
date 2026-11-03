@@ -1,4 +1,4 @@
-/** The activity panel's links to the page around it: the chart's hover and focus (widening a span that hides the failure), the empty panel's Past Activities, Resolve All on a level the batch routes cannot narrow to, the Connectors menu while it loads, pages and fails, an index chip's label, Resolve on running runs, and a searched superseded run. */
+/** The activity panel's links to the page around it: the chart's hover and focus (widening a span that hides the failure), an errors request with no run, the empty panel's Past Activities, Resolve All on a level the batch routes cannot narrow to, the Connectors menu while it loads, pages and fails, an index chip's label, Resolve on running runs, and a searched superseded run. */
 import { useState } from "react";
 import {
   act,
@@ -394,6 +394,36 @@ describe("Repeated focus on the same run", () => {
 
     await user.click(screen.getByRole("button", { name: "View Errors" }));
     await waitFor(() => expect(cardFor(withErrors)).not.toBeNull());
+  });
+});
+
+describe("An errors request with no run to focus", () => {
+  it("clears the search and brings back a level that lists the open errors", async () => {
+    const permErrors = permSyncRun({
+      id: 501,
+      status: "completed_with_errors",
+      minutesAgo: 3,
+      docsWithPermissionErrors: 2,
+    });
+    installActivityFeed([FAILED, permErrors]);
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ActivityPanel scope={PAIR} title="Activities" />
+    );
+    await waitFor(() => expect(cardFor(permErrors)).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Show Filters" }));
+    const search = screen.getByPlaceholderText("Search activity history…");
+    await user.type(search, "unrelated");
+    await pickLevel(user, "Success");
+    await waitFor(() => expect(cardFor(permErrors)).toBeNull());
+
+    rerender(
+      <ActivityPanel scope={PAIR} title="Activities" errorsRequest={1} />
+    );
+
+    await waitFor(() => expect(cardFor(permErrors)).not.toBeNull());
+    expect(search).toHaveValue("");
   });
 });
 
