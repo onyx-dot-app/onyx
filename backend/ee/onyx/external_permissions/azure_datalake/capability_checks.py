@@ -5,6 +5,7 @@ and group members in Microsoft Graph. All of them need an app registration,
 since an account key opens storage only."""
 
 from collections.abc import Callable, Generator
+from functools import partial
 from typing import TypeVar
 
 from ee.onyx.external_permissions.azure_datalake.directory import user_email
@@ -318,8 +319,8 @@ def _probe_groups(
     next_link: str | None = None
     for _ in range(_GROUP_PROBE_MAX_PAGES):
         page = _account_probe(
-            lambda link=next_link: gateway.list_groups(
-                next_link=link, page_size=_PROBE_PAGE_SIZE
+            partial(
+                gateway.list_groups, next_link=next_link, page_size=_PROBE_PAGE_SIZE
             ),
             "The app cannot list Entra groups.",
         )
@@ -349,9 +350,7 @@ class _GraphGroupMembersCheck(_PermSyncCheck):
         for group in _probe_groups(gateway):
             try:
                 _account_probe(
-                    lambda group_id=group.id: gateway.list_transitive_group_members(
-                        group_id=group_id
-                    ),
+                    partial(gateway.list_transitive_group_members, group_id=group.id),
                     "The app cannot read Entra group members.",
                 )
             except InsufficientPermissionsError as error:
