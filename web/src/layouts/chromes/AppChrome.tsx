@@ -67,11 +67,7 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import {
-  useAppPosition,
-  useNavigationTarget,
-  useShownPosition,
-} from "@/lib/position/hooks";
+import { useAppPosition, useRouteRendering } from "@/lib/position/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -648,9 +644,10 @@ function Footer({ position: appPosition }: ChromePartProps) {
 // ---------------------------------------------------------------------------
 
 /**
- * The loading screen of a position's page. Null for a view of /app (a chat, an
- * agent, a project, a new session): that view shows its own once it mounts.
- * Other pages without a loader of their own get the page loader.
+ * The loading screen of a position's page. A view of /app (a chat, an agent, a
+ * project, a new session) is blank until it mounts and shows its own state, so
+ * the page being left never sits under the new tab. Other pages without a
+ * loader of their own get the page loader.
  */
 function loaderFor(position: Position): ReactNode {
   if (position.isMoreAgents()) return <AgentsCatalogLoading />;
@@ -661,17 +658,17 @@ function loaderFor(position: Position): ReactNode {
     position.isAgent() ||
     position.isProject()
   ) {
-    return null;
+    return <div />;
   }
   return <PageLoader />;
 }
 
 /**
- * The loading screen of the page being shown: the target of a navigation in
- * flight, else the URL while its page loads (`/app`'s `loading.tsx`).
+ * The loading screen of the URL's page: while a click's route renders
+ * (`AppChrome`), and as /app's `loading.tsx` while Next loads it.
  */
 export function AppChromeLoader() {
-  return loaderFor(useShownPosition());
+  return loaderFor(useAppPosition());
 }
 
 interface AppChromeProps {
@@ -679,15 +676,11 @@ interface AppChromeProps {
 }
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
-  const urlPosition = useAppPosition();
-  const navigationTarget = useNavigationTarget();
-  const targetLoader = navigationTarget ? loaderFor(navigationTarget) : null;
-  // The page on screen, which the header, footer and background describe:
-  // the target while its loader shows, else the URL's page, which stays shown
-  // until a target without a loader lands. Following the target there would
-  // put the target's chrome around the old page.
-  const appPosition =
-    navigationTarget && targetLoader ? navigationTarget : urlPosition;
+  // The URL leads: a click writes it at once, and the page Next renders
+  // follows. Until it does, the URL's loader stands in for the page.
+  const appPosition = useAppPosition();
+  const routeRendering = useRouteRendering();
+  const targetLoader = routeRendering ? loaderFor(appPosition) : null;
   useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -796,10 +789,9 @@ export default function AppChrome({ children }: AppChromeProps) {
             {/* Header */}
             <Header position={appPosition} />
             <RootLayout.MainContent>
-              {/* A navigation in flight shows its target's loading screen at
-                  once. The page it is leaving stays mounted underneath, so a
-                  cancelled navigation returns to it as it was (an unsaved
-                  draft included); a target with no loader keeps it shown. */}
+              {/* While the URL's route renders, its loader shows. The page
+                  being left stays mounted underneath, so going back to it
+                  finds it as it was (an unsaved draft included). */}
               {targetLoader}
               <div className={targetLoader ? "hidden" : "contents"}>
                 {children}

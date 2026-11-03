@@ -66,6 +66,12 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 - **Open popups inside the click.** Call `window.open("about:blank")` in the event handler, then
   set its `location` after the `await`. Popup blockers and the desktop app block a `window.open`
   that runs after an `await`.
+- **Navigate within the app through `AppPosition`** (`web/src/lib/position/hooks.ts`): spread
+  `useAppPosition().linkTo…()` on a link, or call `open…()`. It writes the URL at once, so the
+  tab, the chrome and the page's loader follow the click; `router.push` or a bare `href` to
+  `/app…` waits for Next to render the page. Add a position when none fits. oxlint
+  `navigation/no-direct-app-navigation` enforces it; files that broke it when it landed are in
+  its baseline in `.oxlintrc.json`, where they only warn. Never add one.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 

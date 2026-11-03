@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo } from "react";
 import type { Route } from "next";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  usePathname,
+  useRouter,
+  useSearchParams,
+  useSelectedLayoutSegments,
+} from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { routeWithQuery } from "@/lib/routes";
 
@@ -25,38 +30,18 @@ type AppPositionType =
         | "plugins";
     };
 
-// A navigation that leaves the page, from its click until the URL changes. The router takes a moment to render the new page (more on a slow
-// network, or before its shell is prefetched); the sidebar and the chrome show
-// the target and its loading screen meanwhile, so the switch reads as instant. Only what
-// is drawn reads it (`useShownPosition`): behavior waits for the URL.
-interface PendingNavigation {
-  value: AppPositionType;
-  /** The URL the click left from (`urlKey`); a change to it ends the wait. */
-  fromUrl: string;
-}
-
 /** A URL as pathname and query, the same however it was read. */
 function urlKey(pathname: string, search: URLSearchParams): string {
   const query = search.toString();
   return query ? `${pathname}?${query}` : pathname;
 }
 
-let pendingNavigation: PendingNavigation | null = null;
-
-// A navigation that ends where it began (a redirect back, a failure) never
-// changes the URL, so nothing would clear it: it stops showing after this.
-const PENDING_NAVIGATION_TIMEOUT_MS = 20_000;
-const pendingListeners = new Set<() => void>();
-
-function setPendingNavigation(next: PendingNavigation | null) {
-  pendingNavigation = next;
-  pendingListeners.forEach((listener) => listener());
-}
-
-function subscribeToPendingNavigation(listener: () => void): () => void {
-  pendingListeners.add(listener);
-  return () => pendingListeners.delete(listener);
-}
+// A router navigation from `go()` writes its URL at once and asks the router
+// for the page after, which renders a moment later (more on a slow network).
+// Set from that click until the route renders (`useRouteRendering`): a click
+// meanwhile must go through the router too, or the earlier page would land
+// after it.
+let routeNavigationInFlight = false;
 
 interface NavigationOptions {
   /** Leaves no history entry, so going back skips this address. */
@@ -224,41 +209,24 @@ class AppPosition {
     );
     const target = new URL(href, window.location.origin);
     const there = urlKey(target.pathname, target.searchParams);
-    // A router navigation still in flight would land after this click and
-    // undo it. Only another router navigation supersedes it; writing the
-    // URL does not.
-    const inFlight = pendingNavigation !== null;
+    // Already there: a second entry for the same URL would make Back look
+    // like it does nothing.
+    if (there === here) return;
 
-    if (there === here) {
-      // Already there: a second entry for the same URL would make Back look
-      // like it does nothing. A navigation in flight is called off.
-      if (inFlight) {
-        setPendingNavigation(null);
-        this.router.replace(href);
-      }
-      return;
-    }
+    const withinApp =
+      window.location.pathname === "/app" && target.pathname === "/app";
+    // The URL changes now, so the tab, the chrome and the loader follow the
+    // click at once: Next keeps usePathname and useSearchParams in sync with
+    // the history API.
+    if (replace) window.history.replaceState(null, "", href);
+    else window.history.pushState(null, "", href);
     // Within /app only the query changes, and the page renders on the client,
-    // so the URL is written in place: Next keeps useSearchParams in sync with
-    // the history API, and no server round trip holds the switch back (the
-    // sidebar, the URL and the loading view update at once). Leaving or
-    // entering /app is a real navigation.
-    if (
-      !inFlight &&
-      window.location.pathname === "/app" &&
-      target.pathname === "/app"
-    ) {
-      if (replace) window.history.replaceState(null, "", href);
-      else window.history.pushState(null, "", href);
-      return;
-    }
-    const next = { value, fromUrl: here };
-    setPendingNavigation(next);
-    window.setTimeout(() => {
-      if (pendingNavigation === next) setPendingNavigation(null);
-    }, PENDING_NAVIGATION_TIMEOUT_MS);
-    if (replace) this.router.replace(href);
-    else this.router.push(href);
+    // so writing the URL is the whole switch. Anything else asks the router
+    // for the page, which renders after; `AppChrome` shows the URL's loader
+    // until it does.
+    if (withinApp && !routeNavigationInFlight) return;
+    routeNavigationInFlight = true;
+    this.router.replace(href);
   }
 
   /**
@@ -423,41 +391,22 @@ export function useAppPosition(): AppPosition {
 }
 
 /**
- * Where a navigation in flight is going: set on the click that leaves the
- * page, and null again once the URL changes. The chrome shows the
- * target's loading screen meanwhile (`AppChrome`).
+ * Whether the URL is ahead of the route Next renders: `go()` wrote the URL of
+ * a page that has not rendered yet. Call it in a component that the /app
+ * layout renders (`AppChrome`), so the rendered segments are read below it.
  */
-export function useNavigationTarget(): AppPosition | null {
+export function useRouteRendering(): boolean {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pending = useSyncExternalStore(
-    subscribeToPendingNavigation,
-    () => pendingNavigation,
-    () => null
+  // The rendered tree's segments, which follow the router, not the URL.
+  // Route groups name no URL segment.
+  const segments = useSelectedLayoutSegments().filter(
+    (segment) => !segment.startsWith("(")
   );
-  // Once the URL changes, the navigation has landed (or gone elsewhere).
-  const inFlight =
-    pending !== null && pending.fromUrl === urlKey(pathname, searchParams);
+  const renderedPathname =
+    segments.length > 0 ? `/app/${segments.join("/")}` : "/app";
+  const rendering = renderedPathname !== pathname;
   useEffect(() => {
-    // Only this navigation: a newer click may have replaced it meanwhile.
-    if (pending !== null && !inFlight && pendingNavigation === pending) {
-      setPendingNavigation(null);
-    }
-  }, [pending, inFlight]);
-
-  return useMemo(
-    () => (inFlight && pending ? new AppPosition(pending.value, router) : null),
-    [inFlight, pending, router]
-  );
-}
-
-/**
- * The position the screen shows: where a navigation in flight is going, else
- * `useAppPosition()`. Use it for what is drawn (a tab's selected state, the
- * chrome); behavior reads `useAppPosition()`, which follows the URL.
- */
-export function useShownPosition(): AppPosition {
-  const position = useAppPosition();
-  return useNavigationTarget() ?? position;
+    if (!rendering) routeNavigationInFlight = false;
+  }, [rendering]);
+  return rendering;
 }

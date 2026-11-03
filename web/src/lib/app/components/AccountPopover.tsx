@@ -35,7 +35,7 @@ import {
   SvgNotificationBubble,
 } from "@opal/icons";
 import { ContentAction, Section, toast, useSidebarFolded } from "@opal/layouts";
-import { useShownPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
@@ -290,7 +290,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   const folded = useSidebarFolded();
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, userResolution } = useUser();
-  const appPosition = useShownPosition();
+  const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const notificationsPageRef = useRef<HTMLDivElement>(null);

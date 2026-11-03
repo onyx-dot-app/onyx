@@ -17,6 +17,10 @@
     {
       "name": "opal",
       "specifier": "./tools/oxlint/opal/index.ts"
+    },
+    {
+      "name": "navigation",
+      "specifier": "./tools/oxlint/navigation/index.ts"
     }
   ],
   "options": {
@@ -62,6 +66,7 @@
     "opal/no-replaced-refresh-import": "warn",
     "opal/no-layout-div": "error",
     "opal/no-section-utility-classes": "error",
+    "navigation/no-direct-app-navigation": "error",
     "no-restricted-imports": [
       "error",
       {
@@ -329,6 +334,51 @@
             ]
           }
         ]
+      }
+    },
+    {
+      // Navigation baseline: files that navigated into /app with router.push or
+      // a bare href when navigation/no-direct-app-navigation landed. Remove a
+      // file once it goes through AppPosition. Never add one.
+      "files": [
+        "src/app/admin/bots/[[]bot-id]/SlackChannelConfigsTable.tsx",
+        "src/app/admin/bots/[[]bot-id]/channels/SlackChannelConfigFormFields.tsx",
+        "src/app/app/agents/edit/[[]id]/page.tsx",
+        "src/app/app/settings/accounts-access/page.tsx",
+        "src/app/app/settings/llm-gateway/page.tsx",
+        "src/app/app/shared/[[]chatId]/SharedChatDisplay.tsx",
+        "src/app/auth/impersonate/page.tsx",
+        "src/app/craft/components/CraftUpgradePage.tsx",
+        "src/app/craft/onboarding/components/CraftLlmLockedState.tsx",
+        "src/app/ee/EEFeatureRedirect.tsx",
+        "src/layouts/chromes/AppChrome.tsx",
+        "src/lib/agents/components/AgentViewerModal.tsx",
+        "src/lib/auth/components.tsx",
+        "src/sections/input/AppInputBar.tsx",
+        "src/sections/input/SharedAppInputBar.tsx",
+        "src/sections/sidebar/AppSidebar.tsx",
+        "src/views/admin/AgentsPage.tsx",
+        "src/views/admin/AgentsPage/AgentRowActions.tsx"
+      ],
+      "rules": {
+        "navigation/no-direct-app-navigation": "warn"
+      }
+    },
+    {
+      // AppPosition is where the app's navigation lives. Opal knows nothing
+      // of the app's routes, and tests use paths as data.
+      "files": [
+        "src/lib/position/**",
+        "lib/**",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "tests/**"
+      ],
+      "rules": {
+        "navigation/no-direct-app-navigation": "off"
       }
     },
     {

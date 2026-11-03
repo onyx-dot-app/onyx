@@ -12,7 +12,7 @@ import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import { useAppPosition, useShownPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 interface SortableItemProps {
   id: number;
   children?: React.ReactNode;
@@ -72,11 +72,10 @@ export function AgentButton({ agent }: AgentButtonProps) {
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
   const isCurrentAgent = activeAgent?.id === agent.id;
   const appPosition = useAppPosition();
-  const shownPosition = useShownPosition();
-  // The agent the screen shows: a click's target at once, else the open one.
-  const shownAgentId = shownPosition.agent();
-  const isShownAgent =
-    shownAgentId !== null ? shownAgentId === agent.id : isCurrentAgent;
+  // The agent the URL names, else the open chat's.
+  const urlAgentId = appPosition.agent();
+  const isOpenAgent =
+    urlAgentId !== null ? urlAgentId === agent.id : isCurrentAgent;
 
   const agentLink = appPosition.linkToAgent(agent.id);
 
@@ -94,7 +93,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
           icon={() => <AgentAvatar agent={agent} />}
           href={agentLink.href}
           onClick={handleClick}
-          selected={shownPosition.isAgentTabHighlightable() && isShownAgent}
+          selected={appPosition.isAgentTabHighlightable() && isOpenAgent}
           rightChildren={
             // Hide unpin button for current agent since auto-pin would immediately re-pin
             !isCurrentAgent && (

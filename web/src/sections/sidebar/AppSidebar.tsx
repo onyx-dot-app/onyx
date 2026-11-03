@@ -68,7 +68,7 @@ import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
 import { getFirstPermittedAdminRoute } from "@/lib/permissions/utils";
-import { useShownPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
@@ -504,7 +504,7 @@ export default function AppSidebar() {
   );
 
   const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
-  const activeSidebarTab = useShownPosition();
+  const activeSidebarTab = useAppPosition();
   const createProjectModal = useCreateModal();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??

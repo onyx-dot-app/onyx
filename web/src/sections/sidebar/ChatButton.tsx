@@ -31,7 +31,7 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { useAppPosition, useShownPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import {
   SvgChevronLeft,
   SvgEdit,
@@ -55,11 +55,9 @@ const ChatButton = memo(
   ({ chatSession, project, draggable = false }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
     const appPosition = useAppPosition();
-    const activeSidebarTab = useShownPosition();
     const active = useMemo(
-      () =>
-        activeSidebarTab.isChat() && activeSidebarTab.chat() === chatSession.id,
-      [activeSidebarTab, chatSession.id]
+      () => appPosition.isChat() && appPosition.chat() === chatSession.id,
+      [appPosition, chatSession.id]
     );
     const mounted = useOnMount();
     const [displayName, setDisplayName] = useState(

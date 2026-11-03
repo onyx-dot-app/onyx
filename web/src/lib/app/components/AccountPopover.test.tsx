@@ -17,7 +17,7 @@ jest.mock("@/lib/app/components/NotificationsPopover", () => ({
 }));
 jest.mock("@/lib/position/hooks", () => ({
   __esModule: true,
-  useShownPosition: () => ({ isUserSettings: () => false }),
+  useAppPosition: () => ({ isUserSettings: () => false }),
 }));
 jest.mock("@/hooks/useScreenSize", () => ({
   __esModule: true,
