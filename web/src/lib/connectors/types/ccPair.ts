@@ -398,4 +398,21 @@ export interface CCPairThroughputResponse {
   docs_indexed: number[];
   /** `ended` is null while the run is still going. */
   runs: { started: string; ended: string | null; status: ValidStatuses }[];
+  /** Absent from an API a deploy behind. */
+  slices?: CCPairThroughputSlice[];
+}
+
+/** One slice of the throughput window. Slices align to the caller's clock when their width divides a day. A running run is in every slice from its start to now. */
+export interface CCPairThroughputSlice {
+  start: string;
+  end: string;
+  docs_indexed: number;
+  runs: CCPairThroughputSliceRun[];
+}
+
+/** `resolved` is true once an admin resolved the run or a newer run superseded it. */
+export interface CCPairThroughputSliceRun {
+  attempt_id: number;
+  status: ValidStatuses;
+  resolved: boolean;
 }

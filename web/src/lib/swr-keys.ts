@@ -36,6 +36,18 @@ function runsQueryParams(query: CCPairRunsQuery): string {
   return params.toString();
 }
 
+function throughputParams(
+  window: CCPairThroughputWindow,
+  bins: number,
+  tzOffsetMinutes: number
+): string {
+  return new URLSearchParams({
+    window,
+    bins: String(bins),
+    tz_offset_minutes: String(tzOffsetMinutes),
+  }).toString();
+}
+
 function resolvableCountParams(
   level: CCPairRunLevel | null,
   q: string,
@@ -368,13 +380,22 @@ export const SWR_KEYS = {
     until: string | null
   ) =>
     `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until)}`,
-  ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
+  ccPairThroughput: (
+    ccPairId: number,
+    window: CCPairThroughputWindow,
+    bins: number,
+    tzOffsetMinutes: number
+  ) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/throughput?${throughputParams(window, bins, tzOffsetMinutes)}`,
 
   // ── Index Monitoring ──────────────────────────────────────────────────────
   // The indexing status page's fleet-wide reads, over every readable pair.
-  indexMonitoringOverview: (window: CCPairThroughputWindow) =>
-    `/api/manage/admin/index-monitoring/overview?window=${window}`,
+  indexMonitoringOverview: (
+    window: CCPairThroughputWindow,
+    bins: number,
+    tzOffsetMinutes: number
+  ) =>
+    `/api/manage/admin/index-monitoring/overview?${throughputParams(window, bins, tzOffsetMinutes)}`,
   // Every connector list query starts with this, so `mutate` can match them all.
   indexMonitoringConnectorsPrefix:
     "/api/manage/admin/index-monitoring/connectors?",

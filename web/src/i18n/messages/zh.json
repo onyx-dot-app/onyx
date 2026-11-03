@@ -2829,6 +2829,8 @@
         "throughput": {
           "ariaLabel": "随时间索引的文档",
           "tooltip": "{count, plural, one {# 个文档} other {# 个文档}}",
+          "lineTooltip": "{failures, plural, one {# 次失败} other {# 次失败}}，{errors, plural, one {# 个错误} other {# 个错误}}",
+          "barLabel": "{count, plural, one {# 个文档} other {# 个文档}}，{range}",
           "loadError": "无法加载图表。",
           "rangeFilter": "在图表此时间段内创建的运行"
         },

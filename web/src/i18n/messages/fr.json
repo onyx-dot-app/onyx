@@ -2829,6 +2829,8 @@
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "lineTooltip": "{failures, plural, one {# échec} other {# échecs}}, {errors, plural, one {# erreur} other {# erreurs}}",
+          "barLabel": "{count, plural, one {# document} other {# documents}}, {range}",
           "loadError": "Le graphique n'a pas pu être chargé.",
           "rangeFilter": "Exécutions créées dans cette tranche du graphique"
         },

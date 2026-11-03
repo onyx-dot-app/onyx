@@ -2829,6 +2829,8 @@
         "throughput": {
           "ariaLabel": "Indexierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
+          "lineTooltip": "{failures, plural, one {# Fehlschlag} other {# Fehlschläge}}, {errors, plural, one {# Fehler} other {# Fehler}}",
+          "barLabel": "{count, plural, one {# Dokument} other {# Dokumente}}, {range}",
           "loadError": "Das Diagramm konnte nicht geladen werden.",
           "rangeFilter": "In diesem Abschnitt des Diagramms erstellte Läufe"
         },

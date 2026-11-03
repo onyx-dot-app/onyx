@@ -2829,6 +2829,8 @@
         "throughput": {
           "ariaLabel": "Documentos indexados a lo largo del tiempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
+          "lineTooltip": "{failures, plural, one {# fallo} other {# fallos}}, {errors, plural, one {# error} other {# errores}}",
+          "barLabel": "{count, plural, one {# documento} other {# documentos}}, {range}",
           "loadError": "No se pudo cargar el gráfico.",
           "rangeFilter": "Ejecuciones creadas en este tramo del gráfico"
         },
