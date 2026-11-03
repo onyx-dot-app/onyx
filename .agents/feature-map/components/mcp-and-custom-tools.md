@@ -248,6 +248,8 @@ Policy precedence is in [[craft-external-apps]].
     The synchronous client cancels and drains the request coroutine before
     raising `AgentCancelled`. This bypasses ordinary tool error recovery and
     records `cancelled`, not `error`, in MCP call metrics.
+    `utils/threadpool_concurrency.py:run_until_cancelled` owns coroutine cancellation
+    and cleanup. The MCP client supplies signal callbacks and `AgentCancelled`.
     A result that already completed wins a concurrent cancellation. Discovery
     calls that have no signal keep the existing synchronous behavior. Stopping
     the local request cannot undo work already performed by the remote server.

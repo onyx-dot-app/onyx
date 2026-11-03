@@ -2,7 +2,7 @@ import asyncio
 import threading
 from collections.abc import Coroutine
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp import ClientSession
@@ -171,79 +171,4 @@ def test_cancellation_stops_a_running_call(monkeypatch: pytest.MonkeyPatch) -> N
     stopper.join(5)
     assert not stopper.is_alive()
     assert stopped.is_set()
-    assert not cancellation._callbacks
-
-
-def test_already_cancelled_call_does_not_start() -> None:
-    cancellation = CancellationSignal()
-    cancellation.cancel()
-
-    async def operation() -> None:
-        pytest.fail("A cancelled request must not start")
-
-    with pytest.raises(AgentCancelled):
-        client._run_until_cancelled(operation(), cancellation)
-
-
-@pytest.mark.parametrize("cancel_during_operation", [False, True])
-def test_completed_call_keeps_its_result(cancel_during_operation: bool) -> None:
-    cancellation = CancellationSignal()
-
-    async def operation() -> str:
-        if cancel_during_operation:
-            cancellation.cancel()
-        return "completed"
-
-    assert client._run_until_cancelled(operation(), cancellation) == "completed"
-    assert not cancellation._callbacks
-    cancellation.cancel()
-
-
-def test_failed_call_keeps_its_error() -> None:
-    cancellation = CancellationSignal()
-    failure = ValueError("server failed")
-
-    async def operation() -> None:
-        raise failure
-
-    with pytest.raises(ValueError) as error:
-        client._run_until_cancelled(operation(), cancellation)
-    assert error.value is failure
-    assert not cancellation._callbacks
-    cancellation.cancel()
-
-
-def test_cancellation_before_event_loop_starts_does_not_start_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    cancellation = CancellationSignal()
-    run = client.run_async_sync_no_cancel
-
-    def cancel_before_running(coroutine: Coroutine[Any, Any, object]) -> object:
-        cancellation.cancel()
-        return run(coroutine)
-
-    async def operation() -> None:
-        pytest.fail("A cancelled request must not start")
-
-    monkeypatch.setattr(client, "run_async_sync_no_cancel", cancel_before_running)
-    with pytest.raises(AgentCancelled):
-        client._run_until_cancelled(operation(), cancellation)
-    assert not cancellation._callbacks
-
-
-def test_cancellation_logs_unexpected_cleanup_failure() -> None:
-    cancellation = CancellationSignal()
-
-    async def operation() -> None:
-        try:
-            asyncio.get_running_loop().call_soon(cancellation.cancel)
-            await asyncio.sleep(30)
-        finally:
-            raise ValueError("cleanup failed")
-
-    with patch.object(client.logger, "exception") as log:
-        with pytest.raises(AgentCancelled):
-            client._run_until_cancelled(operation(), cancellation)
-    log.assert_called_once_with("MCP request cleanup failed after cancellation")
     assert not cancellation._callbacks
