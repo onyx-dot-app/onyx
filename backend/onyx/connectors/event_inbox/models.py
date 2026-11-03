@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_models import EventParseResult
 from onyx.connectors.models import Document
+from onyx.context.search.enrichment.models import ChunkPermissionFilter
 from onyx.db.models import ConnectorEventInbox
 
 
@@ -136,3 +137,15 @@ class EventHandler(Protocol):
         """Return the document, or None to index nothing. `secrets` is the
         pair's credential, for a provider that pushes a link to the body.
         Raising retries this row alone."""
+
+
+class EventSource(BaseModel):
+    """Everything one event source declared."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    webhook: WebhookSourceSpec
+    handler: EventHandler
+    # Set only when the provider decides who may read each document; the
+    # source is then withheld from ordinary search ([[withheld-sources]]).
+    permission_filter: ChunkPermissionFilter | None = None

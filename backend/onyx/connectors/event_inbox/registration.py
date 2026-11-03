@@ -5,24 +5,13 @@ module paths from configuration, so an installed package registers the same
 way a built-in one does. Keep these signatures stable.
 """
 
-from pydantic import BaseModel, ConfigDict
-
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.event_inbox.models import EventHandler, WebhookSourceSpec
+from onyx.connectors.event_inbox.models import (
+    EventHandler,
+    EventSource,
+    WebhookSourceSpec,
+)
 from onyx.context.search.enrichment.models import ChunkPermissionFilter
-
-
-class EventSource(BaseModel):
-    """Everything one event source declared."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
-
-    webhook: WebhookSourceSpec
-    handler: EventHandler
-    # Set only when the provider decides who may read each document; the
-    # source is then withheld from ordinary search ([[withheld-sources]]).
-    permission_filter: ChunkPermissionFilter | None = None
-
 
 _EVENT_SOURCES: dict[DocumentSource, EventSource] = {}
 
