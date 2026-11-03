@@ -1245,14 +1245,13 @@ def _cap_failure_message(message: str) -> str:
     return f"{message[:keep]}... [{len(message) - keep} chars truncated]"
 
 
-def create_index_attempt_error(
+def _index_attempt_error(
     index_attempt_id: int | None,
     connector_credential_pair_id: int,
     failure: ConnectorFailure,
-    db_session: Session,
-) -> int:
+) -> IndexAttemptError:
     exc = failure.exception
-    new_error = IndexAttemptError(
+    return IndexAttemptError(
         index_attempt_id=index_attempt_id,
         connector_credential_pair_id=connector_credential_pair_id,
         document_id=(
@@ -1276,10 +1275,34 @@ def create_index_attempt_error(
         is_resolved=False,
         error_type=type(exc).__name__ if exc else None,
     )
+
+
+def create_index_attempt_error(
+    index_attempt_id: int | None,
+    connector_credential_pair_id: int,
+    failure: ConnectorFailure,
+    db_session: Session,
+) -> int:
+    new_error = _index_attempt_error(
+        index_attempt_id, connector_credential_pair_id, failure
+    )
     db_session.add(new_error)
     db_session.commit()
 
     return new_error.id
+
+
+def create_index_attempt_errors__no_commit(
+    db_session: Session,
+    index_attempt: IndexAttempt,
+    failures: Sequence[ConnectorFailure],
+) -> None:
+    db_session.add_all(
+        _index_attempt_error(
+            index_attempt.id, index_attempt.connector_credential_pair_id, failure
+        )
+        for failure in failures
+    )
 
 
 def resolve_index_attempt_errors_for_documents(
@@ -1287,9 +1310,19 @@ def resolve_index_attempt_errors_for_documents(
     cc_pair_id: int,
     document_ids: Collection[str],
 ) -> None:
+    resolve_index_attempt_errors_for_documents__no_commit(
+        db_session, cc_pair_id, document_ids
+    )
+    db_session.commit()
+
+
+def resolve_index_attempt_errors_for_documents__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+    document_ids: Collection[str],
+) -> None:
     """Mark the pair's open errors for ``document_ids`` resolved in one UPDATE,
-    so the cost scales with the batch, not the pair's open-error backlog.
-    Commits."""
+    so the cost scales with the batch, not the pair's open-error backlog."""
     if not document_ids:
         return
 
@@ -1305,7 +1338,6 @@ def resolve_index_attempt_errors_for_documents(
         .values(is_resolved=True)
         .execution_options(synchronize_session=False)
     )
-    db_session.commit()
 
 
 def get_index_attempt_errors(

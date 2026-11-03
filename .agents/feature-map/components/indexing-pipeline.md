@@ -256,7 +256,10 @@ the error type on purpose in auth code.
    crawl run at the same time. The per-document row lock in
    `backend/onyx/db/document.py:prepare_to_modify_documents` keeps their writes
    apart. The heartbeat check skips these attempts too; the targeted-reindex
-   job owns their lifecycle.
+   job owns their lifecycle. Each pair's attempt ends FAILED when every target
+   of the pair failed again and SUCCESS otherwise. Each document that failed
+   again gets a new error row on the attempt, and its first error stays open.
+   A document that lands closes every open error it has on the pair.
 11. `chunk-text-second-copy` **The chunk text recipe has a second copy.**
     `indexing/port_reembed.py` rebuilds the embedding input from stored chunks
     for the reindex port. A change to title prefix, metadata suffix or
