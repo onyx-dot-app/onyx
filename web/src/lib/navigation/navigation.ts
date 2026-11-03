@@ -69,6 +69,12 @@ function navigate<T extends string>(
   }
   // Against the current URL, so a query-only href (`?a=1`) keeps the path.
   const target = new URL(href, window.location.href);
+  // Another origin is not a page of this app, and history cannot hold it.
+  if (target.origin !== window.location.origin) {
+    if (replace) window.location.replace(target.href);
+    else window.location.assign(target.href);
+    return;
+  }
   const herePathname = window.location.pathname;
   const here = urlKey(
     herePathname,
@@ -92,6 +98,10 @@ function navigate<T extends string>(
   if (shallow && queryOnly && !routeNavigationInFlight) return;
   routeNavigationInFlight = true;
   callRouter(router, "replace", href, scroll);
+}
+
+function isOtherOrigin(href: string): boolean {
+  return new URL(href, window.location.href).origin !== window.location.origin;
 }
 
 /**
@@ -137,8 +147,8 @@ export class Navigation {
       href,
       onClick: (event) => {
         // A modified or middle click keeps the link's own behavior, e.g.
-        // opening a new tab.
-        if (!isPlainClick(event)) return;
+        // opening a new tab, and so does a link to another origin.
+        if (!isPlainClick(event) || isOtherOrigin(href)) return;
         event.preventDefault();
         navigate(this.router, href, options);
       },
