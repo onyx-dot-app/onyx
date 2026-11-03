@@ -40,6 +40,9 @@ jobs:
       BUILD_URL: ${{ github.event.workflow_run.html_url }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+      BUILD_RUN_ID: ${{ github.event.workflow_run.id }}
+      BUILD_CREATED_AT: ${{ github.event.workflow_run.created_at }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
     steps:
       - name: Check the pull request and Mintlify configuration
         id: config
@@ -94,28 +97,30 @@ jobs:
           commit="$(git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit-tree "$tree" -m "docs: preview of #$PR_NUMBER at ${HEAD_SHA::7}")"
-          pr_info() { gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,headRefOid --jq '"\(.state) \(.headRefOid)"'; }
+          pr_state() { gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state; }
           # docs-preview-cleanup.yml deletes the branch once, when the pull request closes.
           # Do not push for a closed pull request, and undo a push that raced the close.
           # A plain assignment makes a failed lookup fail the step, not read as closed.
-          info="$(pr_info)"
-          read -r state head <<<"$info"
+          state="$(pr_state)"
           if [ "$state" != "OPEN" ]; then
             echo "The pull request is closed; no preview"
             echo "closed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A run for an older commit must not replace a newer preview. A head change after
-          # this check is left alone: the build for the new head publishes over this one.
-          if [ "$head" != "$HEAD_SHA" ]; then
-            echo "The pull request head moved to ${head::7}; no preview for ${HEAD_SHA::7}"
+          # A run for an older build must not replace a newer preview. Compare builds, not the
+          # pull request head: a later commit that changes no docs starts no new build, and
+          # this build is then still the latest preview. A newer build after this check
+          # publishes over this one.
+          newer="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/docs-preview.yml/runs?event=pull_request&branch=$HEAD_BRANCH&per_page=50" \
+            --jq "[.workflow_runs[] | select(.id != $BUILD_RUN_ID and .created_at > \"$BUILD_CREATED_AT\")] | length")"
+          if [ "$newer" != "0" ]; then
+            echo "A newer docs build exists for this pull request; no preview for ${HEAD_SHA::7}"
             echo "outdated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           gh auth setup-git
           git push -q --force "https://github.com/${GITHUB_REPOSITORY}.git" "$commit:refs/heads/$PREVIEW_BRANCH"
-          info="$(pr_info)"
-          read -r state head <<<"$info"
+          state="$(pr_state)"
           if [ "$state" != "OPEN" ]; then
             git push -q "https://github.com/${GITHUB_REPOSITORY}.git" --delete "$PREVIEW_BRANCH"
             echo "closed=true" >> "$GITHUB_OUTPUT"
