@@ -37,7 +37,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE = 5
-# How long an event pair whose attempts keep failing waits between runs.
+# How long an event pair waits after a failed attempt before the next run.
 EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS = 300
 
 
@@ -239,14 +239,13 @@ def _is_reindex_request_due(
 def _event_pair_is_due(
     cc_pair: ConnectorCredentialPair,
     last_index_attempt: IndexAttempt,
-    all_recent_errored: bool,
     db_session: Session,
 ) -> bool:
     """An event pair runs when its inbox has work, not on a poll interval.
-    After repeated failed attempts it waits a fixed backoff between runs."""
+    After a failed attempt it waits a fixed backoff before the next run."""
     if not event_pair_has_work(db_session, cc_pair.id):
         return False
-    if not all_recent_errored:
+    if last_index_attempt.status != IndexingStatus.FAILED:
         return True
     since_last = get_db_current_time(db_session) - last_index_attempt.time_updated
     return since_last.total_seconds() >= EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS
@@ -376,9 +375,7 @@ def should_index(
         return True
 
     if connector.input_type == InputType.EVENT:
-        return _event_pair_is_due(
-            cc_pair, last_index_attempt, all_recent_errored, db_session
-        )
+        return _event_pair_is_due(cc_pair, last_index_attempt, db_session)
 
     if connector.refresh_freq is None:
         # print(f"Not indexing cc_pair={cc_pair.id}: refresh_freq is None")

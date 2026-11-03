@@ -8,7 +8,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.docprocessing.utils import should_index
+from onyx.background.celery.tasks.docprocessing.utils import (
+    EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS,
+    should_index,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.event_models import ParsedEvent
 from onyx.connectors.models import InputType
@@ -105,7 +108,36 @@ def test_a_due_event_runs_the_pair_without_a_refresh_frequency(
     assert should_index(event_pair, settings, False, db_session)
 
 
-def test_a_retry_waits_out_its_backoff(
+def _claim(db_session: Session, pair: ConnectorCredentialPair, attempt_id: int) -> None:
+    db_session.query(ConnectorEventInbox).filter_by(
+        connector_credential_pair_id=pair.id
+    ).update(
+        {
+            "status": ConnectorEventStatus.IN_PROGRESS,
+            "index_attempt_id": attempt_id,
+        }
+    )
+    db_session.commit()
+
+
+def _add_attempt(
+    db_session: Session,
+    pair: ConnectorCredentialPair,
+    settings: SearchSettings,
+    status: IndexingStatus,
+) -> IndexAttempt:
+    attempt = IndexAttempt(
+        connector_credential_pair_id=pair.id,
+        search_settings_id=settings.id,
+        from_beginning=False,
+        status=status,
+    )
+    db_session.add(attempt)
+    db_session.commit()
+    return attempt
+
+
+def test_a_row_in_its_retry_backoff_is_not_due(
     db_session: Session, event_pair: ConnectorCredentialPair, settings: SearchSettings
 ) -> None:
     _record(db_session, event_pair)
@@ -117,15 +149,43 @@ def test_a_retry_waits_out_its_backoff(
     assert not should_index(event_pair, settings, False, db_session)
 
 
-def test_an_unsettled_claim_runs_the_pair(
+def test_a_claim_from_an_ended_attempt_runs_the_pair(
     db_session: Session, event_pair: ConnectorCredentialPair, settings: SearchSettings
 ) -> None:
-    """A claim settles on the next run, and a failed attempt's rows return
-    to the queue only then."""
+    """The next run settles it, and a failed attempt's rows return to the
+    queue only then."""
     _record(db_session, event_pair)
-    db_session.query(ConnectorEventInbox).filter_by(
-        connector_credential_pair_id=event_pair.id
-    ).update({"status": ConnectorEventStatus.IN_PROGRESS})
-    db_session.commit()
+    ended = _add_attempt(db_session, event_pair, settings, IndexingStatus.CANCELED)
+    _claim(db_session, event_pair, ended.id)
 
+    assert should_index(event_pair, settings, False, db_session)
+
+
+def test_a_claim_held_by_a_live_attempt_is_not_work(
+    db_session: Session, event_pair: ConnectorCredentialPair, settings: SearchSettings
+) -> None:
+    """The holder settles it. Counting it would start an empty run on every
+    beat while it runs, such as under the other index during a model swap."""
+    _record(db_session, event_pair)
+    live = _add_attempt(db_session, event_pair, settings, IndexingStatus.IN_PROGRESS)
+    _claim(db_session, event_pair, live.id)
+    _add_attempt(db_session, event_pair, settings, IndexingStatus.SUCCESS)
+
+    assert not should_index(event_pair, settings, False, db_session)
+
+
+def test_a_failed_attempt_backs_the_pair_off(
+    db_session: Session, event_pair: ConnectorCredentialPair, settings: SearchSettings
+) -> None:
+    """One failure is enough, whatever the pair's refresh_freq."""
+    event_pair.connector.refresh_freq = 3600
+    _record(db_session, event_pair)
+    failed = _add_attempt(db_session, event_pair, settings, IndexingStatus.FAILED)
+
+    assert not should_index(event_pair, settings, False, db_session)
+
+    failed.time_updated = datetime.now(timezone.utc) - timedelta(
+        seconds=EVENT_PAIR_RETRY_AFTER_FAILURES_SECONDS + 1
+    )
+    db_session.commit()
     assert should_index(event_pair, settings, False, db_session)

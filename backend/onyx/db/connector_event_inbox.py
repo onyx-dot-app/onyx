@@ -377,12 +377,23 @@ def settle_events_from_finished_attempts(
 
 
 def event_pair_has_work(db_session: Session, cc_pair_id: int) -> bool:
-    """A due PENDING row to claim, or an IN_PROGRESS row the next run must
-    settle. Used to schedule an event pair, which has no poll interval."""
+    """A due PENDING row to claim, or an IN_PROGRESS row whose attempt has
+    ended, which the next run settles. Schedules an event pair, which has no
+    poll interval. A row a live attempt holds is not work for another run."""
+    attempt_ended = or_(
+        IndexAttempt.id.is_(None),
+        IndexAttempt.status.in_(
+            [status for status in IndexingStatus if status.is_terminal()]
+        ),
+    )
     return (
         db_session.scalar(
             select(
                 select(ConnectorEventInbox.id)
+                .outerjoin(
+                    IndexAttempt,
+                    ConnectorEventInbox.index_attempt_id == IndexAttempt.id,
+                )
                 .where(
                     ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
                     or_(
@@ -390,7 +401,11 @@ def event_pair_has_work(db_session: Session, cc_pair_id: int) -> bool:
                             ConnectorEventInbox.status == ConnectorEventStatus.PENDING,
                             ConnectorEventInbox.available_at <= func.now(),
                         ),
-                        ConnectorEventInbox.status == ConnectorEventStatus.IN_PROGRESS,
+                        and_(
+                            ConnectorEventInbox.status
+                            == ConnectorEventStatus.IN_PROGRESS,
+                            attempt_ended,
+                        ),
                     ),
                 )
                 .exists()
