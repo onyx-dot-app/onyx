@@ -1,6 +1,7 @@
 import type {
   ContextualMenuWidth,
   IconFunctionComponent,
+  RichNodes,
   RichStr,
 } from "@opal/types";
 import type { BadgeProps } from "@opal/components/badge/components";
@@ -27,6 +28,12 @@ export interface DropdownOption extends DropdownRowBase {
   description?: string | RichStr;
   /** Muted text beside the title in the list, like "(Default)". */
   suffix?: string;
+  /**
+   * Muted note at the end of the row, like what is already set for it. On a
+   * linked option (`href`), markdown links show as plain text; `RichNodes`
+   * there must not hold a link.
+   */
+  info?: string | RichStr | RichNodes;
   icon?: IconFunctionComponent;
   /** Lines the description may take before it clamps, for text a user wrote. */
   descriptionMaxLines?: number;
