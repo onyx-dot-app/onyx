@@ -1,17 +1,10 @@
+import { parseErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   CardPath,
   SpendingLimitCard,
   SpendingLimitRequest,
 } from "@/lib/spendingLimits/types";
-
-async function errorDetail(response: Response): Promise<string> {
-  const body: unknown = await response.json().catch(() => null);
-  if (body && typeof body === "object" && "detail" in body) {
-    return String(body.detail);
-  }
-  return response.statusText;
-}
 
 /** Replaces every limit on one card. */
 export async function saveSpendingLimitCard(
@@ -25,7 +18,7 @@ export async function saveSpendingLimitCard(
     body: JSON.stringify({ enabled, limits }),
   });
   if (!response.ok) {
-    throw new Error(await errorDetail(response));
+    throw new Error(await parseErrorDetail(response, response.statusText));
   }
   return response.json();
 }

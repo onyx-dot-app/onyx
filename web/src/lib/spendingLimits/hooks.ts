@@ -1,6 +1,6 @@
 import useSWR from "swr";
 import type { SelectOption } from "@opal/components";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -26,10 +26,11 @@ export function useGroupSpendingLimits(groupId: number | null) {
   );
 }
 
-/** Visible chat models across every provider, as select options keyed by
- *  model configuration id. */
+/** Loaded visible chat models across the caller's providers, as select
+ *  options keyed by model configuration id. User-scoped, so group managers
+ *  can read it; the model picker pages more models into the same listing. */
 export function useModelOptions(): SelectOption[] {
-  const { llmProviders } = useAdminLanguageModels();
+  const { llmProviders } = useLanguageModels();
   return (llmProviders ?? []).flatMap((provider) =>
     provider.model_configurations
       .filter(

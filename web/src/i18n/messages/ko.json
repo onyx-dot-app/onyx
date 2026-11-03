@@ -10995,22 +10995,22 @@
     },
     "spendingLimits": {
       "page": {
-        "description": "조직 전체의 LLM 지출을 관리하도록 지출 한도를 설정합니다.",
+        "description": "지출 한도를 설정해 조직의 LLM 지출을 관리하세요.",
         "loadFailed": "지출 한도를 불러오지 못했습니다."
       },
       "workspace": {
         "title": "워크스페이스 한도",
-        "description": "이 조직의 모든 사용자에게 적용됩니다.",
+        "description": "이 조직의 모든 사용자와 계정에 적용됩니다.",
         "pool": {
           "title": "공유 예산",
-          "description": "주기마다 모두가 함께 쓰는 예산입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
+          "description": "초기화 기간마다 모두가 공유하는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
           "empty": "워크스페이스 전체 한도 없음",
           "target": "워크스페이스 전체 한도",
           "emptyDescription": "초기화 기간마다 모두가 공유하는 한도입니다."
         },
         "perUser": {
           "title": "사용자별 한도",
-          "description": "사용자마다 따로 주어지는 예산입니다. 같은 주기에는 그룹의 멤버별 한도가 이를 대체합니다.",
+          "description": "조직의 각 사용자에게 개별로 적용되는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
           "empty": "사용자별 한도 없음",
           "target": "사용자별 한도",
           "emptyDescription": "조직의 각 사용자에게 개별로 적용되는 한도입니다."
@@ -11018,36 +11018,45 @@
       },
       "groups": {
         "title": "그룹 한도",
-        "description": "그룹 한도는 그룹 간에 차단하지 않습니다. 사용자는 속한 그룹 중 하나의 공유 예산에 여유가 있는 한 계속 사용할 수 있습니다. 주기마다 사용자가 속한 그룹의 멤버별 한도 중 가장 큰 값이 적용됩니다. 한 사람에게만 한도를 설정하려면 그 사람만 있는 그룹을 만드세요.",
+        "description": "이 조직의 특정 그룹에 적용됩니다.",
         "add": {
           "label": "그룹 한도 추가"
         },
         "picker": {
           "placeholder": "그룹 선택",
-          "limitSet": "(한도 설정됨)"
+          "limitSet": "한도 설정됨:"
         },
         "members": "{count, plural, other {멤버 #명}}",
-        "empty": "아직 지출 한도가 설정된 그룹이 없습니다.",
+        "empty": "워크스페이스, 사용자, 그룹 사용량에 비용/토큰 한도를 설정하세요.",
         "pool": {
           "title": "그룹 공유 예산",
-          "description": "이 그룹의 모두가 함께 쓰는 예산입니다.",
+          "description": "이 그룹의 모두가 공유하는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
           "empty": "그룹 공유 예산 없음",
-          "target": "그룹: {group}",
-          "emptyDescription": "이 그룹의 모두가 공유하는 한도입니다."
+          "target": "그룹 한도",
+          "emptyDescription": "이 그룹의 모두가 공유하는 한도입니다.",
+          "members": "{count, plural, other {멤버 #명}}"
         },
         "perMember": {
           "title": "멤버별 한도",
-          "description": "이 그룹의 각 멤버에게 따로 주어지는 예산입니다. 주기마다 사용자가 속한 그룹의 한도 중 가장 큰 값이 적용됩니다.",
+          "description": "이 그룹의 각 구성원에게 개별로 적용되는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
           "adminOnly": "멤버별 한도는 멤버를 워크스페이스 한도보다 높일 수 있으므로 관리자만 변경할 수 있습니다.",
           "empty": "구성원별 한도 없음",
-          "target": "그룹: {group}, 구성원별",
-          "emptyDescription": "이 그룹의 각 구성원에게 개별로 적용되는 한도입니다."
+          "target": "구성원별 그룹 한도",
+          "emptyDescription": "이 그룹의 각 구성원에게 개별로 적용되는 한도입니다.",
+          "members": "구성원별 한도 • {count, plural, other {멤버 #명}}"
         },
         "kind": {
           "placeholder": "한도 유형 선택"
         },
-        "field": {
-          "members": "({count, plural, other {구성원 #명}})"
+        "field": {},
+        "new": {
+          "title": "새 그룹 한도",
+          "pool": {
+            "description": "특정 그룹의 모두가 공유하는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요."
+          },
+          "perMember": {
+            "description": "특정 그룹의 각 구성원에게 개별로 적용되는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요."
+          }
         }
       },
       "groupPage": {
@@ -11059,7 +11068,7 @@
         "addModelBudget": "모델 예산 추가",
         "modelBudget": {
           "title": "모델 예산",
-          "description": "특정 모델의 지출을 제한합니다. 모델 사용량은 위의 한도에도 함께 계산됩니다."
+          "description": "특정 모델의 지출에 한도를 둡니다. 이 지출은 공유 예산에도 포함됩니다."
         },
         "cancel": "취소",
         "save": "변경 사항 저장",
@@ -11089,7 +11098,8 @@
           "target": "{target} • {count, plural, other {모델 예산 #개}}",
           "nextReset": "다음 초기화: {at}",
           "inactive": "비활성 한도",
-          "used": "<b>{percent}%</b> 사용"
+          "used": "<b>{percent}%</b> 사용",
+          "prefix": "{name} - "
         }
       },
       "alerts": {
@@ -11103,22 +11113,25 @@
       "row": {
         "model": {
           "title": "모델",
-          "placeholder": "모델 선택"
+          "placeholder": "모델 검색…"
         },
         "period": {
           "title": "초기화 주기",
           "options": {
             "DAILY": {
               "title": "일일 한도",
-              "description": "매일 00:00 UTC에 초기화"
+              "description": "매일 초기화",
+              "helper": "매일 00:00 UTC에 초기화됩니다."
             },
             "WEEKLY": {
               "title": "주간 한도",
-              "description": "매주 월요일 00:00 UTC에 초기화"
+              "description": "매주 월요일 초기화",
+              "helper": "매주 월요일 00:00 UTC에 초기화됩니다."
             },
             "MONTHLY": {
               "title": "월간 한도",
-              "description": "매월 1일 00:00 UTC에 초기화"
+              "description": "매월 1일 초기화",
+              "helper": "매월 1일 00:00 UTC에 초기화됩니다."
             }
           }
         },
@@ -11127,35 +11140,39 @@
           "tooltip": "한도 제거"
         },
         "cost": {
-          "title": "비용 한도"
+          "title": "비용 한도",
+          "placeholder": "비용 한도 없음",
+          "suffix": "USD"
         },
         "tokens": {
           "title": "토큰 한도",
           "placeholder": "토큰 한도 없음",
-          "suffix": "K"
+          "suffix": "K",
+          "unit": "토큰"
         },
         "usage": {
           "spent": "<mono>{amount}</mono> 사용",
           "tokens": "<mono>{tokens}</mono> 토큰 사용",
           "percent": "{percent}%",
           "blocked": {
-            "all": "다음 초기화까지 사용이 차단됩니다.",
-            "model": "다음 초기화까지 모델 사용이 차단됩니다."
+            "all": "다음 초기화 때까지 사용이 차단됩니다.",
+            "model": "다음 초기화 때까지 모델 사용이 차단됩니다."
           }
         },
         "whenReached": {
           "title": "이 한도에 도달하면",
           "blockAll": {
             "title": "한도 도달 시 모든 사용 차단",
-            "description": "채팅, 검색, 봇, API 호출을 포함한 모든 모델 사용이 다음 초기화까지 중지됩니다."
+            "description": "채팅, 검색, 봇, API 호출을 포함한 모든 모델의 사용이 다음 초기화까지 중지됩니다."
           },
           "blockModel": {
             "title": "한도 도달 시 모델 사용 차단",
-            "description": "이 모델의 사용이 다음 초기화까지 중지됩니다. 다른 모델은 계속 사용할 수 있습니다.",
+            "description": "채팅, 봇, API 호출을 포함한 이 모델의 사용이 다음 초기화까지 중지됩니다.",
             "summary": "한도 도달 시 모델 사용 차단"
           }
         },
         "errors": {
+          "budgetOutOfRange": "비용은 0.01달러 이상, 토큰은 1조 개 이하로 설정하세요.",
           "budgetRequired": "비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
           "duplicate": "다른 한도가 이미 이 주기를 사용하고 있습니다.",
           "modelRequired": "모델을 선택하세요."

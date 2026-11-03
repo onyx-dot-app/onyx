@@ -10995,22 +10995,22 @@
     },
     "spendingLimits": {
       "page": {
-        "description": "Set spending limits to keep LLM spending in check across your organization.",
+        "description": "Set spending limits to guardrail LLM spending for your organization.",
         "loadFailed": "Couldn't load spending limits."
       },
       "workspace": {
         "title": "Workspace Limits",
-        "description": "Apply to everyone in this organization.",
+        "description": "Apply to all users and accounts in this organization.",
         "pool": {
           "title": "Shared Budget",
-          "description": "One budget shared by everyone for each period. Set a cost limit, a token limit, or both.",
+          "description": "Shared limit across everyone per reset period. Set a cost or token limit, or both.",
           "empty": "No global workspace limit",
           "target": "Global workspace limit",
           "emptyDescription": "Shared limit across everyone per reset period."
         },
         "perUser": {
           "title": "Per-User Limit",
-          "description": "A budget for each user on their own. A group's per-member limit replaces it for the same period.",
+          "description": "Individual limit for each user in the organization. Set a cost or token limit, or both.",
           "empty": "No per-user limit",
           "target": "Global per-user limit",
           "emptyDescription": "Individual limit for each user in the organization."
@@ -11018,36 +11018,45 @@
       },
       "groups": {
         "title": "Group Limits",
-        "description": "Group limits never block across groups: a user can keep going while any of their groups' shared budgets has room. For each period, the largest per-member limit among a user's groups applies. To set a limit for one person, make a group with only that person.",
+        "description": "Apply to certain groups in this organization.",
         "add": {
           "label": "Add Group Limit"
         },
         "picker": {
           "placeholder": "Select a group",
-          "limitSet": "(limit set)"
+          "limitSet": "Limit set:"
         },
         "members": "{count, plural, one {# member} other {# members}}",
-        "empty": "No group has spending limits yet.",
+        "empty": "Set cost/token limit for workspace, user, and group usage.",
         "pool": {
           "title": "Shared Group Budget",
-          "description": "One budget shared by everyone in this group.",
+          "description": "Shared limit for everyone in this group. Set a cost or token limit, or both.",
           "empty": "No shared group budget",
-          "target": "Group: {group}",
-          "emptyDescription": "Shared limit for everyone in this group."
+          "target": "Group limit",
+          "emptyDescription": "Shared limit for everyone in this group.",
+          "members": "{count, plural, one {# member} other {# members}}"
         },
         "perMember": {
           "title": "Per-Member Limit",
-          "description": "A budget for each member of this group on their own. For each period, the largest limit among a user's groups applies.",
+          "description": "Individual limit for each member of this group. Set a cost or token limit, or both.",
           "adminOnly": "Only an admin can change per-member limits, because they can raise a member above the workspace limit.",
           "empty": "No per-member limit",
-          "target": "Group: {group}, per member",
-          "emptyDescription": "Individual limit for each member of this group."
+          "target": "Per-member group limit",
+          "emptyDescription": "Individual limit for each member of this group.",
+          "members": "Per-member limit • {count, plural, one {# member} other {# members}}"
         },
         "kind": {
           "placeholder": "Select a limit type"
         },
-        "field": {
-          "members": "({count, plural, one {# member} other {# members}})"
+        "field": {},
+        "new": {
+          "title": "New Group Limit",
+          "pool": {
+            "description": "Shared limit for everyone in a specific group. Set a cost or token limit, or both."
+          },
+          "perMember": {
+            "description": "Individual limit for each member of a specific group. Set a cost or token limit, or both."
+          }
         }
       },
       "groupPage": {
@@ -11059,7 +11068,7 @@
         "addModelBudget": "Add Model Budget",
         "modelBudget": {
           "title": "Model Budget",
-          "description": "Cap spend on specific models. Usage of a model also counts toward the limits above."
+          "description": "Cap spend on specific models. These also count toward the shared budget."
         },
         "cancel": "Cancel",
         "save": "Save Updates",
@@ -11089,7 +11098,8 @@
           "target": "{target} • {count, plural, one {# model budget} other {# model budgets}}",
           "nextReset": "Next reset: {at}",
           "inactive": "Inactive limit",
-          "used": "<b>{percent}%</b> used"
+          "used": "<b>{percent}%</b> used",
+          "prefix": "{name} - "
         }
       },
       "alerts": {
@@ -11103,22 +11113,25 @@
       "row": {
         "model": {
           "title": "Model",
-          "placeholder": "Select a model"
+          "placeholder": "Search models…"
         },
         "period": {
           "title": "Reset Period",
           "options": {
             "DAILY": {
               "title": "Daily Limit",
-              "description": "Resets every day at 00:00 UTC"
+              "description": "Resets every day",
+              "helper": "Resets every day at 00:00 UTC."
             },
             "WEEKLY": {
               "title": "Weekly Limit",
-              "description": "Resets every Monday at 00:00 UTC"
+              "description": "Resets every Monday",
+              "helper": "Resets every Monday at 00:00 UTC."
             },
             "MONTHLY": {
               "title": "Monthly Limit",
-              "description": "Resets on the 1st of every month at 00:00 UTC"
+              "description": "Resets 1st of every month",
+              "helper": "Resets 1st of every month at 00:00 UTC."
             }
           }
         },
@@ -11127,35 +11140,39 @@
           "tooltip": "Remove limit"
         },
         "cost": {
-          "title": "Cost Limit"
+          "title": "Cost Limit",
+          "placeholder": "No cost limit",
+          "suffix": "USD"
         },
         "tokens": {
           "title": "Token Limit",
           "placeholder": "No token limit",
-          "suffix": "K"
+          "suffix": "K",
+          "unit": "tokens"
         },
         "usage": {
           "spent": "<mono>{amount}</mono> spent",
           "tokens": "<mono>{tokens}</mono> tokens used",
           "percent": "{percent}%",
           "blocked": {
-            "all": "Usage will be blocked until the next reset.",
-            "model": "Model usage will be blocked until the next reset."
+            "all": "Usage will be blocked until next reset.",
+            "model": "Model usage will be blocked until next reset."
           }
         },
         "whenReached": {
           "title": "When This Limit Is Reached",
           "blockAll": {
             "title": "Block All Usage at Limit",
-            "description": "Usage from all models, including chat, search, bots and API calls, stops until the next reset."
+            "description": "Usage from all models including chat, search, bot, and API calls stops until the next reset."
           },
           "blockModel": {
             "title": "Block Model Usage at Limit",
-            "description": "Usage of this model stops until the next reset. Other models stay available.",
+            "description": "Usage from this model including chat, bot, and API calls stops until the next reset.",
             "summary": "Block model usage at limit"
           }
         },
         "errors": {
+          "budgetOutOfRange": "Set a cost of at least $0.01 and at most 1 trillion tokens.",
           "budgetRequired": "Set a cost limit, a token limit, or both.",
           "duplicate": "Another limit already uses this period.",
           "modelRequired": "Choose a model."

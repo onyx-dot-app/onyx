@@ -266,6 +266,7 @@ export async function* sendMessage({
         scope: data.scope,
         reset_at: data.reset_at,
         retry_after_seconds: data.retry_after_seconds,
+        model: data.model,
       };
       const streamingError: StreamingError = {
         error: data.detail ?? "You've reached your usage limit.",

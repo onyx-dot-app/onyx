@@ -305,7 +305,9 @@ rejected signup attempt still counts.
   defaults in `shared_configs/configs.py`, `_FIELD_AND_DEFAULT` in
   `backend/onyx/server/usage_limits.py`, and the override model
   `TenantUsageLimitOverrides`.
-- `trip-budget-by-hand` **Trip a budget by hand.** On an EE build, `PUT
+- `trip-budget-by-hand` **Trip a budget by hand.** Do this only on a
+  disposable test workspace: the PUT replaces every limit on the workspace
+  pool. On an EE build, `PUT
   /admin/spending-limits/workspace/pool` with one DAILY limit of
   `cost_budget_cents: 0.001`; one chat message spends more. Send a message, wait
   2 s for the usage flush, and send another. The second gets the 429 and the

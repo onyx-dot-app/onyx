@@ -5,6 +5,8 @@ import {
   type SpendingLimitCard,
 } from "@/lib/spendingLimits/types";
 import {
+  MAX_TOKEN_BUDGET_THOUSANDS,
+  cardSignature,
   emptyDraftLimit,
   isDraftDirty,
   toCardDraft,
@@ -120,4 +122,58 @@ test("toggling the card or editing a budget makes the draft dirty", () => {
       card
     )
   ).toBe(true);
+});
+
+test("validation flags a zero-cent cost and a token budget above the API maximum", () => {
+  const draft = toCardDraft(card);
+  const zeroCost = {
+    ...emptyDraftLimit(false, draft.limits),
+    costDollars: 0.004,
+  };
+  const tooManyTokens = {
+    ...emptyDraftLimit(true, draft.limits),
+    modelConfigurationId: 8,
+    tokenThousands: MAX_TOKEN_BUDGET_THOUSANDS + 1,
+  };
+  const errors = validateDraft({
+    ...draft,
+    limits: [...draft.limits, zeroCost, tooManyTokens],
+  });
+
+  expect(errors.get(zeroCost.key)).toBe("budgetOutOfRange");
+  expect(errors.get(tooManyTokens.key)).toBe("budgetOutOfRange");
+  expect(errors.size).toBe(2);
+});
+
+test("an unedited cost goes back as stored; an edited one rounds to cents", () => {
+  const fractional: SpendingLimitCard = {
+    enabled: true,
+    limits: [limit({ cost_budget_cents: 12.345 })],
+  };
+  const draft = toCardDraft(fractional);
+
+  expect(toRequests(draft)[0]!.cost_budget_cents).toBe(12.345);
+  expect(isDraftDirty(draft, fractional)).toBe(false);
+  expect(
+    toRequests({
+      ...draft,
+      limits: [{ ...draft.limits[0]!, costDollars: 0.126 }],
+    })[0]!.cost_budget_cents
+  ).toBe(13);
+});
+
+test("the card signature ignores usage and reset times", () => {
+  const refetched: SpendingLimitCard = {
+    ...card,
+    limits: card.limits.map((l) => ({
+      ...l,
+      used_cost_cents: 42,
+      reset_at: "2026-12-01T00:00:00+00:00",
+    })),
+  };
+
+  expect(cardSignature(refetched)).toBe(cardSignature(card));
+  expect(cardSignature({ ...card, enabled: false })).not.toBe(
+    cardSignature(card)
+  );
 });

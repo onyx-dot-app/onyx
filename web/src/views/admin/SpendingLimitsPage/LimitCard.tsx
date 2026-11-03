@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import {
   Button,
@@ -12,7 +12,7 @@ import {
   type SelectOption,
 } from "@opal/components";
 import { Content, Section, toast } from "@opal/layouts";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import {
   SvgAlertCircle,
   SvgExpand,
@@ -32,6 +32,7 @@ import {
   type SpendingLimitCard,
 } from "@/lib/spendingLimits/types";
 import {
+  cardSignature,
   emptyDraftLimit,
   isDraftDirty,
   toCardDraft,
@@ -43,6 +44,7 @@ import {
 import LimitRow from "@/views/admin/SpendingLimitsPage/LimitRow";
 import {
   EMPHASIS,
+  cardSummaryLimits,
   useLimitSummary,
 } from "@/views/admin/SpendingLimitsPage/summary";
 
@@ -116,14 +118,16 @@ function InsetDivider() {
 }
 
 interface LimitCardProps {
-  title: string;
-  description: string;
+  title: string | RichStr;
+  description: string | RichStr;
   icon: IconFunctionComponent;
   /** Shown while the card has no limits. */
-  emptyTitle: string;
-  emptyDescription: string;
-  /** Names the card's target in the folded summary, e.g. "Group: Design". */
+  emptyTitle: string | RichStr;
+  emptyDescription: string | RichStr;
+  /** Names the card's target in the folded summary, e.g. "Group limit". */
   targetLabel: string;
+  /** Leads the folded summary line, e.g. the group's name. */
+  summaryPrefix?: string;
   card: SpendingLimitCard;
   /** null until the caller knows where to save, e.g. before a group is picked. */
   path: CardPath | null;
@@ -132,13 +136,15 @@ interface LimitCardProps {
   /** Read-only when false: the caller can see the card but not change it. */
   canEdit: boolean;
   /** Shown in a read-only card to say why it can't be edited. */
-  readOnlyNote?: string;
+  readOnlyNote?: string | RichStr;
   /** Content above the limits, e.g. the group the card applies to. */
   targetField?: React.ReactNode;
   /** A new card opens with one empty limit and drops on cancel. */
   isNew?: boolean;
   onCancelNew?: () => void;
   onSaved: () => void;
+  /** Each new value opens the card and scrolls to it. */
+  revealKey?: number;
 }
 
 export default function LimitCard({
@@ -148,6 +154,7 @@ export default function LimitCard({
   emptyTitle,
   emptyDescription,
   targetLabel,
+  summaryPrefix,
   card,
   path,
   showUsage,
@@ -158,6 +165,7 @@ export default function LimitCard({
   isNew = false,
   onCancelNew,
   onSaved,
+  revealKey,
 }: LimitCardProps) {
   const t = useTranslations("admin.spendingLimits");
   const format = useFormatter();
@@ -170,6 +178,7 @@ export default function LimitCard({
   // New rows hold their errors back until edited.
   const [editedRows, setEditedRows] = useState<Set<number>>(() => new Set());
   const [saving, setSaving] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   function newDraft(): CardDraft {
     const loaded = toCardDraft(card);
@@ -178,11 +187,19 @@ export default function LimitCard({
       : loaded;
   }
 
-  // A refetch after a save replaces the draft with what the server stored.
+  // A change to the stored limits replaces the draft; a refetch that only
+  // moves usage keeps unsaved edits.
+  const signature = cardSignature(card);
   useEffect(() => {
     setDraft(newDraft());
     setOpenModelRows(new Set());
-  }, [card]);
+  }, [signature]);
+
+  useEffect(() => {
+    if (revealKey === undefined) return;
+    setExpanded(true);
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [revealKey]);
 
   const errors = validateDraft(draft);
   const dirty = isNew || isDraftDirty(draft, card);
@@ -315,6 +332,7 @@ export default function LimitCard({
         border="solid"
         color="background-tint-01"
         data-testid={testId}
+        ref={rootRef}
       >
         <Section gap={0} flexDirection="row" alignItems="start" height="auto">
           <Section
@@ -357,13 +375,7 @@ export default function LimitCard({
     .map((limit) => new Date(limit.reset_at))
     .sort((a, b) => a.getTime() - b.getTime())[0];
   const inactive = !card.enabled;
-  const summaryLimits = blockLimits
-    .filter((limit) => limit.model_configuration_id === null)
-    .map((limit) => ({
-      period: limit.period,
-      costCents: limit.cost_budget_cents,
-      tokenThousands: limit.token_budget,
-    }));
+  const summaryLimits = cardSummaryLimits(card);
 
   const foldedHeader = (
     <>
@@ -390,10 +402,17 @@ export default function LimitCard({
               strikethrough={inactive}
             >
               {richNodes(
-                summarize(
-                  summaryLimits,
-                  inactive ? EMPHASIS.titleInactive : EMPHASIS.title
-                )
+                <>
+                  {summaryPrefix !== undefined && (
+                    <span className="font-main-ui-body">
+                      {t("card.summary.prefix", { name: summaryPrefix })}
+                    </span>
+                  )}
+                  {summarize(
+                    summaryLimits,
+                    inactive ? EMPHASIS.titleInactive : EMPHASIS.title
+                  )}
+                </>
               )}
             </Text>
           </Section>
@@ -548,6 +567,7 @@ export default function LimitCard({
         inactive && !expanded ? "background-tint-02" : "background-tint-00"
       }
       data-testid={testId}
+      ref={rootRef}
     >
       <Section
         gap={0}

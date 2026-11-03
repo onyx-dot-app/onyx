@@ -10995,22 +10995,22 @@
     },
     "spendingLimits": {
       "page": {
-        "description": "设置支出上限，控制整个组织的 LLM 支出。",
+        "description": "设置支出限额，为组织的 LLM 支出设置护栏。",
         "loadFailed": "无法加载支出上限。"
       },
       "workspace": {
         "title": "工作区上限",
-        "description": "适用于此组织中的所有人。",
+        "description": "适用于该组织中的所有用户和账户。",
         "pool": {
           "title": "共享预算",
-          "description": "每个周期由所有人共享的预算。可设置成本上限、令牌上限或两者。",
+          "description": "每个重置周期内所有人共享的限额。设置费用限额、令牌限额或两者。",
           "empty": "无全局工作区限额",
           "target": "全局工作区限额",
           "emptyDescription": "每个重置周期内所有人共享的限额。"
         },
         "perUser": {
           "title": "每用户上限",
-          "description": "每个用户各自的预算。同一周期内，组的每成员上限会替代它。",
+          "description": "组织中每位用户各自的限额。设置费用限额、令牌限额或两者。",
           "empty": "无每用户限额",
           "target": "全局每用户限额",
           "emptyDescription": "组织中每位用户各自的限额。"
@@ -11018,36 +11018,45 @@
       },
       "groups": {
         "title": "组上限",
-        "description": "组上限不会跨组阻止：只要用户所在任一组的共享预算还有余量，用户就可以继续使用。每个周期采用用户所在各组中最大的每成员上限。要为单个人设置上限，请创建只包含此人的组。",
+        "description": "适用于该组织中的特定群组。",
         "add": {
           "label": "添加组上限"
         },
         "picker": {
           "placeholder": "选择组",
-          "limitSet": "（已设置限额）"
+          "limitSet": "已设限额："
         },
         "members": "{count, plural, other {# 名成员}}",
-        "empty": "还没有组设置支出上限。",
+        "empty": "为工作区、用户和群组的使用设置费用/令牌限额。",
         "pool": {
           "title": "组共享预算",
-          "description": "此组所有人共享的预算。",
+          "description": "该群组所有人共享的限额。设置费用限额、令牌限额或两者。",
           "empty": "无群组共享预算",
-          "target": "群组：{group}",
-          "emptyDescription": "该群组所有人共享的限额。"
+          "target": "群组限额",
+          "emptyDescription": "该群组所有人共享的限额。",
+          "members": "{count, plural, other {# 名成员}}"
         },
         "perMember": {
           "title": "每成员上限",
-          "description": "此组每个成员各自的预算。每个周期采用用户所在各组中最大的上限。",
+          "description": "该群组每位成员各自的限额。设置费用限额、令牌限额或两者。",
           "adminOnly": "每成员上限可以让成员高于工作区上限，因此只有管理员可以更改。",
           "empty": "无每成员限额",
-          "target": "群组：{group}，每成员",
-          "emptyDescription": "该群组每位成员各自的限额。"
+          "target": "群组每位成员限额",
+          "emptyDescription": "该群组每位成员各自的限额。",
+          "members": "每位成员限额 • {count, plural, other {# 名成员}}"
         },
         "kind": {
           "placeholder": "选择限额类型"
         },
-        "field": {
-          "members": "（{count, plural, other {# 名成员}}）"
+        "field": {},
+        "new": {
+          "title": "新建群组限额",
+          "pool": {
+            "description": "特定群组所有人共享的限额。设置费用限额、令牌限额或两者。"
+          },
+          "perMember": {
+            "description": "特定群组每位成员各自的限额。设置费用限额、令牌限额或两者。"
+          }
         }
       },
       "groupPage": {
@@ -11059,7 +11068,7 @@
         "addModelBudget": "添加模型预算",
         "modelBudget": {
           "title": "模型预算",
-          "description": "限制特定模型的支出。模型的使用也会计入上面的上限。"
+          "description": "为特定模型的支出设上限。这些支出也计入共享预算。"
         },
         "cancel": "取消",
         "save": "保存更改",
@@ -11089,7 +11098,8 @@
           "target": "{target} • {count, plural, other {# 个模型预算}}",
           "nextReset": "下次重置：{at}",
           "inactive": "已停用的限额",
-          "used": "已使用 <b>{percent}%</b>"
+          "used": "已使用 <b>{percent}%</b>",
+          "prefix": "{name} - "
         }
       },
       "alerts": {
@@ -11103,22 +11113,25 @@
       "row": {
         "model": {
           "title": "模型",
-          "placeholder": "选择模型"
+          "placeholder": "搜索模型…"
         },
         "period": {
           "title": "重置周期",
           "options": {
             "DAILY": {
               "title": "每日上限",
-              "description": "每天 00:00 UTC 重置"
+              "description": "每天重置",
+              "helper": "每天 00:00 UTC 重置。"
             },
             "WEEKLY": {
               "title": "每周上限",
-              "description": "每周一 00:00 UTC 重置"
+              "description": "每周一重置",
+              "helper": "每周一 00:00 UTC 重置。"
             },
             "MONTHLY": {
               "title": "每月上限",
-              "description": "每月 1 日 00:00 UTC 重置"
+              "description": "每月1日重置",
+              "helper": "每月1日 00:00 UTC 重置。"
             }
           }
         },
@@ -11127,35 +11140,39 @@
           "tooltip": "移除上限"
         },
         "cost": {
-          "title": "成本上限"
+          "title": "成本上限",
+          "placeholder": "无费用限额",
+          "suffix": "USD"
         },
         "tokens": {
           "title": "令牌上限",
           "placeholder": "无令牌上限",
-          "suffix": "K"
+          "suffix": "K",
+          "unit": "令牌"
         },
         "usage": {
           "spent": "已花费 <mono>{amount}</mono>",
           "tokens": "已使用 <mono>{tokens}</mono> 个令牌",
           "percent": "{percent}%",
           "blocked": {
-            "all": "在下次重置前，使用将被阻止。",
-            "model": "在下次重置前，该模型的使用将被阻止。"
+            "all": "在下次重置前将阻止使用。",
+            "model": "在下次重置前将阻止使用该模型。"
           }
         },
         "whenReached": {
           "title": "达到此上限时",
           "blockAll": {
             "title": "达到限额时阻止所有使用",
-            "description": "所有模型的使用（包括聊天、搜索、机器人和 API 调用）将停止，直到下次重置。"
+            "description": "所有模型的使用（包括聊天、搜索、机器人和 API 调用）都将停止，直至下次重置。"
           },
           "blockModel": {
             "title": "达到限额时阻止模型使用",
-            "description": "此模型的使用将停止，直到下次重置。其他模型仍可使用。",
+            "description": "该模型的使用（包括聊天、机器人和 API 调用）将停止，直到下次重置。",
             "summary": "达到限额时阻止模型使用"
           }
         },
         "errors": {
+          "budgetOutOfRange": "请将成本设为至少 0.01 美元，令牌数不超过 1 万亿。",
           "budgetRequired": "请设置成本上限、令牌上限或两者。",
           "duplicate": "另一个上限已使用此周期。",
           "modelRequired": "请选择一个模型。"

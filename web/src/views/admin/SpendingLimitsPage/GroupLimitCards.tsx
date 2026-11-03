@@ -2,21 +2,21 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Card,
-  IconContainer,
-  InputSingleSelect,
-  Text,
-  type SelectOption,
-} from "@opal/components";
+import { InputSingleSelect, type SelectOption } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgUser, SvgUsers } from "@opal/icons";
+import { richNodes } from "@opal/utils";
 import type {
   CardPath,
   GroupSpendingLimits,
   SpendingLimitCard,
 } from "@/lib/spendingLimits/types";
 import LimitCard from "@/views/admin/SpendingLimitsPage/LimitCard";
+import {
+  EMPHASIS,
+  cardSummaryLimits,
+  useLimitSummary,
+} from "@/views/admin/SpendingLimitsPage/summary";
 
 export enum GroupCardKind {
   POOL = "pool",
@@ -37,37 +37,6 @@ function groupCardPath(groupId: number, kind: GroupCardKind): CardPath {
   return `groups/${groupId}/${KIND_PATH[kind]}`;
 }
 
-interface GroupFieldProps {
-  name: string;
-  memberCount: number;
-}
-
-/** The group a saved card applies to; it can't change after creation. */
-function GroupField({ name, memberCount }: GroupFieldProps) {
-  const t = useTranslations("admin.spendingLimits.groups");
-  return (
-    <Card padding={2} rounding={2} border="solid">
-      <Section flexDirection="row" justifyContent="start" gap={1} height="auto">
-        <IconContainer icon={SvgUsers} />
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          gap={1}
-          width="fit"
-          height="auto"
-        >
-          <Text font="main-ui-body" color="text-04">
-            {name}
-          </Text>
-          <Text font="main-ui-muted" color="text-03">
-            {t("field.members", { count: memberCount })}
-          </Text>
-        </Section>
-      </Section>
-    </Card>
-  );
-}
-
 interface GroupLimitCardProps {
   kind: GroupCardKind;
   groupId: number;
@@ -77,6 +46,8 @@ interface GroupLimitCardProps {
   modelOptions: SelectOption[];
   canEdit: boolean;
   onSaved: () => void;
+  /** Each new value opens the card and scrolls to it. */
+  revealKey?: number;
 }
 
 export function GroupLimitCard({
@@ -87,18 +58,22 @@ export function GroupLimitCard({
   modelOptions,
   canEdit,
   onSaved,
+  revealKey,
 }: GroupLimitCardProps) {
   const t = useTranslations("admin.spendingLimits.groups");
   return (
     <LimitCard
-      title={t(`${kind}.title`)}
-      description={t(`${kind}.description`)}
+      title={group ? group.name : t(`${kind}.title`)}
+      description={
+        group
+          ? t(`${kind}.members`, { count: group.memberCount })
+          : t(`${kind}.description`)
+      }
       icon={KIND_ICON[kind]}
       emptyTitle={t(`${kind}.empty`)}
       emptyDescription={t(`${kind}.emptyDescription`)}
-      targetLabel={
-        group ? t(`${kind}.target`, { group: group.name }) : t(`${kind}.title`)
-      }
+      targetLabel={t(`${kind}.target`)}
+      summaryPrefix={group?.name}
       card={card}
       path={groupCardPath(groupId, kind)}
       showUsage={kind === GroupCardKind.POOL}
@@ -107,12 +82,8 @@ export function GroupLimitCard({
       readOnlyNote={
         kind === GroupCardKind.PER_MEMBER ? t("perMember.adminOnly") : undefined
       }
-      targetField={
-        group ? (
-          <GroupField name={group.name} memberCount={group.memberCount} />
-        ) : undefined
-      }
       onSaved={onSaved}
+      revealKey={revealKey}
     />
   );
 }
@@ -129,6 +100,8 @@ interface NewGroupLimitCardProps {
   modelOptions: SelectOption[];
   onCancel: () => void;
   onSaved: () => void;
+  /** Called instead of picking a group whose card of this kind exists. */
+  onPickLimited: (groupId: number, kind: GroupCardKind) => void;
 }
 
 /** A card for a group and limit type that have no limits yet. */
@@ -138,26 +111,53 @@ export function NewGroupLimitCard({
   modelOptions,
   onCancel,
   onSaved,
+  onPickLimited,
 }: NewGroupLimitCardProps) {
   const t = useTranslations("admin.spendingLimits.groups");
+  const summarize = useLimitSummary();
   const [groupId, setGroupId] = useState<number | null>(null);
   const [kind, setKind] = useState(GroupCardKind.POOL);
 
-  function isSet(id: number, forKind: GroupCardKind): boolean {
+  function existingCard(
+    id: number,
+    forKind: GroupCardKind
+  ): SpendingLimitCard | null {
     const cards = limited.find((group) => group.user_group_id === id);
-    if (!cards) return false;
+    if (!cards) return null;
     const card = forKind === GroupCardKind.POOL ? cards.pool : cards.per_member;
-    return card.limits.length > 0;
+    return card.limits.length > 0 ? card : null;
   }
 
-  const groupOptions: SelectOption[] = groups.map((group) => ({
-    value: String(group.id),
-    title: group.name,
-    description: t("members", { count: group.memberCount }),
-    icon: SvgUsers,
-    suffix: isSet(group.id, kind) ? t("picker.limitSet") : undefined,
-    disabled: isSet(group.id, kind),
-  }));
+  function isSet(id: number, forKind: GroupCardKind): boolean {
+    return existingCard(id, forKind) !== null;
+  }
+
+  function pick(id: number | null, forKind: GroupCardKind) {
+    if (id !== null && isSet(id, forKind)) {
+      onPickLimited(id, forKind);
+      return;
+    }
+    setGroupId(id);
+    setKind(forKind);
+  }
+
+  const groupOptions: SelectOption[] = groups.map((group) => {
+    const card = existingCard(group.id, kind);
+    return {
+      value: String(group.id),
+      title: group.name,
+      description: t("members", { count: group.memberCount }),
+      info: card
+        ? richNodes(
+            <>
+              {t("picker.limitSet")}
+              <br />
+              {summarize(cardSummaryLimits(card), EMPHASIS.secondary)}
+            </>
+          )
+        : undefined,
+    };
+  });
   const kindOptions: SelectOption[] = Object.values(GroupCardKind).map(
     (value) => ({
       value,
@@ -170,8 +170,8 @@ export function NewGroupLimitCard({
 
   return (
     <LimitCard
-      title={t(`${kind}.title`)}
-      description={t(`${kind}.description`)}
+      title={t("new.title")}
+      description={t(`new.${kind}.description`)}
       icon={KIND_ICON[kind]}
       emptyTitle={t(`${kind}.empty`)}
       emptyDescription={t(`${kind}.emptyDescription`)}
@@ -187,7 +187,7 @@ export function NewGroupLimitCard({
           <InputSingleSelect
             value={groupId === null ? "" : String(groupId)}
             onValueChange={(value) =>
-              setGroupId(value === "" ? null : Number(value))
+              pick(value === "" ? null : Number(value), kind)
             }
             placeholder={t("picker.placeholder")}
             options={groupOptions}
@@ -199,7 +199,7 @@ export function NewGroupLimitCard({
               const picked = Object.values(GroupCardKind).find(
                 (option) => option === value
               );
-              if (picked) setKind(picked);
+              if (picked) pick(groupId, picked);
             }}
             defaultOption={GroupCardKind.POOL}
             placeholder={t("kind.placeholder")}

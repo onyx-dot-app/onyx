@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { AdminSpendingLimitsPage } from "@tests/e2e/pages/AdminSpendingLimitsPage";
 
@@ -15,12 +15,16 @@ test.use({ storageState: "admin_auth.json" });
 
 const PER_USER_CARD = "workspace/per-user";
 
-test.describe("spending limits block chat @exclusive", () => {
-  test.afterEach(async ({ page }) => {
-    await page.request.put(`/api/admin/spending-limits/${PER_USER_CARD}`, {
-      data: { enabled: true, limits: [] },
-    });
+async function clearPerUserCard(page: Page): Promise<void> {
+  await page.request.put(`/api/admin/spending-limits/${PER_USER_CARD}`, {
+    data: { enabled: true, limits: [] },
   });
+}
+
+test.describe("spending limits block chat @exclusive", () => {
+  // The test starts from an empty card, whatever an earlier run left.
+  test.beforeEach(async ({ page }) => clearPerUserCard(page));
+  test.afterEach(async ({ page }) => clearPerUserCard(page));
 
   test("a per-user token limit saved on the page surfaces the usage-limit banner", async ({
     page,

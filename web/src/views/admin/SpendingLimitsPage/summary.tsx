@@ -2,7 +2,11 @@
 
 import { Fragment } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import type { Period } from "@/lib/spendingLimits/types";
+import {
+  LimitAction,
+  type Period,
+  type SpendingLimitCard,
+} from "@/lib/spendingLimits/types";
 
 const CENTS_PER_DOLLAR = 100;
 const TOKENS_PER_THOUSAND = 1000;
@@ -12,6 +16,21 @@ export interface LimitAmounts {
   period: Period;
   costCents: number | null;
   tokenThousands: number | null;
+}
+
+/** The all-models blocking limits a card's one-line summary names. */
+export function cardSummaryLimits(card: SpendingLimitCard): LimitAmounts[] {
+  return card.limits
+    .filter(
+      (limit) =>
+        limit.action === LimitAction.BLOCK &&
+        limit.model_configuration_id === null
+    )
+    .map((limit) => ({
+      period: limit.period,
+      costCents: limit.cost_budget_cents,
+      tokenThousands: limit.token_budget,
+    }));
 }
 
 /** Classes for the amounts inside a Text. A nested Text would add its own

@@ -22,10 +22,15 @@ import {
 } from "@opal/icons";
 import { richNodes } from "@opal/utils";
 import type { RichNodes } from "@opal/types";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
+import { filterModelConfigurations } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
 import { LimitAction, PERIODS } from "@/lib/spendingLimits/types";
-import type {
-  DraftLimit,
-  DraftLimitError,
+import {
+  MAX_TOKEN_BUDGET_THOUSANDS,
+  type DraftLimit,
+  type DraftLimitError,
 } from "@/views/admin/SpendingLimitsPage/draft";
 import {
   EMPHASIS,
@@ -91,6 +96,33 @@ function UsageSummary({ amount, used, budget }: UsageSummaryProps) {
         )}
       </Section>
     </Card>
+  );
+}
+
+interface ModelFieldProps {
+  value: number | null;
+  /** The saved model's row, shown until the listing loads that model. */
+  fallback: SelectOption | undefined;
+  disabled: boolean;
+  onChange: (modelConfigurationId: number) => void;
+}
+
+/** Pages and searches the caller's providers past the first page. */
+function ModelField({ value, fallback, disabled, onChange }: ModelFieldProps) {
+  const t = useTranslations("admin.spendingLimits.row.model");
+  const { llmProviders, modelPaging } = useLanguageModels();
+  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
+  return (
+    <SimpleModelSelector
+      providers={filterModelConfigurations(llmProviders ?? [], { keep: value })}
+      value={value}
+      selectedFallback={fallback}
+      grouped={!hideProviderGrouping}
+      modelPaging={modelPaging}
+      placeholder={t("placeholder")}
+      disabled={disabled}
+      onChange={onChange}
+    />
   );
 }
 
@@ -167,7 +199,11 @@ export default function LimitRow({
     (option) => option.value === String(limit.modelConfigurationId)
   );
   const saved = limit.saved;
-  const savedPeriodMatches = saved !== null && saved.period === limit.period;
+  // Saved usage and reset time hold only for the saved period and model.
+  const savedPeriodMatches =
+    saved !== null &&
+    saved.period === limit.period &&
+    saved.model_configuration_id === limit.modelConfigurationId;
   const costCents =
     limit.costDollars === null
       ? null
@@ -255,18 +291,13 @@ export default function LimitRow({
         {limit.isModelRow && (
           <Section flexDirection="row" alignItems="start" gap={1} height="auto">
             <Section alignItems="stretch" gap={1} height="auto">
-              <InputSingleSelect
-                value={limit.modelConfigurationId?.toString() ?? ""}
-                onValueChange={(value) =>
-                  onChange({
-                    ...limit,
-                    modelConfigurationId: value === "" ? null : Number(value),
-                  })
-                }
-                placeholder={t("row.model.placeholder")}
-                options={modelOptions}
-                search
+              <ModelField
+                value={limit.modelConfigurationId}
+                fallback={model}
                 disabled={disabled}
+                onChange={(modelConfigurationId) =>
+                  onChange({ ...limit, modelConfigurationId })
+                }
               />
               {error === "modelRequired" && (
                 <InputErrorText>{t("row.errors.modelRequired")}</InputErrorText>
@@ -281,6 +312,7 @@ export default function LimitRow({
           wrap
           alignItems="start"
           gap={1}
+          wrapGap={2}
           height="auto"
         >
           <Section
@@ -304,7 +336,7 @@ export default function LimitRow({
               />
               <Section gap={0} alignItems="start" height="auto">
                 <Text font="secondary-body" color="text-03">
-                  {t(`row.period.options.${limit.period}.description`)}
+                  {t(`row.period.options.${limit.period}.helper`)}
                 </Text>
               </Section>
               {error === "duplicate" && (
@@ -362,6 +394,7 @@ export default function LimitRow({
             wrap
             alignItems="start"
             gap={1}
+            wrapGap={4}
             height="auto"
           >
             <Section
@@ -377,6 +410,8 @@ export default function LimitRow({
                   onChange={(costDollars) =>
                     onChange({ ...limit, costDollars })
                   }
+                  placeholder={t("row.cost.placeholder")}
+                  suffix={t("row.cost.suffix")}
                   disabled={disabled}
                 />
               </InputVertical>
@@ -410,8 +445,14 @@ export default function LimitRow({
                     onChange({ ...limit, tokenThousands })
                   }
                   min={1}
+                  max={MAX_TOKEN_BUDGET_THOUSANDS}
                   plain
-                  suffix={t("row.tokens.suffix")}
+                  valueSuffix={t("row.tokens.suffix")}
+                  suffix={
+                    limit.tokenThousands === null
+                      ? undefined
+                      : t("row.tokens.unit")
+                  }
                   placeholder={t("row.tokens.placeholder")}
                   disabled={disabled}
                 />
@@ -437,8 +478,8 @@ export default function LimitRow({
               {blockedMessage}
             </Text>
           )}
-          {error === "budgetRequired" && (
-            <InputErrorText>{t("row.errors.budgetRequired")}</InputErrorText>
+          {(error === "budgetRequired" || error === "budgetOutOfRange") && (
+            <InputErrorText>{t(`row.errors.${error}`)}</InputErrorText>
           )}
         </Section>
 

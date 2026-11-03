@@ -8,6 +8,8 @@ import {
 } from "@/lib/spendingLimits/types";
 
 const CENTS_PER_DOLLAR = 100;
+/** The API's largest token budget, in thousands of tokens. */
+export const MAX_TOKEN_BUDGET_THOUSANDS = 1_000_000_000;
 
 /** One editable BLOCK limit. Budgets are in the units the inputs show:
  *  dollars, and thousands of tokens. */
@@ -30,7 +32,11 @@ export interface CardDraft {
   alertLimits: SpendingLimit[];
 }
 
-export type DraftLimitError = "budgetRequired" | "modelRequired" | "duplicate";
+export type DraftLimitError =
+  | "budgetRequired"
+  | "budgetOutOfRange"
+  | "modelRequired"
+  | "duplicate";
 
 let nextKey = 0;
 
@@ -84,6 +90,28 @@ export function emptyDraftLimit(
   };
 }
 
+/** The cents to send. An unedited budget goes back exactly as stored, so
+ *  fractional cents survive a save. */
+function costCents(limit: DraftLimit): number | null {
+  if (limit.costDollars === null) return null;
+  const saved = limit.saved?.cost_budget_cents ?? null;
+  if (saved !== null && limit.costDollars === saved / CENTS_PER_DOLLAR) {
+    return saved;
+  }
+  return Math.round(limit.costDollars * CENTS_PER_DOLLAR);
+}
+
+/** Budgets the API would reject: cost that rounds to zero cents, or tokens
+ *  outside its range. */
+function isBudgetOutOfRange(limit: DraftLimit): boolean {
+  const cents = costCents(limit);
+  const tokens = limit.tokenThousands;
+  return (
+    (cents !== null && cents <= 0) ||
+    (tokens !== null && (tokens < 1 || tokens > MAX_TOKEN_BUDGET_THOUSANDS))
+  );
+}
+
 function bucketOf(limit: DraftLimit): string {
   return `${limit.modelConfigurationId ?? "all"}:${limit.period}`;
 }
@@ -101,6 +129,10 @@ export function validateDraft(draft: CardDraft): Map<number, DraftLimitError> {
       errors.set(limit.key, "budgetRequired");
       continue;
     }
+    if (isBudgetOutOfRange(limit)) {
+      errors.set(limit.key, "budgetOutOfRange");
+      continue;
+    }
     const bucket = bucketOf(limit);
     if (seen.has(bucket)) {
       errors.set(limit.key, "duplicate");
@@ -111,6 +143,17 @@ export function validateDraft(draft: CardDraft): Map<number, DraftLimitError> {
   return errors;
 }
 
+function asRequest(limit: SpendingLimit): SpendingLimitRequest {
+  return {
+    period: limit.period,
+    model_configuration_id: limit.model_configuration_id,
+    token_budget: limit.token_budget,
+    cost_budget_cents: limit.cost_budget_cents,
+    action: limit.action,
+    threshold_percent: limit.threshold_percent,
+  };
+}
+
 export function toRequests(draft: CardDraft): SpendingLimitRequest[] {
   return [
     ...draft.limits.map((limit) => ({
@@ -119,22 +162,18 @@ export function toRequests(draft: CardDraft): SpendingLimitRequest[] {
         ? limit.modelConfigurationId
         : null,
       token_budget: limit.tokenThousands,
-      cost_budget_cents:
-        limit.costDollars === null
-          ? null
-          : Math.round(limit.costDollars * CENTS_PER_DOLLAR),
+      cost_budget_cents: costCents(limit),
       action: LimitAction.BLOCK,
       threshold_percent: null,
     })),
-    ...draft.alertLimits.map((limit) => ({
-      period: limit.period,
-      model_configuration_id: limit.model_configuration_id,
-      token_budget: limit.token_budget,
-      cost_budget_cents: limit.cost_budget_cents,
-      action: limit.action,
-      threshold_percent: limit.threshold_percent,
-    })),
+    ...draft.alertLimits.map(asRequest),
   ];
+}
+
+/** What the card stores, without usage or reset times. It changes only when
+ *  the stored limits change, not on every refetch. */
+export function cardSignature(card: SpendingLimitCard): string {
+  return JSON.stringify([card.enabled, card.limits.map(asRequest)]);
 }
 
 /** Whether saving the draft would change the card. */

@@ -20,6 +20,10 @@ import { withCardModels } from "@/views/admin/SpendingLimitsPage/modelOptions";
 
 const route = ADMIN_ROUTES.SPENDING_LIMITS;
 
+function groupCardKey(groupId: number, kind: GroupCardKind): string {
+  return `${groupId}-${kind}`;
+}
+
 export default function SpendingLimitsPage() {
   const t = useTranslations("admin.spendingLimits");
   const adminRouteTitle = useAdminRouteTitle();
@@ -29,6 +33,11 @@ export default function SpendingLimitsPage() {
   // Cards opened through "Add Group Limit" that are not saved yet.
   const [newCardKeys, setNewCardKeys] = useState<number[]>([]);
   const [nextNewCardKey, setNextNewCardKey] = useState(0);
+  // The group card to open and scroll to, and a count that re-triggers it.
+  const [reveal, setReveal] = useState<{ card: string; count: number }>({
+    card: "",
+    count: 0,
+  });
 
   const header = (
     <SettingsLayouts.Header
@@ -84,6 +93,11 @@ export default function SpendingLimitsPage() {
     setNewCardKeys((prev) => prev.filter((k) => k !== key));
   }
 
+  function revealGroupCard(newCardKey: number, cardKey: string) {
+    dropGroupCard(newCardKey);
+    setReveal((prev) => ({ card: cardKey, count: prev.count + 1 }));
+  }
+
   const addGroupButton = (
     <Button
       icon={SvgPlusCircle}
@@ -101,7 +115,7 @@ export default function SpendingLimitsPage() {
       .filter(({ card }) => card.limits.length > 0)
       .map(({ kind, card }) => (
         <GroupLimitCard
-          key={`${group.user_group_id}-${kind}`}
+          key={groupCardKey(group.user_group_id, kind)}
           kind={kind}
           groupId={group.user_group_id}
           group={{ name: group.group_name, memberCount: group.member_count }}
@@ -109,6 +123,11 @@ export default function SpendingLimitsPage() {
           modelOptions={modelOptions}
           canEdit
           onSaved={refresh}
+          revealKey={
+            reveal.card === groupCardKey(group.user_group_id, kind)
+              ? reveal.count
+              : undefined
+          }
         />
       ))
   );
@@ -194,6 +213,9 @@ export default function SpendingLimitsPage() {
                   limited={data.groups}
                   modelOptions={modelOptions}
                   onCancel={() => dropGroupCard(key)}
+                  onPickLimited={(groupId, kind) =>
+                    revealGroupCard(key, groupCardKey(groupId, kind))
+                  }
                   onSaved={() => {
                     dropGroupCard(key);
                     refresh();
