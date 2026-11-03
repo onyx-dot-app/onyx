@@ -2829,6 +2829,8 @@
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
+          "lineTooltip": "{failures, plural, one {# 件の失敗} other {# 件の失敗}}、{errors, plural, one {# 件のエラー} other {# 件のエラー}}",
+          "barLabel": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}、{range}",
           "loadError": "グラフを読み込めませんでした。",
           "rangeFilter": "グラフのこの区間に作成された実行"
         },

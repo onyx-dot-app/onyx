@@ -2,23 +2,22 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import useSWR from "swr";
 import { Card, MessageCard, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { CardLoader } from "@opal/loaders";
+import { LineLoader } from "@opal/loaders";
+import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   CCPairThroughputWindow,
   IndexingOverviewResponse,
 } from "@/lib/connectors/types";
 import {
-  THROUGHPUT_POLL_MS,
   ThroughputBars,
   ThroughputWindowPicker,
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import { useThroughputData } from "@/lib/connectors/hooks";
 
 const WINDOWS: readonly CCPairThroughputWindow[] = ["1h", "24h", "7d"];
 
@@ -91,12 +90,10 @@ export default function OverviewCard({
 }: OverviewCardProps) {
   const t = useTranslations("admin.indexing.overview");
   const [timeWindow, setTimeWindow] = useState<CCPairThroughputWindow>("1h");
-  const { data, error } = useSWR<IndexingOverviewResponse>(
-    SWR_KEYS.indexMonitoringOverview(timeWindow),
-    errorHandlingFetcher,
-    // A window switch changes the key, so the loader shows until the new window lands.
-    { refreshInterval: THROUGHPUT_POLL_MS }
-  );
+  const { ref, data, error, stale } =
+    useThroughputData<IndexingOverviewResponse>((bins, tzOffsetMinutes) =>
+      SWR_KEYS.indexMonitoringOverview(timeWindow, bins, tzOffsetMinutes)
+    );
   // The span belongs to the old chart, so a new window drops it.
   function changeWindow(picked: CCPairThroughputWindow) {
     setTimeWindow(picked);
@@ -105,7 +102,6 @@ export default function OverviewCard({
   if (error !== undefined) {
     return <MessageCard variant="error" title={t("loadError")} />;
   }
-  if (data === undefined) return <CardLoader descriptionLines={3} />;
 
   return (
     // Fills the row beside the Activities card, so the two cards share one height.
@@ -116,60 +112,75 @@ export default function OverviewCard({
       height="full"
       data-testid="indexing-overview"
     >
-      <Section alignItems="stretch" gap={1} height="fit">
-        <Section
-          flexDirection="row"
-          alignItems="start"
-          justifyContent="start"
-          gap={1}
-          height="fit"
-          wrap
-        >
-          <Stat
-            value={data.indexing_connectors}
-            whole={data.active_connectors}
-            caption={t("connectors.caption")}
-            label={t("connectors.label")}
-          />
-          <Stat
-            value={data.total_docs_indexed}
-            caption={t("documents.caption")}
-            label={t("documents.label")}
-            tooltip={t("documents.tooltip")}
-          />
-          <Stat
-            value={data.recent_docs_indexed}
-            caption={t("processed.caption")}
-            label={t("processed.label")}
-            tooltip={t("processed.tooltip")}
-          />
+      {/* A new window or bar count keeps the last figures, dimmed, until its response lands. */}
+      <Section
+        alignItems="stretch"
+        gap={1}
+        height="fit"
+        className={cn(stale && "opacity-50")}
+      >
+        {data === undefined ? (
+          <LineLoader lines={3} />
+        ) : (
           <Section
             flexDirection="row"
-            justifyContent="end"
-            alignItems="center"
+            alignItems="start"
+            justifyContent="start"
             gap={1}
-            width="auto"
             height="fit"
-            className="grow basis-0"
             wrap
           >
-            <ThroughputWindowPicker
-              windows={WINDOWS}
-              value={timeWindow}
-              onChange={changeWindow}
-              selection={range}
-              onClearSelection={() => onRangeChange(null)}
+            <Stat
+              value={data.indexing_connectors}
+              whole={data.active_connectors}
+              caption={t("connectors.caption")}
+              label={t("connectors.label")}
             />
+            <Stat
+              value={data.total_docs_indexed}
+              caption={t("documents.caption")}
+              label={t("documents.label")}
+              tooltip={t("documents.tooltip")}
+            />
+            <Stat
+              value={data.recent_docs_indexed}
+              caption={t("processed.caption")}
+              label={t("processed.label")}
+              tooltip={t("processed.tooltip")}
+            />
+            <Section
+              flexDirection="row"
+              justifyContent="end"
+              alignItems="center"
+              gap={1}
+              width="auto"
+              height="fit"
+              className="grow basis-0"
+              wrap
+            >
+              <ThroughputWindowPicker
+                windows={WINDOWS}
+                value={timeWindow}
+                onChange={changeWindow}
+                selection={range}
+                onClearSelection={() => onRangeChange(null)}
+              />
+            </Section>
           </Section>
-        </Section>
+        )}
+        {/* The card's frame stays while loading, so the chart's width sets the bar count of the first fetch. */}
         <Section padding={2} alignItems="stretch" height="fit">
-          <ThroughputBars
-            data={data.throughput}
-            range={timeWindow}
-            height={BARS_HEIGHT}
-            selection={range}
-            onRangeSelect={onRangeChange}
-          />
+          <Section ref={ref} alignItems="stretch" height="fit">
+            {data !== undefined && (
+              <ThroughputBars
+                data={data.throughput}
+                range={timeWindow}
+                height={BARS_HEIGHT}
+                selection={range}
+                onRangeSelect={onRangeChange}
+              />
+            )}
+          </Section>
         </Section>
       </Section>
     </Card>

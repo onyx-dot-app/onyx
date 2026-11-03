@@ -2829,6 +2829,8 @@
         "throughput": {
           "ariaLabel": "المستندات المفهرسة بمرور الوقت",
           "tooltip": "{count, plural, one {# مستند} other {# مستندات}}",
+          "lineTooltip": "{failures, plural, one {# إخفاق} other {# إخفاقات}}، {errors, plural, one {# خطأ} other {# أخطاء}}",
+          "barLabel": "{count, plural, one {# مستند} other {# مستندات}}، {range}",
           "loadError": "تعذر تحميل الرسم البياني.",
           "rangeFilter": "عمليات التشغيل التي أُنشئت في هذا الجزء من المخطط"
         },

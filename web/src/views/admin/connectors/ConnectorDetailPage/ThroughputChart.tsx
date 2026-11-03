@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
-import { useFormatter, useTranslations } from "next-intl";
 import {
-  Bar,
-  BarChart,
-  ReferenceArea,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-} from "recharts";
+  Fragment,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   Card,
   Dropdown,
@@ -21,23 +21,25 @@ import {
 import { Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
-import { cn } from "@opal/utils";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { clickOnKeyDown, cn } from "@opal/utils";
+import type { RichStr } from "@opal/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useThroughputData } from "@/lib/connectors/hooks";
 import type {
   CCPairThroughputResponse,
+  CCPairThroughputSliceRun,
   CCPairThroughputWindow,
 } from "@/lib/connectors/types";
-import type { ValidStatuses } from "@/lib/types";
 
-export const THROUGHPUT_POLL_MS = 30_000;
+// Re-exported for the chart's tests, which import it from here.
+export { binsForWidth } from "@/lib/connectors/throughput";
+
 const BARS_HEIGHT = 48;
-const AXIS_HEIGHT = 16;
 const DAY_MINUTES = 1440;
 const HOUR_MINUTES = 60;
 
 // Labels sit on local times divisible by this. At a day they fall on midnight and show the date.
-// All time has no fixed length, so it takes a zoomed span's spacing.
+// All time has no fixed length, so it takes a spacing from its span.
 const TICK_MINUTES = {
   "1h": 10,
   "24h": 4 * HOUR_MINUTES,
@@ -45,7 +47,7 @@ const TICK_MINUTES = {
   all: null,
 } satisfies Record<CCPairThroughputWindow, number | null>;
 
-// A zoomed span or all time labels the coarsest of these that still fits this many labels.
+// All time labels the coarsest of these that still fits this many labels.
 const SPAN_TICK_MINUTES = [
   1,
   5,
@@ -62,7 +64,7 @@ const SPAN_TICK_MINUTES = [
 ];
 const SPAN_TICKS_WANTED = 3;
 
-/** Tick spacing for a span of any length, zoomed or all time, so it keeps a few labels. */
+/** Tick spacing for a span of any length, such as all time, so it keeps a few labels. */
 function spanTickMinutes(spanMs: number): number {
   const spanMinutes = spanMs / 60_000;
   const fitting = SPAN_TICK_MINUTES.filter(
@@ -120,7 +122,7 @@ export function pickedWindowStart({ window }: PickedWindow): string | null {
   return hours === null ? null : windowStart(hours);
 }
 
-/** A chart slice or dragged span, as ISO times, that zooms the chart and narrows its run lists. `until` is exclusive. */
+/** A chart slice or dragged span, as ISO times, that narrows the chart's run lists. `until` is exclusive. */
 export interface SliceRange {
   since: string;
   until: string;
@@ -183,44 +185,6 @@ export function formatTickLabel(
   });
 }
 
-// The status strip draws this many hairline ticks under each bar, so a run reads as
-// thin ticks with gaps between them rather than a solid block.
-const STRIP_TICKS_PER_SLICE = 2;
-
-// The status strip's tick color for a span a run of that status covered.
-const RUN_CELL_CLASS: Record<ValidStatuses, string> = {
-  success: "bg-action-selection-02",
-  in_progress: "bg-theme-blue-05",
-  not_started: "bg-theme-blue-05",
-  completed_with_errors: "bg-status-warning-05",
-  failed: "bg-status-error-05",
-  invalid: "bg-status-error-05",
-  canceled: "bg-background-neutral-03",
-  interrupted: "bg-background-neutral-03",
-};
-
-interface Slice {
-  /** The slice's middle, where its bar sits. */
-  at: number;
-  docs: number;
-}
-
-/** The slices that overlap `start` to `end`, plus one on each side, which the axis clips. Recharts sizes bars by the gap between points, so a lone slice draws no bar. */
-export function chartSlices(
-  docsIndexed: number[],
-  dataStart: number,
-  sliceMs: number,
-  start: number,
-  end: number
-): Slice[] {
-  return docsIndexed
-    .map((docs, index) => ({ at: dataStart + sliceMs * (index + 0.5), docs }))
-    .filter(
-      (slice) =>
-        slice.at + sliceMs * 1.5 > start && slice.at - sliceMs * 1.5 < end
-    );
-}
-
 /** The local times inside the window that are a whole multiple of `minutes` past local midnight, or every `minutes / DAY_MINUTES`th local midnight. */
 function axisTicks(start: number, end: number, minutes: number): number[] {
   // Ticks within an hour step by their own spacing, longer ones hour by hour so a day's ticks still land on midnight across a clock change.
@@ -242,65 +206,153 @@ function axisTicks(start: number, end: number, minutes: number): number[] {
   return ticks;
 }
 
-/** Unlabeled ticks at a third of the label spacing, inside the window. */
-function minorTicks(
-  labels: number[],
-  start: number,
-  end: number,
-  minutes: number
+// A few documents would otherwise fill the chart's height.
+const Y_FLOOR = 100;
+
+/** The top of the y scale: the highest bin, or `Y_FLOOR` when every bin is below it. */
+export function yScaleMax(docsPerBin: number[]): number {
+  return Math.max(Y_FLOOR, ...docsPerBin);
+}
+
+/** A status line's run kind. Only running and failed runs draw a line; every other status draws none. */
+type StatusLineKind = "running" | "failed" | "resolved";
+
+const LINE_KINDS: readonly StatusLineKind[] = ["running", "failed", "resolved"];
+
+const LINE_CLASS = {
+  running: "bg-chart-sequential-mass-02-blue",
+  failed: "bg-chart-diverging-neg-10-red",
+  resolved: "bg-chart-diverging-neg-02-red",
+} satisfies Record<StatusLineKind, string>;
+
+function isOfKind(run: CCPairThroughputSliceRun, kind: StatusLineKind) {
+  switch (kind) {
+    case "running":
+      return run.status === "in_progress";
+    case "failed":
+      return run.status === "failed" && !run.resolved;
+    case "resolved":
+      return run.status === "failed" && run.resolved;
+  }
+}
+
+interface Slice {
+  from: number;
+  to: number;
+  docs: number;
+  runs: CCPairThroughputSliceRun[];
+  /** The attempt ids each status line draws. */
+  lines: Record<StatusLineKind, number[]>;
+}
+
+function toSlice(
+  from: number,
+  to: number,
+  docs: number,
+  runs: CCPairThroughputSliceRun[]
+): Slice {
+  const idsOf = (kind: StatusLineKind) =>
+    runs.filter((run) => isOfKind(run, kind)).map((run) => run.attempt_id);
+  return {
+    from,
+    to,
+    docs,
+    runs,
+    lines: {
+      running: idsOf("running"),
+      failed: idsOf("failed"),
+      resolved: idsOf("resolved"),
+    },
+  };
+}
+
+/** The response's slices, or equal slices of its flat counts, without runs, from an API a deploy behind. */
+function slicesOf(data: CCPairThroughputResponse): Slice[] {
+  if (data.slices !== undefined) {
+    return data.slices.map((slice) =>
+      toSlice(
+        Date.parse(slice.start),
+        Date.parse(slice.end),
+        slice.docs_indexed,
+        slice.runs
+      )
+    );
+  }
+  const start = Date.parse(data.window_start);
+  const sliceMs =
+    (Date.parse(data.window_end) - start) / data.docs_indexed.length;
+  return data.docs_indexed.map((docs, index) =>
+    toSlice(start + index * sliceMs, start + (index + 1) * sliceMs, docs, [])
+  );
+}
+
+/** A slice in local time, such as "Oct 21, 09:00 – 09:20". */
+function formatSlice(format: Formatter, slice: Slice): string {
+  return formatSliceRange(format, new Date(slice.from), new Date(slice.to));
+}
+
+/** The line's runs that began in its slice. A run is in every slice it spans, so one also in the slice before began earlier. */
+function startedIn(
+  slices: Slice[],
+  index: number,
+  kind: StatusLineKind
 ): number[] {
-  const third = (minutes * 60_000) / 3;
-  const ticks = new Set<number>();
-  for (const label of labels) {
-    for (const offset of [-2, -1, 1, 2]) {
-      const tick = label + offset * third;
-      if (tick >= start && tick <= end) ticks.add(tick);
-    }
-  }
-  return Array.from(ticks);
+  const slice = slices[index];
+  if (slice === undefined) return [];
+  const earlier = new Set(slices[index - 1]?.runs.map((run) => run.attempt_id));
+  return slice.lines[kind].filter((id) => !earlier.has(id));
 }
 
-interface Run {
-  start: number;
-  end: number;
-  status: ValidStatuses;
+/** The one line kind a slice draws, or null when it draws none or several. */
+function slotKind(slice: Slice): StatusLineKind | null {
+  const kinds = LINE_KINDS.filter((kind) => slice.lines[kind].length > 0);
+  return kinds.length === 1 ? (kinds[0] ?? null) : null;
 }
 
-// A slice several runs covered shows the one that needs attention most.
-const STATUS_SEVERITY: Record<ValidStatuses, number> = {
-  failed: 5,
-  invalid: 5,
-  completed_with_errors: 4,
-  in_progress: 3,
-  not_started: 3,
-  success: 2,
-  canceled: 1,
-  interrupted: 1,
-};
+/** Open runs that completed with errors: the tooltip's errors count runs, not document errors. */
+function openErrorCount(slice: Slice): number {
+  return slice.runs.filter(
+    (run) => run.status === "completed_with_errors" && !run.resolved
+  ).length;
+}
 
-/** The status of the run that covered the span, the most severe when several did. */
-function sliceStatus(
-  runs: Run[],
-  sliceStart: number,
-  sliceEnd: number
-): ValidStatuses | null {
-  let shown: Run | null = null;
-  for (const run of runs) {
-    // An instant run (one that failed at once) covers the slice it began in.
-    if (
-      run.start >= sliceEnd ||
-      Math.max(run.end, run.start + 1) <= sliceStart
-    ) {
-      continue;
-    }
-    if (
-      shown === null ||
-      STATUS_SEVERITY[run.status] > STATUS_SEVERITY[shown.status]
-    ) {
-      shown = run;
-    }
-  }
-  return shown?.status ?? null;
+/** The first slice holding the attempt, or null when none does. */
+function firstSliceWith(slices: Slice[], attemptId: number | null) {
+  if (attemptId === null) return null;
+  const index = slices.findIndex((slice) =>
+    slice.runs.some((run) => run.attempt_id === attemptId)
+  );
+  return index === -1 ? null : index;
+}
+
+/** A status line under the pointer, with the runs of its kind that began in its slice. */
+export interface HoveredLine {
+  kind: StatusLineKind;
+  attemptIds: number[];
+}
+
+/** A bar or a status line, by its slice. */
+interface Mark {
+  index: number;
+  kind: StatusLineKind | "bar";
+}
+
+/** The bar or status line an event landed on, from its slot's data attributes. */
+function markAt(target: EventTarget): Mark | null {
+  if (!(target instanceof Element)) return null;
+  const slot = target.closest<HTMLElement>("[data-slice]");
+  if (slot === null) return null;
+  const kind =
+    slot.dataset.line === undefined
+      ? "bar"
+      : LINE_KINDS.find((each) => each === slot.dataset.line);
+  const index = Number(slot.dataset.slice);
+  return kind === undefined || Number.isNaN(index) ? null : { index, kind };
+}
+
+/** `part` of `whole` as a CSS percentage, 0 for an empty whole. */
+function percentOf(part: number, whole: number): string {
+  return `${whole > 0 ? (part / whole) * 100 : 0}%`;
 }
 
 export interface ThroughputWindowPickerProps<W extends PickerWindow> {
@@ -369,245 +421,495 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
   );
 }
 
-interface SliceTooltipProps {
-  active?: boolean;
-  payload?: { payload: Slice }[];
-  sliceMs: number;
+interface TooltipCardProps {
+  title: string | RichStr;
+  slice: Slice;
 }
-function SliceTooltip({ active, payload, sliceMs }: SliceTooltipProps) {
-  const t = useTranslations("admin.connector.statusCard.throughput");
+
+/** The small card over a bar or a status line: what it counts, then its slice's time range. */
+function TooltipCard({ title, slice }: TooltipCardProps) {
   const format = useFormatter();
-  const slice = payload?.[0]?.payload;
-  if (!active || slice === undefined) return null;
-  const from = new Date(slice.at - sliceMs / 2);
-  const to = new Date(slice.at + sliceMs / 2);
   return (
     <Card border="solid" rounding={2} padding={1}>
       <Text font="secondary-action" color="text-04">
-        {t("tooltip", { count: slice.docs })}
+        {title}
       </Text>
       <Text font="secondary-body" color="text-03">
-        {formatSliceRange(format, from, to)}
+        {formatSlice(format, slice)}
       </Text>
     </Card>
   );
 }
 
-/** A drag across the bars, as the indices of the first and the latest slice under the pointer. */
-interface Drag {
+interface CenteredInsideProps {
+  /** Where its middle sits, as a CSS percentage of its parent's width. */
+  at: string;
+  className?: string;
+  children: ReactNode;
+}
+
+/** Centered at `at` across its positioned parent, and moved inward where it would cross either edge, since the chart's card clips what hangs past it. */
+function CenteredInside({ at, className, children }: CenteredInsideProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  // Measured before paint on every render, since a tooltip's text changes its width.
+  useLayoutEffect(() => {
+    const measured = ref.current?.getBoundingClientRect().width ?? null;
+    if (measured !== width) setWidth(measured);
+  });
+  return (
+    // raw-ok: placed at a measured offset, which Section cannot position
+    <div
+      ref={ref}
+      className={cn(
+        "absolute w-max",
+        width === null && "-translate-x-1/2",
+        className
+      )}
+      style={{
+        insetInlineStart:
+          width === null
+            ? at
+            : `clamp(0px, calc(${at} - ${width / 2}px), calc(100% - ${width}px))`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** A run of slices by index, inclusive, as a drag covers them or a selection overlaps them. */
+interface SliceSpan {
   from: number;
   to: number;
 }
 
-export interface ThroughputBarsProps {
+function ordered({ from, to }: SliceSpan): SliceSpan {
+  return { from: Math.min(from, to), to: Math.max(from, to) };
+}
+
+function selectedSlices(
+  slices: Slice[],
+  selection: SliceRange | null
+): SliceSpan | null {
+  if (selection === null) return null;
+  const since = Date.parse(selection.since);
+  const until = Date.parse(selection.until);
+  const inside = slices.flatMap((slice, index) =>
+    slice.to > since && slice.from < until ? [index] : []
+  );
+  const from = inside[0];
+  const to = inside[inside.length - 1];
+  return from === undefined || to === undefined ? null : { from, to };
+}
+
+/** How a chart links to the page around it. */
+interface ThroughputLinkProps {
+  /** The brushed span. Every bar still draws, and those outside it fade. */
+  selection?: SliceRange | null;
+  /** A click picks one slice and a drag a span. A click on the one picked slice clears it with null. */
+  onRangeSelect?: (range: SliceRange | null) => void;
+  /** A click on a failure line, with the first open failed run of its slice. */
+  onFocusAttempt?: (attemptId: number) => void;
+  /** An activity hovered elsewhere on the page: its lines stay, the others fade, and a dashed guide marks its first slice. */
+  hoveredAttemptId?: number | null;
+  /** The status line under the pointer, or null once it leaves the lines. */
+  onHoverLine?: (line: HoveredLine | null) => void;
+}
+
+export interface ThroughputBarsProps extends ThroughputLinkProps {
   data: CCPairThroughputResponse;
   range: CCPairThroughputWindow;
   /** The bars' height in pixels, above the axis. */
   height?: number;
-  /** Zooms the chart to this span of its window. */
-  selection?: SliceRange | null;
-  /** Lets a click pick one slice and a drag pick a span. */
-  onRangeSelect?: (range: SliceRange) => void;
 }
 
-/** Documents indexed in each slice of a window, over a strip that colors each slice by the run that covered it. */
+// Plain DOM, not recharts: recharts 3 remounts every bar on each render, so a press between pointer down and up lands on a detached node.
+/** Documents indexed in each slice of a window, over three status lines per slice for its running, failed and resolved failed runs. */
 export function ThroughputBars({
   data,
   range,
   height = BARS_HEIGHT,
   selection = null,
   onRangeSelect,
+  onFocusAttempt,
+  hoveredAttemptId = null,
+  onHoverLine,
 }: ThroughputBarsProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
   const format = useFormatter();
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const dataStart = Date.parse(data.window_start);
-  const dataEnd = Date.parse(data.window_end);
-  const sliceMs = (dataEnd - dataStart) / data.docs_indexed.length;
-  const tickMs = sliceMs / STRIP_TICKS_PER_SLICE;
-  // A selection shows only the slices near it, so the bars widen to fill the span.
-  const start = selection === null ? dataStart : Date.parse(selection.since);
-  const end = selection === null ? dataEnd : Date.parse(selection.until);
-  const slices = chartSlices(data.docs_indexed, dataStart, sliceMs, start, end);
-  const tickMinutes =
-    (selection === null ? TICK_MINUTES[range] : null) ??
-    spanTickMinutes(end - start);
-  const labelTicks = axisTicks(start, end, tickMinutes);
-  const labelSet = new Set(labelTicks);
-  const ticks = [
-    ...labelTicks,
-    ...minorTicks(labelTicks, start, end, tickMinutes),
-  ].sort((a, b) => a - b);
-  // A run still going covers up to the window's end.
-  const runs: Run[] = data.runs.map((run) => ({
-    start: Date.parse(run.started),
-    end: run.ended === null ? dataEnd : Date.parse(run.ended),
-    status: run.status,
-  }));
+  const [drag, setDrag] = useState<SliceSpan | null>(null);
+  const [tip, setTip] = useState<Mark | null>(null);
+  // The one bar in the tab order; arrow keys move it.
+  const [focusable, setFocusable] = useState(0);
+  const barRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // The release already picked, so the click that follows it must not pick again.
+  const releasePicked = useRef(false);
+  const start = Date.parse(data.window_start);
+  const end = Date.parse(data.window_end);
+  const slices = useMemo(() => slicesOf(data), [data]);
+  const barLabels = useMemo(
+    () =>
+      slices.map((slice) =>
+        t("barLabel", { count: slice.docs, range: formatSlice(format, slice) })
+      ),
+    [slices, t, format]
+  );
+  const count = slices.length;
+  // The bar count follows the width, so a stop past the last bar falls back to it.
+  const stop = Math.min(focusable, count - 1);
+  const top = yScaleMax(slices.map((slice) => slice.docs));
+  const tickMinutes = TICK_MINUTES[range] ?? spanTickMinutes(end - start);
+  // A tick on the window's edge would hang its label off the chart.
+  // Memoized: hover and drag re-render the chart, and all time steps hour by hour.
+  const ticks = useMemo(
+    () =>
+      axisTicks(start, end, tickMinutes).filter(
+        (tick) => tick > start && tick < end
+      ),
+    [start, end, tickMinutes]
+  );
+  const dragged = drag === null ? null : ordered(drag);
+  const brush = dragged ?? selectedSlices(slices, selection);
+  // An activity outside the window links to nothing, so nothing fades.
+  const held = firstSliceWith(slices, hoveredAttemptId);
+  const tipped =
+    tip === null ? null : { ...tip, slice: slices[tip.index] ?? null };
 
-  function sliceIndex(activeTooltipIndex: number | string | null | undefined) {
-    return activeTooltipIndex == null ? null : Number(activeTooltipIndex);
+  function fadesLine(runs: number[]): boolean {
+    return (
+      held !== null &&
+      hoveredAttemptId !== null &&
+      !runs.includes(hoveredAttemptId)
+    );
   }
-  // The dragged span widened to its slices' edges, or null before a drag or once it left the bars.
-  const first =
-    drag === null ? undefined : slices[Math.min(drag.from, drag.to)];
-  const last = drag === null ? undefined : slices[Math.max(drag.from, drag.to)];
-  const dragBounds =
-    first === undefined || last === undefined
-      ? null
-      : { from: first.at - sliceMs / 2, to: last.at + sliceMs / 2 };
-  // The drag ends on the pointer's release or when it leaves the chart, and its span is what it covered.
-  function endDrag() {
-    setDrag(null);
-    if (onRangeSelect === undefined || dragBounds === null) return;
-    onRangeSelect({
-      since: new Date(dragBounds.from).toISOString(),
-      until: new Date(dragBounds.to).toISOString(),
+  function markTitle(kind: Mark["kind"], slice: Slice): string {
+    if (kind === "bar") return t("tooltip", { count: slice.docs });
+    return t("lineTooltip", {
+      failures: slice.lines.failed.length,
+      errors: openErrorCount(slice),
     });
   }
 
-  return (
-    // The SVG never flips for right-to-left text, so the strip must not either.
-    <Section alignItems="stretch" gap={0.5} height="fit" dir="ltr">
-      {/* raw-ok: the chart is an SVG image, Section has no img role */}
-      <div
-        role="img"
-        aria-label={t("ariaLabel")}
-        // Recharts focuses its surface on click; only keyboard focus gets a ring.
-        className="w-full select-none [&_:focus:not(:focus-visible)]:outline-none"
-      >
-        <ResponsiveContainer width="100%" height={height + AXIS_HEIGHT}>
-          <BarChart
-            data={slices}
-            margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-            barCategoryGap={1.5}
-            // The whole column takes the pointer, so a slice with no documents but a failed run can be picked too.
-            onMouseDown={
-              onRangeSelect === undefined
-                ? undefined
-                : ({ activeTooltipIndex }) => {
-                    const index = sliceIndex(activeTooltipIndex);
-                    if (index !== null) setDrag({ from: index, to: index });
-                  }
-            }
-            onMouseMove={
-              drag === null
-                ? undefined
-                : ({ activeTooltipIndex }) => {
-                    const index = sliceIndex(activeTooltipIndex);
-                    if (index !== null && index !== drag.to) {
-                      setDrag({ from: drag.from, to: index });
-                    }
-                  }
-            }
-            onMouseUp={drag === null ? undefined : endDrag}
-            onMouseLeave={drag === null ? undefined : endDrag}
-            style={
-              onRangeSelect === undefined ? undefined : { cursor: "pointer" }
-            }
-          >
-            <XAxis
-              dataKey="at"
-              type="number"
-              scale="time"
-              domain={[start, end]}
-              allowDataOverflow
-              ticks={ticks}
-              tickFormatter={(value: number) =>
-                labelSet.has(value)
-                  ? formatTickLabel(format, value, tickMinutes)
-                  : ""
-              }
-              tick={{
-                fontSize: 10,
-                fontFamily: "var(--font-dm-mono)",
-                fill: "var(--text-03)",
-              }}
-              axisLine={{ stroke: "var(--border-01)" }}
-              tickLine={{ stroke: "var(--border-01)" }}
-              tickSize={2}
-              height={AXIS_HEIGHT}
-            />
-            <Tooltip
-              cursor={{ fill: "var(--background-tint-02)" }}
-              content={<SliceTooltip sliceMs={sliceMs} />}
-              isAnimationActive={false}
-            />
-            {dragBounds !== null && (
-              <ReferenceArea
-                x1={dragBounds.from}
-                x2={dragBounds.to}
-                fill="var(--action-selection-01)"
-                fillOpacity={1}
-                stroke="var(--action-selection-02)"
-              />
-            )}
-            <Bar
-              dataKey="docs"
-              fill="var(--theme-blue-05)"
-              radius={[1, 1, 0, 0]}
-              isAnimationActive={false}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      {/* raw-ok: a 10px strip of over a hundred 1px hairlines, below Section's smallest height and gap steps */}
-      <div className="flex h-2.5 w-full" aria-hidden>
-        {Array.from(
-          { length: Math.round((end - start) / tickMs) },
-          (_, index) => {
-            const tickStart = start + index * tickMs;
-            const status = sliceStatus(runs, tickStart, tickStart + tickMs);
-            return (
-              // raw-ok: one slot per hairline, centered so the gaps hold at any width
-              <div key={tickStart} className="flex flex-1 justify-center">
-                {status !== null && (
-                  <div
-                    className={cn(
-                      "h-full w-px rounded-full",
-                      RUN_CELL_CLASS[status]
-                    )}
-                  />
-                )}
-              </div>
-            );
+  /** The slot at the pointer's x: the browser holds a touch pointer on the element it began on, so x, not the element under the finger, picks the slot. With no layout (width 0) the slot the event landed on. */
+  function sliceAt(event: PointerEvent<HTMLDivElement>): number | null {
+    if (count === 0) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const index = Math.floor(
+      ((event.clientX - rect.left) / rect.width) * count
+    );
+    if (Number.isFinite(index)) return Math.min(count - 1, Math.max(0, index));
+    return markAt(event.target)?.index ?? null;
+  }
+  // Picking the one picked slice again clears it.
+  function pickSpan({ from, to }: SliceSpan) {
+    const first = slices[from];
+    const last = slices[to];
+    if (
+      onRangeSelect === undefined ||
+      first === undefined ||
+      last === undefined
+    )
+      return;
+    const repeated =
+      from === to &&
+      selection !== null &&
+      Date.parse(selection.since) === first.from &&
+      Date.parse(selection.until) === last.to;
+    onRangeSelect(
+      repeated
+        ? null
+        : {
+            since: new Date(first.from).toISOString(),
+            until: new Date(last.to).toISOString(),
           }
-        )}
-      </div>
+    );
+  }
+  // The drag ends on release or when the pointer leaves the bars, and picks what it covered.
+  function endDrag() {
+    if (dragged === null) return;
+    setDrag(null);
+    pickSpan(dragged);
+  }
+
+  function showTip(mark: Mark | null) {
+    if (mark?.index === tip?.index && mark?.kind === tip?.kind) return;
+    setTip(mark);
+    if (mark !== null && mark.kind !== "bar") {
+      onHoverLine?.({
+        kind: mark.kind,
+        attemptIds: startedIn(slices, mark.index, mark.kind),
+      });
+    } else if (tip !== null && tip.kind !== "bar") {
+      onHoverLine?.(null);
+    }
+  }
+  // A blur clears only its own tooltip, so it leaves one the pointer has since opened.
+  function hideTip(mark: Mark) {
+    if (tip?.index === mark.index && tip.kind === mark.kind) showTip(null);
+  }
+  function focusFailure(slice: Slice) {
+    const attemptId = slice.lines.failed[0];
+    if (attemptId !== undefined) onFocusAttempt?.(attemptId);
+  }
+  function barKeyDown(event: KeyboardEvent<HTMLDivElement>, index: number) {
+    const step =
+      event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+    if (step === 0) {
+      clickOnKeyDown(() => pickSpan({ from: index, to: index }))(event);
+      return;
+    }
+    event.preventDefault();
+    barRefs.current[index + step]?.focus();
+  }
+  // The failed line is a button that focuses its run, with the tooltip on keyboard focus too. A run spans slices, so only the slice it began in is a tab stop.
+  function failedLineProps(slice: Slice, index: number) {
+    const mark: Mark = { index, kind: "failed" };
+    return {
+      role: "button",
+      tabIndex: startedIn(slices, index, "failed").length > 0 ? 0 : -1,
+      "aria-label": markTitle("failed", slice),
+      onClick: () => focusFailure(slice),
+      onKeyDown: clickOnKeyDown(() => focusFailure(slice)),
+      onFocus: () => showTip(mark),
+      onBlur: () => hideTip(mark),
+    };
+  }
+
+  // The hover and click target of a status line, with the attributes markAt reads.
+  function lineTargetProps(kind: StatusLineKind, slice: Slice, index: number) {
+    return {
+      "data-testid": "chart-status-line",
+      "data-slice": index,
+      "data-line": kind,
+      className: cn("flex-1", kind === "failed" && "cursor-pointer"),
+      ...(kind === "failed" && failedLineProps(slice, index)),
+    };
+  }
+
+  return (
+    // Time runs left to right in every locale, so the whole chart stays ltr.
+    <Section
+      alignItems="stretch"
+      gap={0.5}
+      height="fit"
+      dir="ltr"
+      className="relative"
+      onPointerOver={(event) => showTip(markAt(event.target))}
+      onPointerLeave={() => showTip(null)}
+    >
+      {tipped !== null && tipped.slice !== null && (
+        <CenteredInside
+          at={percentOf(tipped.index + 0.5, count)}
+          className="pointer-events-none bottom-full z-10 mb-1"
+        >
+          <TooltipCard
+            title={markTitle(tipped.kind, tipped.slice)}
+            slice={tipped.slice}
+          />
+        </CenteredInside>
+      )}
+      <Section alignItems="stretch" gap={0} height="fit">
+        <Section
+          role="group"
+          aria-label={t("ariaLabel")}
+          flexDirection="row"
+          alignItems="stretch"
+          gap={0}
+          height={height / 16}
+          // A sideways touch swipe drags the brush, while a vertical one still scrolls.
+          className={cn(
+            "relative touch-pan-y select-none border-b border-border-01",
+            onRangeSelect !== undefined && "cursor-pointer"
+          )}
+          onPointerDown={(event) => {
+            const index = sliceAt(event);
+            // Only the primary button drags.
+            if (
+              onRangeSelect === undefined ||
+              event.button > 0 ||
+              index === null
+            )
+              return;
+            setDrag({ from: index, to: index });
+          }}
+          onPointerMove={(event) => {
+            const index = sliceAt(event);
+            if (drag === null || index === null || index === drag.to) return;
+            setDrag({ from: drag.from, to: index });
+          }}
+          onPointerUp={() => {
+            releasePicked.current = dragged !== null;
+            endDrag();
+          }}
+          onPointerLeave={endDrag}
+          onClick={() => {
+            releasePicked.current = false;
+          }}
+          onPointerCancel={() => setDrag(null)}
+        >
+          {brush !== null && (
+            // raw-ok: the brush background spans its slots behind the bars
+            <div
+              className="absolute inset-y-0 bg-chart-category-blue-1-05"
+              style={{
+                insetInlineStart: percentOf(brush.from, count),
+                width: percentOf(brush.to - brush.from + 1, count),
+              }}
+            />
+          )}
+          {slices.map((slice, index) => {
+            const faded =
+              brush !== null && (index < brush.from || index > brush.to);
+            const mark: Mark = { index, kind: "bar" };
+            return (
+              // One slot per slice, which takes the pointer even with no bar and draws the focus ring, since a bar can be 0px tall.
+              // Keyed by position: all-time slice bounds move on every poll, and a remounted bar would drop keyboard focus.
+              <Section
+                key={index}
+                data-slice={index}
+                flexDirection="row"
+                alignItems="end"
+                gap={0}
+                width="auto"
+                className="relative flex-1 hover:bg-background-tint-02 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-border-04"
+              >
+                {/* raw-ok: a bar sized to its count, below every Opal size step */}
+                <div
+                  ref={(element) => {
+                    barRefs.current[index] = element;
+                  }}
+                  data-testid="chart-bar"
+                  role="button"
+                  tabIndex={index === stop ? 0 : -1}
+                  aria-label={barLabels[index]}
+                  onFocus={() => {
+                    setFocusable(index);
+                    showTip(mark);
+                  }}
+                  onBlur={() => hideTip(mark)}
+                  onKeyDown={(event) => barKeyDown(event, index)}
+                  // Screen readers activate a button with a bare click and no pointer events.
+                  onClick={() => {
+                    if (!releasePicked.current)
+                      pickSpan({ from: index, to: index });
+                  }}
+                  className={cn(
+                    "w-[58%] rounded-[1px] bg-chart-category-blue-1 outline-hidden",
+                    faded && "opacity-50"
+                  )}
+                  style={{ height: percentOf(slice.docs, top) }}
+                />
+              </Section>
+            );
+          })}
+          {held !== null && (
+            // raw-ok: a 1px guide over the bars, below every Opal size step
+            <div
+              className="pointer-events-none absolute inset-y-0 border-s border-dashed border-border-03"
+              style={{ insetInlineStart: percentOf(held + 0.5, count) }}
+            />
+          )}
+        </Section>
+        <Section height={1} className="relative" aria-hidden>
+          {ticks.map((tick) => {
+            const at = percentOf(tick - start, end - start);
+            return (
+              <Fragment key={tick}>
+                {/* raw-ok: a 2px tick mark at its time, which Section cannot position */}
+                <div
+                  className="absolute top-0 h-0.5 w-px -translate-x-1/2 bg-border-01"
+                  style={{ insetInlineStart: at }}
+                />
+                <CenteredInside at={at} className="top-1">
+                  {/* raw-ok: DM Mono at 10px has no Text preset */}
+                  <span className="block whitespace-nowrap text-[10px] leading-3 text-text-03 [font-family:var(--font-dm-mono)]">
+                    {formatTickLabel(format, tick, tickMinutes)}
+                  </span>
+                </CenteredInside>
+              </Fragment>
+            );
+          })}
+        </Section>
+      </Section>
+      <Section flexDirection="row" gap={0} height={0.625}>
+        {slices.map((slice, index) => {
+          const single = slotKind(slice);
+          return (
+            // Three thirds per slot, each line centered in its own. The line's third takes the pointer, or the whole slot when it holds one kind.
+            <Section
+              key={index}
+              flexDirection="row"
+              gap={0}
+              width="auto"
+              className="flex-1"
+              {...(single !== null && lineTargetProps(single, slice, index))}
+            >
+              {LINE_KINDS.map((kind) => {
+                const runs = slice.lines[kind];
+                if (runs.length === 0) {
+                  return <Section key={kind} width="auto" className="flex-1" />;
+                }
+                return (
+                  <Section
+                    key={kind}
+                    width="auto"
+                    className="flex-1"
+                    {...(single === null &&
+                      lineTargetProps(kind, slice, index))}
+                  >
+                    {/* raw-ok: a 1.5px line, below every Opal size step */}
+                    <div
+                      className={cn(
+                        "h-full w-[1.5px] rounded-[2px]",
+                        LINE_CLASS[kind],
+                        fadesLine(runs) && "opacity-25"
+                      )}
+                    />
+                  </Section>
+                );
+              })}
+            </Section>
+          );
+        })}
+      </Section>
     </Section>
   );
 }
 
-export interface ThroughputChartProps {
+export interface ThroughputChartProps extends ThroughputLinkProps {
   ccPairId: number;
   range: CCPairThroughputWindow;
-  selection?: SliceRange | null;
-  onRangeSelect?: (range: SliceRange) => void;
 }
 
-/** One pair's throughput over the window, polled. */
+/** One pair's throughput over the window, polled, in as many bars as its width fits. */
 export default function ThroughputChart({
   ccPairId,
   range,
-  selection = null,
-  onRangeSelect,
+  ...links
 }: ThroughputChartProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
-  const { data, error } = useSWR<CCPairThroughputResponse>(
-    SWR_KEYS.ccPairThroughput(ccPairId, range),
-    errorHandlingFetcher,
-    { refreshInterval: THROUGHPUT_POLL_MS, keepPreviousData: true }
-  );
+  const { ref, data, error, stale } =
+    useThroughputData<CCPairThroughputResponse>((bins, tzOffsetMinutes) =>
+      SWR_KEYS.ccPairThroughput(ccPairId, range, bins, tzOffsetMinutes)
+    );
+  let body: ReactNode;
   if (error !== undefined) {
-    return <MessageCard variant="error" title={t("loadError")} />;
+    body = <MessageCard variant="error" title={t("loadError")} />;
+  } else if (data === undefined) {
+    body = <LineLoader lines={3} />;
+  } else {
+    body = <ThroughputBars data={data} range={range} {...links} />;
   }
-  if (data === undefined) return <LineLoader lines={3} />;
   return (
-    <ThroughputBars
-      data={data}
-      range={range}
-      selection={selection}
-      onRangeSelect={onRangeSelect}
-    />
+    // Measured before the first fetch, and kept, dimmed, while a new bar count or window loads.
+    <Section
+      ref={ref}
+      alignItems="stretch"
+      height="fit"
+      className={cn(stale && "opacity-50")}
+    >
+      {body}
+    </Section>
   );
 }

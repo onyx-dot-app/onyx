@@ -2829,6 +2829,8 @@
         "throughput": {
           "ariaLabel": "Documents indexed over time",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "lineTooltip": "{failures, plural, one {# failure} other {# failures}}, {errors, plural, one {# error} other {# errors}}",
+          "barLabel": "{count, plural, one {# document} other {# documents}}, {range}",
           "loadError": "The chart could not load.",
           "rangeFilter": "Runs created in this slice of the chart"
         },
