@@ -115,7 +115,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
         icon={SvgSlack}
         title={t("newChannel.header.title")}
         divider
-        cancel
+        cancel={`/admin/bots/${slack_bot_id}`}
       />
       <SettingsLayouts.Body>
         <NewChannelConfigContent slackBotId={slack_bot_id} />
