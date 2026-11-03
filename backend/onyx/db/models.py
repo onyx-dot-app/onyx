@@ -8160,10 +8160,11 @@ class ConnectorEventInbox(Base):
             "event_key",
             name="uq_connector_event_inbox_pair_event_key",
         ),
-        # The claim query's index.
+        # The claim query's index. A claim is always for one pair, in id
+        # order, so the scan stops at the claim's limit with no sort.
         Index(
             "ix_connector_event_inbox_claim",
-            "available_at",
+            "connector_credential_pair_id",
             "id",
             postgresql_where=text("status = 'PENDING'"),
         ),
