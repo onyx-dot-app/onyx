@@ -587,15 +587,22 @@ def _gemini_compatible_tools(
         function = tool.get("function")
         parameters = function.get("parameters") if isinstance(function, dict) else None
         if isinstance(function, dict) and isinstance(parameters, dict):
-            unpack_defs(
-                parameters,
-                parameters.pop("$defs", {}),
-                max_inlined_bytes=DEFS_MAX_INLINED_BYTES,
-            )
-            convert_anyof_null_to_nullable(parameters)
-            process_items(parameters)
-            add_object_type(parameters)
-            function["parameters"] = filter_schema_fields(parameters, schema_fields)
+            original = copy.deepcopy(parameters)
+            try:
+                unpack_defs(
+                    parameters,
+                    parameters.pop("$defs", {}),
+                    max_inlined_bytes=DEFS_MAX_INLINED_BYTES,
+                )
+                convert_anyof_null_to_nullable(parameters)
+                process_items(parameters)
+                add_object_type(parameters)
+                function["parameters"] = filter_schema_fields(parameters, schema_fields)
+            except (AttributeError, TypeError, ValueError) as e:
+                # Schemas the LiteLLM helpers cannot parse (e.g. boolean
+                # subschemas) go to the provider unchanged.
+                logger.warning("Could not convert tool schema for Gemini: %s", e)
+                function["parameters"] = original
     return sanitized
 
 

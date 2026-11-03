@@ -2,10 +2,10 @@
 OpenAPI Schema subset and rejects other JSON Schema keywords with a 400."""
 
 import copy
-from typing import Any
 from unittest.mock import patch
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_request import UserMessage
@@ -13,37 +13,37 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 
 # OpenCode's bash tool, as Zod v4 emits it for z.number().int().positive().
-_BASH_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "bash",
-        "description": "Executes a given bash command",
-        "parameters": {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "properties": {
-                "command": {"type": "string"},
-                "timeout": {
-                    "minimum": -9007199254740991,
-                    "exclusiveMinimum": 0,
-                    "type": "integer",
-                    "maximum": 9007199254740991,
-                    "description": "Optional timeout in milliseconds",
-                },
-            },
-            "required": ["command"],
-            "additionalProperties": False,
+_BASH_PARAMETERS: dict[str, JsonValue] = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "command": {"type": "string"},
+        "timeout": {
+            "minimum": -9007199254740991,
+            "exclusiveMinimum": 0,
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "description": "Optional timeout in milliseconds",
         },
     },
+    "required": ["command"],
+    "additionalProperties": False,
 }
 
 
-def _sent_tools(
+def _tool(name: str, parameters: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return {
+        "type": "function",
+        "function": {"name": name, "parameters": copy.deepcopy(parameters)},
+    }
+
+
+def _sent_parameters(
     model_provider: str,
     model_name: str,
-    tools: list[dict[str, Any]],
+    tool: dict[str, JsonValue],
     deployment_name: str | None = None,
-) -> list[dict[str, Any]]:
+) -> JsonValue:
     llm = LitellmLLM(
         api_key="test-key",
         model_provider=model_provider,
@@ -55,14 +55,15 @@ def _sent_tools(
     with patch("onyx.llm.litellm_singleton.litellm.completion") as completion:
         llm._completion(
             prompt=[UserMessage(content="hi")],
-            tools=tools,
+            tools=[tool],
             tool_choice=None,
             stream=False,
             parallel_tool_calls=False,
             reasoning_effort=ReasoningEffort.OFF,
             env_injection_enabled=False,
         )
-    return completion.call_args.kwargs["tools"]
+    sent: list[dict[str, dict[str, JsonValue]]] = completion.call_args.kwargs["tools"]
+    return sent[0]["function"]["parameters"]
 
 
 @pytest.mark.parametrize(
@@ -72,13 +73,12 @@ def _sent_tools(
 def test_gemini_on_openai_compatible_drops_unsupported_schema_keywords(
     model_name: str, deployment_name: str | None
 ) -> None:
-    tools = [copy.deepcopy(_BASH_TOOL)]
+    tool = _tool("bash", _BASH_PARAMETERS)
 
-    sent = _sent_tools(
-        LlmProviderNames.OPENAI_COMPATIBLE, model_name, tools, deployment_name
+    parameters = _sent_parameters(
+        LlmProviderNames.OPENAI_COMPATIBLE, model_name, tool, deployment_name
     )
 
-    parameters = sent[0]["function"]["parameters"]
     assert parameters == {
         "type": "object",
         "properties": {
@@ -92,31 +92,30 @@ def test_gemini_on_openai_compatible_drops_unsupported_schema_keywords(
         },
         "required": ["command"],
     }
-    assert tools == [_BASH_TOOL]
+    assert tool == _tool("bash", _BASH_PARAMETERS)
 
 
 def test_gemini_on_openai_compatible_inlines_defs() -> None:
-    tool: dict[str, Any] = {
-        "type": "function",
-        "function": {
-            "name": "edit",
-            "parameters": {
-                "type": "object",
-                "properties": {"range": {"$ref": "#/$defs/Range"}},
-                "$defs": {
-                    "Range": {
-                        "type": "object",
-                        "properties": {"start": {"type": "integer"}},
-                        "additionalProperties": False,
-                    }
-                },
+    tool = _tool(
+        "edit",
+        {
+            "type": "object",
+            "properties": {"range": {"$ref": "#/$defs/Range"}},
+            "$defs": {
+                "Range": {
+                    "type": "object",
+                    "properties": {"start": {"type": "integer"}},
+                    "additionalProperties": False,
+                }
             },
         },
-    }
+    )
 
-    sent = _sent_tools(LlmProviderNames.OPENAI_COMPATIBLE, "gemini-3.8-flash", [tool])
+    parameters = _sent_parameters(
+        LlmProviderNames.OPENAI_COMPATIBLE, "gemini-3.8-flash", tool
+    )
 
-    assert sent[0]["function"]["parameters"] == {
+    assert parameters == {
         "type": "object",
         "properties": {
             "range": {"type": "object", "properties": {"start": {"type": "integer"}}}
@@ -125,24 +124,37 @@ def test_gemini_on_openai_compatible_inlines_defs() -> None:
 
 
 def test_gemini_on_openai_compatible_converts_nullable_any_of() -> None:
-    tool: dict[str, Any] = {
-        "type": "function",
-        "function": {
-            "name": "read",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]}
-                },
-            },
+    tool = _tool(
+        "read",
+        {
+            "type": "object",
+            "properties": {"limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]}},
         },
+    )
+
+    parameters = _sent_parameters(
+        LlmProviderNames.OPENAI_COMPATIBLE, "gemini-3.8-flash", tool
+    )
+
+    assert parameters == {
+        "type": "object",
+        "properties": {"limit": {"anyOf": [{"type": "integer", "nullable": True}]}},
     }
 
-    sent = _sent_tools(LlmProviderNames.OPENAI_COMPATIBLE, "gemini-3.8-flash", [tool])
 
-    assert sent[0]["function"]["parameters"]["properties"] == {
-        "limit": {"anyOf": [{"type": "integer", "nullable": True}]}
+def test_gemini_on_openai_compatible_forwards_unparseable_schema() -> None:
+    boolean_subschema: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"metadata": True},
     }
+
+    parameters = _sent_parameters(
+        LlmProviderNames.OPENAI_COMPATIBLE,
+        "gemini-3.8-flash",
+        _tool("write", boolean_subschema),
+    )
+
+    assert parameters == boolean_subschema
 
 
 @pytest.mark.parametrize(
@@ -153,6 +165,8 @@ def test_gemini_on_openai_compatible_converts_nullable_any_of() -> None:
     ],
 )
 def test_other_routes_keep_schema(model_provider: str, model_name: str) -> None:
-    sent = _sent_tools(model_provider, model_name, [copy.deepcopy(_BASH_TOOL)])
+    parameters = _sent_parameters(
+        model_provider, model_name, _tool("bash", _BASH_PARAMETERS)
+    )
 
-    assert sent == [_BASH_TOOL]
+    assert parameters == _BASH_PARAMETERS
