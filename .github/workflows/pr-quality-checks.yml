@@ -38,10 +38,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: |
-          files="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          # --no-renames lists both paths of a rename. Here-strings avoid a pipe, so an
+          # early grep exit cannot fail the pipeline under pipefail and invert the check.
+          files="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
           if [ -n "$files" ] \
-            && ! printf '%s\n' "$files" | grep -qv '^documentation/' \
-            && ! printf '%s\n' "$files" | grep -qE '\.(js|jsx|mjs|cjs|ts|tsx)$'; then
+            && ! grep -qv '^documentation/' <<<"$files" \
+            && ! grep -qE '\.(js|jsx|mjs|cjs|ts|tsx)$' <<<"$files"; then
             echo "docs_only=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Setup Terraform
