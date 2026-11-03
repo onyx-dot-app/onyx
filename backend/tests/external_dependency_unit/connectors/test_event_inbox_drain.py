@@ -684,7 +684,7 @@ def test_a_discarded_sibling_does_not_suppress_the_change_that_won(
     registered_handler: None,  # noqa: ARG001
 ) -> None:
     """Three changes to one document in a batch, one of them untimestamped.
-    `_superseded` falls back to arrival order and keeps the last, but the
+    `claim_events` falls back to arrival order and keeps the last, but the
     claim has already marked all three IN_PROGRESS, so a cross-batch check
     that counted them would let the discarded first row suppress the winner
     and the document would never be indexed at all."""

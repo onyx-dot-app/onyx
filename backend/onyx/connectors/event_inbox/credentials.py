@@ -9,7 +9,8 @@ from onyx.db.models import ConnectorCredentialPair
 
 def pair_secrets(pair: ConnectorCredentialPair) -> Mapping[str, str]:
     """The pair's decrypted credential JSON. A value that is not a string is
-    passed as its JSON text."""
+    passed as its JSON text; a null is left out, so a missing secret stays
+    missing."""
     credential_json = pair.credential.credential_json
     if credential_json is None:
         return {}
@@ -17,4 +18,5 @@ def pair_secrets(pair: ConnectorCredentialPair) -> Mapping[str, str]:
     return {
         key: value if isinstance(value, str) else json.dumps(value)
         for key, value in values.items()
+        if value is not None
     }
