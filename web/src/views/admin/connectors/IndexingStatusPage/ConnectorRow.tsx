@@ -3,10 +3,20 @@
 import { NavLink, useNavigation } from "@opal/navigation";
 import { useEffect, useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
+import {
+  Button,
+  Card,
+  Divider,
+  OverflowText,
+  Popover,
+  Badge,
+  Text,
+  Tooltip,
+  BadgeButton,
+} from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
-  SvgAlertTriangle,
+  SvgChevronRight,
   SvgDocFile,
   SvgExpand,
   SvgFold,
@@ -14,12 +24,12 @@ import {
   SvgPause,
   SvgPlayCircle,
   SvgSettings,
-  SvgUser,
   SvgUsers,
   SvgUserSync,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { timeAgo } from "@opal/time";
+import { cn } from "@opal/utils";
 import {
   ConnectorCredentialPairStatus,
   type IndexingConnectorRow,
@@ -32,10 +42,12 @@ import {
 } from "@/lib/connectors/utils";
 import { can } from "@/lib/permissions/resource-actions";
 import type { AccessType } from "@/lib/types";
-import { DocCounts } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
-import { connectorRowStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import {
+  connectorRowStatusTag,
+  ERROR_COUNT_TAG,
+} from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
@@ -59,6 +71,8 @@ export interface ConnectorRowProps {
   onToggle: () => void;
   /** Opens the activity history on this connector's runs. */
   onViewLogs: () => void;
+  /** Shows this connector's open errors. */
+  onFocusError: () => void;
   /** Another connector holds the focus, so this one steps back. */
   dimmed: boolean;
   /** Called when this connector's stage popover, or one of its runs' popovers, opens or closes. */
@@ -73,6 +87,7 @@ export default function ConnectorRow({
   expanded,
   onToggle,
   onViewLogs,
+  onFocusError,
   dimmed,
   onFocusChange,
   lifted = false,
@@ -83,7 +98,7 @@ export default function ConnectorRow({
   const locale = useLocale();
   const format = useFormatter();
   const attempt = row.latest_index_attempt;
-  // The old table linked a row only when the viewer could operate the pair.
+  // Only an operator opens the connector page or pauses the pair, so the actions stay in place but disabled.
   const canOperate = can(row, "operate");
   const tag = connectorRowStatusTag(
     row.cc_pair_status,
@@ -92,9 +107,10 @@ export default function ConnectorRow({
   );
   // Open errors only, so the badge clears once Retry or Resolve closes them.
   const warnings = row.open_error_count;
-  // An empty display name falls back to the email, as an unset one does.
-  const owner = row.creator_name?.trim() || row.creator_email;
-  // A paused, scheduled or deleting row has no run in flight, so its stages and file counts stay hidden.
+  // The latest run's processed documents. A deleting pair is losing its documents, so its count says nothing.
+  const recentlyProcessed =
+    row.status === "deleting" ? 0 : (attempt?.total_docs_indexed ?? 0);
+  // A paused, scheduled or deleting row has no run in flight, so its stages stay hidden.
   const idle =
     row.status === "paused" ||
     row.status === "scheduled" ||
@@ -104,6 +120,7 @@ export default function ConnectorRow({
   const [runsFocused, setRunsFocused] = useState(false);
   const focused = stagesOpen || runsFocused;
   const ccPairId = row.cc_pair_id;
+  const connectorHref = `/admin/connector/${ccPairId}` as const;
   useEffect(() => {
     onFocusChange(ccPairId, focused);
   }, [ccPairId, focused, onFocusChange]);
@@ -164,32 +181,51 @@ export default function ConnectorRow({
       height="fit"
       className="shrink-0"
     >
-      {canPause && (
-        <Button
-          icon={paused ? SvgPlayCircle : SvgPause}
-          prominence="tertiary"
-          size="sm"
-          tooltip={pauseLabel}
-          aria-label={pauseLabel}
-          disabled={isUpdating}
-          onClick={() =>
-            void handleStatusChange(
-              paused
-                ? ConnectorCredentialPairStatus.ACTIVE
-                : ConnectorCredentialPairStatus.PAUSED
-            )
-          }
-        />
-      )}
+      <Button
+        icon={paused ? SvgPlayCircle : SvgPause}
+        prominence="tertiary"
+        size="md"
+        tooltip={pauseLabel}
+        aria-label={pauseLabel}
+        disabled={!canPause || isUpdating}
+        onClick={() =>
+          void handleStatusChange(
+            paused
+              ? ConnectorCredentialPairStatus.ACTIVE
+              : ConnectorCredentialPairStatus.PAUSED
+          )
+        }
+      />
       <Button
         icon={SvgDocFile}
         prominence="tertiary"
-        size="sm"
+        size="md"
         tooltip={tRuns("actions.logs")}
         aria-label={tRuns("actions.logs")}
         onClick={onViewLogs}
       />
     </Section>
+  );
+
+  // The whole line is one real link, not Divider's footer button, so it opens
+  // in a new tab too. The chevron's 10 px end inset centers it under the
+  // expand button; 6 px above and below make the line 36 px tall.
+  const viewAllRuns = (
+    <NavLink href={`${connectorHref}?tab=indexing`} className="group block">
+      <Section flexDirection="row" alignItems="center" gap={0} height="fit">
+        <Section height="fit" className="min-w-0 flex-1">
+          <Divider title={t("actions.viewAllRuns")} />
+        </Section>
+        <Section
+          width="fit"
+          height="fit"
+          padding={1}
+          className="my-1.5 ms-1.5 me-2.5 rounded-08 group-hover:bg-background-tint-02"
+        >
+          <SvgChevronRight size={16} className="stroke-text-03" />
+        </Section>
+      </Section>
+    </NavLink>
   );
 
   // The stage details popover spans the row, so the row is its anchor. The run list sits flush against the card's edges.
@@ -210,7 +246,13 @@ export default function ConnectorRow({
             data-testid={`indexing-connector-${row.cc_pair_id}`}
           >
             <Section alignItems="stretch" gap={0} height="fit">
-              <Section padding={2} height="fit">
+              {/* Expanded, the run filters close the bottom of this region, 4 px under the line. */}
+              <Section
+                alignItems="stretch"
+                width="auto"
+                height="fit"
+                className={cn("m-2", expanded && "mb-0")}
+              >
                 <LineLayout
                   variant="row"
                   a={
@@ -218,7 +260,7 @@ export default function ConnectorRow({
                       {/* The link spans the column so the clamped title truncates at its edge. */}
                       {canOperate ? (
                         <NavLink
-                          href={`/admin/connector/${row.cc_pair_id}`}
+                          href={connectorHref}
                           className="w-full hover:underline"
                         >
                           <Content
@@ -238,20 +280,16 @@ export default function ConnectorRow({
                       )}
                       {/* Below 640 px A shares its line with D, so it is the name alone and the wrapped row stays two lines tall. */}
                       <Section
-                        flexDirection="row"
-                        justifyContent="start"
-                        gap={1}
+                        alignItems="start"
                         height="fit"
-                        wrap
                         className={LINE_NARROW_HIDDEN}
                       >
                         <LineIconLabel
                           icon={ACCESS_ICONS[row.access_type]}
-                          label={t(`access.${row.access_type}`)}
+                          label={t(`access.${row.access_type}`, {
+                            count: row.group_count,
+                          })}
                         />
-                        {owner !== null && (
-                          <LineIconLabel icon={SvgUser} label={owner} />
-                        )}
                       </Section>
                     </>
                   }
@@ -262,19 +300,13 @@ export default function ConnectorRow({
                           <StageDetailsTrigger open={stagesOpen} />
                         )}
                         {warnings > 0 && (
-                          <Tooltip
-                            tooltip={tRuns("warnings.tooltip", {
-                              count: warnings,
-                            })}
-                            side="top"
-                          >
-                            <Badge
-                              icon={SvgAlertTriangle}
-                              title={format.number(warnings)}
-                              color="warning"
-                              titleColor="text-04"
-                            />
-                          </Tooltip>
+                          <BadgeButton
+                            {...ERROR_COUNT_TAG}
+                            title={format.number(warnings)}
+                            titleColor="text-04"
+                            tooltip={t("actions.viewErrors")}
+                            onClick={onFocusError}
+                          />
                         )}
                       </LineTags>
                       <Text font="secondary-body" color="text-03">
@@ -284,23 +316,29 @@ export default function ConnectorRow({
                   }
                   c={
                     <>
-                      <Section
-                        flexDirection="row"
-                        justifyContent="end"
-                        alignItems="end"
-                        gap={1}
-                        width="fit"
-                        height="fit"
-                      >
-                        <Text font="main-ui-action" color="text-04">
-                          {format.number(row.docs_indexed)}
-                        </Text>
-                        <Text font="secondary-body" color="text-03">
-                          {t("docs.label")}
-                        </Text>
-                      </Section>
-                      {attempt !== null && !idle && (
-                        <>
+                      {/* Each count keeps one line in the narrow column, cut at its end. */}
+                      {row.docs_indexed > 0 && (
+                        <Section
+                          flexDirection="row"
+                          justifyContent="end"
+                          alignItems="end"
+                          gap={1}
+                          height="fit"
+                        >
+                          <OverflowText font="main-ui-action" color="text-04">
+                            {format.number(row.docs_indexed)}
+                          </OverflowText>
+                          <Text font="secondary-body" color="text-03">
+                            {t("docs.label")}
+                          </Text>
+                        </Section>
+                      )}
+                      {recentlyProcessed > 0 && (
+                        <Section
+                          flexDirection="row"
+                          justifyContent="end"
+                          height="fit"
+                        >
                           <Tooltip
                             tooltip={
                               row.status === "indexing"
@@ -309,35 +347,35 @@ export default function ConnectorRow({
                             }
                             side="top"
                           >
-                            <Text font="secondary-body" color="text-03">
+                            <Text
+                              font="secondary-body"
+                              color="text-03"
+                              maxLines={1}
+                            >
                               {t("docs.processed", {
-                                count: attempt.total_docs_indexed,
+                                count: recentlyProcessed,
                               })}
                             </Text>
                           </Tooltip>
-                          <DocCounts attempt={attempt} />
-                        </>
+                        </Section>
                       )}
                     </>
                   }
                   d={
                     <>
-                      {canOperate && (
-                        <Button
-                          icon={SvgSettings}
-                          prominence="tertiary"
-                          size="sm"
-                          {...navigation.linkTo(
-                            `/admin/connector/${row.cc_pair_id}`
-                          )}
-                          tooltip={t("actions.manage")}
-                          aria-label={t("actions.manage")}
-                        />
-                      )}
+                      <Button
+                        icon={SvgSettings}
+                        prominence="tertiary"
+                        size="md"
+                        {...navigation.linkTo(connectorHref)}
+                        tooltip={t("actions.manage")}
+                        aria-label={t("actions.manage")}
+                        disabled={!canOperate}
+                      />
                       <Button
                         icon={expanded ? SvgFold : SvgExpand}
                         prominence="tertiary"
-                        size="sm"
+                        size="md"
                         tooltip={toggleLabel}
                         aria-label={toggleLabel}
                         aria-expanded={expanded}
@@ -353,6 +391,7 @@ export default function ConnectorRow({
                   canOperate={canOperate}
                   embedded
                   actions={runActions}
+                  footer={viewAllRuns}
                   onFocusChange={setRunsFocused}
                 />
               )}

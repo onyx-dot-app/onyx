@@ -3037,16 +3037,12 @@
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}",
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
-        "search": {
-          "placeholder": "Buscar errores de ejecuciones…"
-        },
         "window": {
           "label": "Intervalo",
           "all": "Todo el tiempo",
           "h1": "Última hora",
           "h24": "Últimas 24 horas",
-          "d7": "Últimos 7 días",
-          "d30": "Últimos 30 días"
+          "d7": "Últimos 7 días"
         },
         "statusGroups": {
           "label": "Estado",
@@ -3057,7 +3053,8 @@
           "canceled": "Canceladas"
         },
         "loadError": {
-          "title": "No se pudieron cargar las ejecuciones."
+          "title": "No se pudieron cargar las ejecuciones.",
+          "retry": "Reintentar"
         },
         "empty": {
           "title": "No hay ejecuciones de indexación recientes",
@@ -7461,16 +7458,17 @@
         "counts": {
           "indexed": "{count, plural, one {# conector indexado} other {# conectores indexados}}",
           "indexing": "{count, plural, one {# conector indexando} other {# conectores indexando}}",
+          "syncing": "{count, plural, one {# conector sincronizando} other {# conectores sincronizando}}",
           "failed": "{count, plural, one {# conector con error} other {# conectores con error}}",
           "paused": "{count, plural, one {# conector pausado} other {# conectores pausados}}",
           "scheduled": "{count, plural, one {# conector programado} other {# conectores programados}}",
           "deleting": "{count, plural, one {# conector eliminándose} other {# conectores eliminándose}}"
         },
         "access": {
-          "public": "Organización",
-          "private": "Privado",
-          "sync": "Sincronización automática",
-          "sync_restricted": "Sincronización automática, restringida"
+          "public": "Público para tu organización",
+          "private": "{count, plural, =0 {Privado} one {Compartido con # grupo} other {Compartido con # grupos}}",
+          "sync": "Sincronización automática de permisos",
+          "sync_restricted": "Sincronización automática de permisos"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.º}} en la cola",
@@ -7479,7 +7477,7 @@
         },
         "docs": {
           "label": "docs",
-          "processed": "{count, number} procesados",
+          "processed": "{count, number} procesados recientemente",
           "processedTooltip": {
             "running": "Documentos que la ejecución actual ha procesado hasta ahora, incluidos los fallidos. Un documento que la ejecución procesa dos veces cuenta dos veces, así que la cifra puede superar los documentos del conector.",
             "finished": "Documentos que procesó la última ejecución, incluidos los fallidos. Un documento que la ejecución procesó dos veces cuenta dos veces, y los documentos eliminados desde entonces ya no cuentan para el conector, así que la cifra puede superar los documentos del conector."
@@ -7490,6 +7488,8 @@
           "manageFederated": "Administrar conector federado",
           "expand": "Ver detalles",
           "collapse": "Ocultar detalles",
+          "viewErrors": "Ver errores",
+          "viewAllRuns": "Ver todas las ejecuciones",
           "pause": "Pausar",
           "resume": "Reanudar"
         },
@@ -7502,7 +7502,8 @@
           "filteredTitle": "Ningún conector coincide con estos filtros."
         },
         "loadError": "No se pudieron cargar los conectores.",
-        "units": "{count, plural, one {conector} other {conectores}}"
+        "units": "{count, plural, one {conector} other {conectores}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "Estado de indexación de conectores"
     },

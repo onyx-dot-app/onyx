@@ -64,13 +64,14 @@ import type {
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
 import { isActive } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import { RUNS_POLL_MS } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import { ERROR_COUNT_TAG } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import { BESIDE } from "@/views/admin/connectors/shared/PanelPageBody";
 import {
-  RUNS_POLL_MS,
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
-} from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
-import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
-import { BESIDE } from "@/views/admin/connectors/shared/PanelPageBody";
+} from "@/views/admin/connectors/shared/search";
 
 const LOADER_ROWS = 2;
 
@@ -143,6 +144,8 @@ const LEVEL_ORDER: ActivityLevel[] = [
   "canceled",
 ];
 const DEFAULT_LEVEL: ActivityLevel = "errors";
+// The open sections a focused run can sit in: a failed run under Failures, any other run with open errors under Errors.
+const FOCUS_SECTIONS: ActivitySection[] = ["failures", "errors"];
 // The header counts poll like the feeds and keep the last count while a new range loads, so the tags do not blink.
 const HEADER_COUNT_SWR = {
   refreshInterval: RUNS_POLL_MS,
@@ -174,9 +177,8 @@ function ActivityCountTags({ failures, errors }: ActivityCountTagsProps) {
       )}
       {errors > 0 && (
         <Badge
-          icon={SvgAlertTriangle}
+          {...ERROR_COUNT_TAG}
           title={format.number(errors)}
-          color="warning"
           titleColor="text-04"
           size={6}
           tooltip={t("counts.errors", { count: errors })}
@@ -557,27 +559,28 @@ export default function ActivityPanel({
       feed(isShown("canceled"))
     ),
   };
-  // The run count a page was last asked at for a focus, so one page loads at a time.
-  const focusPagedAt = useRef<number | null>(null);
-  // A failure line names an open failed index run, so its focus shows the level, search and connectors that list it, then pages to it.
+  // The run count each section's page was last asked at for a focus, so one page loads at a time.
+  const focusPagedAt = useRef<Partial<Record<ActivitySection, number>>>({});
+  // A focus names an index run with open failures or errors, so it shows the level, search and connectors that list both open sections, then pages to it.
   useEffect(() => {
     if (focusAttemptId === null) return;
-    focusPagedAt.current = null;
+    focusPagedAt.current = {};
     setLevel((current) => {
       const { sections }: LevelConfig = LEVELS[current];
-      return sections.includes("failures") ? current : DEFAULT_LEVEL;
+      return FOCUS_SECTIONS.every((section) => sections.includes(section))
+        ? current
+        : DEFAULT_LEVEL;
     });
     setSearchInput("");
     setCcPairIds([]);
   }, [focusAttemptId]);
-  const focusFeed = open.failures;
   const focusRevealed =
-    isShown("failures") &&
+    FOCUS_SECTIONS.every(isShown) &&
     searchInput === "" &&
     search === "" &&
     ccPairIds.length === 0;
   const focusedPairId =
-    focusFeed.runs.find(
+    [...open.failures.runs, ...open.errors.runs].find(
       ({ run }) => run.kind === "indexing" && run.attempt.id === focusAttemptId
     )?.ccPairId ?? null;
   const focusListed = focusedPairId !== null;
@@ -590,27 +593,38 @@ export default function ActivityPanel({
     reportFocusedPair(focusedPairId);
     return () => reportFocusedPair(null);
   }, [focusedPairId]);
+  const { failures: openFailures, errors: openErrors } = open;
   const rangeSet = range !== null;
   useEffect(() => {
     if (focusAttemptId === null || focusListed) return;
-    // Pages only once the reset above shows the unnarrowed failures, or the page lands on a feed about to start over.
+    // Pages only once the reset above shows the unnarrowed sections, or the page lands on a feed about to start over.
     if (!focusRevealed) return;
-    if (!focusFeed.hasMore) {
-      // Every failure in the chart's span is listed without the run, so the span is dropped. A span that lists the run stays.
-      if (rangeSet && focusFeed.loaded && !focusFeed.isLoading) {
-        focusPagedAt.current = null;
+    const focusFeeds = [openFailures, openErrors];
+    if (focusFeeds.every((focusFeed) => !focusFeed.hasMore)) {
+      // Every open run in the chart's span is listed without the focused one, so the span is dropped. A span that lists the run stays.
+      const settled = focusFeeds.every(
+        (focusFeed) => focusFeed.loaded && !focusFeed.isLoading
+      );
+      if (rangeSet && settled) {
+        focusPagedAt.current = {};
         onClearRange?.();
       }
       return;
     }
-    if (focusPagedAt.current === focusFeed.runs.length) return;
-    focusPagedAt.current = focusFeed.runs.length;
-    focusFeed.more();
+    for (const focusFeed of focusFeeds) {
+      if (!focusFeed.hasMore) continue;
+      if (focusPagedAt.current[focusFeed.section] === focusFeed.runs.length) {
+        continue;
+      }
+      focusPagedAt.current[focusFeed.section] = focusFeed.runs.length;
+      focusFeed.more();
+    }
   }, [
     focusAttemptId,
     focusListed,
-    focusFeed,
     focusRevealed,
+    openFailures,
+    openErrors,
     rangeSet,
     onClearRange,
   ]);

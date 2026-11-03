@@ -85,6 +85,7 @@ import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/Activity
 import PanelPageBody from "@/views/admin/connectors/shared/PanelPageBody";
 import { useAdminTopBar } from "@/layouts/chromes/AdminTopBarSlot";
 import {
+  DEFAULT_PAIR_WINDOW,
   pickWindow,
   type PickerWindow,
   type PickedWindow,
@@ -156,7 +157,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [checksExpandRequest, setChecksExpandRequest] = useState(0);
   // One window drives the Indexing tab's chart and run list.
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
-    pickWindow("24h")
+    pickWindow(DEFAULT_PAIR_WINDOW)
   );
   // A picked span of the chart brushes it and narrows the runs and activity to it.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);

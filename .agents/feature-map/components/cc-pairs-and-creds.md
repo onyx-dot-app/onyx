@@ -33,7 +33,19 @@
   connector page (`web/src/views/admin/connectors/shared/PanelPageBody.tsx`),
   and an Activities toggle at the end of the list replaces the counts card's
   button. Hovering an activity, or focusing one from the chart, lifts its
-  connector's row.
+  connector's row. The list
+  (`web/src/views/admin/connectors/IndexingStatusPage/ConnectorList.tsx`) puts
+  the page's rows under a foldable divider per source. The divider counts the
+  source's matching pairs on every page (`source_counts`), and rows keep the
+  API's rank order. A row shows the access line, the status tag, the open-error
+  count, and its documents. The count adds the pair's open prune and check runs
+  to the latest run's open errors. A click focuses the latest run in the fleet's
+  Activities panel when it has open errors, else opens the pair's history.
+  Manage and Pause
+  stay disabled without operate. One row expands at a time and lists six runs,
+  running ones first, under the connector page's time range, run type and
+  status filters, and View All Runs opens the connector page on
+  `?tab=indexing`.
 - **An admin opens a pair.** The connector page
   (`web/src/views/admin/connectors/ConnectorDetailPage/index.tsx`) shows the
   status cards over two tabs. Connector Configurations holds the account, index

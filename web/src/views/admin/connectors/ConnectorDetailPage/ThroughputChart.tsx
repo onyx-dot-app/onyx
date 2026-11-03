@@ -78,6 +78,8 @@ export type PickerWindow = CCPairThroughputWindow;
 
 // The pair chart has no 1h window: one hour of a pair is too few runs to read.
 export const PAIR_WINDOWS: readonly PickerWindow[] = ["24h", "7d", "all"];
+/** The window a pair's chart and run lists open on. */
+export const DEFAULT_PAIR_WINDOW: PickerWindow = "24h";
 
 /** Each window's label under `admin.connector.runs.window`. */
 export const WINDOW_LABEL_KEYS = {

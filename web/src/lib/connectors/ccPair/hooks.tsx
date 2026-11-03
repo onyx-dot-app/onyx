@@ -993,10 +993,12 @@ export interface ActivityChartLinks {
   panel: ActivityPanelLinks;
   /** The connector whose card is hovered or focused, for a page that lifts its row. */
   liftedPairId: number | null;
+  /** Focuses an index run's card as a failure line click does. */
+  focusAttempt: (attemptId: number) => void;
 }
 
 export interface ActivityChartLinksOptions {
-  /** Runs as a failure line focuses its card, such as to open the panel that lists it. */
+  /** Runs as a card is focused, such as to open the panel that lists it. */
   onFocusAttempt?: (attemptId: number) => void;
 }
 
@@ -1010,13 +1012,14 @@ export function useActivityChartLinks({
   // Apart, so leaving a hovered card keeps a focused card's lift.
   const [hoveredPairId, setHoveredPairId] = useState<number | null>(null);
   const [focusedPairId, setFocusedPairId] = useState<number | null>(null);
+  function focusAttempt(attemptId: number) {
+    onFocusAttempt?.(attemptId);
+    setFocusAttemptId(attemptId);
+  }
   return {
     chart: {
       hoveredAttemptId,
-      onFocusAttempt: (attemptId: number) => {
-        onFocusAttempt?.(attemptId);
-        setFocusAttemptId(attemptId);
-      },
+      onFocusAttempt: focusAttempt,
       onHoverLine: (line: HoveredLine | null) =>
         setOutlinedAttemptIds(line?.attemptIds ?? []),
     },
@@ -1032,6 +1035,7 @@ export function useActivityChartLinks({
       onFocusPair: setFocusedPairId,
     },
     liftedPairId: hoveredPairId ?? focusedPairId,
+    focusAttempt,
   };
 }
 

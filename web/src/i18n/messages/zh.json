@@ -3037,16 +3037,12 @@
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}",
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
-        "search": {
-          "placeholder": "搜索运行错误…"
-        },
         "window": {
           "label": "时间范围",
           "all": "全部时间",
           "h1": "过去 1 小时",
           "h24": "过去 24 小时",
-          "d7": "过去 7 天",
-          "d30": "过去 30 天"
+          "d7": "过去 7 天"
         },
         "statusGroups": {
           "label": "状态",
@@ -3057,7 +3053,8 @@
           "canceled": "已取消"
         },
         "loadError": {
-          "title": "无法加载运行记录。"
+          "title": "无法加载运行记录。",
+          "retry": "重试"
         },
         "empty": {
           "title": "暂无近期索引运行",
@@ -7461,16 +7458,17 @@
         "counts": {
           "indexed": "{count, plural, other {# 个连接器已索引}}",
           "indexing": "{count, plural, other {# 个连接器正在索引}}",
+          "syncing": "{count, plural, other {# 个连接器正在同步}}",
           "failed": "{count, plural, other {# 个连接器失败}}",
           "paused": "{count, plural, other {# 个连接器已暂停}}",
           "scheduled": "{count, plural, other {# 个连接器已计划}}",
           "deleting": "{count, plural, other {# 个连接器正在删除}}"
         },
         "access": {
-          "public": "组织",
-          "private": "私有",
-          "sync": "自动同步",
-          "sync_restricted": "自动同步（受限）"
+          "public": "对整个组织公开",
+          "private": "{count, plural, =0 {私有} other {已与 # 个组共享}}",
+          "sync": "自动同步权限",
+          "sync_restricted": "自动同步权限"
         },
         "detail": {
           "queued": "队列中第 {position, selectordinal, other {#}} 位",
@@ -7479,7 +7477,7 @@
         },
         "docs": {
           "label": "文档",
-          "processed": "已处理 {count, number} 个",
+          "processed": "最近已处理 {count, number} 个",
           "processedTooltip": {
             "running": "当前运行到目前为止处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，因此可能超过该连接器的文档数。",
             "finished": "上次运行处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，之后删除的文档不再计入该连接器，因此可能超过该连接器的文档数。"
@@ -7490,6 +7488,8 @@
           "manageFederated": "管理联合连接器",
           "expand": "查看详情",
           "collapse": "隐藏详情",
+          "viewErrors": "查看错误",
+          "viewAllRuns": "查看所有运行",
           "pause": "暂停",
           "resume": "恢复"
         },
@@ -7502,7 +7502,8 @@
           "filteredTitle": "没有连接器符合这些筛选条件。"
         },
         "loadError": "无法加载连接器。",
-        "units": "{count, plural, other {个连接器}}"
+        "units": "{count, plural, other {个连接器}}",
+        "sourceGroup": "{source}（{count, number}）"
       },
       "title": "连接器索引状态"
     },
