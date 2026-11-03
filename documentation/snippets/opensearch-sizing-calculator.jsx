@@ -14,11 +14,12 @@ export const OpenSearchSizingCalculator = () => {
 
   const PARTS = [
     // One blue scale from the docs primary: darker means more text per GB.
-    { label: "Text", sub: "wiki, tickets, chat", textShare: 40, color: "#0050B4", ink: "#FFFFFF" },
-    { label: "Office files", sub: "Word, Excel, Google Docs", textShare: 12, color: "#0069ED", ink: "#FFFFFF" },
+    { label: "Text", sub: "wiki, tickets, chat, call transcripts", textShare: 40, color: "#003F8F", ink: "#FFFFFF" },
+    { label: "Office files", sub: "Word, Excel, Google Docs", textShare: 12, color: "#0057C7", ink: "#FFFFFF" },
+    { label: "Email", sub: "mailboxes with attachments", textShare: 8, color: "#0069ED", ink: "#FFFFFF" },
     { label: "Code", sub: "READMEs and docs only", textShare: 5, color: "#4D9CFF", ink: "#0B2A55" },
     { label: "PDFs and slides", sub: "PDF, PowerPoint", textShare: 4, color: "#A9CCFF", ink: "#0B2A55" },
-    { label: "Media and other", sub: "video, images, archives", textShare: 0, color: "#D1D5DB", ink: "#374151", media: true },
+    { label: "Media and other", sub: "video, audio, archives", textShare: 0, color: "#D1D5DB", ink: "#374151", media: true },
   ];
   const MODELS = [
     { name: "Granite Embedding 97M (Onyx default)", dims: 384 },
@@ -31,6 +32,37 @@ export const OpenSearchSizingCalculator = () => {
     { name: "OpenAI text-embedding-3-large", dims: 3072 },
     { name: "Gemini embedding-001", dims: 3072 },
   ];
+  // Mean chunks per item across Onyx Cloud tenants (November 2026), rounded. Spreadsheets are an
+  // estimate: Onyx caps a workbook at 24 chunks, and sheets indexed under the cap average 3.6.
+  const SOURCES = [
+    { key: "docs", label: "Documents", examples: "Google Docs, Word", unit: "files", ratio: 7 },
+    { key: "pdfs", label: "PDFs", examples: "From any drive or upload", unit: "files", ratio: 12 },
+    { key: "slides", label: "Slide decks", examples: "Google Slides, PowerPoint", unit: "files", ratio: 9 },
+    { key: "sheets", label: "Spreadsheets", examples: "Google Sheets, Excel. Onyx indexes at most 24 chunks per file.", unit: "files", ratio: 10 },
+    { key: "images", label: "Images", examples: "Photos, screenshots", unit: "files", ratio: 1 },
+    { key: "wiki", label: "Wiki pages", examples: "Confluence, Notion", unit: "pages", ratio: 4 },
+    { key: "tickets", label: "Tickets and issues", examples: "Jira, Zendesk, GitHub", unit: "tickets", ratio: 2 },
+    { key: "chat", label: "Chat threads", examples: "Slack, Teams. A message outside a thread is one thread.", unit: "threads", ratio: 1 },
+    { key: "email", label: "Email threads", examples: "Gmail, Outlook. A single email is one thread.", unit: "threads", ratio: 4 },
+    { key: "crm", label: "CRM records", examples: "Salesforce, HubSpot", unit: "records", ratio: 4 },
+    { key: "calls", label: "Call transcripts", examples: "Gong, Fireflies", unit: "calls", ratio: 12 },
+    { key: "web", label: "Web pages", examples: "Websites, help centers", unit: "pages", ratio: 6 },
+  ];
+  const MAX_ITEMS = 10_000_000_000;
+  const MAX_RATIO = 1000;
+  // What one employee adds in one year: [type, items × chunks per item, chunks]. The sum, 1,500,
+  // is the high end of managed deployments, so that most estimates err on the high side.
+  const EMPLOYEE_YEAR_BREAKDOWN = [
+    ["Files: documents, slides, PDFs, sheets", "50 × 10", 500],
+    ["Email threads, for part of the company", "100 × 4", 400],
+    ["Chat threads", "300 × 1", 300],
+    ["Tickets and issues", "50 × 2", 100],
+    ["Wiki pages", "25 × 4", 100],
+    ["Other: CRM records, calls, web pages", "", 100],
+  ];
+  const CHUNKS_PER_EMPLOYEE_YEAR = EMPLOYEE_YEAR_BREAKDOWN.reduce((a, [, , n]) => a + n, 0);
+  const MAX_EMPLOYEES = 10_000_000;
+  const MAX_YEARS = 50;
   const NODE_RAM = [16, 32, 64];
   const NODE_DISK = [64, 128, 256, 512, 1000, 1500, 3000, 6000];
   // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large, r8g.xlarge and r8g.2xlarge.
@@ -41,8 +73,24 @@ export const OpenSearchSizingCalculator = () => {
     3: "One copy in each of 3 availability zones. Survives a zone outage.",
   };
 
+  const [inputMode, setInputMode] = useState("storage");
+  const [sourceRows, setSourceRows] = useState(
+    [
+      ["docs", "200000"],
+      ["pdfs", "50000"],
+      ["sheets", "10000"],
+      ["wiki", "20000"],
+      ["tickets", "50000"],
+      ["chat", "500000"],
+      ["email", "300000"],
+    ].map(([key, count], k) => ({ id: k + 1, key, count, ratio: String(SOURCES.find((x) => x.key === key).ratio) }))
+  );
+  const [sourceToAdd, setSourceToAdd] = useState("slides");
+  const [employees, setEmployees] = useState("500");
+  const [years, setYears] = useState("5");
+  const [perEmployeeYear, setPerEmployeeYear] = useState(String(CHUNKS_PER_EMPLOYEE_YEAR));
   const [totalGB, setTotalGB] = useState(500);
-  const [parts, setParts] = useState([0.06, 0.3, 0.06, 0.18, 0.4]);
+  const [parts, setParts] = useState([0.05, 0.25, 0.15, 0.05, 0.15, 0.35]);
   const [growth, setGrowth] = useState(30);
   const [modelIndex, setModelIndex] = useState(0);
   const [quant, setQuant] = useState("none");
@@ -61,14 +109,16 @@ export const OpenSearchSizingCalculator = () => {
     if (g >= 1) return g.toFixed(2) + " GB";
     return Math.max(1, Math.round(g * 1000)) + " MB";
   };
-  const fmtCount = (n) =>
-    n >= 1e9
-      ? (n / 1e9).toFixed(1) + "B"
-      : n >= 1e6
-        ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M"
-        : n >= 1e3
-          ? Math.round(n / 1e3) + "k"
-          : String(Math.round(n));
+  // Picks each unit after rounding, so 999,600 shows as "1.0M", not "1000k".
+  const fmtCount = (n) => {
+    if (n < 1e4) return Math.round(n).toLocaleString();
+    const thousands = Math.round(n / 1e3);
+    if (thousands < 1000) return thousands + "k";
+    let millions = (n / 1e6).toFixed(1);
+    if (Number(millions) >= 10) millions = (n / 1e6).toFixed(0);
+    if (Number(millions) < 1000) return millions + "M";
+    return (n / 1e9).toFixed(1) + "B";
+  };
   const pct = (v) => Math.round(v * 100) + "%";
   const fmtDisk = (gb) => (gb < 1000 ? gb + " GB" : gb / 1000 + " TB");
 
@@ -120,7 +170,40 @@ export const OpenSearchSizingCalculator = () => {
   const textShare = PARTS.reduce((a, p, k) => a + (parts[k] * p.textShare) / 100, 0);
   const indexableGB = total * indexableShare;
   const textGB = total * textShare;
-  const chunksToday = (textGB * 1e9) / TEXT_PER_CHUNK;
+  const clampNumber = (v, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(0, n)) : 0;
+  };
+  const sourceOf = (key) => SOURCES.find((x) => x.key === key);
+  const singular = (unit) => unit.replace(/s$/, "");
+  const sourceChunks = sourceRows.map((r) => clampNumber(r.count, MAX_ITEMS) * clampNumber(r.ratio, MAX_RATIO));
+  const employeeCount = clampNumber(employees, MAX_EMPLOYEES);
+  const yearCount = clampNumber(years, MAX_YEARS);
+  const MAX_EMPLOYEE_RATE = 1_000_000;
+  const employeeRate = clampNumber(perEmployeeYear, MAX_EMPLOYEE_RATE);
+  // Inputs keep what the user types, but never more than the maximum the math uses.
+  const capped = (value, max) => {
+    const n = Number(value);
+    return n < 0 ? "0" : n > max ? String(max) : value;
+  };
+  const chunksToday =
+    inputMode === "storage"
+      ? (textGB * 1e9) / TEXT_PER_CHUNK
+      : inputMode === "employees"
+        ? employeeCount * yearCount * employeeRate
+        : sourceChunks.reduce((a, b) => a + b, 0);
+  const updateRow = (id, field, value) =>
+    setSourceRows((rows) => rows.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  // Each type appears once, so its chunks are never counted twice.
+  const unusedSources = SOURCES.filter((x) => !sourceRows.some((r) => r.key === x.key));
+  const nextSource = unusedSources.some((x) => x.key === sourceToAdd) ? sourceToAdd : unusedSources[0]?.key;
+  const addRow = () => {
+    const src = sourceOf(nextSource);
+    setSourceRows((rows) => [
+      ...rows,
+      { id: Math.max(0, ...rows.map((r) => r.id)) + 1, key: src.key, count: "1000", ratio: String(src.ratio) },
+    ]);
+  };
   const chunks = chunksToday * (1 + growth / 100);
   const quantBytes = quant === "sq7" ? dims : quant === "sq1" ? dims / 8 : 0;
   const bytesPerChunk = (FIXED_BYTES + GRAPH_BYTES + 4 * dims + quantBytes) * DELETED_OVERHEAD;
@@ -166,7 +249,6 @@ export const OpenSearchSizingCalculator = () => {
   const hint = "text-sm text-gray-500 dark:text-gray-400";
   const input =
     "rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-1.5 text-base tabular-nums text-gray-900 dark:text-gray-100";
-  const big = "text-2xl font-semibold tabular-nums text-gray-900 dark:text-white";
   const seg = (active) =>
     "px-3 py-1.5 text-base border-r last:border-r-0 border-gray-200 dark:border-white/10 " +
     (active
@@ -200,6 +282,124 @@ export const OpenSearchSizingCalculator = () => {
       <div className="grid gap-4">
         <div className={card + " space-y-5"}>
           <div className="text-lg font-semibold text-gray-900 dark:text-white">1. What your data needs</div>
+          <div className="space-y-1.5">
+            <div className={label}>Start from</div>
+            {segmented({ ariaLabel: "Start from", value: inputMode, onChange: setInputMode, options: [["storage", "Total storage"], ["sources", "Each source"], ["employees", "Employees"]] })}
+          </div>
+          {inputMode === "sources" ? (
+            <div className="space-y-3">
+              <div className={hint}>Enter how many items of each type you have. For chat and email, divide the message count by the average thread length. The chunks per item are estimates; change them if you know your data.</div>
+              {sourceRows.map((r, k) => {
+                const src = sourceOf(r.key);
+                return (
+                  <div key={r.id} className="space-y-2 rounded-xl border border-gray-200 p-3 dark:border-white/10">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-base text-gray-900 dark:text-gray-100">{src.label}</div>
+                        <div className={hint}>{src.examples}</div>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={"Remove " + src.label}
+                        onClick={() => setSourceRows((rows) => rows.filter((x) => x.id !== r.id))}
+                        className="h-7 w-7 shrink-0 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
+                        <input
+                          id={"os-src-count-" + r.id}
+                          type="number"
+                          min="0"
+                          max={MAX_ITEMS}
+                          aria-label={src.label + " " + src.unit}
+                          value={r.count}
+                          onChange={(e) => updateRow(r.id, "count", capped(e.target.value, MAX_ITEMS))}
+                          className={input + " min-w-0 flex-1"}
+                        />
+                        <span className={hint + " shrink-0"}>{src.unit}</span>
+                      </div>
+                      <div className="flex flex-1 basis-48 items-center gap-2">
+                        <span className={hint}>×</span>
+                        <input
+                          id={"os-src-ratio-" + r.id}
+                          type="number"
+                          min="0"
+                          max={MAX_RATIO}
+                          step="1"
+                          aria-label={src.label + ": chunks per " + singular(src.unit)}
+                          value={r.ratio}
+                          onChange={(e) => updateRow(r.id, "ratio", capped(e.target.value, MAX_RATIO))}
+                          className={input + " w-20 shrink-0"}
+                        />
+                        <span className={hint}>{"per " + singular(src.unit)}</span>
+                        <span className="ml-auto whitespace-nowrap text-base tabular-nums text-gray-900 dark:text-gray-100">{"= " + fmtCount(sourceChunks[k]) + " chunks"}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {unusedSources.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <select id="os-src-add" aria-label="Source to add" value={nextSource} onChange={(e) => setSourceToAdd(e.target.value)} className={input + " min-w-0 flex-1"}>
+                    {unusedSources.map((x) => (
+                      <option key={x.key} value={x.key}>{x.label + " (" + x.unit + ")"}</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={addRow} className="rounded-lg border border-primary px-3 py-1.5 text-base text-primary dark:border-primary-light dark:text-primary-light">
+                    Add source
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : inputMode === "employees" ? (
+            <div className="space-y-4">
+              <div className={hint}>A quick first estimate. The sources a company connects matter more than its size, so use Each source when you know your item counts.</div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label htmlFor="os-employees" className={label}>Employees</label>
+                  <input id="os-employees" type="number" min="0" max={MAX_EMPLOYEES} value={employees} onChange={(e) => setEmployees(capped(e.target.value, MAX_EMPLOYEES))} className={input + " w-full"} />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="os-years" className={label}>Years of history to index</label>
+                  <input id="os-years" type="number" min="0" max={MAX_YEARS} value={years} onChange={(e) => setYears(capped(e.target.value, MAX_YEARS))} className={input + " w-full"} />
+                  <div className={hint}>Older years usually add less, so this estimate errs on the high side.</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  id="os-per-employee"
+                  type="number"
+                  min="0"
+                  max={MAX_EMPLOYEE_RATE}
+                  step="100"
+                  aria-label="Chunks per employee per year"
+                  value={perEmployeeYear}
+                  onChange={(e) => setPerEmployeeYear(capped(e.target.value, MAX_EMPLOYEE_RATE))}
+                  className={input + " w-28"}
+                />
+                <span className={hint}>chunks per employee per year</span>
+              </div>
+              <details className="text-sm">
+                <summary className="cursor-pointer font-medium text-gray-900 dark:text-gray-200">{"What " + CHUNKS_PER_EMPLOYEE_YEAR.toLocaleString() + " includes"}</summary>
+                <table className="mt-2 w-full text-sm">
+                  <tbody>
+                    {EMPLOYEE_YEAR_BREAKDOWN.map(([type, items, n]) => (
+                      <tr key={type} className="border-t border-gray-200 dark:border-white/10">
+                        <td className="py-1.5 pr-2 text-gray-700 dark:text-gray-300">{type}</td>
+                        <td className="whitespace-nowrap py-1.5 pr-2 text-right tabular-nums text-gray-500 dark:text-gray-400">{items}</td>
+                        <td className="py-1.5 text-right tabular-nums text-gray-900 dark:text-gray-100">{n.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className={hint + " mt-2"}>If your company differs, change the rate by the difference. For example, if every employee's email is indexed, email is about 4,000 instead of 400, so the rate becomes about 5,100.</div>
+              </details>
+            </div>
+          ) : (
+          <>
           <div className="space-y-1.5">
             <label htmlFor="os-total" className={label}>Total storage</label>
             <div className="flex items-center gap-2">
@@ -268,6 +468,8 @@ export const OpenSearchSizingCalculator = () => {
               <div><div className={hint}>Text</div><div className="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{fmtBytes(textGB * 1e9)}</div></div>
             </div>
           </div>
+          </>
+          )}
           <div className="space-y-1.5">
             <label htmlFor="os-growth" className={label}>Growth to plan for</label>
             <div className="flex items-center gap-3">
@@ -315,14 +517,35 @@ export const OpenSearchSizingCalculator = () => {
             <table className="mt-2 w-full text-sm">
               <tbody>
                 {[
-                  ["Total storage", fmtBytes(total * 1e9)],
-                  ["× text share of the storage mix (" + (textShare * 100).toFixed(1) + "%)", fmtBytes(textGB * 1e9)],
-                  ["÷ ~1,900 characters per chunk", fmtCount(chunksToday) + " chunks"],
+                  ...(inputMode === "storage"
+                    ? [
+                        ["Total storage", fmtBytes(total * 1e9)],
+                        ["× text share of the storage mix (" + (textShare * 100).toFixed(1) + "%)", fmtBytes(textGB * 1e9)],
+                        ["÷ ~1,900 characters per chunk", fmtCount(chunksToday) + " chunks"],
+                      ]
+                    : inputMode === "employees"
+                    ? [
+                        [
+                          employeeCount.toLocaleString() + " employees × " + yearCount + " years × " + employeeRate.toLocaleString() + " per employee per year",
+                          fmtCount(chunksToday) + " chunks",
+                        ],
+                      ]
+                    : [
+                        ...sourceRows.map((r, k) => {
+                          const src = sourceOf(r.key);
+                          return [
+                            src.label + ": " + clampNumber(r.count, MAX_ITEMS).toLocaleString() + " " + src.unit + " × " + clampNumber(r.ratio, MAX_RATIO),
+                            fmtCount(sourceChunks[k]) + " chunks",
+                            "source-" + r.id,
+                          ];
+                        }),
+                        ["Sum of sources", fmtCount(chunksToday) + " chunks"],
+                      ]),
                   ["× growth (" + growth + "%)", fmtCount(chunks) + " chunks"],
                   ["× " + Math.round(bytesPerChunk).toLocaleString() + " B per chunk (" + dims + " dims)", fmtBytes(indexOneCopy)],
                   ["RAM: chunks × " + Math.round(hotPerChunk).toLocaleString() + " B", fmtBytes(hotOneCopy)],
-                ].map(([a, b]) => (
-                  <tr key={a} className="border-t border-gray-200 dark:border-white/10">
+                ].map(([a, b, id]) => (
+                  <tr key={id ?? a} className="border-t border-gray-200 dark:border-white/10">
                     <td className="py-1.5 pr-2 text-gray-700 dark:text-gray-300">{a}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-900 dark:text-gray-100">{b}</td>
                   </tr>
