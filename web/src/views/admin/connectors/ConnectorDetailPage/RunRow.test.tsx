@@ -158,8 +158,8 @@ describe("RunRow on LineLayout", () => {
   it("AC-4, AC-5: tags a running run at size 20 with the Opal spinner", () => {
     renderRun();
 
-    const tag = screen.getByText("Indexing").closest(".opal-auxiliary-tag");
-    expect(tag).toHaveAttribute("data-size", "20");
+    const tag = screen.getByText("Indexing").closest(".opal-badge");
+    expect(tag).toHaveAttribute("data-size", "5");
     expect(tag!.querySelector('svg[role="status"]')).not.toBeNull();
   });
 

@@ -600,10 +600,11 @@ export default function RunsCard({
           </Section>
           {actions}
         </Section>
+        {/* 4 px around run lines, so a 640 px column leaves their LineLayout above its 620 px wrap. */}
         <Section
           alignItems="stretch"
           gap={1}
-          padding={2}
+          padding={1}
           height="fit"
           className="rounded-b-16 border-t border-border-01 bg-background-tint-01"
         >

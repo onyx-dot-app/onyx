@@ -2,11 +2,12 @@
 
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
+import { Section } from "@opal/layouts";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
+  SvgDocFile,
   SvgFileMinus,
   SvgFilePlus,
   SvgFileRefresh,
@@ -38,7 +39,6 @@ import {
   runKindLabelKey,
   runStatusTag,
 } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
-import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
@@ -46,6 +46,10 @@ import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import LineLayout, {
+  LineIconLabel,
+  LineTags,
+} from "@/views/admin/connectors/shared/LineLayout";
 
 export const RUN_KIND_ICONS = {
   indexing: SvgFiles,
@@ -607,114 +611,72 @@ export default function RunRow({
             padding={1}
             shadow={open ? "md" : "none"}
           >
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="center"
-              gap={1}
-              height="fit"
-            >
-              <Section
-                alignItems="start"
-                gap={1}
-                padding={1}
-                height="fit"
-                className="min-w-0 flex-1"
-              >
-                <Content
-                  icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
-                  title={t(`kinds.${runKindLabelKey(run)}`)}
-                  sizePreset="secondary"
-                  variant="body"
-                  color="muted"
-                  width="fit"
-                />
-                <Text
-                  font={emphasized ? "secondary-action" : "secondary-body"}
-                  color={emphasized ? "text-04" : "text-03"}
-                >
-                  {formatDateTimeLog(run.time_created)}
-                </Text>
-              </Section>
-
-              <Section
-                alignItems="start"
-                gap={1}
-                padding={1}
-                width={12}
-                height="fit"
-                className="shrink-0"
-              >
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  gap={1}
-                  width="fit"
-                  height="fit"
-                >
-                  <StatusTagPill tag={tag} />
-                  {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Tooltip tooltip={t("newModel.tooltip")} side="top">
-                      <Badge title={t("newModel.label")} color="info" />
-                    </Tooltip>
-                  )}
-                  {run.kind === "indexing" && (
-                    <StageDetailsTrigger open={open} />
-                  )}
-                  {run.kind === "checks" &&
-                    shownCheckResults(run.attempt).length > 0 && (
-                      <CheckRunTrigger open={open} />
-                    )}
-                  <RunWarningsTag run={run} />
-                </Section>
-                <Tooltip tooltip={finishedTime} side="top">
-                  <Text font="secondary-body" color="text-03">
-                    {detail()}
+            <LineLayout
+              variant="run"
+              a={
+                <>
+                  <LineIconLabel
+                    icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
+                    label={t(`kinds.${runKindLabelKey(run)}`)}
+                  />
+                  <Text
+                    font={emphasized ? "secondary-action" : "secondary-body"}
+                    color={emphasized ? "text-04" : "text-03"}
+                  >
+                    {formatDateTimeLog(run.time_created)}
                   </Text>
-                </Tooltip>
-              </Section>
-
-              <Section
-                alignItems="end"
-                gap={1}
-                padding={1}
-                width={9}
-                height="fit"
-                className="shrink-0"
-              >
-                <RunFigures run={run} />
-              </Section>
-
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                gap={1}
-                width={3.5}
-                height="fit"
-                className="shrink-0"
-              >
-                {canCancel && run.kind === "indexing" && active && (
-                  <Button
-                    icon={SvgXCircle}
-                    prominence="tertiary"
-                    size="sm"
-                    tooltip={t("actions.cancel")}
-                    aria-label={t("actions.cancel")}
-                    onClick={onCancel}
-                  />
-                )}
-                {hasLogs && (
-                  <Button
-                    icon={SvgAlertTriangle}
-                    prominence="tertiary"
-                    size="sm"
-                    tooltip={t("actions.logs")}
-                    aria-label={t("actions.logs")}
-                    onClick={onViewLogs}
-                  />
-                )}
-              </Section>
-            </Section>
+                </>
+              }
+              b={
+                <>
+                  <LineTags tag={tag}>
+                    {run.kind === "indexing" && run.attempt.is_new_model && (
+                      <Tooltip tooltip={t("newModel.tooltip")} side="top">
+                        <Badge title={t("newModel.label")} color="info" />
+                      </Tooltip>
+                    )}
+                    {run.kind === "indexing" && (
+                      <StageDetailsTrigger open={open} />
+                    )}
+                    {run.kind === "checks" &&
+                      shownCheckResults(run.attempt).length > 0 && (
+                        <CheckRunTrigger open={open} />
+                      )}
+                    <RunWarningsTag run={run} />
+                  </LineTags>
+                  <Tooltip tooltip={finishedTime} side="top">
+                    <Text font="secondary-body" color="text-03">
+                      {detail()}
+                    </Text>
+                  </Tooltip>
+                </>
+              }
+              c={<RunFigures run={run} />}
+              d={
+                <>
+                  {canCancel && run.kind === "indexing" && active && (
+                    <Button
+                      icon={SvgXCircle}
+                      prominence="tertiary"
+                      size="sm"
+                      tooltip={t("actions.cancel")}
+                      aria-label={t("actions.cancel")}
+                      onClick={onCancel}
+                    />
+                  )}
+                  {hasLogs && (
+                    <Button
+                      icon={SvgDocFile}
+                      prominence="tertiary"
+                      size="sm"
+                      tooltip={t("actions.logs")}
+                      aria-label={t("actions.logs")}
+                      onClick={onViewLogs}
+                    />
+                  )}
+                </>
+              }
+            />
           </Card>
         </Popover.Anchor>
         {run.kind === "indexing" && (

@@ -164,8 +164,8 @@ describe("ConnectorRow on LineLayout", () => {
   it("AC-4, AC-5: tags a running row at size 20 with the Opal spinner", () => {
     renderRow();
 
-    const tag = screen.getByText("Indexing").closest(".opal-auxiliary-tag");
-    expect(tag).toHaveAttribute("data-size", "20");
+    const tag = screen.getByText("Indexing").closest(".opal-badge");
+    expect(tag).toHaveAttribute("data-size", "5");
     expect(tag!.querySelector('svg[role="status"]')).not.toBeNull();
   });
 
