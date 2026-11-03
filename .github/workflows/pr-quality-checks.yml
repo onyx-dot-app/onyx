@@ -27,10 +27,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
-      # A change that touches only documentation/ and no JavaScript or TypeScript
-      # needs none of the web setup or widget tests below. The docs hooks need
-      # only Python and bun (prettier runs through bunx). Script files are
-      # excluded because the oxlint hook runs on any of them and needs web/.
+      # A change made only of documentation files needs none of the web setup or
+      # widget tests below. The docs hooks need only Python and bun (prettier runs
+      # through bunx). The check is an allow-list of docs file types: any other
+      # file, such as a script prek tags as JavaScript (any case, or an
+      # extensionless Node script), runs the full setup because oxlint needs web/.
       - name: Detect a docs-only change
         id: changes
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -41,9 +42,8 @@ jobs:
           # --no-renames lists both paths of a rename. Here-strings avoid a pipe, so an
           # early grep exit cannot fail the pipeline under pipefail and invert the check.
           files="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
-          if [ -n "$files" ] \
-            && ! grep -qv '^documentation/' <<<"$files" \
-            && ! grep -qE '\.(js|jsx|mjs|cjs|ts|tsx)$' <<<"$files"; then
+          docs_file='^documentation/.+\.(md|mdx|json|css|svg|png|jpe?g|gif|webp|ico|mp4|txt|ya?ml|py)$'
+          if [ -n "$files" ] && ! grep -qviE "$docs_file" <<<"$files"; then
             echo "docs_only=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Setup Terraform
