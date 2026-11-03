@@ -382,7 +382,7 @@ variable "sandbox_gvisor_enabled" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "How Craft sandboxes run on the sandbox pool. \"pod\" is one container per sandbox. \"firecracker\" turns on nested virtualization so the pool can run Firecracker microVMs, and needs an Intel n2 or c3 machine type."
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" turns on nested virtualization and needs an Intel n2 or c3 machine type. Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the gcp module README."
   default     = "pod"
 
   validation {

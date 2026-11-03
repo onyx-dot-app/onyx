@@ -273,7 +273,7 @@ variable "sandbox_node_disk_size_gb" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "How Craft sandboxes run on the sandbox pool. \"pod\" is one container per sandbox. \"firecracker\" runs Firecracker microVMs, and needs an Intel D or E v5, v6 or v7 sandbox_node_vm_size."
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" needs an Intel D or E v5, v6 or v7 sandbox_node_vm_size. Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the azure module README."
   default     = "pod"
 
   validation {

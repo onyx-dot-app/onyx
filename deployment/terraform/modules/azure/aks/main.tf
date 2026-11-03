@@ -201,8 +201,9 @@ resource "azurerm_kubernetes_cluster_node_pool" "this" {
 
   # Firecracker was tested on AKS Ubuntu 24.04, which already sets
   # vm.max_map_count to 1048576. azurerm caps linux_os_config at 262144, so
-  # the module pins the image rather than set a lower value.
-  os_sku = each.key == "sandbox" && local.sandbox_firecracker ? "Ubuntu2404" : null
+  # the module pins the image rather than set a lower value. The sandbox pool
+  # names "Ubuntu" for "pod": a null os_sku keeps the old value from state.
+  os_sku = each.key == "sandbox" ? (local.sandbox_firecracker ? "Ubuntu2404" : "Ubuntu") : null
 
   temporary_name_for_rotation = local.rotation_names[each.key]
 

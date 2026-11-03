@@ -604,8 +604,10 @@ and limits stay.
 
 ## Craft sandboxes on Firecracker
 
-Craft can run each sandbox as a Firecracker microVM instead of a pod. This
-needs `/dev/kvm` on the sandbox nodes. Set it when you create the pool:
+`craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
+Firecracker microVMs, which need `/dev/kvm`. It does not change how Craft runs
+sandboxes: Craft still runs pods until its Firecracker backend ships. Set it
+when you create the pool:
 
 ```hcl
 enable_sandbox_node_pool = true
@@ -629,7 +631,7 @@ Node requirements:
 |---|---|---|
 | Cluster | GKE Standard | GKE Autopilot |
 | Machine type | Intel `n2`, `c3` (default `n2-standard-8`) | `n2d`, `c2d`, `c3d`, `t2d` (AMD), `t2a` (Arm), `e2` |
-| Image | `COS_CONTAINERD` (module default) | — |
+| Image | `COS_CONTAINERD` (fixed) | — |
 | Pool | — | `sandbox_gvisor_enabled = true` |
 
 The module refuses a blocked machine type, and gVisor with Firecracker on the

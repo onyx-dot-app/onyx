@@ -402,7 +402,7 @@ variable "sandbox_node_disk_size_gb" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "How Craft sandboxes run on the sandbox pool: \"pod\" or \"firecracker\". See the aks module README for the node requirements."
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the azure module README for the node requirements."
   default     = "pod"
 }
 

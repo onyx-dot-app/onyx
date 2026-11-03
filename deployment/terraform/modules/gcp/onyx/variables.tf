@@ -356,7 +356,7 @@ variable "enable_sandbox_node_pool" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "How Craft sandboxes run on the sandbox pool: \"pod\" or \"firecracker\". See the gke module README for the node requirements."
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the gcp module README for the node requirements."
   default     = "pod"
 }
 

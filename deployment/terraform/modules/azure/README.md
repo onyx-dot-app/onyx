@@ -403,8 +403,10 @@ system pool and skip this.
 
 ## Craft sandboxes on Firecracker
 
-Craft can run each sandbox as a Firecracker microVM instead of a pod. This
-needs `/dev/kvm` on the sandbox nodes. Set it on the composition:
+`craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
+Firecracker microVMs, which need `/dev/kvm`. It does not change how Craft runs
+sandboxes: Craft still runs pods until its Firecracker backend ships. Set it on
+the composition:
 
 ```hcl
 enable_sandbox_node_pool = true
@@ -417,8 +419,13 @@ With `"firecracker"`, the `aks` module:
 - sets the sandbox pool OS to `Ubuntu2404`;
 - adds the label `onyx.app/kvm=true`.
 
-The default, `"pod"`, leaves the pool as it is. A change to
-`craft_sandbox_runtime` rotates the sandbox pool.
+The default, `"pod"`, keeps the AKS default `Ubuntu` image. A change to
+`craft_sandbox_runtime` changes the pool OS, so AKS replaces the sandbox nodes
+(through the pool's temporary rotation name).
+
+`Ubuntu2404` needs `azurerm` 4.67 or later. The `aks` and `onyx` modules
+require `>= 4.67, < 5.0`; run `terraform init -upgrade` if your lock file pins
+an older 4.x.
 
 The module sets no `vm.max_map_count`. The Ubuntu 24.04 node image already
 uses `1048576`, and `azurerm` accepts no value above `262144`.

@@ -142,6 +142,11 @@ run "the_sandbox_pool_runs_pods_by_default" {
     condition     = contains(keys(azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels), "onyx.app/kvm") == false
     error_message = "Only pools that can run Firecracker carry the onyx.app/kvm label."
   }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].os_sku == "Ubuntu"
+    error_message = "The pod runtime keeps the AKS default Ubuntu image, also after a switch back from Firecracker."
+  }
 }
 
 run "firecracker_pins_the_tested_image_and_labels_the_pool" {
