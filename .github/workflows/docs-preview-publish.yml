@@ -40,8 +40,7 @@ jobs:
       BUILD_URL: ${{ github.event.workflow_run.html_url }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
-      BUILD_RUN_ID: ${{ github.event.workflow_run.id }}
-      BUILD_CREATED_AT: ${{ github.event.workflow_run.created_at }}
+      BUILD_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
     steps:
       - name: Check the pull request and Mintlify configuration
@@ -60,14 +59,16 @@ jobs:
 
       # An older build, failed or not, must not replace a newer preview or its comment.
       # Compare builds, not the pull request head: a later commit that changes no docs
-      # starts no new build, and this build is then still the latest one.
+      # starts no new build, and this build is then still the latest one. run_number grows
+      # strictly and a rerun keeps it. Runs of another pull request (a fork that reuses the
+      # branch name lists none) do not count.
       - name: Check for a newer docs build
         id: latest
         if: steps.config.outputs.ready == 'true'
         run: |
           newer="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/docs-preview.yml/runs" \
             -f event=pull_request -f branch="$HEAD_BRANCH" -f per_page=50 \
-            --jq "[.workflow_runs[] | select(.id != $BUILD_RUN_ID and .created_at > \"$BUILD_CREATED_AT\")] | length")"
+            --jq "[.workflow_runs[] | select(.run_number > $BUILD_RUN_NUMBER and any(.pull_requests[]; .number == $PR_NUMBER))] | length")"
           if [ "$newer" != "0" ]; then
             echo "A newer docs build exists for this pull request; skipping ${HEAD_SHA::7}"
             echo "outdated=true" >> "$GITHUB_OUTPUT"
