@@ -14841,6 +14841,10 @@
       },
       "plusMenu": {
         "tooltip": "添加文件或技能"
+      },
+      "contextRing": {
+        "label": "上下文窗口用量",
+        "tooltip": "已使用 {percent}% 的上下文"
       }
     },
     "interruptHint": {

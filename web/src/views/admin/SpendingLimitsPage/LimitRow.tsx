@@ -13,13 +13,7 @@ import {
   type SelectOption,
 } from "@opal/components";
 import { InputErrorText, InputVertical, Section } from "@opal/layouts";
-import {
-  SvgAlertCircle,
-  SvgMinusCircle,
-  SvgPenSmall,
-  SvgProgressCircle,
-  SvgSlash,
-} from "@opal/icons";
+import { SvgMinusCircle, SvgPenSmall, SvgSlash } from "@opal/icons";
 import { richNodes } from "@opal/utils";
 import type { RichNodes } from "@opal/types";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
@@ -36,10 +30,12 @@ import {
   EMPHASIS,
   useLimitSummary,
 } from "@/views/admin/SpendingLimitsPage/summary";
+import UsageIcon, {
+  FULL_PERCENT,
+} from "@/views/admin/SpendingLimitsPage/UsageIcon";
 
 const TOKENS_PER_THOUSAND = 1000;
 const CENTS_PER_DOLLAR = 100;
-const FULL_PERCENT = 100;
 
 interface UsageSummaryProps {
   amount: RichNodes;
@@ -79,19 +75,7 @@ function UsageSummary({ amount, used, budget }: UsageSummaryProps) {
                 {t("percent", { percent: Math.round(percent) })}
               </Text>
             </Section>
-            <Section
-              gap={0}
-              width={1.25}
-              height={1.25}
-              padding={0.5}
-              className={over ? "text-status-error-05" : "text-theme-blue-05"}
-            >
-              {over ? (
-                <SvgAlertCircle size={16} />
-              ) : (
-                <SvgProgressCircle size={16} value={percent} />
-              )}
-            </Section>
+            <UsageIcon percent={percent} />
           </>
         )}
       </Section>

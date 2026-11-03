@@ -14841,6 +14841,10 @@
       },
       "plusMenu": {
         "tooltip": "Add files or skills"
+      },
+      "contextRing": {
+        "label": "Context window usage",
+        "tooltip": "{percent}% of context used"
       }
     },
     "interruptHint": {

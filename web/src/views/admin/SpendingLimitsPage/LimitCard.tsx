@@ -14,12 +14,10 @@ import {
 import { Content, Section, toast } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import {
-  SvgAlertCircle,
   SvgExpand,
   SvgFold,
   SvgPlug,
   SvgPlusCircle,
-  SvgProgressCircle,
   SvgUnplug,
 } from "@opal/icons";
 import { richNodes } from "@opal/utils";
@@ -47,9 +45,11 @@ import {
   cardSummaryLimits,
   useLimitSummary,
 } from "@/views/admin/SpendingLimitsPage/summary";
+import UsageIcon, {
+  FULL_PERCENT,
+} from "@/views/admin/SpendingLimitsPage/UsageIcon";
 
 const TOKENS_PER_THOUSAND = 1000;
-const FULL_PERCENT = 100;
 
 interface AlertLimitRowProps {
   limit: SpendingLimit;
@@ -490,23 +490,7 @@ export default function LimitCard({
                   )}
                 </Text>
               </Section>
-              <Section
-                gap={0}
-                width={1.25}
-                height={1.25}
-                padding={0.5}
-                className={
-                  usagePercent >= FULL_PERCENT
-                    ? "text-status-error-05"
-                    : "text-theme-blue-05"
-                }
-              >
-                {usagePercent >= FULL_PERCENT ? (
-                  <SvgAlertCircle size={16} />
-                ) : (
-                  <SvgProgressCircle size={16} value={usagePercent} />
-                )}
-              </Section>
+              <UsageIcon percent={usagePercent} />
             </Section>
           </Section>
         )}
