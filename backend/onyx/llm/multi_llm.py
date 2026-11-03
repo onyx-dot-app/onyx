@@ -575,7 +575,10 @@ def _convert_type_arrays(schema: JsonValue) -> None:
     if not isinstance(schema, dict):
         return
     for key, value in schema.items():
-        if key not in _JSON_SCHEMA_LITERAL_KEYS:
+        if key == "properties" and isinstance(value, dict):
+            for property_schema in value.values():
+                _convert_type_arrays(property_schema)
+        elif key not in _JSON_SCHEMA_LITERAL_KEYS:
             _convert_type_arrays(value)
     type_value = schema.get("type")
     if not isinstance(type_value, list):

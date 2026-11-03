@@ -162,6 +162,7 @@ def test_gemini_on_openai_compatible_converts_type_arrays() -> None:
                     "enum": ["a", "b"],
                     "default": {"type": ["a", "b"]},
                 },
+                "default": {"type": ["string", "null"]},
             },
         },
     )
@@ -182,6 +183,7 @@ def test_gemini_on_openai_compatible_converts_type_arrays() -> None:
                 "enum": ["a", "b"],
                 "default": {"type": ["a", "b"]},
             },
+            "default": {"type": "string", "nullable": True},
         },
     }
 
