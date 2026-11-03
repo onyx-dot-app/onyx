@@ -12777,9 +12777,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "توليد الصور"
-        },
         "emptyState": {
           "text": "لم يتم توليد صور"
         },
@@ -12788,9 +12785,6 @@
         },
         "generatedStatus": {
           "text": "{count, plural, one {تم توليد صورة واحدة} other {تم توليد # صور}}"
-        },
-        "generatingImagesStatus": {
-          "text": "جارٍ توليد الصور..."
         },
         "generatingStatus": {
           "text": "جارٍ توليد الصورة..."
@@ -12957,9 +12951,6 @@
           },
           "executingTool": {
             "label": "جارٍ تنفيذ الأداة"
-          },
-          "generatingImage": {
-            "label": "جارٍ توليد الصورة..."
           },
           "generatingImages": {
             "label": "جارٍ توليد الصور"

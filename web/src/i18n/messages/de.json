@@ -12777,9 +12777,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "Bildgenerierung"
-        },
         "emptyState": {
           "text": "Keine Bilder generiert"
         },
@@ -12788,9 +12785,6 @@
         },
         "generatedStatus": {
           "text": "{count, plural, one {# Bild generiert} other {# Bilder generiert}}"
-        },
-        "generatingImagesStatus": {
-          "text": "Bilder werden generiert..."
         },
         "generatingStatus": {
           "text": "Bild wird generiert..."
@@ -12957,9 +12951,6 @@
           },
           "executingTool": {
             "label": "Führt Werkzeug aus"
-          },
-          "generatingImage": {
-            "label": "Bild wird generiert..."
           },
           "generatingImages": {
             "label": "Bilder werden generiert"

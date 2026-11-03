@@ -12777,9 +12777,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "图片生成"
-        },
         "emptyState": {
           "text": "未生成图片"
         },
@@ -12788,9 +12785,6 @@
         },
         "generatedStatus": {
           "text": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
-        },
-        "generatingImagesStatus": {
-          "text": "正在生成图片..."
         },
         "generatingStatus": {
           "text": "正在生成图片..."
@@ -12957,9 +12951,6 @@
           },
           "executingTool": {
             "label": "正在执行工具"
-          },
-          "generatingImage": {
-            "label": "正在生成图片..."
           },
           "generatingImages": {
             "label": "正在生成图片"
