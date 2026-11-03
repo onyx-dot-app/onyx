@@ -269,8 +269,15 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
           break;
         }
         case "Enter": {
-          // A focused filter header already handled its own Enter.
-          if (e.defaultPrevented) break;
+          // A focused filter header already handled its own Enter. The search
+          // input also prevents Enter, so match on the item, not the flag.
+          if (
+            e.defaultPrevented &&
+            e.target instanceof Element &&
+            e.target.closest("[data-command-item]")
+          ) {
+            break;
+          }
           e.preventDefault();
           e.stopPropagation();
           if (highlightedValue) {
