@@ -80,3 +80,44 @@ async def test_tool_call_succeeds_within_configured_value(
 @pytest.mark.usefixtures("fresh_client")
 async def test_shared_client_keeps_short_default_for_non_tool_calls() -> None:
     assert get_http_client().timeout == httpx.Timeout(60.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("fresh_client")
+@pytest.mark.parametrize(
+    ("tool_name", "tool_args", "error_prefix"),
+    [
+        ("search_indexed_documents", {"query": "q"}, "Document search failed: "),
+        ("search_web", {"query": "q"}, "Web search failed: "),
+        ("open_urls", {"urls": ["https://example.com"]}, "URL fetch failed: "),
+    ],
+)
+async def test_tool_timeout_reaches_the_client_with_a_message(
+    slow_server_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+    tool_args: dict[str, object],
+    error_prefix: str,
+) -> None:
+    """A real httpx.ReadTimeout has an empty str(), so formatting it with str()
+    sent MCP clients a blank error. The message must say what happened."""
+
+    async def _resolve_no_filters(**_kwargs: object) -> search_module._ResolvedFilters:
+        return search_module._ResolvedFilters(persona_id=None, source_types=None)
+
+    api_base_url = slow_server_url.removesuffix("/search")
+    monkeypatch.setattr(search_module, "MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(
+        search_module,
+        "build_api_server_url_for_http_requests",
+        lambda **_kwargs: api_base_url,
+    )
+    monkeypatch.setattr(search_module, "require_access_token", lambda: _TOKEN)
+    monkeypatch.setattr(search_module, "_resolve_filters", _resolve_no_filters)
+
+    payload = await getattr(search_module, tool_name)(**tool_args)
+
+    assert payload["error"].startswith(error_prefix)
+    detail = payload["error"].removeprefix(error_prefix)
+    assert detail, "timeout reached the client as a blank message"
+    assert "ReadTimeout" in detail
