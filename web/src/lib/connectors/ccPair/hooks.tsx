@@ -981,6 +981,8 @@ export function useActivityPanelOpen(scope: ActivityScope): ActivityPanelOpen {
 export interface ActivityPanelLinks {
   onHoverAttempt: (attemptId: number | null) => void;
   focusAttemptId: number | null;
+  /** Counts focus requests, so a repeat focus on the same run resets the panel's filters again. */
+  focusRequest: number;
   outlinedAttemptIds: number[];
   /** A hovered card's connector, or null once the pointer leaves the card. */
   onHoverPair: (ccPairId: number | null) => void;
@@ -1008,6 +1010,7 @@ export function useActivityChartLinks({
 }: ActivityChartLinksOptions = {}): ActivityChartLinks {
   const [hoveredAttemptId, setHoveredAttemptId] = useState<number | null>(null);
   const [focusAttemptId, setFocusAttemptId] = useState<number | null>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
   const [outlinedAttemptIds, setOutlinedAttemptIds] = useState<number[]>([]);
   // Apart, so leaving a hovered card keeps a focused card's lift.
   const [hoveredPairId, setHoveredPairId] = useState<number | null>(null);
@@ -1015,6 +1018,7 @@ export function useActivityChartLinks({
   function focusAttempt(attemptId: number) {
     onFocusAttempt?.(attemptId);
     setFocusAttemptId(attemptId);
+    setFocusRequest((request) => request + 1);
   }
   return {
     chart: {
@@ -1030,6 +1034,7 @@ export function useActivityChartLinks({
         if (attemptId === null) setFocusAttemptId(null);
       },
       focusAttemptId,
+      focusRequest,
       outlinedAttemptIds,
       onHoverPair: setHoveredPairId,
       onFocusPair: setFocusedPairId,

@@ -462,6 +462,7 @@ export default function ActivityPanel({
   ...links
 }: ActivityPanelProps) {
   const focusAttemptId = links.focusAttemptId ?? null;
+  const focusRequest = links.focusRequest ?? 0;
   const t = useTranslations("admin.connector.activity");
   const tPanel = useTranslations("admin.indexing.activities.panel");
   const [searchInput, setSearchInput] = useState("");
@@ -564,7 +565,7 @@ export default function ActivityPanel({
   };
   // The run count each section's page was last asked at for a focus, so one page loads at a time.
   const focusPagedAt = useRef<Partial<Record<ActivitySection, number>>>({});
-  // A focus names an index run with open failures or errors, so it shows the level, search and connectors that list both open sections, then pages to it.
+  // Each focus request names an index run with open failures or errors, so it shows the level, search and connectors that list both open sections, then pages to it.
   useEffect(() => {
     if (focusAttemptId === null) return;
     focusPagedAt.current = {};
@@ -576,7 +577,7 @@ export default function ActivityPanel({
     });
     setSearchInput("");
     setCcPairIds([]);
-  }, [focusAttemptId]);
+  }, [focusAttemptId, focusRequest]);
   const focusRevealed =
     FOCUS_SECTIONS.every(isShown) &&
     searchInput === "" &&

@@ -110,6 +110,16 @@ describe("useActivityChartLinks", () => {
     expect(result.current.panel.focusAttemptId).toBe(12);
   });
 
+  it("counts a repeat focus on the same run as a new request", () => {
+    const { result } = renderHook(() => useActivityChartLinks());
+
+    act(() => result.current.focusAttempt(12));
+    const first = result.current.panel.focusRequest;
+    act(() => result.current.focusAttempt(12));
+    expect(result.current.panel.focusAttemptId).toBe(12);
+    expect(result.current.panel.focusRequest).toBeGreaterThan(first);
+  });
+
   it("keeps a focused card's row lifted after the pointer hovers and leaves another card", () => {
     const { result } = renderHook(() => useActivityChartLinks());
 
@@ -348,6 +358,42 @@ describe("Focus on a run with open errors", () => {
     await waitFor(() => expect(cardFor(target)).not.toBeNull());
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
     expect(onFocusPair).toHaveBeenCalledWith(SALES_DRIVE.id);
+  });
+});
+
+/** A page's View Errors button wired through the hook, as the status page wires it. */
+function FocusedPanel({ attemptId }: { attemptId: number }) {
+  const links = useActivityChartLinks();
+  return (
+    <>
+      <button type="button" onClick={() => links.focusAttempt(attemptId)}>
+        View Errors
+      </button>
+      <ActivityPanel scope={PAIR} title="Activities" {...links.panel} />
+    </>
+  );
+}
+
+describe("Repeated focus on the same run", () => {
+  it("brings the run back after a filter hid it again", async () => {
+    const withErrors = indexRun({
+      id: 450,
+      status: "completed_with_errors",
+      minutesAgo: 10,
+      openErrors: 2,
+    });
+    installActivityFeed([FAILED, withErrors]);
+    const user = userEvent.setup();
+    render(<FocusedPanel attemptId={withErrors.run.attempt.id} />);
+    await waitFor(() => expect(cardFor(withErrors)).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await user.click(screen.getByRole("button", { name: "Show Filters" }));
+    await pickLevel(user, "Failures");
+    await waitFor(() => expect(cardFor(withErrors)).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await waitFor(() => expect(cardFor(withErrors)).not.toBeNull());
   });
 });
 
