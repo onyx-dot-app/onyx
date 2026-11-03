@@ -6,7 +6,8 @@ shared client keep the short 60s default.
 """
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -83,39 +84,42 @@ async def test_shared_client_keeps_short_default_for_non_tool_calls() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("fresh_client")
 @pytest.mark.parametrize(
-    ("tool_name", "tool_args", "error_prefix"),
+    ("tool", "tool_kwargs", "error_prefix"),
     [
-        ("search_indexed_documents", {"query": "q"}, "Document search failed: "),
-        ("search_web", {"query": "q"}, "Web search failed: "),
-        ("open_urls", {"urls": ["https://example.com"]}, "URL fetch failed: "),
+        (
+            search_module.search_indexed_documents,
+            {"query": "q"},
+            "Document search failed: ",
+        ),
+        (search_module.search_web, {"query": "q"}, "Web search failed: "),
+        (
+            search_module.open_urls,
+            {"urls": ["https://example.com"]},
+            "URL fetch failed: ",
+        ),
     ],
 )
 async def test_tool_timeout_reaches_the_client_with_a_message(
-    slow_server_url: str,
     monkeypatch: pytest.MonkeyPatch,
-    tool_name: str,
-    tool_args: dict[str, object],
+    tool: Callable[..., Awaitable[dict[str, Any]]],
+    tool_kwargs: dict[str, Any],
     error_prefix: str,
 ) -> None:
-    """A real httpx.ReadTimeout has an empty str(), so formatting it with str()
+    """An httpx.ReadTimeout has an empty str(), so formatting it with str()
     sent MCP clients a blank error. The message must say what happened."""
 
     async def _resolve_no_filters(**_kwargs: object) -> search_module._ResolvedFilters:
         return search_module._ResolvedFilters(persona_id=None, source_types=None)
 
-    api_base_url = slow_server_url.removesuffix("/search")
-    monkeypatch.setattr(search_module, "MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(
-        search_module,
-        "build_api_server_url_for_http_requests",
-        lambda **_kwargs: api_base_url,
-    )
+    async def _raise_read_timeout(*_args: object, **_kwargs: object) -> httpx.Response:
+        raise httpx.ReadTimeout("")
+
     monkeypatch.setattr(search_module, "require_access_token", lambda: _TOKEN)
     monkeypatch.setattr(search_module, "_resolve_filters", _resolve_no_filters)
+    monkeypatch.setattr(search_module, "_post_model", _raise_read_timeout)
 
-    payload = await getattr(search_module, tool_name)(**tool_args)
+    payload = await tool(**tool_kwargs)
 
     assert payload["error"].startswith(error_prefix)
     detail = payload["error"].removeprefix(error_prefix)
