@@ -22,6 +22,7 @@ jobs:
     if: >-
       github.event.workflow_run.event == 'pull_request'
       && github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.actor.login != 'dependabot[bot]'
       && github.event.workflow_run.conclusion != 'cancelled'
       && github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
@@ -96,14 +97,17 @@ jobs:
           pr_state() { gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state; }
           # docs-preview-cleanup.yml deletes the branch once, when the pull request closes.
           # Do not push for a closed pull request, and undo a push that raced the close.
-          if [ "$(pr_state)" != "OPEN" ]; then
+          # A plain assignment makes a failed lookup fail the step, not read as closed.
+          state="$(pr_state)"
+          if [ "$state" != "OPEN" ]; then
             echo "The pull request is closed; no preview"
             echo "closed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           gh auth setup-git
           git push -q --force "https://github.com/${GITHUB_REPOSITORY}.git" "$commit:refs/heads/$PREVIEW_BRANCH"
-          if [ "$(pr_state)" != "OPEN" ]; then
+          state="$(pr_state)"
+          if [ "$state" != "OPEN" ]; then
             git push -q "https://github.com/${GITHUB_REPOSITORY}.git" --delete "$PREVIEW_BRANCH"
             echo "closed=true" >> "$GITHUB_OUTPUT"
             exit 0
