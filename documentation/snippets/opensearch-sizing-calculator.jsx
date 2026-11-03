@@ -14,11 +14,12 @@ export const OpenSearchSizingCalculator = () => {
 
   const PARTS = [
     // One blue scale from the docs primary: darker means more text per GB.
-    { label: "Text", sub: "wiki, tickets, chat", textShare: 40, color: "#0050B4", ink: "#FFFFFF" },
-    { label: "Office files", sub: "Word, Excel, Google Docs", textShare: 12, color: "#0069ED", ink: "#FFFFFF" },
+    { label: "Text", sub: "wiki, tickets, chat", textShare: 40, color: "#003F8F", ink: "#FFFFFF" },
+    { label: "Office files", sub: "Word, Excel, Google Docs", textShare: 12, color: "#0057C7", ink: "#FFFFFF" },
+    { label: "Email", sub: "mailboxes with attachments", textShare: 8, color: "#0069ED", ink: "#FFFFFF" },
     { label: "Code", sub: "READMEs and docs only", textShare: 5, color: "#4D9CFF", ink: "#0B2A55" },
     { label: "PDFs and slides", sub: "PDF, PowerPoint", textShare: 4, color: "#A9CCFF", ink: "#0B2A55" },
-    { label: "Media and other", sub: "video, images, archives", textShare: 0, color: "#D1D5DB", ink: "#374151", media: true },
+    { label: "Media and other", sub: "video, audio, archives", textShare: 0, color: "#D1D5DB", ink: "#374151", media: true },
   ];
   const MODELS = [
     { name: "Granite Embedding 97M (Onyx default)", dims: 384 },
@@ -32,18 +33,20 @@ export const OpenSearchSizingCalculator = () => {
     { name: "Gemini embedding-001", dims: 3072 },
   ];
   // Starting estimates of chunks per item, until measured on real deployments.
+  // Mean chunks per item across Onyx Cloud tenants (November 2026).
   const SOURCES = [
-    { key: "gdrive", label: "Google Drive", unit: "files", ratio: 6 },
-    { key: "sharepoint", label: "SharePoint and OneDrive", unit: "files", ratio: 6 },
-    { key: "box", label: "Box and Dropbox", unit: "files", ratio: 6 },
-    { key: "upload", label: "Uploaded files", unit: "files", ratio: 6 },
-    { key: "confluence", label: "Confluence", unit: "pages", ratio: 4 },
-    { key: "wiki", label: "Notion and other wikis", unit: "pages", ratio: 3 },
-    { key: "issues", label: "Jira, Linear and GitHub issues", unit: "issues", ratio: 1.5 },
-    { key: "tickets", label: "Zendesk and other tickets", unit: "tickets", ratio: 2 },
-    { key: "chat", label: "Slack and Teams", unit: "messages", ratio: 0.5 },
-    { key: "email", label: "Gmail and Outlook", unit: "emails", ratio: 1.2 },
-    { key: "web", label: "Websites", unit: "pages", ratio: 3 },
+    { key: "docs", label: "Documents", examples: "Google Docs, Word", unit: "files", ratio: 7.5 },
+    { key: "pdfs", label: "PDFs", examples: "From any drive or upload", unit: "files", ratio: 11.5 },
+    { key: "slides", label: "Slide decks", examples: "Google Slides, PowerPoint", unit: "files", ratio: 9 },
+    { key: "sheets", label: "Spreadsheets", examples: "Google Sheets, Excel. Sizes vary a lot.", unit: "files", ratio: 240 },
+    { key: "images", label: "Images", examples: "Photos, screenshots", unit: "files", ratio: 1 },
+    { key: "wiki", label: "Wiki pages", examples: "Confluence, Notion", unit: "pages", ratio: 3.7 },
+    { key: "tickets", label: "Tickets and issues", examples: "Jira, Zendesk, GitHub", unit: "tickets", ratio: 1.9 },
+    { key: "chat", label: "Chat threads", examples: "Slack, Teams. A message outside a thread is one thread.", unit: "threads", ratio: 1.1 },
+    { key: "email", label: "Email threads", examples: "Gmail, Outlook. A single email is one thread.", unit: "threads", ratio: 4.3 },
+    { key: "crm", label: "CRM records", examples: "Salesforce, HubSpot", unit: "records", ratio: 4.3 },
+    { key: "calls", label: "Call transcripts", examples: "Gong, Fireflies", unit: "calls", ratio: 12 },
+    { key: "web", label: "Web pages", examples: "Websites, help centers", unit: "pages", ratio: 5.6 },
   ];
   const MAX_ITEMS = 10_000_000_000;
   const NODE_RAM = [16, 32, 64];
@@ -57,15 +60,20 @@ export const OpenSearchSizingCalculator = () => {
   };
 
   const [inputMode, setInputMode] = useState("storage");
-  const [sourceRows, setSourceRows] = useState([
-    { id: 1, key: "gdrive", count: "2000000", ratio: "6" },
-    { id: 2, key: "confluence", count: "20000", ratio: "4" },
-    { id: 3, key: "issues", count: "50000", ratio: "1.5" },
-    { id: 4, key: "chat", count: "2000000", ratio: "0.5" },
-  ]);
-  const [sourceToAdd, setSourceToAdd] = useState("sharepoint");
+  const [sourceRows, setSourceRows] = useState(
+    [
+      ["docs", "200000"],
+      ["pdfs", "50000"],
+      ["sheets", "10000"],
+      ["wiki", "20000"],
+      ["tickets", "50000"],
+      ["chat", "500000"],
+      ["email", "300000"],
+    ].map(([key, count], k) => ({ id: k + 1, key, count, ratio: String(SOURCES.find((x) => x.key === key).ratio) }))
+  );
+  const [sourceToAdd, setSourceToAdd] = useState("pdfs");
   const [totalGB, setTotalGB] = useState(500);
-  const [parts, setParts] = useState([0.06, 0.3, 0.06, 0.18, 0.4]);
+  const [parts, setParts] = useState([0.05, 0.25, 0.15, 0.05, 0.15, 0.35]);
   const [growth, setGrowth] = useState(30);
   const [modelIndex, setModelIndex] = useState(0);
   const [quant, setQuant] = useState("none");
@@ -245,13 +253,16 @@ export const OpenSearchSizingCalculator = () => {
           </div>
           {inputMode === "sources" ? (
             <div className="space-y-3">
-              <div className={hint}>Enter the item count from each tool's admin console. The chunks per item are estimates; change them if you know your data.</div>
+              <div className={hint}>Enter how many items of each type you have. For chat and email, divide the message count by the average thread length. The chunks per item are estimates; change them if you know your data.</div>
               {sourceRows.map((r, k) => {
                 const src = sourceOf(r.key);
                 return (
                   <div key={r.id} className="space-y-2 rounded-xl border border-gray-200 p-3 dark:border-white/10">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 text-base text-gray-900 dark:text-gray-100">{src.label}</div>
+                      <div className="min-w-0">
+                        <div className="text-base text-gray-900 dark:text-gray-100">{src.label}</div>
+                        <div className={hint}>{src.examples}</div>
+                      </div>
                       <button
                         type="button"
                         aria-label={"Remove " + src.label}
