@@ -1,8 +1,9 @@
-/** The connector page's Indexing and Permissions Sync status cards on LineLayout, without the estimate bar (FE-6, D-2). */
+/** The connector page's Indexing and Permissions Sync status cards on LineLayout, without the estimate bar. */
 import { render, screen, setupUser, within } from "@tests/setup/test-utils";
 import { SvgListCheck, SvgScissors } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import {
+  CC_PAIR_RUN_KINDS,
   ConnectorCredentialPairStatus,
   PermissionSyncStatusEnum,
   type CCPairFullInfo,
@@ -42,7 +43,7 @@ function copy(path: string): string {
 
 const KEYS = {
   title: "admin.connector.statusCard.title",
-  speed: "admin.connector.statusCard.indexingSpeed",
+  rate: "admin.connector.runs.detail.rate",
   lastIndexed: "admin.connector.statusCard.lastIndexed.value",
   indexedLabel: "admin.connector.statusCard.documents.indexedLabel",
   showActivities: "admin.connector.statusCard.actions.showActivities",
@@ -73,6 +74,8 @@ let mockIndexAttempts: PaginatedIndexAttempts = { items: [], total_items: 0 };
 let mockLatestRuns: Partial<Record<CCPairRunKind, CCPairRun>> = {};
 /** The kinds the pair's source runs. */
 let mockSourceKinds: CCPairRunKind[] = [];
+/** The kinds whose runs feed fails to load. */
+let mockFailedKinds: CCPairRunKind[] = [];
 
 function mockRunsResponse(kind: CCPairRunKind): CCPairRunsResponse {
   const run = mockLatestRuns[kind];
@@ -100,8 +103,14 @@ jest.mock("@/lib/connectors/ccPair/hooks", () => {
       kind: CCPairRunKind,
       enabled: boolean
     ) => ({
-      data: enabled ? mockRunsResponse(kind) : undefined,
-      error: undefined,
+      data:
+        enabled && !mockFailedKinds.includes(kind)
+          ? mockRunsResponse(kind)
+          : undefined,
+      error:
+        enabled && mockFailedKinds.includes(kind)
+          ? new Error("runs feed failed")
+          : undefined,
       isLoading: false,
       isValidating: false,
       mutate: jest.fn(),
@@ -119,17 +128,12 @@ afterEach(() => {
   mockIndexAttempts = { items: [], total_items: 0 };
   mockLatestRuns = {};
   mockSourceKinds = [];
+  mockFailedKinds = [];
 });
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
-const ALL_KINDS: CCPairRunKind[] = [
-  "indexing",
-  "doc_permission_sync",
-  "group_sync",
-  "pruning",
-  "checks",
-];
+const ALL_KINDS: CCPairRunKind[] = [...CC_PAIR_RUN_KINDS];
 
 /** An active, permission-synced Confluence pair that indexed 2 minutes ago. */
 function ccPair(overrides: Partial<CCPairFullInfo> = {}): CCPairFullInfo {
@@ -320,7 +324,7 @@ function seedIndexed() {
   return ccPair();
 }
 
-/** An index run in flight at 24.23 docs/min with 3 open errors. The run's own rate and the pair's average agree, so either source reads 24.23. */
+/** An index run in flight at 24.23 docs/min with 3 open errors. */
 function seedIndexing() {
   const started = Date.now() - 101 * MINUTE_MS;
   mockIndexAttempts = {
@@ -513,7 +517,7 @@ describe("Indexing card column A", () => {
       name: copy(KEYS.stageHint),
     });
     const rate = within(card).getByText(
-      copy(KEYS.speed).replace("{speed}", "24.23"),
+      copy(KEYS.rate).replace("{rate}", "24.23"),
       { exact: true }
     );
 
@@ -539,7 +543,7 @@ describe("Indexing card column A", () => {
     expect(within(card).queryByText(/docs\/min/)).toBeNull();
   });
 
-  it("AC-2, D-24: the latest prune and check runs show the scissors and list-check hints, each opening its run", async () => {
+  it("AC-2: the latest prune and check runs show the scissors and list-check hints, each opening its run", async () => {
     const user = setupUser();
     const { onOpenRun } = renderCard(seedIndexed());
     const card = indexingCard();
@@ -563,6 +567,9 @@ describe("Indexing card column A", () => {
     const a = part(within(card).getByText(copy(KEYS.title), { exact: true }));
     expect(part(prune)).toBe(a);
     expect(part(checks)).toBe(a);
+    // They open another tab, not a disclosure.
+    expect(prune).not.toHaveAttribute("aria-expanded");
+    expect(checks).not.toHaveAttribute("aria-expanded");
 
     await user.click(prune);
     expect(onOpenRun).toHaveBeenLastCalledWith(PRUNE_RUN_ID, "pruning");
@@ -612,7 +619,50 @@ describe("Indexing card column A", () => {
 
     await user.click(errors);
     expect(onFocusErrors).toHaveBeenCalledTimes(1);
+    // The count is the latest index run's, so that run's card takes the focus.
+    expect(onFocusErrors).toHaveBeenCalledWith(31);
     expect(onOpenRun).not.toHaveBeenCalled();
+  });
+
+  it("AC-1: an index run in flight that has indexed nothing yet reads Starting sync", () => {
+    const pair = seedIndexing();
+    mockIndexAttempts = {
+      items: [
+        indexAttempt({
+          id: 31,
+          status: "in_progress",
+          total_docs_indexed: 0,
+          time_started: isoAgo(MINUTE_MS),
+          time_updated: isoAgo(MINUTE_MS),
+          time_finished: null,
+        }),
+      ],
+      total_items: 1,
+    };
+    renderCard(pair);
+    const card = indexingCard();
+
+    expect(
+      within(card).getByText(copy(KEYS.startingSync), { exact: true })
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/^Last indexed/)).toBeNull();
+    expect(within(card).queryByText(/docs\/min/)).toBeNull();
+  });
+
+  it("AC-1: a paused pair offers no prune or checks hint, since it runs nothing", () => {
+    seedIndexed();
+    renderCard(ccPair({ status: ConnectorCredentialPairStatus.PAUSED }), {
+      panelOpen: false,
+    });
+    const card = indexingCard();
+
+    expect(tagOf(card, badge("paused"))).toBeInTheDocument();
+    expect(
+      within(card).queryByRole("button", { name: copy(KEYS.viewPruningRun) })
+    ).toBeNull();
+    expect(
+      within(card).queryByRole("button", { name: copy(KEYS.viewChecksRun) })
+    ).toBeNull();
   });
 
   it("AC-1: a paused pair reads Paused and Last indexed 3 months ago, with no stage hint or rate", () => {
@@ -686,6 +736,7 @@ describe("Indexing card bars section and D", () => {
     ).toBeNull();
   });
 
+  // The estimates follow-up stack's expand button reads View Details and Hide Details.
   it("AC-3, AC-8: the View Details and Hide Details keys land for the follow-up", () => {
     expect(copy(KEYS.viewDetails)).toBe("View Details");
     expect(copy(KEYS.hideDetails)).toBe("Hide Details");
@@ -693,7 +744,7 @@ describe("Indexing card bars section and D", () => {
     expect(copy(KEYS.hideActivities)).toBe("Hide Activities");
   });
 
-  it("AC-3, D-62: D holds only the Activities panel button, selected while the panel shows, and it calls the toggle", async () => {
+  it("AC-3: D holds only the Activities panel button, selected while the panel shows, and it calls the toggle", async () => {
     const user = setupUser();
     const { onTogglePanel } = renderCard(seedIndexed(), { panelOpen: true });
     const card = indexingCard();
@@ -725,6 +776,29 @@ describe("Indexing card bars section and D", () => {
 
     await user.click(button);
     expect(onTogglePanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("AC-6: the panel button carries the page's class that hides it where the panel stacks", () => {
+    render(
+      <StatusCard
+        ccPair={seedIndexed()}
+        onStartIndexing={null}
+        startingIndexing={false}
+        onViewChecks={jest.fn()}
+        onOpenRun={jest.fn()}
+        onFocusErrors={jest.fn()}
+        panelOpen
+        onTogglePanel={jest.fn()}
+        panelButtonClassName="hidden-when-stacked"
+      />
+    );
+    const button = within(indexingCard()).getByRole("button", {
+      name: copy(KEYS.hideActivities),
+    });
+    expect(button.closest(".hidden-when-stacked")).not.toBeNull();
+    expect(
+      indexingCard().querySelector(".hidden-when-stacked")
+    ).toContainElement(button);
   });
 
   it("AC-3: only the Indexing card carries the panel button", () => {
@@ -864,13 +938,37 @@ describe("Permissions Sync card", () => {
     expect(errors).toHaveTextContent("3");
     await user.click(errors);
     expect(onFocusErrors).toHaveBeenCalledTimes(1);
+    // A permission sync is no index run, so the panel shows its errors unfocused.
+    expect(onFocusErrors).toHaveBeenCalledWith(null);
 
     await user.hover(tag);
     const tooltip = await screen.findByRole("tooltip", {}, { timeout: 3000 });
     expect(tooltip).toHaveTextContent(copy(KEYS.neverTooltip));
   });
 
-  it("PR 9 handoff: a running sync that has synced nothing yet reads Starting sync", () => {
+  it("AC-5: a pair past its first index that has never synced reads Not synced yet", () => {
+    mockIndexAttempts = { items: [indexAttempt()], total_items: 1 };
+    mockSourceKinds = ALL_KINDS;
+    mockLatestRuns = {};
+    renderCard(
+      ccPair({
+        last_time_perm_sync: null,
+        last_permission_sync_attempt_status: null,
+      })
+    );
+    const card = permissionsCard();
+
+    expect(
+      within(card).getByText(copy("admin.connector.statusCard.sync.never"), {
+        exact: true,
+      })
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByText(copy(KEYS.waitingForFirstIndex))
+    ).toBeNull();
+  });
+
+  it("AC-5: a running sync that has synced nothing yet reads Starting sync", () => {
     mockIndexAttempts = { items: [indexAttempt()], total_items: 1 };
     mockSourceKinds = ALL_KINDS;
     mockLatestRuns = {
@@ -899,7 +997,7 @@ describe("Permissions Sync card", () => {
     expect(within(card).queryByText(/docs\/min/)).toBeNull();
   });
 
-  it("row 37: a paused pair's card reads Paused and Last synced 3 months ago and keeps its counts", () => {
+  it("AC-1: a paused pair's card reads Paused and Last synced 3 months ago and keeps its counts", () => {
     mockIndexAttempts = { items: [indexAttempt()], total_items: 1 };
     mockSourceKinds = ALL_KINDS;
     mockLatestRuns = {
@@ -933,6 +1031,35 @@ describe("Permissions Sync card", () => {
     expect(
       within(card).getByText(copy(KEYS.groupsLabel), { exact: true })
     ).toBeInTheDocument();
+  });
+});
+
+describe("Permissions Sync card on a feed error", () => {
+  it("keeps the card with the pair's last sync status and the load error, without counts", () => {
+    const pair = seedIndexed();
+    mockFailedKinds = ["doc_permission_sync"];
+    renderCard(pair);
+    const card = permissionsCard();
+    tagOf(card, badge("synced"));
+    expect(
+      within(card).getByText(copy("admin.connector.runs.loadError.title"))
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByText(copy(KEYS.docsLabel), { exact: true })
+    ).toBeNull();
+  });
+
+  it("leaves the third column empty when only the group sync feed fails", () => {
+    const pair = seedIndexed();
+    mockFailedKinds = ["group_sync"];
+    renderCard(pair);
+    const card = permissionsCard();
+    expect(
+      within(card).getByText(copy(KEYS.docsLabel), { exact: true })
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByText(copy(KEYS.groupsLabel), { exact: true })
+    ).toBeNull();
   });
 });
 
