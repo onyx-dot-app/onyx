@@ -2,8 +2,10 @@ name: Docs Preview Cleanup
 
 # Deletes the docs-preview/pr-<number> branch that docs-preview-publish.yml pushes. It has
 # no path filter, so it also runs when a pull request reverted its docs changes before closing.
+# pull_request_target also runs for a pull request with merge conflicts, which pull_request
+# skips. The job checks out no code and runs nothing from the pull request.
 on:
-  pull_request:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [closed]
 
 permissions:
@@ -22,6 +24,12 @@ jobs:
     steps:
       - name: Delete the preview branch
         run: |
-          if gh api "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH" >/dev/null 2>&1; then
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH"
+          # GitHub answers a missing ref with "Reference does not exist". Other errors fail the job.
+          if ! out="$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH" 2>&1)"; then
+            if grep -q "HTTP 404\|HTTP 422" <<<"$out"; then
+              echo "No preview branch"
+            else
+              echo "$out"
+              exit 1
+            fi
           fi

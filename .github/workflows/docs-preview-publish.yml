@@ -9,6 +9,11 @@ on:
     workflows: ["Docs Preview"]
     types: [completed]
 
+# One publish at a time per pull request, so an older run cannot overwrite a newer preview.
+concurrency:
+  group: Docs-Preview-Publish-${{ github.event.workflow_run.pull_requests[0].number || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -58,6 +63,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push the preview branch
+        id: push
         if: steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
         env:
           PREVIEW_BRANCH: ${{ steps.config.outputs.branch }}
@@ -87,12 +93,26 @@ jobs:
           commit="$(git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit-tree "$tree" -m "docs: preview of #$PR_NUMBER at ${HEAD_SHA::7}")"
+          pr_state() { gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state; }
+          # docs-preview-cleanup.yml deletes the branch once, when the pull request closes.
+          # Do not push for a closed pull request, and undo a push that raced the close.
+          if [ "$(pr_state)" != "OPEN" ]; then
+            echo "The pull request is closed; no preview"
+            echo "closed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gh auth setup-git
           git push -q --force "https://github.com/${GITHUB_REPOSITORY}.git" "$commit:refs/heads/$PREVIEW_BRANCH"
+          if [ "$(pr_state)" != "OPEN" ]; then
+            git push -q "https://github.com/${GITHUB_REPOSITORY}.git" --delete "$PREVIEW_BRANCH"
+            echo "closed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
       - name: Build the Mintlify preview
         id: preview
-        if: steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
+        if: steps.push.outputs.pushed == 'true'
         env:
           PREVIEW_BRANCH: ${{ steps.config.outputs.branch }}
         run: |
@@ -121,7 +141,7 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
       - name: Comment the preview result
-        if: ${{ !cancelled() && steps.config.outputs.ready == 'true' }}
+        if: ${{ !cancelled() && steps.config.outputs.ready == 'true' && steps.push.outputs.closed != 'true' }}
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
           PREVIEW_STATUS: ${{ steps.preview.outputs.status }}
