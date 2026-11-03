@@ -2,9 +2,10 @@ export const OpenSearchSizingCalculator = () => {
   // Bytes per chunk come from backend/onyx/document_index/opensearch/schema.py and a measured
   // 1.56M-chunk corpus. Model dimensions come from backend/onyx/configs/embedding_configs.py.
   const TEXT_PER_CHUNK = 1900;
-  // Measured 2,610 bytes on indices that also stored a copy of the content (about 500 bytes),
-  // which new indices no longer do.
-  const FIXED_BYTES = 2110;
+  // Measured on indices that store a copy of the content, as released Onyx versions do.
+  // Releases with #17093 drop that copy, about 500 bytes per chunk.
+  const FIXED_BYTES = 2610;
+  const MAX_TOTAL_GB = 10_000_000;
   const GRAPH_BYTES = 40;
   const DELETED_OVERHEAD = 1.05;
   const DISK_FILL = 0.75;
@@ -113,7 +114,8 @@ export const OpenSearchSizingCalculator = () => {
 
   // Step 1: what the data needs, one copy.
   const dims = MODELS[modelIndex].dims;
-  const total = Math.max(0, Number(totalGB) || 0);
+  const totalInput = Number(totalGB);
+  const total = Number.isFinite(totalInput) ? Math.min(MAX_TOTAL_GB, Math.max(0, totalInput)) : 0;
   const indexableShare = PARTS.reduce((a, p, k) => a + (p.media ? 0 : parts[k]), 0);
   const textShare = PARTS.reduce((a, p, k) => a + (parts[k] * p.textShare) / 100, 0);
   const indexableGB = total * indexableShare;
@@ -154,8 +156,10 @@ export const OpenSearchSizingCalculator = () => {
   const limit = nodes > nodesWithoutStorage ? "storage" : nodesForMemory > copies ? "memory" : "copies";
   // Shards are whole units, so pick a primary count whose copies divide evenly over the
   // nodes. Then no node holds more than its share of the vectors and the data.
-  let primaries = Math.max(1, Math.ceil(indexOneCopy / SHARD_BYTES), Math.ceil(nodes / copies));
-  while ((primaries * copies) % nodes !== 0) primaries++;
+  const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+  const primaryStep = nodes / gcd(copies, nodes);
+  const primaries =
+    Math.ceil(Math.max(1, Math.ceil(indexOneCopy / SHARD_BYTES), Math.ceil(nodes / copies)) / primaryStep) * primaryStep;
 
   const card = "rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-transparent p-5";
   const label = "text-base font-medium text-gray-900 dark:text-gray-200";
@@ -199,7 +203,7 @@ export const OpenSearchSizingCalculator = () => {
           <div className="space-y-1.5">
             <label htmlFor="os-total" className={label}>Total storage</label>
             <div className="flex items-center gap-2">
-              <input id="os-total" type="number" min="1" step="10" value={totalGB} onChange={(e) => setTotalGB(e.target.value)} className={input + " w-32"} />
+              <input id="os-total" type="number" min="1" max="10000000" step="10" value={totalGB} onChange={(e) => setTotalGB(e.target.value)} className={input + " w-32"} />
               <span className={hint}>GB</span>
             </div>
           </div>

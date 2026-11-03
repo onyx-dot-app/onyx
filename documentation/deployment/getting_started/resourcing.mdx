@@ -139,12 +139,13 @@ Most file bytes are images, fonts, and layout, and Onyx does not index them.
 
 | Part of each chunk | Size |
 | --- | --- |
-| Text, metadata, keyword index, and graph links | About 2,150 bytes |
+| Text, metadata, keyword index, and graph links | About 2,650 bytes |
 | Embedding vector | 4 bytes × dimensions |
 | Quantized vector (7-bit or 1-bit) | Adds 1 byte or 1 bit per dimension. The full vector stays on disk. |
 
-Indexes created by older Onyx versions also store a title vector and a second copy of the text.
-They use up to twice this storage until a reindex builds a new index.
+Indexes created before Onyx 5.0 also store a title vector,
+so they use up to twice the vector storage until a reindex builds a new index.
+A later release stops storing a second copy of the text and saves about 500 bytes per chunk.
 
 Each copy of the data uses this storage again. Keep room for a second index:
 a change of embedding model or quantization builds a new index while the old one serves search.
@@ -182,10 +183,10 @@ the calculator plans for 24 million chunks.
 
 | Setup | Index size, one copy | Memory for vector search, one copy | Cluster | Onyx settings |
 | --- | --- | --- | --- | --- |
-| Granite (384 dimensions), 2 copies | 93 GB | 37.8 GB | 3 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Same, with 1-bit quantization | 94 GB | 2.1 GB | 2 nodes, 16 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=7`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Granite, 1 copy | 93 GB | 37.8 GB | 2 nodes, 64 GB RAM and 128 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
-| Same, with 1-bit quantization | 94 GB | 2.1 GB | 1 node, 16 GB RAM and 256 GB storage | `OPENSEARCH_INDEX_NUM_SHARDS=7`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
+| Granite (384 dimensions), 2 copies | 106 GB | 37.8 GB | 3 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 16 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite, 1 copy | 106 GB | 37.8 GB | 2 nodes, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
+| Same, with 1-bit quantization | 107 GB | 2.1 GB | 1 node, 16 GB RAM and 512 GB storage | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=0` |
 
 The shard count makes the shard copies divide evenly over the nodes, so no node holds more than its share.
 1-bit quantization needs OpenSearch 3.6 or later. It stores vectors 32× smaller,
