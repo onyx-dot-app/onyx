@@ -505,7 +505,6 @@
         "src/lib/projects/components/ProjectContextPanel.tsx",
         "src/lib/tools/components/SwitchList.tsx",
         "src/refresh-components/Attachment.tsx",
-        "src/refresh-components/Chip.tsx",
         "src/refresh-components/ConnectionProviderIcon.tsx",
         "src/refresh-components/Divider.tsx",
         "src/refresh-components/Keycap.tsx",

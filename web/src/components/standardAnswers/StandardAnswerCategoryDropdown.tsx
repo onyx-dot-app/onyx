@@ -2,8 +2,7 @@ import { FC } from "react";
 import { useTranslations } from "next-intl";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
 import { Label } from "@/components/Field";
-import { InputSingleComboBox } from "@opal/components";
-import Chip from "@/refresh-components/Chip";
+import { Chip, InputSingleComboBox } from "@opal/components";
 import { StandardAnswerCategory } from "@/lib/types";
 import { ErrorCallout } from "../ErrorCallout";
 import { LoadingAnimation } from "../Loading";
@@ -71,12 +70,11 @@ export const StandardAnswerCategoryDropdownField: FC<
             {categories.map((category) => (
               <Chip
                 key={category.id}
+                title={category.name}
                 onRemove={() =>
                   setCategories(categories.filter((c) => c.id !== category.id))
                 }
-              >
-                {category.name}
-              </Chip>
+              />
             ))}
           </div>
         )}
