@@ -78,10 +78,11 @@ You can also use them individually if you need more granular control.
 
   <Step title="Clone the Onyx repo">
     ```bash
-    git clone --depth 1 https://github.com/onyx-dot-app/onyx.git
+    git clone --depth 1 --branch tf/v1.0.2 https://github.com/onyx-dot-app/onyx.git
     cd onyx/deployment/terraform
     ```
 
+    Clone a `tf/vX.Y.Z` tag, not the default branch. The provider versions in the Quickstart match that tag.
     The modules live under `modules/aws/`. You will create a small root module that calls them.
   </Step>
 </Steps>

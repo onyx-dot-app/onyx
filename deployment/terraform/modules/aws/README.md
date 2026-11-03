@@ -360,14 +360,16 @@ A `moved` block handles the relabel, so the group is not recreated.
 
 ### AWS provider 6 and EKS module v21
 
-The modules now need AWS provider `~> 6.33`. The `eks` module uses
-`terraform-aws-modules/eks/aws` `~> 21.23` (was `~> 20.0`). Provider 6.33 and
-EKS module 21.23 are the first versions with the nested-virtualization launch
-template option.
+The `eks`, `onyx`, `vpc`, `opensearch`, `redis` and `waf` modules now need AWS
+provider `~> 6.59`. The `s3` and `postgres` modules still allow `>= 5.100, < 7.0`.
+The `eks` module uses `terraform-aws-modules/eks/aws` `~> 21.23` (was `~> 20.0`),
+which resolves to a release that needs AWS provider 6.59 or later. EKS module
+21.23 is the first version with the nested-virtualization launch template
+option.
 
 Before you upgrade:
 
-1. Allow `hashicorp/aws` `~> 6.33` in your root module.
+1. Allow `hashicorp/aws` `~> 6.59` in your root module.
 2. Run `terraform init -upgrade` to update `.terraform.lock.hcl`.
 3. Run `terraform plan` and check that it replaces nothing.
 
@@ -389,7 +391,7 @@ to the renamed upstream inputs:
 **The `eks` module keeps the v20 node group defaults.** Upstream v21 changed
 them, which would roll every node. The module pins the v20 values: IMDS hop
 limit 2, detailed monitoring on, no automatic move to the latest AMI release,
-and `min_size` 0. The Craft sandbox group keeps hop limit 1.
+and no EFA-only network interfaces. The Craft sandbox group keeps hop limit 1.
 
 **Expected plan changes:**
 - One move: the cluster role's `AmazonEKSVPCResourceController` attachment.

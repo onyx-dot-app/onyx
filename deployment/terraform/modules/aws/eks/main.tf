@@ -22,7 +22,7 @@ locals {
       ami_type                       = "AL2023_x86_64_STANDARD"
       enable_monitoring              = true
       use_latest_ami_release_version = false
-      min_size                       = 0
+      enable_efa_only                = false
       metadata_options = {
         http_endpoint               = "enabled"
         http_tokens                 = "required"

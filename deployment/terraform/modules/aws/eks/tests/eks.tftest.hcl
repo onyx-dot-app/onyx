@@ -65,8 +65,8 @@ run "defaults_plan" {
   }
 
   assert {
-    condition     = local.node_group_defaults.min_size == 0
-    error_message = "Node groups that do not set min_size must keep the v20 default of 0."
+    condition     = !local.node_group_defaults.enable_efa_only
+    error_message = "Node groups must keep the v20 enable_efa_only default of false."
   }
 }
 
