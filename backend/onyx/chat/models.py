@@ -528,7 +528,6 @@ class AvailableFiles(BaseModel):
 
 
 class ChatReminderContext(BaseModel):
-    ran_image_gen: bool
     has_open_url_tool: bool
     out_of_cycles: bool
     persona_task_prompt: str | None
