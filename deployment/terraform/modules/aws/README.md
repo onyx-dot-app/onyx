@@ -245,6 +245,7 @@ On an existing cluster, set it to the principal in the current `cluster_creator`
   - `postgres_endpoint`, `postgres_port`, `postgres_db_name`, `postgres_username` (sensitive), `postgres_dbi_resource_id`
   - `redis_connection_url` (sensitive): hostname:port
   - `opensearch_endpoint`, `opensearch_dashboard_endpoint`, `opensearch_domain_arn` (null unless `enable_opensearch`)
+  - `sandbox_archive_bucket_name`, `sandbox_archive_kms_key_arn` (null unless `enable_sandbox_archive_bucket`)
 
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
@@ -258,6 +259,8 @@ Inputs (common):
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 - `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
 - Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
+- `enable_sandbox_archive_bucket` (default false): a bucket for Craft sandbox
+  session archives. See "Sandbox archive bucket" below
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
@@ -310,6 +313,25 @@ Key inputs include:
 - Access can be scoped to an S3 gateway VPC endpoint (`s3_vpc_endpoint_id`), and
   optionally to source IPs or VPCs (`allow_anonymous_read` with
   `allowed_source_ips` / `allowed_vpc_ids`)
+- `create_kms_key` (default false) creates a customer-managed KMS key with
+  rotation and an `alias/<bucket_name>` alias, and encrypts the bucket with it.
+  It cannot be combined with `kms_key_id` or `allow_anonymous_read`. Output: `kms_key_arn`
+- `abort_incomplete_multipart_upload_days` (default 0, off) removes unfinished
+  multipart uploads
+
+#### Sandbox archive bucket
+
+`onyx` creates a second `s3` instance when `enable_sandbox_archive_bucket` is
+true. The bucket holds Craft sandbox session archives:
+
+- Its own KMS key (`create_kms_key = true`), with rotation
+- Public access blocked, TLS required, versioning on
+- Objects expire after `sandbox_archive_expiration_days` (default 30).
+  Noncurrent versions expire after `sandbox_archive_noncurrent_expiration_days`
+  (default 7). Unfinished multipart uploads are removed after 7 days
+- No Intelligent-Tiering, because objects are short-lived
+- No node or pod role gets access. The bucket is not in `s3_bucket_names` and
+  has no VPC endpoint grant. The api_server will hand out presigned URLs
 
 ### `opensearch`
 - Creates an Amazon OpenSearch domain inside the VPC
