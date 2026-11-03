@@ -396,7 +396,21 @@ def _comment(body: str, **extra: Any) -> dict[str, Any]:
             ),
             False,
         ),
-        (_comment("plain jira comment"), False),
+        # Unknown visibility fails closed.
+        (_comment("no visibility info"), True),
+        (_comment("odd flag", jsdPublic="yes"), True),
+        (
+            _comment("malformed", properties=[{"key": "sd.public.comment"}]),
+            True,
+        ),
+        (
+            _comment(
+                "conflict",
+                jsdPublic=True,
+                properties=[{"key": "sd.public.comment", "value": {"internal": True}}],
+            ),
+            True,
+        ),
     ],
 )
 def test_is_internal_comment(comment: dict[str, Any], internal: bool) -> None:
@@ -419,6 +433,7 @@ def test_internal_notes_are_not_indexed(
     issue["fields"]["comment"]["comments"] = [
         _comment("Customer reply: still broken", jsdPublic=True),
         _comment("INTERNAL: customer is on the risk list", jsdPublic=False),
+        _comment("UNKNOWN: visibility not reported"),
     ]
     mock_source_operations.search_issues.side_effect = [[issue], []]
 
@@ -434,5 +449,6 @@ def test_internal_notes_are_not_indexed(
     text = documents[0].sections[0].text or ""
     assert "Customer reply: still broken" in text
     assert "INTERNAL" not in text
+    assert "UNKNOWN" not in text
     # The raw issue is not mutated.
-    assert len(issue["fields"]["comment"]["comments"]) == 2
+    assert len(issue["fields"]["comment"]["comments"]) == 3

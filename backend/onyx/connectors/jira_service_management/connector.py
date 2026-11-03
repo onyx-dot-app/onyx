@@ -74,16 +74,26 @@ def _is_request_status_value(value: Any) -> bool:
 
 
 def is_internal_comment(comment: dict[str, Any]) -> bool:
-    """Whether a JSM comment is an internal note (agents only)."""
-    if comment.get(_JSD_PUBLIC) is False:
+    """Whether a JSM comment must be treated as an internal note.
+
+    Fails closed: a comment counts as public only when Jira explicitly marks
+    it so (``jsdPublic: true`` or ``sd.public.comment`` with
+    ``internal: false``). Unknown visibility is treated as internal.
+    """
+    jsd_public: Any = comment.get(_JSD_PUBLIC)
+    if jsd_public is False:
         return True
+    explicit_public: bool = jsd_public is True
     for prop in comment.get(_PROPERTIES) or []:
         if not isinstance(prop, dict) or prop.get(_PROPERTY_KEY) != _SD_PUBLIC_COMMENT:
             continue
         value: Any = prop.get(_PROPERTY_VALUE)
-        if isinstance(value, dict) and value.get(_INTERNAL) is True:
+        internal: Any = value.get(_INTERNAL) if isinstance(value, dict) else None
+        if internal is True:
             return True
-    return False
+        if internal is False:
+            explicit_public = True
+    return not explicit_public
 
 
 def without_internal_comments(issue: dict[str, Any]) -> dict[str, Any]:
