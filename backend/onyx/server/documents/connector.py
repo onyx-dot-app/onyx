@@ -53,6 +53,7 @@ from onyx.connectors.credential_families import (
     is_credential_usable_for_source,
     to_source_credential_json,
 )
+from onyx.connectors.event_inbox.models import WebhookSourceSpec
 from onyx.connectors.event_inbox.source_registry import (
     registered_webhook_sources,
     webhook_callback_url,
@@ -2534,7 +2535,17 @@ def get_event_sources(
             callback_urls=[
                 webhook_callback_url(spec.slug, endpoint) for endpoint in spec.endpoints
             ],
-            receiving=bool(get_active_event_cc_pairs(db_session, spec.source)),
+            receiving=_is_receiving(
+                spec, len(get_active_event_cc_pairs(db_session, spec.source))
+            ),
         )
         for spec in registered_webhook_sources()
     ]
+
+
+def _is_receiving(spec: WebhookSourceSpec, active_pairs: int) -> bool:
+    """An unsigned source refuses deliveries once several pairs are active,
+    since it cannot tell them apart."""
+    if spec.verifier is None:
+        return active_pairs == 1
+    return active_pairs > 0
