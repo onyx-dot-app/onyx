@@ -1,11 +1,12 @@
-/** FE-1: a run line on LineLayout, with a size-20 spinner tag, text-02 run-type icon and the SvgDocFile View Logs. */
+/** A run line on LineLayout, with a size-20 spinner tag, text-02 run-type icon and the SvgDocFile View Logs. */
 import { render, screen } from "@tests/setup/test-utils";
 import { SvgAlertTriangle, SvgDocFile, SvgFileText } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import type { CCPairRun } from "@/lib/connectors/types";
 import RunRow from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
-const BELOW_640 = String.raw`@max-\[(?:39\.9rem|639px)\]:`;
+// A line under 620 px, which is a card under 640 px once its border and padding are taken off.
+const BELOW_640 = String.raw`@max-\[(?:38\.75rem|620px)\]:`;
 
 const NOW = new Date().toISOString();
 
@@ -74,7 +75,7 @@ function referencePaths(Icon: IconFunctionComponent): string[] {
   return paths;
 }
 
-/** The nearest svg at or above `element`'s nearest ancestor that holds one. */
+/** The first svg inside the closest self-or-ancestor of `element` that holds one. */
 function nearestIcon(element: HTMLElement): SVGElement {
   let current: HTMLElement | null = element;
   while (current !== null && current.querySelector("svg") === null) {
