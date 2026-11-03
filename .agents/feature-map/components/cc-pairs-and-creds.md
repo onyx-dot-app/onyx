@@ -116,11 +116,17 @@ which masks when the caller passes `mask_credential_prefix`.
 
 **Run feed.** `db/cc_pair_runs.py:get_cc_pair_run_page` unions index attempts,
 doc permission syncs, group syncs, prunes and check runs into one page, newest
-first. A failed run is superseded when a newer run of the same kind on the same
-history succeeded or failed. An admin can resolve a run
+first. A queued run is in the `scheduled` group, apart from `running`. Both
+stay in every time window, and neither is superseded or resolvable. A
+targeted reindex (Retry) attempt is an index run marked `is_retry`, listed once
+under the current model. It does not supersede a full run, does not make the
+pair indexing, and is not the pair's latest attempt. A failed run is
+superseded when a newer run of the same kind on the same history succeeded or
+failed. An admin can resolve a run
 (`db/cc_pair_run_resolution.py:resolve_runs__no_commit`). The fleet view on the
 status page reads the same builders across every pair the caller can read
-(`backend/onyx/server/documents/index_monitoring.py`).
+(`backend/onyx/server/documents/index_monitoring.py`), or across the named
+`cc_pair_ids` among them.
 
 ---
 

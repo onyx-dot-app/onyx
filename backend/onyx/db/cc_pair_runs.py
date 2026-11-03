@@ -67,7 +67,7 @@ from onyx.db.permission_sync_attempt import (
 # Keyed by value, so a value two status enums share must group the same way.
 # PermissionSyncStatus and SyncStatus values are all IndexingStatus values.
 _STATUS_GROUPS: dict[str, CCPairRunStatusGroup] = {
-    IndexingStatus.NOT_STARTED.value: CCPairRunStatusGroup.RUNNING,
+    IndexingStatus.NOT_STARTED.value: CCPairRunStatusGroup.SCHEDULED,
     IndexingStatus.IN_PROGRESS.value: CCPairRunStatusGroup.RUNNING,
     IndexingStatus.SUCCESS.value: CCPairRunStatusGroup.SUCCEEDED,
     IndexingStatus.COMPLETED_WITH_ERRORS.value: CCPairRunStatusGroup.SUCCEEDED,
@@ -96,8 +96,13 @@ _RunT = TypeVar(
 )
 
 
+# A queued or running run has not finished, so it stays in every window and
+# has nothing to resolve or supersede yet.
+_ACTIVE_GROUPS = frozenset(
+    {CCPairRunStatusGroup.RUNNING, CCPairRunStatusGroup.SCHEDULED}
+)
 _SETTLED_GROUPS = frozenset(
-    group for group in CCPairRunStatusGroup if group is not CCPairRunStatusGroup.RUNNING
+    group for group in CCPairRunStatusGroup if group not in _ACTIVE_GROUPS
 )
 # A run supersedes the runs before it once it succeeded or failed. A
 # canceled or interrupted run, like one still going, leaves them open.
@@ -119,13 +124,19 @@ def _runs_with_no_newer_success_or_failure(
     statuses: type[_StatusT],
     history: Sequence[InstrumentedAttribute[Any]],
     *scope: ColumnElement[bool],
+    superseders: ColumnElement[bool] | None = None,
 ) -> Select:
-    """The runs within ``scope`` that no newer succeeded or failed run on the
-    same ``history`` follows: each history's newest such run and any run after
-    it. One set for every row, since a shared source's history has no index."""
+    """The runs within ``scope`` that no newer succeeded or failed run matching
+    ``superseders`` follows on the same ``history``. One set for every row,
+    since a shared source's history has no index."""
+    superseding: ColumnElement[bool] = status.in_(
+        _statuses_in(statuses, _SUPERSEDING_GROUPS)
+    )
+    if superseders is not None:
+        superseding = and_(superseding, superseders)
     newer_successes_or_failures = (
         func.count()
-        .filter(status.in_(_statuses_in(statuses, _SUPERSEDING_GROUPS)))
+        .filter(superseding)
         .over(
             partition_by=history,
             order_by=(time_created.desc(), run_id.desc()),
@@ -192,8 +203,8 @@ def _narrowed(
         stmt = stmt.where(or_(*widened))
     if narrowed:
         stmt = stmt.where(*narrowed)
-    # A run still going belongs to any window or slice, whenever it began.
-    active = status.in_(_statuses_in(statuses, {CCPairRunStatusGroup.RUNNING}))
+    # A run queued or still going belongs to any window or slice, whenever it began.
+    active = status.in_(_statuses_in(statuses, _ACTIVE_GROUPS))
     if run_filter.since is not None:
         stmt = stmt.where(or_(time_created >= run_filter.since, active))
     if run_filter.until is not None:
@@ -209,17 +220,21 @@ def _narrowed(
 def _index_runs(
     cc_pair_ids: list[int],
     settings_statuses: tuple[IndexModelStatus, ...] = (IndexModelStatus.PRESENT,),
+    with_retries: bool = False,
 ) -> Select:
-    """The pairs' index runs under the given search settings, the current ones
-    by default. Targeted reindexes refetch chosen documents, not the pair, so
-    they are not runs."""
+    """The pairs' index runs under the given search settings. A retry refetches
+    chosen documents, so it is a run only ``with_retries``, and then only under
+    the current model, since a job makes one attempt per model."""
+    runs: ColumnElement[bool] = IndexAttempt.targeted_reindex_job_id.is_(None)
+    if with_retries:
+        runs = or_(runs, SearchSettings.status == IndexModelStatus.PRESENT)
     return (
         select(IndexAttempt)
         .join(SearchSettings)
         .where(
             IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
-            IndexAttempt.targeted_reindex_job_id.is_(None),
             SearchSettings.status.in_(settings_statuses),
+            runs,
         )
     )
 
@@ -305,6 +320,7 @@ def _index_attempt_runs(
     stmt = _index_runs(
         run_filter.cc_pair_ids,
         (IndexModelStatus.PRESENT, IndexModelStatus.FUTURE),
+        with_retries=True,
     )
     own_errors = exists().where(IndexAttemptError.index_attempt_id == IndexAttempt.id)
     unresolved = own_errors.where(IndexAttemptError.is_resolved.is_(False))
@@ -319,7 +335,7 @@ def _index_attempt_runs(
         case None:
             matches_errors = None
     # A run under another model or a targeted reindex leaves this model's
-    # failure open.
+    # failure open. A full run supersedes a retry before it.
     newest = aliased(IndexAttempt)
     has_newer_run = ~IndexAttempt.id.in_(
         _runs_with_no_newer_success_or_failure(
@@ -329,7 +345,7 @@ def _index_attempt_runs(
             IndexingStatus,
             [newest.connector_credential_pair_id, newest.search_settings_id],
             newest.connector_credential_pair_id.in_(run_filter.cc_pair_ids),
-            newest.targeted_reindex_job_id.is_(None),
+            superseders=newest.targeted_reindex_job_id.is_(None),
         )
     )
 
@@ -883,8 +899,9 @@ def count_cc_pair_runs_by_status_group(
 
 
 def count_pairs_indexing(db_session: Session, cc_pair_ids: list[int]) -> int:
-    """How many of the pairs have an index run in progress, backfills included,
-    as the throughput chart counts them."""
+    """How many of the pairs have a full index run in progress, backfills
+    included. A retry refetches chosen documents, so it does not make a pair
+    indexing."""
     running = (
         _index_runs(cc_pair_ids)
         .where(IndexAttempt.status == IndexingStatus.IN_PROGRESS)
@@ -898,18 +915,15 @@ def get_index_runs_since(
     db_session: Session, cc_pair_ids: list[int], since: datetime | None
 ) -> list[IndexAttempt]:
     """The pairs' index runs created or ended since ``since``, plus any still
-    active, oldest first; every run kept when ``since`` is None.
-    ``time_updated`` is left out of the window because checkpoint cleanup
-    touches old attempts days later."""
-    stmt = _index_runs(cc_pair_ids)
+    active, oldest first. A retry is a run here, so the chart shows its fetch.
+    ``time_updated`` is left out because checkpoint cleanup touches old runs."""
+    stmt = _index_runs(cc_pair_ids, with_retries=True)
     if since is not None:
         stmt = stmt.where(
             or_(
                 IndexAttempt.time_created >= since,
                 IndexAttempt.end_time >= since,
-                IndexAttempt.status.in_(
-                    [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                ),
+                IndexAttempt.status.in_(_statuses_in(IndexingStatus, _ACTIVE_GROUPS)),
             )
         )
     return list(db_session.scalars(stmt.order_by(IndexAttempt.time_created)).all())

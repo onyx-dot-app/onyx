@@ -421,6 +421,10 @@ def _pair_open_levels(
 ) -> tuple[list[CCPairRunKind], list[CCPairRunFilter]]:
     """The run kinds and the per-level filters of the open runs the request
     names on a pair the caller operates."""
+    if request.cc_pair_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "cc_pair_ids is for the fleet routes only."
+        )
     cc_pair = _get_operated_cc_pair_or_raise(cc_pair_id, db_session, user)
     kinds = [
         kind

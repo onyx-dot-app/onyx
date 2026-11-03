@@ -3,6 +3,7 @@ as one population, where the pair routes in cc_pair.py read one pair."""
 
 from collections import Counter
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -62,6 +63,7 @@ from onyx.server.documents.cc_pair_runs_feed import (
 )
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.models import (
+    CC_PAIR_RUN_BATCH_MAX,
     CCPairRef,
     CCPairRunLevel,
     CCPairRunsResolvableCountResponse,
@@ -112,10 +114,11 @@ _OPEN_ERROR_RUN_KINDS: list[CCPairRunKind] = [
 
 
 def _readable_cc_pairs(
-    db_session: Session, user: User
+    db_session: Session, user: User, cc_pair_ids: list[int] | None = None
 ) -> dict[int, ConnectorCredentialPair]:
-    """Every pair the caller can read, by id. Neither access level contains the
-    other for a scoped manager, so both are read. An admin reads all at once."""
+    """Every pair the caller can read, by id, narrowed to ``cc_pair_ids`` when
+    it lists any. Neither access level contains the other for a scoped manager,
+    so both are read. An admin reads all at once."""
     levels = (
         [CCPairAccessLevel.READ]
         if has_global_permission(user, Permission.MANAGE_CONNECTORS)
@@ -123,10 +126,12 @@ def _readable_cc_pairs(
     )
     pairs: dict[int, ConnectorCredentialPair] = {}
     for level in levels:
+        # An id the caller cannot read drops out, the same as an unknown one.
         for cc_pair in get_connector_credential_pairs_for_user(
             db_session,
             user,
             level,
+            ids=cc_pair_ids,
             eager_load_connector=True,
             eager_load_credential=True,
             eager_load_user=True,
@@ -520,7 +525,7 @@ def _operated_open_levels(
 ) -> tuple[list[CCPairRunKind], list[CCPairRunFilter]] | None:
     """The run kinds and the per-level filters of the open runs the request
     names on the pairs the caller operates, or None when they operate none."""
-    pairs = _readable_cc_pairs(db_session, user)
+    pairs = _readable_cc_pairs(db_session, user, request.cc_pair_ids)
     operate_ids = _managed_ids(
         db_session,
         user,
@@ -552,6 +557,9 @@ def get_resolvable_indexing_runs_count(
     since: datetime | None = Query(None),
     until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
+    cc_pair_ids: Annotated[
+        list[int] | None, Query(max_length=CC_PAIR_RUN_BATCH_MAX)
+    ] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
@@ -559,7 +567,12 @@ def get_resolvable_indexing_runs_count(
 ) -> CCPairRunsResolvableCountResponse:
     """How many runs ``POST /runs/resolve`` would mark for the same filter."""
     request = CCPairRunsResolveMatchingRequest(
-        level=level, q=q, since=since, until=until, kinds=kinds
+        level=level,
+        q=q,
+        since=since,
+        until=until,
+        kinds=kinds,
+        cc_pair_ids=cc_pair_ids,
     )
     scoped = _operated_open_levels(db_session, user, request)
     if scoped is None:
@@ -613,6 +626,9 @@ def get_indexing_runs(
     errors: CCPairRunErrors | None = Query(None),
     superseded: bool | None = Query(None),
     resolved: bool | None = Query(None),
+    cc_pair_ids: Annotated[
+        list[int] | None, Query(max_length=CC_PAIR_RUN_BATCH_MAX)
+    ] = None,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -620,7 +636,7 @@ def get_indexing_runs(
 ) -> IndexingRunsResponse:
     """The readable pairs' index attempts and permission syncs as one feed,
     newest first, filtered as a pair's own feed is. Each run names its pair."""
-    pairs = _readable_cc_pairs(db_session, user)
+    pairs = _readable_cc_pairs(db_session, user, cc_pair_ids)
     wanted = [kind for kind in CCPairRunKind if kinds is None or kind in kinds]
     groups = None if status_groups is None else set(status_groups)
     # A source with one group sync for all its pairs logs it against whichever

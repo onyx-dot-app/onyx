@@ -561,6 +561,8 @@ class CCPairIndexRun(CCPairRunClosure):
     kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
     time_created: datetime
     attempt: IndexAttemptSnapshot
+    # A targeted reindex of chosen documents, not a run over the whole pair.
+    is_retry: bool
 
 
 class CCPairDocPermissionSyncRun(CCPairRunClosure):
@@ -746,13 +748,17 @@ class IndexingOverviewResponse(BaseModel):
     throughput: CCPairThroughputResponse
 
 
+# The most runs or pairs one batch request names.
+CC_PAIR_RUN_BATCH_MAX = 500
+
+
 class CCPairRunKey(BaseModel):
     kind: CCPairRunKind
     attempt_id: int
 
 
 class CCPairRunsResolveRequest(BaseModel):
-    runs: list[CCPairRunKey] = Field(min_length=1, max_length=500)
+    runs: list[CCPairRunKey] = Field(min_length=1, max_length=CC_PAIR_RUN_BATCH_MAX)
 
 
 class CCPairRunLevel(str, Enum):
@@ -771,6 +777,11 @@ class CCPairRunsResolveMatchingRequest(BaseModel):
     since: datetime | None = None
     until: datetime | None = None
     kinds: list[CCPairRunKind] | None = None
+    # The fleet routes narrow to these of the caller's pairs, None or empty
+    # meaning all. The pair routes reject it.
+    cc_pair_ids: list[int] | None = Field(
+        default=None, max_length=CC_PAIR_RUN_BATCH_MAX
+    )
 
 
 class CCPairRunsResolveResponse(BaseModel):
