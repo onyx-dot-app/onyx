@@ -6,7 +6,7 @@ import time
 from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, get_type_hints
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
@@ -571,15 +571,20 @@ def _gemini_compatible_tools(
 ) -> list[dict[str, JsonValue]]:
     """Gemini parses function parameters as its OpenAPI Schema subset and
     rejects other JSON Schema keywords (e.g. exclusiveMinimum) with a 400.
-    LiteLLM's native Gemini route rewrites them with _build_vertex_schema, but
-    OpenAI-compatible routes forward them as-is, so apply the same rewrite."""
-    from litellm.llms.vertex_ai.common_utils import _build_vertex_schema
+    LiteLLM's native Gemini route filters them to that subset, but
+    OpenAI-compatible routes forward them as-is."""
+    from litellm.litellm_core_utils.prompt_templates.common_utils import unpack_defs
+    from litellm.llms.vertex_ai.common_utils import filter_schema_fields
+    from litellm.types.llms.vertex_ai import Schema
 
+    schema_fields = set(get_type_hints(Schema))
     sanitized = copy.deepcopy(tools)
     for tool in sanitized:
         function = tool.get("function")
-        if isinstance(function, dict) and isinstance(function.get("parameters"), dict):
-            function["parameters"] = _build_vertex_schema(function["parameters"])
+        parameters = function.get("parameters") if isinstance(function, dict) else None
+        if isinstance(function, dict) and isinstance(parameters, dict):
+            unpack_defs(parameters, parameters.pop("$defs", {}))
+            function["parameters"] = filter_schema_fields(parameters, schema_fields)
     return sanitized
 
 
