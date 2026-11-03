@@ -1,8 +1,18 @@
 /** A run line on LineLayout, with a size-20 spinner tag, text-02 run-type icon and the SvgDocFile View Logs. */
-import { render, screen } from "@tests/setup/test-utils";
-import { SvgAlertTriangle, SvgDocFile, SvgFileText } from "@opal/icons";
+import { render, screen, setupUser, within } from "@tests/setup/test-utils";
+import {
+  SvgAlertTriangle,
+  SvgDocFile,
+  SvgFileText,
+  SvgRefreshCw,
+} from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import type { CCPairRun } from "@/lib/connectors/types";
+import {
+  PermissionSyncStatusEnum,
+  type CCPairRun,
+} from "@/lib/connectors/types";
+import { formatDateTimeLog } from "@/lib/dateUtils";
+import englishMessages from "@/i18n/messages/en.json";
 import RunRow from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
 // A line under 620 px, which is a card under 640 px once its border and padding are taken off.
@@ -170,5 +180,372 @@ describe("RunRow on LineLayout", () => {
     expect(nearestIcon(screen.getByText("Document Index"))).toHaveClass(
       "stroke-text-02"
     );
+  });
+});
+
+// FE-7 run-line content. Copy comes from the English catalog by key, so a missing key fails as missing copy.
+
+const MINUTE_MS = 60_000;
+// A fixed past start, so a finished run's figures do not depend on the clock.
+const START = "2026-03-23T10:00:00.000Z";
+
+function isoAfter(iso: string, ms: number): string {
+  return new Date(new Date(iso).getTime() + ms).toISOString();
+}
+
+/** The English message at `path` with `{name}` placeholders filled in. A missing key fails the test. */
+function copy(path: string, values: Record<string, string> = {}): string {
+  const raw = path
+    .split(".")
+    .reduce<unknown>(
+      (node, key) =>
+        node !== null && typeof node === "object"
+          ? (node as Record<string, unknown>)[key]
+          : undefined,
+      englishMessages
+    );
+  expect({ key: path, type: typeof raw }).toEqual({
+    key: path,
+    type: "string",
+  });
+  return Object.entries(values).reduce(
+    (text, [name, value]) => text.replace(`{${name}}`, value),
+    raw as string
+  );
+}
+
+type IndexRun = Extract<CCPairRun, { kind: "indexing" }>;
+type IndexAttempt = IndexRun["attempt"];
+
+function indexRun(
+  attempt: Partial<IndexAttempt> = {},
+  run: Partial<Omit<IndexRun, "kind" | "attempt">> & { is_retry?: boolean } = {}
+): CCPairRun {
+  return {
+    kind: "indexing",
+    time_created: START,
+    resolved_at: null,
+    superseded: false,
+    is_retry: false,
+    ...run,
+    attempt: {
+      id: 31,
+      status: "success",
+      from_beginning: false,
+      new_docs_indexed: 100,
+      docs_removed_from_index: 0,
+      total_docs_indexed: 125,
+      error_msg: null,
+      error_count: 0,
+      open_error_count: 0,
+      open_doc_error_count: 0,
+      full_exception_trace: null,
+      time_started: START,
+      time_updated: isoAfter(START, 5 * MINUTE_MS),
+      time_finished: isoAfter(START, 5 * MINUTE_MS),
+      is_new_model: false,
+      is_backfill: false,
+      ...attempt,
+    },
+  } as CCPairRun;
+}
+
+/** An index attempt that is running now, started `minutes` ago. */
+function runningAttempt(minutes: number): Partial<IndexAttempt> {
+  const now = Date.now();
+  return {
+    status: "in_progress",
+    time_started: new Date(now - minutes * MINUTE_MS).toISOString(),
+    time_updated: new Date(now).toISOString(),
+    time_finished: null,
+  };
+}
+
+function groupSyncRun(
+  attempt: Partial<Extract<CCPairRun, { kind: "group_sync" }>["attempt"]>
+): CCPairRun {
+  return {
+    kind: "group_sync",
+    time_created: START,
+    resolved_at: null,
+    superseded: false,
+    attempt: {
+      id: 41,
+      status: PermissionSyncStatusEnum.SUCCESS,
+      error_message: null,
+      full_exception_trace: null,
+      total_users_processed: 122,
+      total_groups_processed: 3,
+      total_group_memberships_synced: 125,
+      time_created: START,
+      time_started: START,
+      time_finished: isoAfter(START, 5 * MINUTE_MS),
+      ...attempt,
+    },
+  };
+}
+
+function renderLine(run: CCPairRun, canCancel = true) {
+  const onCancel = jest.fn();
+  const view = render(
+    <RunRow
+      run={run}
+      canCancel={canCancel}
+      onCancel={onCancel}
+      onViewLogs={jest.fn()}
+      open={false}
+      onOpenChange={jest.fn()}
+      dimmed={false}
+    />
+  );
+  return { ...view, onCancel };
+}
+
+/** `element` and its ancestors up to `root`, nearest first. */
+function selfAndAncestors(element: Element, root: Element): Element[] {
+  const chain: Element[] = [];
+  let current: Element | null = element;
+  while (current !== null && current !== root.parentElement) {
+    chain.push(current);
+    current = current.parentElement;
+  }
+  return chain;
+}
+
+function classesOf(elements: Element[]): string[] {
+  return elements.flatMap((element) => Array.from(element.classList));
+}
+
+function nearestCommonAncestor(first: Element, second: Element): Element {
+  let current: Element | null = first;
+  while (current !== null && !current.contains(second)) {
+    current = current.parentElement;
+  }
+  return current!;
+}
+
+describe("RunRow run-line content (FE-7)", () => {
+  it("AC-2: reads Starting sync before a running or queued index run has a rate, then the live rate", () => {
+    const starting = copy("admin.connector.runs.detail.starting");
+
+    const { unmount } = renderLine(
+      indexRun({
+        ...runningAttempt(1),
+        total_docs_indexed: 0,
+        new_docs_indexed: 0,
+      })
+    );
+    expect(screen.getByText(starting)).toBeInTheDocument();
+    unmount();
+
+    const queued = renderLine(
+      indexRun({
+        status: "not_started",
+        time_started: null,
+        time_finished: null,
+        total_docs_indexed: 0,
+        new_docs_indexed: 0,
+      })
+    );
+    expect(screen.getByText(starting)).toBeInTheDocument();
+    queued.unmount();
+
+    // 125 docs over the 5 minutes since it started: 25.00 docs/min.
+    renderLine(indexRun(runningAttempt(5)));
+    expect(
+      screen.getByText(
+        copy("admin.connector.runs.detail.rate", { rate: "25.00" })
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(starting)).toBeNull();
+  });
+
+  it("AC-2: reads rate (duration) when a finished run indexed docs, as 25.00 docs/min (5 min)", () => {
+    renderLine(indexRun());
+
+    expect(
+      screen.getByText(
+        copy("admin.connector.runs.detail.rateFinished", {
+          rate: "25.00",
+          duration: "5 min",
+        })
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("AC-2: reads Runtime {duration} when a finished run indexed nothing", () => {
+    renderLine(
+      indexRun({
+        total_docs_indexed: 0,
+        new_docs_indexed: 0,
+        time_finished: isoAfter(START, 2 * MINUTE_MS),
+        time_updated: isoAfter(START, 2 * MINUTE_MS),
+      })
+    );
+
+    expect(
+      screen.getByText(
+        copy("admin.connector.runs.detail.runtime", { duration: "2 min" })
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("AC-2: a group sync reads memberships/min while running and rate (duration) when done", () => {
+    const running = renderLine(
+      groupSyncRun({
+        status: PermissionSyncStatusEnum.IN_PROGRESS,
+        time_started: new Date(Date.now() - 5 * MINUTE_MS).toISOString(),
+        time_finished: null,
+      })
+    );
+    // The live rate moves with the clock, so only its shape is pinned.
+    const live = new RegExp(
+      `^${copy("admin.connector.runs.detail.membershipRate", {
+        rate: "RATE",
+      })
+        .replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")
+        .replace("RATE", "\\d+\\.\\d{2}")}$`
+    );
+    expect(screen.getByText(live)).toBeInTheDocument();
+    running.unmount();
+
+    renderLine(groupSyncRun({}));
+    expect(
+      screen.getByText(
+        copy("admin.connector.runs.detail.membershipRateFinished", {
+          rate: "25.00",
+          duration: "5 min",
+        })
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("AC-2: hides new, updated and removed sub-counts that are zero and keeps the nonzero ones", () => {
+    // 125 indexed, all new: updated and removed are zero.
+    const { container, unmount } = renderLine(
+      indexRun({ new_docs_indexed: 125, total_docs_indexed: 125 })
+    );
+    const counts = lineParts(container).part(screen.getByText("indexed"));
+    expect(within(counts).queryByText("0")).toBeNull();
+    expect(within(counts).getAllByText("125")).toHaveLength(2);
+    unmount();
+
+    // 25 updated, nothing new or removed.
+    const updatedOnly = renderLine(
+      indexRun({ new_docs_indexed: 0, total_docs_indexed: 25 })
+    );
+    const updatedCounts = lineParts(updatedOnly.container).part(
+      screen.getByText("indexed")
+    );
+    expect(within(updatedCounts).queryByText("0")).toBeNull();
+    expect(within(updatedCounts).getAllByText("25")).toHaveLength(2);
+    updatedOnly.unmount();
+
+    // A group sync that touched users but no groups.
+    const sync = renderLine(groupSyncRun({ total_groups_processed: 0 }));
+    const syncCounts = lineParts(sync.container).part(
+      screen.getByText("synced")
+    );
+    expect(within(syncCounts).queryByText("0")).toBeNull();
+    expect(within(syncCounts).getByText("122")).toBeInTheDocument();
+  });
+
+  it("AC-1: a clean finished run keeps View Logs hidden until the line is hovered", () => {
+    const { container } = renderLine(indexRun());
+
+    const logs = screen.getByRole("button", { name: "View Logs" });
+    const chain = selfAndAncestors(logs, container);
+    const classes = classesOf(chain);
+    expect(classes).toContain("opacity-0");
+    const reveal = classes.find((name) =>
+      /^group-hover(\/[\w-]+)?:opacity-100$/.test(name)
+    );
+    expect(reveal).toBeDefined();
+    // The hover group is the run line, an ancestor of the button.
+    const groupName = reveal!.match(/^group-hover(\/[\w-]+)?:/)![1] ?? "";
+    expect(classes).toContain(`group${groupName}`);
+  });
+
+  it("AC-1: a run with errors always shows View Logs, also without a run-level error message", () => {
+    const { container, unmount } = renderLine(
+      indexRun({ error_count: 2, open_error_count: 2, open_doc_error_count: 2 })
+    );
+    const logs = screen.getByRole("button", { name: "View Logs" });
+    expect(classesOf(selfAndAncestors(logs, container))).not.toContain(
+      "opacity-0"
+    );
+    unmount();
+
+    const failed = renderLine(
+      indexRun({ status: "failed", error_msg: "Connector timed out" })
+    );
+    const failedLogs = screen.getByRole("button", { name: "View Logs" });
+    expect(
+      classesOf(selfAndAncestors(failedLogs, failed.container))
+    ).not.toContain("opacity-0");
+  });
+
+  it("AC-1: D holds Cancel only while an index run is running and the caller may operate, and View Logs on every run", async () => {
+    const user = setupUser();
+    const running = renderLine(indexRun(runningAttempt(5)));
+    const { part } = lineParts(running.container);
+    const d = part(screen.getByRole("button", { name: "View Logs" }));
+    const cancel = within(d).getByRole("button", { name: "Cancel" });
+    await user.click(cancel);
+    expect(running.onCancel).toHaveBeenCalledTimes(1);
+    running.unmount();
+
+    const noPermission = renderLine(indexRun(runningAttempt(5)), false);
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    noPermission.unmount();
+
+    renderLine(indexRun());
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "View Logs" })
+    ).toBeInTheDocument();
+  });
+
+  it("AC-5: a finished retry run reads Document Index - Retry with refresh-cw, its start time and an index run's stages, counts and logs", () => {
+    const refresh = referencePaths(SvgRefreshCw);
+    const { container } = renderLine(indexRun({}, { is_retry: true }));
+
+    const label = screen.getByText(copy("admin.connector.runs.kinds.retry"));
+    expect(iconPaths(nearestIcon(label))).toEqual(refresh);
+    const { part } = lineParts(container);
+    const a = part(label);
+    expect(within(a).getByText(formatDateTimeLog(START))).toBeInTheDocument();
+    expect(screen.queryByText("Document Index")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "View Stage Metrics" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("indexed")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View Logs" })
+    ).toBeInTheDocument();
+  });
+
+  it("AC-5: a running retry run reads Document Index - Retry and can be canceled", () => {
+    renderLine(indexRun(runningAttempt(5), { is_retry: true }));
+
+    expect(
+      screen.getByText(copy("admin.connector.runs.kinds.retry"))
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("AC-1 (narrow): below 640 px the start time and the type sit side by side in A", () => {
+    const { container } = renderLine(indexRun());
+
+    const type = screen.getByText("Document Index");
+    const time = screen.getByText(formatDateTimeLog(START));
+    const { part } = lineParts(container);
+    expect(part(time)).toBe(part(type));
+    const shared = nearestCommonAncestor(type, time);
+    expect(
+      hasClass(shared, `${BELOW_640}flex-row(?:-reverse)?`) ||
+        // Already a row at every width.
+        hasClass(shared, "flex-row")
+    ).toBe(true);
   });
 });
