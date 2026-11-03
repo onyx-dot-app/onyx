@@ -62,8 +62,10 @@ def _sent_parameters(
             reasoning_effort=ReasoningEffort.OFF,
             env_injection_enabled=False,
         )
-    sent: list[dict[str, dict[str, JsonValue]]] = completion.call_args.kwargs["tools"]
-    return sent[0]["function"]["parameters"]
+    sent: list[dict[str, JsonValue]] = completion.call_args.kwargs["tools"]
+    function = sent[0]["function"]
+    assert isinstance(function, dict)
+    return function["parameters"]
 
 
 @pytest.mark.parametrize(
