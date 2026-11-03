@@ -1,4 +1,4 @@
-/** A run the page's address points at opens its inline details, widening a list that misses it, and only runs with details open. */
+/** A run the page's address points at opens its inline details, widening a list that misses it and paging back to it, and only runs with details open. */
 import {
   copy,
   render,
@@ -165,6 +165,31 @@ function mockWindowedRuns(windowed: CCPairRun[], older: CCPairRun) {
     return Promise.resolve(jsonResponse(page(items)));
   }) as typeof fetch;
 }
+/** The windowed list lists `windowed`; a list with no `since` pages through `allTime` by `page_num` and `page_size`. */
+function mockPagedRuns(windowed: CCPairRun[], allTime: CCPairRun[]) {
+  global.fetch = jest.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (!url.includes(`/cc-pair/${CC_PAIR_ID}/runs?`)) {
+      return new Promise<Response>(() => {});
+    }
+    const params = new URL(url, "http://localhost").searchParams;
+    const listed = params.has("since") ? windowed : allTime;
+    const pageNum = Number(params.get("page_num"));
+    const pageSize = Number(params.get("page_size"));
+    const body: CCPairRunsResponse = {
+      items: listed.slice(pageNum * pageSize, (pageNum + 1) * pageSize),
+      total_items: listed.length,
+      kinds: ["indexing"],
+      status_counts: {
+        running: 0,
+        succeeded: listed.length,
+        failed: 0,
+        canceled: 0,
+      },
+    };
+    return Promise.resolve(jsonResponse(body));
+  }) as typeof fetch;
+}
 afterEach(() => {
   global.fetch = realFetch;
 });
@@ -234,6 +259,47 @@ describe("RunsCard openRun", () => {
         (url) => url.includes("kinds=indexing") && !url.includes("since=")
       )
     ).toBe(true);
+  });
+
+  it("pages back through the run's kind when newer runs push it off the first page", async () => {
+    const allTime = Array.from({ length: 25 }, (_, index) =>
+      indexRun(index + 1)
+    );
+    mockPagedRuns([indexRun(1)], allTime);
+    await renderRuns({ id: 23, kind: "indexing" });
+    expect(
+      await screen.findByRole("button", { name: CLOSE_STAGES })
+    ).toBeInTheDocument();
+    const urls = (global.fetch as jest.Mock).mock.calls.map((call) =>
+      String(call[0])
+    );
+    expect(
+      urls.some(
+        (url) =>
+          url.includes("kinds=indexing") &&
+          url.includes("page_num=2") &&
+          !url.includes("since=")
+      )
+    ).toBe(true);
+  });
+
+  it("stops paging once the kind's runs are exhausted without the run", async () => {
+    const allTime = Array.from({ length: 15 }, (_, index) =>
+      indexRun(index + 1)
+    );
+    mockPagedRuns([indexRun(1)], allTime);
+    await renderRuns({ id: 99, kind: "indexing" });
+    const pagesAsked = () =>
+      (global.fetch as jest.Mock).mock.calls
+        .map((call) => String(call[0]))
+        .filter((url) => !url.includes("since="));
+    await waitFor(() =>
+      expect(pagesAsked().some((url) => url.includes("page_num=1"))).toBe(true)
+    );
+    // A pass of the open effect after the last page settles.
+    await screen.findAllByText("indexed");
+    expect(pagesAsked().some((url) => url.includes("page_num=2"))).toBe(false);
+    expect(screen.queryByRole("button", { name: CLOSE_STAGES })).toBeNull();
   });
 
   it("lists a prune run the window misses without opening it", async () => {

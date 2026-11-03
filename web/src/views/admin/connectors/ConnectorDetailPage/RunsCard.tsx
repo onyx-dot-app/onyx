@@ -267,14 +267,18 @@ export default function RunsCard({
       if (hasInlineDetails(run)) setOpen(runKey(run), true);
       return;
     }
-    // Links point at a kind's latest run, so its kind over all time lists it first.
-    if (revealedRun.current === openRun) return;
-    revealedRun.current = openRun;
-    setKind(openRun.kind);
-    setStatusGroup(null);
-    setPage(1);
-    setWidened(true);
-  }, [openRun, data, isLoading, items, setOpen]);
+    // A link can point at any past run, so the list widens to its kind over all time and pages back until it lists.
+    if (revealedRun.current !== openRun) {
+      revealedRun.current = openRun;
+      setKind(openRun.kind);
+      setStatusGroup(null);
+      setPage(1);
+      setWidened(true);
+      return;
+    }
+    if (page * pageSize < data.total_items) setPage(page + 1);
+    else openedRun.current = openRun;
+  }, [openRun, data, isLoading, items, page, pageSize, setOpen]);
 
   function pickWindow(next: PickerWindow) {
     // Picking the same window again still leaves the widened view.
