@@ -1,9 +1,4 @@
-"""Per-source conversion from a stored event to a document.
-
-The drain is one connector for every event-based source, so the part that
-differs — what a row's payload and stored body mean — lives here. A source
-registers a handler; the drain looks it up by `DocumentSource`.
-"""
+"""The per-source part of the drain: how a stored event becomes a document."""
 
 from collections.abc import Mapping
 from typing import Protocol
@@ -19,27 +14,25 @@ class EventHandler(Protocol):
     def __call__(
         self, event: ConnectorEventInbox, secrets: Mapping[str, str]
     ) -> Document | None:
-        """Return the document, or None to drop the event without failing it.
-
-        `secrets` is the pair's decrypted credential JSON, as the verifier
-        receives it. A provider that pushes a link rather than a body needs
-        it to fetch the body.
-
-        Raising marks the one row failed and leaves the rest of the batch
-        alone, so one bad payload cannot stall a pair.
-        """
+        """Return the document, or None to index nothing. `secrets` is the
+        pair's credential, for a provider that pushes a link to the body.
+        Raising retries this row alone."""
 
 
 _HANDLERS: dict[DocumentSource, EventHandler] = {}
 
 
 def register_event_handler(source: DocumentSource, handler: EventHandler) -> None:
-    """Claim the drain for one source. Last registration wins."""
+    """Claim the drain for one source. Refuses a clash rather than replacing
+    the incumbent."""
+    existing = _HANDLERS.get(source)
+    if existing is not None and existing is not handler:
+        raise ValueError(f"{source.value} already has an event handler.")
     _HANDLERS[source] = handler
 
 
 def unregister_event_handler(source: DocumentSource) -> None:
-    """Give up the drain for one source. Unknown sources are ignored."""
+    """Ignores an unknown source."""
     _HANDLERS.pop(source, None)
 
 
@@ -48,5 +41,4 @@ def get_event_handler(source: DocumentSource) -> EventHandler | None:
 
 
 def event_handler_sources() -> set[DocumentSource]:
-    """Which sources have claimed the drain."""
     return set(_HANDLERS)

@@ -25,13 +25,14 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# A handler that fetches over the network fails for reasons the next run may
-# not see, so a row gets this many tries before it settles as failed.
+# A network fetch in a handler can fail for a reason the next run will not see.
 MAX_EVENT_ATTEMPTS = 5
 _RETRY_BACKOFF_SECONDS = 60
 
-# Keeps one unbounded traceback from bloating the row.
 _MAX_ERROR_CHARS = 2000
+
+# First key of the two-key advisory lock that serializes one pair's claims.
+_CLAIM_LOCK_NAMESPACE = 7_310_142
 
 
 def record_events(
@@ -130,51 +131,62 @@ def superseded_by_newer_events(
     cc_pair_id: int,
     events: Sequence[ConnectorEventInbox],
 ) -> set[int]:
-    """Of these, the ids a newer change to the same document has overtaken.
+    """Ids of these events that a change taken by an earlier claim overtakes.
 
-    The drain compares a batch against itself, which is not enough: a change
-    can arrive late, or fail and wait out a retry while a newer one is
-    indexed. Only IN_PROGRESS and COMPLETED rows count as taken; the batch's
-    own rows are excluded, since the claim has already marked them
-    IN_PROGRESS and the caller compares those itself.
-
-    Event time decides only when every taken row for the document carries
-    one, as within a batch: a missing timestamp means the provider sent
-    none, not that the change is old. Otherwise arrival order decides.
+    Uses the same order as a batch: event time, then id, when every taken row
+    for the document has a time; otherwise arrival order.
     """
     documents = {event.document_id for event in events}
     if not documents:
         return set()
 
-    claimed_here = [event.id for event in events]
     taken = (
-        select(
-            ConnectorEventInbox.document_id,
-            func.max(ConnectorEventInbox.occurred_at).label("newest"),
-            func.max(ConnectorEventInbox.id).label("latest_id"),
-            func.count()
-            .filter(ConnectorEventInbox.occurred_at.is_(None))
-            .label("undated"),
-        )
-        .where(
-            ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
-            ConnectorEventInbox.document_id.in_(documents),
-            ConnectorEventInbox.status.in_(
-                [ConnectorEventStatus.IN_PROGRESS, ConnectorEventStatus.COMPLETED]
-            ),
-            ConnectorEventInbox.id.notin_(claimed_here),
-        )
-        .group_by(ConnectorEventInbox.document_id)
+        ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
+        ConnectorEventInbox.document_id.in_(documents),
+        ConnectorEventInbox.status.in_(
+            [ConnectorEventStatus.IN_PROGRESS, ConnectorEventStatus.COMPLETED]
+        ),
+        ConnectorEventInbox.id.notin_([event.id for event in events]),
     )
+    summary = {
+        row.document_id: row
+        for row in db_session.execute(
+            select(
+                ConnectorEventInbox.document_id,
+                func.max(ConnectorEventInbox.id).label("latest_id"),
+                func.count()
+                .filter(ConnectorEventInbox.occurred_at.is_(None))
+                .label("undated"),
+            )
+            .where(*taken)
+            .group_by(ConnectorEventInbox.document_id)
+        )
+    }
+    newest_dated = {
+        row.document_id: (row.occurred_at, row.id)
+        for row in db_session.execute(
+            select(
+                ConnectorEventInbox.document_id,
+                ConnectorEventInbox.occurred_at,
+                ConnectorEventInbox.id,
+            )
+            .where(*taken, ConnectorEventInbox.occurred_at.is_not(None))
+            .distinct(ConnectorEventInbox.document_id)
+            .order_by(
+                ConnectorEventInbox.document_id,
+                ConnectorEventInbox.occurred_at.desc(),
+                ConnectorEventInbox.id.desc(),
+            )
+        )
+    }
 
     superseded: set[int] = set()
-    by_document = {row.document_id: row for row in db_session.execute(taken)}
     for event in events:
-        row = by_document.get(event.document_id)
+        row = summary.get(event.document_id)
         if row is None:
             continue
-        if event.occurred_at is not None and not row.undated and row.newest:
-            if row.newest > event.occurred_at:
+        if event.occurred_at is not None and not row.undated:
+            if newest_dated[event.document_id] > (event.occurred_at, event.id):
                 superseded.add(event.id)
         elif row.latest_id > event.id:
             superseded.add(event.id)
@@ -187,19 +199,16 @@ def claim_events(
     index_attempt_id: int,
     limit: int,
 ) -> list[ConnectorEventInbox]:
-    """Take ownership of up to `limit` pending rows for one attempt, plus the
-    rest of each document those rows belong to.
+    """Claim up to `limit` due rows for one attempt, plus the other due rows
+    of each document they belong to, so one document is never split across
+    batches or attempts.
 
-    A batch boundary therefore does not split two changes to one document.
-    The caller discards all but the newest; split across batches they would
-    instead become two docprocessing tasks racing to write the same
-    document, which nothing orders.
-
-    Locks with FOR UPDATE SKIP LOCKED, so two attempts on the same pair never
-    claim the same row. Marks each row IN_PROGRESS and stamps the attempt that
-    took it; that stamp is how the row is later settled against the attempt's
-    outcome. Does not commit.
+    Claims for one pair are serialized until the caller commits. Marks each
+    row IN_PROGRESS and stamps the attempt, which later settles it.
     """
+    db_session.execute(
+        select(func.pg_advisory_xact_lock(_CLAIM_LOCK_NAMESPACE, cc_pair_id))
+    )
     due = (
         ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
         ConnectorEventInbox.status == ConnectorEventStatus.PENDING,
@@ -211,7 +220,7 @@ def claim_events(
             .where(*due)
             .order_by(ConnectorEventInbox.id)
             .limit(limit)
-            .with_for_update(skip_locked=True)
+            .with_for_update()
         )
     )
     if rows:
@@ -227,7 +236,7 @@ def claim_events(
                     ConnectorEventInbox.id.notin_(taken),
                 )
                 .order_by(ConnectorEventInbox.id)
-                .with_for_update(skip_locked=True)
+                .with_for_update()
             )
         )
         rows.sort(key=lambda row: row.id)
@@ -259,11 +268,8 @@ def mark_events_completed(db_session: Session, event_ids: Sequence[int]) -> None
 def release_events_to_pending(
     db_session: Session, event_ids: Sequence[int], error: str | None = None
 ) -> None:
-    """Return claimed rows to the queue so a later attempt retries them.
-
-    Used when an attempt ends without indexing what it claimed. Keeps
-    `attempt_count`, which a caller can use to stop retrying. Does not commit.
-    """
+    """Return claimed rows to the queue, keeping `attempt_count`. Does not
+    commit."""
     if not event_ids:
         return
     db_session.execute(
@@ -282,14 +288,8 @@ def retry_or_fail_events(
     failures: Sequence[tuple[int, str]],
     max_attempts: int = MAX_EVENT_ATTEMPTS,
 ) -> None:
-    """Return each row to the queue with backoff, or fail it once it has had
-    enough tries.
-
-    A handler can fail because a provider timed out, and the next run may
-    not. Failing on the first exception would lose the document for good:
-    `claim_events` only reads PENDING rows, and there is no reindex path
-    that can reach a settled one. Does not commit.
-    """
+    """Return each row to the queue with backoff, or fail it after
+    `max_attempts` tries. Does not commit."""
     if not failures:
         return
 
@@ -314,8 +314,7 @@ def retry_or_fail_events(
 def mark_events_failed(
     db_session: Session, failures: Sequence[tuple[int, str]]
 ) -> None:
-    """Settle rows for good, recording why. For a payload no retry can fix.
-    Does not commit."""
+    """Fail rows for good, for a payload no retry can fix. Does not commit."""
     if not failures:
         return
     now = datetime.now(timezone.utc)
@@ -336,29 +335,14 @@ def mark_events_failed(
 def settle_events_from_finished_attempts(
     db_session: Session, cc_pair_id: int
 ) -> tuple[int, int]:
-    """Resolve rows whose claiming attempt has since finished.
+    """Settle claimed rows on their attempt's outcome: complete them if it
+    succeeded, release them if it ended otherwise or no longer exists.
 
-    A row is claimed inside a run but cannot be completed there: the runner
-    buffers documents and flushes them after the generator returns, so a row
-    marked COMPLETED while the generator is still going would be settled
-    before its document was stored, and a failed store would lose the change
-    with no way to claim it again.
-
-    So completion waits for the attempt's own outcome, which the next run of
-    the pair observes. An attempt that succeeded completes its rows; one that
-    failed, was canceled or was interrupted returns them to the queue. Rows
-    of an attempt still running belong to it and are left alone.
-
-    A row whose attempt no longer exists is released too. The column is
-    `ON DELETE SET NULL`, and deleting a search setting deletes its attempts,
-    so a claim can lose its owner; nothing would ever settle it and
-    `claim_events` reads only PENDING rows.
-
-    Returns (completed, released). Does not commit.
+    The run cannot settle its own rows, because the runner stores documents
+    after the generator returns. Returns (completed, released). Does not
+    commit.
     """
-    # Locked, and skipping what another sweep holds: two runs reading the
-    # same rows would both release them, and the second would undo a claim
-    # the first had already made and handed to its handler.
+    # Skip what another sweep holds, so two sweeps never release one claim.
     claimed = (
         select(ConnectorEventInbox.id, IndexAttempt.status)
         .outerjoin(
@@ -395,13 +379,8 @@ def settle_events_from_finished_attempts(
 def get_active_event_cc_pairs(
     db_session: Session, source: DocumentSource
 ) -> list[ConnectorCredentialPair]:
-    """The pairs that may receive pushed events for one source.
-
-    This is what makes a source's endpoint live: with no active EVENT pair,
-    the webhook server has nowhere to attribute a delivery, so setting the
-    connector up is what opens the endpoint and pausing or deleting it is
-    what closes it again.
-    """
+    """The pairs that may receive pushed events for one source. With none,
+    the source's endpoint accepts nothing."""
     return list(
         db_session.scalars(
             select(ConnectorCredentialPair)

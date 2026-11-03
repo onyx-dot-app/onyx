@@ -1,10 +1,5 @@
-"""Guards the drain: claimed rows become documents, and every claimed row
-settles.
-
-A row that is claimed but never settled is invisible — it is IN_PROGRESS, so
-no later attempt claims it, and the change the source reported is silently
-lost. These tests pin that no path leaves one behind.
-"""
+"""Guards the drain: claimed rows become documents, and no path leaves a row
+claimed with nothing to settle it."""
 
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
@@ -102,7 +97,6 @@ def _handler(
     secrets: Mapping[str, str],  # noqa: ARG001
 ) -> Document | None:
     if event.event_type == ConnectorEventType.DELETE:
-        # Nothing to index; the row still settles because it was handled.
         return None
     if event.document_id == BAD_DOCUMENT:
         raise ValueError("payload could not be read")
@@ -120,13 +114,13 @@ def _handler(
 @pytest.fixture(autouse=True)
 def registered_handler() -> Generator[None, None, None]:
     previous = get_event_handler(SOURCE)
+    unregister_event_handler(SOURCE)
     register_event_handler(SOURCE, _handler)
     try:
         yield
     finally:
-        if previous is None:
-            unregister_event_handler(SOURCE)
-        else:
+        unregister_event_handler(SOURCE)
+        if previous is not None:
             register_event_handler(SOURCE, previous)
 
 
@@ -207,7 +201,7 @@ def test_a_full_batch_asks_for_another_round(
     assert checkpoint.has_more is False
 
 
-def test_a_delete_settles_without_a_document(
+def test_a_delete_yields_no_document_and_stays_claimed(
     db_session: Session, pair_and_attempt: tuple[int, int]
 ) -> None:
     pair_id, attempt_id = pair_and_attempt
@@ -557,6 +551,7 @@ def test_the_claim_session_is_closed_before_a_handler_runs(
         [ParsedEvent(document_id="doc-1", event_key="k-1")],
     )
     db_session.commit()
+    unregister_event_handler(SOURCE)
     register_event_handler(SOURCE, _watching)
 
     with patch.object(connector_module, "get_session_with_current_tenant", _counting):
@@ -576,15 +571,13 @@ def test_an_older_change_in_a_later_batch_does_not_overwrite_a_newer_one(
     pair_and_attempt: tuple[int, int],
     registered_handler: None,  # noqa: ARG001
 ) -> None:
-    """Rows are claimed in id order, which is arrival order rather than event
-    time. A provider that redelivers late puts an older change in a later
-    batch than the newer one it must not replace, and indexing both would
-    store the older body last."""
+    """A provider that redelivers late puts an older change in a later batch
+    than the newer one it must not replace."""
     pair_id, attempt_id = pair_and_attempt
     newer = datetime(2026, 11, 2, 15, 45, tzinfo=timezone.utc)
     older = datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)
+    connector = _connector(pair_id, attempt_id, batch_size=1)
 
-    # The newer change arrives first, so it gets the lower row id.
     record_events(
         db_session,
         pair_id,
@@ -592,6 +585,9 @@ def test_an_older_change_in_a_later_batch_does_not_overwrite_a_newer_one(
         [ParsedEvent(document_id="doc-1", event_key="k-new", occurred_at=newer)],
     )
     db_session.commit()
+    first, _failures, checkpoint = _drain(
+        connector, EventInboxCheckpoint(has_more=True)
+    )
     record_events(
         db_session,
         pair_id,
@@ -599,17 +595,87 @@ def test_an_older_change_in_a_later_batch_does_not_overwrite_a_newer_one(
         [ParsedEvent(document_id="doc-1", event_key="k-old", occurred_at=older)],
     )
     db_session.commit()
-
-    connector = _connector(pair_id, attempt_id, batch_size=1)
-    first, _failures, checkpoint = _drain(
-        connector, EventInboxCheckpoint(has_more=True)
-    )
     second, _failures_2, _checkpoint_2 = _drain(connector, checkpoint)
 
     assert [document.id for document in first] == ["doc-1"]
-    # The second batch holds the older change. It settles, but it must not
-    # be indexed on top of the newer one.
     assert second == []
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.IN_PROGRESS: 2
+    }
+
+
+def test_a_later_batch_loses_a_tie_on_event_time_to_a_higher_id(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """Within a batch, id breaks a tie on event time. A retried change with
+    the same time and a lower id must lose to the one already taken."""
+    pair_id, attempt_id = pair_and_attempt
+    same_time = datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)
+    unregister_event_handler(SOURCE)
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-low", occurred_at=same_time)],
+    )
+    db_session.commit()
+    _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+    register_event_handler(SOURCE, _handler)
+
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key="k-high", occurred_at=same_time)],
+    )
+    db_session.commit()
+    taken, _failures, _ = _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+    assert [document.id for document in taken] == ["doc-1"]
+
+    db_session.query(ConnectorEventInbox).filter_by(
+        connector_credential_pair_id=pair_id,
+        status=ConnectorEventStatus.PENDING,
+    ).update({"available_at": datetime(2020, 1, 1, tzinfo=timezone.utc)})
+    db_session.commit()
+    retried, _failures_2, _ = _drain(
+        _connector(pair_id, attempt_id, batch_size=10),
+        EventInboxCheckpoint(has_more=True),
+    )
+
+    assert retried == []
+
+
+def test_a_batch_padded_by_one_document_still_asks_for_more(
+    db_session: Session, pair_and_attempt: tuple[int, int]
+) -> None:
+    """A claim takes all of a document's rows, so it can exceed its limit.
+    That is still a full batch, and the next document must not wait for
+    another run."""
+    pair_id, attempt_id = pair_and_attempt
+    record_events(
+        db_session,
+        pair_id,
+        SOURCE,
+        [ParsedEvent(document_id="doc-1", event_key=f"k-{i}") for i in range(3)]
+        + [ParsedEvent(document_id="doc-2", event_key="k-other")],
+    )
+    db_session.commit()
+    connector = _connector(pair_id, attempt_id, batch_size=2)
+
+    first, _failures, checkpoint = _drain(
+        connector, EventInboxCheckpoint(has_more=True)
+    )
+    assert [document.id for document in first] == ["doc-1"]
+    assert checkpoint.has_more is True
+
+    second, _failures_2, _ = _drain(connector, checkpoint)
+    assert [document.id for document in second] == ["doc-2"]
 
 
 def test_a_discarded_sibling_does_not_suppress_the_change_that_won(
@@ -694,6 +760,9 @@ def test_a_retried_untimestamped_change_does_not_overwrite_a_newer_one(
         _connector(pair_id, attempt_id, batch_size=10),
         EventInboxCheckpoint(has_more=True),
     )
+    assert count_events_by_status(db_session, pair_id) == {
+        ConnectorEventStatus.PENDING: 1
+    }
     register_event_handler(SOURCE, _handler)
 
     # A later change is indexed while the first waits out its backoff.

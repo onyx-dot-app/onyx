@@ -5,6 +5,7 @@ These run against a real PostgreSQL because the guarantee is the unique
 constraint, which a mock cannot show.
 """
 
+import threading
 from collections.abc import Generator
 
 import pytest
@@ -242,42 +243,54 @@ def test_a_long_delivery_id_still_stores_and_dedupes(
     assert len(stored.event_key) < 100
 
 
-def test_two_attempts_never_claim_the_same_row(
+def test_a_second_claim_waits_and_never_splits_a_document(
     db_session: Session, cc_pair_id: int
 ) -> None:
-    """The guarantee that lets two index attempts overlap safely.
-
-    Each claim runs in its own transaction, and the first holds its row locks
-    until it commits, so the second must skip them rather than block or
-    double-claim.
-    """
+    """Two attempts on one pair overlap during a model swap. Their claims are
+    serialized, so neither takes a row the other holds, and a document's rows
+    all go to one of them."""
     record_events(
         db_session,
         cc_pair_id,
         SOURCE,
-        [ParsedEvent(document_id=f"doc-{i}", event_key=f"k-{i}") for i in range(6)],
+        [
+            ParsedEvent(document_id="doc-a", event_key="k-1"),
+            ParsedEvent(document_id="doc-b", event_key="k-2"),
+            ParsedEvent(document_id="doc-a", event_key="k-3"),
+        ],
     )
     first_attempt = _attempt(db_session, cc_pair_id)
     second_attempt = _attempt(db_session, cc_pair_id)
     db_session.commit()
 
     engine = SqlEngine.get_engine()
-    with Session(engine) as session_a, Session(engine) as session_b:
-        claimed_a = {
-            event.id
-            for event in claim_events(session_a, cc_pair_id, first_attempt, limit=4)
-        }
-        # session_a still holds its locks here.
-        claimed_b = {
-            event.id
-            for event in claim_events(session_b, cc_pair_id, second_attempt, limit=4)
-        }
-        session_a.commit()
-        session_b.commit()
+    claimed_b: list[str] = []
+    with Session(engine) as session_a:
+        claimed_a = [
+            event.document_id
+            for event in claim_events(session_a, cc_pair_id, first_attempt, limit=1)
+        ]
 
-    assert claimed_a & claimed_b == set()
-    assert len(claimed_a) == 4
-    assert len(claimed_b) == 2
+        def claim_second() -> None:
+            with Session(engine) as session_b:
+                claimed_b.extend(
+                    event.document_id
+                    for event in claim_events(
+                        session_b, cc_pair_id, second_attempt, limit=10
+                    )
+                )
+                session_b.commit()
+
+        waiter = threading.Thread(target=claim_second)
+        waiter.start()
+        waiter.join(timeout=1)
+        assert waiter.is_alive(), "the second claim did not wait for the first"
+        session_a.commit()
+        waiter.join(timeout=10)
+        assert not waiter.is_alive()
+
+    assert claimed_a == ["doc-a", "doc-a"]
+    assert claimed_b == ["doc-b"]
 
 
 def test_claiming_stamps_the_attempt_and_counts_the_try(

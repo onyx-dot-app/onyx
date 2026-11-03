@@ -139,10 +139,11 @@ become rows in `connector_event_inbox` (`onyx/db/connector_event_inbox.py`),
 keyed `(pair, event_key)` so a redelivery writes nothing, and
 `EventInboxConnector` (`onyx/connectors/event_inbox/connector.py`) drains them
 inside an ordinary docfetching run. A claim takes every due row of each
-document it touches, not a flat row count: the drain keeps only the newest
-change per document, and two changes split across batches would instead
-become two docprocessing tasks racing to write one document, which nothing
-orders. The factory returns that drain for an
+document it touches, not a flat row count, and claims for one pair are
+serialized, so one document never splits across batches or attempts. The
+drain keeps only the newest change per document, in a batch and against
+rows earlier claims took (`superseded_by_newer_events`). The factory returns
+that drain for an
 `EVENT` pair, so the source's own connector class is never loaded, and the run
 injects the pair and attempt ids because neither is stored config. One
 consequence: the probes dispatch on the connector class
@@ -155,10 +156,10 @@ A handler is given the pair's decrypted credential JSON alongside the row
 (`onyx/connectors/event_inbox/credentials.py:pair_secrets`), so a provider
 that pushes a link rather than a body can fetch it. That fetch is why the
 claim session closes before any handler runs, and why a failed handler
-returns to the queue with backoff rather than settling: a timeout is not a
-payload the next run will also reject. A claim whose index attempt was
-deleted is released for the same reason -- nothing else would ever settle
-it, and `claim_events` reads only PENDING rows.
+returns to the queue with backoff until `MAX_EVENT_ATTEMPTS`, then fails: a
+timeout is not a payload the next run will also reject. A claim whose index
+attempt was deleted is released for the same reason -- nothing else would
+ever settle it, and `claim_events` reads only PENDING rows.
 
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
@@ -215,7 +216,8 @@ downloaded file with
    `connectors/sharepoint/connector.py:SharepointConnectorCheckpoint` does.
 6. `honor-time-window` **Honor the `start` and `end` window.** A poll or
    checkpointed connector that ignores it re-reads everything or misses
-   changes. A slim listing that filters by the indexing start must set
+   changes. The event drain is the exception: its queue holds exactly the
+   reported changes. A slim listing that filters by the indexing start must set
    `slim_listing_honors_indexing_start`. Prune then lists only documents from
    that date, and deletes older ones
    (`connectors/interfaces.py:prune_listing_honors_indexing_start`). A dated
@@ -298,6 +300,10 @@ downloaded file with
   does not. Unreachable while no source is registered. Resolve it before the
   first one is: either scope the claim per index, or keep event pairs out of
   the two-run path.
+- **A delete event leaves its document indexed.** A handler returns None for
+  a delete, so the row settles and nothing removes the document. An event
+  pair has no prune run either. Resolve it before a source that reports
+  deletes ships.
 - **`backend/onyx/connectors/README.md` lags the code.** It names `connectors/factory.py`
   for the source mapping (in `connectors/registry.py`) and omits configs and gateways.
   Do not follow it as the add-a-connector checklist; use the recipe below.

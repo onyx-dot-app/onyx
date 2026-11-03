@@ -1,19 +1,20 @@
-"""The secrets an event source's callbacks are given.
+"""The secrets an event source's callbacks get. One reader, so the webhook
+server and the drain cannot disagree."""
 
-One reader, so the webhook server and the drain cannot disagree about which
-values a source sees.
-"""
-
+import json
 from collections.abc import Mapping
 
 from onyx.db.models import ConnectorCredentialPair
 
 
 def pair_secrets(pair: ConnectorCredentialPair) -> Mapping[str, str]:
-    """The pair's decrypted credential JSON. String values only: a source
-    reads named secrets, and could not use a nested or numeric one."""
+    """The pair's decrypted credential JSON. A value that is not a string is
+    passed as its JSON text."""
     credential_json = pair.credential.credential_json
     if credential_json is None:
         return {}
     values = credential_json.get_value(apply_mask=False)
-    return {key: value for key, value in values.items() if isinstance(value, str)}
+    return {
+        key: value if isinstance(value, str) else json.dumps(value)
+        for key, value in values.items()
+    }
