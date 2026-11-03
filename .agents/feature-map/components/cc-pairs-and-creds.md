@@ -22,6 +22,15 @@
   attempt, resolve failed runs, and delete it. A pause stops new work and keeps
   what is indexed. A delete removes the documents that only this pair indexed,
   in the background, and keeps documents that another pair also indexes.
+- **An admin opens a pair.** The connector page
+  (`web/src/views/admin/connectors/ConnectorDetailPage/index.tsx`) shows the
+  status cards over two tabs. Connector Configurations holds the account, index
+  configurations, sharing and schedule. Indexing holds the documents-indexed
+  chart, hidden when its window has no indexing, and the run list. The Indexing
+  tab stays disabled until the pair has an index attempt or indexed documents,
+  a permission sync attempt or a group sync attempt, and `?tab=indexing` opens
+  the page on it. Manage Index offers Update Index and Full Re-index only once
+  the pair has an index attempt or indexed documents.
 - **A user reuses a credential.** A user a credential is shared with can pair
   it. A source with account-bound settings, such as a site URL, accepts a
   shared credential only with the settings of a pair that already uses it.

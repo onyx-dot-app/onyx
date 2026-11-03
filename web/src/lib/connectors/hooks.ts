@@ -452,7 +452,7 @@ export function useHierarchyBreakdown(ccPairId: number) {
 }
 
 // A throughput chart polls this often.
-const THROUGHPUT_POLL_MS = 30_000;
+export const THROUGHPUT_POLL_MS = 30_000;
 
 // A window drag resizes every frame, and each new bar count is a fetch.
 const RESIZE_SETTLE_MS = 200;

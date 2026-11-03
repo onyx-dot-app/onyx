@@ -146,15 +146,25 @@ The status of a Connector can be:
 
 ### Connector Details
 
+Click a Connector to open its page. The status cards show the indexing status,
+the permission sync status or document access, and the number of indexed documents. Two tabs follow the status cards:
+
+- **Connector Configurations**: the account, index configurations, sharing and schedule.
+- **Indexing**: the **Document Indexing** chart and the **Indexing Runs** list.
+  The chart shows only when the selected time window has indexing. The tab is available after the first run starts.
+
 The **Manage Index** menu has these actions:
 
 - **Update Index**: pull updates and index documents since the last successful run.
+- **Sync Permissions**: pull document permissions from the source (permission-synced Connectors).
 - **Full Re-index**: re-index all documents from the source. This can take hours or days on a large source.
-- **Start Indexing**: skip the connector checks and index now.
-- **Sync Permissions**: pull who can read each document from the source now (permission-synced Connectors).
 - **Pause Indexing & Syncs** / **Resume Indexing & Syncs**: stop or restart indexing runs and permission syncs.
   Indexed documents stay searchable while paused.
-- **Delete**: remove the Connector and its documents from Onyx.
+- **Delete Connector**: permanently remove the Connector and the documents only it indexed.
+
+Update Index and Full Re-index show once the Connector has indexed. A paused Connector shows only Resume and Delete.
+If the connector checks hold the first index, the menu shows **Start Indexing** in their place,
+which skips the checks and indexes now.
 
 <img className="rounded-image" src="/assets/admins/connectors/connector_details.webp" alt="Onyx Connector details page showing connector details"/>
 

@@ -87,6 +87,8 @@ interface SettingsRootProps extends WithoutStyles<
    * `loading`. @default false
    */
   error?: SettingsPageError;
+  /** Below 816 px of page width, the header and body keep 8 px side gutters in place of 16. @default false */
+  narrowGutters?: boolean;
 }
 
 /**
@@ -99,6 +101,7 @@ function SettingsRoot({
   animateEnter = true,
   loading = false,
   error = false,
+  narrowGutters = false,
   ...props
 }: SettingsRootProps) {
   // The header reports its title here, so the body's error state can name
@@ -112,7 +115,13 @@ function SettingsRoot({
         id="page-wrapper-scroll-container"
         className="w-full h-full flex flex-col items-center overflow-y-auto"
       >
-        <div className={cn("h-full", widthClasses[width])}>
+        <div
+          className={cn(
+            "h-full",
+            widthClasses[width],
+            narrowGutters && "@container/settings-page"
+          )}
+        >
           <div {...props} />
         </div>
       </div>
@@ -263,7 +272,7 @@ function SettingsHeader({
     >
       <Spacer rem={3.25} />
 
-      <div className="flex flex-col gap-6 px-4">
+      <div className="flex flex-col gap-6 px-4 @max-[51rem]/settings-page:px-2">
         <div
           className={cn(
             "flex w-full items-start justify-between gap-4",
@@ -356,7 +365,7 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
   );
   const body = (
     <div
-      className="pt-6 pb-18 px-4 flex flex-col w-full"
+      className="pt-6 pb-18 px-4 @max-[51rem]/settings-page:px-2 flex flex-col w-full"
       style={{ gap: spacingToRem(gap) }}
       {...props}
     >

@@ -1,7 +1,16 @@
 "use client";
 
-import { useNavigation } from "@opal/navigation";
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import type { Route } from "next";
+import { useNavigation, useSearchParams } from "@opal/navigation";
+import {
+  use,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
@@ -9,6 +18,7 @@ import {
   Divider,
   Dropdown,
   MessageCard,
+  Tabs,
   Text,
   type DropdownMenuItem,
 } from "@opal/components";
@@ -20,8 +30,8 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { IconLoader, PageLoader } from "@opal/loaders";
-import { markdown } from "@opal/utils";
+import { CardLoader, IconLoader } from "@opal/loaders";
+import { cn, markdown } from "@opal/utils";
 import { SvgPlugBroken } from "@opal/illustrations";
 import {
   SvgArrowLeft,
@@ -55,7 +65,9 @@ import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import {
+  CC_PAIR_STATUS_POLL_MS,
   useActivityChartLinks,
+  useLatestCCPairRun,
   useStatusChange,
 } from "@/lib/connectors/ccPair/hooks";
 import { can } from "@/lib/permissions/resource-actions";
@@ -68,22 +80,50 @@ import AuthenticationAccountSection from "@/views/admin/connectors/ConnectorDeta
 import IndexConfigurationsSection from "@/views/admin/connectors/ConnectorDetailPage/IndexConfigurationsSection";
 import SharingSettingsSection from "@/views/admin/connectors/ConnectorDetailPage/SharingSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/ConnectorDetailPage/ScheduleSection";
-import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
-import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
+import IndexingTab from "@/views/admin/connectors/ConnectorDetailPage/IndexingTab";
+import ActivityPanel, {
+  type ActivityPanelBeside,
+} from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
+import { useAdminTopBar } from "@/layouts/chromes/AdminTopBarSlot";
 import {
   pickWindow,
   type PickerWindow,
   type PickedWindow,
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
-import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
-const CC_PAIR_POLL_MS = 5000;
+type ConnectorTab = "configurations" | "indexing";
+
+function parseTab(value: string | null): ConnectorTab {
+  return value === "indexing" ? "indexing" : "configurations";
+}
+
+/** The pair has an index attempt under the current model or documents from an earlier one. The attempt count covers only the current search settings, so a model swap would otherwise read as never indexed. */
+function hasIndexed(ccPair: CCPairFullInfo): boolean {
+  return ccPair.number_of_index_attempts > 0 || ccPair.num_docs_indexed > 0;
+}
+
+/** The pair has indexed, queued a permission sync, or has a group sync run in any state, so the Indexing tab has a run to show. A group sync can start before the first index, and the pair records only its successes. */
+function hasStartedARun(
+  ccPair: CCPairFullInfo,
+  hasGroupSyncRun: boolean
+): boolean {
+  return (
+    hasIndexed(ccPair) ||
+    ccPair.last_permission_sync_attempt_status !== null ||
+    ccPair.last_time_external_group_sync !== null ||
+    hasGroupSyncRun
+  );
+}
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
   const tActivities = useTranslations("admin.indexing.activities");
   const navigation = useNavigation();
+  const searchParams = useSearchParams();
+  const [pickedTab, setPickedTab] = useState<ConnectorTab>(() =>
+    parseTab(searchParams.get("tab"))
+  );
 
   const {
     data: ccPair,
@@ -92,7 +132,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useSWR<CCPairFullInfo>(
     buildCCPairInfoUrl(ccPairId),
     errorHandlingFetcher,
-    { refreshInterval: CC_PAIR_POLL_MS }
+    { refreshInterval: CC_PAIR_STATUS_POLL_MS }
+  );
+  // The status card reads the same feed, so this shares its request.
+  const { data: groupSyncRuns } = useLatestCCPairRun(
+    ccPairId,
+    "group_sync",
+    ccPair !== undefined && isPermSynced(ccPair.access_type),
+    CC_PAIR_STATUS_POLL_MS
   );
 
   const {
@@ -108,8 +155,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     useState(false);
   // Counts the status card's asks to open the checks card.
   const [checksExpandRequest, setChecksExpandRequest] = useState(0);
-  const [runFocus, setRunFocus] = useState(false);
-  // One window drives the status card's chart and the runs card's list.
+  // One window drives the Indexing tab's chart and run list.
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
     pickWindow("24h")
   );
@@ -121,6 +167,19 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const changeWindow = (picked: PickerWindow) => {
     setTimeWindow(pickWindow(picked));
     setSliceRange(null);
+  };
+  // A shallow replace keeps the tab across a reload without a router navigation, which would refetch the page's data.
+  const selectTab = (next: ConnectorTab) => {
+    setPickedTab(next);
+    // The span's only clear control is the chart's picker, which leaves with the Indexing tab.
+    if (next !== "indexing") setSliceRange(null);
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("tab", next);
+    // SAFETY: a query-only href keeps this page's path.
+    navigation.go(`?${query.toString()}` as Route, {
+      replace: true,
+      shallow: true,
+    });
   };
   const isSchedulingConnectorDeletionRef = useRef(false);
 
@@ -240,7 +299,19 @@ function Main({ ccPairId }: { ccPairId: number }) {
   };
 
   if (isLoadingCCPair) {
-    return <PageLoader />;
+    return (
+      <SettingsLayouts.Root width="xl" narrowGutters>
+        <BackToConnectors />
+        <PageBody>
+          <ConnectorTabs
+            value="configurations"
+            onValueChange={selectTab}
+            loading
+          />
+          <CardLoader descriptionLines={2} />
+        </PageBody>
+      </SettingsLayouts.Root>
+    );
   }
 
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {
@@ -278,9 +349,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
   // A credential-less source's pair holds a placeholder credential with no account or checks.
   const takesCredential = getCredentialSpec(source) !== null;
 
-  // Unlike `paused`, this excludes INVALID, whose menu still offers the re-index rows disabled with a reason.
+  // Unlike `paused`, this excludes INVALID, whose menu still offers the re-index rows, disabled with a reason, once it has indexed.
   const strictlyPaused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
   const held = ccPair.indexing_hold;
+  const runStarted = hasStartedARun(
+    ccPair,
+    (groupSyncRuns?.total_items ?? 0) > 0
+  );
+  // A disabled Indexing tab shows Configurations but keeps the pick, so the poll that enables it opens the tab the URL asked for.
+  const tab = runStarted ? pickedTab : "configurations";
   // While held, the menu offers Start Indexing in place of the re-index rows; a check run in flight releases the hold itself.
   const canStartIndexing = held !== null && held.reason !== "checks_running";
   // The reason a row is disabled is its tooltip.
@@ -302,31 +379,27 @@ function Main({ ccPairId }: { ccPairId: number }) {
         },
       ]
     : [];
-  const reIndexItems: DropdownMenuItem[] =
-    strictlyPaused || held !== null
-      ? []
-      : [
+  // The first index is already on its way, so there is nothing to update or re-index before it starts.
+  const reIndexable = held === null && hasIndexed(ccPair);
+  const reIndexItems = (full: boolean): DropdownMenuItem[] =>
+    reIndexable
+      ? [
           {
             kind: "action",
-            id: "update-index",
-            icon: SvgRefreshCw,
-            title: t("manageMenu.updateIndex.label"),
-            description: t("manageMenu.updateIndex.description"),
+            id: full ? "full-reindex" : "update-index",
+            icon: full ? SvgSlowMotion : SvgRefreshCw,
+            title: full
+              ? t("manageMenu.fullReindex.label")
+              : t("manageMenu.updateIndex.label"),
+            description: full
+              ? markdown(t("manageMenu.fullReindex.description"))
+              : t("manageMenu.updateIndex.description"),
             tooltip: reIndexBlocked,
             disabled: reIndexBlocked !== undefined,
-            onSelect: () => void triggerReIndex(false),
+            onSelect: () => void triggerReIndex(full),
           },
-          {
-            kind: "action",
-            id: "full-reindex",
-            icon: SvgSlowMotion,
-            title: t("manageMenu.fullReindex.label"),
-            description: markdown(t("manageMenu.fullReindex.description")),
-            tooltip: reIndexBlocked,
-            disabled: reIndexBlocked !== undefined,
-            onSelect: () => void triggerReIndex(true),
-          },
-        ];
+        ]
+      : [];
   // The route refuses a second sync while one is queued or running.
   const syncOpen =
     ccPair.permission_syncing ||
@@ -390,6 +463,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 icon: SvgTrash,
                 danger: true,
                 title: t("manageMenu.delete.label"),
+                description: t("manageMenu.delete.description"),
                 onSelect: () => setShowDeleteConnectorConfirmModal(true),
               },
             ],
@@ -400,14 +474,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
     ? [...toggleItems, ...dangerItems]
     : [
         ...startItems,
-        ...reIndexItems,
+        ...reIndexItems(false),
         ...syncItems,
+        ...reIndexItems(true),
         ...toggleItems,
         ...dangerItems,
       ];
 
   return (
-    <SettingsLayouts.Root width="xl">
+    <SettingsLayouts.Root width="xl" narrowGutters>
       {ConfirmModal}
       {showDeleteConnectorConfirmModal && (
         <ConfirmEntityModal
@@ -464,71 +539,71 @@ function Main({ ccPairId }: { ccPairId: number }) {
         }
       />
 
-      <SettingsLayouts.Body>
-        {/* The panel sits beside the column on wide screens and under it elsewhere. min-w-0 lets the column shrink under long content. */}
-        <Section
-          flexDirection="row"
-          alignItems="start"
-          gap={4}
-          height="fit"
-          className="max-lg:flex-col"
-        >
-          <Section
-            alignItems="stretch"
-            gap={6}
-            height="fit"
-            className="min-w-0 flex-1"
-          >
-            {ccPair.deletion_failure_message && isDeleting && (
-              <MessageCard
-                variant="error"
-                title={t("deletionError.title")}
-                description={t("deletionError.description")}
-                bottomChildren={
-                  <Text font="secondary-body" color="text-04">
-                    {ccPair.deletion_failure_message}
-                  </Text>
-                }
-              />
-            )}
-            {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
-              <MessageCard
-                variant="warning"
-                title={t("invalidState.title")}
-                description={t("invalidState.description")}
-              />
-            )}
-            {ccPair.pending_backfills.length > 0 && (
-              <PendingBackfills backfills={ccPair.pending_backfills} />
-            )}
+      <PageBody
+        panel={
+          // Always shown: this page has no control to reopen a hidden panel.
+          <ActivityPanel
+            scope={{
+              ccPairId: ccPair.id,
+              canResolve: canOperate && ccPair.supports_targeted_reindex,
+              canResolveRuns: canOperate,
+            }}
+            title={tActivities("title")}
+            range={sliceRange}
+            onClearRange={clearRange}
+            beside={BESIDE.panel}
+            {...activityLinks.panel}
+          />
+        }
+      >
+        {ccPair.deletion_failure_message && isDeleting && (
+          <MessageCard
+            variant="error"
+            title={t("deletionError.title")}
+            description={t("deletionError.description")}
+            bottomChildren={
+              <Text font="secondary-body" color="text-04">
+                {ccPair.deletion_failure_message}
+              </Text>
+            }
+          />
+        )}
+        {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
+          <MessageCard
+            variant="warning"
+            title={t("invalidState.title")}
+            description={t("invalidState.description")}
+          />
+        )}
+        {ccPair.pending_backfills.length > 0 && (
+          <PendingBackfills backfills={ccPair.pending_backfills} />
+        )}
 
-            <StatusCard
-              ccPair={ccPair}
-              onStartIndexing={canOperate ? () => void startIndexing() : null}
-              startingIndexing={busy}
-              onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
-              timeWindow={timeWindow.window}
-              onTimeWindowChange={changeWindow}
-              range={sliceRange}
-              onRangeChange={setSliceRange}
-              activityLinks={activityLinks.chart}
-            />
-            {takesCredential && (
-              <PairChecksCard
-                source={source}
-                credentialId={ccPair.credential.id}
-                connectorId={ccPair.connector.id}
-                held={ccPair.indexing_hold !== null}
-                expandRequest={checksExpandRequest}
-              />
-            )}
-            {/* While a run row's popover is open, the sections step back; the status card stays full. */}
-            <Section
-              alignItems="stretch"
-              gap={6}
-              height="fit"
-              className={focusDimClass(runFocus)}
-            >
+        <StatusCard
+          ccPair={ccPair}
+          onStartIndexing={canOperate ? () => void startIndexing() : null}
+          startingIndexing={busy}
+          onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
+        />
+        {takesCredential && (
+          <PairChecksCard
+            source={source}
+            credentialId={ccPair.credential.id}
+            connectorId={ccPair.connector.id}
+            held={ccPair.indexing_hold !== null}
+            expandRequest={checksExpandRequest}
+          />
+        )}
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+        <ConnectorTabs
+          value={tab}
+          onValueChange={selectTab}
+          indexingDisabled={!runStarted}
+        >
+          {/* Kept mounted so an inline edit survives a look at the Indexing tab. */}
+          <Tabs.Content value="configurations" keepMounted>
+            <Section alignItems="stretch" gap={6} height="fit">
               {takesCredential && (
                 <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
               )}
@@ -542,48 +617,146 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               <ScheduleSection ccPair={ccPair} editable={canOperate} />
             </Section>
-
-            <RunsCard
+          </Tabs.Content>
+          <Tabs.Content value="indexing">
+            <IndexingTab
               ccPairId={ccPair.id}
               canOperate={canOperate}
-              sharedWindow={timeWindow}
-              onSharedWindowChange={changeWindow}
-              onFocusChange={setRunFocus}
+              timeWindow={timeWindow}
+              onTimeWindowChange={changeWindow}
               range={sliceRange}
-              onClearRange={clearRange}
+              onRangeChange={setSliceRange}
+              activityLinks={activityLinks.chart}
+              liftedAttemptId={
+                activityLinks.chart.hoveredAttemptId ??
+                activityLinks.panel.focusAttemptId
+              }
             />
-          </Section>
-          {/* Always shown: this page has no control to reopen a hidden panel. */}
-          <ActivityPanel
-            scope={{
-              ccPairId: ccPair.id,
-              canResolve: canOperate && ccPair.supports_targeted_reindex,
-              canResolveRuns: canOperate,
-            }}
-            title={tActivities("title")}
-            range={sliceRange}
-            onClearRange={clearRange}
-            {...activityLinks.panel}
-          />
-        </Section>
-      </SettingsLayouts.Body>
+          </Tabs.Content>
+        </ConnectorTabs>
+      </PageBody>
     </SettingsLayouts.Root>
   );
 }
 
+interface PageBodyProps {
+  children: ReactNode;
+  panel?: ReactNode;
+}
+
+/**
+ * The body's layout on its @container: the panel beside the column from 816 px
+ * of content, the design's stack point, and under it below. Tailwind reads
+ * whole class literals, so each class spells the width out.
+ */
+const BESIDE = {
+  row: "@max-[51rem]:flex-col @max-[51rem]:items-stretch",
+  // 640 px is the design's column width beside the panel. Stacked, it takes the full width.
+  column: "@min-[51rem]:max-w-[40rem]",
+  panel: {
+    panel:
+      "@min-[51rem]:w-100 @min-[51rem]:shrink-0 @min-[51rem]:h-auto @min-[51rem]:self-stretch @min-[51rem]:contain-size",
+    body: "@min-[51rem]:max-h-full",
+  } satisfies ActivityPanelBeside,
+};
+
+/** The column and the Activities panel beside it, the panel under the column below 816 px of content. */
+function PageBody({ children, panel }: PageBodyProps) {
+  return (
+    <SettingsLayouts.Body>
+      <Section height="fit" className="@container">
+        <Section
+          flexDirection="row"
+          alignItems="start"
+          justifyContent="center"
+          gap={4}
+          height="fit"
+          className={BESIDE.row}
+        >
+          {/* min-w-0 lets the column shrink under long content. */}
+          <Section
+            alignItems="stretch"
+            gap={6}
+            height="fit"
+            className={cn("min-w-0 flex-1", BESIDE.column)}
+          >
+            {children}
+          </Section>
+          {panel}
+        </Section>
+      </Section>
+    </SettingsLayouts.Body>
+  );
+}
+
+interface ConnectorTabsProps {
+  value: ConnectorTab;
+  onValueChange: (tab: ConnectorTab) => void;
+  /** Both tabs wait for the pair. */
+  loading?: boolean;
+  indexingDisabled?: boolean;
+  children?: ReactNode;
+}
+
+function ConnectorTabs({
+  value,
+  onValueChange,
+  loading = false,
+  indexingDisabled = false,
+  children,
+}: ConnectorTabsProps) {
+  const t = useTranslations("admin.connector.tabs");
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) => onValueChange(parseTab(next))}
+      gap={6}
+    >
+      <Tabs.List>
+        <Tabs.Trigger value="configurations" disabled={loading}>
+          {t("configurations")}
+        </Tabs.Trigger>
+        <Tabs.Trigger
+          value="indexing"
+          disabled={loading || indexingDisabled}
+          tooltip={
+            !loading && indexingDisabled ? t("indexingDisabled") : undefined
+          }
+        >
+          {t("indexing")}
+        </Tabs.Trigger>
+      </Tabs.List>
+      {children}
+    </Tabs>
+  );
+}
+
+/** The back link, in the admin top bar beside the sidebar button while there is one. */
 function BackToConnectors() {
   const t = useTranslations("admin.connector");
   const navigation = useNavigation();
+  const topBar = useAdminTopBar();
+  const link = (
+    <Button
+      icon={SvgArrowLeft}
+      prominence="tertiary"
+      size="md"
+      {...navigation.linkTo(ADMIN_ROUTES.INDEXING_STATUS.path)}
+    >
+      {t("backButton.label")}
+    </Button>
+  );
+  if (topBar !== null) return createPortal(link, topBar);
   return (
-    <Section alignItems="start" height="fit" padding={4}>
-      <Button
-        icon={SvgArrowLeft}
-        prominence="tertiary"
-        size="md"
-        {...navigation.linkTo(ADMIN_ROUTES.INDEXING_STATUS.path)}
-      >
-        {t("backButton.label")}
-      </Button>
+    // Section's padding is inline, so the narrow gutter comes off the margin: 16 px, then 8 below 816 px of page.
+    <Section
+      alignItems="start"
+      width="auto"
+      height="fit"
+      padding={2}
+      className="m-2 @max-[51rem]/settings-page:mx-0"
+    >
+      {link}
     </Section>
   );
 }
