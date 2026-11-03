@@ -187,6 +187,24 @@ def get_search_settings_by_id(
     return db_session.get(SearchSettings, search_settings_id)
 
 
+def lock_search_settings_for_share(
+    db_session: Session, search_settings_id: int
+) -> SearchSettings | None:
+    """The row under a share lock (SELECT ... FOR SHARE) until the transaction ends.
+    A swap's status flip waits for every holder, so a caller that reads `status`
+    here either commits before the flip or sees the post-flip status. Readers do
+    not block each other."""
+    return (
+        db_session.execute(
+            select(SearchSettings)
+            .where(SearchSettings.id == search_settings_id)
+            .with_for_update(read=True)
+        )
+        .scalars()
+        .first()
+    )
+
+
 def active_secondary_port_target(db_session: Session) -> SearchSettings | None:
     """The secondary index a reindex-port is populating (the dual-write target), or None.
     Pure — never unpins a drained INSTANT source (unlike _resolve_port_target_settings).
