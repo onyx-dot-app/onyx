@@ -518,12 +518,15 @@ def _cancel_index_attempt__no_commit(
     """Cancels an active attempt the way a pause does. A first attempt that
     waits for the capability checks has no task to see a cancel request, so it
     ends now and stays undispatched. Any other gets the request its task reads.
-    Returns the task id to revoke after the caller commits."""
+    Returns the task id to revoke after the caller commits. A retry's task
+    serves every pair of its job, so it is never revoked."""
     if attempt.celery_task_id is None and cancel_waiting_index_attempt__no_commit(
         db_session, attempt.id, reason
     ):
         return None
     IndexingCoordination.request_cancellation__no_commit(db_session, attempt.id)
+    if attempt.targeted_reindex_job_id is not None:
+        return None
     return attempt.celery_task_id
 
 
