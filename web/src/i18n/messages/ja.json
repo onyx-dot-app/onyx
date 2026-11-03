@@ -2649,7 +2649,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "削除"
+          "label": "コネクターを削除",
+          "description": "インデックス済みのドキュメントをすべて完全に削除します。"
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2689,7 @@
         },
         "syncPermissions": {
           "label": "権限を同期",
-          "description": "各ドキュメントを閲覧できるユーザーを今すぐソースから取得します。",
+          "description": "ソースからドキュメントの権限を取得します。",
           "tooltip": {
             "syncing": "権限の同期はすでに待機中または実行中です"
           }
@@ -2822,7 +2823,7 @@
         },
         "documents": {
           "totalLabel": "インデックス済みドキュメント合計",
-          "recentLabel": "最近処理されたドキュメント",
+          "recentLabel": "最近処理したドキュメント",
           "syncedPermissionsLabel": "同期済みの権限",
           "syncedMembershipsLabel": "同期済みのグループメンバーシップ"
         },
@@ -3255,6 +3256,15 @@
           "tooltip": "このステージのバッチ時間は大きくばらついています"
         },
         "close": "ステージ詳細を閉じる"
+      },
+      "tabs": {
+        "configurations": "コネクター設定",
+        "indexing": "インデックス",
+        "indexingDisabled": "最初の実行が始まると利用できます。"
+      },
+      "indexingTab": {
+        "chartHeading": "ドキュメントのインデックス",
+        "runsHeading": "インデックス実行"
       }
     },
     "connectorTitle": {

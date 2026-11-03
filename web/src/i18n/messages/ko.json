@@ -2649,7 +2649,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "삭제"
+          "label": "커넥터 삭제",
+          "description": "인덱싱된 모든 문서를 영구적으로 제거합니다."
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2689,7 @@
         },
         "syncPermissions": {
           "label": "권한 동기화",
-          "description": "각 문서를 읽을 수 있는 사용자를 지금 소스에서 가져옵니다.",
+          "description": "소스에서 문서 권한을 가져옵니다.",
           "tooltip": {
             "syncing": "권한 동기화가 이미 대기 중이거나 실행 중입니다"
           }
@@ -2822,7 +2823,7 @@
         },
         "documents": {
           "totalLabel": "전체 인덱싱 완료 문서",
-          "recentLabel": "최근 처리된 문서",
+          "recentLabel": "최근에 처리된 문서",
           "syncedPermissionsLabel": "동기화된 권한",
           "syncedMembershipsLabel": "동기화된 그룹 멤버십"
         },
@@ -3255,6 +3256,15 @@
           "tooltip": "이 단계의 배치 시간 편차가 큽니다"
         },
         "close": "단계 세부 정보 닫기"
+      },
+      "tabs": {
+        "configurations": "커넥터 구성",
+        "indexing": "인덱싱",
+        "indexingDisabled": "첫 실행이 시작되면 사용할 수 있습니다."
+      },
+      "indexingTab": {
+        "chartHeading": "문서 인덱싱",
+        "runsHeading": "인덱싱 실행"
       }
     },
     "connectorTitle": {

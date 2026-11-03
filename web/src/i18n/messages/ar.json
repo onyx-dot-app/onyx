@@ -2649,7 +2649,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "حذف"
+          "label": "حذف الموصل",
+          "description": "إزالة جميع المستندات المفهرسة نهائيًا."
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2689,7 @@
         },
         "syncPermissions": {
           "label": "مزامنة الأذونات",
-          "description": "اجلب الآن من المصدر من يمكنه قراءة كل مستند.",
+          "description": "اجلب أذونات المستندات من المصدر.",
           "tooltip": {
             "syncing": "توجد مزامنة أذونات في قائمة الانتظار أو قيد التشغيل بالفعل"
           }
@@ -2822,7 +2823,7 @@
         },
         "documents": {
           "totalLabel": "إجمالي المستندات المفهرسة",
-          "recentLabel": "المستندات المعالجة مؤخرًا",
+          "recentLabel": "مستندات عولجت مؤخرًا",
           "syncedPermissionsLabel": "الأذونات المتزامنة",
           "syncedMembershipsLabel": "عضويات المجموعات المتزامنة"
         },
@@ -3255,6 +3256,15 @@
           "tooltip": "تتفاوت أوقات الدفعات كثيرًا في هذه المرحلة"
         },
         "close": "إغلاق تفاصيل المراحل"
+      },
+      "tabs": {
+        "configurations": "إعدادات الموصل",
+        "indexing": "الفهرسة",
+        "indexingDisabled": "متاح بعد بدء التشغيل الأول."
+      },
+      "indexingTab": {
+        "chartHeading": "فهرسة المستندات",
+        "runsHeading": "عمليات الفهرسة"
       }
     },
     "connectorTitle": {

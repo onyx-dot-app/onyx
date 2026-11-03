@@ -23,8 +23,8 @@ import { SvgClock } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
 import { clickOnKeyDown, cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import { useThroughputData } from "@/lib/connectors/hooks";
+import { useCCPairThroughput } from "@/lib/connectors/ccPair/hooks";
+import type { ThroughputData } from "@/lib/connectors/hooks";
 import type {
   CCPairThroughputResponse,
   CCPairThroughputSliceRun,
@@ -883,22 +883,24 @@ export function ThroughputBars({
   );
 }
 
-export interface ThroughputChartProps extends ThroughputLinkProps {
-  ccPairId: number;
+/** The window holds no run and indexed no documents. */
+export function isEmptyThroughput(data: CCPairThroughputResponse): boolean {
+  return data.runs.length === 0 && data.docs_indexed.every((n) => n === 0);
+}
+
+export interface ThroughputChartViewProps extends ThroughputLinkProps {
+  /** The response its caller polls, so the caller can read it too. */
+  throughput: ThroughputData<CCPairThroughputResponse>;
   range: CCPairThroughputWindow;
 }
 
-/** One pair's throughput over the window, polled, in as many bars as its width fits. */
-export default function ThroughputChart({
-  ccPairId,
+/** A pair's throughput over the window, measured and fetched by the caller, with its loading and error states. */
+export function ThroughputChartView({
+  throughput: { ref, data, error, stale },
   range,
   ...links
-}: ThroughputChartProps) {
+}: ThroughputChartViewProps) {
   const t = useTranslations("admin.connector.statusCard.throughput");
-  const { ref, data, error, stale } =
-    useThroughputData<CCPairThroughputResponse>((bins, tzOffsetMinutes) =>
-      SWR_KEYS.ccPairThroughput(ccPairId, range, bins, tzOffsetMinutes)
-    );
   let body: ReactNode;
   if (error !== undefined) {
     body = <MessageCard variant="error" title={t("loadError")} />;
@@ -925,5 +927,22 @@ export default function ThroughputChart({
     >
       {body}
     </Section>
+  );
+}
+
+export interface ThroughputChartProps extends ThroughputLinkProps {
+  ccPairId: number;
+  range: CCPairThroughputWindow;
+}
+
+/** One pair's throughput over the window, polled, in as many bars as its width fits. */
+export default function ThroughputChart({
+  ccPairId,
+  range,
+  ...links
+}: ThroughputChartProps) {
+  const throughput = useCCPairThroughput(ccPairId, range);
+  return (
+    <ThroughputChartView throughput={throughput} range={range} {...links} />
   );
 }

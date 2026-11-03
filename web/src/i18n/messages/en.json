@@ -2649,7 +2649,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Delete"
+          "label": "Delete Connector",
+          "description": "Permanently remove all indexed docs."
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2689,7 @@
         },
         "syncPermissions": {
           "label": "Sync Permissions",
-          "description": "Pull who can read each doc from the source now.",
+          "description": "Pull doc permissions from the source.",
           "tooltip": {
             "syncing": "A permission sync is already queued or running"
           }
@@ -2822,7 +2823,7 @@
         },
         "documents": {
           "totalLabel": "Total documents indexed",
-          "recentLabel": "Recently processed documents",
+          "recentLabel": "Docs processed recently",
           "syncedPermissionsLabel": "Synced permissions",
           "syncedMembershipsLabel": "Synced group memberships"
         },
@@ -3255,6 +3256,15 @@
           "tooltip": "Batch times vary widely for this stage"
         },
         "close": "Close stage details"
+      },
+      "tabs": {
+        "configurations": "Connector Configurations",
+        "indexing": "Indexing",
+        "indexingDisabled": "Available after the first run starts."
+      },
+      "indexingTab": {
+        "chartHeading": "Document Indexing",
+        "runsHeading": "Indexing Runs"
       }
     },
     "connectorTitle": {

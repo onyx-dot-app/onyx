@@ -433,11 +433,26 @@ export interface ActivityPanelProps extends Partial<ActivityPanelLinks> {
   range?: SliceRange | null;
   /** Drops `range`, from the empty panel's "Past Activities". */
   onClearRange?: () => void;
-  /** Keeps the card in view under the page header while the column beside it scrolls. */
+  /** Keeps the card in view under the page header while the column beside it scrolls. Beside the column at the viewport's lg only. */
   sticky?: boolean;
+  /** The classes that size the card beside the column, each under the breakpoint that puts it there. */
+  beside?: ActivityPanelBeside;
   className?: string;
   ref?: React.Ref<HTMLDivElement>;
 }
+
+export interface ActivityPanelBeside {
+  /** On the panel: its width cap, and the size containment that makes it stretch to the column's height. */
+  panel: string;
+  /** On the card's wrapper: its cap at the panel's height, so a long list scrolls inside the card. */
+  body: string;
+}
+
+// The status page puts the panel beside its column from the viewport's lg up.
+const BESIDE_AT_LG: ActivityPanelBeside = {
+  panel: "lg:w-100 lg:shrink-0 lg:h-auto lg:self-stretch lg:contain-size",
+  body: "lg:max-h-full",
+};
 
 /** The scope's runs by level, in sections: open failures, open errors, running, the level's resolved runs a toggle away, then successes and cancels. */
 export default function ActivityPanel({
@@ -447,6 +462,7 @@ export default function ActivityPanel({
   range = null,
   onClearRange,
   sticky = false,
+  beside = BESIDE_AT_LG,
   className,
   ref,
   onHoverAttempt,
@@ -726,10 +742,7 @@ export default function ActivityPanel({
       alignItems="stretch"
       width="full"
       height="fit"
-      className={cn(
-        "lg:w-100 lg:shrink-0 lg:h-auto lg:self-stretch lg:contain-size",
-        className
-      )}
+      className={cn(beside.panel, className)}
       data-testid="connector-activity"
       // The stack trace opens beside this edge.
       data-side-panel=""
@@ -739,7 +752,8 @@ export default function ActivityPanel({
         alignItems="stretch"
         height="fit"
         className={cn(
-          "min-h-0 lg:max-h-full",
+          "min-h-0",
+          beside.body,
           sticky &&
             "lg:sticky lg:top-[calc(var(--settings-header-height,0px)_+_1.5rem)] lg:max-h-[min(100%,calc(var(--settings-scroll-height)_-_var(--settings-header-height,0px)_-_6rem))]"
         )}

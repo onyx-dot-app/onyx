@@ -2649,7 +2649,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Excluir"
+          "label": "Excluir conector",
+          "description": "Remover permanentemente todos os documentos indexados."
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2689,7 @@
         },
         "syncPermissions": {
           "label": "Sincronizar permissões",
-          "description": "Buscar agora na fonte quem pode ler cada documento.",
+          "description": "Buscar as permissões dos documentos na fonte.",
           "tooltip": {
             "syncing": "Uma sincronização de permissões já está na fila ou em andamento"
           }
@@ -2822,7 +2823,7 @@
         },
         "documents": {
           "totalLabel": "Total de documentos no índice",
-          "recentLabel": "Documentos processados recentemente",
+          "recentLabel": "Documentos processados há pouco",
           "syncedPermissionsLabel": "Permissões sincronizadas",
           "syncedMembershipsLabel": "Associações a grupos sincronizadas"
         },
@@ -3255,6 +3256,15 @@
           "tooltip": "Os tempos por lote variam muito nesta etapa"
         },
         "close": "Fechar detalhes das etapas"
+      },
+      "tabs": {
+        "configurations": "Configurações do conector",
+        "indexing": "Indexação",
+        "indexingDisabled": "Disponível quando a primeira execução começar."
+      },
+      "indexingTab": {
+        "chartHeading": "Indexação de documentos",
+        "runsHeading": "Execuções de indexação"
       }
     },
     "connectorTitle": {

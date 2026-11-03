@@ -1,8 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import useSWR from "swr";
-import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
+import { Badge, Button, Card, Popover, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import {
@@ -18,13 +17,14 @@ import {
   ConnectorCredentialPairStatus,
   type CCPairFullInfo,
   type CCPairRun,
-  type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
 import type { AccessType } from "@/lib/types";
 import { isPermSynced } from "@/lib/connectors/accessType";
-import { useLatestCCPairRun } from "@/lib/connectors/ccPair/hooks";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  CC_PAIR_STATUS_POLL_MS,
+  useLatestCCPairRun,
+  useLatestIndexAttempt,
+} from "@/lib/connectors/ccPair/hooks";
 import {
   attemptStatusTag,
   ccPairStatusTag,
@@ -41,13 +41,6 @@ import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTa
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
-import ThroughputChart, {
-  ThroughputWindowPicker,
-  PAIR_WINDOWS,
-  type PickerWindow,
-  type SliceRange,
-  type ThroughputActivityLinks,
-} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 // Statuses a pair keeps until its first index succeeds, a failed first run included.
 const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
@@ -91,7 +84,7 @@ interface FigureStatBlockProps {
   value: number;
   label: string | RichStr;
 }
-function FigureStatBlock({ value, label }: FigureStatBlockProps) {
+export function FigureStatBlock({ value, label }: FigureStatBlockProps) {
   const locale = useLocale();
   return (
     <StatBlock fixed>
@@ -104,9 +97,6 @@ function FigureStatBlock({ value, label }: FigureStatBlockProps) {
     </StatBlock>
   );
 }
-
-// Matches the page's own poll of the pair.
-const POLL_MS = 5000;
 
 interface SyncStatBlockProps {
   title: string | RichStr;
@@ -199,48 +189,31 @@ export interface StatusCardProps {
   startingIndexing: boolean;
   /** Opens the checks card, from the checks icon a held pair shows in place of its stages. */
   onViewChecks: () => void;
-  /** The page's time window, shared with the runs card. */
-  timeWindow: PickerWindow;
-  onTimeWindowChange: (window: PickerWindow) => void;
-  /** The span of the chart the page is narrowed to: a click or drag on the chart picks one, the chip's X clears it. */
-  range?: SliceRange | null;
-  onRangeChange?: (range: SliceRange | null) => void;
-  /** Ties the chart to the page's activity panel. */
-  activityLinks?: ThroughputActivityLinks;
 }
 
-/** The pair at a glance: its indexing and permission sync statuses or its document access, then its documents and documents indexed over time. */
+/** The pair at a glance: its indexing and permission sync statuses or its document access, then its documents. */
 export default function StatusCard({
   ccPair,
   onStartIndexing,
   startingIndexing,
   onViewChecks,
-  timeWindow,
-  onTimeWindowChange,
-  range = null,
-  onRangeChange,
-  activityLinks,
 }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const locale = useLocale();
   const hold = ccPair.indexing_hold;
-  const { data: latestIndexAttempts, error } = useSWR<PaginatedIndexAttempts>(
-    SWR_KEYS.ccPairLatestIndexAttempt(ccPair.id),
-    errorHandlingFetcher,
-    { refreshInterval: POLL_MS }
-  );
+  const { data: latestIndexAttempts, error } = useLatestIndexAttempt(ccPair.id);
   const permSynced = isPermSynced(ccPair.access_type);
   const docSync = useLatestCCPairRun(
     ccPair.id,
     "doc_permission_sync",
     permSynced,
-    POLL_MS
+    CC_PAIR_STATUS_POLL_MS
   );
   const groupSync = useLatestCCPairRun(
     ccPair.id,
     "group_sync",
     permSynced,
-    POLL_MS
+    CC_PAIR_STATUS_POLL_MS
   );
   // Waits for the latest attempt, so a running pair never flashes as indexed, and for the sync runs, so the columns land together.
   if (
@@ -267,7 +240,6 @@ export default function StatusCard({
     ccPair.num_docs_indexed > 0
       ? ccPair.overall_indexing_speed.toLocaleString(locale, RATE_FORMAT)
       : null;
-  const recent = latestIndexAttempt?.total_docs_indexed ?? 0;
   const lastIndexed = t("lastIndexed.value", {
     when: timeAgo(ccPair.last_indexed, locale) ?? "-",
   });
@@ -295,8 +267,6 @@ export default function StatusCard({
     groupSyncRun?.kind === "group_sync"
       ? groupSyncRun.attempt.total_group_memberships_synced
       : null;
-  // The chart waits for the first successful index, and a paused pair's counts no longer move.
-  const chart = !firstRun && !paused;
   // Before the first index succeeds, the card shows only documents a run already indexed.
   const showsDocuments = !firstRun || ccPair.num_docs_indexed > 0;
 
@@ -398,89 +368,29 @@ export default function StatusCard({
       </Popover>
       {showsDocuments && (
         <Card border="solid" rounding={4} padding={2}>
-          <Section alignItems="stretch" gap={1} height="fit">
-            <Section
-              flexDirection="row"
-              alignItems="start"
-              justifyContent="start"
-              gap={1}
-              height="fit"
-            >
-              {/* The figures wrap among themselves, so the picker keeps the first line and a picked span's longer label never pushes the chart down. */}
-              <Section
-                flexDirection="row"
-                alignItems="start"
-                justifyContent="start"
-                gap={1}
-                width="auto"
-                height="fit"
-                // basis-0 lets the figures give way to the picker, since width="auto" adds shrink-0.
-                className="min-w-0 grow basis-0"
-                wrap
-              >
-                <FigureStatBlock
-                  value={ccPair.num_docs_indexed}
-                  label={t("documents.totalLabel")}
-                />
-                {paused && showsDocSync && syncedDocs !== null && (
-                  <FigureStatBlock
-                    value={syncedDocs}
-                    label={t("documents.syncedPermissionsLabel")}
-                  />
-                )}
-                {paused && showsGroupSync && syncedMemberships !== null && (
-                  <FigureStatBlock
-                    value={syncedMemberships}
-                    label={t("documents.syncedMembershipsLabel")}
-                  />
-                )}
-                {chart && (
-                  <FigureStatBlock
-                    value={recent}
-                    label={t("documents.recentLabel")}
-                  />
-                )}
-              </Section>
-              {chart && (
-                <Section
-                  flexDirection="row"
-                  justifyContent="end"
-                  alignItems="center"
-                  gap={1}
-                  width="fit"
-                  height="fit"
-                  className="shrink-0"
-                >
-                  <ThroughputWindowPicker
-                    windows={PAIR_WINDOWS}
-                    value={timeWindow}
-                    onChange={onTimeWindowChange}
-                    selection={range}
-                    onClearSelection={
-                      onRangeChange === undefined
-                        ? undefined
-                        : () => onRangeChange(null)
-                    }
-                  />
-                </Section>
-              )}
-            </Section>
-            {chart && (
-              // The chart sits 12px in from the card's sides and 8px from the row above.
-              <Section
-                padding={2}
-                alignItems="stretch"
-                height="fit"
-                className="mx-1"
-              >
-                <ThroughputChart
-                  ccPairId={ccPair.id}
-                  range={timeWindow}
-                  selection={range}
-                  onRangeSelect={onRangeChange}
-                  {...activityLinks}
-                />
-              </Section>
+          <Section
+            flexDirection="row"
+            alignItems="start"
+            justifyContent="start"
+            gap={1}
+            height="fit"
+            wrap
+          >
+            <FigureStatBlock
+              value={ccPair.num_docs_indexed}
+              label={t("documents.totalLabel")}
+            />
+            {paused && showsDocSync && syncedDocs !== null && (
+              <FigureStatBlock
+                value={syncedDocs}
+                label={t("documents.syncedPermissionsLabel")}
+              />
+            )}
+            {paused && showsGroupSync && syncedMemberships !== null && (
+              <FigureStatBlock
+                value={syncedMemberships}
+                label={t("documents.syncedMembershipsLabel")}
+              />
             )}
           </Section>
         </Card>

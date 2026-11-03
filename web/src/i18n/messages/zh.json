@@ -2649,7 +2649,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "删除"
+          "label": "删除连接器",
+          "description": "永久移除所有已索引的文档。"
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2689,7 @@
         },
         "syncPermissions": {
           "label": "同步权限",
-          "description": "立即从来源拉取每个文档的可读用户。",
+          "description": "从来源拉取文档权限。",
           "tooltip": {
             "syncing": "权限同步已在排队或运行"
           }
@@ -2822,7 +2823,7 @@
         },
         "documents": {
           "totalLabel": "已索引文档总数",
-          "recentLabel": "最近处理的文档",
+          "recentLabel": "近期处理的文档",
           "syncedPermissionsLabel": "已同步的权限",
           "syncedMembershipsLabel": "已同步的群组成员关系"
         },
@@ -3255,6 +3256,15 @@
           "tooltip": "此阶段各批次耗时差异很大"
         },
         "close": "关闭阶段详情"
+      },
+      "tabs": {
+        "configurations": "连接器配置",
+        "indexing": "索引",
+        "indexingDisabled": "首次运行开始后可用。"
+      },
+      "indexingTab": {
+        "chartHeading": "文档索引",
+        "runsHeading": "索引运行"
       }
     },
     "connectorTitle": {
