@@ -12777,9 +12777,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "이미지 생성"
-        },
         "emptyState": {
           "text": "생성된 이미지 없음"
         },
@@ -12788,9 +12785,6 @@
         },
         "generatedStatus": {
           "text": "{count, plural, one {이미지 #개 생성됨} other {이미지 #개 생성됨}}"
-        },
-        "generatingImagesStatus": {
-          "text": "이미지 생성 중..."
         },
         "generatingStatus": {
           "text": "이미지 생성 중..."
@@ -12957,9 +12951,6 @@
           },
           "executingTool": {
             "label": "도구 실행 중"
-          },
-          "generatingImage": {
-            "label": "이미지 생성 중..."
           },
           "generatingImages": {
             "label": "이미지 생성 중"
