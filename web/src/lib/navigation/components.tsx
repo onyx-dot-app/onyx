@@ -33,8 +33,12 @@ export function PendingRoute({ base, loader, children }: PendingRouteProps) {
 }
 
 export interface NavLinkProps<T extends string = string>
+  // `go` makes the navigation, so Link's own navigation props never apply.
   extends
-    Omit<React.ComponentProps<typeof Link>, "href" | "replace">,
+    Omit<
+      React.ComponentProps<typeof Link>,
+      "href" | "replace" | "scroll" | "onNavigate"
+    >,
     NavigationOptions {
   href: Route<T>;
 }
@@ -44,10 +48,11 @@ export function NavLink<T extends string>({
   href,
   replace,
   shallow,
+  scroll,
   onClick,
   ...props
 }: NavLinkProps<T>) {
-  const link = useNavigation().linkTo(href, { replace, shallow });
+  const link = useNavigation().linkTo(href, { replace, shallow, scroll });
   return (
     <Link
       {...props}

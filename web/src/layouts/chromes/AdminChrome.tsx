@@ -7,7 +7,11 @@ import { useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useAdminDocumentTitle } from "@/lib/app/hooks";
 import { PendingRoute } from "@/lib/navigation/components";
-import { useCurrentUrl, useNavigation } from "@/lib/navigation/navigation";
+import {
+  useCurrentPathname,
+  useNavigation,
+  useRouteRendering,
+} from "@/lib/navigation/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
@@ -39,7 +43,11 @@ export default function AdminChrome({
   const t = useTranslations("common");
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
-  const { pathname } = useCurrentUrl();
+  const pathname = useCurrentPathname();
+  // The proxy serves the EE pages under /admin/… URLs, but a direct visit to
+  // /ee/admin/… keeps that URL.
+  const base = pathname.startsWith("/ee/admin") ? "/ee/admin" : "/admin";
+  const routeRendering = useRouteRendering(base);
   const { vectorDbEnabled, isLoading, application_status } = useSettings();
   useAdminDocumentTitle();
   const navigation = useNavigation();
@@ -71,7 +79,8 @@ export default function AdminChrome({
   }, [denied, navigation, adminCapabilities]);
 
   let content = children;
-  if (isVectorDbRequiredRoute(pathname)) {
+  // While the URL's page renders, the page being left stays as it is.
+  if (!routeRendering && isVectorDbRequiredRoute(pathname)) {
     if (isLoading) {
       content = (
         <Section padding={8}>
@@ -119,9 +128,7 @@ export default function AdminChrome({
         )}
         <OpenSearchResourceBanner />
         <RootLayout.MainContent>
-          {/* The EE pages render under /ee/admin, but the proxy rewrites
-              them there, so their URLs are /admin/… too. */}
-          <PendingRoute base="/admin" loader={<PageLoader />}>
+          <PendingRoute base={base} loader={<PageLoader />}>
             {content}
           </PendingRoute>
         </RootLayout.MainContent>

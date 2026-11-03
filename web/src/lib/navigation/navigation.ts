@@ -75,8 +75,13 @@ function navigate<T extends string>(
     new URLSearchParams(window.location.search)
   );
   // Already there: a second entry for the same URL would make Back look like
-  // it does nothing.
-  if (urlKey(target.pathname, target.searchParams) === here) return;
+  // it does nothing. A new `#fragment` still counts as a move.
+  if (
+    urlKey(target.pathname, target.searchParams) === here &&
+    target.hash === window.location.hash
+  ) {
+    return;
+  }
 
   // The URL changes now, so everything that reads it follows the click at
   // once: Next keeps usePathname and useSearchParams in sync with the history
@@ -90,14 +95,16 @@ function navigate<T extends string>(
 }
 
 /**
- * Whether a click is a plain left click on a link that opens in this tab,
- * which a link may take over.
+ * Whether a click is a plain left click on a link that opens in this tab and
+ * does not download, which a link may take over.
  */
 function isPlainClick(event: React.MouseEvent<HTMLElement>): boolean {
-  const target = event.currentTarget.getAttribute("target");
+  const link = event.currentTarget;
+  const target = link.getAttribute("target");
   return (
     !event.defaultPrevented &&
     (target === null || target === "_self") &&
+    !link.hasAttribute("download") &&
     event.button === 0 &&
     !event.metaKey &&
     !event.ctrlKey &&

@@ -253,6 +253,7 @@ covers new files that match it.
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts` | chat-frontend |
 | `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
+| `web/src/lib/navigation/` | chat-frontend |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
@@ -380,7 +381,6 @@ the admin routes and check that each has a row above, run
 | `.github/` | CI. Read the workflow. |
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
 | `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, the sidebar that filters it by permission and feature flag, its labels, and the admin shell. A new admin route needs its own row above. |
-| `web/src/lib/navigation/` | Navigation for every surface: where the user is (`AppPosition`), how to go somewhere (`useNavigation`, `NavLink`), and the URL's loader until its page renders (`PendingRoute`). Every navigation goes through it (`web/AGENTS.md`). |
 | `web/src/lib/swr-keys.ts` | The SWR cache keys of the whole app. A key belongs to the component that fetches it; invalidate through the key, never a string literal. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
 | `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

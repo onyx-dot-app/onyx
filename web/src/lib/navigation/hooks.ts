@@ -70,6 +70,9 @@ function hrefFor(value: AppPositionType): Route {
   }
 }
 
+/** Every /app position renders its query on the client, so `go` is shallow. */
+type AppNavigationOptions = Omit<NavigationOptions, "shallow">;
+
 class AppPosition {
   constructor(
     private value: AppPositionType,
@@ -92,19 +95,19 @@ class AppPosition {
   // alone would make `chat()` mean the current chat with no argument and a
   // different chat with one — the same word for a question and a command.
 
-  openChat(chatSessionId: string, options?: NavigationOptions) {
+  openChat(chatSessionId: string, options?: AppNavigationOptions) {
     this.go({ location: "chat", id: chatSessionId }, options);
   }
 
-  openAgent(agentId: number, options?: NavigationOptions) {
+  openAgent(agentId: number, options?: AppNavigationOptions) {
     this.go({ location: "agent", id: agentId }, options);
   }
 
-  openProject(projectId: number, options?: NavigationOptions) {
+  openProject(projectId: number, options?: AppNavigationOptions) {
     this.go({ location: "project", id: projectId }, options);
   }
 
-  openNewSession(options?: NavigationOptions) {
+  openNewSession(options?: AppNavigationOptions) {
     this.go({ location: "new-session" }, options);
   }
 
@@ -135,7 +138,7 @@ class AppPosition {
     return this.navigation.linkTo(hrefFor(value), { shallow: true });
   }
 
-  private go(value: AppPositionType, options?: NavigationOptions) {
+  private go(value: AppPositionType, options?: AppNavigationOptions) {
     // Within /app only the query changes, and the page renders it on the
     // client, so writing the URL is the whole switch.
     this.navigation.go(hrefFor(value), { ...options, shallow: true });
