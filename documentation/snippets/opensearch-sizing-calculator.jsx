@@ -32,8 +32,8 @@ export const OpenSearchSizingCalculator = () => {
     { name: "OpenAI text-embedding-3-large", dims: 3072 },
     { name: "Gemini embedding-001", dims: 3072 },
   ];
-  // Starting estimates of chunks per item, until measured on real deployments.
-  // Mean chunks per item across Onyx Cloud tenants (November 2026).
+  // Mean chunks per item across Onyx Cloud tenants (November 2026), rounded. Spreadsheets are an
+  // estimate: Onyx caps a workbook at 24 chunks, and most measured sheets predate that cap.
   const SOURCES = [
     { key: "docs", label: "Documents", examples: "Google Docs, Word", unit: "files", ratio: 7 },
     { key: "pdfs", label: "PDFs", examples: "From any drive or upload", unit: "files", ratio: 12 },
@@ -49,6 +49,7 @@ export const OpenSearchSizingCalculator = () => {
     { key: "web", label: "Web pages", examples: "Websites, help centers", unit: "pages", ratio: 6 },
   ];
   const MAX_ITEMS = 10_000_000_000;
+  const MAX_RATIO = 1000;
   // From managed deployments, rounded up so that most estimates err on the high side.
   const CHUNKS_PER_EMPLOYEE_YEAR = 1500;
   // What the default rate assumes for one employee in one year: [type, items × chunks per item, chunks].
@@ -84,7 +85,7 @@ export const OpenSearchSizingCalculator = () => {
       ["email", "300000"],
     ].map(([key, count], k) => ({ id: k + 1, key, count, ratio: String(SOURCES.find((x) => x.key === key).ratio) }))
   );
-  const [sourceToAdd, setSourceToAdd] = useState("pdfs");
+  const [sourceToAdd, setSourceToAdd] = useState("slides");
   const [employees, setEmployees] = useState("500");
   const [years, setYears] = useState("5");
   const [perEmployeeYear, setPerEmployeeYear] = useState(String(CHUNKS_PER_EMPLOYEE_YEAR));
@@ -173,10 +174,13 @@ export const OpenSearchSizingCalculator = () => {
   };
   const sourceOf = (key) => SOURCES.find((x) => x.key === key);
   const singular = (unit) => unit.replace(/s$/, "");
-  const sourceChunks = sourceRows.map((r) => clampNumber(r.count, MAX_ITEMS) * clampNumber(r.ratio, 1000));
+  const sourceChunks = sourceRows.map((r) => clampNumber(r.count, MAX_ITEMS) * clampNumber(r.ratio, MAX_RATIO));
   const employeeCount = clampNumber(employees, MAX_EMPLOYEES);
   const yearCount = clampNumber(years, MAX_YEARS);
-  const employeeRate = clampNumber(perEmployeeYear, 1_000_000);
+  const MAX_EMPLOYEE_RATE = 1_000_000;
+  const employeeRate = clampNumber(perEmployeeYear, MAX_EMPLOYEE_RATE);
+  // Inputs keep what the user types, but never more than the maximum the math uses.
+  const capped = (value, max) => (Number(value) > max ? String(max) : value);
   const chunksToday =
     inputMode === "storage"
       ? (textGB * 1e9) / TEXT_PER_CHUNK
@@ -185,8 +189,11 @@ export const OpenSearchSizingCalculator = () => {
         : sourceChunks.reduce((a, b) => a + b, 0);
   const updateRow = (id, field, value) =>
     setSourceRows((rows) => rows.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  // Each type appears once, so its chunks are never counted twice.
+  const unusedSources = SOURCES.filter((x) => !sourceRows.some((r) => r.key === x.key));
+  const nextSource = unusedSources.some((x) => x.key === sourceToAdd) ? sourceToAdd : unusedSources[0]?.key;
   const addRow = () => {
-    const src = sourceOf(sourceToAdd);
+    const src = sourceOf(nextSource);
     setSourceRows((rows) => [
       ...rows,
       { id: Math.max(0, ...rows.map((r) => r.id)) + 1, key: src.key, count: "1000", ratio: String(src.ratio) },
@@ -301,9 +308,10 @@ export const OpenSearchSizingCalculator = () => {
                           id={"os-src-count-" + r.id}
                           type="number"
                           min="0"
+                          max={MAX_ITEMS}
                           aria-label={src.label + " " + src.unit}
                           value={r.count}
-                          onChange={(e) => updateRow(r.id, "count", e.target.value)}
+                          onChange={(e) => updateRow(r.id, "count", capped(e.target.value, MAX_ITEMS))}
                           className={input + " min-w-0 flex-1"}
                         />
                         <span className={hint + " shrink-0"}>{src.unit}</span>
@@ -314,10 +322,11 @@ export const OpenSearchSizingCalculator = () => {
                           id={"os-src-ratio-" + r.id}
                           type="number"
                           min="0"
+                          max={MAX_RATIO}
                           step="1"
-                          aria-label={"Chunks per " + singular(src.unit)}
+                          aria-label={src.label + ": chunks per " + singular(src.unit)}
                           value={r.ratio}
-                          onChange={(e) => updateRow(r.id, "ratio", e.target.value)}
+                          onChange={(e) => updateRow(r.id, "ratio", capped(e.target.value, MAX_RATIO))}
                           className={input + " w-20 shrink-0"}
                         />
                         <span className={hint}>{"per " + singular(src.unit)}</span>
@@ -327,16 +336,18 @@ export const OpenSearchSizingCalculator = () => {
                   </div>
                 );
               })}
-              <div className="flex flex-wrap items-center gap-2">
-                <select id="os-src-add" aria-label="Source to add" value={sourceToAdd} onChange={(e) => setSourceToAdd(e.target.value)} className={input + " min-w-0 flex-1"}>
-                  {SOURCES.map((x) => (
-                    <option key={x.key} value={x.key}>{x.label + " (" + x.unit + ")"}</option>
-                  ))}
-                </select>
-                <button type="button" onClick={addRow} className="rounded-lg border border-primary px-3 py-1.5 text-base text-primary dark:border-primary-light dark:text-primary-light">
-                  Add source
-                </button>
-              </div>
+              {unusedSources.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <select id="os-src-add" aria-label="Source to add" value={nextSource} onChange={(e) => setSourceToAdd(e.target.value)} className={input + " min-w-0 flex-1"}>
+                    {unusedSources.map((x) => (
+                      <option key={x.key} value={x.key}>{x.label + " (" + x.unit + ")"}</option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={addRow} className="rounded-lg border border-primary px-3 py-1.5 text-base text-primary dark:border-primary-light dark:text-primary-light">
+                    Add source
+                  </button>
+                </div>
+              )}
             </div>
           ) : inputMode === "employees" ? (
             <div className="space-y-4">
@@ -344,11 +355,11 @@ export const OpenSearchSizingCalculator = () => {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <label htmlFor="os-employees" className={label}>Employees</label>
-                  <input id="os-employees" type="number" min="0" value={employees} onChange={(e) => setEmployees(e.target.value)} className={input + " w-full"} />
+                  <input id="os-employees" type="number" min="0" max={MAX_EMPLOYEES} value={employees} onChange={(e) => setEmployees(capped(e.target.value, MAX_EMPLOYEES))} className={input + " w-full"} />
                 </div>
                 <div className="space-y-1.5">
                   <label htmlFor="os-years" className={label}>Years of history to index</label>
-                  <input id="os-years" type="number" min="0" max={MAX_YEARS} value={years} onChange={(e) => setYears(e.target.value)} className={input + " w-full"} />
+                  <input id="os-years" type="number" min="0" max={MAX_YEARS} value={years} onChange={(e) => setYears(capped(e.target.value, MAX_YEARS))} className={input + " w-full"} />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -356,10 +367,11 @@ export const OpenSearchSizingCalculator = () => {
                   id="os-per-employee"
                   type="number"
                   min="0"
+                  max={MAX_EMPLOYEE_RATE}
                   step="100"
                   aria-label="Chunks per employee per year"
                   value={perEmployeeYear}
-                  onChange={(e) => setPerEmployeeYear(e.target.value)}
+                  onChange={(e) => setPerEmployeeYear(capped(e.target.value, MAX_EMPLOYEE_RATE))}
                   className={input + " w-28"}
                 />
                 <span className={hint}>chunks per employee per year</span>
@@ -377,7 +389,7 @@ export const OpenSearchSizingCalculator = () => {
                     ))}
                   </tbody>
                 </table>
-                <div className={hint + " mt-2"}>Add or remove the rows that do not match your company. Indexing everyone's email adds about 4,000.</div>
+                <div className={hint + " mt-2"}>If your company differs, change the rate by the difference. For example, indexing everyone's email adds about 4,000.</div>
               </details>
             </div>
           ) : (
@@ -516,8 +528,9 @@ export const OpenSearchSizingCalculator = () => {
                         ...sourceRows.map((r, k) => {
                           const src = sourceOf(r.key);
                           return [
-                            src.label + ": " + clampNumber(r.count, MAX_ITEMS).toLocaleString() + " " + src.unit + " × " + clampNumber(r.ratio, 1000),
+                            src.label + ": " + clampNumber(r.count, MAX_ITEMS).toLocaleString() + " " + src.unit + " × " + clampNumber(r.ratio, MAX_RATIO),
                             fmtCount(sourceChunks[k]) + " chunks",
+                            "source-" + r.id,
                           ];
                         }),
                         ["Sum of sources", fmtCount(chunksToday) + " chunks"],
@@ -525,8 +538,8 @@ export const OpenSearchSizingCalculator = () => {
                   ["× growth (" + growth + "%)", fmtCount(chunks) + " chunks"],
                   ["× " + Math.round(bytesPerChunk).toLocaleString() + " B per chunk (" + dims + " dims)", fmtBytes(indexOneCopy)],
                   ["RAM: chunks × " + Math.round(hotPerChunk).toLocaleString() + " B", fmtBytes(hotOneCopy)],
-                ].map(([a, b]) => (
-                  <tr key={a} className="border-t border-gray-200 dark:border-white/10">
+                ].map(([a, b, id]) => (
+                  <tr key={id ?? a} className="border-t border-gray-200 dark:border-white/10">
                     <td className="py-1.5 pr-2 text-gray-700 dark:text-gray-300">{a}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-900 dark:text-gray-100">{b}</td>
                   </tr>
