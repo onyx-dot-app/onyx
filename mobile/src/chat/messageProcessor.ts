@@ -27,6 +27,10 @@ import {
   isToolPacket,
 } from "@/chat/timeline/packetUtils";
 import { parseToolKey } from "@/chat/timeline/toolDisplay";
+import {
+  isGroupEndPacket,
+  isNestedPacket,
+} from "@/chat/timeline/packetHelpers";
 
 export interface ProcessedMessageState {
   nodeId: number;
@@ -236,6 +240,8 @@ function handleStreamingStatusPacket(
   state: ProcessedMessageState,
   packet: Packet,
 ): void {
+  if (isNestedPacket(packet)) return;
+
   if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
   }
@@ -305,10 +311,7 @@ function processPacket(state: ProcessedMessageState, packet: Packet): void {
   const groupKey = getGroupKey(packet);
   state.seenGroupKeys.add(groupKey);
 
-  if (
-    packet.obj.type === PacketType.SECTION_END ||
-    packet.obj.type === PacketType.ERROR
-  ) {
+  if (isGroupEndPacket(packet)) {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 
