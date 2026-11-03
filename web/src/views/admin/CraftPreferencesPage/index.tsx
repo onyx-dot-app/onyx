@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -69,6 +70,7 @@ function BaseInstructionsPreview() {
 
 export default function CraftPreferencesPage() {
   const t = useTranslations("admin.craftPreferences");
+  const navigation = useNavigation();
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const savedInstructions = settings?.craft_instructions ?? "";
@@ -190,7 +192,7 @@ export default function CraftPreferencesPage() {
           ? [
               <Button
                 key="try"
-                href="/craft"
+                {...navigation.linkTo("/craft")}
                 prominence="secondary"
                 rightIcon={SvgArrowUpRight}
               >

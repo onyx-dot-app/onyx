@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
@@ -16,7 +17,6 @@ import {
   updateSlackChannelConfig,
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
-import { useRouter } from "next/navigation";
 import { MinimalAgent } from "@/lib/agents/types";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
@@ -36,7 +36,7 @@ export const SlackChannelConfigCreationForm = ({
   existingSlackChannelConfig?: SlackChannelConfig;
 }) => {
   const t = useTranslations("admin.slackBots");
-  const router = useRouter();
+  const navigation = useNavigation();
   const isUpdate = Boolean(existingSlackChannelConfig);
   const isDefault = existingSlackChannelConfig?.is_default || false;
   const existingSlackBotUsesPersona = existingSlackChannelConfig?.persona
@@ -213,7 +213,7 @@ export const SlackChannelConfigCreationForm = ({
 
           formikHelpers.setSubmitting(false);
           if (response.ok) {
-            router.push(`/admin/bots/${slack_bot_id}`);
+            navigation.go(`/admin/bots/${slack_bot_id}`);
           } else {
             const responseJson = await response.json();
             const errorMsg = responseJson.detail || responseJson.message;

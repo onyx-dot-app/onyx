@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
@@ -11,7 +12,6 @@ import { updateHiddenStatus } from "../lib";
 import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { ScoreSection } from "../ScoreEditor";
-import { useRouter } from "next/navigation";
 import { useSearchFilters } from "@/lib/searchFilters/hooks";
 import { buildFilters } from "@/lib/searchFilters/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
@@ -124,7 +124,7 @@ export function Explorer({
   documentSets: DocumentSetSummary[];
 }) {
   const t = useTranslations("admin.documents");
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const [query, setQuery] = useState(initialSearchValue || "");
   const [timeoutId, setTimeoutId] = useState<number | null>(null);
@@ -167,8 +167,9 @@ export function Explorer({
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
-    router.replace(
-      `/admin/documents/explorer?query=${encodeURIComponent(query)}`
+    navigation.go(
+      `/admin/documents/explorer?query=${encodeURIComponent(query)}`,
+      { replace: true }
     );
 
     const newTimeoutId = window.setTimeout(() => onSearch(query), 300);

@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -20,7 +20,7 @@ const route = ADMIN_ROUTES.LLM_GATEWAY;
 export default function LLMGatewayPage() {
   const t = useTranslations("admin.llmGateway");
   const plans = usePlans();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enabled = settings.llm_gateway_enabled ?? true;
@@ -28,7 +28,7 @@ export default function LLMGatewayPage() {
   async function save(checked: boolean) {
     try {
       await updateAdminSettings({ llm_gateway_enabled: checked });
-      router.refresh();
+      navigation.refresh();
       await mutate(SWR_KEYS.settings);
     } catch {
       toast.error(t("toasts.settingsUpdateFailed"));

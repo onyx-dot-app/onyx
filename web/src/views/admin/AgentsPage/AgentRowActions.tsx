@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -24,7 +25,6 @@ import {
 } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { toast } from "@opal/layouts";
-import { useRouter } from "next/navigation";
 import {
   deleteAgent,
   toggleAgentFeatured,
@@ -54,7 +54,7 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const t = useTranslations("admin.agents");
-  const router = useRouter();
+  const navigation = useNavigation();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareModal = useCreateModal();
 
@@ -136,7 +136,7 @@ export default function AgentRowActions({
             id: "stats",
             icon: SvgBarChart,
             title: t("rowActions.statsItem.title"),
-            onSelect: () => router.push(`/ee/agents/stats/${agent.id}`),
+            onSelect: () => navigation.go(`/ee/agents/stats/${agent.id}`),
           },
         ]
       : []),
@@ -178,7 +178,7 @@ export default function AgentRowActions({
               aria-label={t("rowActions.editAgentButton.label")}
               data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
-                router.push(
+                navigation.go(
                   `/app/agents/edit/${agent.id}?u=${Date.now()}&admin=true`
                 )
               }

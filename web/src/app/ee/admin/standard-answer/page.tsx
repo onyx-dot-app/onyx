@@ -1,5 +1,6 @@
 "use client";
 
+import { NavLink, useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -15,7 +16,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
-import Link from "next/link";
+import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { SvgSearch } from "@opal/icons";
 import { useState, JSX } from "react";
@@ -113,12 +114,12 @@ const StandardAnswersTableRow = ({
     <RowTemplate
       id={standardAnswer.id}
       entries={[
-        <Link
+        <NavLink
           key={`edit-${standardAnswer.id}`}
           href={`/ee/admin/standard-answer/${standardAnswer.id}`}
         >
           <SvgEdit size={16} />
-        </Link>,
+        </NavLink>,
         <div key={`categories-${standardAnswer.id}`}>
           {standardAnswer.categories.map((category) => (
             <CategoryBubble key={category.id} name={category.name} />
@@ -347,6 +348,7 @@ const StandardAnswersTable = ({
 
 function Main() {
   const t = useTranslations("admin.standardAnswers");
+  const navigation = useNavigation();
   const {
     data: standardAnswers,
     error: standardAnswersError,
@@ -402,7 +404,8 @@ function Main() {
       <Button
         icon={SvgPlusCircle}
         prominence="secondary"
-        href="/admin/standard-answer/new"
+        // SAFETY: the proxy rewrites this path to `/ee/admin/standard-answer/new`.
+        {...navigation.linkTo("/admin/standard-answer/new" as Route)}
       >
         {t("newStandardAnswer.label")}
       </Button>

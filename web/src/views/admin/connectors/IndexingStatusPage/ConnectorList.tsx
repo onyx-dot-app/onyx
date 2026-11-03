@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -51,6 +52,7 @@ interface FederatedRowProps {
 /** A federated connector: searched at query time, so it has no runs or documents. */
 function FederatedRow({ connector }: FederatedRowProps) {
   const t = useTranslations("admin.indexing.list");
+  const navigation = useNavigation();
   return (
     <Card border="solid" rounding={4} padding={2}>
       <Section
@@ -76,7 +78,7 @@ function FederatedRow({ connector }: FederatedRowProps) {
           icon={SvgSettings}
           prominence="tertiary"
           size="sm"
-          href={`/admin/federated/${connector.id}`}
+          {...navigation.linkTo(`/admin/federated/${connector.id}`)}
           tooltip={t("actions.manageFederated")}
           aria-label={t("actions.manageFederated")}
         />

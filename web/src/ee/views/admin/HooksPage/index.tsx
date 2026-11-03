@@ -1,10 +1,10 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
@@ -470,7 +470,7 @@ export default function HooksPage() {
   const t = useTranslations("admin.hooks");
   const locale = useLocale();
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
@@ -533,12 +533,18 @@ export default function HooksPage() {
     if (settings.isLoading) return;
     if (!enterpriseTier) {
       toast.info(t("page.enterpriseRequired.message"));
-      router.replace("/");
+      navigation.go("/", { replace: true });
     } else if (!settings.hooks_enabled) {
       toast.info(t("page.notEnabled.message"));
-      router.replace("/");
+      navigation.go("/", { replace: true });
     }
-  }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router, t]);
+  }, [
+    settings.isLoading,
+    enterpriseTier,
+    settings.hooks_enabled,
+    navigation,
+    t,
+  ]);
 
   if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
     return <IconLoader />;

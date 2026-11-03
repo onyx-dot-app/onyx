@@ -128,7 +128,7 @@ packages:
   src/sections/oauth-provider: 100
   src/sections/plugins: 99.8
   src/sections/settings: 100
-  src/sections/sidebar: 99.2
+  src/sections/sidebar: 99.1
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
