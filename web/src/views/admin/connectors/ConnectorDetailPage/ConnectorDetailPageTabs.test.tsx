@@ -339,16 +339,20 @@ async function renderPage(setup: Setup = {}) {
   );
   stubApi(setup);
   const params = Promise.resolve({ ccPairId: String(CC_PAIR_ID) });
+  const page = (
+    <Suspense fallback={null}>
+      <ConnectorDetailPage params={params} />
+    </Suspense>
+  );
   // The page reads its params with `use`, which suspends once.
   let view: ReturnType<typeof render> | undefined;
   await act(async () => {
-    view = render(
-      <Suspense fallback={null}>
-        <ConnectorDetailPage params={params} />
-      </Suspense>
-    );
+    view = render(page);
   });
-  return view as ReturnType<typeof render>;
+  const rendered = view as ReturnType<typeof render>;
+  /** Renders the same page again, as a same-page navigation does after `mockQuery` changes. */
+  const rerenderPage = () => act(async () => rendered.rerender(page));
+  return { ...rendered, rerenderPage };
 }
 
 /** Waits for the pair to load: its name is the page title. */
@@ -1136,11 +1140,11 @@ describe("connector page layout edges", () => {
       )
     );
 
+    // The panel's feed refetches without the span. Counted before the click, since the refetch can land before the click resolves.
+    const before = runsQueries().length;
     await user.click(
       screen.getByRole("tab", { name: "Connector Configurations" })
     );
-    // The panel's feed refetches without the span.
-    const before = runsQueries().length;
     await waitFor(() => expect(runsQueries().length).toBeGreaterThan(before));
     expect(
       runsQueries()
@@ -1273,7 +1277,7 @@ describe("connector page layout edges", () => {
   });
 });
 
-// ── Status cards (PR 16) ────────────────────────────────────────────────────
+// ── Status cards ────────────────────────────────────────────────────────────
 
 function pruneRun(id: number): CCPairRun {
   return {
@@ -1303,13 +1307,16 @@ function routedUrls(): URL[] {
   ].map((href) => new URL(href, "http://localhost/admin/connector/7"));
 }
 
+/** Hides the Activities panel where it sits beside the column. */
+const PANEL_HIDDEN_BESIDE = "@min-[51rem]:hidden";
+
 describe("connector page status cards", () => {
   beforeEach(() => {
     mockPush.mockClear();
     mockReplace.mockClear();
   });
 
-  it("AC-2, D-67: View Pruning Run on the status card opens the Indexing tab at that run", async () => {
+  it("AC-2: View Pruning Run on the status card opens the Indexing tab at that run", async () => {
     const user = setupUser();
     await renderPage({ runs: [pruneRun(44)] });
     await loaded();
@@ -1336,7 +1343,7 @@ describe("connector page status cards", () => {
     );
   });
 
-  it("D-62: the status card's Activities panel button hides and shows the panel", async () => {
+  it("AC-3: the status card's Activities panel button hides and shows the panel beside the column", async () => {
     const user = setupUser();
     await renderPage();
     await loaded();
@@ -1347,9 +1354,16 @@ describe("connector page status cards", () => {
     const [indexingCard] = await screen.findAllByTestId("status-card");
     expect(screen.getByTestId("connector-activity")).toBeInTheDocument();
 
+    expect(screen.getByTestId("connector-activity")).not.toHaveClass(
+      PANEL_HIDDEN_BESIDE
+    );
+
     await user.click(within(indexingCard!).getByRole("button", { name: hide }));
+    // Hidden only beside the column: stacked under it, the panel stays in the page.
     await waitFor(() =>
-      expect(screen.queryByTestId("connector-activity")).toBeNull()
+      expect(screen.getByTestId("connector-activity")).toHaveClass(
+        PANEL_HIDDEN_BESIDE
+      )
     );
 
     await user.click(
@@ -1358,7 +1372,93 @@ describe("connector page status cards", () => {
       })
     );
     await waitFor(() =>
-      expect(screen.getByTestId("connector-activity")).toBeInTheDocument()
+      expect(screen.getByTestId("connector-activity")).not.toHaveClass(
+        PANEL_HIDDEN_BESIDE
+      )
     );
+  });
+
+  it("AC-6: below 816 px of body content the panel button hides, by a query on the body's named container", async () => {
+    await renderPage();
+    await loaded();
+    await settle();
+
+    const [indexingCard] = await screen.findAllByTestId("status-card");
+    const button = within(indexingCard!).getByRole("button", {
+      name: copy("admin.connector.statusCard.actions.hideActivities"),
+    });
+    expect(
+      button.closest('[class~="@max-[51rem]/page-body:hidden"]')
+    ).not.toBeNull();
+
+    let body: HTMLElement | null = indexingCard!.parentElement;
+    while (body !== null && !body.classList.contains("@container/page-body")) {
+      body = body.parentElement;
+    }
+    expect(body).not.toBeNull();
+    expect(body).toContainElement(screen.getByTestId("connector-activity"));
+  });
+
+  it("AC-2: a link to an index run opens the Indexing tab with that run's stage details open", async () => {
+    await renderPage({
+      query: "tab=indexing&run=2&run_kind=indexing",
+      runs: [indexRun(1), indexRun(2)],
+    });
+    await loaded();
+
+    await waitFor(() =>
+      expect(tab(TAB_INDEXING)).toHaveAttribute("aria-selected", "true")
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: copy("admin.connector.stageDetails.close"),
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("AC-2: a same-page link to an index run, such as a resolved error's later run, opens the Indexing tab at it", async () => {
+    const { rerenderPage } = await renderPage({
+      runs: [indexRun(1), indexRun(2)],
+    });
+    await loaded();
+    expect(tab(TAB_CONFIGURATIONS)).toHaveAttribute("aria-selected", "true");
+
+    mockQuery = new URLSearchParams("tab=indexing&run=2&run_kind=indexing");
+    await rerenderPage();
+
+    await waitFor(() =>
+      expect(tab(TAB_INDEXING)).toHaveAttribute("aria-selected", "true")
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: copy("admin.connector.stageDetails.close"),
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("Back to the plain address returns to the default tab with no run open", async () => {
+    const { rerenderPage } = await renderPage({
+      runs: [indexRun(1), indexRun(2)],
+    });
+    await loaded();
+    mockQuery = new URLSearchParams("tab=indexing&run=2&run_kind=indexing");
+    await rerenderPage();
+    expect(
+      await screen.findByRole("button", {
+        name: copy("admin.connector.stageDetails.close"),
+      })
+    ).toBeInTheDocument();
+
+    mockQuery = new URLSearchParams("");
+    await rerenderPage();
+
+    await waitFor(() =>
+      expect(tab(TAB_CONFIGURATIONS)).toHaveAttribute("aria-selected", "true")
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: copy("admin.connector.stageDetails.close"),
+      })
+    ).not.toBeInTheDocument();
   });
 });
