@@ -2816,16 +2816,13 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} 件/分",
-        "indexingSpeedTooltip": "コネクター作成以降の1分あたりのインデックス済みドキュメント数",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
         "documents": {
           "totalLabel": "インデックス済みドキュメント合計",
           "recentLabel": "最近処理したドキュメント",
-          "syncedPermissionsLabel": "同期済みの権限",
-          "syncedMembershipsLabel": "同期済みのグループメンバーシップ"
+          "indexedLabel": "インデックス済みドキュメント"
         },
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
@@ -2847,13 +2844,22 @@
         "title": "インデックス状況",
         "sync": {
           "permissionsTitle": "権限同期の状況",
-          "groupsTitle": "グループメンバーシップ同期の状況",
           "last": "最終同期 {when}",
           "never": "まだ同期されていません",
-          "neverTooltip": "インデックス済みのドキュメントは、権限が同期されるまで検索できない場合があります。",
-          "waitingForFirstIndex": "初回インデックス待ち"
+          "neverTooltip": "インデックス済みのドキュメントは、権限が同期されるまで検索できません。",
+          "waitingForFirstIndex": "初回インデックス待ち",
+          "docsLabel": "権限を同期したドキュメント",
+          "groupsLabel": "グループメンバーシップ"
         },
-        "accessTitle": "コネクターのドキュメントアクセス"
+        "actions": {
+          "showActivities": "アクティビティを表示",
+          "hideActivities": "アクティビティを非表示",
+          "viewDetails": "詳細を表示",
+          "hideDetails": "詳細を隠す",
+          "viewIndexingRun": "インデックスの実行を表示",
+          "viewPruningRun": "プルーニングの実行を表示",
+          "viewChecksRun": "チェックの実行を表示"
+        }
       },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",

@@ -8,8 +8,8 @@ import type { IconFunctionComponent } from "@opal/types";
 export interface RunDetailsHintProps {
   icon: IconFunctionComponent;
   label: string;
-  /** Whether its details are open. The open hint shows selected. */
-  open: boolean;
+  /** Whether its details are open. The open hint shows selected. Null for a hint that opens elsewhere, which has no expanded state. */
+  open: boolean | null;
   onClick?: () => void;
   ref?: Ref<HTMLElement>;
 }
@@ -29,7 +29,7 @@ export function RunDetailsHint({
       size="xs"
       tooltip={label}
       aria-label={label}
-      aria-expanded={open}
+      aria-expanded={open ?? undefined}
       {...rest}
     />
   );

@@ -2816,16 +2816,13 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} documentos/min",
-        "indexingSpeedTooltip": "Documentos indexados por minuto desde que se creó el conector",
         "lastIndexed": {
           "value": "Última indexación {when}"
         },
         "documents": {
           "totalLabel": "Total de documentos en el índice",
           "recentLabel": "Documentos procesados hace poco",
-          "syncedPermissionsLabel": "Permisos sincronizados",
-          "syncedMembershipsLabel": "Membresías de grupos sincronizadas"
+          "indexedLabel": "Documentos indexados"
         },
         "throughput": {
           "ariaLabel": "Documentos indexados a lo largo del tiempo",
@@ -2847,13 +2844,22 @@
         "title": "Estado de indexación",
         "sync": {
           "permissionsTitle": "Estado de sincronización de permisos",
-          "groupsTitle": "Estado de sincronización de membresías de grupos",
           "last": "Última sincronización {when}",
           "never": "Aún no sincronizado",
-          "neverTooltip": "Es posible que los documentos indexados no se puedan buscar hasta que se sincronicen sus permisos.",
-          "waitingForFirstIndex": "Esperando la primera indexación"
+          "neverTooltip": "Los documentos indexados no se podrán buscar hasta que se sincronicen sus permisos.",
+          "waitingForFirstIndex": "Esperando la primera indexación",
+          "docsLabel": "Documentos con permisos sincronizados",
+          "groupsLabel": "Membresías de grupos"
         },
-        "accessTitle": "Acceso a los documentos del conector"
+        "actions": {
+          "showActivities": "Mostrar actividades",
+          "hideActivities": "Ocultar actividades",
+          "viewDetails": "Ver detalles",
+          "hideDetails": "Ocultar detalles",
+          "viewIndexingRun": "Ver ejecución de indexación",
+          "viewPruningRun": "Ver ejecución de depuración",
+          "viewChecksRun": "Ver ejecución de comprobaciones"
+        }
       },
       "toasts": {
         "completeReindexStarted": "La reindexación completa se inició correctamente",

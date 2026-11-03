@@ -2816,16 +2816,13 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "분당 {speed}개 문서",
-        "indexingSpeedTooltip": "커넥터 생성 이후 분당 인덱싱된 문서 수",
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },
         "documents": {
           "totalLabel": "전체 인덱싱 완료 문서",
           "recentLabel": "최근에 처리된 문서",
-          "syncedPermissionsLabel": "동기화된 권한",
-          "syncedMembershipsLabel": "동기화된 그룹 멤버십"
+          "indexedLabel": "인덱싱된 문서"
         },
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
@@ -2847,13 +2844,22 @@
         "title": "인덱싱 상태",
         "sync": {
           "permissionsTitle": "권한 동기화 상태",
-          "groupsTitle": "그룹 멤버십 동기화 상태",
           "last": "마지막 동기화 {when}",
           "never": "아직 동기화되지 않음",
-          "neverTooltip": "인덱싱된 문서는 권한이 동기화될 때까지 검색되지 않을 수 있습니다.",
-          "waitingForFirstIndex": "첫 인덱싱 대기 중"
+          "neverTooltip": "인덱싱된 문서는 권한이 동기화될 때까지 검색되지 않습니다.",
+          "waitingForFirstIndex": "첫 인덱싱 대기 중",
+          "docsLabel": "권한이 동기화된 문서",
+          "groupsLabel": "그룹 멤버십"
         },
-        "accessTitle": "커넥터 문서 액세스"
+        "actions": {
+          "showActivities": "활동 표시",
+          "hideActivities": "활동 숨기기",
+          "viewDetails": "세부 정보 보기",
+          "hideDetails": "세부 정보 숨기기",
+          "viewIndexingRun": "인덱싱 실행 보기",
+          "viewPruningRun": "정리 실행 보기",
+          "viewChecksRun": "검사 실행 보기"
+        }
       },
       "toasts": {
         "completeReindexStarted": "전체 재인덱싱을 시작했습니다",

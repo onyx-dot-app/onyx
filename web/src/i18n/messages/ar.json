@@ -2816,16 +2816,13 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} مستند/دقيقة",
-        "indexingSpeedTooltip": "المستندات المفهرسة في الدقيقة منذ إنشاء الموصل",
         "lastIndexed": {
           "value": "آخر فهرسة {when}"
         },
         "documents": {
           "totalLabel": "إجمالي المستندات المفهرسة",
           "recentLabel": "مستندات عولجت مؤخرًا",
-          "syncedPermissionsLabel": "الأذونات المتزامنة",
-          "syncedMembershipsLabel": "عضويات المجموعات المتزامنة"
+          "indexedLabel": "المستندات المفهرسة"
         },
         "throughput": {
           "ariaLabel": "المستندات المفهرسة بمرور الوقت",
@@ -2847,13 +2844,22 @@
         "title": "حالة الفهرسة",
         "sync": {
           "permissionsTitle": "حالة مزامنة الأذونات",
-          "groupsTitle": "حالة مزامنة عضوية المجموعات",
           "last": "آخر مزامنة {when}",
           "never": "لم تتم المزامنة بعد",
-          "neverTooltip": "قد لا تكون المستندات المفهرسة قابلة للبحث حتى تتم مزامنة أذوناتها.",
-          "waitingForFirstIndex": "في انتظار الفهرسة الأولى"
+          "neverTooltip": "لن تكون المستندات المفهرسة قابلة للبحث حتى تتم مزامنة أذوناتها.",
+          "waitingForFirstIndex": "في انتظار الفهرسة الأولى",
+          "docsLabel": "مستندات بأذونات متزامنة",
+          "groupsLabel": "عضويات المجموعات"
         },
-        "accessTitle": "الوصول إلى مستندات الموصل"
+        "actions": {
+          "showActivities": "إظهار الأنشطة",
+          "hideActivities": "إخفاء الأنشطة",
+          "viewDetails": "عرض التفاصيل",
+          "hideDetails": "إخفاء التفاصيل",
+          "viewIndexingRun": "عرض تشغيل الفهرسة",
+          "viewPruningRun": "عرض تشغيل التقليم",
+          "viewChecksRun": "عرض تشغيل الفحوصات"
+        }
       },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",

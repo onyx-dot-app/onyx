@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
@@ -41,6 +41,8 @@ import {
 } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { cn } from "@opal/utils";
+import useIsDisplayed from "@/hooks/useIsDisplayed";
+import { mergeRefs } from "@/lib/utils";
 import {
   runKey,
   useActivityItems,
@@ -147,11 +149,6 @@ const LEVEL_ORDER: ActivityLevel[] = [
 const DEFAULT_LEVEL: ActivityLevel = "errors";
 // The open sections a focused run can sit in: a failed run under Failures, any other run with open errors under Errors.
 const FOCUS_SECTIONS: ActivitySection[] = ["failures", "errors"];
-// The header counts poll like the feeds and keep the last count while a new range loads, so the tags do not blink.
-const HEADER_COUNT_SWR = {
-  refreshInterval: RUNS_POLL_MS,
-  keepPreviousData: true,
-};
 
 // Finished runs with nothing to resolve list after Resolved. Running runs, which can still report errors, list before it.
 const SETTLED: ActivitySection[] = ["success", "canceled"];
@@ -488,6 +485,12 @@ export default function ActivityPanel({
     resolveMatching,
   } = useResolveRunErrors();
 
+  // A panel hidden beside the column stays mounted for the stacked layout, so it stops polling until it shows.
+  const [displayRef, displayed] = useIsDisplayed<HTMLDivElement>();
+  const rootRef = useMemo(() => mergeRefs(ref, displayRef), [ref, displayRef]);
+  const pollMs = displayed ? RUNS_POLL_MS : 0;
+  // The header counts poll like the feeds and keep the last count while a new range loads, so the tags do not blink.
+  const headerCountSwr = { refreshInterval: pollMs, keepPreviousData: true };
   const timeRange = {
     since: range?.since ?? null,
     until: range?.until ?? null,
@@ -506,7 +509,7 @@ export default function ActivityPanel({
     statusGroups: CCPairRunStatusGroup[] | null = null
   ): ActivityItemsOptions => ({
     enabled: shown,
-    pollMs: RUNS_POLL_MS,
+    pollMs,
     statusGroups,
   });
 
@@ -517,14 +520,14 @@ export default function ActivityPanel({
     ["failures"],
     unsearched,
     true,
-    HEADER_COUNT_SWR
+    headerCountSwr
   );
   const errorCount = useActivityRunsCount(
     scope,
     ["errors"],
     unsearched,
     true,
-    HEADER_COUNT_SWR
+    headerCountSwr
   );
   const open = {
     failures: useActivityItems(
@@ -716,14 +719,14 @@ export default function ActivityPanel({
     canResolveAll,
     "failures",
     narrowing,
-    RUNS_POLL_MS
+    pollMs
   );
   const errorsResolvable = useResolvableRunsCount(
     scope,
     canResolveAll && resolveLevel === null,
     "errors",
     narrowing,
-    RUNS_POLL_MS
+    pollMs
   );
   const errorsToResolve = resolveLevel === null ? errorsResolvable.count : 0;
   const resolveAllCount = failuresResolvable.count + errorsToResolve;
@@ -751,7 +754,7 @@ export default function ActivityPanel({
 
   return (
     <Section
-      ref={ref}
+      ref={rootRef}
       justifyContent="start"
       alignItems="stretch"
       width="full"

@@ -2816,16 +2816,13 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} docs/min",
-        "indexingSpeedTooltip": "Documents indexés par minute depuis la création du connecteur",
         "lastIndexed": {
           "value": "Dernière indexation {when}"
         },
         "documents": {
           "totalLabel": "Total des documents dans l'index",
           "recentLabel": "Documents traités dernièrement",
-          "syncedPermissionsLabel": "Autorisations synchronisées",
-          "syncedMembershipsLabel": "Adhésions aux groupes synchronisées"
+          "indexedLabel": "Documents indexés"
         },
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
@@ -2847,13 +2844,22 @@
         "title": "État de l'indexation",
         "sync": {
           "permissionsTitle": "État de la synchronisation des autorisations",
-          "groupsTitle": "État de la synchronisation des adhésions aux groupes",
           "last": "Dernière synchronisation {when}",
           "never": "Pas encore synchronisé",
-          "neverTooltip": "Les documents indexés peuvent ne pas être consultables tant que leurs autorisations ne sont pas synchronisées.",
-          "waitingForFirstIndex": "En attente de la première indexation"
+          "neverTooltip": "Les documents indexés ne seront pas consultables tant que leurs autorisations ne seront pas synchronisées.",
+          "waitingForFirstIndex": "En attente de la première indexation",
+          "docsLabel": "Documents aux autorisations synchronisées",
+          "groupsLabel": "Adhésions aux groupes"
         },
-        "accessTitle": "Accès aux documents du connecteur"
+        "actions": {
+          "showActivities": "Afficher les activités",
+          "hideActivities": "Masquer les activités",
+          "viewDetails": "Voir les détails",
+          "hideDetails": "Masquer les détails",
+          "viewIndexingRun": "Voir l'exécution d'indexation",
+          "viewPruningRun": "Voir l'exécution d'élagage",
+          "viewChecksRun": "Voir l'exécution des vérifications"
+        }
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",

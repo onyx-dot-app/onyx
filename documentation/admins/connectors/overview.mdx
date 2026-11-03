@@ -165,8 +165,15 @@ The status of a Connector can be:
 
 ### Connector Details
 
-Click a Connector to open its page. The status cards show the indexing status,
-the permission sync status or document access, and the number of indexed documents. Two tabs follow the status cards:
+Click a Connector to open its page.
+The **Indexing Status** card shows the indexing status and the number of indexed documents.
+It does not show an estimate of the documents left to index. Click the status, or the pruning or checks icon beside it,
+to go to that run on the **Indexing** tab.
+Click the error count to see the latest run's errors in the **Activities** panel.
+The panel opens automatically when there are errors. When the panel is beside the page,
+use the panel button to show or hide it.
+A Connector with permission sync also shows a **Permissions Sync Status** card with the synced documents and,
+where the source syncs groups, the group memberships. Two tabs follow the status cards:
 
 - **Connector Configurations**: the account, index configurations, sharing and schedule.
 - **Indexing**: the **Document Indexing** chart and the **Indexing Runs** list.
