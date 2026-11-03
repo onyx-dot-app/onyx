@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { SvgCheck, SvgAlertTriangle } from "@opal/icons";
 import CardSection from "@/components/admin/CardSection";
@@ -35,7 +35,7 @@ interface OAuthCallbackPageProps {
 
 export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   const t = useTranslations("common.oauthCallback");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
 
   const [statusMessage, setStatusMessage] = useState(
@@ -58,10 +58,10 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   const hasProcessedRef = useRef(false);
 
   // Extract query parameters
-  const code = searchParams?.get("code");
-  const state = searchParams?.get("state");
-  const error = searchParams?.get("error");
-  const errorDescription = searchParams?.get("error_description");
+  const code = searchParams.get("code");
+  const state = searchParams.get("state");
+  const error = searchParams.get("error");
+  const errorDescription = searchParams.get("error_description");
 
   // Auto-redirect for success cases (with countdown)
   useEffect(() => {
@@ -76,7 +76,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
 
     const timer = setTimeout(() => {
       const target = redirectPath || config.defaultRedirectPath || "/app";
-      router.push(target as Route);
+      navigation.go(target as Route);
     }, delayMs);
 
     return () => {
@@ -86,7 +86,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   }, [
     isSuccess,
     redirectPath,
-    router,
+    navigation,
     config.autoRedirectDelay,
     config.defaultRedirectPath,
   ]);
@@ -168,7 +168,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
         // Sanitize to prevent open redirects (e.g. "//evil.com")
         const rawPath =
           responseData.redirect_url ||
-          searchParams?.get("return_path") ||
+          searchParams.get("return_path") ||
           config.defaultRedirectPath ||
           "/app";
         const sanitizedPath =
@@ -265,7 +265,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
                     onClick={() => {
                       const target =
                         redirectPath || config.defaultRedirectPath || "/app";
-                      router.push(target as Route);
+                      navigation.go(target as Route);
                     }}
                     width="full"
                   >

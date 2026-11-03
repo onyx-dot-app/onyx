@@ -13,7 +13,7 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn(), refresh: jest.fn() }),
 }));
 
 jest.mock("@opal/layouts/toast/store", () => ({
