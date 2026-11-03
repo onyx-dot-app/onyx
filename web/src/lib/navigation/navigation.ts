@@ -47,15 +47,24 @@ function urlKey(pathname: string, search: URLSearchParams): string {
 // go through the router too, or the earlier page would land after it.
 let routeNavigationInFlight = false;
 
+/** Calls the router, with options only when set, as callers always did. */
+function callRouter<T extends string>(
+  router: Router,
+  method: "push" | "replace",
+  href: Route<T>,
+  scroll: boolean | undefined
+) {
+  if (scroll === undefined) router[method](href);
+  else router[method](href, { scroll });
+}
+
 function navigate<T extends string>(
   router: Router,
   href: Route<T>,
   { replace = false, shallow = false, scroll }: NavigationOptions = {}
 ) {
-  const routerOptions = scroll === undefined ? undefined : { scroll };
   if (typeof window === "undefined") {
-    if (replace) router.replace(href, routerOptions);
-    else router.push(href, routerOptions);
+    callRouter(router, replace ? "replace" : "push", href, scroll);
     return;
   }
   // Against the current URL, so a query-only href (`?a=1`) keeps the path.
@@ -77,7 +86,7 @@ function navigate<T extends string>(
   const queryOnly = target.pathname === herePathname;
   if (shallow && queryOnly && !routeNavigationInFlight) return;
   routeNavigationInFlight = true;
-  router.replace(href, routerOptions);
+  callRouter(router, "replace", href, scroll);
 }
 
 /**
