@@ -142,7 +142,10 @@ inside an ordinary docfetching run. A claim takes every due row of each
 document it touches, not a flat row count, and claims for one pair are
 serialized, so one document never splits across batches or attempts. The
 drain keeps only the newest change per document, in a batch and against
-rows earlier claims took (`superseded_by_newer_events`). The factory returns
+rows earlier claims took (`superseded_by_newer_events`). An event pair has no poll interval:
+`background/celery/tasks/docprocessing/utils.py:should_index` runs it when
+its inbox holds a due or unsettled row (`event_pair_has_work`), whatever its
+`refresh_freq`. The factory returns
 that drain for an
 `EVENT` pair, so the source's own connector class is never loaded, and the run
 injects the pair and attempt ids because neither is stored config. One

@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -374,6 +374,30 @@ def settle_events_from_finished_attempts(
         db_session, orphaned, error="the claiming attempt no longer exists"
     )
     return len(to_complete), len(to_release) + len(orphaned)
+
+
+def event_pair_has_work(db_session: Session, cc_pair_id: int) -> bool:
+    """A due PENDING row to claim, or an IN_PROGRESS row the next run must
+    settle. Used to schedule an event pair, which has no poll interval."""
+    return (
+        db_session.scalar(
+            select(
+                select(ConnectorEventInbox.id)
+                .where(
+                    ConnectorEventInbox.connector_credential_pair_id == cc_pair_id,
+                    or_(
+                        and_(
+                            ConnectorEventInbox.status == ConnectorEventStatus.PENDING,
+                            ConnectorEventInbox.available_at <= func.now(),
+                        ),
+                        ConnectorEventInbox.status == ConnectorEventStatus.IN_PROGRESS,
+                    ),
+                )
+                .exists()
+            )
+        )
+        is True
+    )
 
 
 def get_active_event_cc_pairs(
