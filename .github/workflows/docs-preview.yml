@@ -1,15 +1,19 @@
 name: Docs Preview
 
 # Mintlify previews pull requests only when they target its deployment branch, docs/live
-# (see docs-publish.yml). Docs pull requests target main, so this workflow asks Mintlify to
-# build a preview of the pull request branch and links it in a pull request comment.
+# (see docs-publish.yml). Docs pull requests target main, so this workflow builds the same
+# tree docs-publish pushes to docs/live (documentation/ with the generated logos, icons and
+# openapi.json) on a docs-preview/pr-<number> branch, asks Mintlify to preview that branch,
+# and reports the result in a pull request comment. The branch is deleted when the pull
+# request closes.
 concurrency:
-  group: Docs-Preview-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: Docs-Preview-${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "documentation/**"
       - ".github/workflows/docs-preview.yml"
@@ -21,61 +25,115 @@ jobs:
   docs-preview:
     # Fork pull requests get no secrets, and Mintlify does not preview forked branches.
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.action != 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     # The Mintlify key for docs-publish lives in the protected release environment. This
     # job reads its own copy from the docs-preview environment.
     environment: docs-preview
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
       MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
-      BRANCH: ${{ github.event.pull_request.head.ref }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      PREVIEW_BRANCH: docs-preview/pr-${{ github.event.pull_request.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Build the Mintlify preview
-        id: preview
+      - name: Check the Mintlify configuration
+        id: config
         run: |
           if [ -z "$MINTLIFY_PROJECT_ID" ] || [ -z "$MINTLIFY_API_KEY" ]; then
             echo "::warning::Set MINTLIFY_API_KEY and MINTLIFY_PROJECT_ID in the docs-preview environment to build previews"
-            echo "status=skipped" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Setup Python and Install Dependencies
+        if: steps.config.outputs.ready == 'true'
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/ee.txt
+      - name: Setup bun
+        if: steps.config.outputs.ready == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
+        with:
+          bun-version: "1.3.13"
+      - name: Install web dependencies
+        if: steps.config.outputs.ready == 'true'
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+      - name: Generate logos, icons and openapi.json
+        if: steps.config.outputs.ready == 'true'
+        run: documentation/scripts/generate.sh
+
+      - name: Push the preview branch
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          # The same tree docs-publish pushes to docs/live: documentation/ only, with the
+          # gitignored generated files included.
+          export GIT_INDEX_FILE="$RUNNER_TEMP/docs-preview.index"
+          git read-tree --empty
+          git add -f documentation
+          tree="$(git write-tree)"
+          unset GIT_INDEX_FILE
+          commit="$(git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit-tree "$tree" -m "docs: preview of #$PR_NUMBER at ${HEAD_SHA::7}")"
+          gh auth setup-git
+          git push --force "https://github.com/${GITHUB_REPOSITORY}.git" "$commit:refs/heads/$PREVIEW_BRANCH"
+
+      - name: Build the Mintlify preview
+        id: preview
+        if: steps.config.outputs.ready == 'true'
+        run: |
           api="https://api.mintlify.com/v1/project"
           # Only members of the Onyx Mintlify organization can open the preview.
-          body="$(jq -n --arg branch "$BRANCH" '{branch: $branch, auth: {type: "mintlify"}}')"
+          body="$(jq -n --arg branch "$PREVIEW_BRANCH" '{branch: $branch, auth: {type: "mintlify"}}')"
           response="$(curl -fsS -X POST -H "Authorization: Bearer $MINTLIFY_API_KEY" \
             -H "Content-Type: application/json" -d "$body" "$api/preview/$MINTLIFY_PROJECT_ID")"
           status_id="$(jq -r '.statusId' <<<"$response")"
           echo "url=$(jq -r '.previewUrl' <<<"$response")" >> "$GITHUB_OUTPUT"
           status="timeout"
           for _ in $(seq 1 40); do
-            status="$(curl -fsS -H "Authorization: Bearer $MINTLIFY_API_KEY" \
-              "$api/update-status/$status_id" | jq -r '.status')"
-            echo "Mintlify preview: $status"
-            case "$status" in
-              success | failure) break ;;
-            esac
             sleep 15
+            # A failed poll is not a result; keep polling until the build ends.
+            if ! current="$(curl -fsS -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+              "$api/update-status/$status_id" | jq -r '.status')"; then
+              echo "Status request failed; retrying"
+              continue
+            fi
+            echo "Mintlify preview: $current"
+            if [ "$current" = "success" ] || [ "$current" = "failure" ]; then
+              status="$current"
+              break
+            fi
           done
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
-      - name: Comment the preview link
-        if: steps.preview.outputs.status != 'skipped'
+      - name: Comment the preview result
+        # Runs after failures too, so a failed attempt replaces an older "Ready" comment.
+        if: always() && steps.config.outputs.ready == 'true'
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
           PREVIEW_STATUS: ${{ steps.preview.outputs.status }}
         run: |
           case "$PREVIEW_STATUS" in
-            success) state="✅ Ready" ;;
-            failure) state="❌ Build failed" ;;
-            *) state="⏳ Still building" ;;
+            success) state="✅ Ready"; link="$PREVIEW_URL" ;;
+            failure) state="❌ Mintlify build failed"; link="[run]($RUN_URL)" ;;
+            timeout) state="⏳ Timed out waiting for Mintlify"; link="$PREVIEW_URL ([run]($RUN_URL))" ;;
+            *) state="❌ Preview not built"; link="[run]($RUN_URL)" ;;
           esac
           marker="<!-- docs-preview -->"
           comment="$marker
@@ -83,7 +141,7 @@ jobs:
 
           | Status | Preview | Commit | Updated |
           | --- | --- | --- | --- |
-          | $state | $PREVIEW_URL | \`${HEAD_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+          | $state | $link | \`${HEAD_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
           # --paginate: on a long pull request the marker can sit past the first page.
           existing="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
             --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)"
@@ -92,7 +150,24 @@ jobs:
           else
             gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$comment"
           fi
-          if [ "$PREVIEW_STATUS" = "failure" ]; then
-            echo "::error::The Mintlify preview build failed"
+          if [ "$PREVIEW_STATUS" != "success" ] && [ "$PREVIEW_STATUS" != "timeout" ]; then
             exit 1
+          fi
+
+  delete-preview-branch:
+    if: >-
+      github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PREVIEW_BRANCH: docs-preview/pr-${{ github.event.pull_request.number }}
+    steps:
+      - name: Delete the preview branch
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH" >/dev/null 2>&1; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH"
           fi
