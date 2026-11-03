@@ -68,5 +68,9 @@ test("rejects an external return URL without signalling success", async () => {
     expect(completeExternalAppOAuthCallback).toHaveBeenCalled()
   );
   expect(replace).not.toHaveBeenCalled();
-  expect(window.opener.postMessage).not.toHaveBeenCalled();
+  expect(window.opener.postMessage).toHaveBeenCalledTimes(1);
+  expect(window.opener.postMessage).toHaveBeenCalledWith(
+    { type: "onyx:oauth-complete", state: "state", ok: false },
+    window.location.origin
+  );
 });
