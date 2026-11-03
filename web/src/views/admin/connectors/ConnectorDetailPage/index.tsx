@@ -144,7 +144,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     canResolveRuns: false,
   });
   const panelRef = useRef<HTMLDivElement>(null);
-  // Counts View Errors clicks with no index run to focus, each of which scrolls the panel into view.
+  // Counts View Errors clicks with no index run to focus, each of which resets the panel's filters and scrolls it into view.
   const [errorsRequest, setErrorsRequest] = useState(0);
   // Stacked under the column, the panel is out of view, so it scrolls there.
   useEffect(() => {
@@ -620,6 +620,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             range={sliceRange}
             onClearRange={clearRange}
             {...activityLinks.panel}
+            errorsRequest={errorsRequest}
             className={activityPanel.open ? undefined : BESIDE.panelHidden}
             ref={panelRef}
           />
