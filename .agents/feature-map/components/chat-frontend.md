@@ -354,6 +354,14 @@ up its own branding.
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
 
+15. `scroll-follow-intent` **Content growth must not cancel following.**
+    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
+    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
+    catch up if auto-scroll is enabled and the user has not scrolled away.
+    During the opening-follow window, content observers can also catch up with
+    auto-scroll disabled. Scrolling up ends that window. Content observers
+    update visual state without treating layout growth as a user scroll.
+
 ---
 
 ## Decisions
