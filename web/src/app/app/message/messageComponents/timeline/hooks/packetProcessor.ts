@@ -23,6 +23,10 @@ import {
   getToolKey,
   parseToolKey,
 } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import {
+  isGroupEndPacket,
+  isNestedPacket,
+} from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // Re-export parseToolKey for consumers that import from this module
 export { parseToolKey };
@@ -252,6 +256,8 @@ function handleStreamingStatusPacket(
   state: ProcessorState,
   packet: Packet
 ): void {
+  if (isNestedPacket(packet)) return;
+
   // Check if final answer is coming
   if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
@@ -333,10 +339,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   state.seenGroupKeys.add(groupKey);
 
   // Track SECTION_END and ERROR packets (both indicate completion)
-  if (
-    packet.obj.type === PacketType.SECTION_END ||
-    packet.obj.type === PacketType.ERROR
-  ) {
+  if (isGroupEndPacket(packet)) {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 

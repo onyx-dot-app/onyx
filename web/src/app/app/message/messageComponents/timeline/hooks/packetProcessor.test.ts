@@ -1223,3 +1223,74 @@ describe("packetProcessor", () => {
     });
   });
 });
+
+describe("nested research packet ownership", () => {
+  test.each([PacketType.SECTION_END, PacketType.ERROR])(
+    "nested %s leaves the parent open until next turn or Stop",
+    (endType) => {
+      for (const closing of [
+        createMessageStartPacket({ turn_index: 1 }),
+        createStopPacket(),
+      ]) {
+        const nested = { turn_index: 0, sub_turn_index: 0 };
+        const packets = [
+          createPacket(
+            PacketType.RESEARCH_AGENT_START,
+            { turn_index: 0 },
+            { research_task: "Research" }
+          ),
+          createSearchToolStartPacket(nested),
+          createPacket(endType, nested),
+          createMessageStartPacket({ turn_index: 0, sub_turn_index: 1 }, 99),
+          createPacket(
+            PacketType.MESSAGE_DELTA,
+            { turn_index: 0, sub_turn_index: 1 },
+            { content: "Child answer" }
+          ),
+        ];
+        const state = processPackets(createInitialState(1), packets);
+        expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(false);
+        expect(state.finalAnswerComing).toBe(false);
+        expect(state.toolProcessingDuration).toBeUndefined();
+        const result = processPackets(state, [...packets, closing]);
+        const parentEnds = (result.groupedPacketsMap.get("0-0") ?? []).filter(
+          (packet) =>
+            packet.obj.type === PacketType.SECTION_END &&
+            packet.placement.sub_turn_index == null
+        );
+        expect(parentEnds).toHaveLength(1);
+        expect(result.groupKeysWithSectionEnd.has("0-0")).toBe(true);
+        expect(result.finalAnswerComing).toBe(
+          closing.obj.type === PacketType.MESSAGE_START
+        );
+      }
+    }
+  );
+
+  test("nested messages preserve the top-level answer timing", () => {
+    const state = processPackets(createInitialState(1), [
+      createMessageStartPacket({ turn_index: 0 }, 7),
+      createMessageStartPacket({ turn_index: 0, sub_turn_index: 0 }, 99),
+    ]);
+    expect(state.toolProcessingDuration).toBe(7);
+  });
+});
+
+test.each([undefined, null])(
+  "explicit parent ends prevent duplicate closure (%s)",
+  (subTurnIndex) => {
+    for (const endType of [PacketType.SECTION_END, PacketType.ERROR]) {
+      const state = processPackets(createInitialState(1), [
+        createSearchToolStartPacket({ turn_index: 0 }),
+        createPacket(endType, { turn_index: 0, sub_turn_index: subTurnIndex }),
+        createStopPacket(),
+      ]);
+      const ends = (state.groupedPacketsMap.get("0-0") ?? []).filter(
+        (packet) =>
+          packet.obj.type === PacketType.SECTION_END ||
+          packet.obj.type === PacketType.ERROR
+      );
+      expect(ends).toHaveLength(1);
+    }
+  }
+);
