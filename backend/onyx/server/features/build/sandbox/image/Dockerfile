@@ -94,15 +94,38 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Chromium engine + certutil (libnss3-tools imports the egress-proxy CA into
-# Chromium's NSS db). Its own layer: big and rarely-changing, so an
-# AGENT_BROWSER_VERSION bump below re-pulls only the small CLI layer, not this.
+# Chrome for Testing has an independent security release cadence from Debian.
+# Keep its dependencies and inventory in the audited OS stage.
 RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    chromium \
+    libasound2t64 \
+    libatk-bridge2.0-0t64 \
+    libatk1.0-0t64 \
+    libatspi2.0-0t64 \
+    libcups2t64 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0t64 \
+    libnss3 \
     libnss3-tools \
+    libx11-6 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*; \
     fi
+
+COPY install-browser.sh /tmp/install-browser.sh
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export CURL_CA_BUNDLE=/run/secrets/build_ca_bundle; fi && \
+    if [ "$ENABLE_BROWSER" = "true" ]; then bash /tmp/install-browser.sh; fi && \
+    rm /tmp/install-browser.sh
 
 FROM os
 ARG ENABLE_SKILLS=true
@@ -116,10 +139,9 @@ RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
     ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
 
-# agent-browser CLI/daemon. Do NOT run `agent-browser install` — it fetches
-# Chrome-for-Testing (no arm64 build); we use system chromium via
-# AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts lets the npm postinstall run on
-# npm 11+.
+# agent-browser CLI/daemon. Do not run `agent-browser install`: the OS stage
+# supplies the pinned browser through AGENT_BROWSER_EXECUTABLE_PATH.
+# --allow-scripts lets the npm postinstall run on npm 11+.
 RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
     if [ -f /run/secrets/build_ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; fi && \
     if [ "$ENABLE_BROWSER" = "true" ]; then \
