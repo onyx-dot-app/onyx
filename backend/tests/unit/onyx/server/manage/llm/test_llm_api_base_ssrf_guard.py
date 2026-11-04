@@ -9,12 +9,19 @@ import pytest
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
+from onyx.server.manage.llm import api
 from onyx.server.manage.llm.api import (
     _validate_llm_api_base,
     get_ollama_available_models,
     get_openrouter_available_models,
 )
-from onyx.server.manage.llm.models import OllamaModelsRequest, OpenRouterModelsRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    OllamaModelsRequest,
+    OpenRouterModelsRequest,
+    TestLLMRequest,
+)
 from onyx.server.security.models import SSRFProtectionLevel
 
 
@@ -108,3 +115,52 @@ def test_openrouter_discovery_rejects_loopback_as_validation_error() -> None:
             MagicMock(),
         )
     assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+
+
+def _stored_lm_studio() -> SimpleNamespace:
+    # Key lives in custom_config only, the shape the LM Studio form saves.
+    return SimpleNamespace(
+        id=7,
+        provider="lm_studio",
+        api_key=None,
+        api_base="http://192.168.1.20:1234",
+        custom_config={LM_STUDIO_API_KEY_CONFIG_KEY: "stored-secret"},
+        zoom_voice_provider_id=None,
+    )
+
+
+def test_omitted_custom_config_still_guards_repoint_on_test() -> None:
+    # custom_config_changed=False keeps the stored key, so a new base must be refused.
+    request = TestLLMRequest(
+        id=7,
+        provider="lm_studio",
+        model="qwen",
+        api_base="http://192.168.1.99:1234",
+        api_key_changed=False,
+        custom_config_changed=False,
+    )
+    with patch.object(
+        api, "fetch_existing_llm_provider_by_id", return_value=_stored_lm_studio()
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            api.test_llm_configuration(request, MagicMock(), MagicMock())
+    assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+    assert "without changing the API key" in str(exc_info.value.detail)
+
+
+def test_omitted_custom_config_still_guards_repoint_on_save() -> None:
+    request = LLMProviderUpsertRequest(
+        id=7,
+        name="lm",
+        provider="lm_studio",
+        api_base="http://192.168.1.99:1234",
+        api_key_changed=False,
+        custom_config_changed=False,
+    )
+    with patch.object(
+        api, "fetch_existing_llm_provider_by_id", return_value=_stored_lm_studio()
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            api.put_llm_provider(request, False, MagicMock(), MagicMock())
+    assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+    assert "without changing the API key" in str(exc_info.value.detail)

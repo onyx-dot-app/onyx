@@ -746,6 +746,10 @@ def test_llm_configuration(
                 existing_custom_config=existing_provider.custom_config,
                 new_custom_config=test_custom_config,
             )
+        # The stored config is what the test will run with, so the reuse
+        # guard below must see it.
+        if existing_provider and not test_llm_request.custom_config_changed:
+            test_custom_config = existing_provider.custom_config
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
             _validate_llm_provider_change(
@@ -761,8 +765,6 @@ def test_llm_configuration(
                 if existing_provider.api_key
                 else None
             )
-        if existing_provider and not test_llm_request.custom_config_changed:
-            test_custom_config = existing_provider.custom_config
 
     zoom_voice_provider_id = test_llm_request.zoom_voice_provider_id
     if (
@@ -1260,6 +1262,9 @@ def put_llm_provider(
                 new_custom_config=llm_provider_upsert_request.custom_config,
             )
         )
+        # The stored config is what gets saved, so the reuse guard must see it.
+        if not llm_provider_upsert_request.custom_config_changed:
+            llm_provider_upsert_request.custom_config = existing_provider.custom_config
         _validate_llm_provider_change(
             existing_api_base=existing_provider.api_base,
             existing_custom_config=existing_provider.custom_config,
@@ -1299,8 +1304,6 @@ def put_llm_provider(
             if existing_provider.api_key
             else None
         )
-    if existing_provider and not llm_provider_upsert_request.custom_config_changed:
-        llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     if llm_provider_upsert_request.zoom_voice_provider_id is not None:
         llm_provider_upsert_request.api_key = None
