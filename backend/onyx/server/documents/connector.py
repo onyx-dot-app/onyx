@@ -136,6 +136,7 @@ from onyx.db.models import (
     IndexingStatus,
     User,
 )
+from onyx.db.search_settings import raise_if_port_reindex_in_progress
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_limits import (
@@ -2490,6 +2491,10 @@ def trigger_indexing_for_cc_pair(
             indexing_mode = IndexingMode.UPDATE
             if from_beginning:
                 indexing_mode = IndexingMode.REINDEX
+                # A crawl from the beginning cannot start while a reindex builds
+                # FUTURE; an incremental run can. Checked in the transaction that
+                # writes the trigger, so a reindex start cannot slip in between.
+                raise_if_port_reindex_in_progress(db_session)
 
             mark_ccpair_with_indexing_trigger(cc_pair.id, indexing_mode, db_session)
             num_triggers += 1

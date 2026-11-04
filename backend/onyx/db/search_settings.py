@@ -8,14 +8,22 @@ from onyx.configs.model_configs import (
     PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
 )
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingMode,
+    IndexingStatus,
+)
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import (
     CloudEmbeddingProvider,
+    ConnectorCredentialPair,
     IndexAttempt,
     IndexModelStatus,
     IndexReclaimStatus,
     SearchSettings,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )
@@ -205,6 +213,70 @@ def lock_search_settings_for_share(
         .scalars()
         .first()
     )
+
+
+REINDEX_BLOCKS_FULL_RUN_MESSAGE = (
+    "A re-index of the search index is in progress. Full re-index and backfill "
+    "requests are blocked until it completes."
+)
+
+
+def raise_if_port_reindex_in_progress(db_session: Session) -> None:
+    """Refuse a full re-index or backfill while a port-flow reindex builds a
+    FUTURE index: it would add documents with old timestamps that FUTURE's
+    incremental polls never fetch. INSTANT and legacy reindexes are not affected.
+
+    Locks the PRESENT row for share until the caller commits. A reindex start
+    locks that row for update before checking for pending full runs, so one of
+    the two always sees the other. Write and commit the run in this transaction."""
+    db_session.execute(
+        select(SearchSettings.id)
+        .where(SearchSettings.status == IndexModelStatus.PRESENT)
+        .with_for_update(read=True)
+    )
+    if active_secondary_port_target(db_session) is not None:
+        raise OnyxError(OnyxErrorCode.CONFLICT, REINDEX_BLOCKS_FULL_RUN_MESSAGE)
+
+
+def full_run_pending_cc_pairs(
+    db_session: Session, present_search_settings_id: int
+) -> list[tuple[int, str]]:
+    """(id, name) of cc_pairs that will, or do, crawl PRESENT from the beginning or
+    backfill: a REINDEX trigger, a full re-index or prune-after-reindex request, a
+    pending backfill, or a running or queued PRESENT attempt from the beginning.
+    A reindex started now could never catch up with them (their documents carry
+    old source timestamps), so `set_new_search_settings` refuses while any exist."""
+    full_run_attempt = (
+        select(IndexAttempt.id)
+        .where(
+            IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+            IndexAttempt.search_settings_id == present_search_settings_id,
+            IndexAttempt.is_synthetic_seed.is_(False),
+            or_(
+                IndexAttempt.from_beginning.is_(True),
+                IndexAttempt.is_backfill.is_(True),
+            ),
+            IndexAttempt.status.in_(
+                [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+            ),
+        )
+        .exists()
+    )
+    rows = db_session.execute(
+        select(ConnectorCredentialPair.id, ConnectorCredentialPair.name)
+        .where(
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+            or_(
+                ConnectorCredentialPair.indexing_trigger == IndexingMode.REINDEX,
+                ConnectorCredentialPair.full_reindex_requested_at.isnot(None),
+                ConnectorCredentialPair.prune_after_reindex_requested_at.isnot(None),
+                func.jsonb_array_length(ConnectorCredentialPair.pending_backfills) > 0,
+                full_run_attempt,
+            ),
+        )
+        .order_by(ConnectorCredentialPair.id)
+    )
+    return [(cc_pair_id, name or f"CC pair {cc_pair_id}") for cc_pair_id, name in rows]
 
 
 def active_secondary_port_target(db_session: Session) -> SearchSettings | None:
