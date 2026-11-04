@@ -105,6 +105,8 @@ class DeletionAttemptSnapshot(BaseModel):
     connector_id: int
     credential_id: int
     status: TaskStatus
+    # When the running deletion took its fence. None while it only waits to start.
+    started_at: datetime | None = None
 
 
 class ConnectorBase(BaseModel):
@@ -1045,6 +1047,8 @@ class CCPairFullInfo(BaseModel):
 
     # Set while the first index attempt waits on the capability checks.
     indexing_hold: IndexingHold | None = None
+    # Place by age in the index queue, from 1, while an attempt of the pair waits there.
+    queue_position: int | None = None
     pending_backfills: list[PendingBackfillSnapshot]
 
     @classmethod
@@ -1100,6 +1104,7 @@ class CCPairFullInfo(BaseModel):
         supports_targeted_reindex: bool = False,
         has_named_checks: bool = False,
         indexing_hold: IndexingHold | None = None,
+        queue_position: int | None = None,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -1174,6 +1179,7 @@ class CCPairFullInfo(BaseModel):
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,
             indexing_hold=indexing_hold,
+            queue_position=queue_position,
             pending_backfills=[
                 PendingBackfillSnapshot.from_pending(pending)
                 for pending in cc_pair_model.pending_backfills

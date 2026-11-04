@@ -88,6 +88,7 @@ from onyx.db.index_attempt import (
     get_latest_successful_index_attempt_for_cc_pair_id,
     get_open_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
+    get_queue_positions,
     get_waiting_index_attempt,
 )
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
@@ -783,6 +784,14 @@ def get_cc_pair_full_info(
             cc_pair.connector.source, cc_pair.connector.input_type
         ),
         has_named_checks=has_named_capability_checks(cc_pair.connector.source),
+        # The queue scan reads every queued attempt, so only a pair that can be
+        # in line pays for it on the page's poll.
+        queue_position=(
+            get_queue_positions(db_session).get(cc_pair_id)
+            if latest_attempt is not None
+            and latest_attempt.status == IndexingStatus.NOT_STARTED
+            else None
+        ),
     )
 
 

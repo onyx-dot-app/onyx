@@ -1593,6 +1593,17 @@ def get_queued_index_attempts(db_session: Session) -> Sequence[IndexAttempt]:
     ).all()
 
 
+def get_queue_positions(db_session: Session) -> dict[int, int]:
+    """Each pair's first queued attempt's place in line, from 1. Every attempt
+    handed to the queue counts, other pairs' and other search settings' too,
+    since they share it. The queue also serves a pair's first run ahead of
+    repeats, so the place is where the attempt stands by age."""
+    positions: dict[int, int] = {}
+    for position, attempt in enumerate(get_queued_index_attempts(db_session), 1):
+        positions.setdefault(attempt.connector_credential_pair_id, position)
+    return positions
+
+
 def get_waiting_index_attempt(
     db_session: Session, cc_pair_id: int, search_settings_id: int
 ) -> IndexAttempt | None:
