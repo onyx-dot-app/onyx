@@ -6765,6 +6765,11 @@ class TenantUsage(Base):
     )
 
 
+# Coalesced so the dedup indexes collapse NULLs on Postgres before 15 (no
+# NULLS NOT DISTINCT). Upserts must name this exact expression as the conflict target.
+USAGE_MODEL_CONFIGURATION_KEY = text("COALESCE(model_configuration_id, 0)")
+
+
 class UserUsage(Base):
     """Daily user and system LLM usage rollup. ``user_usage`` is a legacy
     physical name retained for deployment compatibility; partial indexes
@@ -6804,6 +6809,9 @@ class UserUsage(Base):
     incognito: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # The saved model the call ran; None when unknown. Not a FK: a deleted
+    # configuration keeps its id here, which is harmless since ids are never reused.
+    model_configuration_id: Mapped[int | None] = mapped_column(Integer(), nullable=True)
 
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -6844,6 +6852,7 @@ class UserUsage(Base):
             "flow",
             "provider",
             "incognito",
+            USAGE_MODEL_CONFIGURATION_KEY,
             unique=True,
             postgresql_where=text("actor_kind = 'USER'"),
         ),
@@ -6854,6 +6863,7 @@ class UserUsage(Base):
             "model",
             "flow",
             "provider",
+            USAGE_MODEL_CONFIGURATION_KEY,
             unique=True,
             postgresql_where=text("actor_kind = 'SYSTEM'"),
         ),
