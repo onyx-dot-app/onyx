@@ -67,8 +67,8 @@ export const OpenSearchSizingCalculator = () => {
   // GB of RAM per vCPU by node family, most RAM per core first. On Graviton nodes 1 vCPU is 1 core.
   const NODE_TYPES = [
     { gbPerVcpu: 8, name: "memory-optimized", example: "r8g" },
-    { gbPerVcpu: 4, name: "general purpose", example: "m7g" },
-    { gbPerVcpu: 2, name: "compute-optimized", example: "c7g" },
+    { gbPerVcpu: 4, name: "general purpose", example: "m8g" },
+    { gbPerVcpu: 2, name: "compute-optimized", example: "c8g" },
   ];
   // One question runs about 10 hybrid searches: 4-8 on the first search call, 2-4 on a second.
   const SEARCHES_PER_QUESTION = 10;
@@ -81,13 +81,17 @@ export const OpenSearchSizingCalculator = () => {
   // How much busier the peak is than the day's average rate. Onyx Cloud's busiest minutes
   // (p95 to p99) run 3 to 15 times its weekly average search rate.
   const PEAK_TO_AVERAGE = 5;
-  // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large to r8g.4xlarge. General-purpose
-  // nodes with the same RAM allow the same; compute-optimized nodes allow half.
-  const MAX_DISK_FOR_RAM = { 16: 1500, 32: 3000, 64: 6000, 128: 12000 };
+  // Largest gp3 volume Amazon OpenSearch Service allows, in GB, by GB of RAM per vCPU and node RAM.
+  const MAX_DISK = {
+    8: { 16: 1500, 32: 3000, 64: 6000, 128: 12000 },
+    4: { 16: 2000, 32: 3000, 64: 6000, 128: 12000 },
+    2: { 16: 1000, 32: 1500, 64: 3000, 128: 6000 },
+  };
+  const MAX_DISK_FOR_RAM = MAX_DISK[8];
   // Larger disks only pay off with 1-bit vectors, and they make moving or replacing a node slow.
   // Clusters that need more storage add nodes instead.
   const MAX_NODE_DISK = 3000;
-  const NODE_DISK_ALL = [64, 128, 256, 512, 1000, 1500, 3000];
+  const NODE_DISK_ALL = [64, 128, 256, 512, 1000, 1500, 2000, 3000];
   const COPY_HINT = {
     1: "No replica. A node failure stops search until the data is restored.",
     2: "A primary and one replica. Survives one node failure.",
@@ -274,7 +278,7 @@ export const OpenSearchSizingCalculator = () => {
     const vcpusPerNode = nodeRam / nodeType.gbPerVcpu;
     const nodesForSearch = searchNodesWith(nodeType);
     // Recommended storage fills up at the same node count that memory, copies and search need.
-    const maxDisk = Math.min(MAX_DISK_FOR_RAM[nodeRam] / (nodeType.gbPerVcpu === 2 ? 2 : 1), MAX_NODE_DISK);
+    const maxDisk = Math.min(MAX_DISK[nodeType.gbPerVcpu][nodeRam], MAX_NODE_DISK);
     const diskOptions = NODE_DISK_ALL.filter((d) => d <= maxDisk);
     const nodesWithoutStorage = Math.ceil(Math.max(c, nodesForMemory, nodesForSearch) / zones) * zones;
     const neededPerNode = provision / 1e9 / nodesWithoutStorage;
@@ -292,7 +296,7 @@ export const OpenSearchSizingCalculator = () => {
             : "copies";
     return {
       provision, hotAll, recommendedRam, nodeRam, cachePerNode, recommendedType, nodeType, vcpusPerNode,
-      nodesForSearch, diskOptions, recommendedDisk, nodeDisk, nodes, limit,
+      nodesForSearch, maxDisk, diskOptions, recommendedDisk, nodeDisk, nodes, limit,
     };
   };
   // A search runs on one copy of every primary shard, so a node with no shard copy does no
@@ -304,7 +308,7 @@ export const OpenSearchSizingCalculator = () => {
   const effectiveCopies = Math.max(copies, searchCopies);
   const {
     provision, hotAll, recommendedRam, nodeRam, cachePerNode, recommendedType, nodeType, vcpusPerNode,
-    diskOptions, recommendedDisk, nodeDisk, nodes, limit,
+    maxDisk, recommendedDisk, nodeDisk, nodes, limit,
   } = effectiveCopies > copies ? layout(effectiveCopies) : first;
   // Share of the cluster's storage, file cache and vCPUs that the data and peak search use.
   const storageUse = (indexOneCopy * effectiveCopies) / (nodeDisk * 1e9 * nodes);
@@ -678,8 +682,10 @@ export const OpenSearchSizingCalculator = () => {
                 className={input + " w-full"}
               >
                 <option value="auto">{"Recommended (" + fmtDisk(recommendedDisk) + ")"}</option>
-                {diskOptions.map((d) => (
-                  <option key={d} value={String(d)}>{fmtDisk(d)}</option>
+                {NODE_DISK_ALL.map((d) => (
+                  <option key={d} value={String(d)} disabled={d > maxDisk}>
+                    {fmtDisk(d) + (d > maxDisk ? " · above the " + fmtDisk(maxDisk) + " limit for this node" : "")}
+                  </option>
                 ))}
               </select>
               <div className={hint}>Recommended storage fills up at the same node count that memory and search need.</div>
