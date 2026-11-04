@@ -322,8 +322,9 @@ export function useNavigation(): Navigation {
 }
 
 /**
- * A pathname's segments, each decoded (a malformed one stays as it is). An
- * encoded `/` stays inside its segment, so `a%2Fb` is not `a/b`.
+ * A pathname in one canonical encoding: each segment decoded (a malformed one
+ * stays as it is), then encoded again. `%31` and `1` match, and an encoded
+ * `/` stays inside its segment, so `a%2Fb` is not `a/b`.
  */
 function pathSegments(pathname: string): string {
   return pathname
@@ -335,7 +336,8 @@ function pathSegments(pathname: string): string {
         return segment;
       }
     })
-    .join("\u0000");
+    .map(encodeURIComponent)
+    .join("/");
 }
 
 /**
