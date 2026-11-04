@@ -6,7 +6,10 @@ import React, { useRef } from "react";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components/text/components";
 import { SvgImport, SvgX } from "@opal/icons";
-import { InputLeadingIcon } from "@opal/components/inputs/leading-icon";
+import {
+  InputContainer,
+  InputTitleLine,
+} from "@opal/components/inputs/container";
 import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 import useUploadTarget from "@opal/components/inputs/uploads/useUploadTarget";
@@ -113,25 +116,25 @@ export default function UploadControl({
     <div
       {...getRootProps({ className: "opal-input-upload" })}
       data-drag={drag ?? undefined}
-      // Focus moving to the picker, or between the field and its buttons, is
-      // not the user leaving the field.
-      onBlur={(e: React.FocusEvent<HTMLDivElement>) => {
-        if (pickerOpenRef.current) return;
-        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-        onBlur?.(e);
-      }}
     >
       {fileInput}
-      <div className="opal-input" data-variant={variant}>
+      <InputContainer
+        variant={variant}
+        // Focus moving to the picker is not the user leaving the field.
+        onFieldBlur={(e) => {
+          if (!pickerOpenRef.current) onBlur?.(e);
+        }}
+      >
         {/* The whole field picks files, as a button a label can point at;
         the × beside it is its own button. Its name is the label, else its
         text. Enter and Space open the picker, as on any button. */}
+        {/* oxlint-disable-next-line jsx-a11y/control-has-associated-label -- its text is the label inside InputTitleLine; an aria-label would override the <label> name */}
         <button
           id={id}
           type="button"
           disabled={isNonEditable}
           data-testid={rest["data-testid"]}
-          className="opal-input-row opal-input-upload-trigger"
+          className="opal-input-upload-trigger"
           // A click only focuses, as some browsers do not focus a clicked
           // button, so a copied file can be pasted next.
           onClick={() => triggerRef.current?.focus()}
@@ -152,26 +155,27 @@ export default function UploadControl({
             onClear();
           }}
         >
-          <InputLeadingIcon icon={SvgImport} muted />
-          <span
-            className="opal-input-upload-label"
-            data-placeholder={shownLabel === null ? true : undefined}
-          >
-            <Text
-              as="p"
-              font={
-                drag !== null
-                  ? "main-ui-action"
-                  : shownLabel === null
-                    ? "main-ui-muted"
-                    : "main-ui-body"
-              }
-              color="inherit"
-              maxLines={1}
+          <InputTitleLine icon={SvgImport} iconMuted>
+            <span
+              className="opal-input-upload-label"
+              data-placeholder={shownLabel === null ? true : undefined}
             >
-              {shownLabel ?? placeholder}
-            </Text>
-          </span>
+              <Text
+                as="p"
+                font={
+                  drag !== null
+                    ? "main-ui-action"
+                    : shownLabel === null
+                      ? "main-ui-muted"
+                      : "main-ui-body"
+                }
+                color="inherit"
+                maxLines={1}
+              >
+                {shownLabel ?? placeholder}
+              </Text>
+            </span>
+          </InputTitleLine>
         </button>
         {hasValue && !isNonEditable && drag === null && (
           <Button
@@ -197,7 +201,7 @@ export default function UploadControl({
         >
           {selectLabel}
         </Button>
-      </div>
+      </InputContainer>
     </div>
   );
 }

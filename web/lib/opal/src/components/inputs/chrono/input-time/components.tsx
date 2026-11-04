@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 import React from "react";
 import type { InputVariants } from "@opal/types";
 import { Button } from "@opal/components";
@@ -187,19 +187,14 @@ function InputTime({
   const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
   // Commit when focus leaves the whole field, not on intra-field tabbing.
-  function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    commit(segments);
-  }
-
   const separator = <SegmentSeparator>:</SegmentSeparator>;
 
   return (
     <div className="opal-input-segmented-root">
-      <div
-        className="opal-input opal-input-segmented"
-        data-variant={variant}
-        onBlur={handleRootBlur}
+      <InputContainer
+        className="opal-input-segmented"
+        variant={variant}
+        onFieldBlur={() => commit(segments)}
       >
         <div
           className="opal-input-segmented-content"
@@ -257,7 +252,7 @@ function InputTime({
             />
           </div>
         )}
-      </div>
+      </InputContainer>
     </div>
   );
 }

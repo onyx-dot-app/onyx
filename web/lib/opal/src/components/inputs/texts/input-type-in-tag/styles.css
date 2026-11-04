@@ -10,9 +10,6 @@
 
 .opal-input.opal-input-type-in-tag {
   @apply cursor-text items-start justify-start;
-  /* Grows with its chip rows from the single-line 36px. */
-  height: auto;
-  min-height: var(--spacing-block-36);
   min-width: 160px;
 }
 
@@ -67,9 +64,4 @@
 .opal-input-type-in-tag-field {
   /* The title line's 20px text box, as in InputTypeIn. */
   @apply h-5 w-auto min-w-20 flex-1 px-0.5 py-0;
-}
-
-/* The title line grows with its chip rows, which pack from the top. */
-.opal-input-row.opal-input-type-in-tag-row {
-  @apply h-auto items-start;
 }

@@ -9,7 +9,10 @@ import type { IconFunctionComponent } from "@opal/types";
 import { Button, Chip, CHIP_REMOVE_ATTR, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
-import { InputLeadingIcon } from "@opal/components/inputs/leading-icon";
+import {
+  InputContainer,
+  InputTitleLine,
+} from "@opal/components/inputs/container";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -307,12 +310,12 @@ function TagField({
   }
 
   return (
-    <div
+    <InputContainer
       ref={setRootRef}
-      role="presentation"
-      className="opal-input opal-input-type-in-tag"
-      data-variant={disabled ? "disabled" : variant}
-      data-open={open || undefined}
+      className="opal-input-type-in-tag"
+      variant={disabled ? "disabled" : variant}
+      open={open}
+      grows
       data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
       onClick={focusField}
@@ -323,8 +326,7 @@ function TagField({
         onInputDoubleClick();
       }}
     >
-      <div className="opal-input-row opal-input-type-in-tag-row">
-        {Icon && <InputLeadingIcon icon={Icon} />}
+      <InputTitleLine icon={Icon} grows>
         <div
           ref={tagsRef}
           className="opal-input-type-in-tag-tags"
@@ -396,7 +398,7 @@ function TagField({
             />
           )}
         </div>
-      </div>
+      </InputTitleLine>
       {children}
       {/* The clear action is the field's last control, but for a
       trailingAction. */}
@@ -414,7 +416,7 @@ function TagField({
         />
       )}
       {trailingAction}
-    </div>
+    </InputContainer>
   );
 }
 

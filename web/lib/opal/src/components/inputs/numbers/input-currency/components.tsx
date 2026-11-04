@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 import "@opal/components/inputs/numbers/input-currency/styles.css";
 import React from "react";
 import type {
@@ -339,27 +339,16 @@ function InputCurrency({
     };
   }
 
-  // Tidy when focus leaves the whole field, not on intra-field moves.
-  function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    commit(segments);
-  }
-
   const symbol = <SegmentSeparator>{parts.symbol}</SegmentSeparator>;
 
   return (
     <div className="opal-input-segmented-root opal-input-currency">
-      <div
-        role="presentation"
-        className="opal-input opal-input-segmented"
-        data-variant={variant}
-        onBlur={handleRootBlur}
+      <InputContainer
+        className="opal-input-segmented"
+        variant={variant}
+        onFieldBlur={() => commit(segments)}
         // A click on the chrome, not on a segment, focuses the whole segment.
-        onClick={(e) => {
-          if (!(e.target instanceof HTMLInputElement)) {
-            wholeRef.current?.focus();
-          }
-        }}
+        focusTarget={() => wholeRef.current}
       >
         <div
           className="opal-input-segmented-content"
@@ -425,7 +414,7 @@ function InputCurrency({
           </span>
           {parts.symbolAfter && symbol}
         </div>
-      </div>
+      </InputContainer>
     </div>
   );
 }

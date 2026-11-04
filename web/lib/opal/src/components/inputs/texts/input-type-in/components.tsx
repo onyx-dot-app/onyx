@@ -5,7 +5,10 @@ import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
-import { InputLeadingIcon } from "@opal/components/inputs/leading-icon";
+import {
+  InputContainer,
+  InputTitleLine,
+} from "@opal/components/inputs/container";
 import { useOpalStrings } from "@opal/strings";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 
@@ -98,12 +101,10 @@ export default function InputTypeIn({
   const isReadOnly = readOnly || variant === "readOnly";
 
   return (
-    <div
-      role="presentation"
-      data-variant={variant}
-      data-open={open || undefined}
-      className="opal-input"
-      onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
+    <InputContainer
+      variant={variant}
+      open={open}
+      focusTarget={(root) => root.querySelector("input")}
       onKeyDown={(e) => {
         // Escape on a control beside the field (the clear button, a reveal
         // toggle, a chevron) returns focus to the field. It does so even when
@@ -113,13 +114,10 @@ export default function InputTypeIn({
         if (input && e.target !== input) input.focus();
       }}
     >
-      <div className="opal-input-row">
-        {Icon === "search" ? (
-          <InputLeadingIcon icon={SvgSearch} muted />
-        ) : (
-          Icon && <InputLeadingIcon icon={Icon} />
-        )}
-
+      <InputTitleLine
+        icon={Icon === "search" ? SvgSearch : Icon}
+        iconMuted={Icon === "search"}
+      >
         {leftChildren}
 
         <input
@@ -138,7 +136,7 @@ export default function InputTypeIn({
           className="opal-input-field"
           {...props}
         />
-      </div>
+      </InputTitleLine>
 
       {clearButton && !rightChildren && !disabled && !isReadOnly && (
         <div className={cn(value === "" && "invisible")}>
@@ -166,6 +164,6 @@ export default function InputTypeIn({
       )}
 
       {rightChildren}
-    </div>
+    </InputContainer>
   );
 }

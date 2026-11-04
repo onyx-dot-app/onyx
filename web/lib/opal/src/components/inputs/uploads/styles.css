@@ -5,10 +5,10 @@
   @apply w-full;
 }
 
-/* The field itself picks a file: the input's content row as a bare button,
-   with no caret and a pointer. */
+/* The field itself picks a file: a bare button around the title line, with
+   no caret and a pointer. */
 .opal-input-upload-trigger {
-  @apply cursor-pointer select-none outline-hidden bg-transparent border-0 text-start;
+  @apply flex flex-1 min-w-0 cursor-pointer select-none outline-hidden bg-transparent border-0 p-0 text-start;
 }
 
 .opal-input[data-variant="disabled"] .opal-input-upload-trigger {

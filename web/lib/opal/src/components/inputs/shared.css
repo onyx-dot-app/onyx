@@ -25,6 +25,14 @@
   padding: calc(0.375rem - 1px);
 }
 
+/* InputContainer grows: rows or chips raise it from the 36px single line,
+   and its parts align to the top. */
+.opal-input[data-grows] {
+  @apply items-start;
+  height: auto;
+  min-height: var(--spacing-block-36);
+}
+
 .opal-input[data-variant="primary"] {
   background-color: var(--background-neutral-00);
   border: 1px solid var(--border-01);
@@ -85,12 +93,17 @@
   @apply flex flex-1 min-w-0 h-6 items-center gap-1 p-0.5;
 }
 
+/* A title line that wraps (chip rows) grows from 24px, aligned to the top. */
+.opal-input-row[data-grows] {
+  @apply h-auto items-start;
+}
+
 /* The text box is the 20px line; its 2px inline padding matches Text's. */
 .opal-input-row > .opal-input-field {
   @apply h-5 min-w-0 px-0.5 py-0;
 }
 
-/* InputLeadingIcon's wrapper only carries the colour hook: the 20px icon
+/* The leading icon's wrapper only carries the colour hook: the 20px icon
    container is the box. */
 .opal-input-leading-icon {
   display: contents;
