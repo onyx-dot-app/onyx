@@ -75,7 +75,8 @@ export const OpenSearchSizingCalculator = () => {
   // CPU seconds per hybrid search, per embedding dimension and million chunks. Fit from two
   // single-shard benchmarks near 1.5M chunks: 0.17 s at 384 dims and 0.48 s at 1024 dims.
   const SEARCH_CPU_PER_DIM_MILLION = 0.0003;
-  const SEARCH_CPU_TARGET = 0.5;
+  // Peak CPU for search. Stays under the 80% at which AWS recommends an alarm.
+  const SEARCH_CPU_TARGET = 0.75;
   const MAX_QPS = 10_000;
   // How much busier the peak is than the day's average rate. Onyx Cloud's busiest minutes
   // (p95 to p99) run 3 to 15 times its weekly average search rate.
@@ -712,7 +713,7 @@ export const OpenSearchSizingCalculator = () => {
                 : limit === "memory"
                 ? "Set by memory: the vectors of " + (effectiveCopies === 1 ? "1 copy" : effectiveCopies + " copies") + " need " + fmtBytes(hotAll) + " of file cache in total, and each node has about " + fmtBytes(cachePerNode) + "."
                 : limit === "search"
-                ? "Set by search load: peak searches need " + fmtVcpus(vcpusForSearch) + " in total at 50% CPU, and each node has " + vcpusPerNode + " vCPUs."
+                ? "Set by search load: peak searches need " + fmtVcpus(vcpusForSearch) + " in total at " + pct(SEARCH_CPU_TARGET) + " CPU, and each node has " + vcpusPerNode + " vCPUs."
                 : "Set by the copy count: " + effectiveCopies + (effectiveCopies === 1 ? " copy needs" : " copies need") + " at least " + effectiveCopies + (effectiveCopies === 1 ? " node" : " nodes") + (zones === 3 ? ", one in each zone" : "") + "."}
             </div>
           </div>
