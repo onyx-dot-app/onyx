@@ -3,7 +3,9 @@ concurrency:
   # Pushes to main share a group and queue: one run in progress and the
   # newest one pending, so a burst of merges runs at most twice and every
   # run finishes (cancelling would starve main while merges keep landing).
-  group: Run-Playwright-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref) || github.run_id }}
+  # Same-repo PRs get a group per run: the cancel-superseded job cancels the
+  # older runs, so the newest run, the one GitHub shows, always survives.
+  group: Run-Playwright-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
 on:
@@ -83,6 +85,24 @@ env:
   PLAYWRIGHT_S3_BUCKET: onyx-playwright-artifacts
 
 jobs:
+  cancel-superseded:
+    # Forks get a read-only token, so they keep the concurrency group's cancel.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/cancel-superseded-runs
+      - uses: ./.github/actions/cancel-superseded-runs
+
   changes:
     # Decides whether the playwright matrix runs. On pull_request we use
     # paths-filter; on push (main, tags, release branches) we default to
