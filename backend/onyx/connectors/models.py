@@ -248,7 +248,8 @@ class DocumentBase(BaseModel):
 
     # The file's type and size as the source reports them, for the admin breakdown.
     source_mime_type: str | None = None
-    source_size_bytes: int | None = None
+    # Bounded to what the BigInteger column holds.
+    source_size_bytes: int | None = Field(default=None, ge=0, le=2**63 - 1)
 
     def get_title_for_document_index(
         self,
