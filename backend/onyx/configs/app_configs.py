@@ -2132,6 +2132,9 @@ S3_GENERATE_LOCAL_CHECKSUM = (
 # the session credentials that signed it expire.
 FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS = 5 * 60
 FILE_STORE_PRESIGN_MAX_TTL_SECONDS = 15 * 60
+# The largest single S3 PUT. It also bounds the hash that finalize computes on
+# stores that keep no SHA-256.
+FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
 
 # The bundled MinIO that releases before the object store wrote to. A hand-run
 # upgrade keeps this endpoint in .env, so the files stay in MinIO.

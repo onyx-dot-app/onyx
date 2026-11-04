@@ -13,7 +13,11 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.app_configs import S3_ENDPOINT_URL, S3_LEGACY_ENDPOINT_URL
+from onyx.configs.app_configs import (
+    FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES,
+    S3_ENDPOINT_URL,
+    S3_LEGACY_ENDPOINT_URL,
+)
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.file_record import get_filerecord_by_file_id_optional
@@ -194,6 +198,14 @@ def test_bad_presign_arguments_are_rejected(store: S3BackedFileStore) -> None:
             file_type="text/plain",
             size=1,
             sha256="not-a-digest",
+        )
+    with pytest.raises(ValueError, match="size"):
+        store.presign_upload(
+            display_name=None,
+            file_origin=FileOrigin.OTHER,
+            file_type="text/plain",
+            size=FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES + 1,
+            sha256="0" * 64,
         )
 
 

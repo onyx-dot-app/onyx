@@ -22,6 +22,7 @@ from onyx.configs.app_configs import (
     AWS_REGION_NAME,
     FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS,
     FILE_STORE_PRESIGN_MAX_TTL_SECONDS,
+    FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES,
     S3_AWS_ACCESS_KEY_ID,
     S3_AWS_SECRET_ACCESS_KEY,
     S3_ENDPOINT_URL,
@@ -137,7 +138,9 @@ def pending_upload_lock_name(pending_upload_id: str) -> str:
     return f"file_store_presigned_upload_finalize:{pending_upload_id}"
 
 
-# Covers hashing a large object on stores that keep no SHA-256.
+# Covers hashing the largest allowed object on stores that keep no SHA-256.
+# A Redis lock expires after this; the Postgres cache backend's advisory lock
+# holds its connection until finalize ends.
 _FINALIZE_LOCK_TIMEOUT_SECONDS = 30 * 60
 
 
@@ -502,8 +505,10 @@ class PresignableFileStore(FileStore):
         writes no file_record row until finalize_presigned_upload. sha256 is
         the hex digest of the content to upload."""
         ttl_seconds = presign_ttl_seconds(ttl)
-        if size < 0:
-            raise ValueError("A presigned upload size must not be negative")
+        if not 0 <= size <= FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES:
+            raise ValueError(
+                f"A presigned upload size must be 0 to {FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES} bytes"
+            )
         sha256 = sha256.lower()
         if not _SHA256_HEX.fullmatch(sha256):
             raise ValueError("sha256 must be a hex SHA-256 digest")

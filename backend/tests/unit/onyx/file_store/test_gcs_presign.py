@@ -36,7 +36,7 @@ def _store_with(credentials: Credentials) -> GCSBackedFileStore:
     store = GCSBackedFileStore(bucket_name="onyx-bucket")
     client = storage.Client(project="project", credentials=credentials)
     store._get_gcs_client = MagicMock(return_value=client)
-    store._get_signing_credentials = MagicMock(return_value=credentials)
+    store._signing_credentials = credentials
     return store
 
 

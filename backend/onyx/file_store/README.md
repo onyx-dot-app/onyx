@@ -192,6 +192,10 @@ for one object and one method. The default TTL is 5 minutes and the maximum is
 - `presign_upload(display_name, file_origin, file_type, size, sha256)` reserves a
   file ID and returns a PUT request and a pending upload ID. It writes no
   `file_record` row. The pending upload is kept in the cache backend.
+- Uploads are at most 5 GiB (`FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES`), the largest
+  single S3 PUT.
+- `presign_download` checks no user. Authorize the caller before you hand out
+  the URL.
 - `finalize_presigned_upload(pending_upload_id)` checks the size and SHA-256 of
   the uploaded object, then writes the `file_record` row. On a mismatch it
   deletes the object and raises `PresignedUploadVerificationError`.

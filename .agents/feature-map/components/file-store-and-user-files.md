@@ -136,6 +136,8 @@ preview.
    `ChatMessage.files` lists it; readers of the session stamped on a generated
    file; and the document ACL for connector files. A new kind of file must fit
    one of these branches, or nobody can read it.
+   `FileStore.presign_download` checks no user: a caller that hands a URL to
+   anyone else must authorize first.
 2. `generated-file-session-stamp` **Every generated file must carry the
    session stamp.** A `CHAT_IMAGE_GEN` file with no `chat_session_id` in
    `file_metadata` is open to every signed-in user
@@ -284,8 +286,8 @@ preview.
   Implement every `FileStore` method, write the record through
   `upsert_filerecord` so incognito blobs get their cleanup stamp, and keep
   [[#file-id-write-once]]. An object-store backend subclasses
-  `PresignableFileStore` and implements its signing hooks, because Craft
-  sandboxes move files only through presigned URLs.
+  `PresignableFileStore` and implements its signing hooks, because the Craft
+  Firecracker runtime will move files through presigned URLs.
 - `investigate-file-404` **Investigate a 404 on `/chat/file/{file_id}`.** Find which id the caller
   sent ([[#say-which-id]]). Then walk the branches of
   `user_can_access_chat_file` in order for that user: `user_file.user_id`,

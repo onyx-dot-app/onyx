@@ -87,6 +87,8 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         # first read/write. A connection string needs neither URL nor key.
         self._account_url: str | None = None
         self._account_key_credential: dict[str, str] | None = None
+        # A custom-domain endpoint hides the account name that a SAS needs.
+        self._configured_account_name = None if connection_string else account_name
         if not connection_string:
             if account_url:
                 self._account_url = account_url
@@ -548,13 +550,7 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         from azure.storage.blob import generate_blob_sas
 
         client = self._get_blob_service_client()
-        # A custom-domain endpoint hides the account name, so prefer the
-        # configured one.
-        account_name = (
-            self._account_key_credential["account_name"]
-            if self._account_key_credential is not None
-            else client.account_name
-        )
+        account_name = self._configured_account_name or client.account_name
         if account_name is None:
             raise PresignedUrlsNotSupportedError("The Azure account name is unknown")
         expiry = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
