@@ -315,6 +315,7 @@ covers new files that match it.
 | `web/src/sections/knowledge/`, `web/src/lib/hierarchy/` | agents-personas, access-control |
 | `web/src/app/admin/federated/`, `web/src/components/admin/federated/`, `web/src/hooks/useFederatedOAuthStatus.ts`, `web/src/app/federated/oauth/`, `web/src/components/chat/FederatedOAuthModal.tsx` | federated-search |
 | `web/src/app/admin/groups*/`, `web/src/app/ee/admin/groups/`, `web/src/views/admin/GroupsPage/` | access-control, authorization |
+| `web/src/sections/admin/AdminListHeader.tsx` | access-control, auth-and-identity |
 | `web/src/lib/permissions/` | authorization |
 | `web/src/app/admin/scim/`, `web/src/app/admin/users/`, `web/src/app/admin/service-accounts/`, `web/src/app/ee/admin/scim/`, `web/src/app/ee/admin/service-accounts/`, `web/src/views/admin/ScimPage/`, `web/src/views/admin/ServiceAccountsPage/`, `web/src/views/admin/UsersPage/` | auth-and-identity |
 | `web/src/hooks/useScimToken.ts`, `web/src/hooks/useAdminUsers.ts`, `web/src/hooks/useUsers.ts`, `web/src/hooks/useUserCounts.ts`, `web/src/providers/UserProvider.tsx`, `web/src/lib/hooks/useCaptcha.ts` | auth-and-identity |
