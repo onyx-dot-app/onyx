@@ -90,7 +90,9 @@ translates. `fetch_chat_file` accepts either id.
 **One record for every backend.** `db/file_record.py:upsert_filerecord` writes
 the `FileRecord` row for every backend. The Postgres backend adds a
 `FileContent` row that points at a large object. Callers use `FileStore`
-through `get_default_file_store` and never branch on the backend.
+through `get_default_file_store` and never branch on the backend. The one
+exception is presigned URLs: only the cloud backends have them, so a caller
+checks `isinstance(store, PresignableFileStore)` first.
 `upsert_filerecord` also stamps a blob saved during a `USAGE_ONLY` incognito
 turn with its session id (`CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR`, set by
 `chat/execution.py:start_chat_turn`). The incognito cleanup finds blobs only
