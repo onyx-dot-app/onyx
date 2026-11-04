@@ -88,7 +88,6 @@ import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, Presence, ShadowDiv, Spacer } from "@opal/components";
-import { ChatMessageLoader } from "@opal/loaders";
 import {
   IllustrationContent,
   RootLayout,
@@ -103,7 +102,9 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
-import ChatUI, { FULL_WIDTH_TRANSITION } from "@/sections/chat/ChatUI";
+import ChatUI from "@/sections/chat/ChatUI";
+import { FULL_WIDTH_TRANSITION } from "@/sections/chat/constants";
+import { ChatLoading } from "@/views/AppPage/loading";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -985,35 +986,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     width="full"
                     height="full"
                   >
-                    <div className="h-full w-full px-2 sm:px-4 pt-6 pb-12">
-                      <Section justifyContent="start" gap={0}>
-                        {/* A conversation's shape in the chat column, from the
-                        top down like a real chat. More turns than fit, so it
-                        fills any height; the ones that overflow are clipped
-                        (not scrollable) and fade out at the bottom. The bottom
-                        keeps clear of the input bar. */}
-                        <ShadowDiv
-                          role="status"
-                          aria-label={t("firstOpenLoader.ariaLabel")}
-                          variant="mask"
-                          shadowDirection="bottom-only"
-                          containerClassName={cn(
-                            "w-full flex-1 md:max-w-(--app-chat-column-width)",
-                            FULL_WIDTH_TRANSITION
-                          )}
-                          className="flex-1 min-h-0 overflow-y-hidden"
-                        >
-                          <Section gap={12} height="fit">
-                            {Array.from({ length: 8 }, (_, turn) => (
-                              <Section key={turn} gap={12} height="fit">
-                                <ChatMessageLoader orientation="end" />
-                                <ChatMessageLoader orientation="start" />
-                              </Section>
-                            ))}
-                          </Section>
-                        </ShadowDiv>
-                      </Section>
-                    </div>
+                    <ChatLoading />
                   </Presence>
 
                   {/* Session fetch error (404 / 403) */}
