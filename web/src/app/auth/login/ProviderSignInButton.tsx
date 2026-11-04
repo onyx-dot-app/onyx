@@ -22,6 +22,7 @@
 
 "use client";
 
+import { type Navigation, useNavigation } from "@opal/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Text } from "@opal/components";
 import { InputErrorText } from "@opal/layouts";
@@ -50,9 +51,13 @@ function openIdpTab(): Window | null {
 }
 
 /** Returns true when the IdP opened in a new tab and this page stays put. */
-function navigateToIdp(url: string, idpTab: Window | null): boolean {
+function navigateToIdp(
+  url: string,
+  idpTab: Window | null,
+  navigation: Navigation
+): boolean {
   if (!isFramed()) {
-    window.location.href = url;
+    navigation.load(url);
     return false;
   }
   if (idpTab && !idpTab.closed) {
@@ -70,6 +75,7 @@ export default function ProviderSignInButton({
   autoStart = false,
 }: ProviderSignInButtonProps) {
   const t = useTranslations("auth");
+  const navigation = useNavigation();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Strict mode runs effects twice. A second authorize call would replace the
@@ -97,7 +103,7 @@ export default function ProviderSignInButton({
         if (!data.authorization_url) {
           throw new Error(t("login.ssoMissingAuthUrl.error"));
         }
-        if (navigateToIdp(data.authorization_url, idpTab)) {
+        if (navigateToIdp(data.authorization_url, idpTab, navigation)) {
           setIsRedirecting(false);
         }
       } catch (exc) {
@@ -107,7 +113,7 @@ export default function ProviderSignInButton({
         setIsRedirecting(false);
       }
     },
-    [provider.authorizeUrl, nextUrl, t]
+    [provider.authorizeUrl, nextUrl, t, navigation]
   );
 
   useEffect(() => {
