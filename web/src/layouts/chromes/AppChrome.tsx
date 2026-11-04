@@ -64,7 +64,9 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { PendingRoute } from "@opal/navigation";
+import { PageLoader } from "@opal/loaders";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -535,8 +537,11 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
+                {/* Only for the chat on screen: during a navigation to another
+                    chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
                   currentChatSession &&
+                  currentChatSession.id === appPosition.chat() &&
                   !incognitoEnabled && (
                     <FrostedDiv className="flex shrink flex-row items-center">
                       <Button
@@ -747,7 +752,11 @@ export default function AppChrome({ children }: AppChromeProps) {
 
             {/* Header */}
             <Header />
-            <RootLayout.MainContent>{children}</RootLayout.MainContent>
+            <RootLayout.MainContent>
+              <PendingRoute base="/app" loader={<PageLoader />}>
+                {children}
+              </PendingRoute>
+            </RootLayout.MainContent>
             <Footer />
           </div>
           {rightPanel}

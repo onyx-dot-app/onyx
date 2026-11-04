@@ -21,6 +21,9 @@ const streamMessage = jest.fn().mockResolvedValue(undefined);
 const retryQueuedMessage = jest.fn().mockResolvedValue(undefined);
 const idle = jest.fn();
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: jest.fn() }),
 }));
 jest.mock("@/lib/analytics/utils", () => ({

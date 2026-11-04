@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import type { Route } from "next";
 import { SvgRefreshCw } from "@opal/icons";
+import { useNavigation } from "@opal/navigation/hooks";
 import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -367,6 +369,7 @@ interface ToastFromQueryMessages {
  * and strips the param from the URL.
  */
 export function useToastFromQuery(messages: ToastFromQueryMessages) {
+  const navigation = useNavigation();
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const messageValue = searchParams.get("message");
@@ -375,10 +378,10 @@ export function useToastFromQuery(messages: ToastFromQueryMessages) {
       searchParams.delete("message");
       const query = searchParams.toString();
       const newSearch = query ? `?${query}` : "";
-      window.history.replaceState(
-        null,
-        "",
-        window.location.pathname + newSearch + window.location.hash
+      // SAFETY: the current page with its query changed is a page of the app.
+      navigation.go(
+        (window.location.pathname + newSearch + window.location.hash) as Route,
+        { replace: true, shallow: true }
       );
       const spec = messages[messageValue];
       if (spec !== undefined) {

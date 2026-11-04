@@ -12,7 +12,7 @@ import type {
 } from "@/lib/tools/types";
 export type { ChatSearchFilters } from "@/lib/tools/types";
 import type { Tag } from "@/lib/types";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   CODING_AGENT_TOOL_ID,

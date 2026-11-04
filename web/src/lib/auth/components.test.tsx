@@ -10,6 +10,9 @@ import { toast } from "@opal/layouts";
 import { EmailPasswordForm } from "@/lib/auth/components";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
 }));
 

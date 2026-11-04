@@ -29,7 +29,7 @@ import {
   type MemberPlugin,
 } from "@/lib/plugins/member";
 import useScreenSize from "@/hooks/useScreenSize";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
 

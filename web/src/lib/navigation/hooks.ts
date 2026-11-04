@@ -2,7 +2,14 @@
 
 import { useMemo } from "react";
 import type { Route } from "next";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  type LinkProps,
+  type Navigation,
+  type NavigationOptions,
+  useNavigation,
+  usePathname,
+  useSearchParams,
+} from "@opal/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { routeWithQuery } from "@/lib/routes";
 
@@ -23,13 +30,6 @@ type AppPositionType =
         | "shared-chat"
         | "plugins";
     };
-
-interface NavigationOptions {
-  /** Leaves no history entry, so going back skips this address. */
-  replace?: boolean;
-}
-
-type Router = ReturnType<typeof useRouter>;
 
 /** A row id, or null for a parameter that is absent or is not one. */
 function rowId(raw: string | null): number | null {
@@ -71,10 +71,13 @@ function hrefFor(value: AppPositionType): Route {
   }
 }
 
+/** Every /app position renders its query on the client, so `go` is shallow. */
+type AppNavigationOptions = Omit<NavigationOptions, "shallow">;
+
 class AppPosition {
   constructor(
     private value: AppPositionType,
-    private router: Router
+    private navigation: Navigation
   ) {}
 
   /**
@@ -93,19 +96,19 @@ class AppPosition {
   // alone would make `chat()` mean the current chat with no argument and a
   // different chat with one — the same word for a question and a command.
 
-  openChat(chatSessionId: string, options?: NavigationOptions) {
+  openChat(chatSessionId: string, options?: AppNavigationOptions) {
     this.go({ location: "chat", id: chatSessionId }, options);
   }
 
-  openAgent(agentId: number, options?: NavigationOptions) {
+  openAgent(agentId: number, options?: AppNavigationOptions) {
     this.go({ location: "agent", id: agentId }, options);
   }
 
-  openProject(projectId: number, options?: NavigationOptions) {
+  openProject(projectId: number, options?: AppNavigationOptions) {
     this.go({ location: "project", id: projectId }, options);
   }
 
-  openNewSession(options?: NavigationOptions) {
+  openNewSession(options?: AppNavigationOptions) {
     this.go({ location: "new-session" }, options);
   }
 
@@ -133,47 +136,13 @@ class AppPosition {
   }
 
   private linkTo(value: AppPositionType): AppLinkProps {
-    return {
-      href: hrefFor(value),
-      onClick: (event) => {
-        // A modified or middle click keeps the link's own behavior, e.g.
-        // opening a new tab.
-        const plainClick =
-          event.button === 0 &&
-          !event.metaKey &&
-          !event.ctrlKey &&
-          !event.shiftKey &&
-          !event.altKey;
-        if (event.defaultPrevented || !plainClick) return;
-        event.preventDefault();
-        this.go(value);
-      },
-    };
+    return this.navigation.linkTo(hrefFor(value), { shallow: true });
   }
 
-  private go(
-    value: AppPositionType,
-    { replace = false }: NavigationOptions = {}
-  ) {
-    const href = hrefFor(value);
-    // Within /app only the query changes, and the page renders on the client,
-    // so the URL is written in place: Next keeps useSearchParams in sync with
-    // the history API, and no server round trip holds the switch back (the
-    // sidebar, the URL and the loading view update at once). Leaving or
-    // entering /app is a real navigation.
-    if (typeof window !== "undefined" && window.location.pathname === "/app") {
-      const target = new URL(href, window.location.origin);
-      if (target.pathname === "/app") {
-        // Already there: a second entry for the same URL would make Back
-        // look like it does nothing.
-        if (target.search === window.location.search) return;
-        if (replace) window.history.replaceState(null, "", href);
-        else window.history.pushState(null, "", href);
-        return;
-      }
-    }
-    if (replace) this.router.replace(href);
-    else this.router.push(href);
+  private go(value: AppPositionType, options?: AppNavigationOptions) {
+    // Within /app only the query changes, and the page renders it on the
+    // client, so writing the URL is the whole switch.
+    this.navigation.go(hrefFor(value), { ...options, shallow: true });
   }
 
   /**
@@ -271,15 +240,12 @@ class AppPosition {
 }
 
 /** Props for a link to an app position; see `AppPosition.linkToChat`. */
-export interface AppLinkProps {
-  href: Route;
-  onClick: (event: React.MouseEvent<HTMLElement>) => void;
-}
+export type AppLinkProps = LinkProps;
 
 export function useAppPosition(): AppPosition {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
   // Parsed here so every reader gets the id as what it is. Text that is not a
@@ -291,24 +257,27 @@ export function useAppPosition(): AppPosition {
   // AppPosition is immutable, so same inputs → same instance.
   return useMemo(() => {
     if (pathname.startsWith("/app/shared/")) {
-      return new AppPosition({ location: "shared-chat" }, router);
+      return new AppPosition({ location: "shared-chat" }, navigation);
     }
     if (pathname.startsWith("/app/settings")) {
-      return new AppPosition({ location: "user-settings" }, router);
+      return new AppPosition({ location: "user-settings" }, navigation);
     }
     if (pathname === "/app/plugins" || pathname.startsWith("/app/plugins/")) {
-      return new AppPosition({ location: "plugins" }, router);
+      return new AppPosition({ location: "plugins" }, navigation);
     }
     if (pathname.startsWith("/app/agents")) {
-      return new AppPosition({ location: "more-agents" }, router);
+      return new AppPosition({ location: "more-agents" }, navigation);
     }
     if (chatId)
-      return new AppPosition({ location: "chat", id: chatId }, router);
+      return new AppPosition({ location: "chat", id: chatId }, navigation);
     if (agentId)
-      return new AppPosition({ location: "agent", id: agentId }, router);
+      return new AppPosition({ location: "agent", id: agentId }, navigation);
     if (projectId) {
-      return new AppPosition({ location: "project", id: projectId }, router);
+      return new AppPosition(
+        { location: "project", id: projectId },
+        navigation
+      );
     }
-    return new AppPosition({ location: "new-session" }, router);
-  }, [pathname, chatId, agentId, projectId, router]);
+    return new AppPosition({ location: "new-session" }, navigation);
+  }, [pathname, chatId, agentId, projectId, navigation]);
 }

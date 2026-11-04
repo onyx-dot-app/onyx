@@ -41,7 +41,7 @@ jest.mock("@/providers/VoiceModeProvider", () => ({
 jest.mock("@/hooks/useVoiceStatus", () => ({
   useVoiceStatus: () => ({ sttEnabled: false }),
 }));
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({ isNewSession: () => false, chat: () => "session" }),
 }));
 jest.mock("@/lib/settings/hooks", () => ({

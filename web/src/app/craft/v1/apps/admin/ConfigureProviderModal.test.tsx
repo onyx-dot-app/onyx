@@ -60,6 +60,9 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     ),
 }));
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: mockRouterPush }),
   usePathname: () => "/admin/craft/apps",
 }));

@@ -8,6 +8,9 @@ const push = jest.fn();
 const params = new URLSearchParams({ code: "code", state: "state" });
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ replace, push }),
   useSearchParams: () => params,
 }));

@@ -25,6 +25,9 @@ const mockRouter = { push: mockPush, replace: mockReplace };
 let mockQuery = new URLSearchParams();
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   useSearchParams: () => mockQuery,
 }));

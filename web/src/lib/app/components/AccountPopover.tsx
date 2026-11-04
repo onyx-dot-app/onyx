@@ -35,7 +35,7 @@ import {
   SvgNotificationBubble,
 } from "@opal/icons";
 import { ContentAction, Section, toast, useSidebarFolded } from "@opal/layouts";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";

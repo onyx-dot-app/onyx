@@ -16,6 +16,9 @@ jest.mock("swr", () => ({
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   usePathname: jest.fn(),
 }));
 

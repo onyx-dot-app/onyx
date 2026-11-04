@@ -70,6 +70,9 @@ function existingSkill(
 }
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   usePathname: () => "/craft/v1/skills/new",
   useRouter: () => ({
     push: mockRouterPush,

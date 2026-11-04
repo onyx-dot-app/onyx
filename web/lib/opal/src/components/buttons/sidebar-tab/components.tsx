@@ -9,7 +9,7 @@ import { useSidebarFolded } from "@opal/layouts/sidebar/context";
 import { Text, Tooltip } from "@opal/components";
 import useOverflow from "@opal/hooks/useOverflow";
 import { cn } from "@opal/utils";
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,7 +125,7 @@ function LabelTooltip({
  * Sidebar navigation tab built on `Interactive.Stateful` > `Interactive.Container`.
  *
  * Uses `sidebar-heavy` (default) or `sidebar-light` (via `variant`) variants
- * for color styling. The click target is an overlay control — a `Link` when
+ * for color styling. The click target is an overlay control — a `NavLink` when
  * `href` is set, a `button` when only `onClick` is set — so both paths are
  * keyboard focusable. Supports `rightChildren` for inline actions, and folded
  * mode. A string label shows in a tooltip while folded or cut off.
@@ -182,7 +182,7 @@ function SidebarTab({
       ? { "aria-label": label }
       : { "aria-labelledby": labelId };
 
-  /* The click target is an overlay that covers the whole row: a `Link` when
+  /* The click target is an overlay that covers the whole row: a `NavLink` when
   `href` is set, a `button` otherwise. It stays a sibling of the content so that
   `rightChildren` and interactive icons remain valid nested controls. The focus
   outline is inset because the container clips its overflow. `cursor-pointer` is
@@ -200,7 +200,7 @@ function SidebarTab({
   when it has a tooltip to show. */
   const overlay =
     !disabled && href ? (
-      <Link
+      <NavLink
         href={href as Route}
         scroll={false}
         onClick={onClick}

@@ -27,6 +27,9 @@ const mockRefreshLicense = jest.fn() as jest.Mock;
 // ---- Mocks ----
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   useSearchParams: () => mockSearchParams,
 }));

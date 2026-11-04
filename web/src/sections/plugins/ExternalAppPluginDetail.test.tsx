@@ -24,6 +24,9 @@ jest.mock("@/lib/settings/hooks", () => ({
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => "/admin/plugins/external-app/7",
 }));

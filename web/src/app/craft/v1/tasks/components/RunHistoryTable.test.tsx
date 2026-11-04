@@ -8,6 +8,9 @@ import {
 import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/types";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: jest.fn() }),
 }));
 jest.mock("@/app/craft/v1/tasks/api", () => ({
