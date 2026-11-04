@@ -127,6 +127,8 @@ from onyx.db.enums import (
     SkillSharePermission,
     SSOProviderType,
     SwitchoverType,
+    SyncAttemptErrorResolvedReason,
+    SyncEntityKind,
     SyncStatus,
     SyncType,
     SystemUsageAttribution,
@@ -6773,6 +6775,60 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class SyncAttemptError(Base):
+    """A user or group that a group sync skipped whole because the source
+    could not read it."""
+
+    __tablename__ = "sync_attempt_error"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_group_sync_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("external_group_permission_sync_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Copied from the attempt so a pair's errors read from one index.
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    entity_kind: Mapped[SyncEntityKind] = mapped_column(
+        Enum(
+            SyncEntityKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    entity_id: Mapped[str] = mapped_column(String, nullable=False)
+    entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_message: Mapped[str] = mapped_column(Text, nullable=False)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    is_resolved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    resolved_reason: Mapped[SyncAttemptErrorResolvedReason | None] = mapped_column(
+        Enum(
+            SyncAttemptErrorResolvedReason,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_sync_attempt_error_cc_pair_attempt",
+            "connector_credential_pair_id",
+            "external_group_sync_attempt_id",
+        ),
+    )
 
 
 class License(Base):

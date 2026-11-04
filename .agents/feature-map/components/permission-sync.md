@@ -117,8 +117,19 @@ connector_external_group_sync_generator_task -> _timed_perform_external_group_sy
   remove_stale_external_groups                rows a previous cycle left stale
   mark_old_external_groups_as_stale           commit at once
   group_sync_func yields ExternalUserGroup -> upsert_external_groups (stale=False)
+                 or SyncEntityFailure     -> sync_attempt_error row
   remove_stale_external_groups                rows this cycle did not confirm
 ```
+
+Google Drive (per user and per Google group) and Confluence (per user) skip a
+user or group they cannot read and yield a `SyncEntityFailure` for it. Users
+and groups are skipped whole, never yielded with part of their membership. A
+failed Drive user's remaining folders are skipped, and the folders already read
+stay, each with its full permission list. The stale sweep removes whatever was
+skipped. When more than half of the Drive users, Drive groups or Confluence
+listed users fail, the sync fails whole. An attempt with a failure row ends
+`COMPLETED_WITH_ERRORS`. The row write takes the attempt lease lock, and its
+message is capped like an indexing error's.
 
 `upsert_external_groups` and `element_update_permissions` create the `User` rows
 for unknown emails (`db/users.py:batch_add_ext_perm_user_if_not_exists`). A
