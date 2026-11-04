@@ -16082,14 +16082,16 @@
     "inputMultiUpload": {
       "placeholder": "파일 추가…",
       "dropToAdd": "여기에 파일을 놓아 추가",
-      "dropToAddMore": "여기에 놓아 파일 더 추가"
+      "dropToAddMore": "여기에 놓아 파일 더 추가",
+      "select": "파일 선택"
     },
     "inputUpload": {
       "placeholder": "파일 추가…",
       "pasted": "붙여넣은 텍스트",
       "attached": "파일 첨부됨",
       "dropToAdd": "여기에 파일을 놓아 추가",
-      "dropToReplace": "여기에 놓아 파일 바꾸기"
+      "dropToReplace": "여기에 놓아 파일 바꾸기",
+      "select": "파일 선택"
     },
     "inputImage": {
       "alt": "이미지",

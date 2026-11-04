@@ -16082,14 +16082,16 @@
     "inputMultiUpload": {
       "placeholder": "ファイルを追加…",
       "dropToAdd": "ここにファイルをドロップして追加",
-      "dropToAddMore": "ここにドロップしてファイルをさらに追加"
+      "dropToAddMore": "ここにドロップしてファイルをさらに追加",
+      "select": "ファイルを選択"
     },
     "inputUpload": {
       "placeholder": "ファイルを追加…",
       "pasted": "貼り付けたテキスト",
       "attached": "ファイル添付済み",
       "dropToAdd": "ここにファイルをドロップして追加",
-      "dropToReplace": "ここにドロップしてファイルを置き換え"
+      "dropToReplace": "ここにドロップしてファイルを置き換え",
+      "select": "ファイルを選択"
     },
     "inputImage": {
       "alt": "画像",
