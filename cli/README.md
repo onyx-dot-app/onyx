@@ -228,7 +228,7 @@ golangci-lint run ./...
 
 ## Publishing to PyPI
 
-The CLI is distributed as a Python package via [PyPI](https://pypi.org/project/onyx-cli/). The build system uses [hatchling](https://hatch.pypa.io/) with [manygo](https://github.com/nicholasgasior/manygo) to cross-compile Go binaries into platform-specific wheels.
+The CLI is distributed as a Python package via [PyPI](https://pypi.org/project/onyx-cli/). The build system uses [hatchling](https://hatch.pypa.io/) with [manygo](https://github.com/jmelahman/manygo) to cross-compile Go binaries into platform-specific wheels.
 
 ### CI release (recommended)
 
