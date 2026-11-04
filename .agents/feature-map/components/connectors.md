@@ -133,13 +133,13 @@ steps. During a port-flow reindex, a Full Re-index or a backfill is refused with
 CONFLICT. Such a run fetches documents with old source timestamps into PRESENT,
 and the incremental FUTURE polls never ask for those, so they would be missing
 from the new index ([[document-index]]). The check is
-`db/search_settings.py:raise_if_port_reindex_in_progress`. It runs on an edit
-plan that has a full re-index or backfill step, and on a run-once from the
-beginning, inside the transaction that writes the trigger
-(`server/documents/connector.py:trigger_indexing_for_cc_pair`). The check also
-locks the PRESENT settings row for share. A reindex that starts at the same
-moment locks that row for update, so it waits for the trigger to commit and
-then refuses because of it. A stored plan applies only to the pair state it was computed from
+`db/search_settings.py:raise_if_port_reindex_in_progress`, on an edit plan
+with a full re-index or backfill step and on a run-once from the beginning
+(`server/documents/connector.py:trigger_indexing_for_cc_pair`). A request that
+slips past it waits in the beat, untouched, until the swap
+(`background/celery/tasks/docprocessing/tasks.py:_kickoff_indexing_tasks`),
+and then runs on the new index. A stored plan applies only to the pair state it
+was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
 **Pushed events.** A source that pushes instead of being polled declares one

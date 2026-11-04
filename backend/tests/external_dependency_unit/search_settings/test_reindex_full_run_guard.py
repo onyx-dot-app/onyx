@@ -6,11 +6,15 @@ pending (see `raise_if_port_reindex_in_progress` and `full_run_pending_cc_pairs`
 """
 
 from collections.abc import Generator
+from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.docprocessing.tasks import (
+    _kickoff_indexing_tasks,
+)
 from onyx.connectors.edit_plan.apply import _ensure_no_full_run_during_reindex
 from onyx.connectors.edit_plan.models import EditStep, EditStepKind
 from onyx.db.engine.time_utils import get_db_current_time
@@ -24,6 +28,8 @@ from onyx.db.search_settings import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.redis.redis_pool import get_redis_client
+from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -144,6 +150,59 @@ def test_full_run_pending_cc_pairs(
         running.time_finished = get_db_current_time(db_session)
         db_session.commit()
         assert pending() == []
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(IndexAttempt).where(
+                IndexAttempt.connector_credential_pair_id == pair.id
+            )
+        )
+        db_session.commit()
+        cleanup_cc_pair(db_session, pair)
+
+
+def test_the_beat_leaves_a_full_run_pending_during_a_port_flow_reindex(
+    db_session: Session, legacy_future: SearchSettings
+) -> None:
+    """A REINDEX trigger that exists while a port-flow reindex builds FUTURE is
+    left as it is: no attempt, trigger untouched. Once no port-flow FUTURE
+    exists, the beat consumes it as usual."""
+    legacy_future.use_port_flow = True
+    db_session.commit()
+    pair = make_cc_pair(db_session)
+    present = get_current_search_settings(db_session)
+    attempts = (
+        select(func.count())
+        .select_from(IndexAttempt)
+        .where(IndexAttempt.connector_credential_pair_id == pair.id)
+    )
+
+    def beat() -> None:
+        db_session.expire_all()
+        _kickoff_indexing_tasks(
+            celery_app=MagicMock(),
+            db_session=db_session,
+            search_settings=present,
+            cc_pair_ids=[pair.id],
+            secondary_index_building=False,
+            redis_client=get_redis_client(),
+            lock_beat=MagicMock(),
+            tenant_id=get_current_tenant_id(),
+        )
+        db_session.expire_all()
+
+    try:
+        pair.indexing_trigger = IndexingMode.REINDEX
+        db_session.commit()
+        beat()
+        assert db_session.scalar(attempts) == 0
+        assert pair.indexing_trigger == IndexingMode.REINDEX
+
+        legacy_future.use_port_flow = False
+        db_session.commit()
+        beat()
+        assert db_session.scalar(attempts) == 1
+        assert pair.indexing_trigger is None
     finally:
         db_session.rollback()
         db_session.execute(

@@ -245,7 +245,7 @@ def set_new_search_settings(
             raise OnyxError(
                 OnyxErrorCode.CONFLICT,
                 f"A full re-index or backfill is pending or running for {names}. "
-                "Wait for it to finish, or cancel it, before starting a re-index.",
+                "Wait for it to finish before starting a re-index.",
             )
 
     # Upgrade-only: a new target must be the PRESENT model or a selectable model.

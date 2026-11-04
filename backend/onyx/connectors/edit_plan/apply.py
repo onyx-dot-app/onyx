@@ -396,6 +396,7 @@ def _apply_claimed_plan(
     )
 
     try:
+        _ensure_no_full_run_during_reindex(db_session, steps)
         lock_cc_pair_for_edit__no_commit(db_session, cc_pair_id)
         # Under the lock: a concurrent apply of this plan has committed and
         # deleted it, or changed the pair.
@@ -403,10 +404,6 @@ def _apply_claimed_plan(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, _PLAN_NOT_FOUND_MESSAGE)
         current = fetch_current_pair_state(db_session, cc_pair_id)
         ensure_base_state_matches(stored, current)
-        # In the transaction that writes the steps: the guard holds the PRESENT
-        # row for share until the commit, so a reindex start waits and then refuses.
-        _ensure_no_full_run_during_reindex(db_session, steps)
-
         credential = fetch_proposed_credential(
             db_session, user=user, current=current, proposed=proposed
         )

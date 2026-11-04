@@ -123,6 +123,7 @@ from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
+    port_reindex_in_progress,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.error_handling.exceptions import OnyxError
@@ -1000,6 +1001,24 @@ def _kickoff_indexing_tasks(
             f"search_settings={search_settings.id}, "
             f"secondary_index_building={secondary_index_building}"
         )
+
+        # A full run during a port-flow reindex adds documents FUTURE never
+        # fetches. Leave the request as it is; it runs after the swap, on the
+        # new index (see raise_if_port_reindex_in_progress).
+        if (
+            search_settings.status.is_current()
+            and (
+                cc_pair.indexing_trigger == IndexingMode.REINDEX
+                or cc_pair.full_reindex_requested_at is not None
+                or cc_pair.prune_after_reindex_requested_at is not None
+            )
+            and port_reindex_in_progress(db_session)
+        ):
+            task_logger.info(
+                f"_kickoff_indexing_tasks - Full run waits for the reindex swap: "
+                f"cc_pair={cc_pair.id}"
+            )
+            continue
 
         reindex = False
         # the indexing trigger is only checked and cleared with the current search settings

@@ -221,20 +221,18 @@ REINDEX_BLOCKS_FULL_RUN_MESSAGE = (
 )
 
 
-def raise_if_port_reindex_in_progress(db_session: Session) -> None:
-    """Refuse a full re-index or backfill while a port-flow reindex builds a
-    FUTURE index: it would add documents with old timestamps that FUTURE's
-    incremental polls never fetch. INSTANT and legacy reindexes are not affected.
+def port_reindex_in_progress(db_session: Session) -> bool:
+    """A port-flow reindex is building a FUTURE index. A full re-index or a
+    backfill must not run then: it would add documents with old timestamps that
+    FUTURE's incremental polls never fetch. INSTANT and legacy reindexes do not
+    count. A request that slips in anyway waits in the beat, untouched, until
+    the swap (see _kickoff_indexing_tasks)."""
+    return active_secondary_port_target(db_session) is not None
 
-    Locks the PRESENT row for share until the caller commits. A reindex start
-    locks that row for update before checking for pending full runs, so one of
-    the two always sees the other. Write and commit the run in this transaction."""
-    db_session.execute(
-        select(SearchSettings.id)
-        .where(SearchSettings.status == IndexModelStatus.PRESENT)
-        .with_for_update(read=True)
-    )
-    if active_secondary_port_target(db_session) is not None:
+
+def raise_if_port_reindex_in_progress(db_session: Session) -> None:
+    """Refuse a full re-index or backfill during a port-flow reindex."""
+    if port_reindex_in_progress(db_session):
         raise OnyxError(OnyxErrorCode.CONFLICT, REINDEX_BLOCKS_FULL_RUN_MESSAGE)
 
 

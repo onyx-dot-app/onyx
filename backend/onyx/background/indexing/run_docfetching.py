@@ -618,8 +618,11 @@ def connector_document_extraction(
 
         # Clear the indexing trigger if it was set, to prevent duplicate indexing
         # attempts. A backfill does not serve the trigger, so it leaves it set.
+        # Neither does a FUTURE attempt: the trigger is meant for the current
+        # index, and a full run held back during a reindex keeps it until then.
         if (
             not index_attempt.is_backfill
+            and index_attempt.search_settings.status == IndexModelStatus.PRESENT
             and index_attempt.connector_credential_pair.indexing_trigger is not None
         ):
             logger.info(

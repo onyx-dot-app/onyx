@@ -2492,8 +2492,7 @@ def trigger_indexing_for_cc_pair(
             if from_beginning:
                 indexing_mode = IndexingMode.REINDEX
                 # A crawl from the beginning cannot start while a reindex builds
-                # FUTURE; an incremental run can. Checked in the transaction that
-                # writes the trigger, so a reindex start cannot slip in between.
+                # FUTURE; an incremental run can.
                 raise_if_port_reindex_in_progress(db_session)
 
             mark_ccpair_with_indexing_trigger(cc_pair.id, indexing_mode, db_session)
