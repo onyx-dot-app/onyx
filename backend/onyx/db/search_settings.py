@@ -206,7 +206,17 @@ def raise_if_port_reindex_in_progress(db_session: Session) -> None:
     backfill while a port-flow reindex builds a FUTURE index. Such a run adds
     documents with old source timestamps that FUTURE's incremental catch-up never
     fetches, and the swap would wait on them forever. INSTANT has no FUTURE after
-    its promotion, and a legacy FUTURE crawls from scratch, so neither is blocked."""
+    its promotion, and a legacy FUTURE crawls from scratch, so neither is blocked.
+
+    Holds the PRESENT row for share until the caller commits, so a reindex start
+    (which locks that row for update and then checks for pending full runs)
+    either waits for the caller's write or is already visible here. The caller
+    must write and commit the run in this same transaction."""
+    db_session.execute(
+        select(SearchSettings.id)
+        .where(SearchSettings.status == IndexModelStatus.PRESENT)
+        .with_for_update(read=True)
+    )
     if active_secondary_port_target(db_session) is not None:
         raise OnyxError(OnyxErrorCode.CONFLICT, REINDEX_BLOCKS_FULL_RUN_MESSAGE)
 

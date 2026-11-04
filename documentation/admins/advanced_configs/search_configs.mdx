@@ -40,8 +40,10 @@ The [embedding rate limit](#embedding-rate-limit) is an exception: it saves when
 A new embedding model, a new vector quantization, and turning on contextual retrieval need a re-index.
 A re-index builds a new index from the documents that are already in the index.
 Onyx does not fetch the documents from their sources again, but a re-index of a large index can take hours or days.
-During a re-index, **Full Re-index** and connector edits that re-crawl a source are blocked,
-and a re-index cannot start while a Full Re-index is running.
+While a re-index with **Re-index All Connectors Then Switch** or **Re-index Active Connectors Then Switch** builds the
+new index, **Full Re-index** and connector edits that re-crawl a source are blocked.
+Such a re-index cannot start while a connector runs a Full Re-index, or has a queued Full Re-index, a pending backfill,
+or a prune-after-re-index request.
 
 During a re-index, OpenSearch stores the current index and the new index.
 Make sure that OpenSearch has enough disk space for both. By default,

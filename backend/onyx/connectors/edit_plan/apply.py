@@ -404,7 +404,8 @@ def _apply_claimed_plan(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, _PLAN_NOT_FOUND_MESSAGE)
         current = fetch_current_pair_state(db_session, cc_pair_id)
         ensure_base_state_matches(stored, current)
-        # A reindex that started since the check above would be blocked by it.
+        # Re-checked here: the guard holds the PRESENT row for share until this
+        # transaction commits, so a reindex start waits for it and then refuses.
         _ensure_no_full_run_during_reindex(db_session, steps)
 
         credential = fetch_proposed_credential(

@@ -2137,11 +2137,6 @@ def connector_run_once(
                 "Connection not found for current user's permissions",
             )
 
-    # A crawl from the beginning cannot start while a reindex builds FUTURE; an
-    # incremental run can.
-    if run_info.from_beginning:
-        raise_if_port_reindex_in_progress(db_session)
-
     try:
         num_triggers = trigger_indexing_for_cc_pair(
             credential_ids,
@@ -2496,6 +2491,10 @@ def trigger_indexing_for_cc_pair(
             indexing_mode = IndexingMode.UPDATE
             if from_beginning:
                 indexing_mode = IndexingMode.REINDEX
+                # A crawl from the beginning cannot start while a reindex builds
+                # FUTURE; an incremental run can. Checked in the transaction that
+                # writes the trigger, so a reindex start cannot slip in between.
+                raise_if_port_reindex_in_progress(db_session)
 
             mark_ccpair_with_indexing_trigger(cc_pair.id, indexing_mode, db_session)
             num_triggers += 1
