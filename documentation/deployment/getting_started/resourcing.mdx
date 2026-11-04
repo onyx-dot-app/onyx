@@ -114,6 +114,7 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | Memory per data node | 64 GB or less | The JVM heap stops at about 31 GB. For more data, add nodes instead of larger nodes. |
 | Searches per question | 10 hybrid searches | The first search call runs 4–8 searches: the rephrased question, the LLM's queries, the original question, and up to 3 keyword queries. A second call runs 2–4. |
 | CPU per hybrid search | 0.0003 core-seconds × dimensions × millions of chunks | Fit from two single-shard benchmarks near 1.5 million chunks: 0.17 seconds at 384 dimensions and 0.48 seconds at 1,024 dimensions. Growth with chunk count is an estimate. |
+| Peak to average question rate | 5× | Converts peak questions per second to questions per day. Onyx Cloud's busiest minutes run 3 to 15 times its average search rate. |
 | CPU for search at peak | 50% | Leaves room for indexing, merges, and bursts. Above it, searches queue and then fail. |
 | vCPUs per data node | 1 per 8, 4, or 2 GB of RAM | Memory-optimized (`r8g`), general purpose (`m7g`), or compute-optimized (`c7g`) nodes. The calculator picks the type whose vCPUs carry the search load on the nodes the data needs. |
 | Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |

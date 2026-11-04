@@ -77,6 +77,9 @@ export const OpenSearchSizingCalculator = () => {
   const SEARCH_CPU_PER_DIM_MILLION = 0.0003;
   const SEARCH_CPU_TARGET = 0.5;
   const MAX_QPS = 10_000;
+  // How much busier the peak is than the day's average rate. Onyx Cloud's busiest minutes
+  // (p95 to p99) run 3 to 15 times its weekly average search rate.
+  const PEAK_TO_AVERAGE = 5;
   const NODE_DISK = [64, 128, 256, 512, 1000, 1500, 3000, 6000];
   // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large, r8g.xlarge and r8g.2xlarge.
   const MAX_DISK_FOR_RAM = { 16: 1500, 32: 3000, 64: 6000 };
@@ -641,7 +644,9 @@ export const OpenSearchSizingCalculator = () => {
               onChange={(e) => setPeakQps(capped(e.target.value, MAX_QPS))}
               className={input + " w-32"}
             />
-            <div className={hint}>Questions to Onyx at the busiest time. Each question runs about 10 searches. As a guide, 100 active users ask about 1 question every 2 minutes each, or about 1 per second together.</div>
+            <div className={hint}>
+              {"About " + Math.round((qps * 86400) / PEAK_TO_AVERAGE).toLocaleString() + " questions per day, if the peak is about " + PEAK_TO_AVERAGE + "× the average rate. Each question runs about 10 searches."}
+            </div>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-1.5">
