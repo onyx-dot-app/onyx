@@ -39,6 +39,17 @@ class ToolCall(BaseModel):
 # Message types
 
 
+class ResponsesInputText(BaseModel):
+    """A Responses API text block for tool output. LiteLLM's completions-to-
+    Responses bridge passes ``input_text`` blocks through unchanged, so extra
+    keys such as ``prompt_cache_breakpoint`` reach OpenAI (it drops them from
+    ``text`` blocks, and rejects ``input_text`` in user messages)."""
+
+    type: Literal["input_text"] = "input_text"
+    text: str
+    prompt_cache_breakpoint: dict[str, JsonValue] | None = None
+
+
 # Base class for all cacheable messages
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
@@ -64,7 +75,7 @@ class AssistantMessage(CacheableMessage):
 
 class ToolMessage(CacheableMessage):
     role: Literal["tool"] = "tool"
-    content: str
+    content: str | list[ResponsesInputText]
     tool_call_id: str
 
 

@@ -96,9 +96,13 @@ compaction candidate. The list on each model call:
 ```
 
 The notices and reminders change between steps, so they stay after the stable
-prefix. The stable part gets explicit cache markers only when
+prefix. The stable part gets cache markers from prompt assembly only when
 `PROMPT_CACHE_CHAT_HISTORY=true` (`chat/prompt_formatting.py:prepare_model_messages`);
-by default only provider-side prefix caching uses it. `prepare_prompt` copies
+by default provider-side prefix caching uses it. Separately, the LLM adapter marks
+every tool result with an explicit breakpoint on supported OpenAI API requests
+when `ENABLE_PROMPT_CACHING=true`, even with chat-history caching off
+(`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`). The first
+request without tool results keeps implicit caching. `prepare_prompt` copies
 the messages it receives and never changes recorded history. Within one step it
 replaces a search passage that repeats an earlier result's passage (same
 document and text) with a pointer to that result

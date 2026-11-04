@@ -105,6 +105,10 @@ from onyx.llm.models import (
     resolve_reasoning_effort,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.prompt_cache.providers.openai import (
+    explicit_cache_breakpoints,
+    uses_explicit_cache_breakpoints,
+)
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
@@ -1074,6 +1078,15 @@ class LitellmLLM(LLM):
 
         if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
+
+        # OpenAI caching has no write cost, and the moving per-step reminder
+        # defeats implicit prefix reuse, so tool results carry breakpoints.
+        if (
+            is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES
+        ) and uses_explicit_cache_breakpoints(model_identity_names, self._api_base):
+            prompt, cache_options = explicit_cache_breakpoints(prompt)
+            if cache_options is not None:
+                optional_kwargs["prompt_cache_options"] = cache_options
 
         # Settle before anything reads it, so every branch below and tracing
         # see the same effort the provider will.
