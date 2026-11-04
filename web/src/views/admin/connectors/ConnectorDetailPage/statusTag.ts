@@ -49,7 +49,7 @@ export interface StatusTag {
 const TAGS = {
   deleting: { icon: SvgAlertTriangle, color: "error", labelKey: "deleting" },
   paused: { icon: SvgPause, color: "pending", labelKey: "paused" },
-  scheduled: { icon: SvgClock, color: "pending", labelKey: "scheduled" },
+  scheduled: { icon: SvgClock, color: "queued", labelKey: "scheduled" },
   initialIndexing: {
     icon: IconLoader,
     color: "info",

@@ -14,7 +14,7 @@ Both paddings move together. A card inside a modal, popover or toast uses `outer
 
 | Prop             | Type                                                                    | Default     | Description                                                                                |
 | ---------------- | ----------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------ |
-| `variant`        | `"default" \| "info" \| "success" \| "warning" \| "pending" \| "error"` | `"default"` | Visual variant (controls background, border, and icon)                                     |
+| `variant`        | `"default" \| "info" \| "success" \| "warning" \| "pending" \| "queued" \| "error"` | `"default"` | Visual variant (controls background, border, and icon)                                     |
 | `icon`           | `IconFunctionComponent`                                                 | per variant | Override the default variant icon                                                          |
 | `title`          | `string \| RichStr`                                                     | —           | Main title text                                                                            |
 | `description`    | `string \| RichStr`                                                     | —           | Description below the title                                                                |

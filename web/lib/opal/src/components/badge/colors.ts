@@ -34,6 +34,11 @@ export const BADGE_COLORS: Record<
     text: "text-theme-amber-05",
     fg: "var(--theme-amber-05)",
   },
+  queued: {
+    bg: "bg-theme-purple-01",
+    text: "text-theme-purple-05",
+    fg: "var(--theme-purple-05)",
+  },
   error: {
     bg: "bg-status-error-01",
     text: "text-status-error-05",

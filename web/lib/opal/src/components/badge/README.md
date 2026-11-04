@@ -37,6 +37,7 @@ that colour.
 | `success` | `theme-green-01`     | `theme-green-05`    |
 | `warning` | `status-warning-01`  | `status-warning-05` |
 | `pending` | `theme-amber-01`     | `theme-amber-05`    |
+| `queued`  | `theme-purple-01`    | `theme-purple-05`   |
 | `error`   | `status-error-01`    | `status-error-05`   |
 
 ## Usage

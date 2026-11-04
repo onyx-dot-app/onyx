@@ -95,7 +95,7 @@ export default function ReindexProgressBanner({
                 </Text>
                 <div className="flex flex-row items-center gap-1.5">
                   <Badge
-                    color="default"
+                    color="queued"
                     icon={SvgClock}
                     title={String(waiting)}
                   />
