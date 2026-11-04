@@ -8,8 +8,11 @@
    must pack from the top-left.
    --------------------------------------------------------------------------- */
 
-.opal-input-type-in-tag {
+.opal-input.opal-input-type-in-tag {
   @apply cursor-text items-start justify-start;
+  /* Grows with its chip rows from the single-line 36px. */
+  height: auto;
+  min-height: var(--spacing-block-36);
   min-width: 160px;
 }
 

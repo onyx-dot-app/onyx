@@ -18,7 +18,11 @@
 
 .opal-input {
   /* `--interactive-duration` (150ms) felt too laggy, so we're using 100ms instead. */
-  @apply flex flex-row items-center justify-between gap-0.5 h-fit p-1.5 rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
+  @apply flex flex-row items-center justify-between gap-0.5 rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
+  /* 36px with the border, like a button. The 1px border takes 1px of the
+     6px padding, so the 24px title line sits 6px inside the outer edge. */
+  height: var(--spacing-block-36);
+  padding: calc(0.375rem - 1px);
 }
 
 .opal-input[data-variant="primary"] {

@@ -9,8 +9,11 @@
    plus a fixed min-height floor.
    --------------------------------------------------------------------------- */
 
-.opal-input-textarea {
+.opal-input.opal-input-textarea {
   @apply items-start;
+  /* Grows with its rows from the single-line 36px. */
+  height: auto;
+  min-height: var(--spacing-block-36);
 }
 
 .opal-input-textarea-field {
