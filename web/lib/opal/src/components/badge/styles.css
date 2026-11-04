@@ -1,18 +1,18 @@
 @reference "#reference.css";
 
 /* ---------------------------------------------------------------------------
-   Tag
+   Badge
 
-   A coloured pill around a `Content` (secondary preset, body variant: the
-   title in secondary-body), which draws the icon and title. The height comes
-   from the 16px line and the padding: 4 is 1rem (2px inline padding), 6 is
-   1.5rem (4px all round).
+   A coloured pill around a `Content`, which draws the icon and title. The
+   height comes from the title's line and the padding: 4 is a 12px
+   `figure-small-value` line with 2px padding (1rem); 6 is a 16px
+   `secondary-body` line with 4px padding (1.5rem).
    --------------------------------------------------------------------------- */
 
 .opal-badge {
   @apply flex flex-row items-center shrink-0;
   border-radius: var(--radius-04);
-  padding: 0 0.125rem;
+  padding: 0.125rem;
   gap: 0;
 }
 

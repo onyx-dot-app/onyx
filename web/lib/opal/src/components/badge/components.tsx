@@ -84,7 +84,9 @@ function Badge({
       data-size={size}
     >
       <Content
-        font="secondary-body"
+        // The title font sets the height: a 12px line in the small badge,
+        // 16px in the large one.
+        font={size === 4 ? "figure-small-value" : "secondary-body"}
         width="fit"
         color="interactive"
         icon={icon}
