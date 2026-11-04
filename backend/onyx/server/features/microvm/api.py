@@ -18,19 +18,19 @@ from onyx.auth.constants import BEARER_PREFIX
 from onyx.cache.factory import get_shared_cache_backend
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.microvm.registry import (
+    NodeSigningKeyConflictError,
+    register_node_signing_key,
+)
 from onyx.server.features.build.configs import (
     SANDBOX_NODE_REGISTRATION_SECRET,
     SANDBOX_NODE_SIGNING_KEY_ROTATION_OVERLAP_SECONDS,
-)
-from onyx.server.features.build.sandbox.firecracker_registry import (
-    NodeSigningKeyConflictError,
-    register_node_signing_key,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-SANDBOX_NODE_SIGNING_KEY_PATH = "/build/sandbox-node/signing-key"
+SANDBOX_NODE_SIGNING_KEY_PATH = "/microvm/node/signing-key"
 
 _IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
 
@@ -59,10 +59,10 @@ class SandboxNodeSigningKeyRegistration(BaseModel):
     public_key: str = Field(min_length=1, max_length=64)
 
 
-sandbox_node_router = APIRouter()
+router = APIRouter()
 
 
-@sandbox_node_router.put(SANDBOX_NODE_SIGNING_KEY_PATH)
+@router.put(SANDBOX_NODE_SIGNING_KEY_PATH)
 def register_sandbox_node_signing_key(
     registration: SandboxNodeSigningKeyRegistration,
     _: None = Depends(verify_sandbox_node_registration),
