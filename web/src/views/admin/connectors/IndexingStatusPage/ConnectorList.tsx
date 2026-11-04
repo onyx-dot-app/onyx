@@ -47,6 +47,30 @@ const PAGE_SIZE = 20;
 const POLL_MS = 30_000;
 const LOADER_ROWS = 5;
 const ALL = "all";
+/** The live buckets, which the toolbar counts and filters as one running pill. */
+const RUNNING_STATUSES = [
+  "indexing",
+  "syncing",
+] as const satisfies readonly IndexingConnectorStatus[];
+const RUNNING = "running" as const;
+type StatusFilter = IndexingConnectorStatus | typeof RUNNING;
+/** The buckets with a pill of their own, in rank order. */
+const OWN_PILL_STATUSES = INDEXING_CONNECTOR_STATUSES.filter(
+  (
+    bucket
+  ): bucket is Exclude<
+    IndexingConnectorStatus,
+    (typeof RUNNING_STATUSES)[number]
+  > => !RUNNING_STATUSES.some((running) => running === bucket)
+);
+
+/** The buckets a filter asks the API for, or null for every pair. */
+function filterStatuses(
+  filter: StatusFilter | null
+): readonly IndexingConnectorStatus[] | null {
+  if (filter === null) return null;
+  return filter === RUNNING ? RUNNING_STATUSES : [filter];
+}
 
 interface FederatedRowProps {
   connector: FederatedConnectorStatus;
@@ -124,7 +148,7 @@ export default function ConnectorList({
   const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<IndexingConnectorStatus | null>(null);
+  const [status, setStatus] = useState<StatusFilter | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   // A connector's open popover steps the other connectors back.
@@ -137,13 +161,13 @@ export default function ConnectorList({
       pageNum: page - 1,
       pageSize: PAGE_SIZE,
       q: search,
-      status,
+      status: filterStatuses(status),
     }),
     errorHandlingFetcher,
     { refreshInterval: POLL_MS, keepPreviousData: true }
   );
 
-  function pickStatus(next: IndexingConnectorStatus | null) {
+  function pickStatus(next: StatusFilter | null) {
     setStatus(next);
     setPage(1);
   }
@@ -155,6 +179,8 @@ export default function ConnectorList({
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
   const filtered = status !== null || search !== "";
+  const indexingCount = data?.status_counts.indexing ?? 0;
+  const syncingCount = data?.status_counts.syncing ?? 0;
   const empty =
     data !== undefined &&
     data.items.length === 0 &&
@@ -196,7 +222,14 @@ export default function ConnectorList({
               state={status !== null ? "selected" : "empty"}
               onClear={() => pickStatus(null)}
             >
-              {status === null ? t("statusFilter.all") : tBadges(status)}
+              {status === null
+                ? t("statusFilter.all")
+                : status === RUNNING
+                  ? format.list(
+                      RUNNING_STATUSES.map((bucket) => tBadges(bucket)),
+                      { type: "disjunction" }
+                    )
+                  : tBadges(status)}
             </SelectButton>
           </Dropdown.Trigger>
           <Dropdown.Data
@@ -231,24 +264,39 @@ export default function ConnectorList({
           width="fit"
           height="fit"
         >
-          {/* A pill per bucket that holds a pair under the search, whatever the status filter. A click filters to it, and again clears it. */}
-          {INDEXING_CONNECTOR_STATUSES.map((counted) => ({
-            counted,
-            count: data?.status_counts[counted] ?? 0,
-            tag: bucketStatusTag(counted),
-          }))
+          {/* A pill per filter that holds a pair under the search, whatever the status filter. A click filters to it, and again clears it. */}
+          {[
+            {
+              filter: RUNNING,
+              count: indexingCount + syncingCount,
+              tag: bucketStatusTag("indexing"),
+              tooltip: t("counts.running", {
+                indexing: indexingCount,
+                syncing: syncingCount,
+              }),
+            },
+            ...OWN_PILL_STATUSES.map((bucket) => {
+              const count = data?.status_counts[bucket] ?? 0;
+              return {
+                filter: bucket,
+                count,
+                tag: bucketStatusTag(bucket),
+                tooltip: t(`counts.${bucket}`, { count }),
+              };
+            }),
+          ]
             .filter(({ count }) => count > 0)
-            .map(({ counted, count, tag }) => (
+            .map(({ filter, count, tag, tooltip }) => (
               <Badge
-                key={counted}
+                key={filter}
                 icon={tag.icon}
                 title={format.number(count)}
                 color={tag.color}
                 textColor="text-04"
                 size={6}
-                tooltip={t(`counts.${counted}`, { count })}
-                aria-pressed={status === counted}
-                onClick={() => pickStatus(status === counted ? null : counted)}
+                tooltip={tooltip}
+                aria-pressed={status === filter}
+                onClick={() => pickStatus(status === filter ? null : filter)}
               />
             ))}
         </Section>

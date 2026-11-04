@@ -7523,8 +7523,7 @@
         },
         "counts": {
           "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
-          "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
-          "syncing": "{count, plural, one {# connector syncing} other {# connectors syncing}}",
+          "running": "{indexing, plural, other {# indexing}}, {syncing, plural, other {# syncing}}",
           "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
           "paused": "{count, plural, one {# connector paused} other {# connectors paused}}",
           "scheduled": "{count, plural, one {# connector scheduled} other {# connectors scheduled}}",

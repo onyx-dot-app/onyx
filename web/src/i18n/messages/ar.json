@@ -7523,8 +7523,7 @@
         },
         "counts": {
           "indexed": "{count, plural, one {موصل واحد مفهرس} other {# موصلات مفهرسة}}",
-          "indexing": "{count, plural, one {موصل واحد قيد الفهرسة} other {# موصلات قيد الفهرسة}}",
-          "syncing": "{count, plural, one {موصل واحد قيد المزامنة} other {# موصلات قيد المزامنة}}",
+          "running": "{indexing, plural, other {# قيد الفهرسة}}، {syncing, plural, other {# قيد المزامنة}}",
           "failed": "{count, plural, one {موصل واحد فشل} other {# موصلات فشلت}}",
           "paused": "{count, plural, one {موصل واحد متوقف مؤقتًا} other {# موصلات متوقفة مؤقتًا}}",
           "scheduled": "{count, plural, one {موصل واحد مجدول} other {# موصلات مجدولة}}",

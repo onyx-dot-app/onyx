@@ -227,7 +227,7 @@ def _failed_check(
 def _connectors(
     db_session: Session,
     q: str,
-    status: IndexingConnectorStatus | None = None,
+    status: list[IndexingConnectorStatus] | None = None,
     page_num: int = 0,
     page_size: int = 20,
 ) -> IndexingConnectorsResponse:
@@ -322,7 +322,7 @@ def test_pairs_sort_by_rank_then_name_and_open_errors_take_rank_three(
     ]
     assert paged == expected
 
-    filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.INDEXED)
+    filtered = _connectors(db_session, prefix, status=[IndexingConnectorStatus.INDEXED])
 
     assert [row.name for row in filtered.items] == [
         errors.name,
@@ -358,7 +358,9 @@ def test_a_deleting_pair_has_its_own_bucket_and_an_invalid_one_reads_failed(
     assert response.status_counts[IndexingConnectorStatus.DELETING] == 1
     assert response.status_counts[IndexingConnectorStatus.FAILED] == 1
 
-    filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.DELETING)
+    filtered = _connectors(
+        db_session, prefix, status=[IndexingConnectorStatus.DELETING]
+    )
 
     assert [row.name for row in filtered.items] == [deleting.name]
     assert filtered.status_counts == response.status_counts
@@ -420,7 +422,9 @@ def test_a_queued_attempt_knows_its_place_in_line(db_session: Session) -> None:
     # Still in capability checks: scheduled, but not in the line yet.
     _index_attempt(db_session, held, IndexingStatus.NOT_STARTED, now, dispatched=False)
 
-    response = _connectors(db_session, prefix, status=IndexingConnectorStatus.SCHEDULED)
+    response = _connectors(
+        db_session, prefix, status=[IndexingConnectorStatus.SCHEDULED]
+    )
 
     positions = {row.name: row.queue_position for row in response.items}
     assert positions[held.name] is None
@@ -542,7 +546,7 @@ def test_source_counts_hold_the_full_counts_on_every_page(
 
     # The status filter and the search narrow the counts too.
     indexed = _connectors(
-        db_session, prefix, status=IndexingConnectorStatus.INDEXED, page_size=1
+        db_session, prefix, status=[IndexingConnectorStatus.INDEXED], page_size=1
     )
     assert indexed.source_counts == {
         DocumentSource.GMAIL: 2,
@@ -647,7 +651,7 @@ def test_the_syncing_filter_returns_only_syncing_rows_and_keeps_every_count(
     _group_sync(db_session, syncing)
 
     unfiltered = _connectors(db_session, prefix)
-    filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.SYNCING)
+    filtered = _connectors(db_session, prefix, status=[IndexingConnectorStatus.SYNCING])
 
     assert [row.name for row in filtered.items] == [syncing.name]
     assert filtered.total_items == 1
@@ -655,6 +659,30 @@ def test_the_syncing_filter_returns_only_syncing_rows_and_keeps_every_count(
     assert filtered.status_counts[IndexingConnectorStatus.SYNCING] == 1
     assert filtered.status_counts[IndexingConnectorStatus.INDEXED] == 1
     assert filtered.status_counts[IndexingConnectorStatus.PAUSED] == 1
+
+
+def test_the_running_filter_returns_indexing_and_syncing_rows(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    indexing = _create_cc_pair(db_session, prefix, "b indexing")
+    syncing = _create_cc_pair(db_session, prefix, "a syncing")
+    indexed = _create_cc_pair(db_session, prefix, "c indexed")
+    _index_attempt(db_session, indexing, IndexingStatus.IN_PROGRESS, now)
+    for cc_pair in (syncing, indexed):
+        _index_attempt(db_session, cc_pair, IndexingStatus.SUCCESS, now)
+    _group_sync(db_session, syncing)
+
+    running = _connectors(
+        db_session,
+        prefix,
+        status=[IndexingConnectorStatus.INDEXING, IndexingConnectorStatus.SYNCING],
+    )
+
+    assert [row.name for row in running.items] == [syncing.name, indexing.name]
+    assert running.total_items == 2
+    assert running.status_counts[IndexingConnectorStatus.INDEXED] == 1
 
 
 def test_a_failed_prune_or_check_ranks_a_connector_third(

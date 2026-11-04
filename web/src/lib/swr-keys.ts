@@ -429,7 +429,7 @@ export const SWR_KEYS = {
       page_size: String(query.pageSize),
     });
     if (query.q) params.set("q", query.q);
-    if (query.status !== null) params.set("status", query.status);
+    for (const bucket of query.status ?? []) params.append("status", bucket);
     return `${SWR_KEYS.indexMonitoringConnectorsPrefix}${params.toString()}`;
   },
   // Every fleet runs feed query starts with this, so `mutate` can match them all.

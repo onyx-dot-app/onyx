@@ -81,7 +81,8 @@ export interface IndexingConnectorsQuery {
   pageSize: number;
   /** Matched against the name. */
   q: string;
-  status: IndexingConnectorStatus | null;
+  /** Pairs in any of these buckets, or every pair when null. */
+  status: readonly IndexingConnectorStatus[] | null;
 }
 
 /** Mirrors `CCPairRef`: a pair named in a fleet-wide feed. */

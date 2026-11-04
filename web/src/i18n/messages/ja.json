@@ -7523,8 +7523,7 @@
         },
         "counts": {
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
-          "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
-          "syncing": "{count, plural, other {# 件のコネクタが同期中}}",
+          "running": "{indexing, plural, other {インデックス中 # 件}}、{syncing, plural, other {同期中 # 件}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
           "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
           "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",
