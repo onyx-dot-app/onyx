@@ -6,6 +6,7 @@ import React, { useRef } from "react";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components/text/components";
 import { SvgImport, SvgX } from "@opal/icons";
+import { InputLeadingIcon } from "@opal/components/inputs/leading-icon";
 import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 import useUploadTarget from "@opal/components/inputs/uploads/useUploadTarget";
@@ -151,9 +152,7 @@ export default function UploadControl({
             onClear();
           }}
         >
-          <div className="opal-input-leading-icon">
-            <SvgImport className="opal-input-leading-icon-svg" />
-          </div>
+          <InputLeadingIcon icon={SvgImport} muted />
           <span
             className="opal-input-upload-label"
             data-placeholder={shownLabel === null ? true : undefined}

@@ -9,6 +9,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import { Button, Chip, CHIP_REMOVE_ATTR, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
+import { InputLeadingIcon } from "@opal/components/inputs/leading-icon";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -322,11 +323,7 @@ function TagField({
         onInputDoubleClick();
       }}
     >
-      {Icon && (
-        <div className="opal-input-type-in-tag-icon-container">
-          <Icon className="opal-input-type-in-tag-icon" />
-        </div>
-      )}
+      {Icon && <InputLeadingIcon icon={Icon} />}
       <div
         ref={tagsRef}
         className="opal-input-type-in-tag-tags"

@@ -48,7 +48,7 @@
   color: var(--action-selection-05);
 }
 
-.opal-input-upload[data-drag] .opal-input-leading-icon-svg {
+.opal-input-upload[data-drag] .opal-input-leading-icon .opal-icon-container {
   color: var(--action-selection-05);
 }
 

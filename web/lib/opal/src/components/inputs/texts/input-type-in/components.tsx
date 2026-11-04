@@ -5,6 +5,7 @@ import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
+import { InputLeadingIcon } from "@opal/components/inputs/leading-icon";
 import { useOpalStrings } from "@opal/strings";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 
@@ -112,17 +113,9 @@ export default function InputTypeIn({
         if (input && e.target !== input) input.focus();
       }}
     >
-      {searchIcon && (
-        <div className="opal-input-leading-icon">
-          <SvgSearch className="opal-input-leading-icon-svg" />
-        </div>
-      )}
+      {searchIcon && <InputLeadingIcon icon={SvgSearch} muted />}
 
-      {Icon && (
-        <div className="opal-input-leading-icon">
-          <Icon className="opal-input-leading-icon-svg opal-input-option-icon" />
-        </div>
-      )}
+      {Icon && <InputLeadingIcon icon={Icon} />}
 
       {prefixText && (
         <span className="select-none pointer-events-none font-main-ui-body text-text-02 ps-0.5">

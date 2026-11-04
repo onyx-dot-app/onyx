@@ -73,6 +73,17 @@
   @apply bg-transparent border rounded-08;
 }
 
+/* InputLeadingIcon: a 20px icon container in 2px of padding, one 24px row
+   tall. */
+.opal-input-leading-icon {
+  @apply flex shrink-0 p-0.5;
+}
+
+/* The search icon reads a step lighter than a chosen option's icon. */
+.opal-input-leading-icon[data-muted] .opal-icon-container {
+  @apply text-text-02;
+}
+
 /* ---------------------------------------------------------------------------
    Segmented fields (Figma Input/Date, Input/Time)
 

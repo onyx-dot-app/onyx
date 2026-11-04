@@ -30,19 +30,6 @@
   min-height: var(--opal-input-type-in-tag-row-height);
 }
 
-.opal-input-type-in-tag-icon-container {
-  @apply flex shrink-0 items-center justify-center;
-  width: 24px;
-  height: 24px;
-  padding: 4px;
-}
-
-.opal-input-type-in-tag-icon {
-  @apply text-text-03;
-  width: 100%;
-  height: 100%;
-}
-
 /* Chip rows pack from the top, grow the field up to --max-rows, then scroll
    inside it. The 2px bleed (negative margin, matching padding) keeps an armed
    chip's outer ring inside the scroll clip. */
