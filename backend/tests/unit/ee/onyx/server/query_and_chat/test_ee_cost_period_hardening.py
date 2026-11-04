@@ -53,7 +53,7 @@ def test_user_path_fetch_cutoff_covers_every_window(
     captured: list[datetime] = []
 
     def _capture_cutoff(
-        _db: object, _user: object, cutoff: datetime
+        _db: object, _user: object, cutoff: datetime, _model: int | None
     ) -> list[tuple[datetime, float]]:
         captured.append(cutoff)
         return []
@@ -61,14 +61,17 @@ def test_user_path_fetch_cutoff_covers_every_window(
     monkeypatch.setattr(ee_token_limit, "datetime", _FixedDatetime)
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_all_user_token_rate_limits",
-        lambda **_: [weekly, monthly],
+        "fetch_enforced_token_rate_limits",
+        lambda *_: [weekly, monthly],
+    )
+    monkeypatch.setattr(
+        ee_token_limit, "fetch_user_group_enforced_token_rate_limits", lambda *_: {}
     )
     monkeypatch.setattr(
         ee_token_limit, "get_user_cost_cents_buckets_since", _capture_cutoff
     )
 
-    ee_token_limit._user_is_rate_limited(uuid4())
+    ee_token_limit._user_is_rate_limited(uuid4(), None)
 
     assert captured == [datetime(2026, 7, 27, tzinfo=timezone.utc)]
 
@@ -83,7 +86,7 @@ def test_group_path_fetch_cutoff_covers_every_window(
     captured: list[datetime] = []
 
     def _capture_cutoff(
-        _db: object, _group_ids: object, cutoff: datetime
+        _db: object, _group_ids: object, cutoff: datetime, _model: int | None
     ) -> dict[int, list[tuple[datetime, float]]]:
         captured.append(cutoff)
         return {}
@@ -91,13 +94,13 @@ def test_group_path_fetch_cutoff_covers_every_window(
     monkeypatch.setattr(ee_token_limit, "datetime", _FixedDatetime)
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_user_group_token_rate_limits",
+        "fetch_user_group_enforced_token_rate_limits",
         lambda *_: {1: [weekly, monthly]},
     )
     monkeypatch.setattr(
         ee_token_limit, "get_group_cost_cents_buckets_since", _capture_cutoff
     )
 
-    ee_token_limit._user_is_rate_limited_by_group(uuid4())
+    ee_token_limit._user_is_rate_limited_by_group(uuid4(), None)
 
     assert captured == [datetime(2026, 7, 27, tzinfo=timezone.utc)]

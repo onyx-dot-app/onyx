@@ -109,6 +109,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
 )
+from onyx.server.query_and_chat.token_limit import check_model_spend_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
 from onyx.tools.models import SearchToolUsage
@@ -217,6 +218,7 @@ def _select_models(
             tenant_id=get_current_tenant_id(),
             llm_provider_api_key=llm.config.api_key,
         )
+        check_model_spend_limits(user, llm.config.model_configuration_id)
         display_name = llm.config.model_name
         if override is not None:
             display_name = (

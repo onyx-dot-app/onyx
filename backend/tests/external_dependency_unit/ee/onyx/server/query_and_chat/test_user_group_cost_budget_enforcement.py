@@ -136,7 +136,7 @@ def test_user_cost_isolated_and_longest_window_reported(
         _cost_limit(TokenRateLimitScope.USER, TokenRateLimitPeriod.WEEKLY),
     ]
     monkeypatch.setattr(
-        ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: limits
+        ee_token_limit, "fetch_enforced_token_rate_limits", lambda *_: limits
     )
     monkeypatch.setattr(
         ee_token_limit, "get_user_token_buckets_since", _fail_token_query
@@ -144,11 +144,11 @@ def test_user_cost_isolated_and_longest_window_reported(
 
     _record_cost(db_session, user, 50.0)
     _record_cost(db_session, other_user, 1_000.0)
-    ee_token_limit._user_is_rate_limited(user.id)
+    ee_token_limit._user_is_rate_limited(user.id, None)
 
     _record_cost(db_session, user, 50.0)
     with pytest.raises(OnyxError) as exc_info:
-        ee_token_limit._user_is_rate_limited(user.id)
+        ee_token_limit._user_is_rate_limited(user.id, None)
     _assert_cost_rate_limited(
         exc_info.value,
         TokenRateLimitScope.USER,
@@ -194,7 +194,7 @@ def test_group_blocks_only_when_every_group_is_over_budget(
         ee_token_limit, "get_group_token_buckets_since", _fail_token_query
     )
 
-    ee_token_limit._user_is_rate_limited_by_group(user.id)
+    ee_token_limit._user_is_rate_limited_by_group(user.id, None)
 
     db_session.execute(
         delete(User__UserGroup).where(
@@ -204,7 +204,7 @@ def test_group_blocks_only_when_every_group_is_over_budget(
     )
     db_session.commit()
     with pytest.raises(OnyxError) as exc_info:
-        ee_token_limit._user_is_rate_limited_by_group(user.id)
+        ee_token_limit._user_is_rate_limited_by_group(user.id, None)
     _assert_cost_rate_limited(
         exc_info.value,
         TokenRateLimitScope.USER_GROUP,
@@ -225,8 +225,8 @@ def test_user_token_limit_resets_at_window_end(
     )
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_all_user_token_rate_limits",
-        lambda **_: [limit],
+        "fetch_enforced_token_rate_limits",
+        lambda *_: [limit],
     )
     monkeypatch.setattr(
         ee_token_limit,
@@ -240,7 +240,7 @@ def test_user_token_limit_resets_at_window_end(
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        ee_token_limit._user_is_rate_limited(user.id)
+        ee_token_limit._user_is_rate_limited(user.id, None)
     _assert_rate_limited(exc_info.value, TokenRateLimitScope.USER)
     assert exc_info.value.extra is not None
     assert datetime.fromisoformat(str(exc_info.value.extra["reset_at"])) == (

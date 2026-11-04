@@ -13,6 +13,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.enums import UsageActorKind
@@ -357,10 +358,18 @@ def get_user_cost_cents_since(
     return float(total)
 
 
+def _model_clause(model_configuration_id: int | None) -> list[ColumnElement[bool]]:
+    """No filter for None: all-models limits count usage of every model."""
+    if model_configuration_id is None:
+        return []
+    return [UserUsage.model_configuration_id == model_configuration_id]
+
+
 def get_user_cost_cents_buckets_since(
     db_session: Session,
     user_id: str,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[tuple[datetime, float]]:
     """Per-window cost buckets for one user — Python-side multi-period windowing."""
     rows = db_session.execute(
@@ -369,6 +378,7 @@ def get_user_cost_cents_buckets_since(
             func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
         )
         .where(
+            *_model_clause(model_configuration_id),
             UserUsage.user_id == user_id,
             UserUsage.window_start >= cutoff,
         )
@@ -393,6 +403,7 @@ def get_total_cost_cents_since(
 def get_total_cost_cents_buckets_since(
     db_session: Session,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[tuple[datetime, float]]:
     """Tenant-wide per-window cost buckets for multi-period global budgets."""
     rows = db_session.execute(
@@ -400,7 +411,7 @@ def get_total_cost_cents_buckets_since(
             UserUsage.window_start,
             func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
         )
-        .where(UserUsage.window_start >= cutoff)
+        .where(*_model_clause(model_configuration_id), UserUsage.window_start >= cutoff)
         .group_by(UserUsage.window_start)
     ).all()
     return [(datetime_to_utc(window_start), float(cost)) for window_start, cost in rows]
@@ -427,6 +438,7 @@ def get_group_cost_cents_buckets_since(
     db_session: Session,
     user_group_ids: list[int],
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> dict[int, list[tuple[datetime, float]]]:
     """Per-group (window_start, cents) buckets in one query for Python windowing."""
     rows = db_session.execute(
@@ -437,6 +449,7 @@ def get_group_cost_cents_buckets_since(
         )
         .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
         .where(
+            *_model_clause(model_configuration_id),
             User__UserGroup.user_group_id.in_(user_group_ids),
             UserUsage.window_start >= cutoff,
         )
@@ -453,6 +466,7 @@ def get_user_token_buckets_since(
     db_session: Session,
     user_id: str,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[TokenUsageBucket]:
     """Provider input + output tokens across all recorded flows for one user."""
     rows = db_session.execute(
@@ -460,7 +474,11 @@ def get_user_token_buckets_since(
             UserUsage.window_start,
             func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
         )
-        .where(UserUsage.user_id == user_id, UserUsage.window_start >= cutoff)
+        .where(
+            *_model_clause(model_configuration_id),
+            UserUsage.user_id == user_id,
+            UserUsage.window_start >= cutoff,
+        )
         .group_by(UserUsage.window_start)
         .order_by(UserUsage.window_start)
     ).all()
@@ -473,6 +491,7 @@ def get_user_token_buckets_since(
 def get_total_token_buckets_since(
     db_session: Session,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[TokenUsageBucket]:
     """Tenant-wide provider input + output tokens across all recorded flows."""
     rows = db_session.execute(
@@ -480,7 +499,7 @@ def get_total_token_buckets_since(
             UserUsage.window_start,
             func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
         )
-        .where(UserUsage.window_start >= cutoff)
+        .where(*_model_clause(model_configuration_id), UserUsage.window_start >= cutoff)
         .group_by(UserUsage.window_start)
         .order_by(UserUsage.window_start)
     ).all()
@@ -494,6 +513,7 @@ def get_group_token_buckets_since(
     db_session: Session,
     user_group_ids: list[int],
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> dict[int, list[TokenUsageBucket]]:
     """Provider input + output tokens across all recorded flows per group."""
     rows = db_session.execute(
@@ -504,6 +524,7 @@ def get_group_token_buckets_since(
         )
         .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
         .where(
+            *_model_clause(model_configuration_id),
             User__UserGroup.user_group_id.in_(user_group_ids),
             UserUsage.window_start >= cutoff,
         )

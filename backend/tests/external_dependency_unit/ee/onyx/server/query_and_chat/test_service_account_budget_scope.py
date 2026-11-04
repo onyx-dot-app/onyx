@@ -64,15 +64,13 @@ def users_over_a_per_user_budget(
 
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_all_user_token_rate_limits",
-        lambda **_: [_token_limit(TokenRateLimitScope.USER)],
+        "fetch_enforced_token_rate_limits",
+        lambda *_: [_token_limit(TokenRateLimitScope.USER)],
     )
     monkeypatch.setattr(
-        ee_token_limit, "_user_is_rate_limited_by_group", lambda _: None
+        ee_token_limit, "_user_is_rate_limited_by_group", lambda *_: None
     )
-    monkeypatch.setattr(
-        token_limit, "fetch_all_global_token_rate_limits", lambda **_: []
-    )
+    monkeypatch.setattr(token_limit, "fetch_enforced_token_rate_limits", lambda *_: [])
 
     yield standard, service
 
@@ -90,7 +88,7 @@ def test_standard_user_over_per_user_budget_is_limited(
     standard, _ = users_over_a_per_user_budget
 
     with pytest.raises(OnyxError) as exc_info:
-        ee_token_limit._check_token_rate_limits(standard)
+        ee_token_limit._check_spend_limits(standard, None)
 
     assert exc_info.value.error_code is OnyxErrorCode.RATE_LIMITED
     assert exc_info.value.extra is not None
@@ -102,7 +100,7 @@ def test_service_account_is_not_held_to_per_user_budget(
 ) -> None:
     _, service = users_over_a_per_user_budget
 
-    ee_token_limit._check_token_rate_limits(service)
+    ee_token_limit._check_spend_limits(service, None)
 
 
 def test_service_account_is_still_held_to_global_budget(
@@ -112,12 +110,12 @@ def test_service_account_is_still_held_to_global_budget(
     _, service = users_over_a_per_user_budget
     monkeypatch.setattr(
         token_limit,
-        "fetch_all_global_token_rate_limits",
-        lambda **_: [_token_limit(TokenRateLimitScope.GLOBAL)],
+        "fetch_enforced_token_rate_limits",
+        lambda *_: [_token_limit(TokenRateLimitScope.GLOBAL)],
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        ee_token_limit._check_token_rate_limits(service)
+        ee_token_limit._check_spend_limits(service, None)
 
     assert exc_info.value.error_code is OnyxErrorCode.RATE_LIMITED
     assert exc_info.value.extra is not None
