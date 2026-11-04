@@ -75,15 +75,6 @@ def period_fetch_cutoff(
     return min(get_period_window_start(now, limit.period) for limit in rate_limits)
 
 
-def token_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
-    # A non-positive budget can only come from legacy rows; never block on it.
-    return [
-        limit
-        for limit in rate_limits
-        if limit.token_budget is not None and limit.token_budget > 0
-    ]
-
-
 def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
     return [limit for limit in rate_limits if limit.cost_budget_cents is not None]
 
