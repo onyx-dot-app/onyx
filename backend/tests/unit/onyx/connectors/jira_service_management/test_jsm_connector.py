@@ -360,3 +360,24 @@ def test_a_custom_jql_cannot_escape_the_service_desk(
     assert jql.startswith(
         '(project = "SUPPORT" AND (status = Open OR status = Done))'
     ), jql
+
+
+def test_a_portal_only_account_is_not_blocked_by_a_required_check() -> None:
+    """P1 regression: the required project check must not need an agent
+    licence. servicedeskapi refuses portal-only accounts, so only the advisory
+    metadata check may touch it."""
+    from onyx.connectors.capability_checks.registry import (
+        _INDEXING_CHECKS_BY_SOURCE,
+    )
+
+    checks = {
+        check.check_id: check
+        for check in _INDEXING_CHECKS_BY_SOURCE[DocumentSource.JIRA_SERVICE_MANAGEMENT]
+    }
+
+    required = {cid for cid, check in checks.items() if check.required}
+    # The required checks are sign-in and project read, and neither is the
+    # agent-gated metadata probe.
+    assert "jsm_metadata" in checks
+    assert not checks["jsm_metadata"].required
+    assert "jsm_service_desk" in required
