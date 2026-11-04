@@ -31,6 +31,7 @@ root            0.25rem gap inline or reversed; no gap stacked
 | `font`                | `TextFont`                                 | `"main-ui-action"` | The title's font; sets every size                                                                   |
 | `orientation`         | `"inline" \| "reverse" \| "stacked"`       | `"inline"`         | Icon before the title, after it, or above it                                                        |
 | `icon`                | `IconFunctionComponent`                    | —                  | Leading icon                                                                                        |
+| `enlargedIcon`        | `boolean`                                  | `false`            | Drop the icon box's 2px padding, so `icon` and `moreIcon2` are as tall as the title line. The box keeps its size. For larger icons on a page, such as connector logos |
 | `title`               | `string \| RichStr`                        | **(required)**     | The title                                                                                           |
 | `description`         | `string \| RichStr`                        | —                  | Text below the title                                                                                |
 | `titleMaxLines`       | `number`                                   | —                  | Clamp the title; a cut title shows in full in a tooltip                                             |

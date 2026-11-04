@@ -180,6 +180,11 @@
   padding: 0.125rem;
 }
 
+/* `enlargedIcon`: the same box, no padding, so the glyph is the full line. */
+.opal-content-icon[data-enlarged] {
+  padding: 0;
+}
+
 .opal-content-icon-glyph {
   width: 100%;
   height: 100%;

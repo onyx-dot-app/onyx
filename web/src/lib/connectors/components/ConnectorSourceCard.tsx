@@ -60,6 +60,8 @@ export default function ConnectorSourceCard({
       <ContentAction
         font="main-ui-action"
         icon={icon}
+        // Logos read small at 16px; they fill the 20px line instead.
+        enlargedIcon
         title={sourceMetadata.displayName}
         description={description}
         // One line keeps the cards even; a cut title or description shows in

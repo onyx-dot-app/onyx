@@ -61,6 +61,13 @@ interface ContentBaseProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
+  /**
+   * Drop the icon box's 2px padding, so the icon is as tall as the title
+   * line rather than 4px shorter. The box keeps its size, so nothing else
+   * moves. Covers `icon` and `moreIcon2`.
+   */
+  enlargedIcon?: boolean;
+
   /** Main title text. */
   title: string | RichStr;
 
@@ -219,14 +226,20 @@ const AUX_ICON_CONFIG: Record<
 function ContentIcon({
   icon: Icon,
   font,
+  enlarged = false,
   className,
 }: {
   icon: IconFunctionComponent;
   font: TextFont;
+  /** No padding: the glyph is the full line height. */
+  enlarged?: boolean;
   className?: string;
 }) {
   return (
-    <div className={cn("opal-content-icon", `font-${font}`, className)}>
+    <div
+      className={cn("opal-content-icon", `font-${font}`, className)}
+      data-enlarged={enlarged || undefined}
+    >
       <Icon className="opal-content-icon-glyph" />
     </div>
   );
@@ -275,6 +288,7 @@ function Content({
   font = "main-ui-action",
   orientation = "inline",
   icon,
+  enlargedIcon = false,
   title,
   description,
   titleMaxLines,
@@ -353,7 +367,9 @@ function Content({
       >
         {hasIconRow && (
           <div className="opal-content-icon-row">
-            {icon && <ContentIcon icon={icon} font={font} />}
+            {icon && (
+              <ContentIcon icon={icon} font={font} enlarged={enlargedIcon} />
+            )}
             {MoreIcon1 && (
               // The connector between two marks: smaller, and in the
               // secondary foreground rather than the icon colour.
@@ -361,7 +377,13 @@ function Content({
                 <MoreIcon1 className="opal-content-icon-glyph" />
               </div>
             )}
-            {moreIcon2 && <ContentIcon icon={moreIcon2} font={font} />}
+            {moreIcon2 && (
+              <ContentIcon
+                icon={moreIcon2}
+                font={font}
+                enlarged={enlargedIcon}
+              />
+            )}
           </div>
         )}
 
