@@ -466,6 +466,46 @@ class JiraSourceOperations(SourceOperations):
                 },
             )
 
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested="JSM portal enrichment is exercised by the Jira Service "
+        "Management connector's unit tests, not by a capability check.",
+    )
+    def get_service_desk_request(
+        self, *, issue_key: str, fast: bool = False
+    ) -> dict[str, Any] | None:
+        """Returns the Jira Service Management customer-request view of an
+        issue (``servicedeskapi/request``), or ``None`` when the issue is not
+        a service desk request or JSM is not reachable with this credential.
+        Best effort by design: enrichment must never fail an indexing run."""
+        try:
+            with _translate_errors(fast=fast):
+                return self._client(fast=fast)._get_json(
+                    f"rest/servicedeskapi/request/{issue_key}"
+                )
+        except (JiraApiError, JIRAError, requests.RequestException):
+            return None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested="JSM SLA enrichment is exercised by the Jira Service "
+        "Management connector's unit tests, not by a capability check.",
+    )
+    def get_service_desk_sla(
+        self, *, issue_key: str, fast: bool = False
+    ) -> dict[str, Any] | None:
+        """Returns the SLA information of a service desk request
+        (``servicedeskapi/request/{key}/sla``), or ``None`` when unavailable."""
+        try:
+            with _translate_errors(fast=fast):
+                return self._client(fast=fast)._get_json(
+                    f"rest/servicedeskapi/request/{issue_key}/sla"
+                )
+        except (JiraApiError, JIRAError, requests.RequestException):
+            return None
+
 
 def is_cloud_gateway(gateway: JiraSourceOperations) -> bool:
     """True when the gateway's credential uses the Cloud APIs."""
