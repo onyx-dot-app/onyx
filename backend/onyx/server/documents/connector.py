@@ -2497,6 +2497,15 @@ def trigger_indexing_for_cc_pair(
             if from_beginning:
                 indexing_mode = IndexingMode.REINDEX
 
+            # A queued full run covers an update; do not downgrade it. It can
+            # sit for a while when a port-flow reindex holds it until the swap.
+            if (
+                indexing_mode == IndexingMode.UPDATE
+                and cc_pair.indexing_trigger == IndexingMode.REINDEX
+            ):
+                num_triggers += 1
+                continue
+
             mark_ccpair_with_indexing_trigger(cc_pair.id, indexing_mode, db_session)
             num_triggers += 1
 

@@ -248,7 +248,7 @@ def set_new_search_settings(
             names = ", ".join(f"'{name}'" for _, name in running_full_runs[:5])
             raise OnyxError(
                 OnyxErrorCode.CONFLICT,
-                f"A full re-index or backfill is running for {names}. "
+                f"A full re-index or backfill is running or queued for {names}. "
                 "Wait for it to finish before starting a re-index.",
             )
 
