@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from google.auth import compute_engine
+from google.auth.credentials import Credentials
 from google.auth.exceptions import TransportError
 from google.cloud import storage
 from google.oauth2.credentials import Credentials as UserCredentials
@@ -31,27 +32,24 @@ PENDING = PendingPresignedUpload(
 )
 
 
-def _store_with(credentials: object) -> GCSBackedFileStore:
+def _store_with(credentials: Credentials) -> GCSBackedFileStore:
     store = GCSBackedFileStore(bucket_name="onyx-bucket")
     client = storage.Client(project="project", credentials=credentials)
     store._get_gcs_client = MagicMock(return_value=client)
+    store._get_signing_credentials = MagicMock(return_value=credentials)
     return store
 
 
 def _workload_identity_store() -> GCSBackedFileStore:
-    store = _store_with(
-        compute_engine.Credentials(
-            service_account_email=SERVICE_ACCOUNT, universe_domain="googleapis.com"
-        )
+    credentials = compute_engine.Credentials(
+        service_account_email=SERVICE_ACCOUNT, universe_domain="googleapis.com"
     )
-    # The client holds a scoped copy, so the token goes on that copy.
-    credentials = store._get_gcs_client()._credentials
     credentials.token = "access-token"
     # google-auth compares expiry as naive UTC.
     credentials.expiry = datetime.datetime.now(datetime.UTC).replace(
         tzinfo=None
     ) + datetime.timedelta(hours=1)
-    return store
+    return _store_with(credentials)
 
 
 def test_workload_identity_signs_an_upload_through_iam() -> None:
@@ -104,4 +102,17 @@ def test_user_credentials_cannot_sign() -> None:
     store = _store_with(UserCredentials(token="user-token"))
 
     with pytest.raises(PresignedUrlsNotSupportedError, match="service account"):
+        store._sign_download("onyx-bucket", "onyx-files/public/file-1", 300)
+
+
+def test_a_transient_sign_blob_failure_is_raised_as_is() -> None:
+    store = _workload_identity_store()
+
+    with (
+        patch(
+            "google.cloud.storage._signing._sign_message",
+            side_effect=TransportError("Error calling the IAM signBytes API: 503"),
+        ),
+        pytest.raises(TransportError),
+    ):
         store._sign_download("onyx-bucket", "onyx-files/public/file-1", 300)

@@ -13,7 +13,11 @@ import puremagic
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
+    from google.auth.credentials import Credentials as GoogleCredentials
     from google.cloud.storage import Client as GCSClient
+    from google.oauth2.service_account import (
+        Credentials as ServiceAccountCredentials,
+    )
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import (
@@ -34,17 +38,30 @@ from onyx.file_store.file_store import (
     PRESIGN_READ_CHUNK_BYTES,
     PresignableFileStore,
     PresignedUrlsNotSupportedError,
-    StoredObjectStat,
     content_byte_size,
     presign_expiry,
 )
-from onyx.file_store.models import PendingPresignedUpload, PresignedRequest
+from onyx.file_store.models import (
+    PendingPresignedUpload,
+    PresignedRequest,
+    StoredObjectStat,
+)
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
+def _is_permission_denied(error: Exception) -> bool:
+    # google-auth reports a failed signBlob call as TransportError with the
+    # HTTP response in the message.
+    message = str(error)
+    return "403" in message or "PERMISSION_DENIED" in message
+
 
 _SIGN_BLOB_HELP = (
     "GCS signed URLs without a key file sign through the IAM signBlob API. "
@@ -64,6 +81,9 @@ class GCSBackedFileStore(PresignableFileStore):
         service_account_key_json: str | None = None,
     ) -> None:
         self._gcs_client: GCSClient | None = None
+        # The credentials that sign URLs, owned here rather than read from the
+        # client.
+        self._signing_credentials: GoogleCredentials | None = None
         # Shared across threads, so the first operations build one client.
         self._client_lock = threading.Lock()
         self._bucket_name = bucket_name
@@ -426,15 +446,46 @@ class GCSBackedFileStore(PresignableFileStore):
     def _presign_object_key(self, file_id: str) -> str:
         return self._get_object_key(file_id)
 
+    def _service_account_key_credentials(
+        self,
+    ) -> ServiceAccountCredentials | None:
+        """Credentials from the configured key file or inline JSON, if any."""
+        from google.oauth2 import service_account
+
+        if self._service_account_key_path:
+            return service_account.Credentials.from_service_account_file(
+                self._service_account_key_path
+            )
+        if self._service_account_key_json:
+            return service_account.Credentials.from_service_account_info(
+                json.loads(self._service_account_key_json)
+            )
+        return None
+
+    def _get_signing_credentials(self) -> GoogleCredentials:
+        """The key credentials when configured, else Application Default
+        Credentials (Workload Identity or the metadata server)."""
+        import google.auth
+
+        with self._client_lock:
+            if self._signing_credentials is None:
+                key_credentials = self._service_account_key_credentials()
+                if key_credentials is not None:
+                    self._signing_credentials = key_credentials
+                else:
+                    self._signing_credentials, _ = google.auth.default(
+                        scopes=[_CLOUD_PLATFORM_SCOPE]
+                    )
+            return self._signing_credentials
+
     def _iam_signer(self) -> tuple[str, str] | None:
         """(service account email, access token) for credentials without a
         key, which sign through IAM signBlob. None when they hold a key."""
         from google.auth import compute_engine
         from google.auth.credentials import Signing
-        from google.auth.exceptions import GoogleAuthError
         from google.auth.transport.requests import Request
 
-        credentials = self._get_gcs_client()._credentials
+        credentials = self._get_signing_credentials()
         if isinstance(credentials, Signing):
             return None
         # Workload Identity and the metadata server give these credentials.
@@ -443,14 +494,10 @@ class GCSBackedFileStore(PresignableFileStore):
                 "GCS signed URLs need service account credentials, not "
                 f"{type(credentials).__name__}"
             )
-        try:
-            # A refresh also replaces the "default" email with the real one.
-            if not credentials.valid:
-                credentials.refresh(Request())
-        except GoogleAuthError as e:
-            raise PresignedUrlsNotSupportedError(
-                f"Could not get a GCS access token to sign a URL: {e}"
-            ) from e
+        # A refresh also replaces the "default" email with the real one. A
+        # failed refresh is a metadata server problem, so it is raised as is.
+        if not credentials.valid:
+            credentials.refresh(Request())
         if credentials.token is None:
             raise PresignedUrlsNotSupportedError("GCS credentials have no token")
         return credentials.service_account_email, credentials.token
@@ -480,7 +527,11 @@ class GCSBackedFileStore(PresignableFileStore):
                 access_token=signer[1] if signer else None,
             )
         except GoogleAuthError as e:
-            raise PresignedUrlsNotSupportedError(f"{_SIGN_BLOB_HELP} ({e})") from e
+            # Only a denied signBlob means the identity cannot sign. Other
+            # errors (network, IAM outage) are raised as they are.
+            if _is_permission_denied(e):
+                raise PresignedUrlsNotSupportedError(f"{_SIGN_BLOB_HELP} ({e})") from e
+            raise
 
     def _sign_download(
         self, bucket_name: str, object_key: str, ttl_seconds: int

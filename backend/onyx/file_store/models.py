@@ -270,6 +270,12 @@ class PresignedUpload(BaseModel):
     request: PresignedRequest
 
 
+class StoredObjectStat(BaseModel):
+    size: int
+    # Hex SHA-256, when the store keeps one for the object.
+    sha256: str | None
+
+
 class PendingPresignedUpload(BaseModel):
     """What finalize_presigned_upload checks the uploaded object against.
     Kept in the cache backend, so no file_record row exists before finalize."""

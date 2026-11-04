@@ -202,8 +202,10 @@ An upload object that is never finalized stays in the bucket without a record.
 
 Only the cloud backends (S3, GCS, Azure) have presigned URLs. They subclass
 `PresignableFileStore`, so callers check `isinstance(store, PresignableFileStore)`.
-The PostgreSQL backend has none. A cloud backend raises
-`PresignedUrlsNotSupportedError` when its credentials cannot sign.
+The PostgreSQL backend has none. GCS and Azure raise
+`PresignedUrlsNotSupportedError` when their credentials are not allowed to sign.
+S3 signs locally, so a credential problem only shows when the client uses the
+URL. Temporary errors (network, metadata server) are raised as they are.
 
 ### S3 and S3-compatible stores
 

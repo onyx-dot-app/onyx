@@ -37,11 +37,14 @@ from onyx.db.models import FileRecord
 from onyx.file_store.file_store import (
     PresignableFileStore,
     PresignedUrlsNotSupportedError,
-    StoredObjectStat,
     content_byte_size,
     presign_expiry,
 )
-from onyx.file_store.models import PendingPresignedUpload, PresignedRequest
+from onyx.file_store.models import (
+    PendingPresignedUpload,
+    PresignedRequest,
+    StoredObjectStat,
+)
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
@@ -545,7 +548,13 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         from azure.storage.blob import generate_blob_sas
 
         client = self._get_blob_service_client()
-        account_name = client.account_name
+        # A custom-domain endpoint hides the account name, so prefer the
+        # configured one.
+        account_name = (
+            self._account_key_credential["account_name"]
+            if self._account_key_credential is not None
+            else client.account_name
+        )
         if account_name is None:
             raise PresignedUrlsNotSupportedError("The Azure account name is unknown")
         expiry = datetime.now(UTC) + timedelta(seconds=ttl_seconds)

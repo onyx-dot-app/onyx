@@ -14,10 +14,10 @@ from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, TypeVar, cast
 
 import puremagic
 from botocore.exceptions import ClientError
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import (
     AWS_REGION_NAME,
     FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS,
@@ -53,6 +53,7 @@ from onyx.file_store.models import (
     PendingPresignedUpload,
     PresignedRequest,
     PresignedUpload,
+    StoredObjectStat,
 )
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
@@ -98,15 +99,13 @@ class PresignedUploadNotFoundError(Exception):
     """The pending upload is unknown, already finalized, or expired."""
 
 
+class PresignedUploadInProgressError(Exception):
+    """Another call is finalizing the same pending upload."""
+
+
 class PresignedUploadVerificationError(Exception):
     """The uploaded object is missing or does not match the size and SHA-256
     given to presign_upload."""
-
-
-class StoredObjectStat(BaseModel):
-    size: int
-    # Hex SHA-256, when the store keeps one for the object.
-    sha256: str | None
 
 
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
@@ -132,6 +131,14 @@ def presign_expiry(ttl_seconds: int) -> datetime:
 
 def _pending_upload_cache_key(pending_upload_id: str) -> str:
     return f"file_store_presigned_upload:{pending_upload_id}"
+
+
+def pending_upload_lock_name(pending_upload_id: str) -> str:
+    return f"file_store_presigned_upload_finalize:{pending_upload_id}"
+
+
+# Covers hashing a large object on stores that keep no SHA-256.
+_FINALIZE_LOCK_TIMEOUT_SECONDS = 30 * 60
 
 
 class S3PutKwargs(TypedDict):
@@ -528,8 +535,32 @@ class PresignableFileStore(FileStore):
     ) -> str:
         """Checks the size and SHA-256 of the uploaded object, then writes its
         file_record row. On a mismatch, deletes the object and raises
-        PresignedUploadVerificationError. Returns the file ID."""
+        PresignedUploadVerificationError. Returns the file ID.
+
+        Finalize calls for one pending upload run one at a time, so a late
+        second call cannot recreate a record that was deleted after the first.
+        """
         cache = get_cache_backend()
+        lock = cache.lock(
+            pending_upload_lock_name(pending_upload_id),
+            timeout=_FINALIZE_LOCK_TIMEOUT_SECONDS,
+        )
+        if not lock.acquire(blocking=False):
+            raise PresignedUploadInProgressError(
+                f"Pending upload {pending_upload_id} is being finalized"
+            )
+        try:
+            return self._finalize_locked(pending_upload_id, cache, db_session)
+        finally:
+            if lock.owned():
+                lock.release()
+
+    def _finalize_locked(
+        self,
+        pending_upload_id: str,
+        cache: CacheBackend,
+        db_session: Session | None,
+    ) -> str:
         cache_key = _pending_upload_cache_key(pending_upload_id)
         raw = cache.get(cache_key)
         if raw is None:
@@ -1073,7 +1104,8 @@ class S3BackedFileStore(PresignableFileStore):
             and self._stat_object(bucket_name, object_key) is None
         ):
             raise PresignedUrlsNotSupportedError(
-                f"{bucket_name}/{object_key} is only in the legacy MinIO store"
+                f"{bucket_name}/{object_key} is not in the object store "
+                "(it may exist only in the legacy MinIO store)"
             )
         expires_at = presign_expiry(ttl_seconds)
         url = self._get_presign_s3_client().generate_presigned_url(

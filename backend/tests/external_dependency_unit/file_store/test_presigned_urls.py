@@ -12,18 +12,22 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import S3_ENDPOINT_URL, S3_LEGACY_ENDPOINT_URL
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.models import FileRecord
 from onyx.file_store.file_store import (
     LEGACY_OUT_OF_SYNC_PREFIX,
     LEGACY_RETIRED_MARKER_KEY,
     PresignableFileStore,
+    PresignedUploadInProgressError,
     PresignedUploadNotFoundError,
     PresignedUploadVerificationError,
     PresignedUrlsNotSupportedError,
     S3BackedFileStore,
+    pending_upload_lock_name,
 )
 from onyx.file_store.legacy_copy import run_pass
 from onyx.file_store.models import PresignedRequest, PresignedUpload
@@ -47,7 +51,7 @@ CONTENT = b"a craft session snapshot"
 
 @pytest.fixture
 def store(
-    db_session: Session,  # noqa: ARG001
+    db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[S3BackedFileStore, None, None]:
     assert S3_ENDPOINT_URL
@@ -56,6 +60,10 @@ def store(
     store.initialize()
     yield store
     delete_objects(store._get_s3_client(), BUCKET, f"{prefix}/")
+    db_session.query(FileRecord).filter(
+        FileRecord.object_key.startswith(f"{prefix}/")
+    ).delete(synchronize_session=False)
+    db_session.commit()
 
 
 def presign(
@@ -138,6 +146,22 @@ def test_finalize_deletes_an_object_that_does_not_match(
     assert not has_record(upload.file_id)
     with pytest.raises(PresignedUploadNotFoundError):
         store.finalize_presigned_upload(upload.pending_upload_id)
+
+
+def test_finalize_runs_once_at_a_time(store: S3BackedFileStore) -> None:
+    upload = presign(store)
+    assert send(upload.request, CONTENT).status_code == 200
+    lock = get_cache_backend().lock(
+        pending_upload_lock_name(upload.pending_upload_id), timeout=60
+    )
+    assert lock.acquire(blocking=False)
+    try:
+        with pytest.raises(PresignedUploadInProgressError):
+            store.finalize_presigned_upload(upload.pending_upload_id)
+    finally:
+        lock.release()
+
+    assert store.finalize_presigned_upload(upload.pending_upload_id) == upload.file_id
 
 
 def test_a_download_url_reads_the_file(store: S3BackedFileStore) -> None:

@@ -488,6 +488,7 @@ class TestAzurePresignedUrls:
         assert file_store.read_file_record(file_id).file_size == len(PRESIGN_CONTENT)
         with pytest.raises(PresignedUploadNotFoundError):
             file_store.finalize_presigned_upload(upload.pending_upload_id)
+        file_store.delete_file(file_id)
 
     def test_the_upload_url_cannot_overwrite_the_blob(
         self, file_store: AzureBlobBackedFileStore
@@ -500,6 +501,7 @@ class TestAzurePresignedUrls:
 
         assert replaced.status_code >= 400
         assert file_store.read_file(file_id).read() == PRESIGN_CONTENT
+        file_store.delete_file(file_id)
 
     @pytest.mark.parametrize(
         "landed",
@@ -539,6 +541,7 @@ class TestAzurePresignedUrls:
 
         assert response.status_code == 200
         assert response.content == PRESIGN_CONTENT
+        file_store.delete_file(file_id)
 
     def test_expired_urls_are_refused(
         self, file_store: AzureBlobBackedFileStore
