@@ -136,23 +136,6 @@
       // through it. Never add one.
       "files": [
         "src/app/admin/craft/apps/page.tsx",
-        "src/app/admin/mcp-actions/[[]serverId]/page.tsx",
-        "src/app/admin/mcp-actions/new/page.tsx",
-        "src/app/admin/mcp-actions/page.tsx",
-        "src/app/admin/openapi-actions/page.tsx",
-        "src/app/admin/plugins/external-app/[[]appId]/page.tsx",
-        "src/app/admin/plugins/mcp/[[]serverId]/page.tsx",
-        "src/app/admin/plugins/openapi/[[]toolId]/page.tsx",
-        "src/app/app/layout.tsx",
-        "src/app/app/page.tsx",
-        "src/app/app/settings/page.tsx",
-        "src/app/app/shared/[[]chatId]/page.tsx",
-        "src/app/auth/impersonate/layout.tsx",
-        "src/app/auth/join/page.tsx",
-        "src/app/auth/login/page.tsx",
-        "src/app/auth/signup/page.tsx",
-        "src/app/auth/verify-email/page.tsx",
-        "src/app/auth/waiting-on-verification/page.tsx",
         "src/app/craft/components/ChatPanel.tsx",
         "src/app/craft/components/ConnectDataBanner.tsx",
         "src/app/craft/components/CraftInputBar.tsx",
@@ -180,16 +163,8 @@
         "src/app/craft/v1/tasks/components/ScheduleTaskForm.tsx",
         "src/app/craft/v1/tasks/new/page.tsx",
         "src/app/craft/v1/tasks/page.tsx",
-        "src/app/ee/admin/export-logs/page.tsx",
-        "src/app/ee/admin/standard-answer/[[]id]/page.tsx",
-        "src/app/not-found.tsx",
-        "src/app/oauth-provider/authorize/page.tsx",
-        "src/app/page.tsx",
-        "src/layouts/chromes/AdminSSChrome.tsx",
         "src/layouts/craft/CraftManageLayout.tsx",
-        "src/lib/oauth/api.ts",
-        "src/providers/CraftStreamingProvider.tsx",
-        "src/views/admin/connectors/FederatedDetailPage/index.tsx"
+        "src/providers/CraftStreamingProvider.tsx"
       ],
       "rules": {
         "navigation/no-naked-navigation": "warn"
