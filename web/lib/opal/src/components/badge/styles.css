@@ -5,8 +5,8 @@
 
    A coloured pill around a `Content` (secondary preset, body variant: the
    title in secondary-body), which draws the icon and title. The height comes
-   from the 16px line and the padding: 4 is 1rem (2px inline padding), 6 is
-   1.5rem (4px all round).
+   from the 16px line and the padding: 4 is 1rem (2px inline padding), 5 is
+   1.25rem (2px all round), 6 is 1.5rem (4px all round).
    --------------------------------------------------------------------------- */
 
 .opal-badge {
@@ -14,6 +14,10 @@
   border-radius: var(--radius-04);
   padding: 0 0.125rem;
   gap: 0;
+}
+
+.opal-badge[data-size="5"] {
+  padding: 0.125rem;
 }
 
 .opal-badge[data-size="6"] {
