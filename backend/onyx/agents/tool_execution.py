@@ -31,6 +31,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolChoiceOptions,
     ToolResult,
+    ToolResultMessage,
 )
 from onyx.utils.logger import setup_logger
 
@@ -38,6 +39,15 @@ if TYPE_CHECKING:
     from onyx.agents.runtime import Run
 
 logger = setup_logger()
+
+
+def _tool_view(message: Message) -> Message:
+    """An owned copy of a conversation message for a tool. Result details stay
+    with the runtime; tools read them from `recorded_results`."""
+    if isinstance(message, ToolResultMessage) and message.details is not None:
+        message = message.model_copy(update={"details": None})
+    return message.model_copy(deep=True)
+
 
 MAX_TOOL_CALLS_PER_STEP = 64
 
@@ -53,6 +63,7 @@ class ToolBatch:
         progress: RunProgress,
         record: StepRecord,
         history: list[Message],
+        recorded: Sequence[Message],
     ) -> None:
         if progress.options is None:
             raise ValueError("Saved step is missing generation options")
@@ -66,6 +77,10 @@ class ToolBatch:
         self.message_id = self.message.id
         self.options = progress.options
         self.context_messages = history
+        # Every recorded tool result before this step.
+        self.recorded_results = tuple(
+            message for message in recorded if isinstance(message, ToolResultMessage)
+        )
         self.calls = self.message.tool_calls
         if len(self.calls) > MAX_TOOL_CALLS_PER_STEP or len(
             {call.id for call in self.calls}
@@ -82,8 +97,24 @@ class ToolBatch:
             step=self.step,
             call=call.model_copy(deep=True),
             options=self.options.model_copy(deep=True),
-            messages=[item.model_copy(deep=True) for item in self.context_messages],
+            messages=[_tool_view(item) for item in self.context_messages],
         )
+
+    def _recorded_before(self) -> tuple[ToolResultMessage, ...]:
+        """Recorded tool results before a call: earlier steps, then this step's
+        completed results in call order."""
+        with self.run.execution_lock:
+            results = [
+                execution.result
+                for call in self.calls
+                if (execution := self.record.tools.get(call.id)) is not None
+                and execution.result is not None
+            ]
+        return (*self.recorded_results, *results)
+
+    def _was_started(self, call: ToolCall) -> bool:
+        with self.run.execution_lock:
+            return call.id in self.record.tools
 
     def _completed_call_ids(self) -> set[str]:
         with self.run.execution_lock:
@@ -220,6 +251,15 @@ class ToolBatch:
     ) -> None:
         tool = self.tools.get(call.name)
         if (
+            tool is not None
+            and tool.interrupted_result is not None
+            and self._was_started(call)
+        ):
+            # A lost execution owner left the call running. The result ends the
+            # call through `finish_tool`, as a completed call does.
+            self.run.record_tool_results(tool.interrupted_result, [call])
+            return
+        if (
             tool is None
             or tool.merge_arguments is None
             or self.run.before_tool_call is not None
@@ -325,9 +365,10 @@ class ToolBatch:
             cancellation=cancellation_signal,
             update=update,
             messages=[
-                message.model_copy(deep=True)
+                _tool_view(message)
                 for message in (context.messages if context else self.context_messages)
             ],
+            recorded_results=self._recorded_before(),
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination
             else None,

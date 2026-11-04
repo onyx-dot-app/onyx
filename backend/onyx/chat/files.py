@@ -37,6 +37,7 @@ from onyx.file_store.utils import (
     plaintext_file_name_for_id,
     store_plaintext,
 )
+from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
 from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -45,8 +46,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
-
-APPROX_CHARS_PER_TOKEN = 4
 
 
 def collect_available_file_ids(

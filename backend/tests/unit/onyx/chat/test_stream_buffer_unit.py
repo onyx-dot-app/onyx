@@ -39,6 +39,7 @@ from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     OverallStop,
     Packet,
+    StopReason,
     StreamingError,
 )
 from onyx.server.utils import get_json_line
@@ -46,6 +47,13 @@ from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.fakes import FakeCache
 
 _STREAM_ID = 42
+
+# Distinct stop packets that mark the order of delivery.
+_REASONS: dict[str, StopReason] = {
+    "first": "finished",
+    "control": "user_cancelled",
+    "second": "timed_out",
+}
 
 
 def _make_writer(cache: FakeCache, session_id: UUID) -> StreamBufferWriter:
@@ -357,10 +365,12 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     second_started = Event()
     publish = delivery.reader.publish
     first = Packet(
-        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
+        placement=Placement(turn_index=0),
+        obj=OverallStop(stop_reason=_REASONS["first"]),
     )
     second = Packet(
-        placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
+        placement=Placement(turn_index=0),
+        obj=OverallStop(stop_reason=_REASONS["second"]),
     )
 
     def hold_first(item: Packet | StreamingError | _StreamStatus) -> None:
@@ -523,7 +533,7 @@ def test_event_delivery_and_cache_writes_share_worker(
         output.publish(
             Packet(
                 placement=Placement(turn_index=0),
-                obj=OverallStop(stop_reason=event.run_id),
+                obj=OverallStop(stop_reason=_REASONS[event.run_id]),
             )
         )
 
@@ -534,7 +544,8 @@ def test_event_delivery_and_cache_writes_share_worker(
         channel.publish(AgentStartEvent(run_id="first"))
         assert writing.wait(2)
         assert next(output.reader) == Packet(
-            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="first")
+            placement=Placement(turn_index=0),
+            obj=OverallStop(stop_reason=_REASONS["first"]),
         )
         assert not channel.tracker.wait_idle(timeout=0)
         assert output.events.has_pending_events
@@ -545,7 +556,7 @@ def test_event_delivery_and_cache_writes_share_worker(
                 lambda: output.publish(
                     Packet(
                         placement=Placement(turn_index=0),
-                        obj=OverallStop(stop_reason="control"),
+                        obj=OverallStop(stop_reason=_REASONS["control"]),
                     )
                 ),
             ).result(timeout=1)
@@ -556,10 +567,12 @@ def test_event_delivery_and_cache_writes_share_worker(
         output.finish()
     assert list(output.reader) == [
         Packet(
-            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="control")
+            placement=Placement(turn_index=0),
+            obj=OverallStop(stop_reason=_REASONS["control"]),
         ),
         Packet(
-            placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
+            placement=Placement(turn_index=0),
+            obj=OverallStop(stop_reason=_REASONS["second"]),
         ),
     ]
     output.finished.result(timeout=3)
@@ -570,7 +583,8 @@ def test_event_delivery_and_cache_writes_share_worker(
     assert "".join(saved.blocks) == "".join(
         get_json_line(
             Packet(
-                placement=Placement(turn_index=0), obj=OverallStop(stop_reason=reason)
+                placement=Placement(turn_index=0),
+                obj=OverallStop(stop_reason=_REASONS[reason]),
             ).model_dump()
         )
         for reason in ("first", "control", "second")
@@ -592,7 +606,7 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
         output.publish(
             Packet(
                 placement=Placement(turn_index=0),
-                obj=OverallStop(stop_reason=event.run_id),
+                obj=OverallStop(stop_reason=_REASONS[event.run_id]),
             )
         )
 
@@ -608,7 +622,10 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
         channel.close()
         output.finish()
     packets = [
-        Packet(placement=Placement(turn_index=0), obj=OverallStop(stop_reason=reason))
+        Packet(
+            placement=Placement(turn_index=0),
+            obj=OverallStop(stop_reason=_REASONS[reason]),
+        )
         for reason in ("first", "second")
     ]
     assert list(output.reader) == packets

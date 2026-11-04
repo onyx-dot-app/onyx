@@ -190,9 +190,22 @@ failure shape must keep old rows readable.
 **History for the next turn.** A later turn does not see earlier tool output.
 `chat/chat_utils.py:omit_prior_tool_result_content` marks saved runtime tool
 results, and `chat/prompt_utils.py:prepare_prompt` replaces their content with
-`TOOL_CALL_RESPONSE_CROSS_MESSAGE`. Legacy rows get the same placeholder from
-`chat/chat_utils.py:_build_tool_call_response_history_message`. Image
-generation is the exception in both: its output stays. The incognito store
+`chat/tool_results.py:omitted_result_text`: `TOOL_CALL_RESPONSE_CROSS_MESSAGE`
+plus the `file_id` and revised prompt of each generated image, nested images
+included. For a code mode observation it adds
+`tools/tool_implementations/code_mode/prompt.py:omitted_observation_notes`:
+for a program that did not complete, it also keeps the
+list of its calls with their states, also the calls of the cell's earlier
+observations, because those calls may have had effects. A `running`
+observation gets no "did not complete" note: a later observation or the
+closing record reports the cell's end. When the response ended after a
+cell's last observation, the text adds
+`tools/tool_implementations/code_mode/prompt.py:closing_line` ("Cell N stopped
+when the response ended" or "when the run paused", or how it ended, with the
+calls after that output),
+so the next turn sees the side effects. Legacy rows get the same placeholder from
+`chat/chat_utils.py:_build_tool_call_response_history_message`, which keeps
+image output too. The incognito store
 applies the same rule. Within one turn the run keeps the full tool output. The
 stored content stays intact for replay and citations.
 
@@ -334,7 +347,9 @@ Community downgrade clears it ([[billing]]).
 9. `tool-id-not-foreign-key` **`ToolCall.tool_id` is not a foreign key.**
    After a tool is deleted, runtime replay still shows its calls from the
    typed result, but legacy replay skips them, and the steps vanish from a
-   reloaded chat silently.
+   reloaded chat silently. Code mode has no tool row: `persistence.tool_ids`
+   maps `execute_code` and `wait_code` to None, and their calls save with a
+   NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
     session.** `db/chat.py:get_chat_session_by_id` adds `deleted IS FALSE`
     whenever `is_shared` is set, because delete does not unshare. Keep that

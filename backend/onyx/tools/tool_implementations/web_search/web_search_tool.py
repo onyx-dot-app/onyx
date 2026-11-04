@@ -12,8 +12,14 @@ from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
-from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultSpec,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.utils import (
+    SEARCH_RESULTS_CODE_MODE_RESULT,
     convert_inference_sections_to_llm_string,
 )
 from onyx.tools.tool_implementations.web_search.models import (
@@ -112,6 +118,10 @@ class WebSearchTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -122,6 +132,10 @@ class WebSearchTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return SEARCH_RESULTS_CODE_MODE_RESULT
 
     @property
     def supports_site_filter(self) -> bool:

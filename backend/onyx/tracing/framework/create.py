@@ -161,6 +161,7 @@ def function_span(
     name: str,
     input: str | None = None,
     output: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
     span_id: str | None = None,
     parent: Trace | Span[Any] | None = None,
     disabled: bool = False,
@@ -172,6 +173,7 @@ def function_span(
         name: The name of the function.
         input: The input to the function.
         output: The output of the function.
+        metadata: Attributes of the call, for filtering.
         span_id: The ID of the span. Optional. If not provided, we will generate an ID. We
             recommend using `util.gen_span_id()` to generate a span ID, to guarantee that IDs are
             correctly formatted.
@@ -183,7 +185,9 @@ def function_span(
         The newly created function span.
     """
     return get_trace_provider().create_span(
-        span_data=FunctionSpanData(name=name, input=input, output=output),
+        span_data=FunctionSpanData(
+            name=name, input=input, output=output, metadata=metadata
+        ),
         span_id=span_id,
         parent=parent,
         disabled=disabled,

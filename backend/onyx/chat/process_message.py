@@ -121,7 +121,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-APPROX_CHARS_PER_TOKEN = 4
 
 
 def _load_session(

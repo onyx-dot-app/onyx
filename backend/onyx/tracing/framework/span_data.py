@@ -58,7 +58,7 @@ class FunctionSpanData(SpanData):
     Includes input, output and MCP data (if applicable).
     """
 
-    __slots__ = ("name", "input", "output", "mcp_data")
+    __slots__ = ("name", "input", "output", "mcp_data", "metadata")
 
     def __init__(
         self,
@@ -66,11 +66,14 @@ class FunctionSpanData(SpanData):
         input: str | None,
         output: Any | None,
         mcp_data: dict[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
     ):
         self.name = name
         self.input = input
         self.output = output
         self.mcp_data = mcp_data
+        # Attributes for filtering, such as the code mode call of a nested tool.
+        self.metadata = metadata
 
     @property
     def type(self) -> str:
@@ -83,6 +86,7 @@ class FunctionSpanData(SpanData):
             "input": self.input,
             "output": str(self.output) if self.output else None,
             "mcp_data": self.mcp_data,
+            "metadata": dict(self.metadata) if self.metadata else None,
         }
 
 

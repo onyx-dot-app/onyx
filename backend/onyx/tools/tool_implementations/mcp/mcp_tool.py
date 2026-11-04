@@ -37,7 +37,14 @@ from onyx.server.features.mcp.oauth import (
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.tools.interface import Tool
-from onyx.tools.models import CustomToolCallSummary, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeFunctionName,
+    CodeModeResultKind,
+    CodeModeResultSpec,
+    CustomToolCallSummary,
+    ToolContext,
+)
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
@@ -102,6 +109,7 @@ class MCPTool(Tool):
         tool_description: str,
         tool_definition: dict[str, Any],
         connection_config: MCPConnectionConfig | None = None,
+        output_schema: dict[str, JsonValue] | None = None,
         user_email: str = "",
         user_id: str = "",
         user_oauth_token: str | None = None,
@@ -127,6 +135,7 @@ class MCPTool(Tool):
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
         self._tool_definition = tool_definition
+        self._output_schema = output_schema
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
         self._llm_name = sanitize_tool_name(f"mcp_{mcp_server.name}_{tool_name}")
@@ -134,6 +143,10 @@ class MCPTool(Tool):
     @property
     def id(self) -> int:
         return self._id
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
 
     @property
     def name(self) -> str:
@@ -146,6 +159,24 @@ class MCPTool(Tool):
     @property
     def display_name(self) -> str:
         return self._display_name
+
+    @property
+    def code_mode_function_name(self) -> CodeModeFunctionName:
+        return CodeModeFunctionName(
+            name=self._mcp_tool_name, namespace=self.mcp_server.name
+        )
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.MCP,
+            output_schema=self._output_schema,
+            returns=None
+            if self._output_schema is not None
+            else "The server's result. Structured content and JSON objects or "
+            "arrays arrive parsed; other output arrives as a string. Print a small "
+            "sample first if the shape is unknown.",
+        )
 
     def use_disambiguated_name(self) -> None:
         self._name = self._llm_name
@@ -263,15 +294,14 @@ class MCPTool(Tool):
             tool_result_dict = {
                 "tool_result": _tool_result_value(process_mcp_result(tool_result))
             }
-            content = json.dumps(tool_result_dict)
-
             response = ToolResult(
                 details=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
                     tool_result=tool_result_dict,
+                    structured_result=tool_result.structuredContent,
                 ),
-                content=content,
+                content=json.dumps(tool_result_dict),
             )
             outcome = MCPToolCallStatus.SUCCESS
             return response

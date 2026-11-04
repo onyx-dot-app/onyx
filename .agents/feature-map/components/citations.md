@@ -277,14 +277,25 @@ of only markers stays empty.
 
 - `citeable-tool` **A new citeable tool.** Copy how `WebSearchTool` is wired; list the
   current set in `tools/constants.py:CITEABLE_TOOLS_NAMES`. Add the tool name
-  there. It turns on the citation reminder in `build_chat_reminder`, and
-  `chat/citation_utils.py:message_citation_sources` registers numbers only for
-  tools on that list. Without it, the numbers never reach the processor and the
-  markers render as nothing. Start its numbers at the offset in
+  there; it turns on the citation reminder in `build_chat_reminder` even when a
+  call finds nothing. Start its numbers at the offset in
   [[#number-block-per-tool-call]]. Return a `SearchDocsResponse` with
-  `citation_mapping`, and put every cited document in `search_docs`;
-  `message_citation_sources` drops numbers whose document is not there. If the
-  tool sets `merge_list_argument`, expect merged calls to share one number block.
+  `citation_mapping`, and put every cited document in `search_docs`.
+  `chat/tool_results.py:tool_result_sources` is the one reader of documents
+  and numbers from result details. The agent, the saved tool history, history
+  restoration and the reminder all use it. It drops numbers whose document is
+  not there, and it returns nothing for a details type it does not know, so the
+  numbers never reach the processor and the markers render as nothing. A tool
+  that carries documents in a new details type, such as code mode's
+  `CodeModeExecutionResult`, must be added there and to the save and restore
+  pair in `chat/response.py` (`_saved_details`, `restore_result_documents`).
+  Code mode keeps documents only in its calls' search details; the reader
+  derives the result's documents and numbers from the calls of every window
+  (`CodeModeExecutionResult.all_calls`), so calls in the cell's closing record
+  add theirs to that observation, and save and restore rewrite the calls with
+  `CodeModeExecutionResult.map_calls`. If
+  the tool sets `merge_list_argument`, expect merged calls to share one number
+  block.
 - `save-path` **A new save path.** Copy the call in
   `db/chat_response.py:save_chat_response_to_db`; list the
   callers with `git grep -n 'save_chat_turn(' backend/onyx`. Pass both
@@ -295,8 +306,9 @@ of only markers stays empty.
 - `investigate-missing-citations` **Investigate "citations disappear" or "a
   citation opens the wrong source".** Capture the stream in the browser network tab. If no
   `citation_info` packet arrives for a number that the text shows, the
-  processor had no mapping: check that the tool is in `CITEABLE_TOOLS_NAMES`
-  and returns `citation_mapping` with its documents in `search_docs`. If the packet arrives but the marker renders
+  processor had no mapping: check that `tool_result_sources` reads the tool's
+  details type and that it returns `citation_mapping` with its documents in
+  `search_docs`. If the packet arrives but the marker renders
   as nothing, the document is missing from the message's documents
   ([[#unresolved-citation-silent]]). If a number points at the wrong source,
   look for two tools that share a number block ([[#number-block-per-tool-call]],

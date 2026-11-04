@@ -56,8 +56,7 @@ Neighbours own the rest:
   the OpenAPI and MCP tool classes, and MCP credential resolution.
 - [[plugins]] owns Default Chat tool selection and the per-user tool
   preferences that construction reads.
-- [[core-chat-loop]] owns the turn, the stopping-tool rule, and how the
-  sub-agents enter a turn.
+- [[core-chat-loop]] owns the turn and how the sub-agents enter a turn.
 - [[citations]] owns the meaning of the citation number blocks.
 - [[chat-persistence]] owns how tool calls are saved and replayed, and which
   tool results reach later turns.
@@ -124,12 +123,24 @@ renames MCP tools whose names collide.
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
 such as arguments, `call_index`, the cancellation signal and the progress
-callback, comes in `agents/tools.py:ToolInvocation`. `invocation.update` can
-raise `AgentCancelled`; do not catch it. An update sent after `_run` returns is
+callback, comes in `agents/tools.py:ToolInvocation`. `invocation.messages` is
+the model's view after compaction, as owned copies without result details
+(`agents/tool_execution.py:_tool_view`); `invocation.recorded_results` holds every
+recorded tool result before the call, with details and without compaction:
+earlier steps, then this step's completed results. Tools only read it. Use it for state derived from the
+whole conversation. `invocation.update` can raise `AgentCancelled`; do not catch it. An update sent after `_run` returns is
 dropped, and a result that arrives after the run closes is discarded.
 Per-request data, such as chat files, memory and the next citation number,
 comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
 `ResearchAgent._tool_context` build it when the call starts.
+
+Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
+`IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
+`DIRECT`), `code_mode_function_name` (MCP tools add their server as a
+namespace), `inner_tools` (the tools that run inside a call),
+`interrupted_result` (the saved result of a call that must not run twice) and
+`code_mode_result` (the value and stub type a program receives); see
+[[code-execution]].
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
@@ -216,8 +227,12 @@ with no tool calls. Their control functions, such as `think_tool`, `generate_rep
    `ToolExecutionError`. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed argument
-   deltas go only to `run_python` (`chat/renderer.py:MessageRenderer.consume`).
-   Saved responses replay through the same renderer
+   deltas go only to `run_python` and `execute_code`
+   (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
+   `chat/code_mode_renderer.py:CodeModeRenderer`, a
+   `ToolRenderer` that `tool_renderer` picks by tool name; a result that the
+   run's finish hook sets renders through `ToolRenderer.amend`, live and on
+   replay. Saved responses replay through the same renderer
    (`chat/presentation.py:replay_response`), so a change here changes reload too.
 8. `durable-details-registered` **A new `details` type must be registered
    twice.** Chat saves `details` through the discriminated union in

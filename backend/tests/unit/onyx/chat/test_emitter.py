@@ -10,7 +10,7 @@ def test_emitter_tags_model_without_changing_source_packet() -> None:
     emitter = Emitter(delivered.append, model_idx=2)
     packet = Packet(
         placement=Placement(turn_index=5, tab_index=3, sub_turn_index=2),
-        obj=OverallStop(stop_reason="test"),
+        obj=OverallStop(stop_reason="finished"),
     )
     original = packet.model_copy(deep=True)
 

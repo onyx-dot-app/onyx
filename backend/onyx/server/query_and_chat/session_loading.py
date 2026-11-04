@@ -58,6 +58,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
     SectionEnd,
+    StopReason,
 )
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
@@ -907,7 +908,7 @@ def translate_assistant_message_to_packets(
             final_turn_index = max(final_turn_index, citation_turn_index)
 
     # Determine stop reason - check if message indicates user cancelled
-    stop_reason: str | None = None
+    stop_reason: StopReason | None = None
     if chat_message.message:
         if "generation was stopped" in chat_message.message.lower():
             stop_reason = "user_cancelled"

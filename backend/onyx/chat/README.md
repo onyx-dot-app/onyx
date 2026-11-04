@@ -254,9 +254,14 @@ wait after delivery ends to 3,600 seconds. Expiry returns a caller error; it doe
 not cancel execution.
 
 The internal constant `CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline to
-3,600 seconds. Reaching it requests cancellation. The turn retains session ownership
+3,600 seconds. Each response run gets it as its `deadline_at`. Reaching it cancels the
+responses. They save accepted partial content with a `DEADLINE` failure and emit
+`OverallStop(stop_reason="timed_out")`, live and on reload. The turn retains session ownership
 until model calls, tools, storage, and delivery drain. A disconnected browser
 only detaches its reader.
+
+`MAX_LLM_CYCLES` (default 100) caps the steps of a chat response. The last step offers
+no tools, so the model must answer.
 
 ## Deploying the shared runtime
 

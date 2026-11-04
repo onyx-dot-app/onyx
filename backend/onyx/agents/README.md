@@ -32,6 +32,9 @@ Instructions, tools, and generation settings are Agent defaults or choices captu
 A **run** is one execution of an agent, with a step budget. It drives the agent until the
 model produces a final answer (`COMPLETE`), the budget runs out (`LIMIT`), someone cancels it
 (`CANCELLED`), or something breaks (`ERROR`).
+`start(deadline_at=...)` cancels the run at that time with the `deadline` cancellation reason.
+The run then ends `CANCELLED` with a `DEADLINE` failure, so callers can tell a deadline from a
+requested stop. The first cancellation reason wins: a Stop before the deadline stays a stop.
 It can also suspend (`SUSPENDED`) while awaiting input, then continue with the same identity and remaining budget.
 
 `Run` owns its live state, thread startup, cancellation, suspension, resumption, and completion.
@@ -57,6 +60,7 @@ During a run, the agent emits typed `AgentEvent` values to `on_event`:
 | `input_required`, `agent_suspended` | A call awaits identified input, or execution releases its workers at a supported boundary. |
 | `message_start`, `message_update`, `message_end` | An assistant message starts, receives content updates, or ends with its accepted content and outcome. |
 | `tool_start`, `tool_update`, `tool_end` | A tool call starts, reports progress, or returns a result. |
+| `tool_result_amended` | The finish hook set the final result of a call of this run. |
 
 Each event carries a run ID so consumers can distinguish concurrent executions.
 The run applies generation updates under its state lock before notifying listeners.
@@ -182,6 +186,15 @@ Each model call receives a separate context copy. Compaction applies its own tra
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
 
+`on_finish(results)` runs once when the run ends, for every outcome, on the execution thread.
+It receives the run's recorded tool results, not copies, and must not change them.
+It returns `ToolResultAmendment` values: each one replaces the recorded result of a call this run
+started, or gives a call that ended without a result (such as on Stop) its result.
+The call keeps its execution status.
+The run applies them and publishes `tool_result_amended` before `agent_end` and before it saves output.
+A failed hook is logged; the run keeps its outcome and recorded results.
+Chat code mode uses it to stop open cells and save what they did, also for a call that Stop interrupted.
+
 Two optional tool callbacks cover interception and enrichment:
 
 | Callback | Contract |
@@ -204,6 +217,8 @@ The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history.
+- `recorded_results` — every recorded tool result before the call, with details and without
+  compaction: earlier steps, then this step's completed results in call order. Read only.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
@@ -242,6 +257,9 @@ Prompt assembly replaces exact repeated passages within a step with references t
 
 Tools return `ToolResult(is_error=True)` when the model can respond to a failure.
 The runtime also logs ordinary tool exceptions and converts them to error results. Cancellation propagates.
+A cancelled call returns no result; the run's finish hook can supply one (see `on_finish`).
+On restore, a call that a lost owner left running runs again, unless the tool sets
+`interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
 arguments the model truncated. The default loop stops when all results in a step set `terminate=True`.

@@ -47,6 +47,9 @@ class LlmProviderNames(str, Enum):
 # tens of thousands of models.
 LLM_PROVIDER_MODEL_PAGE_SIZE = 50
 
+# Characters per token, for bounds that need no tokenizer.
+APPROX_CHARS_PER_TOKEN = 4
+
 WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.TYPESAFE,
     LlmProviderNames.ZOOM_AI,

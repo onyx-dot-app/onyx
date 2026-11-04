@@ -117,8 +117,12 @@ document and text) with a pointer to that result
 (`chat/prompt_utils.py:_deduplicate_search_passages`), so a change to the
 search result JSON must keep that parse working. On a later turn, saved tool results carry
 `omit_tool_result_content` (`chat/chat_utils.py:omit_prior_tool_result_content`),
-and `prepare_prompt` sends `TOOL_CALL_RESPONSE_CROSS_MESSAGE` in their place.
-Image generation results stay visible. `backend/onyx/chat/README.md` has worked
+and `prepare_prompt` sends `chat/tool_results.py:omitted_result_text` in their
+place: `TOOL_CALL_RESPONSE_CROSS_MESSAGE`, plus the `file_id` and revised prompt
+of each generated image, also of images made inside a code mode program, so a
+later message can edit them. For a program that did not complete, it also keeps
+the list of the program's calls with their states, because those calls may have
+had effects. `backend/onyx/chat/README.md` has worked
 examples of how the agent prompt and project files move from turn to turn.
 
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the

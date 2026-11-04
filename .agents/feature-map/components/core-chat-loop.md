@@ -14,8 +14,8 @@
 
 - **An end user** sends a message. The assistant can think, run tools (search,
   web, code, images, custom tools) for several steps, and then streams an answer
-  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6) the
-  model must answer without tools.
+  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 100, a
+  safety cap) the model must answer without tools.
 - **One message at a time.** While a turn runs, the session is busy. The client
   waits until the session is idle before it sends again. The backend refuses a
   second streaming send on the same session with a `StreamingError` packet whose
@@ -202,7 +202,8 @@ termination grace period is much shorter, so it ends running turns first
    `chat/renderer.py:MessageRenderer` only read events and saved steps to make
    packets. Feature state that a later step needs lives on the agent, such as
    `ChatAgent.search_context` and its citation mapping, and is captured in
-   `ChatFeatureState` for restoration. All tools in one step read the same
+   `ChatFeatureState` for restoration. `ChatFeatureState.code_mode` keeps the
+   mode, so a restored run keeps its tool layout. All tools in one step read the same
    `ChatAgent._tool_context`; citation and search state advance only in
    `ChatAgent._after_step`, after every call in the step finishes.
 6. `persist-once-per-model` **One final outcome per model.** A new way to end a

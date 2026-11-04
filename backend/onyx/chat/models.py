@@ -64,6 +64,7 @@ from onyx.tools.models import (
     SearchToolUsage,
     ToolCallInfo,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
 
@@ -430,8 +431,8 @@ class SearchParams(BaseModel):
     search_usage: SearchToolUsage
 
 
-class ChatSearchResult(SearchDocsResponse):
-    """Search documents with files staged before the tool result is committed."""
+class StagedChatFiles(BaseModel):
+    """Files of a tool result's documents, staged before the result is committed."""
 
     staged_files: list[ChatFile]
 
@@ -450,6 +451,14 @@ class ChatSearchResult(SearchDocsResponse):
             else SavedChatFile.model_validate(file).restore()
             for file in value
         ]
+
+
+class ChatSearchResult(StagedChatFiles, SearchDocsResponse):
+    """Search documents with their files staged."""
+
+
+class ChatCodeModeResult(StagedChatFiles, CodeModeExecutionResult):
+    """A code mode result with the files of its nested searches staged."""
 
 
 class ToolHistorySnapshot(BaseModel):
@@ -575,7 +584,10 @@ class PersonaPromptConfig(BaseModel):
 
 
 class ChatFeatureState(BaseModel):
-    """Chat settings and accumulated state needed to resume suspended execution."""
+    """Chat settings and accumulated state needed to resume suspended execution.
+
+    Unknown fields are ignored, so saved state with extra fields still loads.
+    """
 
     kind: Literal["chat.state.v1"] = "chat.state.v1"
     persona: PersonaPromptConfig | None
@@ -586,6 +598,7 @@ class ChatFeatureState(BaseModel):
     include_citations: bool
     inject_memories: bool
     forced_tool_id: int | None
+    code_mode: bool = False
     base_prompt: str
     custom_prompt: str | None
     reminders_enabled: bool

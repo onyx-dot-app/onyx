@@ -62,18 +62,37 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call hooks)
-  start() -> Run (one request, step budget, own cancellation signal)
+       before_tool_call / after_tool_call / on_finish / on_suspend hooks)
+  start() -> Run (one request, optional step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
-          ToolBatch only waits on ChildRunWait -> _suspend (capture_state)
+          ToolBatch only waits on ChildRunWait
+            -> _suspend (on_suspend amendments, capture_state)
             -> child ends -> _wake_execution on a new "agent-run" thread
   AgentCoordinator: children, RunStore / RunOwnership / AgentDirectory adapters
   handoff(save=...) -> ExecutionCheckpoint -> Agent.resume(snapshot) elsewhere
+  end of run: on_finish(results) -> ToolResultAmendment list
+            -> recorded results replaced, ToolResultAmendedEvent each
+            -> AgentEndEvent -> save
 ```
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
-  (`_advance_step`).
+  (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
+  passes `MAX_LLM_CYCLES`. `Agent.start(deadline_at=...)` arms a timer that
+  cancels the run with the `deadline` reason
+  (`llm/cancellation.py:CancellationSignal.cancel`); the first reason wins, so
+  `Run._finish` records a `DEADLINE` failure only for a run the timer stopped.
+- `Agent.on_finish` runs once at the end of every run, without the execution
+  lock, with the run's recorded tool results.
+  `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
+  `agents/models.py:ToolResultAmendment` list, and `Run._apply_amendments`
+  sets those results and publishes `ToolResultAmendedEvent` for each,
+  after the partial messages end and before `AgentEndEvent` and the save. An
+  amendment can also give a call that Stop interrupted its result. An
+  amendment that names no started call is logged and skipped.
+  `Agent.on_suspend` has the same shape; `Run._suspend` applies its amendments
+  before it captures state. Chat uses both to close code mode cells
+  ([[code-execution#code-mode-interrupted-run]]).
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary

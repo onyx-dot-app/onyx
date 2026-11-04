@@ -160,6 +160,7 @@ from onyx.tools.models import (
     MemoryUpdated,
     ToolExecutionError,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
@@ -3797,7 +3798,8 @@ class StoredToolResult(ToolResultMessage):
             | LlmPythonExecutionResult
             | MemoryUpdated
             | ToolExecutionError
-            | FinalImageGenerationResponse,
+            | FinalImageGenerationResponse
+            | CodeModeExecutionResult,
             Field(discriminator="type"),
         ]
         | None
@@ -4469,6 +4471,10 @@ class Tool(Base):
     )
     # MCP tool input schema. Only applies to MCP tools.
     mcp_input_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    # MCP tool output schema, when the server declares one. Only applies to MCP tools.
+    mcp_output_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
     custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(

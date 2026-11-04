@@ -12,7 +12,7 @@ This module provides a citation processor that can:
 
 import re
 from bisect import bisect_right
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 from typing import TypeAlias
 
@@ -26,6 +26,17 @@ logger = setup_logger()
 
 
 CitationMapping: TypeAlias = dict[int, SearchDoc]
+
+
+def cited_documents(
+    citation_mapping: Mapping[int, str], documents: Mapping[str, SearchDoc]
+) -> CitationMapping:
+    """The document of each citation number, for the numbers whose document is known."""
+    return {
+        number: documents[document_id]
+        for number, document_id in citation_mapping.items()
+        if document_id in documents
+    }
 
 
 # ============================================================================

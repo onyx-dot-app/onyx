@@ -15,6 +15,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.tools import HumanToolAnswer
 from onyx.chat.models import (
+    ChatCodeModeResult,
     ChatMessageMetadata,
     ChatSearchResult,
     CheckpointBinding,
@@ -40,6 +41,7 @@ from onyx.tools.models import (
     MemoryUpdated,
     ToolExecutionError,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 
@@ -64,6 +66,8 @@ CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "tool.memory.v1": MemoryUpdated,
     "tool.error.v1": ToolExecutionError,
     "tool.image.v1": FinalImageGenerationResponse,
+    "tool.code_mode.v1": CodeModeExecutionResult,
+    "chat.code_mode.v1": ChatCodeModeResult,
 }
 
 

@@ -20,6 +20,11 @@ CODING_AGENT_TOOL_ID = "CodingAgentTool"
 # Tool names as referenced by tool results / tool calls (read_file)
 FILE_READER_TOOL_NAME = "read_file"
 
+CODE_MODE_TOOL_NAME = "execute_code"
+WAIT_CODE_TOOL_NAME = "wait_code"
+# Tools whose calls observe a code mode cell; each call renders as one code mode card.
+CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
+
 INTERNAL_SEARCH_TOOL_NAME = "internal_search"
 WEB_SEARCH_TOOL_NAME = "web_search"
 
