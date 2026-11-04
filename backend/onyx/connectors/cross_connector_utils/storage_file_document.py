@@ -1,4 +1,3 @@
-import mimetypes
 from datetime import datetime
 from io import BytesIO
 
@@ -13,7 +12,7 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
 )
 from onyx.connectors.models import Document, ImageSection, TabularSection, TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, guess_mime_type
 from onyx.file_processing.image_utils import (
     make_image_callback,
     store_image_and_create_section,
@@ -48,7 +47,7 @@ def build_storage_file_document(
     errors, so the caller decides how a failed file is reported.
     """
     # Callers pass no content type, so the extension decides.
-    mime_type, _ = mimetypes.guess_type(file_name)
+    mime_type = guess_mime_type(file_name)
     size_bytes = len(file_bytes)
 
     if get_file_ext(file_name) in OnyxFileExtensions.IMAGE_EXTENSIONS:

@@ -218,3 +218,30 @@ def test_unknown_extension_reports_size_without_a_mime_type() -> None:
     assert document is not None
     assert document.source_mime_type is None
     assert document.source_size_bytes == 4
+
+
+@pytest.mark.parametrize(
+    "file_name,expected_mime_type",
+    [
+        (
+            "report.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
+        (
+            "slides.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ),
+    ],
+)
+def test_office_file_reports_its_mime_type_without_system_mappings(
+    file_name: str, expected_mime_type: str
+) -> None:
+    extraction = ExtractionResult(text_content="body", embedded_images=[], metadata={})
+    with (
+        patch(f"{MODULE}.extract_text_and_images", return_value=extraction),
+        patch("mimetypes.guess_type", return_value=(None, None)),
+    ):
+        document = _build(file_name, b"body")
+
+    assert document is not None
+    assert document.source_mime_type == expected_mime_type
