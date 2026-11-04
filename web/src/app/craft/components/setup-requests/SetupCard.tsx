@@ -222,8 +222,7 @@ export default function SetupCard({
           )}
         >
           <Content
-            sizePreset="secondary"
-            variant="body"
+            font="secondary-body"
             icon={Logo}
             color={connected ? "muted" : "danger"}
             title={
@@ -254,8 +253,7 @@ export default function SetupCard({
         className="rounded-08 border border-status-info-03 bg-background-neutral-00 p-3 flex flex-col gap-2"
       >
         <Content
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           icon={Logo}
           title={t("connect.title", { app: appName })}
           description={reason ?? t("reason.fallback", { app: appName })}

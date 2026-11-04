@@ -63,10 +63,9 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
     >
       {sizePreset === "secondary" ? (
         <Content
+          font="secondary-body"
           icon={icon}
           title={title}
-          sizePreset="secondary"
-          variant="body"
           color="muted"
         />
       ) : (
@@ -74,8 +73,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
           icon={icon}
           title={title}
           description={"description" in props ? props.description : undefined}
-          sizePreset={sizePreset}
-          variant="section"
+          font="main-ui-action"
         />
       )}
     </Card>

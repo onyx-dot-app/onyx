@@ -159,7 +159,7 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           title={data?.name ?? t("fallbackTitle")}
           description={scheduleDescription}
-          descriptionTag={data ? taskStatusTag(data.status) : undefined}
+          badge={data ? taskStatusTag(data.status) : undefined}
           stackActionsOnMobile
           actions={
             data

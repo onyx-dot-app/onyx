@@ -117,10 +117,9 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
           <Section justifyContent="between" alignItems="stretch" gap={0}>
             <Section gap={1} padding={1} alignItems="stretch" height="fit">
               <ContentAction
+                font="main-content-emphasis"
                 icon={(props) => <AgentAvatar agent={agent} {...props} />}
                 title={agent.name}
-                sizePreset="main-content"
-                variant="section"
                 titleMaxLines={1}
                 padding={1.5}
                 rightChildren={
@@ -206,19 +205,17 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
               <div className="px-2 py-1">
                 <Section alignItems="stretch" width="auto" height="fit" gap={1}>
                   <Content
+                    font="secondary-body"
                     icon={SvgUser}
                     title={agent.owner?.email || "Onyx"}
-                    sizePreset="secondary"
-                    variant="body"
                     color="muted"
                   />
                   <Content
+                    font="secondary-body"
                     icon={SvgActions}
                     title={t("card.actionsCount.label", {
                       count: agent.tools.length,
                     })}
-                    sizePreset="secondary"
-                    variant="body"
                     color="muted"
                   />
                 </Section>

@@ -20,11 +20,10 @@ export function StaticPermissionLabel({
 }: StaticPermissionLabelProps) {
   return (
     <Content
+      font="main-ui-action"
       color={muted ? "muted" : undefined}
       icon={icon}
-      sizePreset="main-ui"
       title={label}
-      variant="section"
     />
   );
 }

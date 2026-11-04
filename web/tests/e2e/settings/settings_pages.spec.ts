@@ -57,7 +57,7 @@ for (const theme of THEMES) {
         if (expectedHeader) {
           await expect(
             page
-              .locator(".opal-content-md-header")
+              .locator(".opal-content-title-row")
               .filter({ hasText: expectedHeader })
               .first()
           ).toBeVisible({ timeout: 10_000 });

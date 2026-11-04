@@ -71,10 +71,10 @@ function FileLineItem({
   return (
     <Hoverable.Root group="FileLineItem">
       <LineItemButton
+        font="main-ui-action"
         presentational
         selectVariant="select-heavy"
         interaction={highlighted ? "hover" : "rest"}
-        sizePreset="main-ui"
         rounding={2}
         icon={
           showLoader

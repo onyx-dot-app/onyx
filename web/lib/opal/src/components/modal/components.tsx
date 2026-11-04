@@ -425,14 +425,14 @@ function ModalHeader({
           <DialogPrimitive.Title asChild>
             <div>
               <Content
+                font="heading-h3"
+                orientation="stacked"
                 icon={icon}
                 moreIcon1={moreIcon1}
                 moreIcon2={moreIcon2}
                 color={color}
                 title={title}
                 description={description}
-                sizePreset="section"
-                variant="heading"
               />
               {description && (
                 <DialogPrimitive.Description className="opal-modal-a11y-description">

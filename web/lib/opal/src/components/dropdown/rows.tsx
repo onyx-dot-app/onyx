@@ -7,6 +7,7 @@ import { Text } from "@opal/components/text/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { isRichNodes } from "@opal/utils";
 import { rowElementId } from "@opal/components/dropdown/model";
+import type { TextFont } from "@opal/components/text/components";
 import type {
   DropdownMode,
   DropdownRow,
@@ -96,9 +97,16 @@ export const Row = React.memo(function Row({
         icon={row.icon}
         title={row.title}
         description={row.description}
-        sizePreset={sizePreset}
+        font={
+          row.description
+            ? sizePreset === "secondary"
+              ? "secondary-action"
+              : "main-ui-action"
+            : sizePreset === "secondary"
+              ? "secondary-body"
+              : "main-ui-body"
+        }
         padding={sizePreset === "secondary" ? 0 : 0.5}
-        variant={row.description ? "heading" : "body"}
         // The switch only shows the state: the row is the control, so the
         // switch takes no pointer or focus of its own.
         rightChildren={
@@ -140,7 +148,7 @@ export const Row = React.memo(function Row({
     title: row.title,
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
-    tag: row.kind === "option" ? row.tag : undefined,
+    badge: row.kind === "option" ? row.tag : undefined,
     rightChildren: info ? (
       <div className="opal-dropdown-info">
         <Text
@@ -161,14 +169,16 @@ export const Row = React.memo(function Row({
       row.kind === "action" || row.kind === "option" ? row.tooltip : undefined,
     // Beside the list, so it never covers the row above.
     tooltipSide: "end",
-    sizePreset,
     padding: sizePreset === "secondary" ? 0 : 0.5,
-    // `body` resolves to `ContentSm`, which has no description, suffix or
-    // tag slot; a row with any of them takes the `heading` layout.
-    variant:
-      row.description || (row.kind === "option" && (row.suffix || row.tag))
-        ? "heading"
-        : "body",
+    // A row with a description, suffix or badge sets its title in the
+    // action weight; a bare row in the body weight.
+    font: (row.description || (row.kind === "option" && (row.suffix || row.tag))
+      ? sizePreset === "secondary"
+        ? "secondary-action"
+        : "main-ui-action"
+      : sizePreset === "secondary"
+        ? "secondary-body"
+        : "main-ui-body") satisfies TextFont,
     id,
     "data-index": index,
     role: mode === "picker" ? "option" : "menuitem",

@@ -101,11 +101,10 @@ function CollapsibleSectionLayout({
         onPointerLeave={() => setHovered(false)}
       >
         <ContentAction
+          font="main-content-emphasis"
           title={title}
           description={description}
-          tag={tag}
-          sizePreset="main-content"
-          variant="section"
+          badge={tag}
           padding={0}
           center
           rightChildren={

@@ -168,9 +168,8 @@ function SharedGroupResources({
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
             <LineItemButton
+              font="main-ui-action"
               presentational
-              sizePreset="main-ui"
-              variant="section"
               color={dimmed ? "muted" : undefined}
               icon={getSourceMetadata(p.connector.source).icon}
               title={
@@ -204,9 +203,8 @@ function SharedGroupResources({
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
             <LineItemButton
+              font="main-ui-action"
               presentational
-              sizePreset="main-ui"
-              variant="section"
               color={dimmed ? "muted" : undefined}
               icon={SvgFiles}
               title={ds.name}
@@ -267,9 +265,8 @@ function SharedGroupResources({
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
             <LineItemButton
+              font="main-ui-action"
               presentational
-              sizePreset="main-ui"
-              variant="section"
               color={dimmed ? "muted" : undefined}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               title={a.name}
@@ -386,11 +383,10 @@ function SharedGroupResources({
                 </Section>
               ) : (
                 <Content
+                  font="secondary-action"
                   icon={SvgEmpty}
                   title={t("sharedResources.noConnectors.title")}
                   description={t("sharedResources.noConnectors.description")}
-                  sizePreset="secondary"
-                  variant="section"
                 />
               )}
             </Section>
@@ -445,11 +441,10 @@ function SharedGroupResources({
                 </Section>
               ) : (
                 <Content
+                  font="secondary-action"
                   icon={SvgXOctagon}
                   title={t("sharedResources.noAgents.title")}
                   description={t("sharedResources.noAgents.description")}
-                  sizePreset="secondary"
-                  variant="section"
                 />
               )}
             </Section>

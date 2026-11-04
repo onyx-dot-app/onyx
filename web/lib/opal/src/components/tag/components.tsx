@@ -138,8 +138,7 @@ function Tag(props: TagProps) {
   const content = (
     <>
       <Content
-        sizePreset="secondary"
-        variant="section"
+        font="secondary-action"
         width="fit"
         color="interactive"
         icon={icon}

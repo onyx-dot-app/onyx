@@ -181,14 +181,13 @@ export default function GroupShareList({
       hideable: false,
       cell: (groupName, row) => (
         <Content
+          font="main-ui-action"
           title={groupName}
           description={
             row.memberCount === undefined
               ? undefined
               : t("memberCount", { count: row.memberCount })
           }
-          sizePreset="main-ui"
-          variant="section"
         />
       ),
     },
@@ -207,11 +206,10 @@ export default function GroupShareList({
               if (row.note) {
                 const note = (
                   <Content
+                    font="secondary-body"
+                    orientation="reverse"
                     icon={row.icon}
                     title={row.note}
-                    sizePreset="secondary"
-                    variant="body"
-                    orientation="reverse"
                     color="muted"
                     width="fit"
                   />

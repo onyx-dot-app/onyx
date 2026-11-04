@@ -2,8 +2,9 @@
 export {
   Content,
   type ContentProps,
-  type SizePreset,
-  type ContentVariant,
+  type ContentOrientation,
+  type ContentBadge,
+  type ContentEditHandle,
 } from "@opal/layouts/content/components";
 
 /* ContentAction */

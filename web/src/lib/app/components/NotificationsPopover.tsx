@@ -69,10 +69,10 @@ function NotificationItem({
   return (
     <Hoverable.Root group="notifications-popover/NotificationItem">
       <LineItemButton
+        font="main-ui-action"
         icon={getNotificationIcon(notification.notif_type)}
         title={notification.title}
         description={notification.description ?? undefined}
-        sizePreset="main-ui"
         rounding={2}
         color={state === "new" ? undefined : "muted"}
         onClick={onClick}

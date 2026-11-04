@@ -344,10 +344,9 @@ export default function ActivityPanel({
                 height="fit"
               >
                 <Content
+                  font="main-ui-action"
                   icon={SvgActivity}
                   title={title}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 <Section
                   flexDirection="row"

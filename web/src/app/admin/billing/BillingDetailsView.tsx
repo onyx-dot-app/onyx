@@ -516,10 +516,9 @@ function SeatsCard({
             height="auto"
           >
             <Content
+              font="main-content-emphasis"
               title={t("seats.updateSeats.title")}
               description={t("seats.updateSeats.description")}
-              sizePreset="main-content"
-              variant="section"
             />
             <Button
               disabled={isSubmitting}

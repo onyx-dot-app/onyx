@@ -103,7 +103,7 @@ function useSettingsItems({
       render: ({ props }) => (
         <div {...props} ref={userRowRef}>
           <ContentAction
-            sizePreset="main-ui"
+            font="main-ui-action"
             title={
               userResolution === "unavailable"
                 ? t("profileUnavailable.title")
@@ -137,11 +137,10 @@ function useSettingsItems({
           onActivate: (views) => views.push("notifications"),
           render: ({ highlighted, props }) => (
             <LineItemButton
+              font="main-ui-action"
               presentational
               selectVariant="select-heavy"
               interaction={highlighted ? "hover" : "rest"}
-              sizePreset="main-ui"
-              variant="section"
               rounding={2}
               icon={SvgBell}
               title={t("notifications.label")}

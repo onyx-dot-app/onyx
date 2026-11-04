@@ -230,6 +230,7 @@ function ProjectChatItem({
 
       <Hoverable.Root group={chat.id} width="full">
         <LineItemButton
+          font="main-ui-action"
           {...appPosition.linkToChat(chat.id)}
           group={chat.id}
           icon={icon}
@@ -241,7 +242,6 @@ function ProjectChatItem({
                 })
               : undefined
           }
-          sizePreset="main-ui"
           interaction={menuOpen ? "active" : undefined}
           rightChildren={
             <Hoverable.Item group={chat.id} variant="appear-on-hover">

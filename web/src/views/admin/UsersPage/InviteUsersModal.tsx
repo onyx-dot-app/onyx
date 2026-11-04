@@ -239,8 +239,7 @@ export default function InviteUsersModal({
           />
           {message && (
             <Content
-              sizePreset="secondary"
-              variant="body"
+              font="secondary-body"
               icon={message.icon}
               title={message.text}
               color={message.color}

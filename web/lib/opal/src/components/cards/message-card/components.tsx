@@ -250,14 +250,13 @@ function MessageCard({
         <div className="opal-message-card-layout">
           <div style={{ padding: spacingToRem(innerPadding) }}>
             <ContentAction
+              font="main-ui-action"
               icon={(props) => (
                 <Icon {...props} className={cn(props.className, iconClass)} />
               )}
               title={title}
               description={description}
               titleMaxLines={titleMaxLines}
-              sizePreset="main-ui"
-              variant="section"
               rightChildren={right}
               padding={contentPadding}
             />

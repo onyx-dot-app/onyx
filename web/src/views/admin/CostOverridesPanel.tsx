@@ -403,13 +403,12 @@ function OverrideRow({ override }: OverrideRowProps) {
         >
           <Section gap={0} alignItems="stretch" height="fit">
             <ContentAction
+              font="main-ui-action"
               icon={getModelIcon(override.provider, override.model_name)}
               title={override.model_display_name}
               description={description}
               titleMaxLines={1}
               descriptionMaxLines={1}
-              sizePreset="main-ui"
-              variant="section"
               padding={2}
               rightChildren={
                 <Section
@@ -477,10 +476,9 @@ export default function CostOverridesPanel() {
   return (
     <Section gap={3} height="fit" alignItems="stretch" justifyContent="start">
       <ContentAction
+        font="main-content-emphasis"
         title={t("panel.title")}
         description={markdown(t("panel.description"))}
-        sizePreset="main-content"
-        variant="section"
         rightChildren={
           <Button
             icon={SvgPlus}

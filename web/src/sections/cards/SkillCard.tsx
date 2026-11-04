@@ -304,10 +304,9 @@ export default function SkillCard({
             className="min-w-0 flex-1"
           >
             <Content
+              font="secondary-body"
               icon={dependency ? SvgPlug : SvgUser}
               title={dependencyStatus ?? authorTitle}
-              sizePreset="secondary"
-              variant="body"
               color="muted"
             />
           </Section>

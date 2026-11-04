@@ -119,12 +119,11 @@ function Vertical({
 
   const titleRow = rightChildren ? (
     <ContentAction
+      font="main-ui-action"
       title={title}
       description={description}
       suffix={suffix}
-      tag={tag}
-      sizePreset="main-ui"
-      variant="section"
+      badge={tag}
       width="full"
       padding={0}
       rightChildren={
@@ -140,12 +139,11 @@ function Vertical({
     />
   ) : (
     <Content
+      font="main-ui-action"
       title={title}
       description={description}
       suffix={suffix}
-      tag={tag}
-      sizePreset="main-ui"
-      variant="section"
+      badge={tag}
     />
   );
 
@@ -216,13 +214,12 @@ function Horizontal({
   const content = (
     <Section ref={ref} gap={1} alignItems="start">
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         suffix={suffix}
-        tag={tag}
-        sizePreset="main-ui"
-        variant="section"
+        badge={tag}
         width="full"
         padding={0}
         center={center}
@@ -301,8 +298,7 @@ function InputErrorText({
   return (
     <div ref={ref} className="px-1">
       <Content
-        sizePreset="secondary"
-        variant="body"
+        font="secondary-body"
         icon={Icon}
         title={children}
         color={color}

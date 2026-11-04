@@ -622,10 +622,9 @@ export default function RunRow({
                 className="min-w-0 flex-1"
               >
                 <Content
+                  font="secondary-body"
                   icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
                   title={t(`kinds.${runKindLabelKey(run)}`)}
-                  sizePreset="secondary"
-                  variant="body"
                   color="muted"
                   width="fit"
                 />

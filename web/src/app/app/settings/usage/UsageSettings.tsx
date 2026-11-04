@@ -81,13 +81,12 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgBarChart}
         title={t("usageThisPeriod.title")}
         description={t("usageThisPeriod.description", {
           amount: formatDollars(windowCostCents),
         })}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
 
@@ -285,11 +284,10 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgCreditCard}
         title={t("modelPrices.title")}
         description={t("modelPrices.description")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
       <Card border="solid" rounding={4}>
@@ -397,10 +395,9 @@ function BudgetSection({
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgWallet}
         title={t("budget.title")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
       <Card border="solid" rounding={4}>

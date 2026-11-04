@@ -70,10 +70,9 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             {tools.map((tool) => (
               <Section key={tool.id} padding={1}>
                 <Content
+                  font="main-ui-action"
                   title={tool.display_name}
                   description={tool.description}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
               </Section>
             ))}
@@ -82,11 +81,10 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       }
     >
       <ContentAction
+        font="main-ui-action"
         icon={serverIcon}
         title={server.name}
         description={server.description}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
@@ -112,11 +110,10 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
     <Card border="solid" rounding={4} padding={4}>
       <Content
+        font="main-ui-action"
         icon={SvgActions}
         title={tool.display_name}
         description={tool.description}
-        sizePreset="main-ui"
-        variant="section"
       />
     </Card>
   );
@@ -275,27 +272,24 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
           <Section flexDirection="row" justifyContent="start">
             {agent.is_featured && (
               <Content
+                font="main-ui-body"
                 icon={SvgStar}
                 title={t("viewer.featured.label")}
-                sizePreset="main-ui"
-                variant="body"
                 width="fit"
               />
             )}
             <Content
+              font="main-ui-body"
               icon={SvgUser}
               title={agent.owner?.email ?? "Onyx"}
-              sizePreset="main-ui"
-              variant="body"
               color="muted"
               width="fit"
             />
             {agent.is_public && (
               <Content
+                font="main-ui-body"
                 icon={SvgOrganization}
                 title={t("viewer.public.label")}
-                sizePreset="main-ui"
-                variant="body"
                 color="muted"
                 width="fit"
               />
@@ -311,9 +305,8 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
           <Divider paddingParallel={0} paddingPerpendicular={0} />
           <Section gap={2} alignItems="start">
             <Content
+              font="main-content-emphasis"
               title={t("viewer.knowledge.title")}
-              sizePreset="main-content"
-              variant="section"
             />
             {hasKnowledge ? (
               <Section
@@ -369,10 +362,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
             <Section gap={2} alignItems="start">
               {agent.system_prompt && (
                 <Content
+                  font="main-ui-action"
                   title={t("viewer.instructions.title")}
                   description={agent.system_prompt}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
               )}
               {defaultModel && (
@@ -412,10 +404,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
             <>
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
+                font="main-content-emphasis"
                 title={t("viewer.promptReminders.title")}
                 description={agent.task_prompt}
-                sizePreset="main-content"
-                variant="section"
               />
             </>
           )}
@@ -425,9 +416,8 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
             <>
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
+                font="main-content-emphasis"
                 title={t("viewer.conversationStarters.title")}
-                sizePreset="main-content"
-                variant="section"
               />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
@@ -438,10 +428,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                   >
                     <Interactive.Container>
                       <Content
+                        font="main-ui-body"
                         icon={SvgBubbleText}
                         title={starter.message}
-                        sizePreset="main-ui"
-                        variant="body"
                         color="muted"
                         width="full"
                       />

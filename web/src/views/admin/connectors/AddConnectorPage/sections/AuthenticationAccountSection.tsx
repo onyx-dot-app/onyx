@@ -467,10 +467,9 @@ export default function AuthenticationAccountSection({
       ) : (
         <Section padding={2} width="full">
           <Content
+            font="main-ui-body"
             icon={SvgPlusCircle}
             title={newAccountLabel}
-            sizePreset="main-ui"
-            variant="body"
             color={isCreating ? "interactive" : "muted"}
           />
         </Section>
@@ -482,12 +481,11 @@ export default function AuthenticationAccountSection({
     <>
       <Section gap={2} alignItems="stretch" width="full">
         <ContentAction
+          font="main-content-emphasis"
           title={t("add.credentialStep.title")}
           description={t("add.credentialStep.description", {
             appName: settings.appName,
           })}
-          sizePreset="main-content"
-          variant="section"
           padding={0}
           rightChildren={
             <Section
@@ -498,12 +496,11 @@ export default function AuthenticationAccountSection({
             >
               <Section padding={2} width="fit">
                 <Content
+                  font="main-ui-body"
                   icon={SvgListTree}
                   title={t("add.savedAccounts.label", {
                     count: credentials?.length ?? 0,
                   })}
-                  sizePreset="main-ui"
-                  variant="body"
                   color="muted"
                   width="fit"
                 />

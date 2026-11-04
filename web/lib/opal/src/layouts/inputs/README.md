@@ -4,7 +4,7 @@
 
 Layout primitives for form fields. Arrange title, description, input controls, and Formik error
 messages in vertical or horizontal orientations with optional `<label>` wrapping. Uses
-`sizePreset="main-ui"` internally for all text sizing.
+`font="main-ui-action"` internally for all text sizing.
 
 ## Components
 

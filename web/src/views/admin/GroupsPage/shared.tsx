@@ -120,11 +120,10 @@ function nameColumn(
     weight: 25,
     cell: (_searchValue, row) => (
       <Content
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         title={row.personal_name ?? row.email}
         description={row.personal_name ? row.email : undefined}
-        tag={
+        badge={
           isManager?.(row)
             ? { title: labels.manager, color: "info" }
             : undefined

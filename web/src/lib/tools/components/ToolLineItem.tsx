@@ -277,10 +277,9 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   return (
     <Hoverable.Root group={HOVER_GROUP}>
       <LineItemButton
+        font="main-ui-action"
         title={label}
         icon={getIconForAction(tool)}
-        sizePreset="main-ui"
-        variant="section"
         rounding={2}
         state={isForced ? "selected" : "empty"}
         strikethrough={isDisabled}

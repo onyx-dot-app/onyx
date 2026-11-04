@@ -244,8 +244,7 @@ export default function HookStatusPopover({
               <>
                 <div className="p-1">
                   <Content
-                    sizePreset="secondary"
-                    variant="section"
+                    font="secondary-action"
                     icon={(props) => (
                       <SvgXOctagon
                         {...props}
@@ -282,7 +281,7 @@ export default function HookStatusPopover({
                 )}
 
                 <LineItemButton
-                  sizePreset="main-ui"
+                  font="main-ui-action"
                   rounding={2}
                   color="muted"
                   icon={SvgMaximize2}
@@ -297,8 +296,7 @@ export default function HookStatusPopover({
               <>
                 <div className="p-1">
                   <Content
-                    sizePreset="secondary"
-                    variant="section"
+                    font="secondary-action"
                     icon={(props) => (
                       <SvgXOctagon
                         {...props}
@@ -338,7 +336,7 @@ export default function HookStatusPopover({
 
                 {/* View More Lines */}
                 <LineItemButton
-                  sizePreset="main-ui"
+                  font="main-ui-action"
                   rounding={2}
                   color="muted"
                   icon={SvgMaximize2}
@@ -354,8 +352,7 @@ export default function HookStatusPopover({
               <>
                 <div className="p-1">
                   <Content
-                    sizePreset="secondary"
-                    variant="section"
+                    font="secondary-action"
                     icon={SvgCheckCircle}
                     title={t("status.noError.title")}
                     description={t("status.pastHour.description")}
@@ -366,7 +363,7 @@ export default function HookStatusPopover({
 
                 {/* View Older Errors */}
                 <LineItemButton
-                  sizePreset="main-ui"
+                  font="main-ui-action"
                   rounding={2}
                   color="muted"
                   icon={SvgMaximize2}

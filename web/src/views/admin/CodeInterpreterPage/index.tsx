@@ -71,8 +71,7 @@ function CheckingStatus() {
       padding={2}
     >
       <Content
-        sizePreset="main-ui"
-        variant="body"
+        font="main-ui-body"
         orientation="reverse"
         width="fit"
         icon={IconLoader}
@@ -106,8 +105,7 @@ function ConnectionStatus({
   const { labelKey, icon, color } = STATUS_CONFIG[status];
   const statusContent = (
     <Content
-      sizePreset="main-ui"
-      variant="body"
+      font="main-ui-body"
       orientation="reverse"
       width="fit"
       icon={icon}
@@ -288,8 +286,7 @@ export default function CodeInterpreterPage() {
                 >
                   <Card.Header>
                     <ContentAction
-                      sizePreset="main-ui"
-                      variant="section"
+                      font="main-ui-action"
                       icon={SvgTerminal}
                       title={t("card.title")}
                       strikethrough={isConnectionLost}
@@ -327,8 +324,7 @@ export default function CodeInterpreterPage() {
               onMouseLeave={() => handleErrorHover(false)}
             >
               <Content
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={SvgXOctagon}
                 color="danger"
                 titleColor="text-04"
@@ -350,8 +346,7 @@ export default function CodeInterpreterPage() {
               onClick={() => handleToggle(true)}
             >
               <ContentAction
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={SvgTerminal}
                 title={t("card.disconnectedTitle")}
                 description={t("card.description")}

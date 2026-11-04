@@ -71,11 +71,10 @@ function MemoryTagWithTooltip({
                 </Text>
               </div>
               <ContentAction
+                font="secondary-body"
                 icon={SvgAddLines}
                 title={operationLabel}
-                sizePreset="secondary"
                 padding={1}
-                variant="body"
                 color="muted"
                 rightChildren={
                   <Button

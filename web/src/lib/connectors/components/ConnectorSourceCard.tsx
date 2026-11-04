@@ -58,6 +58,7 @@ export default function ConnectorSourceCard({
       onClick={navigate}
     >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={sourceMetadata.displayName}
         description={description}
@@ -65,8 +66,6 @@ export default function ConnectorSourceCard({
         // a tooltip.
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         gapping={0}
         rightChildren={

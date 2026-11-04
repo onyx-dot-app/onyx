@@ -193,8 +193,7 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
       <div className="w-full flex flex-row">
         <div className="flex-1 p-2">
           <Content
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={Icon}
             title={hookPointName(spec, t)}
             description={hookPointDescription(spec, t)}
@@ -365,8 +364,7 @@ function ConnectedHookCard({
           <div className="w-full flex flex-row">
             <div className="flex-1 p-2">
               <Content
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={HookIcon}
                 title={
                   !hook.is_active || hook.is_reachable === false

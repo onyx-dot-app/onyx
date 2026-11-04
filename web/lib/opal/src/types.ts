@@ -10,7 +10,6 @@ import type { ReactNode, SVGProps } from "react";
 //   - Interactive.Container  (height + min-width + padding)
 //   - Button                 (icon sizing)
 //   - ContentAction          (padding only)
-//   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
 // ---------------------------------------------------------------------------
 
 // Base Size Types:

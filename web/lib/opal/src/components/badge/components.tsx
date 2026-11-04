@@ -84,9 +84,8 @@ function Badge({
       data-size={size}
     >
       <Content
+        font="secondary-body"
         // The body variant sets the title in secondary-body.
-        sizePreset="secondary"
-        variant="body"
         width="fit"
         color="interactive"
         icon={icon}

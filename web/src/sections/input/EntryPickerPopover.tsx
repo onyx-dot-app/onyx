@@ -280,9 +280,8 @@ function SkillRow({
   return (
     <div className="cursor-pointer">
       <LineItemButton
+        font="main-ui-action"
         presentational
-        sizePreset="main-ui"
-        variant="section"
         title={`/${slug}`}
         titleMaxLines={1}
         state={selected ? "selected" : "empty"}
@@ -332,9 +331,8 @@ function ConnectableRow({
           and the unauthenticated dimming becomes the muted colour mode
           rather than opacity on a hand-rolled span. */}
       <LineItemButton
+        font="main-ui-action"
         presentational
-        sizePreset="main-ui"
-        variant="section"
         icon={Logo}
         title={name}
         titleMaxLines={1}

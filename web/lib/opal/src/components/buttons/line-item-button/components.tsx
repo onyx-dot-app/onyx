@@ -7,14 +7,9 @@ import type {
   RichStr,
   Rounding,
 } from "@opal/types";
-import { Tooltip, type TooltipSide } from "@opal/components";
+import { Tooltip, type TextFont, type TooltipSide } from "@opal/components";
 import type { BadgeProps } from "@opal/components/badge/components";
-import {
-  type ContentActionProps,
-  type ContentVariant,
-  type SizePreset,
-  ContentAction,
-} from "@opal/layouts";
+import { ContentAction } from "@opal/layouts";
 import {
   composeKeyHandler,
   guardNestedInteractiveClick,
@@ -27,19 +22,9 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * The `ContentAction` props a row actually uses — twelve of the twenty-two it
- * offers. Listed rather than spread, so that everything a caller passes which
- * is *not* here is DOM, and reaches the row element.
- *
- * That inversion is the point. Spreading the remainder into `ContentAction`
- * put every unrecognised prop somewhere that never renders it, so a label or a
- * handler was accepted and silently dropped. Now the leftover lands on the row
- * instead, and the compiler has the last word on the rest.
- *
- * `sizePreset` and `variant` come from the flattened aliases, which loses the
- * cross-constraint `ContentProps` keeps between them. Every call site states
- * both explicitly, so what is given up is the compiler rejecting a pair that
- * no one writes.
+ * The `ContentAction` props a row actually uses. Listed rather than spread, so
+ * that everything a caller passes which is *not* here is DOM, and reaches the
+ * row element instead of being accepted and silently dropped.
  */
 type RowContentProps = {
   /** Main label. */
@@ -57,17 +42,11 @@ type RowContentProps = {
   /** Secondary line under the title. */
   description?: string | RichStr;
 
-  /**
-   * Muted text beside the title, like "(Default)". Shown only by the
-   * `heading` variant with a `main-*` size preset.
-   */
+  /** Muted text beside the title, like "(Default)". */
   suffix?: string;
 
-  /**
-   * Badge beside the title, like a plan badge. Shown only by the `heading`
-   * variant with a `main-*` size preset.
-   */
-  tag?: BadgeProps;
+  /** Badge beside the title, like a plan badge. */
+  badge?: BadgeProps;
 
   /**
    * Cap the description at N lines and truncate the rest. Unset wraps without
@@ -78,11 +57,11 @@ type RowContentProps = {
   /** Content after the label — an action button, a count, a chevron. */
   rightChildren?: React.ReactNode;
 
-  /** Content size preset. @default "headline" */
-  sizePreset?: SizePreset;
+  /** The title's font, which sets every size. @default "main-ui-action" */
+  font?: TextFont;
 
-  /** Content layout variant. @default "heading" */
-  variant?: ContentVariant;
+  /** Where the icon sits. @default "inline" */
+  orientation?: "inline" | "reverse";
 
   /**
    * Content colour mode. `"interactive"` is what lets the row's hover,
@@ -191,10 +170,10 @@ function LineItemButton({
   description,
   descriptionMaxLines,
   suffix,
-  tag,
+  badge,
   rightChildren,
-  sizePreset,
-  variant,
+  font,
+  orientation,
   strikethrough,
   padding,
 
@@ -270,30 +249,19 @@ function LineItemButton({
       >
         <div className="w-full p-1.5">
           <ContentAction
-            {...({
-              title,
-              titleMaxLines,
-              icon,
-              description,
-              descriptionMaxLines,
-              suffix,
-              tag,
-              rightChildren,
-              sizePreset,
-              variant,
-              strikethrough,
-              color,
-              padding: padding ?? 0.5,
-              /*
-               * `ContentActionProps` is a union whose arms pair a `sizePreset`
-               * with the `variant`s valid for it. Flattening the two into
-               * `SizePreset` and `ContentVariant` is what keeps a row's props
-               * flat for its callers, and it costs that pairing — so the
-               * assertion is the flattening, stated once, over a set this
-               * component names in full. It is not the old blanket cast over
-               * whatever a caller happened to pass.
-               */
-            } as ContentActionProps)}
+            title={title}
+            titleMaxLines={titleMaxLines}
+            icon={icon}
+            description={description}
+            descriptionMaxLines={descriptionMaxLines}
+            suffix={suffix}
+            badge={badge}
+            rightChildren={rightChildren}
+            font={font}
+            orientation={orientation}
+            strikethrough={strikethrough}
+            color={color}
+            padding={padding ?? 0.5}
           />
         </div>
       </Interactive.Container>

@@ -196,6 +196,7 @@ export function AddPeoplePicker({
                     key={`${suggestion.type}-${suggestion.id}`}
                   >
                     <LineItemButton
+                      font="main-ui-action"
                       description={
                         suggestion.type === "group"
                           ? t("addPeople.groupSuggestion.description")
@@ -213,10 +214,8 @@ export function AddPeoplePicker({
                       }
                       rounding={3}
                       selectVariant="select-heavy"
-                      sizePreset="main-ui"
                       state={suggestion.shared ? "filled" : "empty"}
                       title={suggestion.label}
-                      variant="section"
                       width="full"
                     />
                   </div>

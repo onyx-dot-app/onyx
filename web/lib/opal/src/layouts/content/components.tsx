@@ -1,72 +1,106 @@
 "use client";
 
 import "@opal/layouts/content/styles.css";
+import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
-  ContentSm,
-  type ContentSmOrientation,
-} from "@opal/layouts/content/ContentSm";
-import {
-  ContentXl,
-  type ContentXlProps,
-} from "@opal/layouts/content/ContentXl";
-import {
-  ContentLg,
-  type ContentLgProps,
-} from "@opal/layouts/content/ContentLg";
-import {
-  ContentMd,
-  type ContentMdEditHandle,
-  type ContentMdProps,
-  type ContentMdTag,
-} from "@opal/layouts/content/ContentMd";
-import type { BadgeProps, TextColor } from "@opal/components";
-import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
+  Badge,
+  Button,
+  OverflowText,
+  Text,
+  Tooltip,
+  type BadgeProps,
+  type TextColor,
+  type TextFont,
+} from "@opal/components";
+import SvgAlertCircle from "@opal/icons/alert-circle";
+import SvgAlertTriangle from "@opal/icons/alert-triangle";
+import SvgEdit from "@opal/icons/edit";
+import SvgXOctagon from "@opal/icons/x-octagon";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { widthVariants } from "@opal/shared";
-import type { ExtremaSizeVariants } from "@opal/types";
+import { useOpalStrings } from "@opal/strings";
+import type {
+  ColorTypes,
+  ContainerSizeVariants,
+  ExtremaSizeVariants,
+  IconFunctionComponent,
+  RichStr,
+} from "@opal/types";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
-// Shared types
+// Types
 // ---------------------------------------------------------------------------
 
-type SizePreset =
-  | "headline"
-  | "section"
-  | "main-content"
-  | "main-ui"
-  | "secondary";
+/**
+ * Where the icon sits: before the title (`"inline"`), after it
+ * (`"reverse"`), or above it (`"stacked"`).
+ */
+type ContentOrientation = "inline" | "reverse" | "stacked";
 
-type ContentVariant = "heading" | "section" | "body";
+type ContentAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
+
+type ContentSuffix = "optional" | (string & {});
+
+/** A badge beside the title, with an optional hover tooltip. */
+type ContentBadge = BadgeProps & { tooltip?: string };
+
+/** Starts a title edit from a control outside the content. */
+interface ContentEditHandle {
+  startEditing: () => void;
+}
 
 interface ContentBaseProps {
+  /**
+   * The title's font. Every size derives from it: the icon container is one
+   * title line tall, so the icon is that line height less 4px.
+   * Default: `"main-ui-action"`.
+   */
+  font?: TextFont;
+
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
   /** Main title text. */
   title: string | RichStr;
 
-  /** Optional description below the title. */
+  /** Optional description below the title (`secondary-body`, `text-03`). */
   description?: string | RichStr;
 
-  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  /**
+   * Clamp the title to N lines; a cut title shows in full in a tooltip.
+   * Omit to wrap freely.
+   */
   titleMaxLines?: number;
 
-  /**
-   * Strike the title through — a presentational state (e.g. an option that is
-   * switched off), not content, so callers keep passing a plain string.
-   */
+  /** Clamp the description to N lines; a cut one shows in a tooltip. */
+  descriptionMaxLines?: number;
+
+  /** Strike the title through, for an option that is switched off. */
   strikethrough?: boolean;
 
-  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
-  descriptionMaxLines?: number;
+  /**
+   * Muted text beside the title. `"optional"` is the translated
+   * "(Optional)" (`OpalStrings.contentOptional`).
+   */
+  suffix?: ContentSuffix;
+
+  /** A status icon beside the title. */
+  auxIcon?: ContentAuxIcon;
+
+  /** A badge beside the title. */
+  badge?: ContentBadge;
+
+  /** ARIA role on the title element. */
+  role?: string;
 
   /** Enable inline editing of the title. */
   editable?: boolean;
 
-  /** Handle for starting a title edit from an external control. Setting it
-   *  hides the built-in pencil. */
-  editHandle?: React.Ref<ContentMdEditHandle>;
+  /** Starts a title edit from an outside control; hides the built-in pencil. */
+  editHandle?: React.Ref<ContentEditHandle>;
 
-  /** Called when the user commits an edit. */
+  /** Called with the new title when an edit is committed. */
   onTitleChange?: (newTitle: string) => void;
 
   /**
@@ -75,15 +109,10 @@ interface ContentBaseProps {
    */
   editTooltip?: string;
 
-  /**
-   * Width preset controlling the component's horizontal size.
-   *
-   * - `"auto"` — Shrink-wraps to content width
-   * - `"fit"` — Shrink-wraps to content width
-   * - `"full"` — Stretches to fill the parent's width
-   *
-   * @default "full"
-   */
+  /** When the pencil shows: on hover of the content, or at rest too. */
+  editButton?: "hover" | "rest";
+
+  /** Width preset. Default: `"full"`. */
   width?: ExtremaSizeVariants;
 
   /**
@@ -101,158 +130,204 @@ interface ContentBaseProps {
   color?: ColorTypes;
 
   /**
-   * Overrides the title's colour only. `color` still picks the icon and the
-   * description; this replaces the title tone the preset would give. Inside
-   * an interactive surface the override holds at rest and yields to hover,
-   * pressed, selected and disabled, so the row's states still reach the
-   * title. `"inherit"` is not offered: the default already inherits where
-   * that is meant. Covers the title as displayed; an editable title being
-   * edited keeps the input's standard colour.
-   *
-   * Unset, the title takes the tone its `color` mode sets in `styles.css`:
-   *
-   * - `"default"` — `text-04`
-   * - `"muted"` — `text-03`
-   * - `"success"` / `"warning"` / `"danger"` — `text-03`
-   * - `"interactive"` — `text-04` on its own; inside an interactive surface,
-   *   the surface's foreground
+   * Overrides the title's colour only; `color` still picks the icon and the
+   * description. Inside an interactive surface the override holds at rest and
+   * yields to hover, pressed, selected and disabled.
    */
   titleColor?: Exclude<TextColor, "inherit">;
 
-  /** Ref forwarded to the root `<div>` of the resolved layout. */
+  /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
 
-// ---------------------------------------------------------------------------
-// Discriminated union: valid sizePreset × variant combinations
-// ---------------------------------------------------------------------------
-
-type XlContentProps = ContentBaseProps & {
-  /** Size preset. Default: `"headline"`. */
-  sizePreset?: "headline" | "section";
-  /** Variant. Default: `"heading"` for heading-eligible presets. */
-  variant?: "heading";
-  /** Optional secondary icon rendered in the icon row (ContentXl only). */
-  moreIcon1?: IconFunctionComponent;
-  /** Optional tertiary icon rendered in the icon row (ContentXl only). */
-  moreIcon2?: IconFunctionComponent;
-  /** Badge rendered inline after the description (ContentXl only). */
-  descriptionTag?: BadgeProps;
-  /** When an editable title shows its pencil: on hover, or at rest too (ContentXl only). Default: `"hover"`. */
-  editButton?: "hover" | "rest";
-};
-
-type LgContentProps = ContentBaseProps & {
-  /** Size preset. Default: `"headline"`. */
-  sizePreset?: "headline" | "section";
-  /** Variant. */
-  variant: "section";
-};
-
-type MdContentProps = ContentBaseProps & {
-  sizePreset: "main-content" | "main-ui" | "secondary";
-  variant?: "section";
-  /** Muted suffix rendered beside the title. Use `"optional"` for the translated "(Optional)" (`OpalStrings.contentOptional`). */
-  suffix?: "optional" | (string & {});
-  /** Auxiliary status icon rendered beside the title. */
-  auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
-  /** Badge rendered beside the title, with an optional hover tooltip. */
-  tag?: ContentMdTag;
-  /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
-  rightChildren?: React.ReactNode;
-};
-
-/** ContentSm does not support descriptions or inline editing. */
-type SmContentProps = Omit<
-  ContentBaseProps,
-  "description" | "editable" | "onTitleChange" | "editTooltip"
-> & {
-  sizePreset: "main-content" | "main-ui" | "secondary";
-  variant: "body";
-  /** Layout orientation. Default: `"inline"`. */
-  orientation?: ContentSmOrientation;
-  /** ARIA role forwarded to the title text element. */
-  role?: string;
-};
-
-type ContentProps =
-  | XlContentProps
-  | LgContentProps
-  | MdContentProps
-  | SmContentProps;
+/** `moreIcon1` / `moreIcon2` sit in the icon row, so only a stacked layout has them. */
+type ContentProps = ContentBaseProps &
+  (
+    | {
+        orientation?: "inline" | "reverse";
+        moreIcon1?: never;
+        moreIcon2?: never;
+      }
+    | {
+        orientation: "stacked";
+        /** A small connector icon after the icon, in `text-03`. */
+        moreIcon1?: IconFunctionComponent;
+        /** A peer of the icon, the same size, after `moreIcon1`. */
+        moreIcon2?: IconFunctionComponent;
+      }
+  );
 
 // ---------------------------------------------------------------------------
-// Content — routes to the appropriate internal layout
+// Font metrics
 // ---------------------------------------------------------------------------
 
-function Content(props: ContentProps) {
-  const {
-    sizePreset = "headline",
-    variant = "heading",
-    width = "full",
-    color = "default",
-    titleColor,
-    ref,
-    ...rest
-  } = props;
+/** Each font's line height in px, from the typography presets. */
+const FONT_LINE_HEIGHT: Record<TextFont, number> = {
+  "heading-h1": 64,
+  "heading-h2": 36,
+  "heading-h3": 28,
+  "heading-h3-muted": 28,
+  "main-content-body": 24,
+  "main-content-emphasis": 24,
+  "main-content-muted": 24,
+  "main-content-mono": 23,
+  "main-ui-body": 20,
+  "main-ui-muted": 20,
+  "main-ui-action": 20,
+  "main-ui-mono": 20,
+  "secondary-body": 16,
+  "secondary-action": 16,
+  "secondary-mono": 16,
+  "secondary-mono-label": 16,
+  "figure-small-label": 12,
+  "figure-small-value": 12,
+  "figure-keystroke": 16,
+};
 
-  let layout: React.ReactNode = null;
+/** The largest button that fits on one title line. */
+function editButtonSize(lineHeight: number): ContainerSizeVariants {
+  if (lineHeight >= 36) return "lg";
+  if (lineHeight >= 28) return "md";
+  if (lineHeight >= 24) return "sm";
+  if (lineHeight >= 20) return "xs";
+  return "2xs";
+}
 
-  // ContentXl / ContentLg: headline/section presets
-  if (sizePreset === "headline" || sizePreset === "section") {
-    if (variant === "heading") {
-      layout = (
-        <ContentXl
-          sizePreset={sizePreset}
-          ref={ref}
-          {...(rest as Omit<ContentXlProps, "sizePreset">)}
-        />
-      );
-    } else {
-      layout = (
-        <ContentLg
-          sizePreset={sizePreset}
-          ref={ref}
-          {...(rest as Omit<ContentLgProps, "sizePreset">)}
-        />
-      );
-    }
+/** The suffix reads a step quieter than the title. */
+function suffixFont(lineHeight: number): TextFont {
+  return lineHeight >= 20 ? "main-ui-muted" : "secondary-action";
+}
+
+const AUX_ICON_CONFIG: Record<
+  ContentAuxIcon,
+  { icon: IconFunctionComponent; colorClass: string }
+> = {
+  "info-gray": { icon: SvgAlertCircle, colorClass: "text-text-02" },
+  "info-blue": { icon: SvgAlertCircle, colorClass: "text-status-info-05" },
+  warning: { icon: SvgAlertTriangle, colorClass: "text-status-warning-05" },
+  error: { icon: SvgXOctagon, colorClass: "text-status-error-05" },
+};
+
+// ---------------------------------------------------------------------------
+// Pieces
+// ---------------------------------------------------------------------------
+
+/**
+ * An icon in a square one title line tall (`1lh` of the title font), with
+ * 2px padding, so the glyph is the line height less 4px.
+ */
+function ContentIcon({
+  icon: Icon,
+  font,
+  className,
+}: {
+  icon: IconFunctionComponent;
+  font: TextFont;
+  className?: string;
+}) {
+  return (
+    <div className={cn("opal-content-icon", `font-${font}`, className)}>
+      <Icon className="opal-content-icon-glyph" />
+    </div>
+  );
+}
+
+interface ContentDescriptionProps {
+  description: string | RichStr;
+  maxLines?: number;
+}
+
+/** The description: `secondary-body` in the secondary foreground. */
+function ContentDescription({
+  description,
+  maxLines,
+}: ContentDescriptionProps) {
+  return (
+    <div className="opal-content-description">
+      {/* Clamped, the full description shows in a tooltip when it is cut. */}
+      {maxLines ? (
+        <OverflowText
+          font="secondary-body"
+          color="inherit"
+          as="p"
+          maxLines={maxLines}
+        >
+          {description}
+        </OverflowText>
+      ) : (
+        <Text font="secondary-body" color="inherit" as="p">
+          {description}
+        </Text>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
+
+/**
+ * An icon beside (or above) a title and an optional description. The title
+ * `font` sets every size; `orientation` places the icon.
+ */
+function Content({
+  font = "main-ui-action",
+  orientation = "inline",
+  icon,
+  title,
+  description,
+  titleMaxLines,
+  descriptionMaxLines,
+  strikethrough,
+  suffix,
+  auxIcon,
+  badge,
+  role,
+  editable,
+  editHandle,
+  onTitleChange,
+  editTooltip,
+  editButton = "hover",
+  width = "full",
+  color = "default",
+  titleColor,
+  moreIcon1: MoreIcon1,
+  moreIcon2,
+  ref,
+}: ContentProps) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(toPlainString(title));
+  const strings = useOpalStrings();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lineHeight = FONT_LINE_HEIGHT[font];
+
+  // Move focus to the edit input as soon as editing starts.
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  function startEditing() {
+    setEditValue(toPlainString(title));
+    setEditing(true);
+  }
+  useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
+
+  // Starting or making an edit must not double as a click on a parent row.
+  function handleTitleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    startEditing();
   }
 
-  // ContentMd: main-content/main-ui/secondary with section/heading variant
-  // (variant defaults to "heading" when omitted on MdContentProps, so both arms are needed)
-  else if (variant === "section" || variant === "heading") {
-    layout = (
-      <ContentMd
-        sizePreset={sizePreset}
-        ref={ref}
-        {...(rest as Omit<ContentMdProps, "sizePreset">)}
-      />
-    );
+  // An empty edit keeps the old title.
+  function commit() {
+    const value = editValue.trim();
+    if (value && value !== toPlainString(title)) onTitleChange?.(value);
+    setEditing(false);
   }
-
-  // ContentSm: main-content/main-ui/secondary with body variant
-  else if (variant === "body") {
-    layout = (
-      <ContentSm
-        sizePreset={sizePreset}
-        ref={ref}
-        {...(rest as Omit<
-          React.ComponentProps<typeof ContentSm>,
-          "sizePreset"
-        >)}
-      />
-    );
-  }
-
-  // This case should NEVER be hit.
-  if (!layout)
-    throw new Error(
-      `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
-    );
 
   // The override rides an unregistered variable that the colour modes read
-  // with the preset tone as fallback, so the disabled rule still wins.
+  // with the mode's tone as fallback, so the disabled rule still wins.
   // SAFETY: CSSProperties has no index for custom properties; the object
   // holds only the one custom property the stylesheet reads.
   const titleColorStyle: React.CSSProperties | undefined = titleColor
@@ -261,13 +336,148 @@ function Content(props: ContentProps) {
       } as React.CSSProperties)
     : undefined;
 
+  const hasDescription = !!description && !!toPlainString(description);
+  const hasIconRow = !!(icon || MoreIcon1 || moreIcon2);
+
   return (
     <div
       className={widthVariants[width]}
       data-content-color={color}
       style={titleColorStyle}
     >
-      {layout}
+      <div
+        ref={ref}
+        className="opal-content"
+        data-opal-content
+        data-orientation={orientation}
+      >
+        {hasIconRow && (
+          <div className="opal-content-icon-row">
+            {icon && <ContentIcon icon={icon} font={font} />}
+            {MoreIcon1 && (
+              // The connector between two marks: smaller, and in the
+              // secondary foreground rather than the icon colour.
+              <div className="opal-content-more-icon">
+                <MoreIcon1 className="opal-content-icon-glyph" />
+              </div>
+            )}
+            {moreIcon2 && <ContentIcon icon={moreIcon2} font={font} />}
+          </div>
+        )}
+
+        <div className="opal-content-text">
+          <div className="opal-content-title-row">
+            {editing ? (
+              <div className="opal-content-input-sizer">
+                <span
+                  className={cn("opal-content-input-mirror", `font-${font}`)}
+                >
+                  {editValue || " "}
+                </span>
+                <input
+                  ref={inputRef}
+                  className={cn(
+                    "opal-content-input",
+                    `font-${font}`,
+                    "text-text-04"
+                  )}
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  size={1}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onBlur={commit}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commit();
+                    if (e.key === "Escape") {
+                      setEditValue(toPlainString(title));
+                      setEditing(false);
+                    }
+                  }}
+                />
+              </div>
+            ) : titleMaxLines ? (
+              <OverflowText
+                // Lets a host (a toast) measure whether a clamped title overflows.
+                data-opal-content-title=""
+                font={font}
+                color="inherit"
+                maxLines={titleMaxLines}
+                strikethrough={strikethrough}
+                role={role}
+                onClick={editable ? handleTitleClick : undefined}
+              >
+                {title}
+              </OverflowText>
+            ) : (
+              <Text
+                data-opal-content-title=""
+                font={font}
+                color="inherit"
+                strikethrough={strikethrough}
+                title={toPlainString(title)}
+                role={role}
+                onClick={editable ? handleTitleClick : undefined}
+              >
+                {title}
+              </Text>
+            )}
+
+            {suffix && (
+              <div className="opal-content-suffix">
+                <Text as="p" font={suffixFont(lineHeight)} color="inherit">
+                  {suffix === "optional" ? strings.contentOptional : suffix}
+                </Text>
+              </div>
+            )}
+
+            {auxIcon &&
+              (() => {
+                const { icon: AuxIcon, colorClass } = AUX_ICON_CONFIG[auxIcon];
+                return (
+                  <div className={cn("opal-content-icon", `font-${font}`)}>
+                    <AuxIcon
+                      className={cn("opal-content-aux-glyph", colorClass)}
+                    />
+                  </div>
+                );
+              })()}
+
+            {badge &&
+              (() => {
+                const { tooltip, ...badgeProps } = badge;
+                return (
+                  <span className="opal-content-badge">
+                    <Tooltip tooltip={tooltip} side="top">
+                      <Badge {...badgeProps} />
+                    </Tooltip>
+                  </span>
+                );
+              })()}
+
+            {editable && !editing && editHandle == null && (
+              <div className="opal-content-edit-button" data-show={editButton}>
+                <Button
+                  icon={SvgEdit}
+                  prominence="internal"
+                  size={editButtonSize(lineHeight)}
+                  aria-label={editTooltip || strings.edit}
+                  tooltip={editTooltip || strings.edit}
+                  tooltipSide="end"
+                  onClick={handleTitleClick}
+                />
+              </div>
+            )}
+          </div>
+
+          {hasDescription && (
+            <ContentDescription
+              description={description}
+              maxLines={descriptionMaxLines}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -278,11 +488,14 @@ function Content(props: ContentProps) {
 
 export {
   Content,
+  ContentDescription,
+  ContentIcon,
+  FONT_LINE_HEIGHT,
   type ContentProps,
-  type SizePreset,
-  type ContentVariant,
-  type XlContentProps,
-  type LgContentProps,
-  type MdContentProps,
-  type SmContentProps,
+  type ContentOrientation,
+  type ContentAuxIcon,
+  type ContentSuffix,
+  type ContentBadge,
+  type ContentEditHandle,
+  type ContentDescriptionProps,
 };
