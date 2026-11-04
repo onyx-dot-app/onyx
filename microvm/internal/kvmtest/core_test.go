@@ -114,7 +114,7 @@ func TestCoreKVM(t *testing.T) {
 
 	// 1. Start N VMs at once.
 	req := func(id string, attempt uint64) *pb.CreateRequest {
-		return &pb.CreateRequest{SandboxId: id, Attempt: attempt, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB}
+		return &pb.CreateRequest{SandboxId: id, Attempt: attempt, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB, TenantId: "public"}
 	}
 	ids := make([]string, e.VMs)
 	vms := make([]*pb.VM, e.VMs)

@@ -53,6 +53,7 @@ type Record struct {
 	ScratchGiB uint32    `json:"scratch_gib"`
 	StartedAt  time.Time `json:"started_at"`
 	StoppedAt  time.Time `json:"stopped_at,omitzero"`
+	TenantID   string    `json:"tenant_id,omitempty"`
 	// Prev is the stopped attempt that a starting record replaces. A crash
 	// during the start must not forget it.
 	Prev *Tombstone `json:"prev,omitempty"`
