@@ -2,10 +2,10 @@
 
 import {
   redirect,
+  useNavigation,
   usePathname,
-  useRouter,
   useSearchParams,
-} from "next/navigation";
+} from "@opal/navigation";
 import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
@@ -158,7 +158,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // });
 
   const t = useTranslations("chat.app");
-  const router = useRouter();
+  const navigation = useNavigation();
   const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
 
@@ -168,8 +168,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       type: "success",
     },
   });
-  const searchParams = useSearchParams();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
   const {
@@ -213,9 +213,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       params.has(SEARCH_PARAM_NAMES.PROJECT_ID)
     ) {
       params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-      router.replace(`?${params.toString()}`, { scroll: false });
+      navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
     }
-  }, [searchParams, router]);
+  }, [searchParams, navigation]);
 
   const toolConfiguration = useToolConfiguration();
   const pluginCopy = useTranslations("actions.memberPlugins");
@@ -262,7 +262,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       toast.error(pluginCopy("chat.intent.unavailable"));
     }
     const remaining = withoutChatPluginIntent(params).toString();
-    router.replace(remaining ? `/app?${remaining}` : "/app", {
+    navigation.go(remaining ? `/app?${remaining}` : "/app", {
+      replace: true,
       scroll: false,
     });
   }, [
@@ -272,7 +273,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     memberPlugins,
     pathname,
     pluginCopy,
-    router,
+    navigation,
     searchParams,
     toolConfiguration,
   ]);

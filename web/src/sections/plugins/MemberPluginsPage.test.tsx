@@ -103,6 +103,7 @@ function network({
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   mockManage = false;
   mockPush.mockClear();
   mockSearchParams = new URLSearchParams();

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -7,7 +8,6 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 import { can } from "@/lib/permissions/resource-actions";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -38,7 +38,7 @@ export interface AgentCardProps {
 export default function AgentCard({ agent, onView }: AgentCardProps) {
   const t = useTranslations("agents");
   const appPosition = useAppPosition();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const pinned = useMemo(
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
@@ -93,7 +93,7 @@ export default function AgentCard({ agent, onView }: AgentCardProps) {
                           icon={SvgBarChart}
                           prominence="tertiary"
                           onClick={noProp(() =>
-                            router.push(`/ee/agents/stats/${agent.id}`)
+                            navigation.go(`/ee/agents/stats/${agent.id}`)
                           )}
                           tooltip={t("card.viewStats.tooltip")}
                         />
@@ -105,7 +105,7 @@ export default function AgentCard({ agent, onView }: AgentCardProps) {
                           icon={SvgEdit}
                           prominence="tertiary"
                           onClick={noProp(() =>
-                            router.push(`/app/agents/edit/${agent.id}`)
+                            navigation.go(`/app/agents/edit/${agent.id}`)
                           )}
                           tooltip={t("card.edit.tooltip")}
                         />

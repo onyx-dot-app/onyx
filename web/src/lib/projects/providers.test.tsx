@@ -15,9 +15,8 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useSearchParams: () => ({
-    get: () => null,
-  }),
+  usePathname: () => "/app",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock("@/lib/navigation/hooks", () => ({

@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { Fragment, useMemo } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Button, LineItemButton } from "@opal/components";
@@ -58,7 +58,7 @@ export interface ToolLineItemProps {
  */
 export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const t = useTranslations("actions");
-  const router = useRouter();
+  const navigation = useNavigation();
   const {
     agent,
     toolConfiguration,
@@ -252,7 +252,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             size="sm"
             tooltip={action.tooltip}
             onClick={() => {
-              router.push(action.href as Route);
+              navigation.go(action.href as Route);
               close();
             }}
           />
@@ -266,7 +266,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             aria-label={connectorsLabel}
             tooltip={connectorsLabel}
             onClick={() => {
-              if (needsConnectors) router.push(ADMIN_ROUTES.CONNECTORS.path);
+              if (needsConnectors) navigation.go(ADMIN_ROUTES.CONNECTORS.path);
               else openSources();
             }}
           />

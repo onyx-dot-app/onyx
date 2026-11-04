@@ -1,5 +1,3 @@
-import { ReadonlyURLSearchParams } from "next/navigation";
-
 // search params
 export const SEARCH_PARAM_NAMES = {
   CHAT_ID: "chatId",
@@ -30,9 +28,7 @@ export const SEARCH_PARAM_NAMES = {
 export type SearchParamName =
   (typeof SEARCH_PARAM_NAMES)[keyof typeof SEARCH_PARAM_NAMES];
 
-export function shouldSubmitOnLoad(
-  searchParams: ReadonlyURLSearchParams | null
-) {
+export function shouldSubmitOnLoad(searchParams: URLSearchParams | null) {
   const rawSubmitOnLoad = searchParams?.get(SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD);
   if (rawSubmitOnLoad === "true" || rawSubmitOnLoad === "1") {
     return true;

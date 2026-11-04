@@ -19,7 +19,6 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/types";
-import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet, StreamCursor } from "@/app/app/services/streamingModels";
 import type { ErrorResponseBody } from "@/lib/fetcher";
@@ -566,7 +565,7 @@ const PARAMS_TO_SKIP = [
 ];
 
 export function buildChatUrl(
-  existingSearchParams: ReadonlyURLSearchParams | null,
+  existingSearchParams: URLSearchParams | null,
   chatSessionId: string | null,
   personaId: number | null,
   search?: boolean,

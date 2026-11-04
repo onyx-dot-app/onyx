@@ -84,6 +84,7 @@ const json = (body: unknown, status = 200) =>
 beforeEach(() => {
   toast.clearAll();
   mockFullAdmin = true;
+  window.history.replaceState(null, "", "/");
   mockQuery = new URLSearchParams();
   mockPush.mockClear();
   mockReplace.mockClear();

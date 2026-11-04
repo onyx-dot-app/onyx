@@ -1,7 +1,7 @@
 "use client";
 
+import { usePathname } from "@opal/navigation";
 import useSWR from "swr";
-import { usePathname } from "next/navigation";
 import useCCPairs from "@/hooks/useCCPairs";
 import { errorHandlingFetcher, isNotFoundError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";

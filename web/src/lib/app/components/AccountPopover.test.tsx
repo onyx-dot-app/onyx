@@ -10,7 +10,7 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   usePathname: () => "/app",
   useSearchParams: () => new URLSearchParams(),
 }));
