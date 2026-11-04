@@ -210,7 +210,13 @@ function InputTime({
                 disabled={disabled}
                 ref={segmentRefs[part]}
                 id={part === "hours" ? id : undefined}
-                aria-label={strings[part]}
+                // With an id, the field's <label> names the hours segment; an
+                // aria-label would override that name.
+                aria-label={
+                  part === "hours" && id !== undefined
+                    ? undefined
+                    : strings[part]
+                }
                 placeholder={SEGMENT_PLACEHOLDERS[part]}
                 maxLength={2}
                 value={segments[part]}
