@@ -115,7 +115,7 @@ func TestRestartKVM(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			r, err := c.Create(ctx, &pb.CreateRequest{SandboxId: ids[i], Attempt: 1, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB})
+			r, err := c.Create(ctx, &pb.CreateRequest{SandboxId: ids[i], Attempt: 1, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB, TenantId: "public"})
 			errs[i] = err
 			if err == nil {
 				vms[i] = r.GetVm()
@@ -277,7 +277,7 @@ func TestRestartKVM(t *testing.T) {
 	t.Logf("after restart: ping %d/%d, run %d/%d, counters without gaps %d/%d (worst gap %.2f s)", okPing, n, okRun, n, okCounter, n, worst)
 
 	// Idempotency and Stop through the new agent.
-	r, err := c.Create(ctx, &pb.CreateRequest{SandboxId: ids[0], Attempt: 1, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB})
+	r, err := c.Create(ctx, &pb.CreateRequest{SandboxId: ids[0], Attempt: 1, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB, TenantId: "public"})
 	if err != nil || r.GetCreated() || r.GetVm().GetGeneration() != vms[0].GetGeneration() {
 		t.Errorf("repeat create after restart: %v %v", r, err)
 	}
@@ -295,7 +295,7 @@ func TestRestartKVM(t *testing.T) {
 	t.Logf("stopped %d adopted VMs through ha2; %d processes left", n, left)
 
 	// The doubt VM's sandbox is blocked while its VM runs.
-	doubtReq := &pb.CreateRequest{SandboxId: doubt.GetSandboxId(), Attempt: 2, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB}
+	doubtReq := &pb.CreateRequest{SandboxId: doubt.GetSandboxId(), Attempt: 2, Template: e.Template, Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB, TenantId: "public"}
 	_, err = c.Create(ctx, doubtReq)
 	wantReason(t, "create of a sandbox in doubt", err, pb.ErrorReason_SANDBOX_IN_DOUBT)
 	if raw, _ := os.ReadFile(filepath.Join(e.DataDir, "journal", doubt.GetSandboxId()+".json")); string(raw) != "{corrupt" {
