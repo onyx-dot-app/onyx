@@ -2460,6 +2460,11 @@ def trigger_indexing_for_cc_pair(
             "Connector has no valid credentials, cannot create index attempts."
         )
 
+    # A crawl from the beginning cannot start while a reindex builds FUTURE; an
+    # incremental run can. Checked once, before any pair is marked.
+    if from_beginning:
+        raise_if_port_reindex_in_progress(db_session)
+
     # Prevents index attempts for cc pairs that already have an index attempt currently running
     skipped_credentials = [
         credential_id
@@ -2491,9 +2496,6 @@ def trigger_indexing_for_cc_pair(
             indexing_mode = IndexingMode.UPDATE
             if from_beginning:
                 indexing_mode = IndexingMode.REINDEX
-                # A crawl from the beginning cannot start while a reindex builds
-                # FUTURE; an incremental run can.
-                raise_if_port_reindex_in_progress(db_session)
 
             mark_ccpair_with_indexing_trigger(cc_pair.id, indexing_mode, db_session)
             num_triggers += 1

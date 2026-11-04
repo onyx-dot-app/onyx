@@ -858,9 +858,11 @@ def _try_creating_pending_backfill(
     """Settles the pair's ended backfill attempts, then creates the attempt of
     its oldest ready backfill on the current index. The caller checked that no
     attempt is active there. The backfill waits while the pair is not ACTIVE,
-    and while an indexing trigger, a prune-after-reindex or a full re-index
-    request is pending: that run goes first, and a full re-index covers the
-    backfill. The creation checks these again under the pair's row lock."""
+    while an indexing trigger, a prune-after-reindex or a full re-index
+    request is pending (that run goes first, and a full re-index covers the
+    backfill), and while a port-flow reindex builds FUTURE (see
+    port_reindex_in_progress). The creation checks these again under the
+    pair's row lock."""
     if not search_settings.status.is_current() or not cc_pair.pending_backfills:
         return False
     if (
@@ -868,6 +870,7 @@ def _try_creating_pending_backfill(
         or cc_pair.indexing_trigger is not None
         or cc_pair.prune_after_reindex_requested_at is not None
         or cc_pair.full_reindex_requested_at is not None
+        or port_reindex_in_progress(db_session)
         or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
     ):
         return False

@@ -136,10 +136,12 @@ from the new index ([[document-index]]). The check is
 `db/search_settings.py:raise_if_port_reindex_in_progress`, on an edit plan
 with a full re-index or backfill step and on a run-once from the beginning
 (`server/documents/connector.py:trigger_indexing_for_cc_pair`). A request that
-slips past it waits in the beat, untouched, until the swap
-(`background/celery/tasks/docprocessing/tasks.py:_kickoff_indexing_tasks`),
-and then runs on the new index. A stored plan applies only to the pair state it
-was computed from
+is already queued waits in the beat, untouched, until the swap
+(`background/celery/tasks/docprocessing/tasks.py:_kickoff_indexing_tasks` and
+`_try_creating_pending_backfill`), and then runs on the new index. A reindex
+cannot start while such a run is in progress
+(`db/search_settings.py:cc_pairs_with_full_run_in_progress`). A stored plan
+applies only to the pair state it was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
 **Pushed events.** A source that pushes instead of being polled declares one

@@ -10,7 +10,6 @@ from onyx.configs.model_configs import (
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    IndexingMode,
     IndexingStatus,
 )
 from onyx.db.llm import fetch_embedding_provider
@@ -236,18 +235,23 @@ def raise_if_port_reindex_in_progress(db_session: Session) -> None:
         raise OnyxError(OnyxErrorCode.CONFLICT, REINDEX_BLOCKS_FULL_RUN_MESSAGE)
 
 
-def full_run_pending_cc_pairs(
+def cc_pairs_with_full_run_in_progress(
     db_session: Session, present_search_settings_id: int
 ) -> list[tuple[int, str]]:
-    """(id, name) of cc_pairs that will, or do, crawl PRESENT from the beginning or
-    backfill: a REINDEX trigger, a full re-index or prune-after-reindex request, a
-    pending backfill, or a running or queued PRESENT attempt from the beginning.
-    A reindex started now could never catch up with them (their documents carry
-    old source timestamps), so `set_new_search_settings` refuses while any exist."""
-    full_run_attempt = (
-        select(IndexAttempt.id)
-        .where(
+    """(id, name) of cc_pairs with a running or queued PRESENT attempt from the
+    beginning, or a backfill attempt. A reindex started now could never catch up
+    with them (their documents carry old source timestamps), so
+    `set_new_search_settings` refuses while any exist. A queued request (REINDEX
+    trigger, full re-index or prune-after-reindex request, pending backfill) does
+    not count: the beat holds it until the swap (see port_reindex_in_progress)."""
+    rows = db_session.execute(
+        select(ConnectorCredentialPair.id, ConnectorCredentialPair.name)
+        .join(
+            IndexAttempt,
             IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+        )
+        .where(
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
             IndexAttempt.search_settings_id == present_search_settings_id,
             IndexAttempt.is_synthetic_seed.is_(False),
             or_(
@@ -258,20 +262,7 @@ def full_run_pending_cc_pairs(
                 [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
             ),
         )
-        .exists()
-    )
-    rows = db_session.execute(
-        select(ConnectorCredentialPair.id, ConnectorCredentialPair.name)
-        .where(
-            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
-            or_(
-                ConnectorCredentialPair.indexing_trigger == IndexingMode.REINDEX,
-                ConnectorCredentialPair.full_reindex_requested_at.isnot(None),
-                ConnectorCredentialPair.prune_after_reindex_requested_at.isnot(None),
-                func.jsonb_array_length(ConnectorCredentialPair.pending_backfills) > 0,
-                full_run_attempt,
-            ),
-        )
+        .distinct()
         .order_by(ConnectorCredentialPair.id)
     )
     return [(cc_pair_id, name or f"CC pair {cc_pair_id}") for cc_pair_id, name in rows]

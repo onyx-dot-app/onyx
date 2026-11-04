@@ -379,6 +379,7 @@ def _apply_claimed_plan(
     ensure_edit_is_plannable(current, proposed)
     ensure_base_state_matches(stored, current)
     steps = resolve_edit_steps(stored.plan, choices)
+    _ensure_no_full_run_during_reindex(db_session, steps)
     if _access_changed(current, proposed):
         validate_pairing_access(
             db_session,
@@ -396,7 +397,6 @@ def _apply_claimed_plan(
     )
 
     try:
-        _ensure_no_full_run_during_reindex(db_session, steps)
         lock_cc_pair_for_edit__no_commit(db_session, cc_pair_id)
         # Under the lock: a concurrent apply of this plan has committed and
         # deleted it, or changed the pair.
