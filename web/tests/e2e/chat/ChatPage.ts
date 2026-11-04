@@ -239,10 +239,14 @@ export class ChatPage {
     await expect(this.inputBar.sendButton).toBeDisabled();
   }
 
-  async expectCustomToolResult(name: string, json: string): Promise<void> {
+  async expandTimeline(): Promise<void> {
     await this.page
       .getByRole("button", { name: "Expand timeline", exact: true })
       .click();
+  }
+
+  async expectCustomToolResult(name: string, json: string): Promise<void> {
+    await this.expandTimeline();
     const status = this.scrollContainer.getByText(`${name} completed`, {
       exact: true,
     });

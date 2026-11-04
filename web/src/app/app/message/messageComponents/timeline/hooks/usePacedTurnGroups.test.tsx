@@ -22,8 +22,10 @@ function createStep(
   tabIndex: number,
   packetType: PacketType = PacketType.SEARCH_TOOL_START
 ): TransformedStep {
+  const key = `${turnIndex}-${tabIndex}`;
   return {
-    key: `${turnIndex}-${tabIndex}`,
+    key,
+    groupKey: key,
     turnIndex,
     tabIndex,
     packets: [
@@ -32,6 +34,8 @@ function createStep(
         obj: { type: packetType },
       } as Packet,
     ],
+    nestedCalls: [],
+    codeMode: null,
   };
 }
 
@@ -65,6 +69,8 @@ function createDisplayGroup(turnIndex: number): GroupedPacket {
         },
       } as Packet,
     ],
+    nestedCalls: [],
+    codeMode: null,
   };
 }
 

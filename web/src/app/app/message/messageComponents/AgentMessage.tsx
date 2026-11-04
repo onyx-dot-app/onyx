@@ -147,6 +147,7 @@ const AgentMessage = React.memo(function AgentMessage({
     documentMap,
     toolGroups,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
     hasSteps,
     stopPacketSeen,
@@ -409,6 +410,7 @@ const AgentMessage = React.memo(function AgentMessage({
         generatedImageCount={generatedImages.length}
         finalAnswerComing={pacedFinalAnswerComing}
         toolProcessingDuration={toolProcessingDuration}
+        codeModeWorking={codeModeWorking}
       />
 
       {/* Row 2: Display content + MessageToolbar */}

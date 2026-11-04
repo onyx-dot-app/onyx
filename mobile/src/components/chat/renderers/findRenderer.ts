@@ -1,5 +1,8 @@
 // Priority-ordered renderer dispatch, mirroring web `renderMessageComponent`. First match wins.
 //
+// A group holds the packets of its own call and of any nested calls (code mode, research and
+// coding agents); only parent-level packets decide the renderer.
+//
 // Only chat and reasoning are wired; the tool slots between them return null on purpose. Reasoning
 // sits last and matches section_end/error, which in web are already claimed by whichever tool group
 // they close — delete the intervening predicates and reasoning inherits every closed tool group,
@@ -14,6 +17,7 @@ import {
   isCodingAgentPackets,
   isDeepResearchPlanPackets,
   isMemoryToolPackets,
+  isNestedPacket,
 } from "@/chat/timeline/packetHelpers";
 
 import { MessageTextRenderer } from "./MessageTextRenderer";
@@ -75,7 +79,9 @@ function isReasoningPacket(packet: Packet): boolean {
   );
 }
 
-export function findRenderer(packets: Packet[]): DispatchRenderer | null {
+export function findRenderer(groupPackets: Packet[]): DispatchRenderer | null {
+  const packets = groupPackets.filter((packet) => !isNestedPacket(packet));
+
   if (packets.some(isChatPacket)) {
     return MessageTextRenderer;
   }

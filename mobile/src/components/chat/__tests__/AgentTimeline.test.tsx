@@ -5,6 +5,7 @@ import { makePacket, makePlacedPacket } from "@/chat/__tests__/fixtures";
 import { createInitialState, processPackets } from "@/chat/messageProcessor";
 import { StopReason, type Packet } from "@/chat/streamingModels";
 import {
+  expandCodeModeSteps,
   groupStepsByTurn,
   transformPacketGroups,
 } from "@/chat/timeline/transformers";
@@ -45,20 +46,25 @@ const overallStop = (stopReason?: StopReason) =>
 // Mirrors what MessageRow feeds the timeline.
 function turnGroupsFor(packets: Packet[]) {
   const state = processPackets(createInitialState(1), packets);
+  const { steps, codeModeWorking } = expandCodeModeSteps(
+    transformPacketGroups(state.toolGroups),
+  );
   return {
-    turnGroups: groupStepsByTurn(transformPacketGroups(state.toolGroups)),
+    turnGroups: groupStepsByTurn(steps),
+    codeModeWorking: codeModeWorking && !state.stopPacketSeen,
     state,
   };
 }
 
 function renderTimeline(packets: Packet[], overrides = {}) {
-  const { turnGroups, state } = turnGroupsFor(packets);
+  const { turnGroups, codeModeWorking, state } = turnGroupsFor(packets);
   const result = render(
     <AgentTimeline
       turnGroups={turnGroups}
       chatState={chatState}
       stopPacketSeen={state.stopPacketSeen}
       stopReason={state.stopReason}
+      codeModeWorking={codeModeWorking}
       {...overrides}
     />,
   );
@@ -193,6 +199,28 @@ describe("AgentTimeline", () => {
     );
     expect(screen.queryByText("Thinking...")).toBeNull();
     expect(screen.queryByText("Thought for some time")).toBeNull();
+  });
+
+  it("shows Working while a code mode program runs between calls", () => {
+    const start = makePacket({ type: "code_mode_start", code: "", cell_id: 1 });
+    const search = (done: boolean) => [
+      makePlacedPacket({ type: "search_tool_start" }, { sub_turn_index: 0 }),
+      ...(done
+        ? [makePlacedPacket({ type: "section_end" }, { sub_turn_index: 0 })]
+        : []),
+    ];
+
+    renderTimeline([start]);
+    expect(screen.getByText("Working")).toBeTruthy();
+
+    renderTimeline([start, ...search(false)]);
+    expect(screen.getByText("Searching")).toBeTruthy();
+
+    renderTimeline([start, ...search(true)]);
+    expect(screen.getByText("Working")).toBeTruthy();
+
+    renderTimeline([start, overallStop(StopReason.USER_CANCELLED)]);
+    expect(screen.queryByText("Working")).toBeNull();
   });
 
   describe("parallel turns", () => {

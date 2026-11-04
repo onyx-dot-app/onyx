@@ -65,11 +65,17 @@ export enum PacketType {
 
   BASH_TOOL_START = "bash_tool_start",
   BASH_TOOL_DELTA = "bash_tool_delta",
+
+  CODE_MODE_START = "code_mode_start",
+  CODE_MODE_DELTA = "code_mode_delta",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
   PYTHON: "python",
 } as const;
+
+// tool_type of the argument deltas that stream a code mode program
+export const CODE_MODE_TOOL_TYPE = "execute_code";
 
 export interface MessageStart extends BaseObj {
   id: string;
@@ -333,6 +339,31 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
+export type CodeModeStatus =
+  "running" | "completed" | "failed" | "timed_out" | "terminated" | "cancelled";
+
+export interface CodeModeStart extends BaseObj {
+  type: "code_mode_start";
+  code: string;
+  cell_id?: number | null;
+  observation?: number;
+}
+
+export interface CodeModeDelta extends BaseObj {
+  type: "code_mode_delta";
+  stdout: string;
+  replace_stdout?: boolean;
+  result?: string | null;
+  error?: string | null;
+  status?: CodeModeStatus | null;
+  duration_seconds?: number | null;
+  tool_call_count?: number | null;
+  stored_keys?: string[] | null;
+  cell_id?: number | null;
+  observation?: number | null;
+  response_ended?: boolean;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type SearchToolObj =
@@ -422,6 +453,8 @@ export type ObjTypes =
   | DeepResearchPlanObj
   | ResearchAgentObj
   | CodingAgentObj
+  | CodeModeStart
+  | CodeModeDelta
   | PacketError;
 
 export interface Placement {

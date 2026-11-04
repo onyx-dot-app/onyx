@@ -13008,6 +13008,9 @@
           },
           "updatingMemory": {
             "label": "جارٍ تحديث الذاكرة..."
+          },
+          "working": {
+            "label": "جارٍ العمل"
           }
         },
         "internalSearch": {

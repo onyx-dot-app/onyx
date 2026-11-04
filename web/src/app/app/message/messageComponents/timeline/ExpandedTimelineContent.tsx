@@ -77,6 +77,7 @@ const TimelineStep = React.memo(function TimelineStep({
   return (
     <TimelineRendererComponent
       packets={step.packets}
+      nestedCalls={step.nestedCalls}
       chatState={chatState}
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
@@ -130,7 +131,7 @@ export const ExpandedTimelineContent = React.memo(
 
           return renderAsParallelTabs ? (
             <ParallelTimelineTabs
-              key={turnGroup.turnIndex}
+              key={turnGroup.steps[0]?.key ?? turnGroup.turnIndex}
               turnGroup={turnGroup}
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}

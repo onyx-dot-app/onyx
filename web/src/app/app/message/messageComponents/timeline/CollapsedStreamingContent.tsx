@@ -45,6 +45,7 @@ export const CollapsedStreamingContent = React.memo(
           <TimelineRendererComponent
             key={`${step.key}-compact`}
             packets={step.packets}
+            nestedCalls={step.nestedCalls}
             chatState={chatState}
             animate={true}
             stopPacketSeen={false}

@@ -2,6 +2,7 @@
 
 import {
   CODE_INTERPRETER_TOOL_TYPES,
+  CODE_MODE_TOOL_TYPE,
   Packet,
   PacketType,
   ToolCallArgumentDelta,
@@ -20,35 +21,127 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.DEEP_RESEARCH_PLAN_START,
 ]);
 
-// Nested output shares its parent's group but does not end it.
+// A packet from a tool call nested under a parent tool (code mode, research agent, coding agent).
+// Nested packets share the parent's group key and set sub_turn_index.
 export const isNestedPacket = (packet: Packet): boolean =>
   packet.placement.sub_turn_index != null;
 
+// Every step-kind check in this file reads only parent-level packets, so the nested calls of a
+// step never change the kind of the step.
+const someParentPacket = (
+  packets: Packet[],
+  predicate: (packet: Packet) => boolean,
+): boolean => packets.some((p) => !isNestedPacket(p) && predicate(p));
+
+// A parent-level SECTION_END or ERROR ends a group. A nested call ends with its own SECTION_END
+// while the parent tool keeps running.
 export const isGroupEndPacket = (packet: Packet): boolean =>
   !isNestedPacket(packet) &&
   (packet.obj.type === PacketType.SECTION_END ||
     packet.obj.type === PacketType.ERROR);
 
-export const isResearchAgentPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
+/** One nested tool call of a parent step, with its packets placed at parent level so it reads as
+ * a standalone call. */
+export interface NestedCall {
+  subTurnIndex: number;
+  packets: Packet[];
+  complete: boolean;
+}
 
-// Bash packets are emitted into the coding-agent group, so any of these signals it.
+/** A nested packet placed at parent level, so it reads as a standalone call. */
+export const asStandalonePacket = (packet: Packet): Packet => ({
+  ...packet,
+  placement: { ...packet.placement, sub_turn_index: null },
+});
+
+/** Nested calls ordered by sub_turn_index, from packets already placed at parent level. A call
+ * whose packet count did not change keeps its previous object, and an unchanged list keeps its
+ * previous array, so memoized renderers skip calls that have not changed. */
+export function nestedCallSnapshot(
+  bySubTurn: ReadonlyMap<number, Packet[]>,
+  previous: NestedCall[] = [],
+): NestedCall[] {
+  const previousByIndex = new Map(
+    previous.map((call) => [call.subTurnIndex, call]),
+  );
+  let changed = previous.length !== bySubTurn.size;
+  const calls = Array.from(bySubTurn.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([subTurnIndex, callPackets]): NestedCall => {
+      const prior = previousByIndex.get(subTurnIndex);
+      if (prior && prior.packets.length === callPackets.length) return prior;
+      changed = true;
+      return {
+        subTurnIndex,
+        packets: [...callPackets],
+        complete: callPackets.some(isGroupEndPacket),
+      };
+    });
+  return changed ? calls : previous;
+}
+
+/** What the parent-level packets of a code mode group say about its program. */
+export interface CodeModeProgram {
+  /** The cell the program runs in, once a start or output packet names it. */
+  cellId: number | null;
+  /** The program has started running; before that the model is still writing it. */
+  started: boolean;
+  /** The group has ended. */
+  ended: boolean;
+}
+
+/** The program after one more packet of its group. Call it only for code mode packets. */
+export function nextCodeModeProgram(
+  program: CodeModeProgram,
+  packet: Packet,
+): CodeModeProgram {
+  const obj = packet.obj;
+  if (
+    obj.type !== PacketType.CODE_MODE_START &&
+    obj.type !== PacketType.CODE_MODE_DELTA
+  ) {
+    return program;
+  }
+  return {
+    ...program,
+    cellId: program.cellId ?? obj.cell_id ?? null,
+    started: program.started || obj.type === PacketType.CODE_MODE_START,
+  };
+}
+
+export const isResearchAgentPackets = (packets: Packet[]): boolean =>
+  someParentPacket(
+    packets,
+    (p) => p.obj.type === PacketType.RESEARCH_AGENT_START,
+  );
+
+// Parent-level packet types that identify a coding agent group. The agent's bash calls and
+// thinking stream as nested sections of the same group.
 export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
   PacketType.CODING_AGENT_START,
-  PacketType.CODING_AGENT_THINKING_DELTA,
   PacketType.CODING_AGENT_FINAL,
-  PacketType.BASH_TOOL_START,
-  PacketType.BASH_TOOL_DELTA,
 ]);
 
 export const isCodingAgentPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => CODING_AGENT_PACKET_TYPES.has(p.obj.type as PacketType));
+  someParentPacket(packets, (p) =>
+    CODING_AGENT_PACKET_TYPES.has(p.obj.type as PacketType),
+  );
+
+// Parent-level packets that identify a code mode group: the streamed program (argument deltas),
+// its start, and its output deltas.
+export const isCodeModePacket = (packet: Packet): boolean =>
+  !isNestedPacket(packet) &&
+  (packet.obj.type === PacketType.CODE_MODE_START ||
+    packet.obj.type === PacketType.CODE_MODE_DELTA ||
+    (packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+      packet.obj.tool_type === CODE_MODE_TOOL_TYPE));
 
 export const isSearchToolPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.SEARCH_TOOL_START);
+  someParentPacket(packets, (p) => p.obj.type === PacketType.SEARCH_TOOL_START);
 
 export const isPythonToolPackets = (packets: Packet[]): boolean =>
-  packets.some(
+  someParentPacket(
+    packets,
     (p) =>
       p.obj.type === PacketType.PYTHON_TOOL_START ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
@@ -57,10 +150,11 @@ export const isPythonToolPackets = (packets: Packet[]): boolean =>
   );
 
 export const isReasoningPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.REASONING_START);
+  someParentPacket(packets, (p) => p.obj.type === PacketType.REASONING_START);
 
 export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
-  packets.some(
+  someParentPacket(
+    packets,
     (p) =>
       COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType) ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
@@ -73,8 +167,9 @@ export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
 export const stepHasCollapsedStreamingContent = (
   packets: Packet[],
 ): boolean => {
+  const parentPackets = packets.filter((packet) => !isNestedPacket(packet));
   const packetTypes = new Set(
-    packets.map((packet) => packet.obj.type as PacketType),
+    parentPackets.map((packet) => packet.obj.type as PacketType),
   );
 
   if (packetTypes.has(PacketType.ERROR)) {
@@ -99,7 +194,7 @@ export const stepHasCollapsedStreamingContent = (
   if (
     packetTypes.has(PacketType.PYTHON_TOOL_START) ||
     packetTypes.has(PacketType.PYTHON_TOOL_DELTA) ||
-    packets.some(
+    parentPackets.some(
       (p) =>
         p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
         (p.obj as ToolCallArgumentDelta).tool_type ===
@@ -141,10 +236,14 @@ export const stepHasCollapsedStreamingContent = (
 };
 
 export const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START);
+  someParentPacket(
+    packets,
+    (p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START,
+  );
 
 export const isMemoryToolPackets = (packets: Packet[]): boolean =>
-  packets.some(
+  someParentPacket(
+    packets,
     (p) =>
       p.obj.type === PacketType.MEMORY_TOOL_START ||
       p.obj.type === PacketType.MEMORY_TOOL_NO_ACCESS,
