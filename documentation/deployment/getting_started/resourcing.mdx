@@ -111,7 +111,7 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | Chunks per item | 7 per document, 12 per PDF, 9 per slide deck, 10 per spreadsheet, 1 per image, 4 per wiki page, 2 per ticket, 1 per chat thread, 4 per email thread, 4 per CRM record, 12 per call, 6 per web page | Mean across Onyx Cloud tenants. Most items are smaller, but large ones set the total. The spreadsheet value is an estimate: Onyx indexes at most 24 chunks of a spreadsheet by default (`TABULAR_MAX_CHUNKS_PER_WORKBOOK`), and spreadsheets indexed with that limit average about 4 chunks. The estimate is higher to allow for large workbooks. Onyx makes one document from each chat or email thread. Change the value if you know your data. |
 | Chunks per employee per year | 1,500 | Estimate from managed deployments, which range from about 200 to 1,500. Each year, one employee adds about 50 files (500 chunks), 100 email threads (400), 300 chat threads (300), 50 tickets (100), 25 wiki pages (100), and 100 chunks from other sources. If every employee's email is indexed, email is about 4,000 chunks instead of 400, so the rate becomes about 5,100. Older years usually add less than recent ones, so a long history errs on the high side. |
 | Memory for vector search | Node RAM minus the JVM heap | The heap uses half of the RAM, at most 31 GB. The calculator counts 80% of the rest for vectors. |
-| Memory per data node | 64 GB or less | The JVM heap stops at about 31 GB. For more data, add nodes instead of larger nodes. |
+| Memory per data node | 16 to 128 GB | The JVM heap stops at about 31 GB, so a 128 GB node has about 3 times the vector memory of a 64 GB node. On Amazon OpenSearch Service, the heap is half the RAM, up to 31 GB, by default. |
 | Searches per question | 10 hybrid searches | The first search call runs 4–8 searches: the rephrased question, the LLM's queries, the original question, and up to 3 keyword queries. A second call runs 2–4. |
 | CPU per hybrid search | 0.0003 core-seconds × dimensions × millions of chunks | Fit from two single-shard benchmarks near 1.5 million chunks: 0.17 seconds at 384 dimensions and 0.48 seconds at 1,024 dimensions. Growth with chunk count is an estimate. |
 | Peak to average question rate | 5× | Converts peak questions per second to questions per day. Onyx Cloud's busiest minutes run 3 to 15 times its average search rate. |
@@ -194,9 +194,9 @@ the calculator plans for 24 million chunks.
 
 | Setup | Index size, one copy | Memory for vector search, one copy | Cluster | Onyx settings |
 | --- | --- | --- | --- | --- |
-| Granite (384 dimensions), 2 copies, no search load | 106 GB | 38 GB | 3 nodes, 8 vCPUs, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite (384 dimensions), 2 copies, no search load | 106 GB | 38 GB | 2 nodes, 16 vCPUs, 128 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 | Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 2 vCPUs, 16 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Granite, 2 copies, 1 question per second at peak | 106 GB | 38 GB | 3 nodes, 16 vCPUs, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=9`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite, 2 copies, 1 question per second at peak | 106 GB | 38 GB | 2 nodes, 32 vCPUs, 128 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 | Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 32 vCPUs, 64 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 
 The shard count makes the shard copies divide evenly over the nodes, so no node holds more than its share.
@@ -205,9 +205,9 @@ so the memory for vector search drops about 18× in this example (the graph link
 Storage barely changes.
 
 At 1 question per second, the searches need about 37 vCPUs at peak.
-The 3 nodes that hold the data have 24 vCPUs as memory-optimized nodes,
-so the calculator picks general-purpose nodes with 16 vCPUs each. With 1-bit quantization, 2 nodes hold the data,
-so the calculator picks compute-optimized nodes with 32 vCPUs each.
+The 2 nodes that hold the data have 32 vCPUs as memory-optimized nodes,
+so the calculator picks general-purpose nodes with 32 vCPUs each. With 1-bit quantization, the data fits on 16 GB nodes,
+but they have too few vCPUs, so the calculator picks 64 GB compute-optimized nodes.
 When search needs more nodes than there are shard copies, the calculator adds replicas,
 because a node without a shard copy does no search work.
 

@@ -63,7 +63,7 @@ export const OpenSearchSizingCalculator = () => {
   const CHUNKS_PER_EMPLOYEE_YEAR = EMPLOYEE_YEAR_BREAKDOWN.reduce((a, [, , n]) => a + n, 0);
   const MAX_EMPLOYEES = 10_000_000;
   const MAX_YEARS = 50;
-  const NODE_RAM = [16, 32, 64];
+  const NODE_RAM = [16, 32, 64, 128];
   // GB of RAM per vCPU by node family, most RAM per core first. On Graviton nodes 1 vCPU is 1 core.
   const NODE_TYPES = [
     { gbPerVcpu: 8, name: "memory-optimized", example: "r8g" },
@@ -81,9 +81,10 @@ export const OpenSearchSizingCalculator = () => {
   // How much busier the peak is than the day's average rate. Onyx Cloud's busiest minutes
   // (p95 to p99) run 3 to 15 times its weekly average search rate.
   const PEAK_TO_AVERAGE = 5;
-  const NODE_DISK = [64, 128, 256, 512, 1000, 1500, 3000, 6000];
-  // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large, r8g.xlarge and r8g.2xlarge.
-  const MAX_DISK_FOR_RAM = { 16: 1500, 32: 3000, 64: 6000 };
+  // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large to r8g.4xlarge. General-purpose
+  // nodes with the same RAM allow the same; compute-optimized nodes allow half.
+  const MAX_DISK_FOR_RAM = { 16: 1500, 32: 3000, 64: 6000, 128: 12000 };
+  const NODE_DISK_ALL = [64, 128, 256, 512, 1000, 1500, 3000, 6000, 12000];
   const COPY_HINT = {
     1: "No replica. A node failure stops search until the data is restored.",
     2: "A primary and one replica. Survives one node failure.",
@@ -270,8 +271,8 @@ export const OpenSearchSizingCalculator = () => {
     const vcpusPerNode = nodeRam / nodeType.gbPerVcpu;
     const nodesForSearch = searchNodesWith(nodeType);
     // Recommended storage fills up at the same node count that memory, copies and search need.
-    const maxDisk = MAX_DISK_FOR_RAM[nodeRam];
-    const diskOptions = NODE_DISK.filter((d) => d <= maxDisk);
+    const maxDisk = MAX_DISK_FOR_RAM[nodeRam] / (nodeType.gbPerVcpu === 2 ? 2 : 1);
+    const diskOptions = NODE_DISK_ALL.filter((d) => d <= maxDisk);
     const nodesWithoutStorage = Math.ceil(Math.max(c, nodesForMemory, nodesForSearch) / zones) * zones;
     const neededPerNode = provision / 1e9 / nodesWithoutStorage;
     const recommendedDisk = diskOptions.find((d) => d >= neededPerNode) || maxDisk;
@@ -663,7 +664,7 @@ export const OpenSearchSizingCalculator = () => {
                   <option key={r} value={String(r)}>{r + " GB"}</option>
                 ))}
               </select>
-              <div className={hint}>Recommended memory is the smallest node that holds the data and the search load on the fewest nodes. 64 GB at most.</div>
+              <div className={hint}>Recommended memory is the smallest node that holds the data and the search load on the fewest nodes. Larger nodes give vectors more room, because the JVM heap stops at 31 GB.</div>
             </div>
             <div className="space-y-1.5">
               <label htmlFor="os-disk" className={label}>Storage per data node</label>
