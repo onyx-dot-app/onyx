@@ -220,8 +220,8 @@ function useSizeParts(): (bytes: number) => SizeParts {
 }
 
 interface SummaryLineProps {
-  value: string;
-  unit: string;
+  value: string | RichStr;
+  unit: string | RichStr;
 }
 /** A value in 14/20 semibold before its unit in 12/16. */
 function SummaryLine({ value, unit }: SummaryLineProps) {
