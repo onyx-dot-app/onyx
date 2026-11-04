@@ -10,7 +10,7 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
   └─ Interactive.Container   <- width, rounding
        └─ ContentAction      <- padding
-            ├─ Content       <- icon, title, description, font, orientation, ...
+            ├─ Content       <- icon, title, description, font, ...
             └─ rightChildren
 ```
 
@@ -88,7 +88,6 @@ meanings in one prop. Use `tooltip` for hover text.
 | `suffix`              | `string`                | —               | Muted text beside the title, like "(Default)"                                                                                        |
 | `badge`         | `BadgeProps`         | —        | Badge beside the title, like a plan badge                                 |
 | `font`                | `TextFont`              | `"main-ui-action"` | The title's font; sets every size |
-| `orientation`         | `"inline" \| "reverse"` | `"inline"`      | Where the icon sits |
 | `rightChildren`       | `ReactNode`             | —               | Content after the label (e.g. action button)                                                                                                                                                                                 |
 | `color`               | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
 | `strikethrough`       | `boolean`               | `false`         | Strike the label through, e.g. a row switched off                                                                                                                                                                            |

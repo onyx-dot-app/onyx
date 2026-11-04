@@ -7,6 +7,12 @@ export {
   type ContentEditHandle,
 } from "@opal/layouts/content/components";
 
+/* ReverseContent */
+export {
+  ReverseContent,
+  type ReverseContentProps,
+} from "@opal/layouts/reverse-content/components";
+
 /* ContentAction */
 export {
   ContentAction,

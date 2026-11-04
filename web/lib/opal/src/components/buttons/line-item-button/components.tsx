@@ -60,9 +60,6 @@ type RowContentProps = {
   /** The title's font, which sets every size. @default "main-ui-action" */
   font?: TextFont;
 
-  /** Where the icon sits. @default "inline" */
-  orientation?: "inline" | "reverse";
-
   /**
    * Content colour mode. `"interactive"` is what lets the row's hover,
    * selected and disabled colours reach its title and icon; anything else
@@ -173,7 +170,6 @@ function LineItemButton({
   badge,
   rightChildren,
   font,
-  orientation,
   strikethrough,
   padding,
 
@@ -258,7 +254,6 @@ function LineItemButton({
             badge={badge}
             rightChildren={rightChildren}
             font={font}
-            orientation={orientation}
             strikethrough={strikethrough}
             color={color}
             padding={padding ?? 0.5}

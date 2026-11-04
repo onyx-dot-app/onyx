@@ -11,7 +11,12 @@ import {
   type TableColumn,
   type TagItem,
 } from "@opal/components";
-import { Content, InputErrorText, Section } from "@opal/layouts";
+import {
+  Content,
+  InputErrorText,
+  ReverseContent,
+  Section,
+} from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -205,13 +210,11 @@ export default function GroupShareList({
             cell: (row) => {
               if (row.note) {
                 const note = (
-                  <Content
+                  <ReverseContent
                     font="secondary-body"
-                    orientation="reverse"
                     icon={row.icon}
                     title={row.note}
                     color="muted"
-                    width="fit"
                   />
                 );
                 if (row.role === undefined) return note;

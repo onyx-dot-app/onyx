@@ -33,10 +33,10 @@ import { cn } from "@opal/utils";
 // ---------------------------------------------------------------------------
 
 /**
- * Where the icon sits: before the title (`"inline"`), after it
- * (`"reverse"`), or above it (`"stacked"`).
+ * Where the icon sits: before the title (`"inline"`) or above it
+ * (`"stacked"`). For an icon after the title, use `ReverseContent`.
  */
-type ContentOrientation = "inline" | "reverse" | "stacked";
+type ContentOrientation = "inline" | "stacked";
 
 type ContentAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
@@ -151,7 +151,7 @@ interface ContentBaseProps {
 type ContentProps = ContentBaseProps &
   (
     | {
-        orientation?: "inline" | "reverse";
+        orientation?: "inline";
         moreIcon1?: never;
         moreIcon2?: never;
       }
@@ -200,9 +200,33 @@ function editButtonSize(lineHeight: number): ContainerSizeVariants {
   return "2xs";
 }
 
-/** The suffix reads a step quieter than the title. */
-function suffixFont(lineHeight: number): TextFont {
-  return lineHeight >= 20 ? "main-ui-muted" : "secondary-action";
+/**
+ * The suffix: the title's size in its lighter weight. A heading without a
+ * muted cut of its own takes the muted H3.
+ */
+function suffixFont(font: TextFont): TextFont {
+  if (font.startsWith("main-ui")) return "main-ui-muted";
+  if (font.startsWith("main-content")) return "main-content-muted";
+  if (font.startsWith("heading")) return "heading-h3-muted";
+  if (font.startsWith("figure")) return "figure-small-label";
+  return "secondary-body";
+}
+
+/**
+ * The `titleColor` override, set inline on the colour wrapper. It rides an
+ * unregistered variable that the colour modes read with the mode's tone as
+ * fallback, so the disabled rule still wins.
+ */
+function titleColorStyle(
+  titleColor: Exclude<TextColor, "inherit"> | undefined
+): React.CSSProperties | undefined {
+  // SAFETY: CSSProperties has no index for custom properties; the object
+  // holds only the one custom property the stylesheet reads.
+  return titleColor
+    ? ({
+        "--content-title-color": `var(--${titleColor})`,
+      } as React.CSSProperties)
+    : undefined;
 }
 
 const AUX_ICON_CONFIG: Record<
@@ -340,16 +364,6 @@ function Content({
     setEditing(false);
   }
 
-  // The override rides an unregistered variable that the colour modes read
-  // with the mode's tone as fallback, so the disabled rule still wins.
-  // SAFETY: CSSProperties has no index for custom properties; the object
-  // holds only the one custom property the stylesheet reads.
-  const titleColorStyle: React.CSSProperties | undefined = titleColor
-    ? ({
-        "--content-title-color": `var(--${titleColor})`,
-      } as React.CSSProperties)
-    : undefined;
-
   const hasDescription = !!description && !!toPlainString(description);
   const hasIconRow = !!(icon || MoreIcon1 || moreIcon2);
 
@@ -357,7 +371,7 @@ function Content({
     <div
       className={widthVariants[width]}
       data-content-color={color}
-      style={titleColorStyle}
+      style={titleColorStyle(titleColor)}
     >
       <div
         ref={ref}
@@ -447,7 +461,7 @@ function Content({
 
             {suffix && (
               <div className="opal-content-suffix">
-                <Text as="p" font={suffixFont(lineHeight)} color="inherit">
+                <Text as="p" font={suffixFont(font)} color="inherit">
                   {suffix === "optional" ? strings.contentOptional : suffix}
                 </Text>
               </div>
@@ -513,6 +527,7 @@ export {
   ContentDescription,
   ContentIcon,
   FONT_LINE_HEIGHT,
+  titleColorStyle,
   type ContentProps,
   type ContentOrientation,
   type ContentAuxIcon,

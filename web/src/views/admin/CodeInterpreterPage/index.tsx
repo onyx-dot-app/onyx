@@ -14,7 +14,7 @@ import {
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button, Popover, SelectCard, Text } from "@opal/components";
-import { Card, Content, ContentAction } from "@opal/layouts";
+import { Card, Content, ContentAction, ReverseContent } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { richNodes } from "@opal/utils";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -70,10 +70,8 @@ function CheckingStatus() {
       alignItems="center"
       padding={2}
     >
-      <Content
+      <ReverseContent
         font="main-ui-body"
-        orientation="reverse"
-        width="fit"
         icon={IconLoader}
         title={t("status.checking.label")}
         color="muted"
@@ -104,10 +102,8 @@ function ConnectionStatus({
 
   const { labelKey, icon, color } = STATUS_CONFIG[status];
   const statusContent = (
-    <Content
+    <ReverseContent
       font="main-ui-body"
-      orientation="reverse"
-      width="fit"
       icon={icon}
       title={t(labelKey)}
       color={color}

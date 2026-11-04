@@ -8,7 +8,7 @@ sets every size, and `orientation` places the icon.
 ## Structure
 
 ```
-root            0.25rem gap inline or reversed; no gap stacked
+root            0.25rem gap inline; no gap stacked
 ├─ icon row     icon (+ moreIcon1, moreIcon2 when stacked)
 └─ text         no gap
    ├─ title row title, suffix, aux icon, badge, edit pencil
@@ -29,7 +29,7 @@ root            0.25rem gap inline or reversed; no gap stacked
 | Prop                  | Type                                       | Default            | Description                                                                                         |
 | --------------------- | ------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------- |
 | `font`                | `TextFont`                                 | `"main-ui-action"` | The title's font; sets every size                                                                   |
-| `orientation`         | `"inline" \| "reverse" \| "stacked"`       | `"inline"`         | Icon before the title, after it, or above it                                                        |
+| `orientation`         | `"inline" \| "stacked"`                  | `"inline"`         | Icon before the title, or above it. For an icon after the title, use [`ReverseContent`](../reverse-content/README.md) |
 | `icon`                | `IconFunctionComponent`                    | —                  | Leading icon                                                                                        |
 | `enlargedIcon`        | `boolean`                                  | `false`            | Drop the icon box's 2px padding, so `icon` and `moreIcon2` are as tall as the title line. The box keeps its size. Use it where a page wants larger icons, such as the connector catalog's logos |
 | `title`               | `string \| RichStr`                        | **(required)**     | The title                                                                                           |
@@ -37,7 +37,7 @@ root            0.25rem gap inline or reversed; no gap stacked
 | `titleMaxLines`       | `number`                                   | —                  | Clamp the title; a cut title shows in full in a tooltip                                             |
 | `descriptionMaxLines` | `number`                                   | —                  | Clamp the description; a cut one shows in full in a tooltip                                         |
 | `strikethrough`       | `boolean`                                  | `false`            | Strike the title through, for an option that is switched off                                        |
-| `suffix`              | `"optional" \| string`                     | —                  | Muted text beside the title; `"optional"` is the translated "(Optional)"                             |
+| `suffix`              | `"optional" \| string`                     | —                  | Muted text beside the title, in the title's size and lighter weight; `"optional"` is the translated "(Optional)" |
 | `auxIcon`             | `"info-gray" \| "info-blue" \| "warning" \| "error"` | —        | A status icon beside the title                                                                      |
 | `badge`               | `BadgeProps & { tooltip?: string }`        | —                  | A badge beside the title                                                                            |
 | `role`                | `string`                                   | —                  | ARIA role on the title element                                                                      |
