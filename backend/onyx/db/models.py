@@ -1303,6 +1303,10 @@ class Document(Base):
     # First Section's link
     link: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
     file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # As the source reports them. Null for sources that report neither and for
+    # documents not re-indexed since the source started reporting them.
+    source_mime_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # The updated time is also used as a measure of the last successful state of the doc
     # pulled from the source (to help skip reindexing already updated docs in case of

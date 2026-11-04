@@ -246,6 +246,10 @@ class DocumentBase(BaseModel):
 
     file_id: str | None = None
 
+    # The file's type and size as the source reports them, for the admin breakdown.
+    source_mime_type: str | None = None
+    source_size_bytes: int | None = None
+
     def get_title_for_document_index(
         self,
     ) -> str | None:
@@ -420,6 +424,8 @@ class Document(DocumentBase):
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
             file_id=base.file_id,
+            source_mime_type=base.source_mime_type,
+            source_size_bytes=base.source_size_bytes,
         )
 
     def __sizeof__(self) -> int:

@@ -244,6 +244,7 @@
   "GET /llm/provider/{provider_id}/models": "current_chat_accessible_user, scope_exempt",
   "GET /manage/admin/cc-pair/{cc_pair_id}": "read:connectors +scope",
   "GET /manage/admin/cc-pair/{cc_pair_id}/data-access": "read:connectors +scope",
+  "GET /manage/admin/cc-pair/{cc_pair_id}/document-types": "read:connectors +scope",
   "GET /manage/admin/cc-pair/{cc_pair_id}/edit/plan/{plan_id}": "manage:connectors +scope",
   "GET /manage/admin/cc-pair/{cc_pair_id}/errors": "read:connectors +scope",
   "GET /manage/admin/cc-pair/{cc_pair_id}/get-docs-sync-status": "read:connectors +scope",

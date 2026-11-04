@@ -276,7 +276,7 @@ user reaches each level.
 
 | Action | Level |
 |---|---|
-| Read the detail page, runs, errors, hierarchy breakdown | READ |
+| Read the detail page, runs, errors, hierarchy and document type breakdowns | READ |
 | Pause, resume, rename, change schedules, prune, start a permission or group sync, cancel an attempt, resolve runs, release the indexing hold | OPERATE |
 | Delete, set data-access or manage-access groups, pair a credential to a connector that has pairs | EDIT (on every existing pair of the connector, for pairing) |
 

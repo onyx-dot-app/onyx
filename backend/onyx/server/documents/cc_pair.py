@@ -58,7 +58,11 @@ from onyx.db.connector_credential_pair import (
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.credentials import fetch_credential_by_id_for_user
-from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
+from onyx.db.document import (
+    get_document_counts_for_cc_pairs,
+    get_document_type_breakdown_for_cc_pair,
+    get_documents_for_cc_pair,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
@@ -121,6 +125,7 @@ from onyx.server.documents.cc_pair_throughput import (
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
+    CCPairDocumentTypeBreakdown,
     CCPairFullInfo,
     CCPairHierarchyBreakdown,
     CCPairRunLevel,
@@ -1245,6 +1250,30 @@ def get_cc_pair_indexing_errors(
             for error, name in index_attempt_errors
         ],
         total_items=total_count,
+    )
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/document-types")
+def get_cc_pair_document_types(
+    cc_pair_id: int,
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairDocumentTypeBreakdown:
+    """Indexed documents per source MIME type. A separate route, because the
+    count reads every document of the pair and the detail page must load fast."""
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    return get_document_type_breakdown_for_cc_pair(
+        db_session, cc_pair.connector_id, cc_pair.credential_id
     )
 
 

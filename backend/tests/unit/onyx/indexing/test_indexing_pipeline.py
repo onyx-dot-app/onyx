@@ -1592,11 +1592,15 @@ def _make_db_doc(
     doc_id: str,
     content_hash: str | None = None,
     doc_updated_at: datetime | None = None,
+    source_mime_type: str | None = None,
+    source_size_bytes: int | None = None,
 ) -> MagicMock:
     db_doc = MagicMock()
     db_doc.id = doc_id
     db_doc.content_hash = content_hash
     db_doc.doc_updated_at = doc_updated_at
+    db_doc.source_mime_type = source_mime_type
+    db_doc.source_size_bytes = source_size_bytes
     db_doc.external_user_emails = []
     db_doc.external_user_group_ids = []
     db_doc.is_public = False
@@ -1698,6 +1702,44 @@ def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
 
     assert docs == [doc]
     assert hashes == {"doc1": doc.content_hash()}
+
+
+def test_get_docs_to_update_new_source_info_bypasses_both_gates_once() -> None:
+    """A type or size the source newly reports is otherwise skipped forever by an
+    unchanged timestamp and hash. Matching or no longer reported values skip."""
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = updated_at
+
+    def db_doc(mime_type: str | None, size_bytes: int | None) -> MagicMock:
+        return _make_db_doc(
+            "doc1",
+            content_hash=doc.content_hash(),
+            doc_updated_at=updated_at,
+            source_mime_type=mime_type,
+            source_size_bytes=size_bytes,
+        )
+
+    cases = [
+        # (incoming type, incoming size, stored type, stored size, updates)
+        ("application/pdf", 2048, None, None, True),
+        ("application/pdf", 2048, "application/pdf", None, True),
+        ("application/pdf", 4096, "application/pdf", 2048, True),
+        ("application/pdf", 2048, "application/pdf", 2048, False),
+        (None, None, "application/pdf", 2048, False),
+    ]
+    for ignore_timestamp_gate in (False, True):
+        for mime_type, size_bytes, stored_type, stored_size, updates in cases:
+            doc.source_mime_type = mime_type
+            doc.source_size_bytes = size_bytes
+            docs, hashes = get_docs_to_update(
+                [doc],
+                db_docs=[db_doc(stored_type, stored_size)],
+                ignore_timestamp_gate=ignore_timestamp_gate,
+            )
+            assert docs == ([doc] if updates else [])
+            assert hashes == ({"doc1": doc.content_hash()} if updates else {})
 
 
 def test_get_docs_to_update_mixed_batch() -> None:

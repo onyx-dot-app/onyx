@@ -6,13 +6,16 @@ from datetime import datetime, timezone
 from typing import Any, NamedTuple
 from uuid import UUID
 
+from psycopg2.errors import QueryCanceled
 from sqlalchemy import (
+    BigInteger,
     CompoundSelect,
     Integer,
     Select,
     String,
     and_,
     case,
+    cast,
     column,
     delete,
     distinct,
@@ -28,7 +31,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
@@ -64,7 +67,11 @@ from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
-from onyx.server.documents.models import ConnectorCredentialPairIdentifier
+from onyx.server.documents.models import (
+    CCPairDocumentTypeBreakdown,
+    ConnectorCredentialPairIdentifier,
+    DocumentTypeCount,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -981,6 +988,76 @@ def get_document_counts_for_cc_pairs(
     ]
 
 
+# A cold read of a 135k-document pair takes about 0.9 s, so this covers pairs
+# into the low millions and still frees the API worker on larger ones.
+_DOCUMENT_TYPE_BREAKDOWN_TIMEOUT_MS = 10_000
+
+
+def get_document_type_breakdown_for_cc_pair(
+    db_session: Session, connector_id: int, credential_id: int
+) -> CCPairDocumentTypeBreakdown:
+    """Indexed documents of the pair per source MIME type, largest first. Empty
+    with `timed_out` set when the read takes longer than the timeout."""
+    stmt = (
+        select(
+            DbDocument.source_mime_type,
+            func.count(),
+            func.count(DbDocument.source_size_bytes),
+            cast(func.sum(DbDocument.source_size_bytes), BigInteger),
+        )
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+        )
+        .group_by(DbDocument.source_mime_type)
+        .order_by(func.count().desc(), DbDocument.source_mime_type)
+    )
+    # Always rolled back: the savepoint only scopes the timeout to this read.
+    savepoint = db_session.begin_nested()
+    try:
+        db_session.execute(
+            select(
+                func.set_config(
+                    "statement_timeout", str(_DOCUMENT_TYPE_BREAKDOWN_TIMEOUT_MS), True
+                )
+            )
+        )
+        rows = db_session.execute(stmt).all()
+    except Exception as e:
+        if not (isinstance(e, OperationalError) and isinstance(e.orig, QueryCanceled)):
+            # On a dead connection the rollback fails too; raise the read's error.
+            with contextlib.suppress(SQLAlchemyError):
+                savepoint.rollback()
+            raise
+        savepoint.rollback()
+        logger.warning(
+            "Document type breakdown timed out for connector %s, credential %s",
+            connector_id,
+            credential_id,
+        )
+        return CCPairDocumentTypeBreakdown(types=[], untyped_count=0, timed_out=True)
+    savepoint.rollback()
+
+    types: list[DocumentTypeCount] = []
+    untyped_count = 0
+    for mime_type, count, sized_count, size_bytes in rows:
+        if mime_type is None:
+            untyped_count = count
+            continue
+        types.append(
+            DocumentTypeCount(
+                mime_type=mime_type,
+                count=count,
+                sized_count=sized_count,
+                size_bytes=size_bytes,
+            )
+        )
+    return CCPairDocumentTypeBreakdown(types=types, untyped_count=untyped_count)
+
+
 def count_documents_by_cc_pair_ids(
     db_session: Session, cc_pair_ids: list[int]
 ) -> dict[int, int]:
@@ -1232,6 +1309,8 @@ def upsert_documents(
                     ),
                     doc_metadata=doc.doc_metadata,
                     file_id=doc.file_id,
+                    source_mime_type=doc.source_mime_type,
+                    source_size_bytes=doc.source_size_bytes,
                 )
             )
             for doc in seen_documents.values()
@@ -1249,6 +1328,8 @@ def upsert_documents(
         "doc_metadata": insert_stmt.excluded.doc_metadata,
         "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
         "file_id": insert_stmt.excluded.file_id,
+        "source_mime_type": insert_stmt.excluded.source_mime_type,
+        "source_size_bytes": insert_stmt.excluded.source_size_bytes,
     }
     if includes_permissions:
         preserve_onedrive_permissions = exists(
