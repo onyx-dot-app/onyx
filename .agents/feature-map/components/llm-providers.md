@@ -212,7 +212,13 @@ build their own clients.
    because the non-admin listings are cached per tenant and group set. Writes
    outside this API call it too, such as the persona API (the listing includes
    each agent's default model) and the Community downgrade. Search for
-   `invalidate_provider_listing_cache` to find every caller.
+   `invalidate_provider_listing_cache` to find every caller. A stored key is
+   only reused against the `api_base` and `custom_config` it was saved with
+   (`_validate_llm_provider_change`, on every deployment), and every admin
+   path that takes an `api_base` runs it through `_validate_llm_api_base` at
+   the admin SSRF level before any request. Ollama and LM Studio are local
+   servers by design and may use loopback and private hosts, never cloud
+   metadata.
 9. `personal-default-string-format` **Deleting a provider clears personal
    defaults by string match.** `User.default_model` stores
    `<display name>__<provider type>__<model>`. `db/llm.py:remove_llm_provider`

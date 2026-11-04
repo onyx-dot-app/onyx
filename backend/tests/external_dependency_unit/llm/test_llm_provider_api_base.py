@@ -6,8 +6,8 @@ or custom_config of an LLM provider without changing the API key, allowing them 
 redirect API requests (containing the real API key in headers) to an attacker-controlled
 server.
 
-These are external dependency unit tests because they need a real database but
-also need to control the MULTI_TENANT setting via patching.
+These are external dependency unit tests because they need a real database. The
+guard holds on every deployment, so MULTI_TENANT is patched both ways.
 """
 
 from collections.abc import Generator
@@ -253,15 +253,14 @@ class TestLLMProviderChanges:
         finally:
             _cleanup_provider(db_session, provider_name)
 
-    def test_allows_api_base_change__single_tenant(
+    def test_blocks_api_base_change_without_key_change__single_tenant(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
         """
-        In single-tenant mode (MULTI_TENANT=False), changing api_base without
-        changing the API key IS allowed. This is by design since single-tenant
-        users have full control over their deployment.
+        Single-tenant deployments get the same guard: a stored key never
+        follows a repointed api_base.
         """
         try:
             provider = _create_test_provider(db_session, provider_name)
@@ -274,14 +273,15 @@ class TestLLMProviderChanges:
                     api_base="https://custom.example.com/v1",
                 )
 
-                result = put_llm_provider(
-                    llm_provider_upsert_request=update_request,
-                    is_creation=False,
-                    user=_create_mock_admin(),
-                    db_session=db_session,
-                )
+                with pytest.raises(OnyxError) as exc_info:
+                    put_llm_provider(
+                        llm_provider_upsert_request=update_request,
+                        is_creation=False,
+                        user=_create_mock_admin(),
+                        db_session=db_session,
+                    )
 
-                assert result.api_base == "https://custom.example.com/v1"
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
         finally:
             _cleanup_provider(db_session, provider_name)
 
@@ -466,14 +466,14 @@ class TestLLMProviderChanges:
         finally:
             _cleanup_provider(db_session, provider_name)
 
-    def test_allows_custom_config_change__single_tenant(
+    def test_blocks_custom_config_change_without_key_change__single_tenant(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
         """
-        In single-tenant mode, changing custom_config without changing
-        the API key IS allowed.
+        Single-tenant deployments get the same custom_config guard, since
+        custom_config can redirect where the stored key is sent.
         """
         new_config = {"AWS_REGION_NAME": "eu-west-1"}
 
@@ -493,14 +493,15 @@ class TestLLMProviderChanges:
                     custom_config_changed=True,
                 )
 
-                result = put_llm_provider(
-                    llm_provider_upsert_request=update_request,
-                    is_creation=False,
-                    user=_create_mock_admin(),
-                    db_session=db_session,
-                )
+                with pytest.raises(OnyxError) as exc_info:
+                    put_llm_provider(
+                        llm_provider_upsert_request=update_request,
+                        is_creation=False,
+                        user=_create_mock_admin(),
+                        db_session=db_session,
+                    )
 
-                assert result.custom_config == new_config
+                assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
         finally:
             _cleanup_provider(db_session, provider_name)
 
@@ -651,31 +652,32 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
             db_session=db_session,
         )
 
-        with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
-            put_llm_provider(
-                llm_provider_upsert_request=LLMProviderUpsertRequest(
-                    id=view.id,
-                    name=name,
-                    provider=provider,
-                    custom_config={
-                        "vertex_credentials": _mask_string(
-                            original_custom_config["vertex_credentials"]
-                        ),
-                        "vertex_location": "us-central1",
-                    },
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
-                    api_key_changed=False,
-                    custom_config_changed=True,
-                    is_auto_mode=False,
-                ),
-                is_creation=False,
-                user=_create_mock_admin(),
-                db_session=db_session,
-            )
+        # The UI resubmits the masked secret; only the masked value may be
+        # echoed back without re-entering the key.
+        put_llm_provider(
+            llm_provider_upsert_request=LLMProviderUpsertRequest(
+                id=view.id,
+                name=name,
+                provider=provider,
+                custom_config={
+                    "vertex_credentials": _mask_string(
+                        original_custom_config["vertex_credentials"]
+                    ),
+                    "vertex_location": "global",
+                },
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name=default_model_name, is_visible=True
+                    )
+                ],
+                api_key_changed=False,
+                custom_config_changed=True,
+                is_auto_mode=False,
+            ),
+            is_creation=False,
+            user=_create_mock_admin(),
+            db_session=db_session,
+        )
 
         updated_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
         assert updated_provider is not None
@@ -684,7 +686,7 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
             updated_provider.custom_config["vertex_credentials"]
             == original_custom_config["vertex_credentials"]
         )
-        assert updated_provider.custom_config["vertex_location"] == "us-central1"
+        assert updated_provider.custom_config["vertex_location"] == "global"
     finally:
         db_session.rollback()
         _cleanup_provider(db_session, name)

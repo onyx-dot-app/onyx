@@ -1025,7 +1025,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1046,7 +1046,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1093,7 +1093,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_http_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1116,7 +1116,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1158,7 +1158,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1191,7 +1191,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1229,7 +1229,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1264,7 +1264,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1284,7 +1284,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1305,7 +1305,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             with pytest.raises(OnyxError, match="No models found"):
@@ -1324,7 +1324,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             with pytest.raises(OnyxError):
@@ -1357,7 +1357,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             results = get_litellm_available_models(request, MagicMock(), mock_session)
@@ -1384,7 +1384,7 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             with pytest.raises(OnyxError, match="No compatible models"):
@@ -1415,14 +1415,14 @@ class TestGetLitellmAvailableModels:
             mock_get.return_value = mock_response
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000/",
+                api_base="http://litellm.example.com:4000/",
                 api_key="test-key",
             )
             get_litellm_available_models(request, MagicMock(), mock_session)
 
             # Should call /v1/model/info without double slashes
             call_args = mock_get.call_args
-            assert call_args[0][0] == "http://localhost:4000/v1/model/info"
+            assert call_args[0][0] == "http://litellm.example.com:4000/v1/model/info"
 
     def test_connection_failure_returns_400(self) -> None:
         """An unreachable proxy is a client misconfig → 400 VALIDATION_ERROR, not 502."""
@@ -1437,7 +1437,7 @@ class TestGetLitellmAvailableModels:
             )
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             with pytest.raises(OnyxError) as exc_info:
@@ -1460,7 +1460,7 @@ class TestGetLitellmAvailableModels:
             )
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="bad-key",
             )
             with pytest.raises(OnyxError, match="Authentication failed"):
@@ -1480,7 +1480,7 @@ class TestGetLitellmAvailableModels:
             )
 
             request = LitellmModelsRequest(
-                api_base="http://localhost:4000",
+                api_base="http://litellm.example.com:4000",
                 api_key="test-key",
             )
             with pytest.raises(OnyxError, match="endpoint not found"):

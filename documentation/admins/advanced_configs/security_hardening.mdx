@@ -198,6 +198,10 @@ to block server-side request forgery.
   hosts. Cloud metadata addresses stay blocked, and `open_url` still refuses loopback. Use only on a trusted network,
   for example to reach a local LLM backend.
 
+LLM provider **API Base URL** values are checked against this level when you save or test a provider and when Onyx lists
+its models. Ollama and LM Studio run on your own machine or network,
+so they may use `localhost` and private addresses at every level. Cloud metadata addresses are always refused.
+
 This one control replaces the older per-path environment variables.
 They now only seed the default level when nothing has been saved here:
 `OPEN_URL_VALIDATE_SSRF=false` or `MCP_SERVER_ALLOW_LOOPBACK=true` seeds **Disabled**,

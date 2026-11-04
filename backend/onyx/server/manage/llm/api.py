@@ -163,6 +163,8 @@ from onyx.server.manage.llm.utils import (
     lm_studio_capability_enabled,
     strip_openrouter_vendor_prefix,
 )
+from onyx.server.security.models import OutboundSSRFParams, outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.server.settings.models import Settings
 from onyx.server.settings.store import (
     load_settings,
@@ -178,6 +180,7 @@ from onyx.utils.audit import (
 )
 from onyx.utils.encryption import mask_string as mask_with_ellipsis
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -191,6 +194,48 @@ def _mask_string(value: str) -> str:
     if len(value) <= 8:
         return "****"
     return value[:4] + "****" + value[-4:]
+
+
+# Providers whose api_base is a server on the admin's own machine or network.
+_LOCAL_SERVER_PROVIDERS = frozenset(
+    {
+        LlmProviderNames.OLLAMA,
+        LlmProviderNames.OLLAMA_CHAT,
+        LlmProviderNames.LM_STUDIO,
+    }
+)
+
+
+def _validate_llm_api_base(
+    api_base: str | None, *, resolve_dns: bool, allow_local_server: bool = False
+) -> None:
+    """SSRF guard for an admin-supplied api_base, enforced at every level of the
+    admin SSRF setting. Local model servers (Ollama, LM Studio) run on the
+    admin's own machine or network by design, so they keep loopback and private
+    ranges but never the cloud-metadata range."""
+    if not api_base or not api_base.strip():
+        return
+    if allow_local_server:
+        params = OutboundSSRFParams(
+            allow_private_network=True,
+            block_loopback_and_link_local=False,
+            block_link_local_only=True,
+        )
+    else:
+        params = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
+    try:
+        validate_outbound_http_url(
+            api_base,
+            allow_private_network=params.allow_private_network,
+            block_loopback_and_link_local=params.block_loopback_and_link_local,
+            block_link_local_only=params.block_link_local_only,
+            resolve_dns=resolve_dns,
+            allow_localhost_name=allow_local_server,
+        )
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, f"Invalid API base URL: {e}"
+        ) from e
 
 
 def _resolve_api_key(
@@ -350,17 +395,13 @@ def _validate_llm_provider_change(
     new_custom_config: dict[str, str] | None,
     api_key_changed: bool,
 ) -> None:
-    """Validate that api_base and custom_config changes are safe.
-
-    When using a stored API key (api_key_changed=False), we must ensure api_base and
-    custom_config match the stored values.
-
-    Only enforced in MULTI_TENANT mode.
+    """A stored API key may only be reused against the api_base and custom_config
+    it was saved with, so a repointed endpoint never receives it.
 
     Raises:
         OnyxError: If api_base or custom_config changed without changing API key
     """
-    if not MULTI_TENANT or api_key_changed:
+    if api_key_changed:
         return
 
     normalized_existing_api_base = existing_api_base or None
@@ -605,6 +646,11 @@ def test_llm_configuration(
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test LLM configuration settings"""
+    _validate_llm_api_base(
+        test_llm_request.api_base,
+        resolve_dns=True,
+        allow_local_server=test_llm_request.provider in _LOCAL_SERVER_PROVIDERS,
+    )
 
     # the api key is sanitized if we are testing a provider already in the system
 
@@ -907,6 +953,8 @@ def _resolve_decision_connection(
                 if existing.api_key
                 else None
             )
+    # Both callers fetch the catalog right after, so resolve DNS here.
+    _validate_llm_api_base(request.api_base, resolve_dns=True)
     if request.provider == LlmProviderNames.TYPESAFE and (
         request.api_base or request.custom_config
     ):
@@ -1077,6 +1125,12 @@ def put_llm_provider(
     user: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
+    _validate_llm_api_base(
+        llm_provider_upsert_request.api_base,
+        resolve_dns=False,
+        allow_local_server=llm_provider_upsert_request.provider
+        in _LOCAL_SERVER_PROVIDERS,
+    )
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
     # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
     # the result
@@ -2191,10 +2245,7 @@ def get_ollama_available_models(
             "API base URL is required to fetch Ollama models.",
         )
 
-    # NOTE: most people run Ollama locally, so we don't disallow internal URLs
-    # the only way this could be used for SSRF is if there's another endpoint that
-    # is not protected + exposes sensitive information on the `/api/tags` endpoint
-    # with the same response format
+    _validate_llm_api_base(cleaned_api_base, resolve_dns=True, allow_local_server=True)
     model_names = _get_ollama_available_model_names(cleaned_api_base)
     if not model_names:
         raise OnyxError(
@@ -2376,6 +2427,7 @@ def get_openrouter_available_models(
                 "Model discovery requires an OpenRouter provider",
             )
 
+    _validate_llm_api_base(request.api_base, resolve_dns=True)
     api_key = _resolve_api_key(
         request.api_key, request.provider_id, request.api_base, db_session
     )
@@ -2496,6 +2548,8 @@ def get_lm_studio_available_models(
             "API base URL is required to fetch LM Studio models.",
         )
 
+    _validate_llm_api_base(cleaned_api_base, resolve_dns=True, allow_local_server=True)
+
     # If provider_id is given and the api_key hasn't been changed by the user,
     # fall back to the stored API key from the database (the form value is masked).
     # Only do so when the api_base matches what is stored.
@@ -2604,6 +2658,7 @@ def get_litellm_available_models(
     db_session: Session = Depends(get_session),
 ) -> list[LitellmFinalModelResponse]:
     """Fetch available models from LiteLLM proxy /v1/model/info endpoint."""
+    _validate_llm_api_base(request.api_base, resolve_dns=True)
     api_key = _resolve_api_key(
         request.api_key, request.provider_id, request.api_base, db_session
     )
@@ -2753,6 +2808,7 @@ def get_bifrost_available_models(
     db_session: Session = Depends(get_session),
 ) -> list[BifrostFinalModelResponse]:
     """Fetch available models from Bifrost gateway /v1/models endpoint."""
+    _validate_llm_api_base(request.api_base, resolve_dns=True)
     api_key = _resolve_api_key(
         request.api_key, request.provider_id, request.api_base, db_session
     )
@@ -2893,6 +2949,7 @@ def get_nebius_tokenfactory_available_models(
 ) -> list[NebiusTokenfactoryFinalModelResponse]:
     """Fetch chat models from Nebius TokenFactory, with per-model context
     length and tool/vision capabilities read straight from the source API."""
+    _validate_llm_api_base(request.api_base, resolve_dns=True)
     api_key = _resolve_api_key(
         request.api_key, request.provider_id, request.api_base, db_session
     )
@@ -3006,6 +3063,7 @@ def get_openai_compatible_server_available_models(
     db_session: Session = Depends(get_session),
 ) -> list[OpenAICompatibleFinalModelResponse]:
     """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""
+    _validate_llm_api_base(request.api_base, resolve_dns=True)
     api_key = _resolve_api_key(
         request.api_key, request.provider_id, request.api_base, db_session
     )
@@ -3131,6 +3189,7 @@ def get_vercel_ai_gateway_available_models(
     api_base = (
         (request.api_base or VERCEL_AI_GATEWAY_DEFAULT_API_BASE).strip().rstrip("/")
     )
+    _validate_llm_api_base(api_base, resolve_dns=True)
     url = f"{api_base}/models" if api_base.endswith("/v1") else f"{api_base}/v1/models"
 
     # On edit the form sends a masked key, so resolve the stored one.
@@ -3237,6 +3296,7 @@ def get_portkey_available_models(
     db_session: Session = Depends(get_session),
 ) -> list[PortkeyFinalModelResponse]:
     """Fetch available models from a Portkey gateway's /v1/models endpoint."""
+    _validate_llm_api_base(request.api_base, resolve_dns=True)
     api_key = _resolve_api_key(
         request.api_key, request.provider_id, request.api_base, db_session
     )

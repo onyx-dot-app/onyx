@@ -12,10 +12,12 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+LOCALHOST_HOSTNAME = "localhost"
+
 # Hostnames that should always be blocked
 BLOCKED_HOSTNAMES = {
     # Localhost variations
-    "localhost",
+    LOCALHOST_HOSTNAME,
     # Cloud metadata endpoints (defense-in-depth, IPs also blocked via _is_ip_private_or_reserved)
     "169.254.169.254",  # AWS/Azure/GCP metadata IP
     "fd00:ec2::254",  # AWS IPv6 metadata
@@ -246,9 +248,14 @@ def validate_outbound_http_url(
     block_loopback_and_link_local: bool = False,
     block_link_local_only: bool = False,
     resolve_dns: bool = True,
+    allow_localhost_name: bool = False,
 ) -> str:
     """Validate a URL for backend outbound HTTP calls; returns the whitespace-
     stripped URL or raises ``SSRFException``/``ValueError``.
+
+    ``allow_localhost_name`` lets the literal ``localhost`` name through, for
+    endpoints that are local servers by design (Ollama, LM Studio); it still
+    needs ``allow_private_network`` without the loopback block to pass.
 
     ``allow_private_network`` skips the private/reserved-IP guard for trusted
     networks. When it's on, ``block_loopback_and_link_local`` keeps the strict
@@ -282,7 +289,9 @@ def validate_outbound_http_url(
         raise SSRFException("URLs with embedded credentials are not allowed.")
 
     hostname = parsed.hostname.lower()
-    if hostname in BLOCKED_HOSTNAMES:
+    if hostname in BLOCKED_HOSTNAMES and not (
+        allow_localhost_name and hostname == LOCALHOST_HOSTNAME
+    ):
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
     block_loopback = block_loopback_and_link_local

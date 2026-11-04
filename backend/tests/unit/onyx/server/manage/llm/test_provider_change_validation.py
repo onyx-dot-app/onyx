@@ -1,4 +1,5 @@
-"""Tests for _validate_llm_provider_change's custom_config comparison.
+"""Tests for _validate_llm_provider_change's api_base and custom_config
+comparison, which must hold on every deployment, not only multi-tenant.
 
 Surface-mode keys pick a path on the same api_base, so changing them alone
 must not force key re-entry; everything else still must.
@@ -32,7 +33,6 @@ def _validate(
     )
 
 
-@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_surface_mode_only_change_is_allowed() -> None:
     _validate(None, {BIFROST_API_MODE_CONFIG_KEY: "responses"})
     _validate(
@@ -41,7 +41,6 @@ def test_surface_mode_only_change_is_allowed() -> None:
     )
 
 
-@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_mode_change_alongside_unchanged_entries_is_allowed() -> None:
     _validate(
         {BIFROST_API_MODE_CONFIG_KEY: "chat_completions", "extra": "kept"},
@@ -49,7 +48,6 @@ def test_mode_change_alongside_unchanged_entries_is_allowed() -> None:
     )
 
 
-@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_other_custom_config_change_still_rejected() -> None:
     with pytest.raises(OnyxError):
         _validate(
@@ -58,7 +56,6 @@ def test_other_custom_config_change_still_rejected() -> None:
         )
 
 
-@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_mode_only_submission_dropping_stored_entries_is_rejected() -> None:
     # The submitted dict is persisted wholesale; dropped entries must reject.
     with pytest.raises(OnyxError):
@@ -68,7 +65,6 @@ def test_mode_only_submission_dropping_stored_entries_is_rejected() -> None:
         )
 
 
-@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
 def test_api_base_change_still_rejected() -> None:
     with pytest.raises(OnyxError):
         _validate(
@@ -78,9 +74,22 @@ def test_api_base_change_still_rejected() -> None:
         )
 
 
-def test_single_tenant_skips_validation() -> None:
-    # MULTI_TENANT is False in unit tests: everything passes.
-    _validate(None, {"anything": "goes"})
+@patch("onyx.server.manage.llm.api.MULTI_TENANT", False)
+def test_single_tenant_still_rejects_repointed_stored_key() -> None:
+    with pytest.raises(OnyxError):
+        _validate(None, None, new_api_base="https://attacker.example.com/v1")
+    with pytest.raises(OnyxError):
+        _validate(None, {"anything": "goes"})
+
+
+def test_key_change_skips_validation() -> None:
+    _validate_llm_provider_change(
+        existing_api_base=_BASE,
+        existing_custom_config=None,
+        new_api_base="https://other.example.com/v1",
+        new_custom_config={"anything": "goes"},
+        api_key_changed=True,
+    )
 
 
 @patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
