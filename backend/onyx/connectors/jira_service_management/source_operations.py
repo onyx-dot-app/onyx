@@ -1,13 +1,22 @@
 """The JSM source-operations gateway.
 
-A service desk is a Jira project, so credential handling, paging and error
-translation match the Jira gateway's. This gateway adds the
-``rest/servicedeskapi`` calls that describe a service desk and a request type.
+A service desk is a Jira project, so credential handling and error translation
+match the Jira gateway's. This gateway adds the ``rest/servicedeskapi`` calls
+that describe a service desk and a request type.
 
-Those calls need a Service Desk *agent* licence. A user with only portal access
-gets an error response, so an indexing run must not fail on them: the connector
-treats an error from a servicedeskapi operation as "metadata absent" and still
-indexes the request through the Jira API.
+**URL construction.** ``servicedeskapi`` is *unversioned*: it lives at
+``{server}/rest/servicedeskapi/...``, not under ``/rest/api/3/``. The SDK's
+``JIRA._get_url`` / ``_get_json`` default to ``JIRA_BASE_URL``, which is
+``{server}/rest/{rest_path}/{rest_api_version}/{path}``, so a relative
+``servicedeskapi`` path would resolve to
+``/rest/rest/api/3/rest/servicedeskapi/...``. Every call here therefore builds
+an absolute URL from the client's server, and passes it to
+``client._session`` directly.
+
+**Licence.** The servicedeskapi needs a Service Desk *agent* licence. A user
+with only portal access gets an error response, so an indexing run must not
+fail on it: the connector treats an error from a servicedeskapi operation as
+"metadata absent" and still indexes the request through the Jira API.
 
 The gateway subclasses ``SourceOperations`` directly, as every gateway must.
 Shared logic lives in the module-level helpers below.
@@ -26,12 +35,13 @@ from more_itertools import chunked
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
-from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.jira.config import JiraCredentialBinding
-from onyx.connectors.jira.models import JiraIssueIdPage
+from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JIRA_API_TOKEN_KEY,
     JIRA_USER_EMAIL_KEY,
+    JiraApiError,
+    JiraTimeoutError,
 )
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION, JIRA_SERVER_API_VERSION
 from onyx.connectors.source_operations import (
@@ -43,19 +53,95 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_SERVICEDESK_API_PREFIX = "rest/servicedeskapi"
-# https://developer.atlassian.com/cloud/jira/service-desk/rest/api-group-service-desk/
+# Unversioned on purpose: see the module docstring.
+_SERVICEDESK_API = "rest/servicedeskapi"
 _MAX_RESULTS = 100
-# https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
 _BULK_FETCH_LIMIT = 100
-# The ``fast=True`` client gives a check a request timeout and no retries, so a
-# slow site cannot hold it.
+_GROUP_PICKER_MAX_RESULTS = 9999
 _FAST_TIMEOUT_SECONDS = 10
 _INDEXING_TIMEOUT_SECONDS: int | None = None
 _INDEXING_MAX_RETRIES = 3
 
 
-def _bulk_fetch(
+class JsmApiError(JiraApiError):
+    """A JSM API call returned an error response, or no answer in time.
+
+    Subclasses ``JiraApiError`` so the inherited Jira validation and error
+    handling classify a JSM failure exactly as it classifies a Jira one
+    (401 credential expired, 403 insufficient permissions, 429 rate limited).
+    """
+
+
+class JsmTimeoutError(JsmApiError, JiraTimeoutError):
+    """A ``fast=True`` call got no answer within its request timeout."""
+
+
+def _error_text(error: Exception) -> str | None:
+    if isinstance(error, requests.HTTPError) and error.response is not None:
+        try:
+            return error.response.text
+        except Exception:
+            return None
+    return None
+
+
+@contextlib.contextmanager
+def _translate_errors(*, fast: bool = False) -> Iterator[None]:
+    """Turn every client exception into a ``JsmApiError``, so callers never
+    handle ``jira`` or ``requests`` exceptions.
+
+    ``str(JIRAError)`` prints the request and the response headers, which carry
+    the Basic credential and the session cookie. The message here is built from
+    the status and the URL only; the response body (which holds Jira's own
+    error text and never the credential) is the ``body``.
+    """
+    try:
+        yield
+    except JIRAError as e:
+        status: int | None = getattr(e, "status_code", None)
+        url: str | None = getattr(e, "url", None)
+        method: str | None = getattr(e, "request_method", None)
+        # ``e.text`` is the response body; never fall back to ``str(e)``.
+        body: str | None = getattr(e, "text", None)
+        raise JsmApiError(
+            f"Jira answered {method or 'the request'} {url or ''} with HTTP "
+            f"{status if status is not None else 'no status'}.".strip(),
+            status_code=status,
+            method=method,
+            url=url,
+            body=body,
+        ) from e
+    except requests.HTTPError as e:
+        response: requests.Response | None = e.response
+        raise JsmApiError(
+            str(e),
+            status_code=response.status_code if response is not None else None,
+            method=response.request.method if response is not None else None,
+            url=response.url if response is not None else None,
+            body=_error_text(e),
+        ) from e
+    except requests.Timeout as e:
+        raise JsmTimeoutError(
+            (
+                f"No answer within {_FAST_TIMEOUT_SECONDS}s."
+                if fast
+                else "The request timed out."
+            ),
+            status_code=None,
+        ) from e
+
+
+def _servicedesk_url(client: JIRA, path: str) -> str:
+    """The absolute servicedeskapi URL for ``path``, on the client's server.
+
+    ``JIRA._get_url`` would add ``/rest/api/<version>/``, which this API does
+    not use.
+    """
+    server: Any = client._options["server"]
+    return f"{str(server).rstrip('/')}/{_SERVICEDESK_API}/{path.lstrip('/')}"
+
+
+def _fetch_bulk(
     client: JIRA, issue_ids: list[str], fields: str | None
 ) -> list[dict[str, Any]]:
     """Raw POST to the bulkfetch endpoint. Returns the raw issue dicts."""
@@ -72,51 +158,26 @@ def _bulk_fetch(
     return issues if isinstance(issues, list) else []
 
 
-class JsmApiError(SourceApiError):
-    """A JSM API call returned an error response, or no answer in time."""
-
-
-def _error_text(error: Exception) -> str | None:
-    if isinstance(error, requests.HTTPError) and error.response is not None:
-        try:
-            return error.response.text
-        except Exception:
-            return None
-    return None
-
-
-@contextlib.contextmanager
-def _translate_errors(*, fast: bool = False) -> Iterator[None]:
-    """Turn every client exception into a ``JsmApiError``, so callers never
-    handle ``jira`` or ``requests`` exceptions."""
+def _fetch_bulk_batched(
+    client: JIRA, issue_ids: list[str], fields: str | None
+) -> list[dict[str, Any]]:
+    """One batch. A JSON decode failure (a truncated all-fields response) is
+    bisected until it succeeds or reaches a single issue, as the Jira
+    gateway does."""
     try:
-        yield
-    except JIRAError as e:
-        raise JsmApiError(
-            str(e),
-            status_code=getattr(e, "status_code", None),
-            method=getattr(e, "request_method", None),
-            url=getattr(e, "url", None),
-            body=_error_text(e),
-        ) from e
-    except requests.HTTPError as e:
-        response: requests.Response | None = e.response
-        raise JsmApiError(
-            str(e),
-            status_code=response.status_code if response is not None else None,
-            method=response.request.method if response is not None else None,
-            url=response.url if response is not None else None,
-            body=response.text if response is not None else None,
-        ) from e
-    except requests.Timeout as e:
-        raise JsmApiError(
-            (
-                f"No answer within {_FAST_TIMEOUT_SECONDS}s"
-                if fast
-                else "The request timed out."
-            ),
-            status_code=None,
-        ) from e
+        return _fetch_bulk(client, issue_ids, fields)
+    except requests.exceptions.JSONDecodeError:
+        if len(issue_ids) <= 1:
+            logger.exception(
+                "Jira bulk-fetch response for issue(s) %s could not be decoded "
+                "as JSON (response too large or truncated).",
+                issue_ids,
+            )
+            raise
+        mid: int = len(issue_ids) // 2
+        left = _fetch_bulk_batched(client, issue_ids[:mid], fields)
+        right = _fetch_bulk_batched(client, issue_ids[mid:], fields)
+        return left + right
 
 
 class JiraServiceManagementSourceOperations(SourceOperations):
@@ -142,6 +203,10 @@ class JiraServiceManagementSourceOperations(SourceOperations):
     def _credentials(self) -> dict[str, Any]:
         return self.credentials_provider.get_credentials()
 
+    def _is_cloud(self) -> bool:
+        """True when the credential uses the Cloud APIs."""
+        return JIRA_USER_EMAIL_KEY in self._credentials()
+
     def _api_url(self) -> str:
         """The URL the client calls. Scoped tokens go through
         ``api.atlassian.com``."""
@@ -160,8 +225,6 @@ class JiraServiceManagementSourceOperations(SourceOperations):
     def _build_client(self, api_url: str, *, fast: bool) -> JIRA:
         credentials: dict[str, Any] = self._credentials()
         api_token: str = credentials[JIRA_API_TOKEN_KEY]
-        # Version 3 on Cloud, 2 on Server / Data Center. The servicedeskapi
-        # endpoints are unversioned, so this only steers the Jira calls.
         options: dict[str, str | bool | Any] = {
             "rest_api_version": (
                 JIRA_CLOUD_API_VERSION
@@ -210,11 +273,15 @@ class JiraServiceManagementSourceOperations(SourceOperations):
         client: JIRA = self._client(fast=fast)
         with _translate_errors(fast=fast):
             response: requests.Response = client._session.get(  # ty: ignore[unresolved-attribute]
-                client._get_url(f"{_SERVICEDESK_API_PREFIX}/{path}"),
+                _servicedesk_url(client, path),
                 params=dict(params),
             )
             response.raise_for_status()
             return response.json()
+
+    # ------------------------------------------------------------------
+    # Service desk operations.
+    # ------------------------------------------------------------------
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -235,8 +302,7 @@ class JiraServiceManagementSourceOperations(SourceOperations):
         ),
     )
     def get_project(self, *, project_key: str, fast: bool = False) -> dict[str, Any]:
-        """Returns one project. Raises ``JsmApiError`` (404) when it does not
-        exist or the credential cannot browse it."""
+        """Returns one Jira project."""
         with _translate_errors(fast=fast):
             return self._client(fast=fast).project(project_key).raw
 
@@ -248,8 +314,8 @@ class JiraServiceManagementSourceOperations(SourceOperations):
         self, *, project_key: str, fast: bool = False
     ) -> dict[str, Any]:
         """Returns the service desk of this project: its id, name and portal
-        URL. Raises ``JsmApiError`` when the project is not a service desk, or
-        the credential is not a Service Desk agent."""
+        URL. Raises ``JsmApiError`` (404) when the project is not a service
+        desk, or when the credential is not a Service Desk agent."""
         body: Any = self._get(
             "servicedesk", {"projectKey": project_key, "limit": 1}, fast=fast
         )
@@ -283,10 +349,10 @@ class JiraServiceManagementSourceOperations(SourceOperations):
         return body if isinstance(body, dict) else {}
 
     # ------------------------------------------------------------------
-    # Jira operations the inherited indexing path calls. A service desk is a
-    # Jira project and a request is a Jira issue, so these are the Jira
-    # gateway's operations with the same names and shapes. They live here
-    # because a gateway may not inherit another gateway.
+    # Jira operations the inherited indexing and permission-sync paths call.
+    # A service desk is a Jira project and a request is a Jira issue, so these
+    # are the Jira gateway's operations with the same names and shapes. They
+    # live here because a gateway may not inherit another gateway.
     # ------------------------------------------------------------------
 
     @source_operation(
@@ -339,8 +405,7 @@ class JiraServiceManagementSourceOperations(SourceOperations):
         raw_issues: list[dict[str, Any]] = []
         for batch in chunked(issue_ids, _BULK_FETCH_LIMIT):
             with _translate_errors(fast=fast):
-                raw: Any = _bulk_fetch(client, list(batch), fields)
-            raw_issues.extend(raw)
+                raw_issues.extend(_fetch_bulk_batched(client, list(batch), fields))
         return raw_issues
 
     @source_operation(
@@ -374,3 +439,120 @@ class JiraServiceManagementSourceOperations(SourceOperations):
                     jql, startAt=start_at, maxResults=max_results, fields=fields
                 )
         return [issue.raw for issue in found]
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "JSM has no separate perm-sync check registration; it inherits the "
+            "Jira permission model. These operations run during a perm-synced "
+            "indexing run of this connector, and "
+            "test_jsm_gateway_serves_the_inherited_permission_path asserts the "
+            "inherited permission read reaches them."
+        ),
+    )
+    def get_project_permission_scheme(
+        self, *, project_key: str, fast: bool = False
+    ) -> dict[str, Any]:
+        """Returns the permission scheme of a project with its grants and
+        expanded users."""
+        with _translate_errors(fast=fast):
+            # The SDK resource requests ``expand=user``.
+            return (
+                self._client(fast=fast)
+                .project_permissionscheme(project=project_key)
+                .raw
+            )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "JSM has no separate perm-sync check registration; it inherits the "
+            "Jira permission model. These operations run during a perm-synced "
+            "indexing run of this connector, and "
+            "test_jsm_gateway_serves_the_inherited_permission_path asserts the "
+            "inherited permission read reaches them."
+        ),
+    )
+    def get_project_role(
+        self, *, project_key: str, role_id: str, fast: bool = False
+    ) -> dict[str, Any]:
+        """Returns a project role with its actors (users and groups)."""
+        with _translate_errors(fast=fast):
+            return (
+                self._client(fast=fast)
+                .project_role(project=project_key, id=role_id)
+                .raw
+            )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "JSM has no separate perm-sync check registration; it inherits the "
+            "Jira permission model. These operations run during a perm-synced "
+            "indexing run of this connector, and "
+            "test_jsm_gateway_serves_the_inherited_permission_path asserts the "
+            "inherited permission read reaches them."
+        ),
+    )
+    def get_user(self, *, user_id: str, fast: bool = False) -> dict[str, Any]:
+        """Returns a user: ``user_id`` is the accountId on Cloud and the
+        username on Server / Data Center."""
+        with _translate_errors(fast=fast):
+            return self._client(fast=fast).user(id=user_id).raw
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "JSM has no separate perm-sync check registration; it inherits the "
+            "Jira permission model. These operations run during a perm-synced "
+            "indexing run of this connector, and "
+            "test_jsm_gateway_serves_the_inherited_permission_path asserts the "
+            "inherited permission read reaches them."
+        ),
+    )
+    def list_groups(self, *, fast: bool = False) -> JiraGroupPage:
+        """Returns the group names from ``groups/picker``, sorted."""
+        with _translate_errors(fast=fast):
+            response: dict[str, Any] = self._client(fast=fast)._get_json(
+                "groups/picker", params={"maxResults": _GROUP_PICKER_MAX_RESULTS}
+            )
+        return JiraGroupPage(
+            group_names=sorted(group["name"] for group in response["groups"]),
+            total=response.get("total"),
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "JSM has no separate perm-sync check registration; it inherits the "
+            "Jira permission model. These operations run during a perm-synced "
+            "indexing run of this connector, and "
+            "test_jsm_gateway_serves_the_inherited_permission_path asserts the "
+            "inherited permission read reaches them."
+        ),
+    )
+    def get_group_members_page(
+        self,
+        *,
+        group_name: str,
+        start_at: int,
+        max_results: int,
+        fast: bool = False,
+    ) -> dict[str, Any]:
+        """Returns one page of the active members of a group
+        (``group/member``)."""
+        with _translate_errors(fast=fast):
+            return self._client(fast=fast)._get_json(
+                "group/member",
+                params={
+                    "groupname": group_name,
+                    "includeInactiveUsers": "false",
+                    "startAt": start_at,
+                    "maxResults": max_results,
+                },
+            )

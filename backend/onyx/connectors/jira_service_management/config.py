@@ -13,6 +13,7 @@ from onyx.connectors.connector_config import (
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
+    ScopeDirection,
     ScopeExclude,
     ScopeInclude,
     ScopeOpaque,
@@ -20,6 +21,7 @@ from onyx.connectors.field_policy import (
 from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 _JQL_QUERY = "jql_query"
+_PROJECT_KEY = "project_key"
 
 JQL_ORDER_BY_ERROR = (
     "Unsupported clause: ORDER BY. Jira does not allow it inside the sync filter."
@@ -77,7 +79,7 @@ class JiraServiceManagementConnectorConfig(
         str | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
     ] = None
 
-    @field_validator("project_key")
+    @field_validator(_PROJECT_KEY)
     @classmethod
     def _project_key_is_a_key(cls, value: str) -> str:
         if not re.fullmatch(_PROJECT_KEY_PATTERN, value):
@@ -97,7 +99,15 @@ def jsm_planning_rule(
     old: JiraServiceManagementConnectorConfig,
     new: JiraServiceManagementConnectorConfig,
 ) -> ConnectorChangeOverride | None:
-    """A changed service desk project selects different requests."""
-    if old.project_key != new.project_key or bool(old.jql_query) != bool(new.jql_query):
-        return ConnectorChangeOverride()
-    return None
+    """A changed project key or JQL selects different requests.
+
+    A different project key, or adding/removing a JQL filter, both drops the
+    old requests and adds new ones, so the direction is BOTH. Saying that here
+    keeps the plan explicit for the one connector that is always single-project.
+    """
+    directions: dict[str, ScopeDirection] = {}
+    if old.project_key != new.project_key:
+        directions[_PROJECT_KEY] = ScopeDirection.BOTH
+    if old.jql_query != new.jql_query:
+        directions[_JQL_QUERY] = ScopeDirection.BOTH
+    return ConnectorChangeOverride(scope_directions=directions) if directions else None
