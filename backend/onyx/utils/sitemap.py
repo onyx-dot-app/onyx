@@ -86,7 +86,7 @@ def _extract_urls_from_sitemap(
             for sitemap in root.findall(f".//{ns}loc"):
                 if sitemap.text:
                     sub_urls = _extract_urls_from_sitemap(
-                        sitemap.text,
+                        urljoin(sitemap_url, sitemap.text.strip()),
                         crawl,
                         allow_private_network,
                         depth + 1,
@@ -97,7 +97,7 @@ def _extract_urls_from_sitemap(
             # This is a regular sitemap
             for url in root.findall(f".//{ns}loc"):
                 if url.text:
-                    urls.add(url.text)
+                    urls.add(urljoin(sitemap_url, url.text.strip()))
 
     except Exception as e:
         logger.warning("Error processing sitemap %s: %s", sitemap_url, e)

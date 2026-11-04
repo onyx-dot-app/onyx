@@ -50,7 +50,13 @@ from onyx.utils.playwright_fetch import (
     read_bounded_page_html,
     start_playwright,
 )
-from onyx.utils.sitemap import list_pages_for_site
+from onyx.utils.sitemap import (
+    MAX_SITEMAP_INDEX_DEPTH,
+    MAX_SITEMAPS_FETCHED,
+    _extract_urls_from_sitemap,
+    _SitemapCrawl,
+    list_pages_for_site,
+)
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
 
@@ -319,11 +325,39 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
         urls = [
-            _ensure_absolute_url(sitemap_url, loc_tag.text)
+            _ensure_absolute_url(sitemap_url, loc_tag.text.strip())
             for loc_tag in soup.find_all("loc")
+            if loc_tag.text
         ]
 
-        if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
+        if soup.find_all("sitemapindex") or (
+            len(soup.find_all("sitemap")) > 0 and len(soup.find_all("urlset")) == 0
+        ):
+            crawl = _SitemapCrawl()
+            crawl.visited.add(sitemap_url)
+            page_urls: set[str] = set()
+            for child_sitemap in urls:
+                page_urls.update(
+                    _extract_urls_from_sitemap(
+                        child_sitemap,
+                        crawl,
+                        allow_private_network=allow_private_network,
+                        depth=1,
+                        allow_loopback=allow_loopback,
+                    )
+                )
+            if crawl.skipped:
+                logger.warning(
+                    "Sitemap index %s skipped %d child sitemap(s) after reaching limits "
+                    "(depth %d, %d fetched); some pages may not be indexed",
+                    sitemap_url,
+                    crawl.skipped,
+                    MAX_SITEMAP_INDEX_DEPTH,
+                    MAX_SITEMAPS_FETCHED,
+                )
+            urls = list(page_urls)
+
+        elif len(urls) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
             urls = list_pages_for_site(
                 sitemap_url, allow_private_network, allow_loopback
