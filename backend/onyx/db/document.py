@@ -1532,15 +1532,6 @@ def update_docs_content_hash__no_commit(
         doc.content_hash = ids_to_new_hash[doc.id]
 
 
-def _cc_pair_document_ids(connector_id: int, credential_id: int) -> Select:
-    # No DISTINCT (unlike construct_document_id_select_for_connector_credential_pair),
-    # so a select built on it can carry FOR UPDATE SKIP LOCKED.
-    return select(DocumentByConnectorCredentialPair.id).where(
-        DocumentByConnectorCredentialPair.connector_id == connector_id,
-        DocumentByConnectorCredentialPair.credential_id == credential_id,
-    )
-
-
 def _update_documents__no_commit(
     db_session: Session,
     targets: Select,
@@ -1549,7 +1540,9 @@ def _update_documents__no_commit(
 ) -> int:
     """Updates the documents `targets` selects (a plain id select, no DISTINCT).
     With `skip_locked`, rows another transaction holds are left out, not waited
-    for. Returns the row count."""
+    for: the swap's second pass runs after the status flip, so a row a batch
+    still holds gets no new stamp from that batch (it reads PAST), and its old
+    stamp was already handled by the first pass. Returns the row count."""
     if skip_locked:
         targets = targets.with_for_update(skip_locked=True)
     result = db_session.execute(
@@ -1573,7 +1566,11 @@ def clear_content_hash_for_cc_pair_since__no_commit(
     after `since`: a NULL hash never matches, so the next poll re-indexes them.
     Used at a reindex swap. Caller commits. Returns the rows cleared."""
     targets = select(DbDocument.id).where(
-        DbDocument.id.in_(_cc_pair_document_ids(connector_id, credential_id)),
+        DbDocument.id.in_(
+            construct_document_id_select_for_connector_credential_pair(
+                connector_id, credential_id
+            )
+        ),
         DbDocument.last_modified >= since,
         DbDocument.content_hash.isnot(None),
     )
@@ -1617,7 +1614,11 @@ def mark_secondary_pending_documents_needs_sync__no_commit(
     so the next metadata sync re-applies permissions and document sets on the
     current index. Used at a reindex swap. Caller commits."""
     targets = select(DbDocument.id).where(
-        DbDocument.id.in_(_cc_pair_document_ids(connector_id, credential_id)),
+        DbDocument.id.in_(
+            construct_document_id_select_for_connector_credential_pair(
+                connector_id, credential_id
+            )
+        ),
         DbDocument.secondary_only_sync_pending.is_(True),
     )
     return _update_documents__no_commit(

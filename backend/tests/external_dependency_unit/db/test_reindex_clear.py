@@ -15,21 +15,16 @@ from onyx.db.document import (
     mark_secondary_pending_documents_needs_sync__no_commit,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IndexingStatus, PortAttemptStatus
+from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import create_synthetic_seed_attempt
 from onyx.db.models import (
     ConnectorCredentialPair,
     Document,
     IndexAttempt,
     IndexAttemptError,
-    PortAttempt,
     SearchSettings,
 )
-from onyx.db.port_attempt import (
-    create_port_attempt,
-    mark_port_in_progress,
-    mark_port_terminal,
-)
+from onyx.db.port_attempt import create_port_attempt
 from onyx.db.reindex_clear import (
     _CLEAR_MARGIN,
     PairClearBounds,
@@ -72,25 +67,13 @@ def _seed(
     return seed.time_created
 
 
-def _success_port(
-    db_session: Session, pair: ConnectorCredentialPair, future_id: int
-) -> PortAttempt:
-    attempt = create_port_attempt(db_session, pair.id, future_id)
-    mark_port_in_progress(db_session, attempt.id)
-    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
-    db_session.expire_all()
-    row = db_session.get(PortAttempt, attempt.id)
-    assert row is not None
-    return row
-
-
 def _attempt(
     db_session: Session,
     pair: ConnectorCredentialPair,
     search_settings_id: int,
-    *,
     status: IndexingStatus,
     poll_range_end: datetime | None = None,
+    *,
     is_backfill: bool = False,
 ) -> IndexAttempt:
     now = datetime.now(tz=timezone.utc)
@@ -135,9 +118,7 @@ def _bounds(
     db_session: Session, pair: ConnectorCredentialPair, future: SearchSettings
 ) -> dict[int, PairClearBounds]:
     db_session.expire_all()
-    future_row = db_session.get(SearchSettings, future.id)
-    assert future_row is not None
-    return get_pair_clear_bounds(db_session, future_row, [pair.id])
+    return get_pair_clear_bounds(db_session, future, [pair.id])
 
 
 def test_clear_from_follows_futures_last_successful_poll(
@@ -145,15 +126,10 @@ def test_clear_from_follows_futures_last_successful_poll(
 ) -> None:
     pair, future = pair_and_future
     since = _seed(db_session, pair, future.id)
+    success, errors = IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS
 
     # A window end within the margin of the reindex start clears from the start.
-    _attempt(
-        db_session,
-        pair,
-        future.id,
-        status=IndexingStatus.SUCCESS,
-        poll_range_end=since + timedelta(minutes=10),
-    )
+    _attempt(db_session, pair, future.id, success, since + timedelta(minutes=10))
     bounds = _bounds(db_session, pair, future)[pair.id]
     assert bounds.future_covered_through == since + timedelta(minutes=10)
     assert bounds.clear_from == since
@@ -161,31 +137,39 @@ def test_clear_from_follows_futures_last_successful_poll(
     later = since + timedelta(hours=3)
     latest = since + timedelta(hours=4)
     # Not resume points: a failure, a backfill (own window, cursor untouched).
-    for status, backfill in (
-        (IndexingStatus.FAILED, False),
-        (IndexingStatus.SUCCESS, True),
-    ):
-        _attempt(
-            db_session,
-            pair,
-            future.id,
-            status=status,
-            poll_range_end=latest,
-            is_backfill=backfill,
-        )
+    _attempt(db_session, pair, future.id, IndexingStatus.FAILED, latest)
+    _attempt(db_session, pair, future.id, success, latest, is_backfill=True)
     # Completed with errors moves the cursor like a success does.
-    _attempt(
-        db_session,
-        pair,
-        future.id,
-        status=IndexingStatus.COMPLETED_WITH_ERRORS,
-        poll_range_end=later,
-    )
+    _attempt(db_session, pair, future.id, errors, later)
     bounds = _bounds(db_session, pair, future)[pair.id]
     assert bounds.since == since
     assert bounds.future_covered_through == later
     assert bounds.clear_from == later - _CLEAR_MARGIN
     assert bounds.push_based is False
+
+    # Completed with an unresolved folder-level error: not a resume point, since
+    # that folder's documents may never have reached FUTURE. Resolved: it is.
+    entity_failed = _attempt(db_session, pair, future.id, errors, latest)
+    error = IndexAttemptError(
+        index_attempt_id=entity_failed.id,
+        connector_credential_pair_id=pair.id,
+        entity_id="folder-1",
+        failure_message="folder unreachable",
+    )
+    db_session.add(error)
+    db_session.commit()
+    try:
+        assert (
+            _bounds(db_session, pair, future)[pair.id].future_covered_through == later
+        )
+        error.is_resolved = True
+        db_session.commit()
+        assert (
+            _bounds(db_session, pair, future)[pair.id].future_covered_through == latest
+        )
+    finally:
+        db_session.delete(error)
+        db_session.commit()
 
 
 def test_clear_from_falls_back_to_the_reindex_start(
@@ -194,8 +178,13 @@ def test_clear_from_falls_back_to_the_reindex_start(
     """No successful FUTURE poll: clear from the reindex start (seed, else port)."""
     pair, future = pair_and_future
     assert get_pair_clear_bounds(db_session, future, []) == {}
+    # Neither seed nor port: clear everything rather than nothing.
+    assert _bounds(db_session, pair, future)[
+        pair.id
+    ].clear_from == datetime.fromtimestamp(0, tz=timezone.utc)
 
-    port = _success_port(db_session, pair, future.id)
+    port = create_port_attempt(db_session, pair.id, future.id)
+    db_session.commit()
     bounds = _bounds(db_session, pair, future)[pair.id]
     assert bounds.future_covered_through is None
     assert bounds.since == port.time_created
@@ -280,16 +269,10 @@ def test_failed_documents_clear_hits_error_rows_of_these_settings_only(
 ) -> None:
     pair, future = pair_and_future
     now = datetime.now(tz=timezone.utc)
-    future_attempt, present_attempt = (
-        _attempt(
-            db_session,
-            pair,
-            settings_id,
-            status=IndexingStatus.COMPLETED_WITH_ERRORS,
-            poll_range_end=now,
-        )
-        for settings_id in (future.id, get_current_search_settings(db_session).id)
-    )
+    errors = IndexingStatus.COMPLETED_WITH_ERRORS
+    future_attempt = _attempt(db_session, pair, future.id, errors, now)
+    present_id = get_current_search_settings(db_session).id
+    present_attempt = _attempt(db_session, pair, present_id, errors, now)
     resolved, unresolved, present_only, untouched = _docs(db_session, pair, 4)
     for doc_id in (resolved, unresolved, present_only, untouched):
         _set(db_session, doc_id, content_hash="h", last_modified=now)

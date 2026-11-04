@@ -1,25 +1,24 @@
 """What a reindex swap clears so the new PRESENT re-indexes what FUTURE may lack.
 
-During a port-flow reindex PRESENT keeps indexing and stamping content hashes while
-the port copies its chunks into FUTURE, so a document PRESENT wrote after its copy is
-newer in PRESENT, and after the swap the hash gate would skip it for good. A FUTURE
-poll fetches at or after its window end, so every change before the window end of
-FUTURE's last successful poll already reached FUTURE at least as new. Only what
-PRESENT wrote at or after that point can be newer: the swap clears those hashes (NULL
-never matches) and the next poll on the new PRESENT, which starts from that same
-window end, re-indexes them. Read-only: derived from index_attempt and port_attempt.
+PRESENT keeps indexing and stamping content hashes while the port copies its chunks
+into FUTURE, so a document written after its copy is newer in PRESENT and the hash
+gate would skip it after the swap. A FUTURE poll fetches at or after its window end,
+so every change before the end of FUTURE's last successful poll already reached
+FUTURE; only what PRESENT wrote after that point can be newer. The swap clears those
+hashes (NULL never matches) and the next poll, which starts from that same window
+end, re-indexes them. Read-only: derived from index_attempt and port_attempt rows.
 """
 
 from collections.abc import Collection
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import DocumentSource
-from onyx.db.engine.time_utils import get_db_current_time
+from onyx.db.connector_credential_pair import has_unresolved_entity_error
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import (
     Connector,
@@ -28,11 +27,16 @@ from onyx.db.models import (
     PortAttempt,
     SearchSettings,
 )
+from onyx.utils.logger import setup_logger
 
-_SUCCESS_STATUSES = [status for status in IndexingStatus if status.is_successful()]
+logger = setup_logger()
+
 # Poll windows overlap by this much to absorb source-side lag; the clear bound keeps
 # the same margin, which also covers clock skew between workers.
 _CLEAR_MARGIN = timedelta(minutes=POLL_CONNECTOR_OFFSET)
+# A pair with neither a seed nor a port attempt cannot be placed in the reindex: clear
+# everything it holds rather than nothing. The swap gate never passes such a pair.
+_CLEAR_EVERYTHING_SINCE = datetime.fromtimestamp(0, tz=timezone.utc)
 
 
 class PairClearBounds(BaseModel):
@@ -42,7 +46,7 @@ class PairClearBounds(BaseModel):
     # Ingestion API pair: it writes both indexes itself, nothing to clear.
     push_based: bool
     # When the reindex began for this pair: its seed's creation, else its first port
-    # attempt's creation, else now. PRESENT writes before it are in the port copy.
+    # attempt's creation. PRESENT writes before it are in the port copy.
     since: datetime
     # Window end of FUTURE's latest successful poll (seed, backfill and targeted
     # runs excluded). None when FUTURE never completed a poll for the pair.
@@ -65,7 +69,6 @@ def get_pair_clear_bounds(
     ids = list(cc_pair_ids)
     if not ids:
         return {}
-    db_now = get_db_current_time(db_session)
 
     pair_rows = {
         cc_pair_id: (connector_id, source)
@@ -103,6 +106,9 @@ def get_pair_clear_bounds(
         )
         if cc_pair_id is not None
     }
+    # Same resume points as get_last_successful_attempt_poll_range_end: an attempt
+    # that completed with an unresolved entity (folder, mailbox) error is not one,
+    # since nothing says what that entity's window held.
     covered_through: dict[int, datetime] = {
         cc_pair_id: window_end
         for cc_pair_id, window_end in db_session.execute(
@@ -113,7 +119,13 @@ def get_pair_clear_bounds(
             .where(
                 IndexAttempt.search_settings_id == future.id,
                 IndexAttempt.connector_credential_pair_id.in_(ids),
-                IndexAttempt.status.in_(_SUCCESS_STATUSES),
+                or_(
+                    IndexAttempt.status == IndexingStatus.SUCCESS,
+                    and_(
+                        IndexAttempt.status == IndexingStatus.COMPLETED_WITH_ERRORS,
+                        ~has_unresolved_entity_error(),
+                    ),
+                ),
                 IndexAttempt.is_synthetic_seed.is_(False),
                 IndexAttempt.is_backfill.is_(False),
                 IndexAttempt.targeted_reindex_job_id.is_(None),
@@ -130,14 +142,14 @@ def get_pair_clear_bounds(
         if row is None:
             continue
         connector_id, source = row
+        since = seed_created.get(cc_pair_id) or first_port_created.get(cc_pair_id)
+        if since is None:
+            logger.warning("cc_pair %s: no seed and no port; clearing all", cc_pair_id)
+            since = _CLEAR_EVERYTHING_SINCE
         bounds[cc_pair_id] = PairClearBounds(
             cc_pair_id=cc_pair_id,
             push_based=connector_id == 0 or source == DocumentSource.INGESTION_API,
-            since=(
-                seed_created.get(cc_pair_id)
-                or first_port_created.get(cc_pair_id)
-                or db_now
-            ),
+            since=since,
             future_covered_through=covered_through.get(cc_pair_id),
         )
     return bounds
