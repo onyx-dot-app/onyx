@@ -2,6 +2,7 @@
 and the start of a deletion once its fence is up."""
 
 from collections.abc import Generator
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -30,34 +31,52 @@ from onyx.server.documents import cc_pair as cc_pair_routes
 from onyx.server.documents.cc_pair import get_cc_pair_full_info
 from onyx.server.documents.index_monitoring import get_indexing_connectors
 from shared_configs.contextvars import get_current_tenant_id
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 
 
+@dataclass
+class _Created:
+    pairs: list[ConnectorCredentialPair] = field(default_factory=list)
+    users: list[User] = field(default_factory=list)
+
+
 @pytest.fixture
-def created(
-    db_session: Session,
-) -> Generator[list[ConnectorCredentialPair], None, None]:
-    """The pairs a test makes, removed with their attempts after it, so no
-    queued attempt shifts a later test's queue place."""
-    pairs: list[ConnectorCredentialPair] = []
-    yield pairs
+def created(db_session: Session) -> Generator[_Created, None, None]:
+    """The pairs and users a test makes, removed with the pairs' attempts after
+    it, so no queued attempt shifts a later test's queue place."""
+    made = _Created()
+    yield made
     db_session.rollback()
     db_session.query(IndexAttempt).filter(
-        IndexAttempt.connector_credential_pair_id.in_([pair.id for pair in pairs])
+        IndexAttempt.connector_credential_pair_id.in_([pair.id for pair in made.pairs])
     ).delete(synchronize_session=False)
     db_session.commit()
-    for pair in pairs:
+    for pair in made.pairs:
         cleanup_cc_pair(db_session, pair)
+    delete_test_user(db_session, *made.users)
+    db_session.commit()
+
+
+def _create_user(
+    db_session: Session, created: _Created, email_prefix: str, is_admin: bool = False
+) -> User:
+    user = create_test_user(db_session, email_prefix, is_admin=is_admin)
+    created.users.append(user)
+    return user
+
+
+def _create_admin(db_session: Session, created: _Created) -> User:
+    return _create_user(db_session, created, "queue_deletion_admin", is_admin=True)
 
 
 def _create_cc_pair(
     db_session: Session,
-    created: list[ConnectorCredentialPair],
+    created: _Created,
     name: str,
     status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
 ) -> ConnectorCredentialPair:
-    owner: User = create_test_user(db_session, "queue_deletion_owner")
+    owner: User = _create_user(db_session, created, "queue_deletion_owner")
     connector = Connector(
         name=f"{name} Connector",
         source=DocumentSource.GOOGLE_DRIVE,
@@ -81,7 +100,7 @@ def _create_cc_pair(
     )
     db_session.add(cc_pair)
     db_session.commit()
-    created.append(cc_pair)
+    created.pairs.append(cc_pair)
     return cc_pair
 
 
@@ -103,7 +122,7 @@ def _queue_attempt(
 
 
 def test_pair_info_queue_position_matches_the_fleet_row(
-    db_session: Session, created: list[ConnectorCredentialPair]
+    db_session: Session, created: _Created
 ) -> None:
     prefix: str = f"Queue Place {uuid4().hex[:8]}"
     first = _create_cc_pair(db_session, created, f"{prefix} first")
@@ -111,7 +130,7 @@ def test_pair_info_queue_position_matches_the_fleet_row(
     now: datetime = datetime.now(timezone.utc)
     _queue_attempt(db_session, first, now)
     _queue_attempt(db_session, second, now + timedelta(seconds=1))
-    admin: User = create_test_user(db_session, "queue_deletion_admin", is_admin=True)
+    admin: User = _create_admin(db_session, created)
 
     fleet = get_indexing_connectors(
         page_num=0,
@@ -135,7 +154,7 @@ def test_pair_info_queue_position_matches_the_fleet_row(
 
 
 def test_fenced_deletion_reports_its_start(
-    db_session: Session, created: list[ConnectorCredentialPair]
+    db_session: Session, created: _Created
 ) -> None:
     cc_pair = _create_cc_pair(
         db_session,
@@ -143,7 +162,7 @@ def test_fenced_deletion_reports_its_start(
         f"Deletion Start {uuid4().hex[:8]}",
         ConnectorCredentialPairStatus.DELETING,
     )
-    admin: User = create_test_user(db_session, "queue_deletion_admin", is_admin=True)
+    admin: User = _create_admin(db_session, created)
     submitted: datetime = datetime.now(timezone.utc) - timedelta(minutes=5)
     redis_connector = RedisConnector(get_current_tenant_id(), cc_pair.id)
     redis_connector.delete.set_fence(
@@ -159,16 +178,14 @@ def test_fenced_deletion_reports_its_start(
     assert info.latest_deletion_attempt.started_at == submitted
 
 
-def test_pending_deletion_has_no_start(
-    db_session: Session, created: list[ConnectorCredentialPair]
-) -> None:
+def test_pending_deletion_has_no_start(db_session: Session, created: _Created) -> None:
     cc_pair = _create_cc_pair(
         db_session,
         created,
         f"Deletion Pending {uuid4().hex[:8]}",
         ConnectorCredentialPairStatus.DELETING,
     )
-    admin: User = create_test_user(db_session, "queue_deletion_admin", is_admin=True)
+    admin: User = _create_admin(db_session, created)
 
     info = get_cc_pair_full_info(cc_pair.id, user=admin, db_session=db_session)
 
@@ -179,7 +196,7 @@ def test_pending_deletion_has_no_start(
 
 @pytest.mark.parametrize("fence_bytes", [b"not json", b"\xff\xfe"])
 def test_unreadable_fence_reports_started_without_a_start(
-    db_session: Session, created: list[ConnectorCredentialPair], fence_bytes: bytes
+    db_session: Session, created: _Created, fence_bytes: bytes
 ) -> None:
     cc_pair = _create_cc_pair(
         db_session,
@@ -187,7 +204,7 @@ def test_unreadable_fence_reports_started_without_a_start(
         f"Deletion Unreadable {uuid4().hex[:8]}",
         ConnectorCredentialPairStatus.DELETING,
     )
-    admin: User = create_test_user(db_session, "queue_deletion_admin", is_admin=True)
+    admin: User = _create_admin(db_session, created)
     redis_connector = RedisConnector(get_current_tenant_id(), cc_pair.id)
     redis_connector.delete.redis.set(redis_connector.delete.fence_key, fence_bytes)
     try:
@@ -202,11 +219,11 @@ def test_unreadable_fence_reports_started_without_a_start(
 
 def test_pair_that_is_not_queued_skips_the_queue_scan(
     db_session: Session,
-    created: list[ConnectorCredentialPair],
+    created: _Created,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cc_pair = _create_cc_pair(db_session, created, f"Not Queued {uuid4().hex[:8]}")
-    admin: User = create_test_user(db_session, "queue_deletion_admin", is_admin=True)
+    admin: User = _create_admin(db_session, created)
 
     def _no_scan(db_session: Session) -> dict[int, int]:  # noqa: ARG001
         raise AssertionError("the queue scan ran for a pair that is not queued")
