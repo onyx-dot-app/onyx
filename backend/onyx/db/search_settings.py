@@ -193,12 +193,14 @@ def lock_search_settings_for_share(
     """The row under a share lock (SELECT ... FOR SHARE) until the transaction ends.
     A swap's status flip waits for every holder, so a caller that reads `status`
     here either commits before the flip or sees the post-flip status. Readers do
-    not block each other."""
+    not block each other. The row is refreshed from the locked read: sessions keep
+    loaded rows across commits, and a stale PRESENT would defeat the lock."""
     return (
         db_session.execute(
             select(SearchSettings)
             .where(SearchSettings.id == search_settings_id)
             .with_for_update(read=True)
+            .execution_options(populate_existing=True)
         )
         .scalars()
         .first()

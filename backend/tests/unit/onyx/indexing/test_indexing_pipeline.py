@@ -1898,7 +1898,9 @@ def _run_batch_to_stamp(
             f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
             return_value=([MagicMock(document_id="doc", already_existed=False)], []),
         ),
-        patch(f"{_PATCH_PREFIX}.lock_search_settings_for_share", return_value=locked),
+        patch(
+            f"{_PATCH_PREFIX}.lock_search_settings_for_share", return_value=locked
+        ) as lock,
         patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit") as stamp,
         patch(f"{_PATCH_PREFIX}._maybe_push_documents"),
     ):
@@ -1913,6 +1915,10 @@ def _run_batch_to_stamp(
             written_search_settings_id=7,
             stamp_content_hash=stamp_content_hash,
         )
+    if stamp_content_hash:
+        # The lock is taken on the settings the batch wrote into, by id.
+        lock.assert_called_once()
+        assert lock.call_args.args[1] == 7
     return stamp
 
 
@@ -1931,8 +1937,8 @@ def test_hash_is_stamped_only_when_the_written_settings_are_present() -> None:
 
 
 def test_caller_can_skip_the_hash_stamp() -> None:
-    """A targeted re-index while a reindex builds leaves the hash alone even on
-    PRESENT, so a failed FUTURE twin cannot make the post-swap poll skip the doc."""
+    """A targeted re-index leaves the hash alone even on PRESENT, so a failed
+    FUTURE twin cannot make the post-swap poll skip the doc."""
     stamp = _run_batch_to_stamp(
         locked_status=IndexModelStatus.PRESENT, stamp_content_hash=False
     )

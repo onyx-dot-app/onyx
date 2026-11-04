@@ -1498,7 +1498,6 @@ def _maybe_push_documents(
                 )
 
 
-@log_function_time(debug_only=True)
 def _written_settings_are_present(
     db_session: Session, written_search_settings_id: int
 ) -> bool:
@@ -1508,6 +1507,7 @@ def _written_settings_are_present(
     return written is not None and written.status == IndexModelStatus.PRESENT
 
 
+@log_function_time(debug_only=True)
 def index_doc_batch(
     *,
     document_batch: list[Document],
