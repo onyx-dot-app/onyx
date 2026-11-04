@@ -113,6 +113,11 @@ function ContentAction({
   if (responsive && rightChildren) {
     const { description, descriptionMaxLines, ...titleProps } = contentProps;
     const font = contentProps.font ?? "main-ui-action";
+    // Only an icon before the title pushes the title in; reversed or
+    // stacked, the description already lines up with it.
+    const indent =
+      !!contentProps.icon &&
+      (contentProps.orientation ?? "inline") === "inline";
     // Full width: in a flex-col `align-items: start` parent (e.g. InputHorizontal's
     // Section) a wrapper without w-full shrinks to content width, so the input
     // wouldn't fill the row.
@@ -135,9 +140,9 @@ function ContentAction({
           <div
             className={cn(
               "opal-content-action-responsive-description",
-              contentProps.icon && `font-${font}`
+              indent && `font-${font}`
             )}
-            data-indent={contentProps.icon ? true : undefined}
+            data-indent={indent || undefined}
           >
             <ContentDescription
               description={description}

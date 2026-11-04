@@ -286,6 +286,8 @@
   @apply opacity-0 no-hover:opacity-100;
 }
 
-.opal-content:hover .opal-content-edit-button[data-show="hover"] {
+/* Hover, or keyboard focus on the pencil, reveals it. */
+.opal-content:hover .opal-content-edit-button[data-show="hover"],
+.opal-content-edit-button[data-show="hover"]:focus-within {
   @apply opacity-100;
 }
