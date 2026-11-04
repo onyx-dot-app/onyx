@@ -35,7 +35,10 @@ from more_itertools import chunked
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
-from onyx.connectors.jira.config import JiraCredentialBinding
+from onyx.connectors.jira.config import (
+    JiraConnectorConfig,
+    JiraCredentialBinding,
+)
 from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.jira.source_operations import (
     JIRA_API_TOKEN_KEY,
@@ -120,6 +123,12 @@ def _translate_errors(*, fast: bool = False) -> Iterator[None]:
             url=response.url if response is not None else None,
             body=_error_text(e),
         ) from e
+    except requests.ConnectionError as e:
+        raise JsmApiError(
+            "Could not connect to the Jira site.",
+            status_code=None,
+            url=getattr(getattr(e, "request", None), "url", None),
+        ) from e
     except requests.Timeout as e:
         raise JsmTimeoutError(
             (
@@ -155,7 +164,16 @@ def _fetch_bulk(
     response.raise_for_status()
     body: Any = response.json()
     issues: Any = body.get("issues") if isinstance(body, dict) else None
-    return issues if isinstance(issues, list) else []
+    if not isinstance(issues, list):
+        # Returning [] here would silently drop a whole batch from the index.
+        raise JsmApiError(
+            "Jira bulkfetch answered without an issues list.",
+            status_code=response.status_code,
+            method=response.request.method,
+            url=response.url,
+            body=response.text[:500],
+        )
+    return issues
 
 
 def _fetch_bulk_batched(
@@ -185,7 +203,9 @@ class JiraServiceManagementSourceOperations(SourceOperations):
     sdk_modules = ("jira",)
     # The gateway reads only the credential-bound fields (site URL, scoped
     # token).
-    config_keys = frozenset(JiraCredentialBinding.model_fields)
+    config_keys = frozenset(
+        JiraConnectorConfig.credential_binding_class().model_fields  # ty: ignore[unresolved-attribute]
+    )
 
     _cached_client: JIRA | None = None
     _cached_fast_client: JIRA | None = None
@@ -295,11 +315,6 @@ class JiraServiceManagementSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=(
-            "jsm_service_desk proves the project read through servicedeskapi, "
-            "which is the call this connector depends on. A plain Jira project "
-            "read adds nothing a check could distinguish."
-        ),
     )
     def get_project(self, *, project_key: str, fast: bool = False) -> dict[str, Any]:
         """Returns one Jira project."""
