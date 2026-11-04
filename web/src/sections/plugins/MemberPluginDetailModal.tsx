@@ -828,7 +828,7 @@ export function MemberPluginDetailContent({
                     ) : (
                       <div className="flex flex-col gap-4">
                         <InputTypeIn
-                          searchIcon
+                          icon="search"
                           value={endpointSearch}
                           onChange={(event) =>
                             setEndpointSearch(event.target.value)

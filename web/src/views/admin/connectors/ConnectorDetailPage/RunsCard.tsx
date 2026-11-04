@@ -588,7 +588,7 @@ export default function RunsCard({
           {/* The full card's filters narrow it, so only the embedded list searches. */}
           <Section height="fit" padding={2} className="min-w-0 flex-1">
             <InputTypeIn
-              searchIcon
+              icon="search"
               variant="primary"
               placeholder={t("search.placeholder")}
               value={searchInput}

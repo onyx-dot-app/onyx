@@ -152,7 +152,7 @@ function CreateGroupPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={t("members.searchUsers.placeholder")}
-              searchIcon
+              icon="search"
             />
             <Table
               items={allRows}

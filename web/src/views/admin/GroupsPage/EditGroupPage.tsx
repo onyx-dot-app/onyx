@@ -675,7 +675,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                         ? t("members.searchUsers.placeholder")
                         : t("members.searchMembers.placeholder")
                     }
-                    searchIcon
+                    icon="search"
                   />
                   {isAddingMembers ? (
                     <Button

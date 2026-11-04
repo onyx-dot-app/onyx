@@ -10,6 +10,7 @@ import {
 import { cn } from "@opal/utils";
 import { SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
+import type { IconFunctionComponent } from "@opal/types";
 
 // Backend placeholder pattern - indicates a stored value that can't be revealed
 const BACKEND_PLACEHOLDER_PATTERN = /^•+$/; // All bullet characters (U+2022)
@@ -25,8 +26,10 @@ function isBackendPlaceholder(value: string): boolean {
 
 type InputPasswordTypeInProps = Omit<
   InputTypeInProps,
-  "type" | "rightChildren" | "searchIcon" | "variant" | "clearButton"
+  "type" | "rightChildren" | "icon" | "variant" | "clearButton"
 > & {
+  /** Leading icon. No search icon: the field is a password. */
+  icon?: IconFunctionComponent;
   /** Controls after the reveal toggle, at the field's end (a dropdown chevron). */
   rightChildren?: React.ReactNode;
   disabled?: boolean;

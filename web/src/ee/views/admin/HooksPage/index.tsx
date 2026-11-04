@@ -625,7 +625,7 @@ export default function HooksPage() {
                   placeholder={t("page.search.placeholder")}
                   value={search}
                   variant="internal"
-                  searchIcon
+                  icon="search"
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>

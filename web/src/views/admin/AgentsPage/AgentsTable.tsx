@@ -222,7 +222,7 @@ export default function AgentsTable() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder={t("search.placeholder")}
-          searchIcon
+          icon="search"
         />
         <Section gap={1} flexDirection="row" justifyContent="start">
           {filterBar}

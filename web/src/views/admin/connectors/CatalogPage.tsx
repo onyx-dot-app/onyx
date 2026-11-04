@@ -214,7 +214,7 @@ export default function ConnectorsPage() {
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header icon={route.icon} title={adminRouteTitle(route)}>
         <InputTypeIn
-          searchIcon
+          icon="search"
           placeholder={t("search.placeholder")}
           ref={searchInputRef}
           value={rawSearchTerm} // keep the input bound to immediate state

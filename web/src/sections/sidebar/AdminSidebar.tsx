@@ -139,7 +139,7 @@ export default function AdminSidebar() {
           <InputTypeIn
             ref={searchRef}
             variant="internal"
-            searchIcon
+            icon="search"
             placeholder={t("adminSidebar.searchInput.placeholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}

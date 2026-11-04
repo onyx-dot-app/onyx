@@ -170,7 +170,7 @@ export type DropdownSearch = Omit<
   | "onKeyDown"
   | "ref"
   | "variant"
-  | "searchIcon"
+  | "icon"
   | "aria-label"
   | "placeholder"
 > &

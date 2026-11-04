@@ -161,7 +161,7 @@ export default function ConnectorList({
       >
         <Section height="fit" className="min-w-40 flex-1">
           <InputTypeIn
-            searchIcon
+            icon="search"
             variant="internal"
             placeholder={t("search.placeholder")}
             maxLength={SEARCH_MAX_LENGTH}

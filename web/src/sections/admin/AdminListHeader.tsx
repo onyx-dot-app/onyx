@@ -99,7 +99,7 @@ export default function AdminListHeader({
     <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
-        searchIcon
+        icon="search"
         clearButton
         placeholder={placeholder ?? t("listHeader.search.placeholder")}
         ref={inputRef}

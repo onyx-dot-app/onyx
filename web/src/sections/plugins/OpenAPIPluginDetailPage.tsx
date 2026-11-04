@@ -394,7 +394,7 @@ export default function OpenAPIPluginDetailPage({
                 <Tabs.Content value="tools">
                   <div className="flex flex-col gap-4">
                     <InputTypeIn
-                      searchIcon
+                      icon="search"
                       value={toolSearch}
                       onChange={(event) => setToolSearch(event.target.value)}
                       placeholder={t("mcpTools.search")}

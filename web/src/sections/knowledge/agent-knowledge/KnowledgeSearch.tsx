@@ -70,7 +70,7 @@ export function KnowledgeSearchBar({
       ) : null}
       <Section height="auto">
         <InputTypeIn
-          searchIcon={!isSearchMode}
+          icon={isSearchMode ? undefined : "search"}
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           onKeyDown={handleKeyDown}

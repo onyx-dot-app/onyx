@@ -538,7 +538,7 @@ function Card({
           <InputTypeIn
             {...fieldProps}
             ref={searchRef}
-            searchIcon
+            icon="search"
             variant="internal"
             placeholder={placeholder}
             aria-label={placeholder}

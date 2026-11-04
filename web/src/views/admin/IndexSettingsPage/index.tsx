@@ -2086,7 +2086,7 @@ export default function IndexSettingsPage() {
                                         "modelPicker.search.placeholder"
                                       )}
                                       variant="internal"
-                                      searchIcon
+                                      icon="search"
                                       value={query}
                                       onChange={(e) => setQuery(e.target.value)}
                                     />

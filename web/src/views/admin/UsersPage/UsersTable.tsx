@@ -260,7 +260,7 @@ export default function UsersTable({
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         placeholder={t("table.search.placeholder")}
-        searchIcon
+        icon="search"
       />
       <UserFilters
         selectedAccountTypes={selectedAccountTypes}

@@ -2345,7 +2345,7 @@ function AccountsAccessSettings() {
                           placeholder={t("apiKeys.list.searchPlaceholder")}
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
-                          searchIcon
+                          icon="search"
                           variant="internal"
                         />
                       )}

@@ -76,7 +76,7 @@ export default function PolicyEditor({
     <div className="flex flex-col gap-4">
       {showTitle && <Text font="main-ui-action">{t("permissions.title")}</Text>}
       <InputTypeIn
-        searchIcon
+        icon="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={toolCopy("search")}

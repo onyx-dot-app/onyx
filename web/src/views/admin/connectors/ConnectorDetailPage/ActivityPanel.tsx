@@ -407,7 +407,7 @@ export default function ActivityPanel({
               {filtersOpen && (
                 <>
                   <InputTypeIn
-                    searchIcon
+                    icon="search"
                     variant={foldFilters ? "internal" : "primary"}
                     placeholder={t("search.placeholder")}
                     maxLength={SEARCH_MAX_LENGTH}

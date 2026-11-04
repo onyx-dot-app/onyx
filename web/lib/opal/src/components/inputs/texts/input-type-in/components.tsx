@@ -26,9 +26,12 @@ export interface InputTypeInProps extends WithoutStyles<
 > {
   ref?: React.Ref<HTMLInputElement>;
   variant?: InputVariants;
-  searchIcon?: boolean;
-  /** Leading icon (a select's chosen option icon). Renders after `searchIcon`. */
-  icon?: IconFunctionComponent;
+  /**
+   * Leading icon. `"search"` shows the search icon and renders a native
+   * `type="search"` field; a component shows that icon (a select's chosen
+   * option icon).
+   */
+  icon?: "search" | IconFunctionComponent;
   /** Content before the text, after the leading icon (a chosen value shown as a tag). */
   leftChildren?: React.ReactNode;
   rightChildren?: React.ReactNode;
@@ -47,7 +50,7 @@ export interface InputTypeInProps extends WithoutStyles<
 }
 
 /**
- * A styled text input with support for a search icon, prefix text,
+ * A styled text input with support for a leading icon,
  * a clear button, and an optional right section slot.
  *
  * @example
@@ -56,7 +59,7 @@ export interface InputTypeInProps extends WithoutStyles<
  * <InputTypeIn value={value} onChange={(e) => setValue(e.target.value)} />
  *
  * // With search icon
- * <InputTypeIn searchIcon placeholder="Search..." value={q} onChange={...} />
+ * <InputTypeIn icon="search" placeholder="Search..." value={q} onChange={...} />
  *
  * // Error state
  * <InputTypeIn variant="error" value={value} onChange={...} />
@@ -79,7 +82,6 @@ export default function InputTypeIn({
   ref,
   variant = "primary",
   leftChildren,
-  searchIcon,
   icon: Icon,
   rightChildren,
   clearButton = false,
@@ -111,9 +113,11 @@ export default function InputTypeIn({
         if (input && e.target !== input) input.focus();
       }}
     >
-      {searchIcon && <InputLeadingIcon icon={SvgSearch} muted />}
-
-      {Icon && <InputLeadingIcon icon={Icon} />}
+      {Icon === "search" ? (
+        <InputLeadingIcon icon={SvgSearch} muted />
+      ) : (
+        Icon && <InputLeadingIcon icon={Icon} />
+      )}
 
       {leftChildren}
 
@@ -121,7 +125,7 @@ export default function InputTypeIn({
         ref={ref}
         // Chrome ignores autocomplete="off" when it guesses a text field takes
         // a saved card; it does not offer cards in search fields.
-        type={searchIcon ? "search" : type}
+        type={Icon === "search" ? "search" : type}
         // dir="auto": typed text decides the direction so punctuation sits on the
         // correct side. While empty it inherits the page direction (see styles.css).
         dir="auto"
