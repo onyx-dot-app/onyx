@@ -138,9 +138,9 @@ def test_signed_identity_only_with_firecracker_runtime(
     from unittest.mock import MagicMock
 
     from onyx.sandbox_proxy.sandbox_identity.signed import SignedIdentityVerifier
-    from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
+    from onyx.server.features.build.configs import SandboxRuntime
 
-    assert SANDBOX_RUNTIME is SandboxRuntime.POD
+    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.POD)
     assert server._build_signed_identity(lambda _tenant: MagicMock()) is None
 
     monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.FIRECRACKER)

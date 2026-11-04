@@ -68,6 +68,13 @@
       "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060}",
       "signer": "node",
       "rejection": "malformed"
+    },
+    {
+      "name": "exp_before_iat",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1799999999,\"jti\":\"jti-0001\"}",
+      "signer": "node",
+      "rejection": "malformed"
     }
   ]
 }

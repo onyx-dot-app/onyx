@@ -155,6 +155,9 @@ class GateAddon:
         # Signed connection id -> id of the plain-HTTP flow that bound it. The
         # relay forces `Connection: close`, so any other plain flow is rejected.
         self._conn_signed_plain_flow: dict[str, str] = {}
+        # Connections whose first request carried no signed header; they keep
+        # the IP identity and can never switch to a signed one.
+        self._conn_unsigned: set[str] = set()
         self._destination_policy = destination_policy
         self._mcp_resolver = mcp_resolver
         self._identity = identity
@@ -252,6 +255,7 @@ class GateAddon:
             self._upstream_addresses.pop(conn_id, None)
             self._conn_signed_sandboxes.pop(conn_id, None)
             self._conn_signed_plain_flow.pop(conn_id, None)
+            self._conn_unsigned.discard(conn_id)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
         """Validate the final addresses and pin them while preserving TLS SNI."""
@@ -1169,7 +1173,15 @@ class GateAddon:
             flow.request.headers.get("Proxy-Authorization")
         )
         if token is None:
+            self._conn_unsigned.add(conn_id)
             return True
+        if conn_id in self._conn_unsigned:
+            logger.warning(
+                "identity_signed_rejected reason=after_unsigned_request host=%s",
+                flow.request.host,
+            )
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+            return False
         sandbox = await asyncio.to_thread(
             self._verify_signed_identity, verifier, flow, token
         )

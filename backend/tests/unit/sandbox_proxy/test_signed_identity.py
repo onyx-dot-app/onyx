@@ -117,6 +117,7 @@ def _build_vectors() -> dict[str, Any]:
             "malformed",
         ),
         ("missing_jti", eddsa, no_jti, "node", "malformed"),
+        ("exp_before_iat", eddsa, _claims(iat=_NOW, exp=_NOW - 1), "node", "malformed"),
     ]
     vectors: list[dict[str, Any]] = []
     for name, header, claims, signer, rejection in cases:

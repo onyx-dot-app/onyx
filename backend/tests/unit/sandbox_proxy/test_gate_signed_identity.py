@@ -227,3 +227,25 @@ async def test_verifier_error_fails_closed(
 
     _assert_unidentified(flow)
     assert resolver.resolve_sandbox_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_signed_header_after_unsigned_request_rejected(
+    destinations: list[ResolvedSandbox | None],  # noqa: ARG001
+) -> None:
+    """A connection identified by IP can never switch to a signed identity."""
+    resolver = StubResolver(sandbox=make_resolved_sandbox())
+    verifier = _StubVerifier()
+    addon = _build(resolver, verifier)
+    first = make_flow(conn_id="c1", method="GET", host="example.com", port=80)
+
+    await addon.request(first)
+    assert first.response is None
+
+    second = make_flow(
+        conn_id="c1", method="GET", host="example.com", port=80, proxy_auth=_GOOD
+    )
+    await addon.request(second)
+    _assert_unidentified(second)
+    assert verifier.calls == 0
+    assert addon._conn_signed_sandboxes == {}

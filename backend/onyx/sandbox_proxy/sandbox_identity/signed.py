@@ -205,6 +205,8 @@ class SignedIdentityVerifier:
             raise SignedIdentityError(SignedIdentityRejection.EXPIRED)
         if issued_at > now + CLOCK_SKEW_SECONDS:
             raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
+        if expires_at <= issued_at:
+            raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
         if expires_at - issued_at > MAX_TOKEN_LIFETIME_SECONDS:
             raise SignedIdentityError(SignedIdentityRejection.LIFETIME_TOO_LONG)
         if node_id != signing_key.node_id:

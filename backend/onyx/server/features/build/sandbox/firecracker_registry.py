@@ -67,9 +67,14 @@ def register_node_signing_key(
     if not lock.acquire(blocking_timeout=_LOCK_WAIT_SECONDS):
         raise CacheLockAcquisitionError(node_id)
     try:
-        existing = get_node_signing_key(shared_cache, key_id)
-        if existing is not None and existing != RegisteredSigningKey(
-            node_id, public_key
+        # `key_id` is global and the lock is per node, so claim it atomically.
+        record = json.dumps(
+            {"node": node_id, "public_key": base64.b64encode(public_key).decode()}
+        )
+        if not shared_cache.renew_if_value(
+            _KEY_PREFIX + key_id, record.encode(), NODE_SIGNING_KEY_TTL_SECONDS
+        ) and not shared_cache.set_if_absent(
+            _KEY_PREFIX + key_id, record, ex=NODE_SIGNING_KEY_TTL_SECONDS
         ):
             raise NodeSigningKeyConflictError(key_id)
 
@@ -82,13 +87,6 @@ def register_node_signing_key(
             if ttl == TTL_NO_EXPIRY or ttl > rotation_overlap_seconds:
                 shared_cache.expire(_KEY_PREFIX + other, rotation_overlap_seconds)
 
-        shared_cache.set(
-            _KEY_PREFIX + key_id,
-            json.dumps(
-                {"node": node_id, "public_key": base64.b64encode(public_key).decode()}
-            ),
-            ex=NODE_SIGNING_KEY_TTL_SECONDS,
-        )
         live = [k for k in kids if k != key_id and shared_cache.exists(_KEY_PREFIX + k)]
         shared_cache.set(
             _NODE_KIDS_PREFIX + node_id,

@@ -325,3 +325,14 @@ def test_registration_route_over_http(monkeypatch: pytest.MonkeyPatch) -> None:
         assert registered is not None and registered.node_id == node_id
     finally:
         get_shared_cache_backend().delete(f"sandbox_fc:signing_key:{body['key_id']}")
+
+
+def test_registration_rejects_key_id_claimed_by_other_node(
+    placed_vm: tuple[UUID, UUID, str, str, Ed25519PrivateKey],
+) -> None:
+    _, _, node_id, key_id, private_key = placed_vm
+    with pytest.raises(OnyxError) as conflict:
+        _register(f"{node_id}-other", key_id, private_key)
+    assert conflict.value.error_code is OnyxErrorCode.CONFLICT
+    registered = get_node_signing_key(get_shared_cache_backend(), key_id)
+    assert registered is not None and registered.node_id == node_id
