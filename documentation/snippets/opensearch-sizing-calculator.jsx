@@ -90,7 +90,6 @@ export const OpenSearchSizingCalculator = () => {
     4: { 16: 2000, 32: 3000, 64: 6000, 128: 12000 },
     2: { 16: 1000, 32: 1500, 64: 3000, 128: 6000 },
   };
-  const MAX_DISK_FOR_RAM = MAX_DISK[8];
   // Larger disks only pay off with 1-bit vectors, and they make moving or replacing a node slow.
   // Clusters that need more storage add nodes instead.
   const MAX_NODE_DISK = 3000;
@@ -254,19 +253,24 @@ export const OpenSearchSizingCalculator = () => {
     const hotAll = hotOneCopy * c;
     // Recommended memory is the smallest node size that fits the data and the search load on
     // one node per copy; otherwise the largest, so the cluster adds nodes instead of growing
-    // nodes. Search assumes the chosen node type, or the one with the most vCPUs per GB.
+    // nodes. Each size is judged with the node type search would need at that size, so its vCPUs
+    // and its disk limit match.
     const baseNodes = Math.ceil(c / zones) * zones;
-    const fewestGbPerVcpu =
-      nodeTypeChoice === "auto" ? NODE_TYPES[NODE_TYPES.length - 1].gbPerVcpu : nodeTypeChoice;
-    const nodesFor = (ram) =>
-      Math.ceil(
+    const typeFor = (ram) =>
+      nodeTypeChoice !== "auto"
+        ? NODE_TYPES.find((t) => t.gbPerVcpu === nodeTypeChoice)
+        : NODE_TYPES.find((t) => Math.ceil(vcpusForSearch / (ram / t.gbPerVcpu)) <= baseNodes) || NODE_TYPES[NODE_TYPES.length - 1];
+    const nodesFor = (ram) => {
+      const t = typeFor(ram);
+      return Math.ceil(
         Math.max(
           c,
           Math.ceil(hotAll / cacheFor(ram)),
-          Math.ceil(provision / (Math.min(MAX_DISK_FOR_RAM[ram], MAX_NODE_DISK) * 1e9)),
-          Math.ceil(vcpusForSearch / (ram / fewestGbPerVcpu))
+          Math.ceil(provision / (Math.min(MAX_DISK[t.gbPerVcpu][ram], MAX_NODE_DISK) * 1e9)),
+          Math.ceil(vcpusForSearch / (ram / t.gbPerVcpu))
         ) / zones
       ) * zones;
+    };
     const recommendedRam = NODE_RAM.find((r) => nodesFor(r) <= baseNodes) || NODE_RAM[NODE_RAM.length - 1];
     const nodeRam = nodeRamChoice === "auto" ? recommendedRam : nodeRamChoice;
     const heapGB = Math.min(nodeRam / 2, 31);
