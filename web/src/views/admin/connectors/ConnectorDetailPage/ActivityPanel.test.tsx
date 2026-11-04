@@ -426,6 +426,64 @@ describe("AC-7: Resolve all asks to confirm", () => {
   });
 });
 
+describe("AC-7: Resolve all on the Running level", () => {
+  it("AC-7: Running offers Resolve All for its running runs with errors only, narrowed by status_groups", async () => {
+    const feed = installActivityFeed(POOL);
+    const user = userEvent.setup();
+    renderPanel();
+    await loaded(F1, ER);
+
+    await chooseLevel(user, "Running");
+    await waitFor(() => expect(cardFor(F1)).toBeNull());
+    await waitFor(() =>
+      expect(
+        feed
+          .calls("GET", "/runs/resolvable-count")
+          .some((request) =>
+            request.url.searchParams.getAll("status_groups").includes("running")
+          )
+      ).toBe(true)
+    );
+
+    const dialog = await openResolveAll(user);
+    await waitFor(() =>
+      expect(dialog).toHaveTextContent(
+        "This resolves the 1 activity that matches the current filter: no failures and 1 run with errors."
+      )
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Resolve All" })
+    );
+    await waitFor(() =>
+      expect(feed.calls("POST", "/runs/resolve-matching")).toHaveLength(1)
+    );
+    const [request] = feed.calls("POST", "/runs/resolve-matching");
+    expect(request!.body).toMatchObject({
+      level: "errors",
+      status_groups: ["running"],
+    });
+  });
+
+  it.each(["Success", "Canceled"])(
+    "AC-7: %s has no Resolve All",
+    async (level) => {
+      installActivityFeed(POOL);
+      const user = userEvent.setup();
+      renderPanel();
+      await loaded(F1);
+      expect(
+        await screen.findByRole("button", { name: /^Resolve All$/ })
+      ).toBeInTheDocument();
+
+      await chooseLevel(user, level);
+      await waitFor(() => expect(cardFor(F1)).toBeNull());
+      expect(
+        screen.queryByRole("button", { name: /^Resolve All$/ })
+      ).toBeNull();
+    }
+  );
+});
+
 // ── AC-8: Connectors filter ───────────────────────────────────────────────
 
 describe("AC-8: Connectors filter", () => {

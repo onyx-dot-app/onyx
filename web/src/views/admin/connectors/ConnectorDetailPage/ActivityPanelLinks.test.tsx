@@ -1,4 +1,4 @@
-/** The activity panel's links to the page around it: the chart's hover and focus (widening a span that hides the failure), an errors request with no run, the empty panel's Past Activities, Resolve All on a level the batch routes cannot narrow to, the Connectors menu while it loads, pages and fails, an index chip's label, Resolve on running runs, and a searched superseded run. */
+/** The activity panel's links to the page around it: the chart's hover and focus (widening a span that hides the failure), an errors request with no run, the empty panel's Past Activities, the Connectors menu while it loads, pages and fails, an index chip's label, Resolve on running runs, and a searched superseded run. */
 import { useState } from "react";
 import {
   act,
@@ -156,26 +156,6 @@ describe("Past Activities", () => {
 
     await user.click(await screen.findByText("Past Activities"));
     expect(onClearRange).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("Resolve All on the Running level", () => {
-  it("is hidden, since the batch routes cannot narrow to running runs", async () => {
-    installActivityFeed([FAILED, RUNNING_ERRORS]);
-    const user = userEvent.setup();
-    render(<ActivityPanel scope={PAIR} title="Activities" />);
-    const resolveAll = await screen.findByRole("button", {
-      name: "Resolve All",
-    });
-    await waitFor(() => expect(resolveAll).toBeEnabled());
-
-    await user.click(screen.getByRole("button", { name: "Show Filters" }));
-    await user.click(screen.getByRole("button", { name: "Errors" }));
-    await user.click(await screen.findByRole("option", { name: "Running" }));
-
-    await waitFor(() => expect(cardFor(FAILED)).toBeNull());
-    expect(cardFor(RUNNING_ERRORS)).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Resolve All" })).toBeNull();
   });
 });
 

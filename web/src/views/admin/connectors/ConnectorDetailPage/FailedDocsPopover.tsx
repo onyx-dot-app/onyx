@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -40,7 +40,7 @@ import {
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/shared/search";
 
-// The errors route's largest page: `/errors` orders by time only, so the groups sort within what is loaded.
+// The errors route's largest page.
 const PAGE_SIZE = 100;
 const CLAMPED_LINES = 5;
 // Hidden until the row is hovered or focused. Touch screens always show it.
@@ -54,12 +54,6 @@ function errorGroup(error: IndexAttemptError): ErrorGroup {
   if (error.is_resolved) return "closed";
   return error.resolved_reason === "without_retry" ? "withoutRetry" : "open";
 }
-
-const GROUP_ORDER = {
-  open: 0,
-  withoutRetry: 1,
-  closed: 2,
-} satisfies Record<ErrorGroup, number>;
 
 function errorKey(error: IndexAttemptError): number {
   return error.id;
@@ -357,14 +351,8 @@ function FailedDocsBody({
     PAGE_SIZE,
     RUNS_POLL_MS
   );
-  // Stable, so each group keeps the route's newest-first order.
-  const items = useMemo(
-    () =>
-      [...pages.items].sort(
-        (a, b) => GROUP_ORDER[errorGroup(a)] - GROUP_ORDER[errorGroup(b)]
-      ),
-    [pages.items]
-  );
+  const { items } = pages;
+  // The route orders by state, so the resolved groups start at the first row that is not open.
   const firstResolved = items.findIndex((item) => errorGroup(item) !== "open");
   const busy = resolving || fallback.resolving;
 

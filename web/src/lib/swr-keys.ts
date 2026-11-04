@@ -9,6 +9,7 @@
 import type {
   CCPairRunLevel,
   CCPairRunsQuery,
+  CCPairRunStatusGroup,
   CCPairThroughputWindow,
   IndexingConnectorsQuery,
 } from "@/lib/connectors/types";
@@ -66,6 +67,7 @@ function resolvableCountParams(
   q: string,
   since: string | null,
   until: string | null,
+  statusGroups: readonly CCPairRunStatusGroup[] | null,
   ccPairIds: readonly number[] = []
 ): string {
   const params = new URLSearchParams();
@@ -73,6 +75,9 @@ function resolvableCountParams(
   if (q) params.set("q", q);
   if (since) params.set("since", since);
   if (until) params.set("until", until);
+  for (const group of statusGroups ?? []) {
+    params.append("status_groups", group);
+  }
   appendPairIds(params, ccPairIds);
   return params.toString();
 }
@@ -394,9 +399,10 @@ export const SWR_KEYS = {
     level: CCPairRunLevel | null,
     q: string,
     since: string | null,
-    until: string | null
+    until: string | null,
+    statusGroups: readonly CCPairRunStatusGroup[] | null
   ) =>
-    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until)}`,
+    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until, statusGroups)}`,
   ccPairThroughput: (
     ccPairId: number,
     window: CCPairThroughputWindow,
@@ -434,9 +440,10 @@ export const SWR_KEYS = {
     q: string,
     since: string | null,
     until: string | null,
+    statusGroups: readonly CCPairRunStatusGroup[] | null,
     ccPairIds: readonly number[]
   ) =>
-    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until, ccPairIds)}`,
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until, statusGroups, ccPairIds)}`,
   indexMonitoringRuns: (query: CCPairRunsQuery, ccPairIds: readonly number[]) =>
     `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query, ccPairIds)}`,
   // Sums the totals of these runs feed URLs. `mutate` matches it by its first element.
@@ -459,7 +466,7 @@ export const SWR_KEYS = {
   // this base key invalidates every variant under the same prefix.
   ccPairIndexingErrors: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-  // One attempt's open and resolved errors, newest first, searched by message, document id or entity id.
+  // One attempt's errors grouped open, resolved without retry, then closed, newest first in each, searched by message, document id or entity id.
   ccPairAttemptErrors: (
     ccPairId: number,
     query: {
@@ -474,6 +481,7 @@ export const SWR_KEYS = {
       page_num: String(query.pageNum),
       page_size: String(query.pageSize),
       include_resolved: "true",
+      order: "state",
     });
     if (query.q) params.set("q", query.q);
     return `/api/manage/admin/cc-pair/${ccPairId}/errors?${params.toString()}`;

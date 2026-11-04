@@ -92,9 +92,9 @@ interface LevelConfig {
   icon: IconFunctionComponent;
   /** The open sections, in display order. */
   sections: readonly ActivitySection[];
-  /** The batch resolve's level: null for every resolvable section, undefined where the batch routes, which take a level and no status, cannot narrow to it. */
+  /** The batch resolve's level: null for every resolvable section, undefined on levels that list nothing open to resolve. */
   resolveLevel: CCPairRunLevel | null | undefined;
-  /** Narrows the Errors section's status groups, null for all of them. */
+  /** Narrows the Errors section's status groups and the batch resolve's, null for all of them. */
   errorStatusGroups: CCPairRunStatusGroup[] | null;
 }
 
@@ -121,7 +121,7 @@ const LEVELS = {
   running: {
     icon: SvgLoader,
     sections: ["errors", "running"],
-    resolveLevel: undefined,
+    resolveLevel: "errors",
     errorStatusGroups: ["running"],
   },
   success: {
@@ -476,6 +476,7 @@ export default function ActivityPanel({
   // typed meanwhile cannot widen what the click resolves.
   const [confirming, setConfirming] = useState<{
     level: CCPairRunLevel | null;
+    statusGroups: CCPairRunStatusGroup[] | null;
     narrowing: ActivityNarrowing;
     failures: number;
     errors: number;
@@ -722,22 +723,24 @@ export default function ActivityPanel({
 
   const canResolveRuns = scope === "fleet" || scope.canResolveRuns;
   const canResolveAll = canResolveRuns && resolveLevel !== undefined;
+  const resolvesFailures = canResolveAll && resolveLevel !== "errors";
+  const resolvesErrors = canResolveAll && resolveLevel !== "failures";
   const failuresResolvable = useResolvableRunsCount(
     scope,
-    canResolveAll,
-    "failures",
+    resolvesFailures,
     narrowing,
-    pollMs
+    { level: "failures", statusGroups: null, pollMs }
   );
   const errorsResolvable = useResolvableRunsCount(
     scope,
-    canResolveAll && resolveLevel === null,
-    "errors",
+    resolvesErrors,
     narrowing,
-    pollMs
+    { level: "errors", statusGroups: errorStatusGroups, pollMs }
   );
-  const errorsToResolve = resolveLevel === null ? errorsResolvable.count : 0;
-  const resolveAllCount = failuresResolvable.count + errorsToResolve;
+  // A disabled count keeps its last value, so only the levels resolved here count.
+  const failuresToResolve = resolvesFailures ? failuresResolvable.count : 0;
+  const errorsToResolve = resolvesErrors ? errorsResolvable.count : 0;
+  const resolveAllCount = failuresToResolve + errorsToResolve;
   // Waits until the counts match the search typed.
   const resolveAllSettled =
     searchInput.trim() === search &&
@@ -829,7 +832,7 @@ export default function ActivityPanel({
                     aria-label={filterToggleLabel}
                     onClick={() => setFiltersOpen((shown) => !shown)}
                   />
-                  {/* Absent on levels the batch routes cannot narrow to, disabled while nothing shown resolves. */}
+                  {/* Absent on levels that list nothing open, disabled while nothing shown resolves. */}
                   {canResolveAll && (
                     <Button
                       icon={SvgCheckAll}
@@ -840,8 +843,9 @@ export default function ActivityPanel({
                       onClick={() =>
                         setConfirming({
                           level: resolveLevel ?? null,
+                          statusGroups: errorStatusGroups,
                           narrowing,
-                          failures: failuresResolvable.count,
+                          failures: failuresToResolve,
                           errors: errorsToResolve,
                         })
                       }
@@ -1026,11 +1030,10 @@ export default function ActivityPanel({
             <Button
               disabled={resolving}
               onClick={async () => {
-                await resolveMatching(
-                  scope,
-                  confirming.level,
-                  confirming.narrowing
-                );
+                await resolveMatching(scope, confirming.narrowing, {
+                  level: confirming.level,
+                  statusGroups: confirming.statusGroups,
+                });
                 setConfirming(null);
               }}
             >
