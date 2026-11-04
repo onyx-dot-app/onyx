@@ -20,6 +20,10 @@ on:
       - ".github/actions/**"
       - "tools/ods/**"
       - "tools/ods-audit/**"
+      - ".github/scripts/audit-sandbox-browser.sh"
+      - ".github/scripts/base-image-ref.sh"
+      - "backend/onyx/server/features/build/sandbox/image/Dockerfile"
+      - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
   schedule:
     # Nightly at 09:00 UTC.
     - cron: "0 9 * * *"
@@ -110,3 +114,24 @@ jobs:
         with:
           sarif_file: audit.sarif
           category: ods-audit
+
+  browser-audit:
+    name: Sandbox browser audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build browser OS stage
+        run: >-
+          docker build --target os --build-arg ENABLE_SKILLS=false
+          --tag onyx-sandbox-browser:audit
+          backend/onyx/server/features/build/sandbox/image
+
+      - name: Scan browser inventory
+        run: bash .github/scripts/audit-sandbox-browser.sh onyx-sandbox-browser:audit

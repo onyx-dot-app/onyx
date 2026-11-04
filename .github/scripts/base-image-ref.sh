@@ -31,6 +31,7 @@ case "${component}" in
   sandbox)
     docker build --quiet --target os --tag onyx-sandbox-os:audit backend/onyx/server/features/build/sandbox/image >&2
     ref="onyx-sandbox-os:audit"
+    bash .github/scripts/audit-sandbox-browser.sh "$ref" >&2
     ;;
   *)
     echo "unknown component: ${component}" >&2
