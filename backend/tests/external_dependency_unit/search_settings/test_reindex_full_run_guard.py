@@ -1,0 +1,155 @@
+"""External dependency unit tests for the full-run guard during a port-flow
+reindex: a crawl from the beginning or a backfill on PRESENT adds documents an
+incremental FUTURE catch-up never fetches, so the connector endpoints refuse them
+while a port-flow FUTURE exists, and a reindex refuses to start while one is
+pending (see `raise_if_port_reindex_in_progress` and `full_run_pending_cc_pairs`).
+"""
+
+from collections.abc import Generator
+
+import pytest
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
+
+from onyx.connectors.edit_plan.apply import _ensure_no_full_run_during_reindex
+from onyx.connectors.edit_plan.models import EditStep, EditStepKind
+from onyx.db.engine.time_utils import get_db_current_time
+from onyx.db.enums import IndexingMode, IndexingStatus, SwitchoverType
+from onyx.db.models import IndexAttempt, SearchSettings
+from onyx.db.search_settings import (
+    REINDEX_BLOCKS_FULL_RUN_MESSAGE,
+    full_run_pending_cc_pairs,
+    get_current_search_settings,
+    raise_if_port_reindex_in_progress,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+    make_future_search_settings,
+)
+
+
+@pytest.fixture
+def legacy_future(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[SearchSettings, None, None]:
+    future = make_future_search_settings(db_session, use_port_flow=False)
+    try:
+        yield future
+    finally:
+        db_session.rollback()
+        db_session.delete(future)
+        db_session.commit()
+
+
+def _step(kind: EditStepKind) -> EditStep:
+    return EditStep(kind=kind, required=False, reasons=[])
+
+
+def test_full_runs_are_refused_only_during_a_port_flow_reindex(
+    db_session: Session, legacy_future: SearchSettings
+) -> None:
+    # A legacy FUTURE crawls from scratch and needs no guard.
+    raise_if_port_reindex_in_progress(db_session)
+
+    legacy_future.use_port_flow = True
+    db_session.commit()
+    with pytest.raises(OnyxError) as excinfo:
+        raise_if_port_reindex_in_progress(db_session)
+    assert excinfo.value.error_code == OnyxErrorCode.CONFLICT
+    assert REINDEX_BLOCKS_FULL_RUN_MESSAGE in str(excinfo.value.detail)
+
+    # ACTIVE_ONLY ports too; INSTANT promotes at once and leaves no FUTURE row.
+    legacy_future.switchover_type = SwitchoverType.ACTIVE_ONLY
+    db_session.commit()
+    with pytest.raises(OnyxError):
+        raise_if_port_reindex_in_progress(db_session)
+
+
+def test_edit_steps_that_recrawl_are_refused_during_a_port_flow_reindex(
+    db_session: Session, legacy_future: SearchSettings
+) -> None:
+    legacy_future.use_port_flow = True
+    db_session.commit()
+
+    for kind in (
+        EditStepKind.FULL_REINDEX,
+        EditStepKind.FULL_REINDEX_THEN_PRUNE,
+        EditStepKind.SCOPED_BACKFILL,
+        EditStepKind.WINDOW_BACKFILL,
+    ):
+        with pytest.raises(OnyxError):
+            _ensure_no_full_run_during_reindex(
+                db_session, [_step(EditStepKind.PRUNE), _step(kind)]
+            )
+
+    # Incremental and metadata-only steps go through.
+    _ensure_no_full_run_during_reindex(
+        db_session,
+        [
+            _step(EditStepKind.RESTART_ATTEMPT),
+            _step(EditStepKind.PRUNE),
+            _step(EditStepKind.ACCESS_TYPE),
+        ],
+    )
+
+
+def test_full_run_pending_cc_pairs(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A reindex refuses to start while a connector will, or does, crawl from the
+    beginning: a REINDEX trigger, a full re-index request, or a running attempt
+    from the beginning. An incremental trigger does not count."""
+    pair = make_cc_pair(db_session)
+    present_id = get_current_search_settings(db_session).id
+    try:
+
+        def pending() -> list[int]:
+            db_session.expire_all()
+            return [
+                cc_pair_id
+                for cc_pair_id, _ in full_run_pending_cc_pairs(db_session, present_id)
+                if cc_pair_id == pair.id
+            ]
+
+        assert pending() == []
+
+        pair.indexing_trigger = IndexingMode.REINDEX
+        db_session.commit()
+        assert pending() == [pair.id]
+        pair.indexing_trigger = IndexingMode.UPDATE
+        db_session.commit()
+        assert pending() == []
+
+        pair.full_reindex_requested_at = get_db_current_time(db_session)
+        db_session.commit()
+        assert pending() == [pair.id]
+        pair.full_reindex_requested_at = None
+        db_session.commit()
+
+        running = IndexAttempt(
+            connector_credential_pair_id=pair.id,
+            search_settings_id=present_id,
+            status=IndexingStatus.IN_PROGRESS,
+            from_beginning=True,
+        )
+        db_session.add(running)
+        db_session.commit()
+        assert pending() == [pair.id]
+        running.status = IndexingStatus.SUCCESS
+        running.time_finished = get_db_current_time(db_session)
+        db_session.commit()
+        assert pending() == []
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(IndexAttempt).where(
+                IndexAttempt.connector_credential_pair_id == pair.id
+            )
+        )
+        db_session.commit()
+        cleanup_cc_pair(db_session, pair)

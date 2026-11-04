@@ -129,7 +129,14 @@ cannot run a window. A SCOPE field that narrows needs a prune, and an unknown
 direction makes the admin pick. A planning rule (`connectors/planning_rule_registry.py`)
 handles mode fields that change what other fields mean. `connectors/edit_plan/apply.py`
 writes the state and the steps in one transaction, and beat tasks run the
-steps. A stored plan applies only to the pair state it was computed from
+steps. While a port-flow reindex builds a FUTURE index, a plan with a full
+re-index or backfill step is refused with CONFLICT
+(`db/search_settings.py:raise_if_port_reindex_in_progress`): such a run adds
+documents an incremental FUTURE poll never fetches ([[document-index]]). A
+run-once from the beginning is refused the same way, in the transaction that
+writes the trigger (`server/documents/connector.py:trigger_indexing_for_cc_pair`).
+The guard holds the PRESENT settings row for share, so a reindex start waits
+for the write and then sees the pending run. A stored plan applies only to the pair state it was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
 **Source gateways.** A source can put every remote call in one
