@@ -258,8 +258,9 @@ the error type on purpose in auth code.
    meanwhile, and a PRESENT batch that lands after a swap stamps nothing
    either. `run_indexing_pipeline` takes `written_search_settings_id` from its
    caller: pass the id resolved when the batch started, never a fresh lookup,
-   because a batch can straddle a swap. A targeted re-index passes
-   `stamp_content_hash=False` on PRESENT while a reindex builds.
+   because a batch can straddle a swap. Multipass and contextual-RAG settings
+   come from that row too, so a batch chunks for the index it writes. A
+   targeted re-index never stamps (`stamp_content_hash=False`).
 10. `targeted-reindex-outside-fence` **The attempt fence excludes targeted
    reindex on purpose.**
    `db/indexing_coordination.py:IndexingCoordination.try_create_index_attempt`
@@ -334,11 +335,6 @@ the error type on purpose in auth code.
 
 ## Known issues
 
-- **A PRESENT attempt can chunk with FUTURE settings.**
-  `run_indexing_pipeline` takes multipass and contextual-RAG settings from the
-  FUTURE `SearchSettings` whenever one exists, but `docprocessing_task` embeds
-  with the attempt's own. It is unconfirmed as a bug; check before you rely on
-  either behaviour.
 - **Index-time LLM steps skip the provider cost limit.** Contextual RAG
   (`llm/factory.py:get_llm_for_contextual_rag`) and image summarization
   (`llm/factory.py:get_default_llm_with_vision`) do not call
