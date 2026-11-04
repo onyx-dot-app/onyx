@@ -45,7 +45,7 @@ def verify_sandbox_node_registration(request: Request) -> None:
         not expected
         or not auth_header.startswith(BEARER_PREFIX)
         or not secrets.compare_digest(
-            auth_header[len(BEARER_PREFIX) :].strip().encode("latin-1"),
+            auth_header[len(BEARER_PREFIX) :].encode("latin-1").strip(),
             expected.encode("utf-8"),
         )
     ):

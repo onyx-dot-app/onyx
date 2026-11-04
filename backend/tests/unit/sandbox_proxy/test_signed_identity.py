@@ -148,7 +148,9 @@ def _build_vectors() -> dict[str, Any]:
 class _Keys(NodeSigningKeyLookup):
     def __init__(self) -> None:
         public_key = Ed25519PrivateKey.from_private_bytes(_NODE_SEED).public_key()
-        self.keys = {_KID: NodeSigningKey(_KID, _NODE, public_key)}
+        self.keys = {
+            _KID: NodeSigningKey(key_id=_KID, node_id=_NODE, public_key=public_key)
+        }
 
     def get(self, key_id: str) -> NodeSigningKey | None:
         return self.keys.get(key_id)

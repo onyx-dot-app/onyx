@@ -130,19 +130,3 @@ def test_startup_uses_internal_cidrs(monkeypatch: pytest.MonkeyPatch) -> None:
     policy: DestinationPolicyConfig = server._build_destination_policy()
     assert resolve_destination(policy, "2600:ffff::1", 443) is None
     assert resolve_destination(policy, "2606:4700:4700::1111", 443) is not None
-
-
-def test_signed_identity_only_with_firecracker_runtime(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from unittest.mock import MagicMock
-
-    from onyx.sandbox_proxy.sandbox_identity.signed import SignedIdentityVerifier
-    from onyx.server.features.build.configs import SandboxRuntime
-
-    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.POD)
-    assert server._build_signed_identity(lambda _tenant: MagicMock()) is None
-
-    monkeypatch.setattr(server, "SANDBOX_RUNTIME", SandboxRuntime.FIRECRACKER)
-    verifier = server._build_signed_identity(lambda _tenant: MagicMock())
-    assert isinstance(verifier, SignedIdentityVerifier)

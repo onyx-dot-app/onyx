@@ -187,19 +187,6 @@ def _build_cache_factory() -> Callable[[str], CacheBackend]:
     return _factory
 
 
-def _build_signed_identity(
-    cache_factory: Callable[[str], CacheBackend],
-) -> SignedIdentityVerifier | None:
-    """Relay-signed VM identity; only the Firecracker runtime has a relay."""
-    if SANDBOX_RUNTIME is not SandboxRuntime.FIRECRACKER:
-        return None
-    return SignedIdentityVerifier(
-        signing_keys=CachedNodeSigningKeyLookup(get_shared_cache_backend),
-        placement=CacheSandboxPlacementLookup(cache_factory),
-        replay_guard=CacheReplayGuard(cache_factory),
-    )
-
-
 def _build_mitm_master() -> DumpMaster:
     master: DumpMaster = DumpMaster(
         options=Options(
@@ -338,11 +325,21 @@ def main() -> int:
             [type(r).__name__ for r in resolvers],
         )
         cache_factory = _build_cache_factory()
+        # Only the Firecracker runtime has a relay that signs VM identity.
+        signed_identity = (
+            SignedIdentityVerifier(
+                signing_keys=CachedNodeSigningKeyLookup(get_shared_cache_backend),
+                placement=CacheSandboxPlacementLookup(cache_factory),
+                replay_guard=CacheReplayGuard(cache_factory),
+            )
+            if SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER
+            else None
+        )
         gate = GateAddon(
             mcp_resolver=mcp_resolver,
             destination_policy=destination_policy,
             identity=identity,
-            signed_identity=_build_signed_identity(cache_factory),
+            signed_identity=signed_identity,
             request_evaluator=CompositeRequestEvaluator(
                 [ExternalAppRequestEvaluator(), McpRequestEvaluator()]
             ),

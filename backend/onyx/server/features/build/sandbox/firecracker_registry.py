@@ -10,8 +10,9 @@ placement in the tenant cache, both with TTLs their writers refresh.
 
 import base64
 import json
-from dataclasses import dataclass
 from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLockAcquisitionError
 
@@ -27,14 +28,16 @@ class NodeSigningKeyConflictError(Exception):
     """The key id is already registered with different key material or node."""
 
 
-@dataclass(frozen=True)
-class RegisteredSigningKey:
+class RegisteredSigningKey(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     node_id: str
     public_key: bytes
 
 
-@dataclass(frozen=True)
-class SandboxPlacement:
+class SandboxPlacement(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     node_id: str
     generation: int
 
@@ -83,9 +86,15 @@ def register_node_signing_key(
         for other in kids:
             if other == key_id:
                 continue
+            # Only shorten keys this node still owns; the id may be reclaimed.
+            other_raw = shared_cache.get(_KEY_PREFIX + other)
+            if other_raw is None or json.loads(other_raw)["node"] != node_id:
+                continue
             ttl = shared_cache.ttl(_KEY_PREFIX + other)
             if ttl == TTL_NO_EXPIRY or ttl > rotation_overlap_seconds:
-                shared_cache.expire(_KEY_PREFIX + other, rotation_overlap_seconds)
+                shared_cache.renew_if_value(
+                    _KEY_PREFIX + other, other_raw, rotation_overlap_seconds
+                )
 
         live = [k for k in kids if k != key_id and shared_cache.exists(_KEY_PREFIX + k)]
         shared_cache.set(

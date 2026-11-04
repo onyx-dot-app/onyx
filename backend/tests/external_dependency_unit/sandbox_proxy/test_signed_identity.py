@@ -114,7 +114,10 @@ def placed_vm(
     db_session.add(sandbox)
     db_session.commit()
     set_sandbox_placement(
-        _tenant_cache(), sandbox.id, SandboxPlacement(node_id, 2), ttl_seconds=300
+        _tenant_cache(),
+        sandbox.id,
+        SandboxPlacement(node_id=node_id, generation=2),
+        ttl_seconds=300,
     )
     private_key = Ed25519PrivateKey.generate()
     _register(node_id, key_id, private_key)
@@ -156,7 +159,10 @@ def test_verifier_rejects_stale_generation_and_moved_sandbox(
 
     # The sandbox moved to another node: the old node can no longer vouch for it.
     set_sandbox_placement(
-        _tenant_cache(), sandbox_id, SandboxPlacement("node-other", 2), ttl_seconds=300
+        _tenant_cache(),
+        sandbox_id,
+        SandboxPlacement(node_id="node-other", generation=2),
+        ttl_seconds=300,
     )
     moved = _token(
         private_key, key_id=key_id, node_id=node_id, sandbox_id=sandbox_id, generation=2
@@ -214,6 +220,7 @@ def test_registration_rejects_key_id_reuse_with_other_key(
         ("cluster-cred", "Bearer wrong", False),
         ("cluster-cred", None, False),
         ("caf\u00e9", "Bearer caf\u00e9", True),
+        ("voil\u00e0", "Bearer voil\u00e0", True),
         ("cluster-cred", "Bearer \u00ff\u00fe", False),
         (None, "Bearer anything", False),
     ],

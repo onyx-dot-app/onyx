@@ -10,19 +10,19 @@ Accept a token only if all of these hold:
 - the signature verifies against a registered, unexpired key whose node matches
   the `node` claim;
 - the token is fresh (`iat`/`exp`, lifetime capped) and its `jti` is unused;
-- Postgres places the sandbox on that node with that generation.
+- the placement record puts the sandbox on that node with that generation.
 """
 
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
 from uuid import UUID
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.engine.tenant_utils import validate_tenant_id
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
@@ -57,15 +57,17 @@ class SignedIdentityError(Exception):
         self.reason = reason
 
 
-@dataclass(frozen=True)
-class NodeSigningKey:
+class NodeSigningKey(BaseModel):
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
     key_id: str
     node_id: str
     public_key: Ed25519PublicKey
 
 
-@dataclass(frozen=True)
-class SandboxClaims:
+class SandboxClaims(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     sandbox_id: UUID
     tenant_id: str
     node_id: str
