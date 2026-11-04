@@ -6,7 +6,7 @@ import {
   Modal,
   Table,
   type TableColumn,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { SvgAlertCircle, SvgPauseCircle, SvgPlayCircle } from "@opal/icons";
@@ -128,13 +128,13 @@ export default function ReindexErrorsModal({
         width: { weight: 12 },
         cell: (row) =>
           row.paused ? (
-            <Tag
+            <Badge
               color="amber"
               icon={SvgPauseCircle}
               title={t("errorsModal.status.paused")}
             />
           ) : (
-            <Tag
+            <Badge
               color="red"
               icon={SvgAlertCircle}
               title={t("errorsModal.status.failed")}

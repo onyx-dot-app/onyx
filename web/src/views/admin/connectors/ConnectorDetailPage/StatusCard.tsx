@@ -2,7 +2,7 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
+import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
 import {
   SvgListCheck,
@@ -175,7 +175,7 @@ function AccessStatBlock({ accessType }: AccessStatBlockProps) {
   const everyone = accessType === "public";
   return (
     <StatBlock title={t("accessTitle")}>
-      <Tag
+      <Badge
         icon={everyone ? SvgOrganization : SvgUsers}
         title={tAccess(everyone ? "everyone.title" : "specificGroups.title")}
         color="gray"

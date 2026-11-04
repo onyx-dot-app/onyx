@@ -31,7 +31,7 @@ import {
   Button,
   InputSingleSelect,
   MessageCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { Formik, Form, type FormikHelpers } from "formik";
@@ -445,7 +445,10 @@ export default function MCPAuthenticationPage({
                       rightChildren={
                         selectedAuthentication !== null &&
                         selectedAuthentication === recommendedAuthentication ? (
-                          <Tag title={recommendedCopy("label")} color="green" />
+                          <Badge
+                            title={recommendedCopy("label")}
+                            color="green"
+                          />
                         ) : undefined
                       }
                       options={[

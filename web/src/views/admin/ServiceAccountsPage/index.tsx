@@ -17,7 +17,7 @@ import {
   MessageCard,
   Modal,
   Table,
-  Tag,
+  Badge,
   Text,
   type TableColumn,
 } from "@opal/components";
@@ -178,10 +178,10 @@ export default function ServiceAccountsPage() {
           return (
             <div className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0">
               {visible.map((g) => (
-                <Tag key={g.id} title={g.name} size="md" />
+                <Badge key={g.id} title={g.name} size="md" />
               ))}
               {overflow > 0 && (
-                <Tag
+                <Badge
                   title={t("table.groups.overflow.label", { count: overflow })}
                   size="md"
                 />

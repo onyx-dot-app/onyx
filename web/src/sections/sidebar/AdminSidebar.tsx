@@ -14,7 +14,12 @@ import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
-import { InputTypeIn, SidebarTab, Tag, type TagProps } from "@opal/components";
+import {
+  InputTypeIn,
+  SidebarTab,
+  Badge,
+  type BadgeProps,
+} from "@opal/components";
 import { SvgSearch, SvgX } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import {
@@ -103,11 +108,11 @@ export default function AdminSidebar() {
     [t]
   );
 
-  const betaTag: TagProps = useBetaTag();
+  const betaTag: BadgeProps = useBetaTag();
   const sectionTag = (sectionId: AdminNavSectionId | null) =>
     sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
   const itemTag = (beta: boolean | undefined) =>
-    beta ? <Tag {...betaTag} /> : undefined;
+    beta ? <Badge {...betaTag} /> : undefined;
 
   // Search the labels the user reads, not the underlying ids.
   const itemExtractor = useCallback(

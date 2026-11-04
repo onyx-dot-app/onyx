@@ -1,5 +1,5 @@
-import { TAG_COLORS } from "@opal/components/tag/colors";
-import type { TagColor } from "@opal/components/tag/colors";
+import { BADGE_COLORS } from "@opal/components/badge/colors";
+import type { BadgeColor } from "@opal/components/badge/colors";
 
 /** Value stored in a tile's `data-tile-type` for slash-command skill tiles. */
 export const SKILL_TILE_TYPE = "skill";
@@ -60,8 +60,8 @@ interface IconSpec {
 }
 
 interface TileSpec {
-  /** Opal Tag tint sourcing the tile's fill/text colors (single source of truth). */
-  tagColor: TagColor;
+  /** Opal Badge tint sourcing the tile's fill/text colors (single source of truth). */
+  tagColor: BadgeColor;
   icon: IconSpec;
 }
 
@@ -138,7 +138,7 @@ export function createRichInputTileNode(
   }
   tile.className = "rich-input-tile";
   const spec = TILE_SPECS[config.type] ?? TILE_SPECS.paste!;
-  const tagColor = TAG_COLORS[spec.tagColor];
+  const tagColor = BADGE_COLORS[spec.tagColor];
   tile.classList.add(...tagColor.bg.split(" "));
   tile.title = isSkill
     ? config.preview

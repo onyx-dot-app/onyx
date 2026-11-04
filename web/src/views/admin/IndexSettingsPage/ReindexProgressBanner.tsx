@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn, markdown } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, MessageCard, ProgressBar, Tag, Text } from "@opal/components";
+import {
+  Button,
+  MessageCard,
+  ProgressBar,
+  Badge,
+  Text,
+} from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -88,23 +94,27 @@ export default function ReindexProgressBanner({
                   {t("progressBanner.status.label")}
                 </Text>
                 <div className="flex flex-row items-center gap-1.5">
-                  <Tag color="purple" icon={SvgClock} title={String(waiting)} />
-                  <Tag
+                  <Badge
+                    color="purple"
+                    icon={SvgClock}
+                    title={String(waiting)}
+                  />
+                  <Badge
                     color="blue"
                     icon={in_progress > 0 ? SpinningLoader : SvgLoader}
                     title={String(in_progress)}
                   />
-                  <Tag
+                  <Badge
                     color="green"
                     icon={SvgCheckCircle}
                     title={String(completed)}
                   />
-                  <Tag
+                  <Badge
                     color="red"
                     icon={SvgAlertCircle}
                     title={String(failed)}
                   />
-                  <Tag
+                  <Badge
                     color="amber"
                     icon={SvgPauseCircle}
                     title={String(paused)}

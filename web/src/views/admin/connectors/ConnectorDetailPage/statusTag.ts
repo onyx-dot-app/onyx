@@ -1,5 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
-import type { TagColor } from "@opal/components";
+import type { BadgeColor } from "@opal/components";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgAlertTriangle,
@@ -22,7 +22,7 @@ import type { ValidStatuses } from "@/lib/types";
 /** One pair or attempt state as its status tag shows it. */
 export interface StatusTag {
   icon: IconFunctionComponent;
-  color: TagColor;
+  color: BadgeColor;
   /** Key under `admin.status.badges`. */
   labelKey:
     | "deleting"

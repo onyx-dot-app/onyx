@@ -6,7 +6,7 @@ import {
   Button,
   InputTypeIn,
   LineItemButton,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { SvgUser, SvgUsers, SvgX } from "@opal/icons";
@@ -205,7 +205,7 @@ export function AddPeoplePicker({
                       onClick={() => handleSelectSuggestion(suggestion)}
                       rightChildren={
                         suggestion.shared ? (
-                          <Tag
+                          <Badge
                             color="gray"
                             title={t("addPeople.sharedTag.label")}
                           />

@@ -9,7 +9,7 @@ import type {
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import { Text, Divider, type TagProps } from "@opal/components";
+import { Text, Divider, type BadgeProps } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { Content, ContentAction, Section } from "@opal/layouts";
@@ -61,8 +61,8 @@ interface InputLayoutProps {
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
   title: string | RichStr;
-  /** Tag rendered inline beside the title (passed through to Content). */
-  tag?: TagProps;
+  /** Badge rendered inline beside the title (passed through to Content). */
+  tag?: BadgeProps;
   description?: string | RichStr;
   suffix?: "optional" | (string & {});
   /**

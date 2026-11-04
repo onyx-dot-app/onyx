@@ -5,7 +5,7 @@ import {
   Button,
   InputTypeIn,
   type InputTypeInProps,
-  Tag,
+  Badge,
 } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
@@ -161,7 +161,7 @@ function InputPasswordTypeIn({
           isExistingValue ? (
             <>
               {leftChildren}
-              <Tag icon={SvgKey} title={realValue} color="blue" size="md" />
+              <Badge icon={SvgKey} title={realValue} color="blue" size="md" />
             </>
           ) : (
             leftChildren

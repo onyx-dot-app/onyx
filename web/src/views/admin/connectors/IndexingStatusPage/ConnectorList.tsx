@@ -12,7 +12,7 @@ import {
   InputTypeIn,
   MessageCard,
   Pagination,
-  Chip,
+  Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { Content, IllustrationContent, Section } from "@opal/layouts";
@@ -232,7 +232,7 @@ export default function ConnectorList({
             }))
               .filter(({ count }) => count > 0)
               .map(({ counted, count, tag }) => (
-                <Chip
+                <Tag
                   key={counted}
                   icon={tag.icon}
                   title={format.number(count)}

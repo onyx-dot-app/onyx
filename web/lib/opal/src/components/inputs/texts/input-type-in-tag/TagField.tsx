@@ -6,7 +6,7 @@ import "@opal/components/inputs/texts/input-type-in/styles.css";
 import "@opal/components/inputs/texts/input-type-in-tag/styles.css";
 import { useCallback, useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, Chip, CHIP_REMOVE_ATTR, Text } from "@opal/components";
+import { Button, Tag, TAG_REMOVE_ATTR, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 import {
@@ -134,7 +134,7 @@ interface TagFieldProps extends TagFieldBaseProps {
 
 /**
  * The chips-in-input chrome (Figma `Input/Tags`) that `InputTypeInTag` and
- * `InputMultiSelect` share: `Chip`s inline with a text input on the
+ * `InputMultiSelect` share: `Tag`s inline with a text input on the
  * `.opal-input` chrome. Backspace on an empty input arms the last tag, and
  * Backspace or Delete on an armed tag removes it. Internal to Opal.
  */
@@ -209,7 +209,7 @@ function TagField({
   function removeButtons(): HTMLButtonElement[] {
     return Array.from(
       ownRootRef.current?.querySelectorAll<HTMLButtonElement>(
-        `[${CHIP_REMOVE_ATTR}]`
+        `[${TAG_REMOVE_ATTR}]`
       ) ?? []
     );
   }
@@ -282,7 +282,7 @@ function TagField({
       focusField();
       return;
     }
-    if (!target.hasAttribute(CHIP_REMOVE_ATTR)) return;
+    if (!target.hasAttribute(TAG_REMOVE_ATTR)) return;
     const buttons = removeButtons();
     const index = buttons.indexOf(target as HTMLButtonElement);
     // The arrows walk the chips; Right off the last one returns to the
@@ -338,7 +338,7 @@ function TagField({
           }
         >
           {tags.map((tag) => (
-            <Chip
+            <Tag
               key={tag.id}
               title={tag.label}
               icon={tag.icon}

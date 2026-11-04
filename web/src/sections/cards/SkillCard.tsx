@@ -7,7 +7,7 @@ import {
   Card,
   InputSwitch,
   InputCheckbox,
-  Tag,
+  Badge,
   Text,
   Tooltip,
 } from "@opal/components";
@@ -321,7 +321,7 @@ export default function SkillCard({
           >
             {isRequired && (
               <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
-                <Tag
+                <Badge
                   title={skillCopy("modals.share.installation.required")}
                   color="blue"
                 />
@@ -344,17 +344,20 @@ export default function SkillCard({
             )}
             {item.source === "builtin" ? (
               item.is_available ? (
-                <Tag title={t("skill.tags.builtin.label")} color="blue" />
+                <Badge title={t("skill.tags.builtin.label")} color="blue" />
               ) : (
-                <Tag title={t("skill.tags.unavailable.label")} color="amber" />
+                <Badge
+                  title={t("skill.tags.unavailable.label")}
+                  color="amber"
+                />
               )
             ) : isInvalid ? (
-              <Tag title={t("skill.tags.invalid.label")} color="amber" />
+              <Badge title={t("skill.tags.invalid.label")} color="amber" />
             ) : dependency ? (
-              <Tag title={t("skill.tags.appSkill.label")} color="blue" />
+              <Badge title={t("skill.tags.appSkill.label")} color="blue" />
             ) : null}
             {item.source === "custom" && (
-              <Tag
+              <Badge
                 title={t(
                   item.skill.public_permission !== null
                     ? "skill.tags.organization.label"

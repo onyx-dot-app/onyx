@@ -1,8 +1,8 @@
-// Tag color tints. Kept in a standalone, import-free module so non-React
+// Badge color tints. Kept in a standalone, import-free module so non-React
 // surfaces (e.g. the raw-DOM skill tile in richInputTile.ts) can source the same
 // classes without pulling in the component/CSS barrel.
 
-export type TagColor =
+export type BadgeColor =
   | "green"
   | "purple"
   | "blue"
@@ -13,8 +13,8 @@ export type TagColor =
   | "white";
 
 // `fg` is the `text` colour as a CSS value, for the tag's icon.
-export const TAG_COLORS: Record<
-  TagColor,
+export const BADGE_COLORS: Record<
+  BadgeColor,
   { bg: string; text: string; fg: string }
 > = {
   green: {

@@ -4,7 +4,7 @@ import { IconLoader } from "@opal/loaders";
 import { useId, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, CopyButton, Tag, Text } from "@opal/components";
+import { Button, Card, CopyButton, Badge, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { InputVertical, Section, toast } from "@opal/layouts";
 
@@ -84,7 +84,7 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
           <Text font="main-ui-action" color="text-05" as="span">
             {status.domain}
           </Text>
-          <Tag
+          <Badge
             color={status.verified ? "green" : "amber"}
             title={
               status.verified

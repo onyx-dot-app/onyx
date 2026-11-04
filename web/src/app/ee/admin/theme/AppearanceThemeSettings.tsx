@@ -9,7 +9,7 @@ import {
   InputTypeIn,
   InputSwitch,
   Tabs,
-  Tag,
+  Badge,
 } from "@opal/components";
 import Preview from "@/app/ee/admin/theme/Preview";
 import CharacterCount from "@/refresh-components/CharacterCount";

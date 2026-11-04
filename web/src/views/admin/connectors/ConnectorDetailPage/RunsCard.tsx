@@ -13,7 +13,7 @@ import {
   InputTypeIn,
   MessageCard,
   Pagination,
-  Tag,
+  Badge,
   Tooltip,
   Text,
 } from "@opal/components";
@@ -528,7 +528,7 @@ export default function RunsCard({
                 })}
                 side="top"
               >
-                <Tag
+                <Badge
                   icon={icon}
                   title={format.number(data?.status_counts[group] ?? 0)}
                   color={color}

@@ -7,7 +7,7 @@ import {
   type RowData,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Button, Divider, LineItemButton, Tag } from "@opal/components";
+import { Button, Divider, LineItemButton, Badge } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgColumn, SvgCheck } from "@opal/icons";
 import { Popover } from "@opal/components/popover/components";
@@ -74,7 +74,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
                 rightChildren={
                   !canHide ? (
                     <div className="flex items-center">
-                      <Tag title={strings.alwaysShown} color="blue" />
+                      <Badge title={strings.alwaysShown} color="blue" />
                     </div>
                   ) : isVisible ? (
                     <SvgCheck size={16} className="text-action-selection-05" />

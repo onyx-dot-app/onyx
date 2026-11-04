@@ -8,7 +8,7 @@ import type {
   Rounding,
 } from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
-import type { TagProps } from "@opal/components/tag/components";
+import type { BadgeProps } from "@opal/components/badge/components";
 import {
   type ContentActionProps,
   type ContentVariant,
@@ -64,10 +64,10 @@ type RowContentProps = {
   suffix?: string;
 
   /**
-   * Tag beside the title, like a plan badge. Shown only by the `heading`
+   * Badge beside the title, like a plan badge. Shown only by the `heading`
    * variant with a `main-*` size preset.
    */
-  tag?: TagProps;
+  tag?: BadgeProps;
 
   /**
    * Cap the description at N lines and truncate the rest. Unset wraps without

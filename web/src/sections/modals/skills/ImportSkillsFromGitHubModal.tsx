@@ -10,7 +10,7 @@ import {
   InputTypeIn,
   MessageCard,
   Modal,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
@@ -351,7 +351,7 @@ export function ImportSkillsFromGitHubModalView({
                               </Text>
                             )}
                           </div>
-                          <Tag
+                          <Badge
                             color={item.skill.enabled ? "green" : "gray"}
                             title={
                               item.skill.enabled
@@ -546,7 +546,7 @@ export function ImportSkillsFromGitHubModalView({
                               </Text>
                             </div>
                             {unavailable && (
-                              <Tag
+                              <Badge
                                 color="amber"
                                 title={t("importGithub.unavailableTag.label")}
                               />

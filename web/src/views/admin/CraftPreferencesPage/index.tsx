@@ -5,7 +5,7 @@ import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { Button, Card, Tag, Text } from "@opal/components";
+import { Button, Card, Badge, Text } from "@opal/components";
 import {
   IllustrationContent,
   InputVertical,
@@ -250,7 +250,7 @@ export default function CraftPreferencesPage() {
                   placeholder={t("defaultModel.placeholder")}
                 />
                 {isInherited && (
-                  <Tag title={t("defaultModel.inheritedTag.label")} />
+                  <Badge title={t("defaultModel.inheritedTag.label")} />
                 )}
                 {configuredSelection && (
                   <Button
