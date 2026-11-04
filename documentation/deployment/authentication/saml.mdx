@@ -72,8 +72,9 @@ On the application's **Sign On** tab, open the SAML setup instructions or metada
 
 4. The modal shows the **ACS (Reply) URL**. Make sure it matches the single sign-on URL in your identity provider.
 
-Users now see a **Sign in with &lt;Display Name&gt;** button on the login page.
-Onyx also accepts IdP-initiated sign-in from the identity provider's app dashboard.
+Users now see a **Sign in with &lt;Display Name&gt;** button on the login page. Sign-in must start from this button.
+Onyx rejects IdP-initiated sign-in from the identity provider's app dashboard,
+because it only accepts a SAML response that answers a sign-in request Onyx issued.
 
 ## Upgrading from an Older Version
 
