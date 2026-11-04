@@ -15,9 +15,17 @@ class Counts:
     search_calls: int = 0
     reasoning_packets: int = 0
     citations: int = 0
+    code_programs: int = 0
+    code_waits: int = 0
+    nested_search_calls: int = 0
+    code_failures: int = 0
 
 
 METRIC_NAMES = tuple(field.name for field in fields(Counts))
+# Counts that each turn adds from its StreamSummary field of the same name.
+STREAM_METRIC_NAMES = tuple(
+    name for name in METRIC_NAMES if name not in ("active", "started", "finished")
+)
 
 local: dict[str, Counts] = {}
 workers: dict[str, dict[str, dict[str, int]]] = {}

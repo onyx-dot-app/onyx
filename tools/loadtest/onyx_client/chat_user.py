@@ -254,22 +254,20 @@ class OnyxChatUser(HttpUser):
                     return
 
                 for line in response.iter_lines(decode_unicode=True):
-                    before = (
-                        analyzer.summary.packets,
-                        analyzer.summary.search_calls,
-                        analyzer.summary.reasoning_packets,
-                        analyzer.summary.citations,
-                        analyzer.summary.answer_chars,
-                    )
+                    before = {
+                        name: getattr(analyzer.summary, name)
+                        for name in workload_metrics.STREAM_METRIC_NAMES
+                    }
                     milestones = analyzer.feed(line)
                     counts = workload_metrics.local[self.scenario_prefix]
-                    counts.packets += analyzer.summary.packets - before[0]
-                    counts.search_calls += analyzer.summary.search_calls - before[1]
-                    counts.reasoning_packets += (
-                        analyzer.summary.reasoning_packets - before[2]
-                    )
-                    counts.citations += analyzer.summary.citations - before[3]
-                    counts.answer_chars += analyzer.summary.answer_chars - before[4]
+                    for name, value in before.items():
+                        setattr(
+                            counts,
+                            name,
+                            getattr(counts, name)
+                            + getattr(analyzer.summary, name)
+                            - value,
+                        )
                     for milestone in milestones:
                         self._fire(milestone, start)
                         if disconnect_target and milestone == disconnect_target:

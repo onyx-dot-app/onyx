@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 # Packet type strings (subset of StreamingType in
 # backend/onyx/server/query_and_chat/streaming_models.py — keep in sync).
@@ -22,6 +23,8 @@ SEARCH_TOOL_START = "search_tool_start"
 SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
 DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
 RESEARCH_AGENT_START = "research_agent_start"
+CODE_MODE_START = "code_mode_start"
+CODE_MODE_DELTA = "code_mode_delta"
 STOP = "stop"
 ERROR = "error"
 CHAT_HEARTBEAT = "chat_heartbeat"
@@ -33,6 +36,12 @@ FIRST_ANSWER_TOKEN = "first_answer_token"
 FIRST_DR_PLAN = "first_dr_plan"
 FIRST_RESEARCH_AGENT = "first_research_agent"
 
+# Final code_mode_delta statuses of a program that did not finish its work.
+# "running" is not final: a later wait_code observation reports the end.
+CODE_FAILED_STATUSES = frozenset({"failed", "timed_out", "cancelled", "terminated"})
+# BUSY_MESSAGE in backend/onyx/tools/tool_implementations/code_mode/sandbox.py.
+CODE_SANDBOX_BUSY = "The code sandbox is busy"
+
 
 @dataclass
 class StreamSummary:
@@ -43,6 +52,14 @@ class StreamSummary:
     search_calls: int = 0
     reasoning_packets: int = 0
     citations: int = 0
+    # Code mode: execute_code programs, wait_code observations, searches that
+    # programs made (also counted in search_calls), and failed observations.
+    code_programs: int = 0
+    code_waits: int = 0
+    nested_search_calls: int = 0
+    code_failures: int = 0
+    # First failed code mode observation; it fails the turn.
+    code_error: str | None = None
     saw_message_start: bool = False
     saw_stop: bool = False
     error: str | None = None
@@ -98,6 +115,8 @@ class ChatStreamAnalyzer:
         self.summary.search_calls += packet_type == SEARCH_TOOL_START
         self.summary.reasoning_packets += packet_type == "reasoning_delta"
         self.summary.citations += packet_type == "citation_info"
+        if self._code_mode(packet_type, obj, data.get("placement")):
+            return hit
         if packet_type == ERROR or obj.get("error"):
             self.summary.error = str(obj.get("error") or "streaming error packet")
         elif packet_type == CHAT_HEARTBEAT:
@@ -127,6 +146,40 @@ class ChatStreamAnalyzer:
 
         return hit
 
+    def _code_mode(
+        self, packet_type: object, obj: dict[str, Any], placement: object
+    ) -> bool:
+        """Count code mode work; True when the packet is a code mode packet.
+
+        Searches inside a program carry `placement.sub_turn_index`.
+        """
+        if packet_type == SEARCH_TOOL_START and isinstance(placement, dict):
+            self.summary.nested_search_calls += (
+                placement.get("sub_turn_index") is not None
+            )
+        if packet_type == CODE_MODE_START:
+            if obj.get("observation") or 0:
+                self.summary.code_waits += 1
+            else:
+                self.summary.code_programs += 1
+            return True
+        if packet_type == CODE_MODE_DELTA:
+            # Its `error` is the program's, judged by status, not a stream error.
+            self._code_status(obj)
+            return True
+        return False
+
+    def _code_status(self, obj: dict[str, Any]) -> None:
+        status = obj.get("status")
+        error = str(obj.get("error") or "")
+        busy = CODE_SANDBOX_BUSY in error
+        if status not in CODE_FAILED_STATUSES and not busy:
+            return
+        self.summary.code_failures += 1
+        if self.summary.code_error is None:
+            label = "code sandbox busy" if busy else f"code program {status}"
+            self.summary.code_error = f"{label}: {error[:200]}" if error else label
+
     def _mark(self, milestone: str, hit: list[str]) -> None:
         if milestone not in self.summary.milestones_hit:
             self.summary.milestones_hit.add(milestone)
@@ -137,6 +190,7 @@ class ChatStreamAnalyzer:
         # is a failure even if answer content already arrived.
         return (
             self.summary.error is None
+            and self.summary.code_error is None
             and self.summary.saw_message_start
             and self.summary.answer_chars > 0
             and self.summary.saw_stop
@@ -145,6 +199,8 @@ class ChatStreamAnalyzer:
     def failure_reason(self) -> str:
         if self.summary.error:
             return self.summary.error
+        if self.summary.code_error:
+            return self.summary.code_error
         if not self.summary.saw_message_start or not self.summary.answer_chars:
             return (
                 "stream ended without answer content "

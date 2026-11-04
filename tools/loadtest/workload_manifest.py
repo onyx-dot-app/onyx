@@ -23,7 +23,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if not re.fullmatch(
-        r"mock-profile-(chat|search|research|held)-v1(?:-agents[1-9][0-9]*)?",
+        r"mock-profile-(chat|search|research|held)-v1"
+        r"(?:-agents[1-9][0-9]*|-codebatched)?",
         args.model,
     ):
         parser.error(
