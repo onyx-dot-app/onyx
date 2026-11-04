@@ -55,7 +55,7 @@ import {
   runWarnings,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
-// A Badge is clickable only with an onClick, and the popover trigger around it handles the click.
+// A Tag is clickable only with an onClick, and the popover trigger around it handles the click.
 const NOOP = () => {};
 
 const GROUP_STYLE: Record<
