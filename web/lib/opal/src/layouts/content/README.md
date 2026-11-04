@@ -8,7 +8,7 @@ sets every size, and `orientation` places the icon.
 ## Structure
 
 ```
-root            0.25rem gap, in every orientation
+root            0.25rem gap inline or reversed; no gap stacked
 ├─ icon row     icon (+ moreIcon1, moreIcon2 when stacked)
 └─ text         no gap
    ├─ title row title, suffix, aux icon, badge, edit pencil

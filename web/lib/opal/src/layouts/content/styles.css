@@ -134,7 +134,8 @@
 /* ===========================================================================
    Content — layout
 
-   Root (0.25rem gap in every orientation) > icon row, then the text (no gap)
+   Root (0.25rem gap inline or reversed, none stacked) > icon row, then the
+   text (no gap)
    > title row, then description. Every size derives from the title font:
    an icon box is `1lh` of it, with 2px padding, so the glyph is the line
    height less 4px.
@@ -155,8 +156,10 @@
   @apply flex-row-reverse;
 }
 
+/* Stacked, the icon row sits directly on the title, with no gap. */
 .opal-content[data-orientation="stacked"] {
   @apply flex-col;
+  gap: 0;
 }
 
 /* ---------------------------------------------------------------------------
