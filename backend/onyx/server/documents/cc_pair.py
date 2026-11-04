@@ -71,6 +71,7 @@ from onyx.db.enums import (
     CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
+    IndexAttemptErrorOrder,
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
@@ -464,6 +465,8 @@ def get_resolvable_cc_pair_runs_count(
     since: datetime | None = Query(None),
     until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
+    # Annotated, so a direct call that omits it gets None, not a Query object.
+    status_groups: Annotated[list[CCPairRunStatusGroup] | None, Query()] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
@@ -471,7 +474,12 @@ def get_resolvable_cc_pair_runs_count(
 ) -> CCPairRunsResolvableCountResponse:
     """How many runs ``resolve-matching`` would mark for the same filter."""
     request = CCPairRunsResolveMatchingRequest(
-        level=level, q=q, since=since, until=until, kinds=kinds
+        level=level,
+        q=q,
+        since=since,
+        until=until,
+        kinds=kinds,
+        status_groups=status_groups,
     )
     wanted, run_filters = _pair_open_levels(cc_pair_id, request, user, db_session)
     return CCPairRunsResolvableCountResponse(
@@ -1214,6 +1222,7 @@ def get_cc_pair_indexing_errors(
     page_size: int = Query(10, ge=1, le=100),
     index_attempt_id: int | None = Query(None),
     q: str | None = Query(None, max_length=200),
+    order: IndexAttemptErrorOrder = IndexAttemptErrorOrder.TIME,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -1228,6 +1237,8 @@ def get_cc_pair_indexing_errors(
         page_size: Number of errors to return per page
         index_attempt_id: Keeps only the errors of this attempt
         q: Keeps only errors whose message or document id contains this text
+        order: ``time`` lists newest first. ``state`` lists open errors, then
+            errors resolved without retry, then closed errors, each newest first
         user: Current user; must be able to read this CC pair
         db_session: Database session
 
@@ -1253,6 +1264,7 @@ def get_cc_pair_indexing_errors(
         page_size=page_size,
         index_attempt_id=index_attempt_id,
         query=query,
+        order=order,
     )
     return PaginatedReturn(
         items=[

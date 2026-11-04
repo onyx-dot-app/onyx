@@ -810,6 +810,8 @@ class CCPairRunsResolveMatchingRequest(BaseModel):
     since: datetime | None = None
     until: datetime | None = None
     kinds: list[CCPairRunKind] | None = None
+    # Narrows each level's own groups, so a level outside them matches nothing.
+    status_groups: list[CCPairRunStatusGroup] | None = None
     # The fleet routes narrow to these of the caller's pairs, None or empty
     # meaning all. The pair routes reject it.
     cc_pair_ids: list[int] | None = Field(

@@ -565,6 +565,7 @@ def get_resolvable_indexing_runs_count(
     cc_pair_ids: Annotated[
         list[int] | None, Query(max_length=CC_PAIR_RUN_BATCH_MAX)
     ] = None,
+    status_groups: Annotated[list[CCPairRunStatusGroup] | None, Query()] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
@@ -577,6 +578,7 @@ def get_resolvable_indexing_runs_count(
         since=since,
         until=until,
         kinds=kinds,
+        status_groups=status_groups,
         cc_pair_ids=cc_pair_ids,
     )
     scoped = _operated_open_levels(db_session, user, request)
