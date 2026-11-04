@@ -119,7 +119,7 @@ export default function GroupsCell({
     <div className="flex flex-wrap gap-1 max-w-56">
       {groups.map((g) => (
         <div key={g.id} className="max-w-40">
-          <Badge title={g.name} size="md" />
+          <Badge title={g.name} size={5.5} />
         </div>
       ))}
     </div>
@@ -129,14 +129,14 @@ export default function GroupsCell({
     <>
       {(isMeasuring ? groups : groups.slice(0, effectiveVisible)).map((g) => (
         <div key={g.id} data-group-tag className="shrink-0">
-          <Badge title={g.name} size="md" />
+          <Badge title={g.name} size={5.5} />
         </div>
       ))}
       {hasOverflow && (
         <div className="shrink-0">
           <Badge
             title={t("groupsCell.overflow.label", { count: overflowCount })}
-            size="md"
+            size={5.5}
           />
         </div>
       )}

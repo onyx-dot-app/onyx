@@ -323,7 +323,7 @@ export default function SkillCard({
               <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
                 <Badge
                   title={skillCopy("modals.share.installation.required")}
-                  color="blue"
+                  color="info"
                 />
               </Tooltip>
             )}
@@ -344,17 +344,17 @@ export default function SkillCard({
             )}
             {item.source === "builtin" ? (
               item.is_available ? (
-                <Badge title={t("skill.tags.builtin.label")} color="blue" />
+                <Badge title={t("skill.tags.builtin.label")} color="info" />
               ) : (
                 <Badge
                   title={t("skill.tags.unavailable.label")}
-                  color="amber"
+                  color="pending"
                 />
               )
             ) : isInvalid ? (
-              <Badge title={t("skill.tags.invalid.label")} color="amber" />
+              <Badge title={t("skill.tags.invalid.label")} color="pending" />
             ) : dependency ? (
-              <Badge title={t("skill.tags.appSkill.label")} color="blue" />
+              <Badge title={t("skill.tags.appSkill.label")} color="info" />
             ) : null}
             {item.source === "custom" && (
               <Badge
@@ -365,7 +365,7 @@ export default function SkillCard({
                       ? "skill.tags.personal.label"
                       : "skill.tags.shared.label"
                 )}
-                color={item.skill.is_personal ? "purple" : "blue"}
+                color={item.skill.is_personal ? "default" : "info"}
               />
             )}
           </Section>

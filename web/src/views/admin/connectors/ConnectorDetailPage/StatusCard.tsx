@@ -178,7 +178,7 @@ function AccessStatBlock({ accessType }: AccessStatBlockProps) {
       <Badge
         icon={everyone ? SvgOrganization : SvgUsers}
         title={tAccess(everyone ? "everyone.title" : "specificGroups.title")}
-        color="gray"
+        color="default"
         variant="status"
       />
     </StatBlock>

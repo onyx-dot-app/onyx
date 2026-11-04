@@ -267,7 +267,7 @@ export function RunWarningsTag({ run }: RunWarningsTagProps) {
       <Badge
         icon={SvgAlertTriangle}
         title={format.number(warnings)}
-        color="orange"
+        color="warning"
         variant="count"
       />
     </Tooltip>
@@ -314,7 +314,7 @@ function Count({ icon: Icon, value, tooltip, look }: CountProps) {
   if (look === "tag") {
     return (
       <Tooltip tooltip={tooltip} side="top">
-        <Badge icon={Icon} title={format.number(value)} color="gray" />
+        <Badge icon={Icon} title={format.number(value)} color="default" />
       </Tooltip>
     );
   }
@@ -655,7 +655,7 @@ export default function RunRow({
                   <StatusTagPill tag={tag} />
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tooltip tooltip={t("newModel.tooltip")} side="top">
-                      <Badge title={t("newModel.label")} color="purple" />
+                      <Badge title={t("newModel.label")} color="info" />
                     </Tooltip>
                   )}
                   {run.kind === "indexing" && (

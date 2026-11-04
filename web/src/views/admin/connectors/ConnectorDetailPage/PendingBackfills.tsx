@@ -56,11 +56,11 @@ export default function PendingBackfills({ backfills }: PendingBackfillsProps) {
             variant="section"
             rightChildren={
               <Section flexDirection="row" gap={1} height="fit" width="fit">
-                {backfill.scoped && <Badge title={t("scoped")} color="blue" />}
+                {backfill.scoped && <Badge title={t("scoped")} color="info" />}
                 {backfill.failure_count > 0 && (
                   <Badge
                     title={t("failures", { count: backfill.failure_count })}
-                    color="amber"
+                    color="pending"
                   />
                 )}
               </Section>

@@ -447,7 +447,7 @@ export default function MCPAuthenticationPage({
                         selectedAuthentication === recommendedAuthentication ? (
                           <Badge
                             title={recommendedCopy("label")}
-                            color="green"
+                            color="success"
                           />
                         ) : undefined
                       }

@@ -297,7 +297,7 @@ export default function ActivityCard({
           ? t("tags.indexingItems", { count: openErrors })
           : t("tags.indexing", { count: openDocs });
 
-  const pillIconColor = closed ? undefined : "orange";
+  const pillIconColor = closed ? undefined : "warning";
 
   // The outline draws the edge inside the card, so hovering does not shift the list.
   return (
@@ -380,7 +380,7 @@ export default function ActivityCard({
                 >
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tooltip tooltip={tRuns("newModel.tooltip")} side="top">
-                      <Badge title={tRuns("newModel.label")} color="purple" />
+                      <Badge title={tRuns("newModel.label")} color="info" />
                     </Tooltip>
                   )}
                   <OverflowText font="secondary-body" color={mutedColor}>

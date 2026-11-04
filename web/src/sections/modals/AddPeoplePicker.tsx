@@ -206,7 +206,7 @@ export function AddPeoplePicker({
                       rightChildren={
                         suggestion.shared ? (
                           <Badge
-                            color="gray"
+                            color="default"
                             title={t("addPeople.sharedTag.label")}
                           />
                         ) : null

@@ -33,10 +33,10 @@ const PLAN_STYLES: Record<
     copyKey: "free" | "business" | "enterprise";
   }
 > = {
-  [Tier.COMMUNITY]: { color: "gray", icon: undefined, copyKey: "free" },
-  [Tier.BUSINESS]: { color: "green", icon: SvgUsers, copyKey: "business" },
+  [Tier.COMMUNITY]: { color: "default", icon: undefined, copyKey: "free" },
+  [Tier.BUSINESS]: { color: "success", icon: SvgUsers, copyKey: "business" },
   [Tier.ENTERPRISE]: {
-    color: "amber",
+    color: "pending",
     icon: SvgOrganization,
     copyKey: "enterprise",
   },
@@ -75,7 +75,7 @@ export function usePlans(): Record<Tier, PlanMetadata> {
  */
 export function useBetaTag(): BadgeProps {
   const t = useTranslations("common.plans");
-  return useMemo(() => ({ title: t("beta.title"), color: "blue" }), [t]);
+  return useMemo(() => ({ title: t("beta.title"), color: "info" }), [t]);
 }
 
 // The value of the "Upgrade Plan" row. It is a link, so it is never picked.

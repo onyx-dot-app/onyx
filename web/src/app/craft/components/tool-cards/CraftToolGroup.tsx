@@ -89,8 +89,8 @@ export default function CraftToolGroup({
                 <span className="ms-auto shrink-0 flex items-center gap-2">
                   <Badge
                     title={t("calls.tag", { count: toolCalls.length })}
-                    size="sm"
-                    color="gray"
+                    size={4}
+                    color="default"
                   />
                 </span>
                 <SvgChevronDown

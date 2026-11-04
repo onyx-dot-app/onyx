@@ -4,8 +4,8 @@
    Tag
 
    A coloured pill around a `Content` (secondary preset, body variant: the
-   title in secondary-body), which draws the icon and title. Fixed height of
-   1rem (sm) / 1.375rem (md).
+   title in secondary-body), which draws the icon and title. Fixed height on
+   the Tailwind scale: 4 (1rem) or 5.5 (1.375rem).
    --------------------------------------------------------------------------- */
 
 .opal-badge {
@@ -16,7 +16,7 @@
   gap: 0;
 }
 
-.opal-badge[data-size="md"] {
+.opal-badge[data-size="5.5"] {
   height: 1.375rem;
   padding: 0 0.375rem;
   border-radius: 0.375rem;

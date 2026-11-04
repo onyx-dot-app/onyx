@@ -16,7 +16,7 @@ A gray, 1.375rem-tall `Interactive` pill around a `Content` (`secondary` preset)
 | ------------------ | -------------------------------------- | -------------- | --------------------------------------------------------------------------- |
 | `title`            | `string \| RichStr`                    | **(required)** | Tag label text                                                             |
 | `icon`             | `IconFunctionComponent`                | —              | Optional icon before the title                                              |
-| `iconColor`        | `BadgeColor`                             | —              | Icon colour when it is not the tag's gray, kept in every state             |
+| `iconColor`        | `StatusVariants`                         | —              | Icon colour when it is not the tag's gray, kept in every state             |
 | `onClick`          | `MouseEventHandler<HTMLButtonElement>` | —              | Makes the tag a button. `ref` is then a `Ref<HTMLButtonElement>`           |
 | `onRemove`         | `() => void`                           | —              | Renders the remove button                                                   |
 | `removeInTabOrder` | `boolean`                              | `true`         | Removable only: whether the remove button is a Tab stop                     |
@@ -35,7 +35,7 @@ import { SvgAlertTriangle, SvgUsers } from "@opal/icons";
 
 <Tag
   icon={SvgAlertTriangle}
-  iconColor="orange"
+  iconColor="warning"
   title="3 failed"
   onClick={openDetails}
 />

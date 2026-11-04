@@ -74,7 +74,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
                 rightChildren={
                   !canHide ? (
                     <div className="flex items-center">
-                      <Badge title={strings.alwaysShown} color="blue" />
+                      <Badge title={strings.alwaysShown} color="info" />
                     </div>
                   ) : isVisible ? (
                     <SvgCheck size={16} className="text-action-selection-05" />

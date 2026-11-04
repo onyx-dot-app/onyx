@@ -1,8 +1,12 @@
 "use client";
 
 import "@opal/components/badge/styles.css";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { BADGE_COLORS, type BadgeColor } from "@opal/components/badge/colors";
+import type {
+  IconFunctionComponent,
+  RichStr,
+  StatusVariants,
+} from "@opal/types";
+import { BADGE_COLORS } from "@opal/components/badge/colors";
 import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
@@ -10,7 +14,8 @@ import { cn } from "@opal/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-type BadgeSize = "sm" | "md";
+/** Height on the Tailwind scale: `4` is 1rem, `5.5` is 1.375rem. */
+type BadgeSize = 4 | 5.5;
 
 /**
  * - `"default"`: tinted background, icon and label in the color's text.
@@ -31,13 +36,13 @@ type BadgeProps = {
   /** Badge label text. */
   title: string | RichStr;
 
-  /** Color variant. Default: `"gray"`. */
-  color?: BadgeColor;
+  /** Status color. Default: `"default"`. */
+  color?: StatusVariants;
 
   /** How the color is applied. Default: `"default"`. */
   variant?: BadgeVariant;
 
-  /** Size variant. Default: `"sm"`. */
+  /** Height on the Tailwind scale. Default: `4`. */
   size?: BadgeSize;
 };
 
@@ -47,14 +52,14 @@ type BadgeProps = {
 
 /**
  * A small coloured label: an icon and a title in a tinted pill. It does
- * nothing on click. For a removable, clickable or field chip, use `Chip`.
+ * nothing on click. For a removable, clickable or field pill, use `Tag`.
  */
 function Badge({
   icon,
   title,
-  color = "gray",
+  color = "default",
   variant = "default",
-  size = "sm",
+  size = 4,
   ...rest
 }: BadgeProps) {
   const config = BADGE_COLORS[color];
@@ -90,4 +95,4 @@ function Badge({
 }
 
 export { Badge, type BadgeProps, type BadgeSize, type BadgeVariant };
-export { BADGE_COLORS, type BadgeColor } from "@opal/components/badge/colors";
+export { BADGE_COLORS } from "@opal/components/badge/colors";

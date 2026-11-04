@@ -71,7 +71,7 @@ function FederatedRow({ connector }: FederatedRowProps) {
             titleMaxLines={1}
             sizePreset="main-ui"
             variant="section"
-            tag={{ title: t("federated.tag"), color: "gray" }}
+            tag={{ title: t("federated.tag"), color: "default" }}
           />
         </Section>
         <Button

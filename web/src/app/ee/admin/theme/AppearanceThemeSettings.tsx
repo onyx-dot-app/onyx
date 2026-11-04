@@ -530,7 +530,7 @@ export const AppearanceThemeSettings = forwardRef<
           >
             <FormField.Label>
               {t("helpLink.label")}
-              {!enterpriseTier && <PlanTag plan={Tier.ENTERPRISE} size="sm" />}
+              {!enterpriseTier && <PlanTag plan={Tier.ENTERPRISE} size={4} />}
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn

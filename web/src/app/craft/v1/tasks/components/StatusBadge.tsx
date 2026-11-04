@@ -29,7 +29,7 @@ export function taskStatusTag(status: ScheduledTaskStatus): BadgeProps {
   return {
     icon: isActive ? SvgPlayCircle : SvgPauseCircle,
     title: isActive ? "Active" : "Paused",
-    color: isActive ? "green" : "gray",
+    color: isActive ? "success" : "default",
   };
 }
 

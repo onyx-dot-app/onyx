@@ -1,5 +1,5 @@
 import { BADGE_COLORS } from "@opal/components/badge/colors";
-import type { BadgeColor } from "@opal/components/badge/colors";
+import type { StatusVariants } from "@opal/types";
 
 /** Value stored in a tile's `data-tile-type` for slash-command skill tiles. */
 export const SKILL_TILE_TYPE = "skill";
@@ -61,14 +61,14 @@ interface IconSpec {
 
 interface TileSpec {
   /** Opal Badge tint sourcing the tile's fill/text colors (single source of truth). */
-  tagColor: BadgeColor;
+  tagColor: StatusVariants;
   icon: IconSpec;
 }
 
 // Spec per tile type. Keyed by RichTileConfig.type; falls back to "paste".
 const TILE_SPECS: Record<string, TileSpec> = {
   paste: {
-    tagColor: "gray",
+    tagColor: "default",
     icon: {
       paths: [CLIPBOARD_PATH],
       viewBox: "0 0 16 16",
@@ -78,7 +78,7 @@ const TILE_SPECS: Record<string, TileSpec> = {
     },
   },
   skill: {
-    tagColor: "blue",
+    tagColor: "info",
     icon: {
       paths: [SPARKLE_PATH],
       viewBox: "0 0 16 16",

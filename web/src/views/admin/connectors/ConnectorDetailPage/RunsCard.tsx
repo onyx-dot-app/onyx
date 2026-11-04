@@ -85,10 +85,10 @@ const STATUS_GROUPS: CCPairRunStatusGroup[] = [
 
 // The header counts. A group with no runs shows no tag.
 const COUNT_TAGS = [
-  { group: "succeeded", icon: SvgCheckCircle, color: "green" },
-  { group: "running", icon: IconLoader, color: "blue" },
-  { group: "failed", icon: SvgXOctagon, color: "red" },
-  { group: "canceled", icon: SvgXCircle, color: "gray" },
+  { group: "succeeded", icon: SvgCheckCircle, color: "success" },
+  { group: "running", icon: IconLoader, color: "info" },
+  { group: "failed", icon: SvgXOctagon, color: "error" },
+  { group: "canceled", icon: SvgXCircle, color: "default" },
 ] as const;
 
 const ALL = "all";

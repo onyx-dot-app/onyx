@@ -1,5 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
-import type { BadgeColor } from "@opal/components";
+import type { StatusVariants } from "@opal/types";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgAlertTriangle,
@@ -22,7 +22,7 @@ import type { ValidStatuses } from "@/lib/types";
 /** One pair or attempt state as its status tag shows it. */
 export interface StatusTag {
   icon: IconFunctionComponent;
-  color: BadgeColor;
+  color: StatusVariants;
   /** Key under `admin.status.badges`. */
   labelKey:
     | "deleting"
@@ -47,30 +47,34 @@ export interface StatusTag {
 }
 
 const TAGS = {
-  deleting: { icon: SvgAlertTriangle, color: "red", labelKey: "deleting" },
-  paused: { icon: SvgPause, color: "amber", labelKey: "paused" },
-  scheduled: { icon: SvgClock, color: "purple", labelKey: "scheduled" },
+  deleting: { icon: SvgAlertTriangle, color: "error", labelKey: "deleting" },
+  paused: { icon: SvgPause, color: "pending", labelKey: "paused" },
+  scheduled: { icon: SvgClock, color: "pending", labelKey: "scheduled" },
   initialIndexing: {
     icon: IconLoader,
-    color: "blue",
+    color: "info",
     labelKey: "initialIndexing",
   },
-  invalid: { icon: SvgXOctagon, color: "red", labelKey: "invalid" },
-  indexing: { icon: IconLoader, color: "blue", labelKey: "indexing" },
-  canceled: { icon: SvgXCircle, color: "gray", labelKey: "canceled" },
+  invalid: { icon: SvgXOctagon, color: "error", labelKey: "invalid" },
+  indexing: { icon: IconLoader, color: "info", labelKey: "indexing" },
+  canceled: { icon: SvgXCircle, color: "default", labelKey: "canceled" },
   // Resumes on its own, so it reads neutral rather than as indexed.
-  interrupted: { icon: SvgXCircle, color: "gray", labelKey: "interrupted" },
-  indexed: { icon: SvgCheckCircle, color: "green", labelKey: "indexed" },
-  backfilling: { icon: IconLoader, color: "blue", labelKey: "backfilling" },
-  backfilled: { icon: SvgCheckCircle, color: "green", labelKey: "backfilled" },
-  failed: { icon: SvgXOctagon, color: "red", labelKey: "failed" },
-  syncing: { icon: IconLoader, color: "blue", labelKey: "syncing" },
-  synced: { icon: SvgCheckCircle, color: "green", labelKey: "synced" },
-  pruning: { icon: IconLoader, color: "blue", labelKey: "pruning" },
-  pruned: { icon: SvgCheckCircle, color: "green", labelKey: "pruned" },
-  checking: { icon: IconLoader, color: "blue", labelKey: "checking" },
-  passed: { icon: SvgCheckCircle, color: "green", labelKey: "passed" },
-  failedToRun: { icon: SvgXOctagon, color: "red", labelKey: "failedToRun" },
+  interrupted: { icon: SvgXCircle, color: "default", labelKey: "interrupted" },
+  indexed: { icon: SvgCheckCircle, color: "success", labelKey: "indexed" },
+  backfilling: { icon: IconLoader, color: "info", labelKey: "backfilling" },
+  backfilled: {
+    icon: SvgCheckCircle,
+    color: "success",
+    labelKey: "backfilled",
+  },
+  failed: { icon: SvgXOctagon, color: "error", labelKey: "failed" },
+  syncing: { icon: IconLoader, color: "info", labelKey: "syncing" },
+  synced: { icon: SvgCheckCircle, color: "success", labelKey: "synced" },
+  pruning: { icon: IconLoader, color: "info", labelKey: "pruning" },
+  pruned: { icon: SvgCheckCircle, color: "success", labelKey: "pruned" },
+  checking: { icon: IconLoader, color: "info", labelKey: "checking" },
+  passed: { icon: SvgCheckCircle, color: "success", labelKey: "passed" },
+  failedToRun: { icon: SvgXOctagon, color: "error", labelKey: "failedToRun" },
 } satisfies Record<StatusTag["labelKey"], StatusTag>;
 
 /** The tag for the pair's own state, else the latest attempt's. A live attempt outranks repeated failures. */

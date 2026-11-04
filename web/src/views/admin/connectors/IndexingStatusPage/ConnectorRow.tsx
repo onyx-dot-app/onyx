@@ -299,7 +299,7 @@ export default function ConnectorRow({
                           <Badge
                             icon={SvgAlertTriangle}
                             title={format.number(warnings)}
-                            color="orange"
+                            color="warning"
                             variant="count"
                           />
                         </Tooltip>

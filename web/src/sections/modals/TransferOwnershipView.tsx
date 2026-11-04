@@ -130,7 +130,10 @@ export function TransferOwnershipView({
           </div>
 
           {selectedTarget.type === "group" ? (
-            <Badge color="gray" title={t("transferOwnership.groupTag.label")} />
+            <Badge
+              color="default"
+              title={t("transferOwnership.groupTag.label")}
+            />
           ) : null}
         </div>
       ) : null}

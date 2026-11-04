@@ -7,7 +7,7 @@ import { render } from "@testing-library/react";
 import SvgSparkle from "@opal/icons/sparkle";
 import SvgClipboard from "@opal/icons/clipboard";
 import { BADGE_COLORS } from "@opal/components/badge/colors";
-import type { BadgeColor } from "@opal/components/badge/colors";
+import type { StatusVariants } from "@opal/types";
 import { createRichInputTileNode } from "@/lib/richInputTile";
 
 // Guards the raw-DOM tiles against drift from their source of truth (the Opal
@@ -28,7 +28,7 @@ function expectIconMirrors(tile: HTMLElement, realIcon: ComponentType) {
   expect(tileIcon?.getAttribute("stroke-linecap")).toBe(realCap);
 }
 
-function expectColorsFromTag(tile: HTMLElement, color: BadgeColor) {
+function expectColorsFromTag(tile: HTMLElement, color: StatusVariants) {
   for (const cls of BADGE_COLORS[color].bg.split(" ")) {
     expect(tile.classList.contains(cls)).toBe(true);
   }
@@ -59,7 +59,7 @@ describe("skill tile stays in sync with the Opal Badge + sparkle icon", () => {
   });
 
   it("sources fill + text colors from BADGE_COLORS.blue", () => {
-    expectColorsFromTag(skillTile(), "blue");
+    expectColorsFromTag(skillTile(), "info");
   });
 });
 
@@ -78,6 +78,6 @@ describe("paste tile stays in sync with the Opal Badge + clipboard icon", () => 
   });
 
   it("sources fill + text colors from BADGE_COLORS.gray", () => {
-    expectColorsFromTag(pasteTile(), "gray");
+    expectColorsFromTag(pasteTile(), "default");
   });
 });

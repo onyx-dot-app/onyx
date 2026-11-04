@@ -219,7 +219,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Badge title={t("required.label")} color="white" variant="status" />
+    <Badge title={t("required.label")} color="default" variant="status" />
   ) : undefined;
 
   // A required expected check cannot be skipped.
@@ -653,7 +653,7 @@ export function CheckCardView({
             <Badge
               icon={SvgXOctagon}
               title={t("requiredFailed", { count: requiredFailed })}
-              color="red"
+              color="error"
             />
           )}
           {/* Shown unless a run that broke left no rows to fold. */}

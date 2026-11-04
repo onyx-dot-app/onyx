@@ -85,7 +85,7 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
             {status.domain}
           </Text>
           <Badge
-            color={status.verified ? "green" : "amber"}
+            color={status.verified ? "success" : "pending"}
             title={
               status.verified
                 ? t("domainVerification.status.verified")

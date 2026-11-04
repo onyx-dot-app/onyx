@@ -129,13 +129,13 @@ export default function ReindexErrorsModal({
         cell: (row) =>
           row.paused ? (
             <Badge
-              color="amber"
+              color="pending"
               icon={SvgPauseCircle}
               title={t("errorsModal.status.paused")}
             />
           ) : (
             <Badge
-              color="red"
+              color="error"
               icon={SvgAlertCircle}
               title={t("errorsModal.status.failed")}
             />

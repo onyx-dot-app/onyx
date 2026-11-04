@@ -80,9 +80,9 @@ export function ActivityCountTags({
           <Badge
             icon={SvgXOctagon}
             title={format.number(failures)}
-            color="red"
+            color="error"
             variant={variant}
-            size="md"
+            size={5.5}
           />
         </Tooltip>
       )}
@@ -91,9 +91,9 @@ export function ActivityCountTags({
           <Badge
             icon={SvgAlertTriangle}
             title={format.number(errors)}
-            color="orange"
+            color="warning"
             variant={variant}
-            size="md"
+            size={5.5}
           />
         </Tooltip>
       )}

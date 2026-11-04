@@ -217,7 +217,7 @@ function ExistingProviderCard({
             padding={2}
             tag={
               isDefault
-                ? { title: t("providerCard.defaultTag.label"), color: "blue" }
+                ? { title: t("providerCard.defaultTag.label"), color: "info" }
                 : undefined
             }
             rightChildren={

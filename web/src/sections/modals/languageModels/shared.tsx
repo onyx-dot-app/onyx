@@ -680,7 +680,7 @@ function ModelRow({
                       side="top"
                     >
                       <Badge
-                        color="gray"
+                        color="default"
                         title={t("models.row.decisionTag.label")}
                       />
                     </Tooltip>

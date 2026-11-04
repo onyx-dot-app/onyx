@@ -95,27 +95,27 @@ export default function ReindexProgressBanner({
                 </Text>
                 <div className="flex flex-row items-center gap-1.5">
                   <Badge
-                    color="purple"
+                    color="default"
                     icon={SvgClock}
                     title={String(waiting)}
                   />
                   <Badge
-                    color="blue"
+                    color="info"
                     icon={in_progress > 0 ? SpinningLoader : SvgLoader}
                     title={String(in_progress)}
                   />
                   <Badge
-                    color="green"
+                    color="success"
                     icon={SvgCheckCircle}
                     title={String(completed)}
                   />
                   <Badge
-                    color="red"
+                    color="error"
                     icon={SvgAlertCircle}
                     title={String(failed)}
                   />
                   <Badge
-                    color="amber"
+                    color="pending"
                     icon={SvgPauseCircle}
                     title={String(paused)}
                   />

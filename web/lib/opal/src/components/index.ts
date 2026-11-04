@@ -133,7 +133,6 @@ export {
   BADGE_COLORS,
   type BadgeProps,
   type BadgeVariant,
-  type BadgeColor,
 } from "@opal/components/badge/components";
 
 /* Tag */

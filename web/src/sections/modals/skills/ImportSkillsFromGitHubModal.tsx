@@ -352,7 +352,7 @@ export function ImportSkillsFromGitHubModalView({
                             )}
                           </div>
                           <Badge
-                            color={item.skill.enabled ? "green" : "gray"}
+                            color={item.skill.enabled ? "success" : "default"}
                             title={
                               item.skill.enabled
                                 ? t("importGithub.skillTag.enabled")
@@ -547,7 +547,7 @@ export function ImportSkillsFromGitHubModalView({
                             </div>
                             {unavailable && (
                               <Badge
-                                color="amber"
+                                color="pending"
                                 title={t("importGithub.unavailableTag.label")}
                               />
                             )}

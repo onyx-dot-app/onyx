@@ -267,8 +267,8 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
         <div className="opal-toast-pile-count">
           <Badge
             title={strings.toastMoreCount(pileCount)}
-            color="white"
-            size="md"
+            color="default"
+            size={5.5}
           />
         </div>
       )}

@@ -120,7 +120,7 @@ function TokenLimitSection({
     <Collapsible
       title={t("tokenLimits.section.title")}
       description={t("tokenLimits.section.description")}
-      tag={disabled ? { ...plans[Tier.ENTERPRISE].tag, size: "sm" } : undefined}
+      tag={disabled ? { ...plans[Tier.ENTERPRISE].tag, size: 4 } : undefined}
     >
       <Disabled disabled={disabled} tooltip={disabledTooltip}>
         <Card border="solid" rounding={4}>

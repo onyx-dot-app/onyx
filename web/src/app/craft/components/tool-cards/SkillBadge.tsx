@@ -12,5 +12,5 @@ interface SkillBadgeProps {
  * originated from a skill (skill-namespaced tool name).
  */
 export default function SkillBadge({ name }: SkillBadgeProps) {
-  return <Badge icon={SvgSparkle} title={name} color="blue" size="sm" />;
+  return <Badge icon={SvgSparkle} title={name} color="info" size={4} />;
 }
