@@ -2,7 +2,7 @@
 
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
-import type { TagProps } from "@opal/components";
+import type { BadgeProps } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -24,12 +24,12 @@ interface TaskStatusBadgeProps {
   status: ScheduledTaskStatus;
 }
 
-export function taskStatusTag(status: ScheduledTaskStatus): TagProps {
+export function taskStatusTag(status: ScheduledTaskStatus): BadgeProps {
   const isActive = status === "ACTIVE";
   return {
     icon: isActive ? SvgPlayCircle : SvgPauseCircle,
     title: isActive ? "Active" : "Paused",
-    color: isActive ? "green" : "gray",
+    color: isActive ? "success" : "default",
   };
 }
 

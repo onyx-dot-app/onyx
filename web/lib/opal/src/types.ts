@@ -170,7 +170,8 @@ export type CardColor =
   | "status-success-00"
   | "status-warning-00"
   | "status-error-00"
-  | "theme-amber-01";
+  | "theme-amber-01"
+  | "theme-purple-01";
 
 // ---------------------------------------------------------------------------
 // Color Types
@@ -209,6 +210,7 @@ export type StatusVariants =
   | "success"
   | "warning"
   | "pending"
+  | "queued"
   | "error";
 
 // ---------------------------------------------------------------------------

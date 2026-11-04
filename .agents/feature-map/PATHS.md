@@ -261,6 +261,7 @@ covers new files that match it.
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
 | `web/src/app/app/components/files/`, `web/src/sections/modals/UserFilesModal.tsx`, `web/src/sections/cards/FileCard.tsx` | file-store-and-user-files |
 | `web/src/sections/modals/PreviewModal/` | chat-frontend |
+| `web/src/lib/richInputTile.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/app/plugins/` | plugins, chat-frontend |
 | `web/src/app/app/settings/llm-gateway/` | llm-gateway |
@@ -316,6 +317,7 @@ covers new files that match it.
 | `web/src/sections/knowledge/`, `web/src/lib/hierarchy/` | agents-personas, access-control |
 | `web/src/app/admin/federated/`, `web/src/components/admin/federated/`, `web/src/hooks/useFederatedOAuthStatus.ts`, `web/src/app/federated/oauth/`, `web/src/components/chat/FederatedOAuthModal.tsx` | federated-search |
 | `web/src/app/admin/groups*/`, `web/src/app/ee/admin/groups/`, `web/src/views/admin/GroupsPage/` | access-control, authorization |
+| `web/src/sections/admin/AdminListHeader.tsx` | access-control, auth-and-identity |
 | `web/src/lib/permissions/` | authorization |
 | `web/src/app/admin/scim/`, `web/src/app/admin/users/`, `web/src/app/admin/service-accounts/`, `web/src/app/ee/admin/scim/`, `web/src/app/ee/admin/service-accounts/`, `web/src/views/admin/ScimPage/`, `web/src/views/admin/ServiceAccountsPage/`, `web/src/views/admin/UsersPage/` | auth-and-identity |
 | `web/src/hooks/useScimToken.ts`, `web/src/hooks/useAdminUsers.ts`, `web/src/hooks/useUsers.ts`, `web/src/hooks/useUserCounts.ts`, `web/src/providers/UserProvider.tsx`, `web/src/lib/hooks/useCaptcha.ts` | auth-and-identity |
@@ -323,6 +325,7 @@ covers new files that match it.
 | `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/lib/oauth/`, `web/src/app/anonymous/` | auth-and-identity |
 | `web/src/app/oauth-provider/`, `web/src/sections/oauth-provider/`, `web/src/lib/oauth-provider/`, `web/src/lib/sso/`, `web/src/lib/users/`, `web/src/lib/auth/` | auth-and-identity |
 | `web/src/app/admin/agents/`, `web/src/lib/agents/`, `web/src/views/admin/AgentsPage.tsx`, `web/src/views/admin/AgentsPage/`, `web/src/app/ee/agents/stats/` | agents-personas |
+| `web/src/sections/modals/AddPeoplePicker.tsx`, `web/src/sections/modals/TransferOwnershipView.tsx` | agents-personas, skills |
 | `web/src/app/admin/chat-preferences/` | chat-preferences |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
 | `web/src/app/admin/language-models/`, `web/src/views/admin/LanguageModelsPage.tsx`, `web/src/sections/modals/languageModels/`, `web/src/lib/languageModels/`, `web/src/lib/hooks/useLLMProviderOptions.ts` | llm-providers |

@@ -12,7 +12,7 @@ import {
   InputTypeIn,
   MessageCard,
   Pagination,
-  Chip,
+  Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { Content, IllustrationContent, Section } from "@opal/layouts";
@@ -71,7 +71,7 @@ function FederatedRow({ connector }: FederatedRowProps) {
             titleMaxLines={1}
             sizePreset="main-ui"
             variant="section"
-            tag={{ title: t("federated.tag"), color: "gray" }}
+            tag={{ title: t("federated.tag"), color: "default" }}
           />
         </Section>
         <Button
@@ -161,7 +161,7 @@ export default function ConnectorList({
       >
         <Section height="fit" className="min-w-40 flex-1">
           <InputTypeIn
-            searchIcon
+            icon="search"
             variant="internal"
             placeholder={t("search.placeholder")}
             maxLength={SEARCH_MAX_LENGTH}
@@ -232,7 +232,7 @@ export default function ConnectorList({
             }))
               .filter(({ count }) => count > 0)
               .map(({ counted, count, tag }) => (
-                <Chip
+                <Tag
                   key={counted}
                   icon={tag.icon}
                   title={format.number(count)}

@@ -32,7 +32,7 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 | `placeholder`   | `{ whole?: string; fraction?: string }`  | `"0"` / `"00"`            | Segment placeholders                                                        |
 | `error`         | `boolean`                                | `false`                   | Error chrome on the field                                                   |
 | `disabled`      | `boolean`                                | `false`                   | Disabled chrome, segments inert                                             |
-| `id`            | `string`                                 | —                         | Applied to the whole segment for `<label htmlFor>`                          |
+| `id`            | `string`                                 | —                         | Applied to the whole segment for `<label htmlFor>`; the label then names it in place of "Whole amount" |
 
 ## Locale
 

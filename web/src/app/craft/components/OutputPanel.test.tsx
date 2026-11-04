@@ -227,7 +227,7 @@ it("clears only the turn filter from the Outputs turn chip", async () => {
   });
   render(<BuildOutputPanel panelMode="medium" />);
   expect(
-    screen.getByText("Turn 4 outputs").closest(".opal-chip")
+    screen.getByText("Turn 4 outputs").closest(".opal-tag")
   ).toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", { name: "Remove Turn 4 outputs" })

@@ -23,6 +23,7 @@ import {
 import { SvgCheck, SvgGlobe, SvgUser, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import { InputCurrencyField } from "@opal/form";
 import useShareableGroups from "@/hooks/useShareableGroups";
 import { formatCurrency, formatTokenCount } from "@/lib/format";
 
@@ -36,7 +37,7 @@ interface RateLimitFormValues {
   enabled: boolean;
   period_days: string;
   token_budget: string;
-  cost_budget_dollars: string;
+  cost_budget_dollars: number | null;
   target_scope: Scope;
   user_group_id: number | undefined;
 }
@@ -341,7 +342,10 @@ function LimitSummary({ groupName }: LimitSummaryProps) {
   const period = Number(values.period_days);
   if (!Number.isInteger(period) || period < 1) return null;
 
-  const costAmount = parseBudgetInput(values.cost_budget_dollars);
+  const costAmount =
+    values.cost_budget_dollars !== null && values.cost_budget_dollars > 0
+      ? values.cost_budget_dollars
+      : null;
   const tokenAmount = parseBudgetInput(values.token_budget);
   const cost = costAmount === null ? null : formatCurrency(costAmount, locale);
   const tokens =
@@ -434,7 +438,7 @@ export default function CreateRateLimitModal({
             enabled: true,
             period_days: "30",
             token_budget: "",
-            cost_budget_dollars: "",
+            cost_budget_dollars: null,
             target_scope: forSpecificScope || Scope.GLOBAL,
             user_group_id: forSpecificUserGroup,
           }}
@@ -444,18 +448,11 @@ export default function CreateRateLimitModal({
               .integer(t("modal.errors.periodInteger"))
               .min(1, t("modal.errors.periodMin")),
             cost_budget_dollars: Yup.number()
-              .transform((value, original) =>
-                original === "" ? undefined : value
-              )
+              .nullable()
               .moreThan(0, t("modal.errors.costMoreThanZero"))
               .max(
                 MAX_COST_BUDGET_DOLLARS,
                 t("modal.errors.costMax", { amount: MAX_COST_BUDGET_DOLLARS })
-              )
-              .test(
-                "minimum-cents",
-                t("modal.errors.costMinCents"),
-                (value) => value == null || Math.round(value * 100) > 0
               )
               .when("token_budget", {
                 is: (value: string | undefined) =>
@@ -498,9 +495,9 @@ export default function CreateRateLimitModal({
                 ? null
                 : Number(values.token_budget) / 1_000;
             const costBudgetCents =
-              values.cost_budget_dollars === ""
+              values.cost_budget_dollars === null
                 ? null
-                : Math.round(Number(values.cost_budget_dollars) * 100);
+                : Math.round(values.cost_budget_dollars * 100);
             await onSubmit(
               values.target_scope,
               Number(values.period_days) * HOURS_PER_DAY,
@@ -609,23 +606,7 @@ export default function CreateRateLimitModal({
                       title={t("modal.costBudget.title")}
                       description={t("modal.costBudget.description")}
                     >
-                      <InputTypeInField
-                        name="cost_budget_dollars"
-                        inputMode="decimal"
-                        prefixText="$"
-                        placeholder={t("modal.costBudget.placeholder")}
-                        rightChildren={
-                          <div className="pe-1">
-                            <Text
-                              font="secondary-action"
-                              color="text-03"
-                              wordWrap="whitespace-nowrap"
-                            >
-                              {t("modal.costBudget.unit")}
-                            </Text>
-                          </div>
-                        }
-                      />
+                      <InputCurrencyField name="cost_budget_dollars" />
                     </InputVertical>
 
                     <InputVertical

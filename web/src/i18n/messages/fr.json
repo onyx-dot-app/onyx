@@ -9931,14 +9931,11 @@
         },
         "costBudget": {
           "description": "Dépense maximale par période de réinitialisation. Définissez un budget de coût, un budget de jetons, ou les deux.",
-          "placeholder": "Aucune limite de coût",
-          "title": "Budget de coût",
-          "unit": "USD"
+          "title": "Budget de coût"
         },
         "errors": {
           "budgetRequired": "Saisissez un budget de coût, un budget de jetons, ou les deux",
           "costMax": "Le budget de coût maximal est de {amount, number} $",
-          "costMinCents": "Le budget de coût doit être d'au moins 0,01 $",
           "costMoreThanZero": "Le budget de coût doit être supérieur à 0",
           "groupRequired": "Sélectionnez un groupe d'utilisateurs",
           "periodInteger": "Saisissez un nombre entier de jours",

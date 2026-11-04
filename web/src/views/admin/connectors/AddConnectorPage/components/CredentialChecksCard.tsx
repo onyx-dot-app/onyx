@@ -22,7 +22,7 @@ import {
   type LogVariant,
   OverflowText,
   SelectCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import {
@@ -219,7 +219,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Tag title={t("required.label")} color="white" variant="status" />
+    <Badge title={t("required.label")} color="default" textColor="text-04" />
   ) : undefined;
 
   // A required expected check cannot be skipped.
@@ -650,10 +650,10 @@ export function CheckCardView({
               )
             ))}
           {collapsed && requiredFailed > 0 && (
-            <Tag
+            <Badge
               icon={SvgXOctagon}
               title={t("requiredFailed", { count: requiredFailed })}
-              color="red"
+              color="error"
             />
           )}
           {/* Shown unless a run that broke left no rows to fold. */}

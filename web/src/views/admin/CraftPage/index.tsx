@@ -239,7 +239,7 @@ export default function CraftPage() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={t("search.placeholder")}
-                searchIcon
+                icon="search"
               />
               <Table
                 items={realUsers}

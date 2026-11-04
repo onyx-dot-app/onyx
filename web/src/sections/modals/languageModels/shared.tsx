@@ -59,7 +59,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard, Tag, Tooltip } from "@opal/components";
+import { Card, EmptyMessageCard, Badge, Tooltip } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
 import { SvgEdit } from "@opal/icons";
@@ -700,8 +700,8 @@ function ModelRow({
                       )}
                       side="top"
                     >
-                      <Tag
-                        color="gray"
+                      <Badge
+                        color="default"
                         title={t("models.row.decisionTag.label")}
                       />
                     </Tooltip>

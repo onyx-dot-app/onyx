@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components";
@@ -234,12 +234,7 @@ export default function InputNumber({
   return (
     // Pointer convenience only — this forwards a click to the input, which is
     // already keyboard reachable.
-    <div
-      role="presentation"
-      className="opal-input"
-      data-variant={variant}
-      onClick={() => inputRef.current?.focus()}
-    >
+    <InputContainer variant={variant} focusTarget={() => inputRef.current}>
       <input
         ref={inputRef}
         id={id}
@@ -325,6 +320,6 @@ export default function InputNumber({
           </div>
         )}
       </div>
-    </div>
+    </InputContainer>
   );
 }

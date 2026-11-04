@@ -3,7 +3,7 @@
 import { NavLink, useNavigation } from "@opal/navigation";
 import { useEffect, useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
+import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
@@ -296,11 +296,11 @@ export default function ConnectorRow({
                           })}
                           side="top"
                         >
-                          <Tag
+                          <Badge
                             icon={SvgAlertTriangle}
                             title={format.number(warnings)}
-                            color="orange"
-                            variant="count"
+                            color="warning"
+                            textColor="text-04"
                           />
                         </Tooltip>
                       )}

@@ -9931,14 +9931,11 @@
         },
         "costBudget": {
           "description": "Maximum spend per reset period. Set a cost budget, a token budget, or both.",
-          "placeholder": "No cost limit",
-          "title": "Cost budget",
-          "unit": "USD"
+          "title": "Cost budget"
         },
         "errors": {
           "budgetRequired": "Enter a cost budget, a token budget, or both",
           "costMax": "The maximum cost budget is ${amount, number}",
-          "costMinCents": "Cost budget must be at least $0.01",
           "costMoreThanZero": "Cost budget must be greater than 0",
           "groupRequired": "Select a user group",
           "periodInteger": "Enter a whole number of days",

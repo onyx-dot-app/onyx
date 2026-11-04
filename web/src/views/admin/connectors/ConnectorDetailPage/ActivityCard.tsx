@@ -8,8 +8,8 @@ import {
   OverflowText,
   Popover,
   SelectButton,
-  Chip,
   Tag,
+  Badge,
   Tooltip,
   Text,
 } from "@opal/components";
@@ -55,7 +55,7 @@ import {
   runWarnings,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
-// A Tag is clickable only with an onClick, and the popover trigger around it handles the click.
+// A Badge is clickable only with an onClick, and the popover trigger around it handles the click.
 const NOOP = () => {};
 
 const GROUP_STYLE: Record<
@@ -297,7 +297,7 @@ export default function ActivityCard({
           ? t("tags.indexingItems", { count: openErrors })
           : t("tags.indexing", { count: openDocs });
 
-  const pillIconColor = closed ? undefined : "orange";
+  const pillIconColor = closed ? undefined : "warning";
 
   // The outline draws the edge inside the card, so hovering does not shift the list.
   return (
@@ -380,7 +380,7 @@ export default function ActivityCard({
                 >
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tooltip tooltip={tRuns("newModel.tooltip")} side="top">
-                      <Tag title={tRuns("newModel.label")} color="purple" />
+                      <Badge title={tRuns("newModel.label")} color="info" />
                     </Tooltip>
                   )}
                   <OverflowText font="secondary-body" color={mutedColor}>
@@ -429,7 +429,7 @@ export default function ActivityCard({
                 {trace !== null && (
                   <Popover onOpenChange={togglePopover("trace")}>
                     <Popover.Trigger asChild>
-                      <Chip
+                      <Tag
                         icon={SvgTextLines}
                         title={t("tags.stackTrace")}
                         onClick={NOOP}
@@ -447,7 +447,7 @@ export default function ActivityCard({
                   <>
                     <Popover onOpenChange={togglePopover("items")}>
                       <Popover.Trigger asChild>
-                        <Chip
+                        <Tag
                           icon={WARNING_ICONS.indexing}
                           iconColor={pillIconColor}
                           title={docsLabel}
@@ -485,7 +485,7 @@ export default function ActivityCard({
                 ) : run.kind === "checks" && listsChecks ? (
                   <Popover onOpenChange={togglePopover("items")}>
                     <Popover.Trigger asChild>
-                      <Chip
+                      <Tag
                         icon={WARNING_ICONS.checks}
                         iconColor={pillIconColor}
                         title={docsLabel}
@@ -500,7 +500,7 @@ export default function ActivityCard({
                   </Popover>
                 ) : (
                   warnings > 0 && (
-                    <Chip
+                    <Tag
                       icon={WARNING_ICONS[run.kind]}
                       iconColor={pillIconColor}
                       title={docsLabel}
