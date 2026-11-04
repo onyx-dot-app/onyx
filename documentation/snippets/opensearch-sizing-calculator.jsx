@@ -311,8 +311,10 @@ export const OpenSearchSizingCalculator = () => {
   const effectiveCopies = Math.max(copies, searchCopies);
   const {
     provision, hotAll, recommendedRam, nodeRam, cachePerNode, recommendedType, nodeType, vcpusPerNode,
-    maxDisk, recommendedDisk, nodeDisk, nodes, limit,
+    maxDisk, recommendedDisk, nodeDisk, nodes, limit: layoutLimit,
   } = effectiveCopies > copies ? layout(effectiveCopies) : first;
+  // Raised copies come from search, even when the node count then equals the copy count.
+  const limit = layoutLimit === "copies" && effectiveCopies > copies ? "search" : layoutLimit;
   // Share of the cluster's storage, file cache and vCPUs that the data and peak search use.
   const storageUse = (indexOneCopy * effectiveCopies) / (nodeDisk * 1e9 * nodes);
   const memoryUse = hotAll / (cachePerNode * nodes);
@@ -657,7 +659,7 @@ export const OpenSearchSizingCalculator = () => {
               className={input + " w-32"}
             />
             <div className={hint}>
-              {"About " + Math.round((qps * 86400) / PEAK_TO_AVERAGE).toLocaleString() + " questions per day, if the peak is about " + PEAK_TO_AVERAGE + "× the average rate. Each question runs about 10 searches."}
+              {"About " + Math.round((qps * 86400) / PEAK_TO_AVERAGE).toLocaleString() + " questions per day, if the peak is about " + PEAK_TO_AVERAGE + "× the average rate. Each question runs about " + SEARCHES_PER_QUESTION + " searches. Count questions from the search API and MCP clients too."}
             </div>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
@@ -728,6 +730,9 @@ export const OpenSearchSizingCalculator = () => {
                 : limit === "search"
                 ? "Set by search load: peak searches need " + fmtVcpus(vcpusForSearch) + " in total at " + pct(SEARCH_CPU_TARGET) + " CPU, and each node has " + vcpusPerNode + " vCPUs."
                 : "Set by the copy count: " + effectiveCopies + (effectiveCopies === 1 ? " copy needs" : " copies need") + " at least " + effectiveCopies + (effectiveCopies === 1 ? " node" : " nodes") + (zones === 3 ? ", one in each zone" : "") + "."}
+              {limit !== "search" && cpuUse >= 0.5
+                ? " The node size is set by search load: peak searches need " + fmtVcpus(vcpusForSearch) + " at " + pct(SEARCH_CPU_TARGET) + " CPU."
+                : null}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
