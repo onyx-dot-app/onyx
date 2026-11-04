@@ -3,6 +3,8 @@ from __future__ import annotations
 import tempfile
 import threading
 import uuid
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, cast
 
@@ -10,8 +12,13 @@ import puremagic
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
-    from azure.storage.blob import BlobServiceClient
+    from azure.storage.blob import (
+        BlobSasPermissions,
+        BlobServiceClient,
+        UserDelegationKey,
+    )
 
+from onyx.configs.app_configs import FILE_STORE_PRESIGN_MAX_TTL_SECONDS
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
@@ -27,7 +34,17 @@ from onyx.db.file_record import (
     upsert_filerecord,
 )
 from onyx.db.models import FileRecord
-from onyx.file_store.file_store import FileStore, content_byte_size
+from onyx.file_store.file_store import (
+    PresignableFileStore,
+    PresignedUrlsNotSupportedError,
+    content_byte_size,
+    presign_expiry,
+)
+from onyx.file_store.models import (
+    PendingPresignedUpload,
+    PresignedRequest,
+    StoredObjectStat,
+)
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
@@ -35,8 +52,12 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+_USER_DELEGATION_KEY_LIFETIME = timedelta(hours=1)
+# Covers clock skew between this host and Azure.
+_USER_DELEGATION_KEY_BACKDATE = timedelta(minutes=5)
 
-class AzureBlobBackedFileStore(FileStore):
+
+class AzureBlobBackedFileStore(PresignableFileStore):
     """Azure Blob Storage backed file store with Workload Identity support.
 
     The container name maps to the generic `bucket_name` column of `file_record`.
@@ -54,6 +75,9 @@ class AzureBlobBackedFileStore(FileStore):
         self._blob_service_client: BlobServiceClient | None = None
         # Shared across threads, so the first operations build one client.
         self._client_lock = threading.Lock()
+        self._user_delegation_key: UserDelegationKey | None = None
+        self._user_delegation_key_expiry = datetime.min.replace(tzinfo=UTC)
+        self._user_delegation_key_lock = threading.Lock()
         self._container_name = container_name
         self._azure_prefix = azure_prefix or "onyx-files"
         self._connection_string = connection_string
@@ -63,6 +87,8 @@ class AzureBlobBackedFileStore(FileStore):
         # first read/write. A connection string needs neither URL nor key.
         self._account_url: str | None = None
         self._account_key_credential: dict[str, str] | None = None
+        # A custom-domain endpoint hides the account name that a SAS needs.
+        self._configured_account_name = None if connection_string else account_name
         if not connection_string:
             if account_url:
                 self._account_url = account_url
@@ -466,3 +492,154 @@ class AzureBlobBackedFileStore(FileStore):
                 prefix=prefix, db_session=db_session
             )
         return file_records
+
+    def _presign_bucket_name(self) -> str:
+        return self._container_name
+
+    def _presign_object_key(self, file_id: str) -> str:
+        return self._get_object_key(file_id)
+
+    def _shared_account_key(self) -> str | None:
+        if self._account_key_credential is not None:
+            return self._account_key_credential["account_key"]
+        if self._connection_string is not None:
+            fields = dict(
+                part.split("=", 1)
+                for part in self._connection_string.split(";")
+                if "=" in part
+            )
+            return fields.get("AccountKey")
+        return None
+
+    def _get_user_delegation_key(self, client: BlobServiceClient) -> UserDelegationKey:
+        """Kept until less than the longest URL lifetime remains on it."""
+        from azure.core.exceptions import HttpResponseError
+
+        now = datetime.now(UTC)
+        with self._user_delegation_key_lock:
+            if (
+                self._user_delegation_key is None
+                or self._user_delegation_key_expiry - now
+                < timedelta(seconds=FILE_STORE_PRESIGN_MAX_TTL_SECONDS)
+            ):
+                expiry = now + _USER_DELEGATION_KEY_LIFETIME
+                try:
+                    self._user_delegation_key = client.get_user_delegation_key(
+                        key_start_time=now - _USER_DELEGATION_KEY_BACKDATE,
+                        key_expiry_time=expiry,
+                    )
+                except HttpResponseError as e:
+                    if e.status_code == 403:
+                        raise PresignedUrlsNotSupportedError(
+                            "An Azure user delegation SAS needs the Storage Blob "
+                            "Delegator role on the storage account"
+                        ) from e
+                    raise
+                self._user_delegation_key_expiry = expiry
+            return self._user_delegation_key
+
+    def _sas_url(
+        self,
+        container_name: str,
+        blob_name: str,
+        permission: BlobSasPermissions,
+        ttl_seconds: int,
+    ) -> str:
+        """A SAS for one blob: a service SAS with an account key, else a user
+        delegation SAS for the managed or workload identity."""
+        from azure.storage.blob import generate_blob_sas
+
+        client = self._get_blob_service_client()
+        account_name = self._configured_account_name or client.account_name
+        if account_name is None:
+            raise PresignedUrlsNotSupportedError("The Azure account name is unknown")
+        expiry = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
+        account_key = self._shared_account_key()
+        if account_key is not None:
+            sas = generate_blob_sas(
+                account_name=account_name,
+                container_name=container_name,
+                blob_name=blob_name,
+                account_key=account_key,
+                permission=permission,
+                expiry=expiry,
+            )
+        elif self._connection_string is None:
+            sas = generate_blob_sas(
+                account_name=account_name,
+                container_name=container_name,
+                blob_name=blob_name,
+                user_delegation_key=self._get_user_delegation_key(client),
+                permission=permission,
+                expiry=expiry,
+            )
+        else:
+            raise PresignedUrlsNotSupportedError(
+                "An Azure connection string without an AccountKey cannot sign a SAS"
+            )
+        blob_url = client.get_blob_client(container=container_name, blob=blob_name).url
+        return f"{blob_url}?{sas}"
+
+    def _sign_download(
+        self, bucket_name: str, object_key: str, ttl_seconds: int
+    ) -> PresignedRequest:
+        from azure.storage.blob import BlobSasPermissions
+
+        expires_at = presign_expiry(ttl_seconds)
+        url = self._sas_url(
+            bucket_name, object_key, BlobSasPermissions(read=True), ttl_seconds
+        )
+        return PresignedRequest(
+            url=url, method="GET", headers={}, expires_at=expires_at
+        )
+
+    def _sign_upload(
+        self, pending: PendingPresignedUpload, ttl_seconds: int
+    ) -> PresignedRequest:
+        from azure.storage.blob import BlobSasPermissions
+
+        # A SAS cannot pin the size or content, so finalize checks both. Create
+        # permission cannot overwrite, so the URL writes the blob only once.
+        expires_at = presign_expiry(ttl_seconds)
+        url = self._sas_url(
+            pending.bucket_name,
+            pending.object_key,
+            BlobSasPermissions(create=True),
+            ttl_seconds,
+        )
+        return PresignedRequest(
+            url=url,
+            method="PUT",
+            headers={"x-ms-blob-type": "BlockBlob", "Content-Type": pending.file_type},
+            expires_at=expires_at,
+        )
+
+    def _stat_object(
+        self, bucket_name: str, object_key: str
+    ) -> StoredObjectStat | None:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        blob_client = self._get_blob_service_client().get_blob_client(
+            container=bucket_name, blob=object_key
+        )
+        try:
+            properties = blob_client.get_blob_properties()
+        except ResourceNotFoundError:
+            return None
+        return StoredObjectStat(size=properties.size, sha256=None)
+
+    def _read_object_chunks(self, bucket_name: str, object_key: str) -> Iterator[bytes]:
+        blob_client = self._get_blob_service_client().get_blob_client(
+            container=bucket_name, blob=object_key
+        )
+        yield from blob_client.download_blob().chunks()
+
+    def _delete_object(self, bucket_name: str, object_key: str) -> None:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        try:
+            self._get_blob_service_client().get_blob_client(
+                container=bucket_name, blob=object_key
+            ).delete_blob()
+        except ResourceNotFoundError:
+            pass
