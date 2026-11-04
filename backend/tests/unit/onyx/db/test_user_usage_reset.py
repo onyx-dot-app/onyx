@@ -13,7 +13,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.models import TokenRateLimit, UserUsage
 from onyx.db.user_usage import (
     USER_USAGE_BUCKET_SECONDS,
@@ -87,14 +87,14 @@ class TestResetUserUsage:
                 enabled=True,
                 token_budget=100,
                 cost_budget_cents=None,
-                period_hours=48,
+                period=TokenRateLimitPeriod.DAILY,
                 scope=TokenRateLimitScope.USER,
             ),
             TokenRateLimit(
                 enabled=True,
                 token_budget=None,
                 cost_budget_cents=100.0,
-                period_hours=168,
+                period=TokenRateLimitPeriod.WEEKLY,
                 scope=TokenRateLimitScope.GLOBAL,
             ),
         ]

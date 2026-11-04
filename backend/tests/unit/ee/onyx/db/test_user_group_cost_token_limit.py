@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
+from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.models import TokenRateLimit, TokenRateLimit__UserGroup
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 
@@ -47,7 +48,7 @@ def test_group_insert_persists_cost_budget(db_session: Session) -> None:
         TokenRateLimitArgs(
             enabled=True,
             token_budget=None,
-            period_hours=168,
+            period=TokenRateLimitPeriod.WEEKLY,
             cost_budget_cents=3000.0,
         ),
         group_id=1,
@@ -59,7 +60,9 @@ def test_group_insert_persists_cost_budget(db_session: Session) -> None:
 def test_group_insert_persists_token_budget(db_session: Session) -> None:
     limit = insert_user_group_token_rate_limit(
         db_session,
-        TokenRateLimitArgs(enabled=True, token_budget=500, period_hours=24),
+        TokenRateLimitArgs(
+            enabled=True, token_budget=500, period=TokenRateLimitPeriod.DAILY
+        ),
         group_id=1,
     )
     assert limit.token_budget == 500

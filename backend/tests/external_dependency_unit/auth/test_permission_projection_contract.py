@@ -44,7 +44,7 @@ from onyx.auth.scoped_permissions import (
     manages_group,
     within_scope,
 )
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, TokenRateLimitPeriod
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -1407,7 +1407,9 @@ def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
 
     # Disabled: these tests check write authorization only, and an enabled
     # global limit left in the shared DB would be enforced on later suites.
-    args = TokenRateLimitArgs(enabled=False, token_budget=1000, period_hours=24)
+    args = TokenRateLimitArgs(
+        enabled=False, token_budget=1000, period=TokenRateLimitPeriod.DAILY
+    )
     managed_limit = insert_user_group_token_rate_limit(
         db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
     )
@@ -1469,7 +1471,9 @@ def test_group_token_rate_limit_write_multi_group_scope(db_session: Session) -> 
 
     # Disabled: these tests check write authorization only, and an enabled
     # global limit left in the shared DB would be enforced on later suites.
-    args = TokenRateLimitArgs(enabled=False, token_budget=1000, period_hours=24)
+    args = TokenRateLimitArgs(
+        enabled=False, token_budget=1000, period=TokenRateLimitPeriod.DAILY
+    )
     # limit attached to BOTH a managed and an unmanaged group
     shared_limit = insert_user_group_token_rate_limit(
         db_session=db_session, token_rate_limit_settings=args, group_id=managed.id

@@ -1,3 +1,4 @@
+import { Period } from "@/app/admin/token-rate-limits/types";
 import { saveTokenLimits } from "@/views/admin/GroupsPage/svc";
 
 describe("group token-limit persistence", () => {
@@ -19,12 +20,12 @@ describe("group token-limit persistence", () => {
   test.each([
     [
       "token",
-      { tokenBudget: 0, periodDays: 1, costBudgetDollars: null },
+      { tokenBudget: 0, period: Period.DAILY, costBudgetDollars: null },
       { token_budget: 0, cost_budget_cents: null },
     ],
     [
       "cost",
-      { tokenBudget: null, periodDays: 1, costBudgetDollars: 0 },
+      { tokenBudget: null, period: Period.DAILY, costBudgetDollars: 0 },
       { token_budget: null, cost_budget_cents: 0 },
     ],
   ])(
@@ -39,7 +40,7 @@ describe("group token-limit persistence", () => {
       expect(JSON.parse(String(options.body))).toEqual({
         enabled: true,
         ...expected,
-        period_hours: 24,
+        period: Period.DAILY,
       });
     }
   );
@@ -51,21 +52,21 @@ describe("group token-limit persistence", () => {
         token_id: 10,
         enabled: true,
         token_budget: 100,
-        period_hours: 24,
+        period: Period.DAILY,
         cost_budget_cents: null,
       },
       {
         token_id: 20,
         enabled: false,
         token_budget: 200,
-        period_hours: 24,
+        period: Period.DAILY,
         cost_budget_cents: null,
       },
       {
         token_id: 30,
         enabled: true,
         token_budget: 300,
-        period_hours: 24,
+        period: Period.DAILY,
         cost_budget_cents: null,
       },
     ];
@@ -77,14 +78,14 @@ describe("group token-limit persistence", () => {
           tokenId: 10,
           enabled: true,
           tokenBudget: 100,
-          periodDays: 1,
+          period: Period.DAILY,
           costBudgetDollars: null,
         },
         {
           tokenId: 30,
           enabled: true,
           tokenBudget: 300,
-          periodDays: 1,
+          period: Period.DAILY,
           costBudgetDollars: null,
         },
       ],

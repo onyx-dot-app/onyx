@@ -67,8 +67,6 @@ import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
 import { can } from "@/lib/permissions/resource-actions";
 
-const HOURS_PER_DAY = 24;
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -161,7 +159,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       tokenId: null,
       enabled: true,
       tokenBudget: null,
-      periodDays: null,
+      period: null,
       costBudgetDollars: null,
     },
   ]);
@@ -220,7 +218,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         tokenId: trl.token_id,
         enabled: trl.enabled,
         tokenBudget: trl.token_budget,
-        periodDays: trl.period_hours / HOURS_PER_DAY,
+        period: trl.period,
         costBudgetDollars:
           trl.cost_budget_cents != null ? trl.cost_budget_cents / 100 : null,
       }))

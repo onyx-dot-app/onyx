@@ -33,7 +33,7 @@ test.describe("usage budget blocks chat", () => {
       data: {
         enabled: true,
         token_budget: 1,
-        period_hours: 168,
+        period: "WEEKLY",
         cost_budget_cents: null,
       },
     });

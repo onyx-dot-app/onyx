@@ -12,17 +12,16 @@ from onyx.db.token_limit import (
 )
 from onyx.db.user_usage import (
     TokenUsageBucket,
-    cost_budget_fetch_cutoff,
     cost_budget_limits,
     get_group_cost_cents_buckets_since,
     get_group_token_buckets_since,
     get_user_cost_cents_buckets_since,
     get_user_token_buckets_since,
+    period_fetch_cutoff,
+    token_budget_limits,
 )
 from onyx.server.query_and_chat.token_limit import (
     _cost_budget_reset,
-    _get_cutoff_time,
-    _has_token_budget,
     _raise_for_latest_reset,
     _token_budget_reset,
     _user_is_rate_limited_by_global,
@@ -64,29 +63,20 @@ def _user_is_rate_limited(user_id: UUID) -> None:
         if not user_rate_limits:
             return
 
+        now = datetime.now(timezone.utc)
         token_reset: datetime | None = None
-        token_limits = [
-            limit
-            for limit in user_rate_limits
-            if limit.token_budget is not None and limit.token_budget > 0
-        ]
-        if token_limits:
-            user_cutoff_time = _get_cutoff_time(token_limits)
+        if token_limits := token_budget_limits(user_rate_limits):
             user_usage = get_user_token_buckets_since(
-                db_session, str(user_id), user_cutoff_time
+                db_session, str(user_id), period_fetch_cutoff(now, token_limits)
             )
-            token_reset = _token_budget_reset(user_rate_limits, user_usage)
+            token_reset = _token_budget_reset(token_limits, user_usage)
 
         cost_reset: datetime | None = None
-        cost_limits = cost_budget_limits(user_rate_limits)
-        if cost_limits:
-            cost_cutoff = cost_budget_fetch_cutoff(
-                datetime.now(timezone.utc), cost_limits
-            )
+        if cost_limits := cost_budget_limits(user_rate_limits):
             cost_buckets = get_user_cost_cents_buckets_since(
-                db_session, str(user_id), cost_cutoff
+                db_session, str(user_id), period_fetch_cutoff(now, cost_limits)
             )
-            cost_reset = _cost_budget_reset(user_rate_limits, cost_buckets)
+            cost_reset = _cost_budget_reset(cost_limits, cost_buckets)
 
         _raise_for_latest_reset(TokenRateLimitScope.USER, token_reset, cost_reset)
 
@@ -107,26 +97,17 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
         ]
         user_group_ids = list(group_rate_limits)
 
+        now = datetime.now(timezone.utc)
         group_token_usage: dict[int, list[TokenUsageBucket]] = {}
-        if _has_token_budget(all_rate_limits):
-            token_limits = [
-                limit
-                for limit in all_rate_limits
-                if limit.token_budget is not None and limit.token_budget > 0
-            ]
-            token_cutoff = _get_cutoff_time(token_limits)
+        if token_limits := token_budget_limits(all_rate_limits):
             group_token_usage = get_group_token_buckets_since(
-                db_session, user_group_ids, token_cutoff
+                db_session, user_group_ids, period_fetch_cutoff(now, token_limits)
             )
 
         group_cost_usage: dict[int, list[tuple[datetime, float]]] = {}
-        cost_limits = cost_budget_limits(all_rate_limits)
-        if cost_limits:
-            cost_cutoff = cost_budget_fetch_cutoff(
-                datetime.now(timezone.utc), cost_limits
-            )
+        if cost_limits := cost_budget_limits(all_rate_limits):
             group_cost_usage = get_group_cost_cents_buckets_since(
-                db_session, user_group_ids, cost_cutoff
+                db_session, user_group_ids, period_fetch_cutoff(now, cost_limits)
             )
 
         group_resets: list[datetime] = []

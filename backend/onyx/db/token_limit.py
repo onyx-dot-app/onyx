@@ -88,7 +88,7 @@ def insert_user_token_rate_limit(
         enabled=token_rate_limit_settings.enabled,
         token_budget=token_rate_limit_settings.token_budget,
         cost_budget_cents=token_rate_limit_settings.cost_budget_cents,
-        period_hours=token_rate_limit_settings.period_hours,
+        period=token_rate_limit_settings.period,
         scope=TokenRateLimitScope.USER,
     )
     db_session.add(token_limit)
@@ -105,7 +105,7 @@ def insert_global_token_rate_limit(
         enabled=token_rate_limit_settings.enabled,
         token_budget=token_rate_limit_settings.token_budget,
         cost_budget_cents=token_rate_limit_settings.cost_budget_cents,
-        period_hours=token_rate_limit_settings.period_hours,
+        period=token_rate_limit_settings.period,
         scope=TokenRateLimitScope.GLOBAL,
     )
     db_session.add(token_limit)
@@ -157,7 +157,7 @@ def update_token_rate_limit(
     token_limit.enabled = token_rate_limit_settings.enabled
     token_limit.token_budget = token_rate_limit_settings.token_budget
     token_limit.cost_budget_cents = token_rate_limit_settings.cost_budget_cents
-    token_limit.period_hours = token_rate_limit_settings.period_hours
+    token_limit.period = token_rate_limit_settings.period
     db_session.commit()
 
     return token_limit
