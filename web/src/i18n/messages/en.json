@@ -2859,6 +2859,17 @@
           "viewIndexingRun": "View Indexing Run",
           "viewPruningRun": "View Pruning Run",
           "viewChecksRun": "View Checks Run"
+        },
+        "types": {
+          "count": "{count, plural, one {Document type} other {Document types}}",
+          "header": "Document Type",
+          "indexed": "Indexed",
+          "size": "Size",
+          "other": "Other",
+          "countWithSize": "{count} ({size})",
+          "bytes": "Bytes",
+          "loadError": "Couldn't load the document types.",
+          "sizeValue": "{value} {unit}"
         }
       },
       "toasts": {

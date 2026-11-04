@@ -312,6 +312,22 @@ export interface CCPairRunsResponse {
   status_counts: Record<CCPairRunStatusGroup, number>;
 }
 
+/** Mirrors `DocumentTypeCount`: a type's size is complete only when `sized_count` equals `count`. */
+export interface DocumentTypeCount {
+  mime_type: string;
+  count: number;
+  sized_count: number;
+  size_bytes: number | null;
+}
+
+/** Mirrors `CCPairDocumentTypeBreakdown`, the pair's indexed documents per source MIME type. */
+export interface CCPairDocumentTypeBreakdown {
+  types: DocumentTypeCount[];
+  untyped_count: number;
+  /** The read hit its statement timeout, so the empty lists mean unknown, not zero. */
+  timed_out: boolean;
+}
+
 /** An activity level that holds open runs, as the batch resolve routes take it. */
 export type CCPairRunLevel = "failures" | "errors";
 

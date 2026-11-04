@@ -2859,6 +2859,17 @@
           "viewIndexingRun": "Indexierungslauf anzeigen",
           "viewPruningRun": "Bereinigungslauf anzeigen",
           "viewChecksRun": "Prüflauf anzeigen"
+        },
+        "types": {
+          "count": "{count, plural, one {Dokumenttyp} other {Dokumenttypen}}",
+          "header": "Dokumenttyp",
+          "indexed": "Indexiert",
+          "size": "Größe",
+          "other": "Andere",
+          "countWithSize": "{count} ({size})",
+          "bytes": "Byte",
+          "loadError": "Die Dokumenttypen konnten nicht geladen werden.",
+          "sizeValue": "{value} {unit}"
         }
       },
       "toasts": {

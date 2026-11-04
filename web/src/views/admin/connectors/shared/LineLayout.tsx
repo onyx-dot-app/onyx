@@ -70,22 +70,43 @@ const VARIANT_CLASSES = {
   },
 } satisfies Record<LineVariant, VariantClasses>;
 
-export interface LineLayoutProps {
+interface LineParts {
   a: ReactNode;
   b: ReactNode;
   /** A stat line leaves C out when it is null, so D takes the whole third. */
   c: ReactNode;
   d: ReactNode;
-  variant: LineVariant;
 }
+
+// A stat line sizes its third to C's picker, so only row and run lines can hand C's width to B.
+export type LineLayoutProps = LineParts &
+  (
+    | { variant: "stat"; bSpansC?: never }
+    | {
+        variant: Exclude<LineVariant, "stat">;
+        /** B runs on through C, for a bar or table on one ruler across both; C is not drawn. */
+        bSpansC?: boolean;
+      }
+  );
+
+// B's basis is C's share of the third (the third less D's 64 px), so A keeps the width it has on every other line.
+const B_SPANS_C =
+  "flex-[1_1_calc(min(13rem,33.333%)_-_4rem)] @max-[38.75rem]:basis-full";
 
 /**
  * The three-column line shared by connector rows, run lines and stat cards: A and B split the width, C and D share a third capped at 208 px.
  * Below 640 px of card it wraps by variant, keeping the actions top right.
  */
-export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
+export default function LineLayout({
+  a,
+  b,
+  c,
+  d,
+  variant,
+  bSpansC = false,
+}: LineLayoutProps) {
   const variantClasses: VariantClasses = VARIANT_CLASSES[variant];
-  const showsC = variant !== "stat" || c !== null;
+  const showsC = !bSpansC && (variant !== "stat" || c !== null);
   // A container query cannot measure its own element, so the parts query this wrapper.
   return (
     <div className="@container w-full">
@@ -116,7 +137,8 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
           padding={variantClasses.padding}
           height="fit"
           className={cn(
-            "min-w-0 flex-1",
+            "min-w-0",
+            bSpansC ? B_SPANS_C : "flex-1",
             variantClasses.part,
             variantClasses.b
           )}
@@ -129,9 +151,11 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
           justifyContent="end"
           alignItems="start"
           gap={0}
+          width={bSpansC ? "fit" : "full"}
           height="fit"
           className={cn(
-            "max-w-[13rem] shrink-0 basis-1/3 @max-[38.75rem]:contents",
+            "shrink-0 @max-[38.75rem]:contents",
+            !bSpansC && "max-w-[13rem] basis-1/3",
             variantClasses.third
           )}
         >
@@ -168,7 +192,7 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
 }
 
 // A figure that failed to load, so the line keeps its height and does not read as empty.
-const NO_FIGURE = "—";
+export const NO_FIGURE = "—";
 
 export interface LineFigureProps {
   /** Null shows a dash. */

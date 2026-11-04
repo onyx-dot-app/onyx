@@ -380,6 +380,8 @@ export const SWR_KEYS = {
   // ── Index Attempts ────────────────────────────────────────────────────────
   ccPairLatestIndexAttempt: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/index-attempts?page_num=0&page_size=1`,
+  ccPairDocumentTypes: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/document-types`,
   // Every runs feed query of one pair starts with this, so `mutate` can match them all.
   ccPairRunsPrefix: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/runs?`,

@@ -154,6 +154,46 @@ describe("LineLayout", () => {
     }
   );
 
+  it.each(["row", "run"] as const)(
+    "bSpansC: a %s's B takes C's share of the third and C is not drawn",
+    (variant) => {
+      render(
+        <LineLayout
+          variant={variant}
+          bSpansC
+          a={<span>part-a</span>}
+          b={<span>part-b</span>}
+          c={<span>part-c</span>}
+          d={<span>part-d</span>}
+        />
+      );
+      const d = screen.getByText("part-d").closest(".w-16")!;
+      const third = d.parentElement!;
+      const root = third.parentElement!;
+      const [a, b] = Array.from(root.children);
+
+      // B's basis is the third less D, so A keeps the width it has on every other line.
+      expect(a).toHaveClass("flex-1", "min-w-0");
+      expect(b).toHaveTextContent("part-b");
+      expect(b).not.toHaveClass("flex-1");
+      expect(
+        hasClass(
+          b!,
+          String.raw`flex-\[1_1_calc\(min\(13rem,33\.333%\)_-_4rem\)\]`
+        )
+      ).toBe(true);
+      expect(hasClass(b!, `${BELOW_640}basis-full`)).toBe(true);
+      expect(screen.queryByText("part-c")).toBeNull();
+      // The third shrinks to D, with no 208 px cap or third basis.
+      expect(third.children).toHaveLength(1);
+      expect(third).toHaveClass("w-fit", "shrink-0");
+      expect(third).not.toHaveClass("basis-1/3");
+      expect(hasClass(third, String.raw`max-w-\[(?:208px|13rem)\]`)).toBe(
+        false
+      );
+    }
+  );
+
   describe("stat", () => {
     function renderStat(c: string | null) {
       render(
