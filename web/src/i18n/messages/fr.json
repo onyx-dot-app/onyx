@@ -13005,6 +13005,9 @@
           },
           "updatingMemory": {
             "label": "Mise à jour de la mémoire..."
+          },
+          "working": {
+            "label": "En cours"
           }
         },
         "internalSearch": {

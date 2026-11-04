@@ -24,8 +24,14 @@ import {
   parseToolKey,
 } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import {
+  asStandalonePacket,
+  CodeModeProgram,
+  isCodeModePacket,
   isGroupEndPacket,
   isNestedPacket,
+  NestedCall,
+  nestedCallSnapshot,
+  nextCodeModeProgram,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // Re-export parseToolKey for consumers that import from this module
@@ -49,14 +55,23 @@ export interface ProcessorState {
 
   // Packet grouping
   groupedPacketsMap: Map<string, Packet[]>;
+  // Nested calls of each group by sub_turn_index, placed at parent level once
+  // per packet
+  nestedCallsMap: Map<string, Map<number, Packet[]>>;
+  // The last nested-call list built for each group; unchanged calls keep their
+  // objects across batches
+  nestedCallSnapshots: Map<string, NestedCall[]>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
+  // The program of each code mode group, updated once per packet
+  codeModePrograms: Map<string, CodeModeProgram>;
 
   // Pre-categorized groups (populated during packet processing)
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
-  // Image generation status
+  // Images from every image generation call, nested calls included, in
+  // arrival order and unique by file_id
   generatedImages: GeneratedImage[];
 
   // Streaming status
@@ -76,6 +91,10 @@ export interface GroupedPacket {
   turn_index: number;
   tab_index: number;
   packets: Packet[];
+  /** The tool calls nested under this group, ordered by sub_turn_index. */
+  nestedCalls: NestedCall[];
+  /** The program of a code mode group; null for other groups. */
+  codeMode: CodeModeProgram | null;
 }
 
 // ============================================================================
@@ -91,8 +110,11 @@ export function createInitialState(nodeId: number): ProcessorState {
     citationMap: {},
     documentMap: new Map(),
     groupedPacketsMap: new Map(),
+    nestedCallsMap: new Map(),
+    nestedCallSnapshots: new Map(),
     seenGroupKeys: new Set(),
     groupKeysWithSectionEnd: new Set(),
+    codeModePrograms: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     generatedImages: [],
@@ -150,6 +172,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
 
 function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) => {
+    if (isCodeModePacket(packet)) return true;
     const type = packet.obj.type as PacketType;
     if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
       return isCodeInterpreterToolType(
@@ -241,7 +264,7 @@ function handleImagePacket(state: ProcessorState, packet: Packet): void {
   const delta = packet.obj;
   const seenFileIds = new Set(state.generatedImages.map((i) => i.file_id));
   const newImages: GeneratedImage[] = [];
-  for (const image of delta.images ?? []) {
+  for (const image of delta.images) {
     if (seenFileIds.has(image.file_id)) continue;
     seenFileIds.add(image.file_id);
     newImages.push(image);
@@ -258,7 +281,6 @@ function handleStreamingStatusPacket(
 ): void {
   if (isNestedPacket(packet)) return;
 
-  // Check if final answer is coming
   if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
   }
@@ -293,15 +315,17 @@ function handleStopPacket(state: ProcessorState, packet: Packet): void {
 
 function handleToolAfterMessagePacket(
   state: ProcessorState,
-  packet: Packet
+  packet: Packet,
+  opensToolGroup: boolean
 ): void {
-  // Handles case where we get a Message packet from Claude, and then tool
-  // calling packets. We use isActualToolCallPacket instead of isToolPacket
-  // to exclude reasoning packets - reasoning is just the model thinking,
-  // not an actual tool call that would produce new content.
+  // The model can write a message and then call a tool, so the answer is not
+  // final yet. Only a tool packet that opens a new group is a new call: later
+  // packets of a known group (such as a code mode cell's closing record) are
+  // not. Reasoning is not a tool call.
   if (
     state.finalAnswerComing &&
     !state.stopPacketSeen &&
+    opensToolGroup &&
     isActualToolCallPacket(packet)
   ) {
     state.finalAnswerComing = false;
@@ -319,6 +343,15 @@ function addPacketToGroup(
   } else {
     state.groupedPacketsMap.set(groupKey, [packet]);
   }
+
+  const subTurnIndex = packet.placement.sub_turn_index;
+  if (subTurnIndex === undefined || subTurnIndex === null) return;
+  const calls =
+    state.nestedCallsMap.get(groupKey) ?? new Map<number, Packet[]>();
+  state.nestedCallsMap.set(groupKey, calls);
+  const call = calls.get(subTurnIndex) ?? [];
+  call.push(asStandalonePacket(packet));
+  calls.set(subTurnIndex, call);
 }
 
 // ============================================================================
@@ -338,7 +371,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   );
   state.seenGroupKeys.add(groupKey);
 
-  // Track SECTION_END and ERROR packets (both indicate completion)
+  // Track the packets that end a group (same rule as isToolComplete)
   if (isGroupEndPacket(packet)) {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
@@ -346,27 +379,37 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   // Add packet to group
   addPacketToGroup(state, packet, groupKey);
 
+  if (isCodeModePacket(packet)) {
+    const program = state.codeModePrograms.get(groupKey) ?? {
+      cellId: null,
+      started: false,
+      ended: false,
+    };
+    state.codeModePrograms.set(groupKey, nextCodeModeProgram(program, packet));
+  }
+
   // Debug and control packets can precede the first rendered packet.
+  let opensToolGroup = false;
   if (
     !state.toolGroupKeys.has(groupKey) &&
     !state.displayGroupKeys.has(groupKey)
   ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
+      opensToolGroup = true;
     }
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
     }
   }
 
-  handleImagePacket(state, packet);
-
   // Handle specific packet types
+  handleImagePacket(state, packet);
   handleCitationPacket(state, packet);
   handleDocumentPacket(state, packet);
   handleStreamingStatusPacket(state, packet);
   handleStopPacket(state, packet);
-  handleToolAfterMessagePacket(state, packet);
+  handleToolAfterMessagePacket(state, packet, opensToolGroup);
 }
 
 export function processPackets(
@@ -403,6 +446,25 @@ export function processPackets(
   }
 
   return state;
+}
+
+function nestedCalls(state: ProcessorState, key: string): NestedCall[] {
+  const calls = nestedCallSnapshot(
+    state.nestedCallsMap.get(key) ?? new Map<number, Packet[]>(),
+    state.nestedCallSnapshots.get(key)
+  );
+  state.nestedCallSnapshots.set(key, calls);
+  return calls;
+}
+
+function codeModeProgram(
+  state: ProcessorState,
+  key: string
+): CodeModeProgram | null {
+  const program = state.codeModePrograms.get(key);
+  if (!program) return null;
+  const ended = state.groupKeysWithSectionEnd.has(key);
+  return program.ended === ended ? program : { ...program, ended };
 }
 
 /**
@@ -455,7 +517,15 @@ function buildGroupsFromKeys(
       const { turn_index, tab_index } = parseToolKey(key);
       const packets = state.groupedPacketsMap.get(key);
       // Spread to create new array reference - ensures React detects changes for re-renders
-      return packets ? { turn_index, tab_index, packets: [...packets] } : null;
+      return packets
+        ? {
+            turn_index,
+            tab_index,
+            packets: [...packets],
+            nestedCalls: nestedCalls(state, key),
+            codeMode: codeModeProgram(state, key),
+          }
+        : null;
     })
     .filter(
       (g): g is GroupedPacket => g !== null && hasContentPackets(g.packets)

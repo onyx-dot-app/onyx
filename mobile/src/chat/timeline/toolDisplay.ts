@@ -8,28 +8,10 @@ export function hasToolError(packets: Packet[]): boolean {
   return packets.some((p) => p.obj.type === PacketType.ERROR);
 }
 
-// Research agents complete only on a parent-level SECTION_END or ERROR — nested tool
-// SECTION_ENDs don't count; coding agents on CodingAgentFinal/error; others on any SECTION_END/ERROR.
+// A group is complete once a parent-level SECTION_END or ERROR arrives. Nested calls end with
+// their own SECTION_END and do not count.
 export function isToolComplete(packets: Packet[]): boolean {
-  const firstPacket = packets[0];
-  if (!firstPacket) return false;
-
-  if (firstPacket.obj.type === PacketType.RESEARCH_AGENT_START) {
-    return packets.some(isGroupEndPacket);
-  }
-
-  if (firstPacket.obj.type === PacketType.CODING_AGENT_START) {
-    return packets.some(
-      (p) =>
-        p.obj.type === PacketType.CODING_AGENT_FINAL ||
-        p.obj.type === PacketType.ERROR,
-    );
-  }
-
-  return packets.some(
-    (p) =>
-      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR,
-  );
+  return packets.some(isGroupEndPacket);
 }
 
 export function getToolKey(turn_index: number, tab_index: number): string {

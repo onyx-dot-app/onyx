@@ -1,6 +1,10 @@
 import { describe, expect, it, jest } from "@jest/globals";
 
-import { makeMessageStartPacket, makePacket } from "@/chat/__tests__/fixtures";
+import {
+  makeMessageStartPacket,
+  makePacket,
+  makePlacedPacket,
+} from "@/chat/__tests__/fixtures";
 import { type Packet } from "@/chat/streamingModels";
 
 import { findRenderer } from "../findRenderer";
@@ -100,6 +104,24 @@ describe("findRenderer", () => {
         ]),
       ).toBeNull();
     });
+  });
+
+  it("ignores nested packets when choosing the renderer", () => {
+    const nested = { turn_index: 0, sub_turn_index: 0 };
+    expect(
+      findRenderer([
+        makePacket({ type: "reasoning_start" }),
+        makePlacedPacket(
+          {
+            type: "message_start",
+            id: "m",
+            content: "",
+            final_documents: null,
+          },
+          nested,
+        ),
+      ]),
+    ).toBe(ReasoningRenderer);
   });
 
   // With no tool slot claiming it, a bare section_end/error falls through to reasoning, which

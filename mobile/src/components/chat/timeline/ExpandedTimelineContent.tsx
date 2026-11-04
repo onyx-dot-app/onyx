@@ -46,7 +46,7 @@ export const ExpandedTimelineContent = memo(function ExpandedTimelineContent({
         if (renderAsParallelTabs) {
           return (
             <ParallelTimelineTabs
-              key={turnGroup.turnIndex}
+              key={turnGroup.steps[0]?.key ?? turnGroup.turnIndex}
               turnGroup={turnGroup}
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}
