@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { memo, useCallback, useMemo, useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
@@ -111,7 +111,7 @@ function ChatPanelContent({
   animateLayout = true,
 }: BuildChatPanelProps) {
   const t = useTranslations("craft.chatPanel");
-  const router = useRouter();
+  const navigation = useNavigation();
   const session = useChatSession();
   const sessionId = useSessionId();
   const outputSessionId = sessionId ?? existingSessionId ?? null;
@@ -538,7 +538,7 @@ function ChatPanelContent({
         });
 
         // Navigate to URL - session controller will set currentSessionId
-        router.push(
+        navigation.go(
           `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
         );
 
@@ -558,7 +558,7 @@ function ChatPanelContent({
       streamMessage,
       consumePreProvisionedSession,
       createSession,
-      router,
+      navigation,
       hasUploadingFiles,
       getCurrentMessageFiles,
       selectedModel,

@@ -11,7 +11,7 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn() }),
 }));
 jest.mock("@/app/craft/v1/tasks/api", () => ({
   listScheduledTaskRuns: jest.fn(),

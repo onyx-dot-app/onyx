@@ -131,46 +131,6 @@
       }
     },
     {
-      // Navigation baseline: files that navigated around @opal/navigation when
-      // navigation/no-naked-navigation landed. Remove a file once it goes
-      // through it. Never add one.
-      "files": [
-        "src/app/admin/craft/apps/page.tsx",
-        "src/app/craft/components/ChatPanel.tsx",
-        "src/app/craft/components/ConnectDataBanner.tsx",
-        "src/app/craft/components/CraftInputBar.tsx",
-        "src/app/craft/components/CraftUpgradePage.tsx",
-        "src/app/craft/components/ScheduledRunBanner.tsx",
-        "src/app/craft/components/SideBar.tsx",
-        "src/app/craft/components/setup-requests/SetupCard.tsx",
-        "src/app/craft/hooks/useBuildSessionController.ts",
-        "src/app/craft/layout.tsx",
-        "src/app/craft/onboarding/components/CraftLlmLockedState.tsx",
-        "src/app/craft/page.tsx",
-        "src/app/craft/services/searchParams.ts",
-        "src/app/craft/v1/apps/admin/ConfigureProviderModal.tsx",
-        "src/app/craft/v1/apps/admin/CreateCustomAppModal.tsx",
-        "src/app/craft/v1/apps/admin/ExternalAppSkillsStepModal.tsx",
-        "src/app/craft/v1/apps/admin/page.tsx",
-        "src/app/craft/v1/apps/connectableApps.ts",
-        "src/app/craft/v1/apps/manage/page.tsx",
-        "src/app/craft/v1/apps/oauth/callback/page.tsx",
-        "src/app/craft/v1/apps/page.tsx",
-        "src/app/craft/v1/page.tsx",
-        "src/app/craft/v1/tasks/[[]id]/edit/page.tsx",
-        "src/app/craft/v1/tasks/[[]id]/page.tsx",
-        "src/app/craft/v1/tasks/components/RunHistoryTable.tsx",
-        "src/app/craft/v1/tasks/components/ScheduleTaskForm.tsx",
-        "src/app/craft/v1/tasks/new/page.tsx",
-        "src/app/craft/v1/tasks/page.tsx",
-        "src/layouts/craft/CraftManageLayout.tsx",
-        "src/providers/CraftStreamingProvider.tsx"
-      ],
-      "rules": {
-        "navigation/no-naked-navigation": "warn"
-      }
-    },
-    {
       "files": [
         "**/*.test.ts",
         "**/*.test.tsx",

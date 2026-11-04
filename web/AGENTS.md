@@ -75,9 +75,7 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
   the URL at once and then asks Next for the page, so the tabs and the page's loader
   (`PendingRoute`) follow the click; `clampedBack(fallback)` never leaves the app. A static internal
   `href` is banned too: spread `useNavigation().linkTo(…)` or use `NavLink`. oxlint
-  `navigation/no-naked-navigation` enforces this. Files that broke it when it landed are in its
-  baseline in `.oxlintrc.json`, where they only warn. Migrate a file when you edit it, and never
-  add one.
+  `navigation/no-naked-navigation` enforces this.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 
