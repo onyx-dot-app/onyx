@@ -277,8 +277,11 @@ test.describe("Guilds List Page", () => {
 
     // Should show loading indicator (OnyxLoader)
     // The loader should appear while data is being fetched.
-    // OnyxLoader exposes role="status" on its wrapper.
-    const loader = adminPage.getByRole("status");
+    // OnyxLoader exposes role="status" on its wrapper. Scope to the page body:
+    // the admin sidebar's loader can show at the same time.
+    const loader = adminPage
+      .locator("#page-wrapper-scroll-container")
+      .getByRole("status");
     // Give it a moment to appear
     await expect(loader).toBeVisible({ timeout: 5000 });
 
