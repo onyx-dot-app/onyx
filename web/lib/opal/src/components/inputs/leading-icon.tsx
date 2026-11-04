@@ -9,9 +9,8 @@ interface InputLeadingIconProps {
 }
 
 /**
- * The icon at the start of an input row (InputTypeIn, the upload inputs,
- * TagField): a 20px main-ui icon container in 2px of padding, one 24px row
- * tall. The field's own 2px start padding completes the 4px gap to the text.
+ * The icon at the start of an input's content row (InputTypeIn, the upload
+ * inputs, TagField): a bare 20px main-ui icon container.
  */
 function InputLeadingIcon({ icon, muted = false }: InputLeadingIconProps) {
   return (

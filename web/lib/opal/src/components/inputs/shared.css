@@ -73,10 +73,28 @@
   @apply bg-transparent border rounded-08;
 }
 
-/* InputLeadingIcon: a 20px icon container in 2px of padding, one 24px row
-   tall. */
+/* The input's content row: 2px padding and a 4px gap around the leading icon
+   (20px) and the text (20px), one 24px row. Trailing controls sit outside
+   it. The height is fixed so a 22px tag in it does not grow the input. */
+.opal-input-row {
+  @apply flex flex-1 min-w-0 h-6 items-center gap-1 p-0.5;
+}
+
+/* The text box is the 20px line; its 2px inline padding matches Text's. */
+.opal-input-row > .opal-input-field {
+  @apply h-5 min-w-0 px-0.5 py-0;
+}
+
+/* InputLeadingIcon's wrapper only carries the colour hook: the 20px icon
+   container is the box. */
 .opal-input-leading-icon {
-  @apply flex shrink-0 p-0.5;
+  display: contents;
+}
+
+/* TagField packs chip rows from the top, with no content row: the icon takes
+   the row's 2px inset itself and centres on the first 24px row. */
+.opal-input-type-in-tag > .opal-input-leading-icon > .opal-icon-container {
+  @apply my-0.5 ms-0.5;
 }
 
 /* The search icon reads a step lighter than a chosen option's icon. */

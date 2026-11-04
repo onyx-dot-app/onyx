@@ -113,30 +113,32 @@ export default function InputTypeIn({
         if (input && e.target !== input) input.focus();
       }}
     >
-      {Icon === "search" ? (
-        <InputLeadingIcon icon={SvgSearch} muted />
-      ) : (
-        Icon && <InputLeadingIcon icon={Icon} />
-      )}
+      <div className="opal-input-row">
+        {Icon === "search" ? (
+          <InputLeadingIcon icon={SvgSearch} muted />
+        ) : (
+          Icon && <InputLeadingIcon icon={Icon} />
+        )}
 
-      {leftChildren}
+        {leftChildren}
 
-      <input
-        ref={ref}
-        // Chrome ignores autocomplete="off" when it guesses a text field takes
-        // a saved card; it does not offer cards in search fields.
-        type={Icon === "search" ? "search" : type}
-        // dir="auto": typed text decides the direction so punctuation sits on the
-        // correct side. While empty it inherits the page direction (see styles.css).
-        dir="auto"
-        name={name}
-        disabled={disabled}
-        readOnly={isReadOnly}
-        value={value}
-        onChange={onChange}
-        className="opal-input-field"
-        {...props}
-      />
+        <input
+          ref={ref}
+          // Chrome ignores autocomplete="off" when it guesses a text field takes
+          // a saved card; it does not offer cards in search fields.
+          type={Icon === "search" ? "search" : type}
+          // dir="auto": typed text decides the direction so punctuation sits on the
+          // correct side. While empty it inherits the page direction (see styles.css).
+          dir="auto"
+          name={name}
+          disabled={disabled}
+          readOnly={isReadOnly}
+          value={value}
+          onChange={onChange}
+          className="opal-input-field"
+          {...props}
+        />
+      </div>
 
       {clearButton && !rightChildren && !disabled && !isReadOnly && (
         <div className={cn(value === "" && "invisible")}>

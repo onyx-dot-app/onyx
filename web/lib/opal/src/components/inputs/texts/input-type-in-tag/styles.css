@@ -60,7 +60,7 @@
 }
 
 .opal-input-type-in-tag-field {
-  /* Keep the family's 24px inner rhythm: h-6 like every .opal-input-field.
+  /* Keep the family's 24px inner rhythm: h-6 like every content row.
      Vertical padding here made the field 28px and the whole input 42px,
      4px taller than its siblings. */
   @apply h-6 w-auto min-w-20 flex-1;

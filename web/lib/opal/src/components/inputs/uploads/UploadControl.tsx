@@ -131,7 +131,7 @@ export default function UploadControl({
           type="button"
           disabled={isNonEditable}
           data-testid={rest["data-testid"]}
-          className="opal-input-upload-trigger"
+          className="opal-input-row opal-input-upload-trigger"
           // A click only focuses, as some browsers do not focus a clicked
           // button, so a copied file can be pasted next.
           onClick={() => triggerRef.current?.focus()}
