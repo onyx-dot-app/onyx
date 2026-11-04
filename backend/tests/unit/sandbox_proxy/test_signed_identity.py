@@ -20,7 +20,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from onyx.sandbox_proxy.sandbox_identity import signed
 from onyx.sandbox_proxy.sandbox_identity.signed import (
     NodeSigningKey,
+    NodeSigningKeyLookup,
+    ReplayGuard,
     SandboxClaims,
+    SandboxPlacementLookup,
     SignedIdentityError,
     SignedIdentityRejection,
     SignedIdentityVerifier,
@@ -142,7 +145,7 @@ def _build_vectors() -> dict[str, Any]:
     }
 
 
-class _Keys:
+class _Keys(NodeSigningKeyLookup):
     def __init__(self) -> None:
         public_key = Ed25519PrivateKey.from_private_bytes(_NODE_SEED).public_key()
         self.keys = {_KID: NodeSigningKey(_KID, _NODE, public_key)}
@@ -151,7 +154,7 @@ class _Keys:
         return self.keys.get(key_id)
 
 
-class _Placement:
+class _Placement(SandboxPlacementLookup):
     def __init__(self) -> None:
         self.placed: dict[tuple[UUID, str, int], UUID] = {(_SANDBOX, _NODE, 3): _OWNER}
 
@@ -159,7 +162,7 @@ class _Placement:
         return self.placed.get((claims.sandbox_id, claims.node_id, claims.generation))
 
 
-class _Replay:
+class _Replay(ReplayGuard):
     def __init__(self) -> None:
         self.seen: set[str] = set()
 

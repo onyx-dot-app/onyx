@@ -213,6 +213,8 @@ def test_registration_rejects_key_id_reuse_with_other_key(
         ("cluster-cred", "Bearer cluster-cred", True),
         ("cluster-cred", "Bearer wrong", False),
         ("cluster-cred", None, False),
+        ("caf\u00e9", "Bearer caf\u00e9", True),
+        ("cluster-cred", "Bearer \u00ff\u00fe", False),
         (None, "Bearer anything", False),
     ],
 )
@@ -223,7 +225,7 @@ def test_registration_requires_cluster_credential(
     allowed: bool,
 ) -> None:
     monkeypatch.setattr(sandbox_nodes, "SANDBOX_NODE_REGISTRATION_SECRET", configured)
-    raw_headers = [] if header is None else [(b"authorization", header.encode())]
+    raw_headers = [] if header is None else [(b"authorization", header.encode("utf-8"))]
     request = Request({"type": "http", "headers": raw_headers})
     if allowed:
         verify_sandbox_node_registration(request)

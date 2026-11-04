@@ -39,11 +39,14 @@ def verify_sandbox_node_registration(request: Request) -> None:
     """Constant-time check of the shared cluster credential (fails closed if unset)."""
     expected = SANDBOX_NODE_REGISTRATION_SECRET
     auth_header = request.headers.get("Authorization", "")
+    # Compare bytes: compare_digest raises on non-ASCII str, and Starlette
+    # decodes header values as latin-1.
     if (
         not expected
         or not auth_header.startswith(BEARER_PREFIX)
         or not secrets.compare_digest(
-            auth_header[len(BEARER_PREFIX) :].strip(), expected
+            auth_header[len(BEARER_PREFIX) :].strip().encode("latin-1"),
+            expected.encode("utf-8"),
         )
     ):
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
