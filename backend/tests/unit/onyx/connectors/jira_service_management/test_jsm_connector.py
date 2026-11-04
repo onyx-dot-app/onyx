@@ -265,3 +265,23 @@ def test_request_type_id_absent_when_the_field_is_missing() -> None:
 
 def test_request_type_id_tolerates_a_non_dict_fields() -> None:
     assert _request_type_id({"fields": "not-a-dict"}) is None
+
+
+def test_the_index_query_is_scoped_to_the_service_desk(
+    connector: JiraServiceManagementConnector,
+) -> None:
+    """A service desk connector must never index another project."""
+    jql = connector._get_jql_query(0, 1_700_000_000)
+
+    assert 'project = "SUPPORT"' in jql
+    assert "updated >=" in jql
+
+
+def test_a_custom_jql_narrows_within_the_project(
+    connector: JiraServiceManagementConnector,
+) -> None:
+    connector.jql_query = 'requestType = "Get IT help"'
+
+    jql = connector._get_jql_query(0, 1_700_000_000)
+
+    assert 'requestType = "Get IT help"' in jql

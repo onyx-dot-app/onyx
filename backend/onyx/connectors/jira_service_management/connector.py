@@ -23,7 +23,7 @@ from typing import Any
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
+from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira_service_management.source_operations import (
     JiraServiceManagementSourceOperations,
     JsmApiError,
@@ -209,6 +209,3 @@ class JiraServiceManagementConnector(JiraConnector):
             if isinstance(item, Document):
                 self._apply_service_desk_metadata(issue, item)
             yield item
-
-    def build_dummy_checkpoint(self) -> JiraConnectorCheckpoint:
-        return super().build_dummy_checkpoint()
