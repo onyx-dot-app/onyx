@@ -211,7 +211,7 @@ def test_toggling_auto_update_keeps_the_saved_models(
             provider=LlmProviderNames.OPENAI,
             is_auto_mode=True,
             model_configurations=[
-                ModelConfigurationUpsertRequest.from_model(mc)
+                ModelConfigurationUpsertRequest(name=mc.name, is_visible=mc.is_visible)
                 for mc in provider.model_configurations
             ],
         ),
