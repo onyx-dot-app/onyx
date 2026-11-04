@@ -17,6 +17,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document as ConnectorDocument
 from onyx.connectors.models import IndexAttemptMetadata, InputType
 from onyx.db.document import (
+    get_document_ids_claimed_by_other_sources,
     get_document_source_types,
     get_document_source_types_after_cc_pair_removal,
     upsert_document_by_connector_credential_pair,
@@ -730,6 +731,65 @@ def test_removing_onedrive_relationship_restores_sharepoint_writes(
         )
     finally:
         _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
+
+
+def test_other_source_claims_document_ids(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    jira_doc = f"jira-{unique}"
+    shared_doc = f"shared-{unique}"
+    sharepoint_doc = f"sharepoint-{unique}"
+    jira = _add_cc_pair(
+        db_session, DocumentSource.JIRA, ConnectorCredentialPairStatus.ACTIVE, unique
+    )
+    imap = _add_cc_pair(
+        db_session, DocumentSource.IMAP, ConnectorCredentialPairStatus.ACTIVE, unique
+    )
+    sharepoint = _add_cc_pair(
+        db_session,
+        DocumentSource.SHAREPOINT,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+    )
+    onedrive = _add_cc_pair(
+        db_session,
+        DocumentSource.ONEDRIVE,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+    )
+    document_ids = [jira_doc, shared_doc, sharepoint_doc]
+    for document_id in document_ids:
+        db_session.add(
+            Document(
+                id=document_id, semantic_id=document_id, kg_stage=KGStage.NOT_STARTED
+            )
+        )
+    db_session.commit()
+    _add_document_relationship(db_session, jira, jira_doc, has_been_indexed=True)
+    _add_document_relationship(db_session, jira, shared_doc, has_been_indexed=True)
+    _add_document_relationship(db_session, imap, shared_doc, has_been_indexed=True)
+    _add_document_relationship(
+        db_session, sharepoint, sharepoint_doc, has_been_indexed=True
+    )
+
+    def claimed(cc_pair: ConnectorCredentialPair, source: DocumentSource) -> set[str]:
+        return get_document_ids_claimed_by_other_sources(
+            db_session,
+            [*document_ids, f"new-{unique}"],
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            source,
+        )
+
+    try:
+        # A link that already exists stays; a new cross-source link is refused.
+        assert claimed(imap, DocumentSource.IMAP) == {jira_doc, sharepoint_doc}
+        assert claimed(jira, DocumentSource.JIRA) == {sharepoint_doc}
+        assert claimed(onedrive, DocumentSource.ONEDRIVE) == {jira_doc, shared_doc}
+    finally:
+        _delete_test_data(db_session, document_ids, [jira, imap, sharepoint, onedrive])
 
 
 def test_same_source_permissions_remain_last_writer_wins(

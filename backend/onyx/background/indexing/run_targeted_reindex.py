@@ -32,6 +32,7 @@ from onyx.connectors.models import (
     IndexAttemptMetadata,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.document import get_document_ids_claimed_by_other_sources
 from onyx.db.enums import AccessType
 from onyx.db.hierarchy import persist_hierarchy_nodes_for_cc_pair
 from onyx.db.models import (
@@ -146,6 +147,14 @@ def _flush_batch(
         tenant_id=tenant_id,
         index_attempt_metadata=metadata,
     )
+    # Same gate as docprocessing: never rewrite another source's document.
+    claimed_doc_ids = get_document_ids_claimed_by_other_sources(
+        db_session=db_session,
+        document_ids=[d.id for d in documents],
+        connector_id=metadata.connector_id,
+        credential_id=metadata.credential_id,
+        source=attempt.connector_credential_pair.connector.source,
+    )
 
     result = run_indexing_pipeline(
         embedder=embedder,
@@ -155,13 +164,13 @@ def _flush_batch(
         index_to_secondary=search_settings.status.is_future(),
         db_session=db_session,
         tenant_id=tenant_id,
-        document_batch=documents,
+        document_batch=[d for d in documents if d.id not in claimed_doc_ids],
         request_id=metadata.request_id,
         adapter=adapter,
         skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
     )
 
-    failed_ids: set[str] = set()
+    failed_ids: set[str] = set(claimed_doc_ids)
     for f in result.failures or []:
         if f.failed_document is not None:
             failed_ids.add(f.failed_document.document_id)
