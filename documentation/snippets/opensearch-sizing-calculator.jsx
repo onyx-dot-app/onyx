@@ -729,8 +729,10 @@ export const OpenSearchSizingCalculator = () => {
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {stat({
-              value: pct(storageUse),
-              text: "of storage holds the index" + (rebuildRoom ? ", " + pct(storageUse * 2) + " during a rebuild" : ""),
+              value: pct(rebuildRoom ? storageUse * 2 : storageUse),
+              text:
+                (rebuildRoom ? "of storage used during a rebuild, " + pct(storageUse) + " normally" : "of storage holds the index") +
+                ". The plan allows " + pct(DISK_FILL) + ".",
             })}
             {stat({ value: pct(memoryUse), text: "of the file cache holds vectors (" + fmtBytes(hotAll) + ")" })}
             {stat({ value: pct(cpuUse), text: "of vCPUs busy at peak search (" + fmtVcpus(vcpusForSearch * SEARCH_CPU_TARGET) + " of " + vcpusPerNode * nodes + ")" })}
