@@ -490,6 +490,11 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
         {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
     ],
     DocumentSource.EGNYTE: [{"folder_path": "/Shared/Docs"}],
+    # The service desk checks read a configured project, and the request read
+    # runs only when a project is set.
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [
+        {"jira_base_url": "https://example.atlassian.net", "project_key": "SUPPORT"}
+    ],
 }
 
 
