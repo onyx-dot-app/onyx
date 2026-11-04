@@ -4,7 +4,6 @@ import * as Yup from "yup";
 import {
   Button,
   Dropdown,
-  InputCurrency,
   InputTypeIn,
   Modal,
   SelectCard,
@@ -24,6 +23,7 @@ import {
 import { SvgCheck, SvgGlobe, SvgUser, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import { InputCurrencyField } from "@opal/form";
 import useShareableGroups from "@/hooks/useShareableGroups";
 import { formatCurrency, formatTokenCount } from "@/lib/format";
 
@@ -611,17 +611,7 @@ export default function CreateRateLimitModal({
                       title={t("modal.costBudget.title")}
                       description={t("modal.costBudget.description")}
                     >
-                      <InputCurrency
-                        id="cost_budget_dollars"
-                        value={values.cost_budget_dollars}
-                        onChange={(amount) =>
-                          void setFieldValue("cost_budget_dollars", amount)
-                        }
-                        error={
-                          !!touched.cost_budget_dollars &&
-                          !!errors.cost_budget_dollars
-                        }
-                      />
+                      <InputCurrencyField name="cost_budget_dollars" />
                     </InputVertical>
 
                     <InputVertical

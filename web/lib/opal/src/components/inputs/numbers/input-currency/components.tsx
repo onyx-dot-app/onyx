@@ -385,7 +385,11 @@ function InputCurrency({
                 }))
               }
               id={id}
-              aria-label={strings.inputCurrencyWhole}
+              // With an id, the field's <label> names it; an aria-label
+              // would override that name.
+              aria-label={
+                id === undefined ? strings.inputCurrencyWhole : undefined
+              }
               placeholder={wholePlaceholder}
               value={segments.whole}
               style={{ width: segmentWidth(segments.whole, wholePlaceholder) }}
