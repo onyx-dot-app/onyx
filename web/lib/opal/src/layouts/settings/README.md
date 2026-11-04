@@ -70,6 +70,7 @@ route's `loading.tsx`.
 | `icon`        | `IconFunctionComponent`                  | —       | As on `Header`          |
 | `title`       | `string \| RichStr`                      | —       | As on `Header` (required) |
 | `description` | `string \| RichStr`                      | —       | As on `Header`          |
+| `divider`     | `boolean`                                | `false` | As on `Header`          |
 | `width`       | `"sm" \| "md" \| "lg" \| "xl" \| "full"` | `"md"`  | As on `Root`            |
 
 ```tsx
