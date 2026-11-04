@@ -160,7 +160,7 @@ it deletes the old one.
    needs an orphan record.** A copy can recreate a document that was deleted
    after the copy read it. The cleanup task records a port orphan candidate
    before it deletes
-   (`background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`),
+   (`background/celery/tasks/shared/tasks.py:document_batch_by_cc_pair_cleanup_task`),
    and the port sweeps it.
 5. `missing-secondary-defers-sync` **A sync to a document the port has not
    copied is deferred, not failed.** This applies to FUTURE, and to a PRESENT

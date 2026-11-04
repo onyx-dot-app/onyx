@@ -18,7 +18,6 @@ from onyx.connectors.models import Document as ConnectorDocument
 from onyx.connectors.models import IndexAttemptMetadata, InputType
 from onyx.db.document import (
     get_document_source_types,
-    get_document_source_types_after_cc_pair_removal,
     upsert_document_by_connector_credential_pair,
 )
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
@@ -307,15 +306,6 @@ def test_document_sources_follow_relationship_rows_and_add_marks_stale(
                 DocumentSource.WEB,
             )
         }
-        assert get_document_source_types_after_cc_pair_removal(
-            db_session,
-            document_id,
-            cc_pairs[0].connector_id,
-            cc_pairs[0].credential_id,
-        ) == (
-            DocumentSource.GOOGLE_DRIVE,
-            DocumentSource.SHAREPOINT,
-        )
 
         upsert_document_by_connector_credential_pair(
             db_session,

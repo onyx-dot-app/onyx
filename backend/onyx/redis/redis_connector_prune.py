@@ -174,8 +174,8 @@ class RedisConnectorPrune:
     def generator_failed(self) -> bool:
         return bool(self.redis.exists(self.generator_failed_key))
 
-    def increment_failed_docs(self) -> None:
-        self.redis.incr(self.failed_docs_key)
+    def increment_failed_docs(self, count: int) -> None:
+        self.redis.incrby(self.failed_docs_key, count)
         self.redis.expire(self.failed_docs_key, self.FENCE_TTL)
 
     @property
