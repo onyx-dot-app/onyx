@@ -30,5 +30,5 @@ docker run --rm \
   "${certificate_args[@]}" \
   --env GRYPE_CHECK_FOR_APP_UPDATE=false \
   --mount "type=bind,source=${inventory},target=/inventory,readonly" \
-  anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9 \
+  "${BASE_IMAGE_REGISTRY:-docker.io}/anchore/grype:v0.121.1@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9" \
   sbom:/inventory/browser.cdx.json --fail-on critical

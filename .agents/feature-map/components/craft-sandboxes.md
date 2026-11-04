@@ -280,9 +280,11 @@ the stored token on each request, so a new token takes effect at once.
 
 - **Browser security updates do not wait for Debian.**
   `backend/onyx/server/features/build/sandbox/image/install-browser.sh` pins
-  Chrome for Testing and checks both architecture archives. The image audit
-  resolver requires current stable Chrome and runs Grype on its browser
-  inventory before ODS scans apt.
+  Chrome for Testing and verifies the selected archive with its architecture's
+  checksum. Release gates require current stable Chrome and run Grype on its
+  inventory before ODS scans apt. CVE report collection uses `--report` to
+  resolve the image without enforcing the browser gate, so browser failures
+  cannot stop unrelated alerts.
   Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
   use the ODS allowlist or automatic issue tracking.
 
