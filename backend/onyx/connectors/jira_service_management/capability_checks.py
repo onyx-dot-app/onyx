@@ -51,6 +51,8 @@ logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
 _SITE_FIELDS = frozenset({"jira_base_url"})
+# The probes below read the configured project, so they wait for it.
+_DESK_FIELDS = frozenset({"jira_base_url", "project_key"})
 _ERROR_DETAIL_CHARS = 300
 _SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Jira Service Management")
 
@@ -99,6 +101,8 @@ class _JsmCheck(CapabilityCheck[JiraServiceManagementConnectorConfig]):
         row_id: str | None = None,
         step: CheckStep | None = None,
         timeout_text: CheckRowText | None = None,
+        requires_fields: frozenset[str] = _SITE_FIELDS,
+        depends_on: tuple[str, ...] = (),
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -107,7 +111,8 @@ class _JsmCheck(CapabilityCheck[JiraServiceManagementConnectorConfig]):
             row_id=row_id,
             required=required,
             requires_connector_instance=False,
-            requires_fields=_SITE_FIELDS,
+            requires_fields=requires_fields,
+            depends_on=depends_on,
             remediation=remediation,
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
@@ -181,6 +186,8 @@ class _ServiceDeskProjectCheck(_JsmCheck):
         super().__init__(
             check_id="jsm_service_desk",
             display_name="Read the service desk",
+            requires_fields=_DESK_FIELDS,
+            depends_on=("jsm_auth",),
             remediation=(
                 "Enter the key of a Jira Service Management project. To read it, "
                 "give the token's account the Service Desk agent role, or at "
@@ -248,6 +255,8 @@ class _RequestReadCheck(_JsmCheck):
         super().__init__(
             check_id="jsm_request_read",
             display_name="Sample requests",
+            requires_fields=_DESK_FIELDS,
+            depends_on=("jsm_auth", "jsm_service_desk"),
             remediation=(
                 "Give the token's account Browse Projects on the service desk, "
                 "and access to the request security levels."
@@ -261,6 +270,12 @@ class _RequestReadCheck(_JsmCheck):
         try:
             page = gateway.search_issue_ids(jql=jql, max_results=1, fast=True)
         except JsmApiError as e:
+            if e.status_code is None:
+                raise TimedOutValidationError(
+                    "Jira did not answer the request search in time.",
+                    summary="Jira did not answer in time",
+                    description="The site took too long to answer. Re-run the check.",
+                ) from e
             if e.status_code == 400:
                 raise ConnectorValidationError(
                     f"Jira rejected the request query: {_detail(e)}",
@@ -297,6 +312,12 @@ class _RequestReadCheck(_JsmCheck):
         try:
             issues = gateway.bulk_fetch_issues(issue_ids=[page.issue_ids[0]], fast=True)
         except JsmApiError as e:
+            if e.status_code is None:
+                raise TimedOutValidationError(
+                    "Jira did not answer the request read in time.",
+                    summary="Jira did not answer in time",
+                    description="The site took too long to answer. Re-run the check.",
+                ) from e
             if e.status_code in (401, 403):
                 raise InsufficientPermissionsError(
                     "The credential can search the service desk but cannot read a "
@@ -313,10 +334,11 @@ class _RequestReadCheck(_JsmCheck):
                 summary="Unexpected answer from Jira",
                 description="The site answered, but not as Jira should.",
             ) from e
-        if not issues:
+        fields: Any = issues[0].get("fields") if issues else None
+        if not isinstance(fields, dict) or "summary" not in fields:
             raise ConnectorValidationError(
-                "Jira listed a request but returned no content for it, so "
-                "requests would index empty.",
+                "Jira listed a request but did not return its fields, so requests "
+                "would index empty.",
                 summary="Request came back without content",
                 description="Give the account access to the request security levels.",
             )
@@ -332,6 +354,8 @@ class _ServiceDeskMetadataCheck(_JsmCheck):
         super().__init__(
             check_id="jsm_metadata",
             display_name="Read service desk metadata",
+            requires_fields=_DESK_FIELDS,
+            depends_on=("jsm_auth", "jsm_service_desk"),
             remediation=(
                 "Give the token's account the Service Desk agent role on this "
                 "project to add the portal name and the request type to each "

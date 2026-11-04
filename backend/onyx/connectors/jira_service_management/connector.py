@@ -23,7 +23,8 @@ from typing import Any
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.jira.connector import JiraConnector, build_jql_query
 from onyx.connectors.jira_service_management.source_operations import (
     JiraServiceManagementSourceOperations,
     JsmApiError,
@@ -91,6 +92,26 @@ class JiraServiceManagementConnector(JiraConnector):
         self._service_desk_metadata: dict[str, Any] | None = None
         self._metadata_unavailable_reason: str | None = None
         self._logged_metadata_failure = False
+
+    def _get_jql_query(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> str:
+        """The sync query, always limited to this service desk.
+
+        The inherited implementation lets a custom JQL *replace* the project
+        predicate, so ``status = Open`` would index other projects. This
+        connector is defined as one service desk, so the project predicate is
+        always present and the custom JQL can only narrow within it.
+
+        The parent wraps this query in parentheses and appends a time filter,
+        so the result must remain a plain conjunction.
+        """
+        scoped = f'project = "{self.jira_project}"' if self.jira_project else ""
+        if self.jql_query:
+            scoped = (
+                f"{scoped} AND ({self.jql_query})" if scoped else f"({self.jql_query})"
+            )
+        return build_jql_query(project_key=None, jql_query=scoped, start=start, end=end)
 
     @property
     def source_operations(self) -> JiraServiceManagementSourceOperations:

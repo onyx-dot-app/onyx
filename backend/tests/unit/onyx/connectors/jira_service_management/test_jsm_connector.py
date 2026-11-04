@@ -285,3 +285,78 @@ def test_a_custom_jql_narrows_within_the_project(
     jql = connector._get_jql_query(0, 1_700_000_000)
 
     assert 'requestType = "Get IT help"' in jql
+
+
+def test_the_gateway_serves_jira_bulk_fetch() -> None:
+    """The inherited indexing path calls ``bulk_fetch_issues`` on the gateway.
+    A JSM gateway without it would fail every indexing run."""
+    from onyx.connectors.jira_service_management.source_operations import (
+        JiraServiceManagementSourceOperations,
+    )
+
+    assert (
+        "bulk_fetch_issues" in JiraServiceManagementSourceOperations.operation_specs()
+    )
+    assert "search_issue_ids" in JiraServiceManagementSourceOperations.operation_specs()
+
+
+def test_the_gateway_serves_the_inherited_permission_path() -> None:
+    """``JiraConnector._get_project_permissions`` runs during a perm-synced
+    indexing run and calls these gateway operations. They must exist, or that
+    run fails with ``AttributeError``."""
+    from onyx.connectors.jira_service_management.source_operations import (
+        JiraServiceManagementSourceOperations,
+    )
+
+    specs = JiraServiceManagementSourceOperations.operation_specs()
+    assert {
+        "get_project_permission_scheme",
+        "get_project_role",
+        "get_user",
+        "list_groups",
+        "get_group_members_page",
+    } <= set(specs)
+
+
+def test_the_servicedesk_url_is_unversioned() -> None:
+    """``servicedeskapi`` is not under ``/rest/api/<version>/``. Building it
+    with the SDK's default base produces ``/rest/rest/api/3/...``."""
+    from jira import JIRA
+
+    from onyx.connectors.jira_service_management.source_operations import (
+        _servicedesk_url,
+    )
+
+    client = JIRA.__new__(JIRA)
+    client._options = {"server": "https://acme.atlassian.net"}
+
+    url = _servicedesk_url(client, "servicedesk")
+
+    assert url == "https://acme.atlassian.net/rest/servicedeskapi/servicedesk"
+    assert "/rest/api/" not in url
+
+
+def test_jsm_errors_are_jira_errors() -> None:
+    """The inherited validation classifies a Jira error by type. A JSM error
+    that is not one would be reported as an unexpected answer."""
+    from onyx.connectors.jira.source_operations import JiraApiError, JiraTimeoutError
+    from onyx.connectors.jira_service_management.source_operations import (
+        JsmApiError,
+        JsmTimeoutError,
+    )
+
+    assert issubclass(JsmApiError, JiraApiError)
+    assert issubclass(JsmTimeoutError, JiraTimeoutError)
+
+
+def test_a_custom_jql_cannot_escape_the_service_desk(
+    connector: JiraServiceManagementConnector,
+) -> None:
+    """P1 regression: JQL used to replace the project predicate."""
+    connector.jql_query = "status = Open OR status = Done"
+
+    jql = connector._get_jql_query(0, 1_700_000_000)
+
+    assert jql.startswith(
+        '(project = "SUPPORT" AND (status = Open OR status = Done))'
+    ), jql
