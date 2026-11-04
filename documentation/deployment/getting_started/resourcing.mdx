@@ -117,6 +117,7 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | Peak to average question rate | 5× | Converts peak questions per second to questions per day. Onyx Cloud's busiest minutes run 3 to 15 times its average search rate. |
 | CPU for search at peak | 75% | Stays under the 80% at which AWS recommends an alarm, with room for indexing and merges. Above it, searches queue and then fail. |
 | vCPUs per data node | 1 per 8, 4, or 2 GB of RAM | Memory-optimized (`r8g`), general purpose (`m7g`), or compute-optimized (`c7g`) nodes. The calculator picks the type whose vCPUs carry the search load on the nodes the data needs. |
+| Storage per data node | 3 TB or less | Larger disks only pay off with 1-bit quantization, and they make moving or replacing a node slow. For more storage, add nodes. |
 | Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |
 | Shard size | 15 GB or less | Amazon OpenSearch Service recommends 10 GB to 30 GB per shard for search workloads. The calculator aims low so the index can grow without a change of shard count. |
 

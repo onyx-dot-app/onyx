@@ -84,7 +84,10 @@ export const OpenSearchSizingCalculator = () => {
   // Largest gp3 volume Amazon OpenSearch Service allows for r8g.large to r8g.4xlarge. General-purpose
   // nodes with the same RAM allow the same; compute-optimized nodes allow half.
   const MAX_DISK_FOR_RAM = { 16: 1500, 32: 3000, 64: 6000, 128: 12000 };
-  const NODE_DISK_ALL = [64, 128, 256, 512, 1000, 1500, 3000, 6000, 12000];
+  // Larger disks only pay off with 1-bit vectors, and they make moving or replacing a node slow.
+  // Clusters that need more storage add nodes instead.
+  const MAX_NODE_DISK = 3000;
+  const NODE_DISK_ALL = [64, 128, 256, 512, 1000, 1500, 3000];
   const COPY_HINT = {
     1: "No replica. A node failure stops search until the data is restored.",
     2: "A primary and one replica. Survives one node failure.",
@@ -253,7 +256,7 @@ export const OpenSearchSizingCalculator = () => {
         Math.max(
           c,
           Math.ceil(hotAll / cacheFor(ram)),
-          Math.ceil(provision / (MAX_DISK_FOR_RAM[ram] * 1e9)),
+          Math.ceil(provision / (Math.min(MAX_DISK_FOR_RAM[ram], MAX_NODE_DISK) * 1e9)),
           Math.ceil(vcpusForSearch / (ram / fewestGbPerVcpu))
         ) / zones
       ) * zones;
@@ -271,7 +274,7 @@ export const OpenSearchSizingCalculator = () => {
     const vcpusPerNode = nodeRam / nodeType.gbPerVcpu;
     const nodesForSearch = searchNodesWith(nodeType);
     // Recommended storage fills up at the same node count that memory, copies and search need.
-    const maxDisk = MAX_DISK_FOR_RAM[nodeRam] / (nodeType.gbPerVcpu === 2 ? 2 : 1);
+    const maxDisk = Math.min(MAX_DISK_FOR_RAM[nodeRam] / (nodeType.gbPerVcpu === 2 ? 2 : 1), MAX_NODE_DISK);
     const diskOptions = NODE_DISK_ALL.filter((d) => d <= maxDisk);
     const nodesWithoutStorage = Math.ceil(Math.max(c, nodesForMemory, nodesForSearch) / zones) * zones;
     const neededPerNode = provision / 1e9 / nodesWithoutStorage;
