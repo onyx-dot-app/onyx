@@ -3207,6 +3207,8 @@
           "indexingItems": "{count, plural, one {# item failed} other {# items failed}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "users": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
+          "groups": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "resolved": "Resolved",
           "superseded": "Superseded"
         },
@@ -3236,6 +3238,18 @@
           "resolvedGroup": "Resolved Errors",
           "resolvedWithoutRetry": "Resolved without Retry",
           "resolvedByLaterRun": "Resolved by Later Run"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Failed users",
+            "search": "Search users…",
+            "empty": "No failed users"
+          },
+          "groups": {
+            "title": "Failed groups",
+            "search": "Search groups…",
+            "empty": "No failed groups"
+          }
         },
         "trace": {
           "header": "Stack Trace • Run ID: {id}",

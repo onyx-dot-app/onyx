@@ -204,13 +204,25 @@ export function permSyncRun(
   };
 }
 
-/** A group sync, which records no per-item errors. */
-export function groupSyncRun(options: SyncRunOptions): FeedRun {
+/** A group sync. Its failed users and groups count every row, resolved ones included; `openErrors` counts the open ones. */
+export function groupSyncRun(
+  options: SyncRunOptions & {
+    failedUsers?: number;
+    failedGroups?: number;
+    openErrors?: number;
+  }
+): FeedRun {
+  const { failedUsers = 0, failedGroups = 0, openErrors = 0 } = options;
   const created = minutesAgo(options.minutesAgo);
   return {
     ccPairId: options.ccPairId ?? SALES_DRIVE.id,
     group: syncGroup(options.status),
-    errors: "none",
+    errors:
+      openErrors > 0
+        ? "open"
+        : failedUsers + failedGroups > 0
+          ? "closed"
+          : "none",
     resolved: false,
     superseded: false,
     run: {
@@ -225,6 +237,9 @@ export function groupSyncRun(options: SyncRunOptions): FeedRun {
         total_users_processed: 40,
         total_groups_processed: 6,
         total_group_memberships_synced: 80,
+        failed_users: failedUsers,
+        failed_groups: failedGroups,
+        open_error_count: openErrors,
         time_created: created,
         time_started: created,
         time_finished: minutesAgo(Math.max(options.minutesAgo - 5, 0)),

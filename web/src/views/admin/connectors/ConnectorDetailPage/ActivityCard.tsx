@@ -29,6 +29,8 @@ import {
   SvgHistory,
   SvgRefreshCw,
   SvgTextLines,
+  SvgUser,
+  SvgUsers,
   SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
@@ -39,6 +41,7 @@ import type {
   StatusVariants,
 } from "@opal/types";
 import { cn } from "@opal/utils";
+import type { FailedItemsRoute } from "@/lib/ccPair";
 import type { CCPairRef, CCPairRun } from "@/lib/connectors/types";
 import {
   runKey,
@@ -170,25 +173,41 @@ function splitReason(message: string): FailureReason {
   };
 }
 
-type EntityKind = "indexing" | "pruning" | "checks";
+type EntityKind = "indexing" | "pruning" | "checks" | "users" | "groups";
 
 const ENTITY_CHIP_ICONS = {
   indexing: SvgFiles,
   pruning: SvgFiles,
   checks: SvgXOctagon,
+  users: SvgUser,
+  groups: SvgUsers,
 } satisfies Record<EntityKind, IconFunctionComponent>;
 
-/** The kind whose failed entities a chip counts. A sync chip counts failed users or groups, which no sync records, so syncs have none. */
-function entityKind(run: CCPairRun): EntityKind | null {
+interface EntityChip {
+  kind: EntityKind;
+  /** Resolved entities included, so the chip keeps what the run failed on. */
+  count: number;
+}
+
+/** Each kind of entity the run can fail on. A doc sync counts the documents it could not read without naming them, so it has none. */
+function entityCounts(run: CCPairRun): EntityChip[] {
   switch (run.kind) {
     case "indexing":
     case "pruning":
     case "checks":
-      return run.kind;
-    case "doc_permission_sync":
+      return [{ kind: run.kind, count: runWarnings(run) }];
     case "group_sync":
-      return null;
+      return [
+        { kind: "users", count: run.attempt.failed_users },
+        { kind: "groups", count: run.attempt.failed_groups },
+      ];
+    case "doc_permission_sync":
+      return [];
   }
+}
+
+function entityChips(run: CCPairRun): EntityChip[] {
+  return entityCounts(run).filter((chip) => chip.count > 0);
 }
 
 /** The chip's label key. An index run's errors can be whole sources (a space, a drive), and only its open errors say which, so it reads "items" unless every open error is a document. */
@@ -303,13 +322,16 @@ export interface ActivityCardProps {
   canResolveRuns: boolean;
   /** Resolves these errors of the run by a targeted reindex, or every open one when `null`. */
   onResolve: (errorIds: number[] | null) => void;
-  /** Closes these errors of the run without a reindex. Without it the failed documents list posts on its own. */
-  onResolveWithoutRetry?: (errorIds: number[]) => Promise<void>;
+  /** Closes these errors of the run without a reindex. Without it the failed items list posts on its own. */
+  onResolveWithoutRetry?: (
+    errorIds: number[],
+    route: FailedItemsRoute
+  ) => Promise<void>;
   /** Marks the run resolved without a reindex. */
   onResolveRun: () => void;
   /** A resolve is in flight, so the resolve actions wait for it. */
   resolving: boolean;
-  /** Overrides where every pill's popover opens. Without it the stack trace follows the content width, the failed documents open below, the checks beside. */
+  /** Overrides where every pill's popover opens. Without it the stack trace follows the content width, the failed items lists open below, the checks beside. */
   popoverPlacement?: PopoverPlacement;
   /** The pointer entered or left the card. */
   onHoverChange?: (hovered: boolean) => void;
@@ -372,7 +394,7 @@ export default function ActivityCard({
   }
   const [hovered, setHovered] = useState(false);
   const [focusWithin, setFocusWithin] = useState(false);
-  const [openPopover, setOpenPopover] = useState<"trace" | "items" | null>(
+  const [openPopover, setOpenPopover] = useState<"trace" | EntityKind | null>(
     null
   );
   useEffect(() => {
@@ -409,7 +431,7 @@ export default function ActivityCard({
     reportHover(true);
     return () => reportHover(false);
   }, [hovered]);
-  const togglePopover = (popover: "trace" | "items") => (open: boolean) =>
+  const togglePopover = (popover: "trace" | EntityKind) => (open: boolean) =>
     setOpenPopover((current) =>
       open ? popover : current === popover ? null : current
     );
@@ -419,9 +441,7 @@ export default function ActivityCard({
   const style: SectionStyle = SECTION_STYLE[section];
   const StatusIcon = active ? IconLoader : style.icon;
   const minutes = runMinutes(run);
-  const chipKind = entityKind(run);
-  // Counts resolved entities too, so the chip keeps what the run failed on.
-  const entities = chipKind === null ? 0 : runWarnings(run);
+  const chips = entityChips(run);
   const trace = runTrace(run);
   const openable = sectionResolves(section);
   const openDocs =
@@ -436,22 +456,19 @@ export default function ActivityCard({
   const retriesDocs =
     openable && !closed && !active && canResolve && openDocs > 0;
   const showsActions = resolvesRun || retriesDocs;
-  const hasChips = trace !== null || entities > 0;
+  const hasChips = trace !== null || chips.length > 0;
   const revealed = hovered || focusWithin || selected;
   const edged = hovered || selected || outlined;
   const lifted = selected || focused;
-  // A pruning run records how many documents failed, not which, so only index and check runs list them.
-  const listsItems =
-    entities > 0 && (run.kind === "indexing" || run.kind === "checks");
-  // A popover that unmounts never reports its close, so the card would stay selected. Only a checks run can lose its list: an index run's error count never drops.
+  // A popover that unmounts never reports its close, so the card would stay selected. Only a checks run can lose its list: index and group sync counts never drop.
+  const openGone =
+    openPopover === "trace"
+      ? trace === null
+      : openPopover !== null &&
+        !chips.some((chip) => chip.kind === openPopover);
   useEffect(() => {
-    setOpenPopover((current) =>
-      (current === "trace" && trace === null) ||
-      (current === "items" && !listsItems)
-        ? null
-        : current
-    );
-  }, [trace, listsItems]);
+    if (openGone) setOpenPopover(null);
+  }, [openGone]);
   const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure, superseded or not, titles with the error's first sentence and describes with the rest. A run with errors reports what it still did.
@@ -463,8 +480,10 @@ export default function ActivityCard({
     if (split !== null && split.reason !== "") {
       title = t(`title.${run.kind}.failedWith`, { reason: split.reason });
       description = split.rest;
-    } else if (chipKind === "checks" && entities > 0) {
-      description = t("description.checksFailed", { count: entities });
+    } else if (run.kind === "checks" && chips.length > 0) {
+      description = t("description.checksFailed", {
+        count: runWarnings(run),
+      });
     }
   } else if (minutes !== null) {
     description = t(`description.${run.kind}`, {
@@ -476,13 +495,14 @@ export default function ActivityCard({
   const ClosedIcon = superseded ? SvgHistory : SvgCheckSquare;
 
   // A pruning run records how many documents failed, not which, so its chip opens nothing.
-  function entityPopover(): React.ReactNode | null {
+  function entityPopover(kind: EntityKind): React.ReactNode | null {
     switch (run.kind) {
       case "indexing":
         return (
           <FailedDocsPopoverContent
             ccPairId={ccPairId}
-            indexAttemptId={run.attempt.id}
+            attemptId={run.attempt.id}
+            kind="docs"
             canResolve={canResolve}
             canRetryAll={canResolve && openDocs > 0}
             canResolveErrors={canResolveRuns}
@@ -497,6 +517,22 @@ export default function ActivityCard({
           <CheckRunPopoverContent
             run={run.attempt}
             placement={placement.checks}
+          />
+        );
+      case "group_sync":
+        if (kind !== "users" && kind !== "groups") return null;
+        // A failed user or group cannot be re-read alone, so its list resolves only.
+        return (
+          <FailedDocsPopoverContent
+            ccPairId={ccPairId}
+            attemptId={run.attempt.id}
+            kind={kind}
+            canResolve={false}
+            canResolveErrors={canResolveRuns}
+            onResolve={onResolve}
+            onResolveWithoutRetry={onResolveWithoutRetry}
+            resolving={resolving}
+            placement={placement.docs}
           />
         );
       default:
@@ -661,23 +697,24 @@ export default function ActivityCard({
                         }
                       />
                     )}
-                    {chipKind !== null && entities > 0 && (
+                    {chips.map((chip) => (
                       <PopoverChip
-                        icon={ENTITY_CHIP_ICONS[chipKind]}
+                        key={chip.kind}
+                        icon={ENTITY_CHIP_ICONS[chip.kind]}
                         iconColor={chipIconColor}
-                        title={t(entityLabelKey(run, chipKind), {
-                          count: entities,
+                        title={t(entityLabelKey(run, chip.kind), {
+                          count: chip.count,
                         })}
                         anchor={anchorFor(
                           run.kind === "checks"
                             ? placement.checks
                             : placement.docs
                         )}
-                        open={openPopover === "items"}
-                        onOpenChange={togglePopover("items")}
-                        popover={entityPopover()}
+                        open={openPopover === chip.kind}
+                        onOpenChange={togglePopover(chip.kind)}
+                        popover={entityPopover(chip.kind)}
                       />
-                    )}
+                    ))}
                   </Section>
                   {closed ? (
                     <Section

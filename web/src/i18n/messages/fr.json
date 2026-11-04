@@ -3207,6 +3207,8 @@
           "indexingItems": "{count, plural, one {# élément en échec} other {# éléments en échec}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+          "users": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
+          "groups": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolved": "Résolu",
           "superseded": "Remplacé"
         },
@@ -3236,6 +3238,18 @@
           "resolvedGroup": "Erreurs résolues",
           "resolvedWithoutRetry": "Résolu sans relance",
           "resolvedByLaterRun": "Résolu par une exécution ultérieure"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Utilisateurs en échec",
+            "search": "Rechercher des utilisateurs…",
+            "empty": "Aucun utilisateur en échec"
+          },
+          "groups": {
+            "title": "Groupes en échec",
+            "search": "Rechercher des groupes…",
+            "empty": "Aucun groupe en échec"
+          }
         },
         "trace": {
           "header": "Trace de la pile • ID d'exécution : {id}",

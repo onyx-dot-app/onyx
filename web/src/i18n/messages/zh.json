@@ -3207,6 +3207,8 @@
           "indexingItems": "{count, plural, other {# 个项目失败}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "users": "{count, plural, one {# 个用户同步失败} other {# 个用户同步失败}}",
+          "groups": "{count, plural, one {# 个群组同步失败} other {# 个群组同步失败}}",
           "resolved": "已解决",
           "superseded": "已被取代"
         },
@@ -3236,6 +3238,18 @@
           "resolvedGroup": "已解决的错误",
           "resolvedWithoutRetry": "已解决但未重试",
           "resolvedByLaterRun": "已由后续运行解决"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "失败的用户",
+            "search": "搜索用户…",
+            "empty": "没有失败的用户"
+          },
+          "groups": {
+            "title": "失败的群组",
+            "search": "搜索群组…",
+            "empty": "没有失败的群组"
+          }
         },
         "trace": {
           "header": "堆栈跟踪 • 运行 ID：{id}",

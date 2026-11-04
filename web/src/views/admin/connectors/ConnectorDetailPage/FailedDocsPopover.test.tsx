@@ -2,15 +2,23 @@
 import { act, render, screen, waitFor, within } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import { Button, Popover } from "@opal/components";
+import { SvgUser, SvgUsers } from "@opal/icons";
 import englishMessages from "@/i18n/messages/en.json";
-import type { IndexAttemptError } from "@/lib/connectors/types";
+import type {
+  IndexAttemptError,
+  SyncAttemptError,
+  SyncEntityKind,
+} from "@/lib/connectors/types";
 import type { ActivityScope } from "@/lib/connectors/ccPair/hooks";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import {
   SALES_DRIVE,
+  groupSyncRun,
+  holdsIcon,
   indexRun,
   installActivityFeed,
+  referencePaths,
   restoreFetch,
 } from "@tests/setup/activityFeedTestUtils";
 
@@ -231,7 +239,8 @@ function renderPanel(
       </Popover.Trigger>
       <FailedDocsPopoverContent
         ccPairId={CC_PAIR_ID}
-        indexAttemptId={ATTEMPT_ID}
+        attemptId={ATTEMPT_ID}
+        kind="docs"
         canResolve={overrides.canResolve ?? true}
         canRetryAll={overrides.canRetryAll}
         canResolveErrors={overrides.canResolveErrors}
@@ -250,11 +259,17 @@ async function shownMessage(row: IndexAttemptError): Promise<HTMLElement> {
   return waitFor(() => within(panel()).getByText(row.failure_message));
 }
 
+interface ShownRow {
+  id: number;
+  failure_message: string;
+}
+
 /** The largest element around `row`'s message that holds no other row's message. */
-function rowOf(row: IndexAttemptError): HTMLElement {
+function rowOf(row: ShownRow, pool: ShownRow[] = ALL_ROWS): HTMLElement {
   const root = panel();
   const message = within(root).getByText(row.failure_message);
-  const others = ALL_ROWS.filter((other) => other.id !== row.id)
+  const others = pool
+    .filter((other) => other.id !== row.id)
     .map((other) => within(root).queryByText(other.failure_message))
     .filter((element): element is HTMLElement => element !== null);
   let element: HTMLElement = message;
@@ -1012,6 +1027,298 @@ describe("AC-5: the list once its last open error is resolved", () => {
     ).toHaveAttribute("aria-pressed", "true");
     expect(
       within(panel()).getByRole("button", { name: "Retry All Docs" })
+    ).toBeInTheDocument();
+  });
+});
+
+// ── Failed users and groups ───────────────────────────────────────────────
+
+const SYNC_ATTEMPT_ID = 702;
+
+function syncErrorRow(
+  id: number,
+  minutes: number,
+  entityKind: SyncEntityKind,
+  fields: Pick<SyncAttemptError, "entity_id" | "failure_message">
+): SyncAttemptError {
+  return {
+    id,
+    connector_credential_pair_id: CC_PAIR_ID,
+    external_group_sync_attempt_id: SYNC_ATTEMPT_ID,
+    entity_kind: entityKind,
+    entity_name: null,
+    time_created: minutesAgo(minutes),
+    is_resolved: false,
+    resolved_reason: null,
+    resolved_at: null,
+    ...fields,
+  };
+}
+
+const FAILED_BOB = syncErrorRow(11, 1, "user", {
+  entity_id: "acct-bob",
+  failure_message: "memberOf page 2 returned 500.",
+});
+const FAILED_ANN = syncErrorRow(12, 2, "user", {
+  entity_id: "acct-ann",
+  failure_message: "User lookup timed out.",
+});
+const FAILED_SALES = syncErrorRow(13, 3, "group", {
+  entity_id: "grp-sales",
+  failure_message: "Group members page returned 403.",
+});
+const SYNC_ROWS = [FAILED_BOB, FAILED_ANN, FAILED_SALES];
+
+const isOpenSync = (row: SyncAttemptError) =>
+  !row.is_resolved && row.resolved_reason === null;
+
+/** Serves `/sync-errors` and `sync-errors/resolve` over the feed fake, as the backend does. A run resolve closes the run's open rows without retry. */
+function installSyncErrorsRoute(seed: SyncAttemptError[]) {
+  const rows = seed.map((row) => ({ ...row }));
+  const resolvePosts: number[][] = [];
+  const listReads: URLSearchParams[] = [];
+  const feedFetch = global.fetch;
+  const base = `/api/manage/admin/cc-pair/${CC_PAIR_ID}/sync-errors`;
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  const closeWithoutRetry = (row: SyncAttemptError) => {
+    row.resolved_reason = "without_retry";
+    row.resolved_at = new Date().toISOString();
+  };
+  global.fetch = jest.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "GET" && url.pathname === base) {
+        const params = url.searchParams;
+        listReads.push(params);
+        const attempt = params.get("attempt_id");
+        const kind = params.get("entity_kind");
+        const q = (params.get("q") ?? "").toLowerCase();
+        const includeResolved = params.get("include_resolved") === "true";
+        const pageNum = Number(params.get("page_num") ?? "0");
+        const pageSize = Number(params.get("page_size") ?? "10");
+        const matching = rows
+          .filter((row) => includeResolved || isOpenSync(row))
+          .filter(
+            (row) =>
+              attempt === null ||
+              String(row.external_group_sync_attempt_id) === attempt
+          )
+          .filter((row) => kind === null || row.entity_kind === kind)
+          .filter(
+            (row) =>
+              q === "" ||
+              [row.failure_message, row.entity_id, row.entity_name].some(
+                (field) => field?.toLowerCase().includes(q)
+              )
+          )
+          .sort(
+            (a, b) =>
+              (params.get("order") === "state"
+                ? Number(!isOpenSync(a)) - Number(!isOpenSync(b))
+                : 0) ||
+              Date.parse(b.time_created) - Date.parse(a.time_created) ||
+              b.id - a.id
+          );
+        return json({
+          items: matching.slice(pageNum * pageSize, (pageNum + 1) * pageSize),
+          total_items: matching.length,
+        });
+      }
+      if (method === "POST" && url.pathname === `${base}/resolve`) {
+        const ids = (JSON.parse(String(init?.body)) as { error_ids: number[] })
+          .error_ids;
+        resolvePosts.push(ids);
+        rows.filter((row) => ids.includes(row.id)).forEach(closeWithoutRetry);
+        return json({ resolved_count: ids.length });
+      }
+      if (method === "POST" && url.pathname.endsWith("/runs/resolve")) {
+        rows.filter(isOpenSync).forEach(closeWithoutRetry);
+      }
+      return feedFetch(input, init);
+    }
+  ) as typeof fetch;
+  return { resolvePosts, listReads };
+}
+
+describe("Failed users and groups", () => {
+  const PAIR: ActivityScope = {
+    ccPairId: CC_PAIR_ID,
+    canResolve: true,
+    canResolveRuns: true,
+  };
+  const syncRun = () =>
+    groupSyncRun({
+      id: SYNC_ATTEMPT_ID,
+      status: "completed_with_errors",
+      minutesAgo: 4,
+      failedUsers: 2,
+      failedGroups: 1,
+      openErrors: 3,
+    });
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = jest.fn();
+    window.sessionStorage.clear();
+  });
+
+  it("the users chip lists the run's failed users with the user icon and Resolve only, no Retry", async () => {
+    installActivityFeed([syncRun()]);
+    const route = installSyncErrorsRoute(SYNC_ROWS);
+    const user = userEvent.setup();
+    render(<ActivityPanel scope={PAIR} title="Activities" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "2 users failed to sync" })
+    );
+    await waitFor(() => within(panel()).getByText(FAILED_BOB.failure_message));
+    expect(panel()).toHaveAccessibleName("Failed users");
+    expect(
+      within(panel()).getByText(FAILED_ANN.failure_message)
+    ).toBeInTheDocument();
+    expect(
+      within(panel()).queryByText(FAILED_SALES.failure_message)
+    ).toBeNull();
+    // The server narrows to the chip's kind and orders by state, as /errors does.
+    for (const params of route.listReads) {
+      expect(params.get("entity_kind")).toBe("user");
+      expect(params.get("order")).toBe("state");
+    }
+    expect(
+      within(panel()).getByPlaceholderText("Search users\u2026")
+    ).toBeInTheDocument();
+    expect(
+      within(panel()).queryByRole("button", { name: "Retry All Docs" })
+    ).toBeNull();
+
+    const row = rowOf(FAILED_BOB, SYNC_ROWS);
+    await user.hover(row);
+    expect(holdsIcon(row, referencePaths(SvgUser))).toBe(true);
+    expect(within(row).getByText("acct-bob")).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: "Resolve" })
+    ).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Retry Doc" })).toBeNull();
+    expect(
+      within(row).queryByRole("button", { name: "Resolve without Retry" })
+    ).toBeNull();
+  });
+
+  it("Resolve posts sync-errors/resolve, moves the row under Resolved Errors, and the chip keeps its count", async () => {
+    installActivityFeed([syncRun()]);
+    const route = installSyncErrorsRoute(SYNC_ROWS);
+    const user = userEvent.setup();
+    render(<ActivityPanel scope={PAIR} title="Activities" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "2 users failed to sync" })
+    );
+    await waitFor(() => within(panel()).getByText(FAILED_BOB.failure_message));
+    const row = rowOf(FAILED_BOB, SYNC_ROWS);
+    await user.hover(row);
+    await user.click(within(row).getByRole("button", { name: "Resolve" }));
+
+    await waitFor(() => expect(route.resolvePosts).toEqual([[FAILED_BOB.id]]));
+    await waitFor(() =>
+      expect(
+        precedes(
+          divider(),
+          within(panel()).getByText(FAILED_BOB.failure_message)
+        )
+      ).toBe(true)
+    );
+    // A user or group never retries, so its closed row reads Resolved.
+    const resolved = rowOf(FAILED_BOB, SYNC_ROWS);
+    expect(
+      within(resolved).getByRole("button", { name: "Resolved" })
+    ).toBeInTheDocument();
+    expect(
+      precedes(within(panel()).getByText(FAILED_ANN.failure_message), divider())
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "2 users failed to sync" })
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("pages a long users list from the server and searches it there", async () => {
+    // 101 open users fill page one and spill onto page two, ahead of an older resolved one.
+    const users = Array.from({ length: 101 }, (_, index) =>
+      syncErrorRow(100 + index, 10 + index, "user", {
+        entity_id: `acct-${index}`,
+        failure_message: `User ${index} lookup failed.`,
+      })
+    );
+    const lastUser = users[users.length - 1]!;
+    const resolvedAnn = {
+      ...FAILED_ANN,
+      time_created: minutesAgo(500),
+      resolved_reason: "without_retry" as const,
+      resolved_at: minutesAgo(400),
+    };
+    installActivityFeed([
+      groupSyncRun({
+        id: SYNC_ATTEMPT_ID,
+        status: "completed_with_errors",
+        minutesAgo: 4,
+        failedUsers: 102,
+        failedGroups: 0,
+        openErrors: 101,
+      }),
+    ]);
+    const route = installSyncErrorsRoute([resolvedAnn, ...users]);
+    const user = userEvent.setup();
+    render(<ActivityPanel scope={PAIR} title="Activities" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "102 users failed to sync" })
+    );
+    await waitFor(() => within(panel()).getByText(users[0]!.failure_message));
+    expect(within(panel()).queryByText(lastUser.failure_message)).toBeNull();
+    expect(within(panel()).queryByText("Resolved Errors")).toBeNull();
+
+    await user.click(
+      within(panel()).getByRole("button", { name: "Show more" })
+    );
+    await waitFor(() => within(panel()).getByText(resolvedAnn.failure_message));
+    expect(route.listReads.at(-1)?.get("page_num")).toBe("1");
+    expect(within(panel()).getAllByText("Resolved Errors")).toHaveLength(1);
+    expect(
+      precedes(within(panel()).getByText(lastUser.failure_message), divider())
+    ).toBe(true);
+
+    await user.type(within(panel()).getByRole("searchbox"), "acct-100");
+    await waitFor(() =>
+      expect(within(panel()).queryByText(users[0]!.failure_message)).toBeNull()
+    );
+    expect(route.listReads.at(-1)?.get("q")).toBe("acct-100");
+    expect(
+      within(panel()).getByText(lastUser.failure_message)
+    ).toBeInTheDocument();
+  });
+
+  it("the groups chip lists the failed groups with the group icon", async () => {
+    installActivityFeed([syncRun()]);
+    const route = installSyncErrorsRoute(SYNC_ROWS);
+    const user = userEvent.setup();
+    render(<ActivityPanel scope={PAIR} title="Activities" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "1 group failed to sync" })
+    );
+    await waitFor(() =>
+      within(panel()).getByText(FAILED_SALES.failure_message)
+    );
+    expect(panel()).toHaveAccessibleName("Failed groups");
+    expect(within(panel()).queryByText(FAILED_BOB.failure_message)).toBeNull();
+    expect(route.listReads.at(-1)?.get("entity_kind")).toBe("group");
+    const row = rowOf(FAILED_SALES, SYNC_ROWS);
+    expect(holdsIcon(row, referencePaths(SvgUsers))).toBe(true);
+    expect(
+      within(row).getByRole("button", { name: "Resolve" })
     ).toBeInTheDocument();
   });
 });

@@ -3207,6 +3207,8 @@
           "indexingItems": "{count, plural, one {# Element fehlgeschlagen} other {# Elemente fehlgeschlagen}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+          "users": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
+          "groups": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolved": "Behoben",
           "superseded": "Abgelöst"
         },
@@ -3236,6 +3238,18 @@
           "resolvedGroup": "Behobene Fehler",
           "resolvedWithoutRetry": "Ohne erneuten Versuch behoben",
           "resolvedByLaterRun": "Durch späteren Lauf behoben"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Fehlgeschlagene Benutzer",
+            "search": "Benutzer durchsuchen…",
+            "empty": "Keine fehlgeschlagenen Benutzer"
+          },
+          "groups": {
+            "title": "Fehlgeschlagene Gruppen",
+            "search": "Gruppen durchsuchen…",
+            "empty": "Keine fehlgeschlagenen Gruppen"
+          }
         },
         "trace": {
           "header": "Stacktrace • Lauf-ID: {id}",

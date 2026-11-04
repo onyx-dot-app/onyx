@@ -64,6 +64,7 @@ import type {
   CCPairRunLevel,
   CCPairRunStatusGroup,
 } from "@/lib/connectors/types";
+import type { FailedItemsRoute } from "@/lib/ccPair";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
 import { isActive } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
@@ -228,7 +229,8 @@ interface BlockListProps {
   onResolve: (item: ActivityItem, errorIds: number[] | null) => void;
   onResolveWithoutRetry: (
     item: ActivityItem,
-    errorIds: number[]
+    errorIds: number[],
+    route: FailedItemsRoute
   ) => Promise<void>;
   onResolveRun: (item: ActivityItem) => void;
   links: Partial<ActivityPanelLinks>;
@@ -294,8 +296,8 @@ function BlockList({
             canResolveRuns={item.canResolveRuns}
             resolving={resolving}
             onResolve={(errorIds) => onResolve(item, errorIds)}
-            onResolveWithoutRetry={(errorIds) =>
-              onResolveWithoutRetry(item, errorIds)
+            onResolveWithoutRetry={(errorIds, route) =>
+              onResolveWithoutRetry(item, errorIds, route)
             }
             onResolveRun={() => onResolveRun(item)}
             onPanelOpenChange={
@@ -1005,8 +1007,8 @@ export default function ActivityPanel({
                         onResolve={(item, errorIds) =>
                           void resolve(item, errorIds)
                         }
-                        onResolveWithoutRetry={(item, errorIds) =>
-                          resolveWithoutRetry(item.ccPairId, errorIds)
+                        onResolveWithoutRetry={(item, errorIds, route) =>
+                          resolveWithoutRetry(item.ccPairId, errorIds, route)
                         }
                         onResolveRun={(item) => void resolveRun(item)}
                         links={links}

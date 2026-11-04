@@ -139,6 +139,9 @@ with an open row sits under Errors until it is resolved. A newer sync does not
 supersede it, so the Errors level, the open count and the row list agree.
 `entity_kind` narrows the list to users or groups, and `order=state` lists
 open rows first, as `/errors` does.
+Its activity card shows one chip per kind, which opens that kind's rows with
+Resolve only
+(`web/src/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover.tsx`).
 
 `upsert_external_groups` and `element_update_permissions` create the `User` rows
 for unknown emails (`db/users.py:batch_add_ext_perm_user_if_not_exists`). A

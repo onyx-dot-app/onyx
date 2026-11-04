@@ -177,6 +177,11 @@ export interface ExternalGroupSyncAttemptSnapshot {
   total_users_processed: number;
   total_groups_processed: number;
   total_group_memberships_synced: number;
+  /** Users and groups the sync could not read, resolved ones included. */
+  failed_users: number;
+  failed_groups: number;
+  /** Of those, the ones no admin resolved. */
+  open_error_count: number;
   time_created: string;
   time_started: string | null;
   time_finished: string | null;
@@ -385,6 +390,25 @@ export interface IndexAttemptError {
   index_attempt_id: number;
 
   error_type: string | null;
+}
+
+/** Mirrors `SyncEntityKind` in `backend/onyx/db/enums.py`. */
+export type SyncEntityKind = "user" | "group";
+
+/** A user or group a group sync skipped whole. Mirrors `SyncAttemptErrorSnapshot` in `backend/ee/onyx/server/documents/models.py`. */
+export interface SyncAttemptError {
+  id: number;
+  connector_credential_pair_id: number;
+  external_group_sync_attempt_id: number;
+  entity_kind: SyncEntityKind;
+  entity_id: string;
+  entity_name: string | null;
+  failure_message: string;
+  time_created: string;
+  /** Stays false on a row resolved without retry. */
+  is_resolved: boolean;
+  resolved_reason: "without_retry" | null;
+  resolved_at: string | null;
 }
 
 export interface PaginatedIndexAttemptErrors {
