@@ -36,14 +36,14 @@ _SEAT_LOCK_NAMESPACE = "onyx_seat_lock"
 _LICENSE_STORE_LOCK_NAMESPACE = "onyx_license_store_lock"
 
 
-def _advisory_lock_id(namespace: str, tenant_id: str) -> int:
+def advisory_lock_id(namespace: str, tenant_id: str) -> int:
     digest = hashlib.sha256(f"{namespace}:{tenant_id}".encode()).digest()
     # pg_advisory_xact_lock takes a signed 8-byte int.
     return struct.unpack("q", digest[:8])[0]
 
 
 def seat_lock_id_for_tenant(tenant_id: str) -> int:
-    return _advisory_lock_id(_SEAT_LOCK_NAMESPACE, tenant_id)
+    return advisory_lock_id(_SEAT_LOCK_NAMESPACE, tenant_id)
 
 
 def acquire_license_store_lock(db_session: Session) -> None:
@@ -53,9 +53,9 @@ def acquire_license_store_lock(db_session: Session) -> None:
     lock, or a slower response overwrites a newer license. Released on the
     caller's commit or rollback.
     """
-    _acquire_advisory_lock(
+    acquire_advisory_xact_lock(
         db_session,
-        _advisory_lock_id(_LICENSE_STORE_LOCK_NAMESPACE, get_current_tenant_id()),
+        advisory_lock_id(_LICENSE_STORE_LOCK_NAMESPACE, get_current_tenant_id()),
     )
 
 
@@ -65,12 +65,12 @@ def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None
     Caller must run the seat check AND the seat-consuming write in the
     same transaction.
     """
-    _acquire_advisory_lock(
+    acquire_advisory_xact_lock(
         db_session, seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
     )
 
 
-def _acquire_advisory_lock(db_session: Session, lock_id: int) -> None:
+def acquire_advisory_xact_lock(db_session: Session, lock_id: int) -> None:
     # Bounded wait: a double-acquisition bug or wedged holder should fail
     # fast with lock_not_available, not hang until the idle-in-transaction
     # reaper kills the session (observed as 10-minute invite freezes).
