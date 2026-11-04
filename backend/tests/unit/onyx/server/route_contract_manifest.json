@@ -154,7 +154,7 @@
   "GET /auth/oidc/{provider_name}/authorize": "none",
   "GET /auth/oidc/{provider_name}/callback": "none",
   "GET /auth/saml/authorize": "none",
-  "GET /auth/saml/callback": "none",
+  "GET /auth/saml/complete": "none",
   "GET /auth/saml/{provider_name}/authorize": "none",
   "GET /auth/type": "none",
   "GET /build/action-policies": "basic",

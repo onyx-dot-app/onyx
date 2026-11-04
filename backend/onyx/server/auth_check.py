@@ -94,8 +94,8 @@ PUBLIC_ENDPOINT_SPECS = [
     # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
     ("/auth/saml/{provider_name}/authorize", {"GET"}),
-    ("/auth/saml/callback", {"GET"}),
     ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/complete", {"GET"}),
     ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),

@@ -5,8 +5,8 @@
  * OIDC/Google it also sets the CSRF/PKCE cookies on that response, so the fetch
  * must run in the browser (credentials included) to land those cookies on the
  * client that completes the flow. A server component fetching it would land them
- * on the wrong client. SAML sets no cookies but returns the same shape, so it
- * takes the same path.
+ * on the wrong client. SAML sets its login cookie the same way (read back on
+ * /auth/saml/complete) and returns the same shape.
  *
  * With `autoStart` the flow begins on mount, for deployments where this
  * provider is the only way in. The button stays rendered as the retry path.
