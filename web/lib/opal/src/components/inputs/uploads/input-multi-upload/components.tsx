@@ -155,7 +155,7 @@ export default function InputMultiUpload({
           openFilePicker();
         }}
         inputAriaProps={{ role: "button" }}
-        trailingAction={
+        rightChildren={
           <Button
             onClick={noProp(openFilePicker)}
             type="button"

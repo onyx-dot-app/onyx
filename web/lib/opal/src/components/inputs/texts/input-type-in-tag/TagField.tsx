@@ -110,7 +110,7 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   /** A control after the clear button, so it keeps its place as the clear
    * button comes and goes (an upload's select button). */
-  trailingAction?: React.ReactNode;
+  rightChildren?: React.ReactNode;
 
   /**
    * No text input: the chips are the whole field (a select's button
@@ -157,7 +157,7 @@ function TagField({
   onInputDoubleClick,
   inputAriaProps,
   children,
-  trailingAction,
+  rightChildren,
   readOnly = false,
   triggerRef: triggerRefProp,
 }: TagFieldProps) {
@@ -400,7 +400,7 @@ function TagField({
       </div>
       {children}
       {/* The clear action is the field's last control, but for a
-      trailingAction. */}
+      rightChildren. */}
       {onClear !== undefined && !disabled && (
         <Button
           prominence="tertiary"
@@ -414,7 +414,7 @@ function TagField({
           }}
         />
       )}
-      {trailingAction}
+      {rightChildren}
     </div>
   );
 }
