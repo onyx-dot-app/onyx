@@ -161,6 +161,16 @@ class IndexAttemptErrorResolvedReason(str, PyEnum):
     WITHOUT_RETRY = "without_retry"
 
 
+class IndexAttemptErrorOrder(str, PyEnum):
+    """How a pair's errors list orders its rows."""
+
+    # Newest first.
+    TIME = "time"
+    # Open, then resolved without retry, then closed by a run, a Retry or a
+    # legacy resolve, each newest first.
+    STATE = "state"
+
+
 class SyncEntityKind(str, PyEnum):
     """What a permission sync failed to read: a user or a group."""
 

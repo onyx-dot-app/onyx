@@ -132,6 +132,13 @@ half of the Drive users, Drive groups or Confluence listed users fail, the sync
 reports the collected failures and then fails whole. An attempt with a failure
 row ends `COMPLETED_WITH_ERRORS`. The row write takes the attempt lease lock,
 and its message is capped like an indexing error's.
+Admins list the rows with `GET /manage/admin/cc-pair/{id}/sync-errors` and
+resolve them without retry (`ee/onyx/db/sync_attempt_error.py`). The run feed
+counts them on the sync (`failed_users`, `failed_groups`), and a settled sync
+with an open row sits under Errors until it is resolved. A newer sync does not
+supersede it, so the Errors level, the open count and the row list agree.
+`entity_kind` narrows the list to users or groups, and `order=state` lists
+open rows first, as `/errors` does.
 
 `upsert_external_groups` and `element_update_permissions` create the `User` rows
 for unknown emails (`db/users.py:batch_add_ext_perm_user_if_not_exists`). A
