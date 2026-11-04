@@ -1,7 +1,7 @@
 "use client";
 
+import { NavLink, useNavigation } from "@opal/navigation";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
@@ -71,6 +71,7 @@ export default function ConnectorRow({
   onFocusChange,
 }: ConnectorRowProps) {
   const t = useTranslations("admin.indexing.list");
+  const navigation = useNavigation();
   const tRuns = useTranslations("admin.connector.runs");
   const locale = useLocale();
   const format = useFormatter();
@@ -220,7 +221,7 @@ export default function ConnectorRow({
                   >
                     {/* The link spans the column so the clamped title truncates at its edge. */}
                     {canOperate ? (
-                      <Link
+                      <NavLink
                         href={`/admin/connector/${row.cc_pair_id}`}
                         className="w-full hover:underline"
                       >
@@ -231,7 +232,7 @@ export default function ConnectorRow({
                           sizePreset="main-ui"
                           variant="section"
                         />
-                      </Link>
+                      </NavLink>
                     ) : (
                       <Content
                         icon={getSourceMetadata(row.source).icon}
@@ -367,7 +368,9 @@ export default function ConnectorRow({
                         icon={SvgSettings}
                         prominence="tertiary"
                         size="sm"
-                        href={`/admin/connector/${row.cc_pair_id}`}
+                        {...navigation.linkTo(
+                          `/admin/connector/${row.cc_pair_id}`
+                        )}
                         tooltip={t("actions.manage")}
                         aria-label={t("actions.manage")}
                       />

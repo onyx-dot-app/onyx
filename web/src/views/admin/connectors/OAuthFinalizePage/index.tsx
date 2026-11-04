@@ -1,8 +1,8 @@
 "use client";
 
+import { usePathname, useSearchParams } from "@opal/navigation";
 import { useEffect, useState } from "react";
 import { getSourceMetadata, isValidSource } from "@/lib/connectors/utils";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@opal/components";
 import { ConfluenceAccessibleResource } from "@/lib/types";
@@ -55,7 +55,7 @@ function UpdateCloudURLOnCloudIdChange({
 
 export default function OAuthFinalizePage() {
   const t = useTranslations("admin.connectorsList");
-  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [statusMessage, setStatusMessage] = useState(
@@ -74,10 +74,9 @@ export default function OAuthFinalizePage() {
   >([]);
 
   // Extract query parameters
-  const credentialParam = searchParams?.get("credential");
+  const credentialParam = searchParams.get("credential");
   const credential = credentialParam ? parseInt(credentialParam, 10) : NaN;
-  const pathname = usePathname();
-  const connector = pathname?.split("/")[3];
+  const connector = pathname.split("/")[3];
 
   useEffect(() => {
     const onFirstLoad = async () => {

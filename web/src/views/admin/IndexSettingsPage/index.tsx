@@ -1,11 +1,11 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
@@ -875,7 +875,7 @@ export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
@@ -1205,11 +1205,11 @@ export default function IndexSettingsPage() {
   const commitImageProcessing = useCallback(
     (result: ImagePersistResult) => {
       if (result !== "saved") return;
-      router.refresh();
+      navigation.refresh();
       void mutate(SWR_KEYS.settings);
       void mutate(SWR_KEYS.llmProviders);
     },
-    [router]
+    [navigation]
   );
 
   // Applies to documents indexed from now on, without a re-index.
@@ -1830,7 +1830,9 @@ export default function IndexSettingsPage() {
                           >
                             <Button
                               icon={SvgExternalLink}
-                              href={ADMIN_ROUTES.INDEXING_STATUS.path}
+                              {...navigation.linkTo(
+                                ADMIN_ROUTES.INDEXING_STATUS.path
+                              )}
                             >
                               {t("reindexBanner.seeConnectors.label")}
                             </Button>

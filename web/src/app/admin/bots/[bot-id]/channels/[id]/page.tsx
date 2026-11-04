@@ -15,7 +15,13 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
-function EditSlackChannelConfigContent({ id }: { id: string }) {
+function EditSlackChannelConfigContent({
+  id,
+  botId,
+}: {
+  id: string;
+  botId: string;
+}) {
   const t = useTranslations("admin.slackBots");
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
@@ -59,7 +65,12 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
 
   return (
     <SettingsLayouts.Root loading={isLoading}>
-      <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
+      <SettingsLayouts.Header
+        icon={SvgSlack}
+        title={title}
+        divider
+        cancel={`/admin/bots/${botId}`}
+      />
       <SettingsLayouts.Body>
         {channelsError || !slackChannelConfigs ? (
           <ErrorCallout
@@ -111,8 +122,12 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
   );
 }
 
-export default function Page(props: { params: Promise<{ id: string }> }) {
+export default function Page(props: {
+  params: Promise<{ id: string; "bot-id": string }>;
+}) {
   const params = use(props.params);
 
-  return <EditSlackChannelConfigContent id={params.id} />;
+  return (
+    <EditSlackChannelConfigContent id={params.id} botId={params["bot-id"]} />
+  );
 }

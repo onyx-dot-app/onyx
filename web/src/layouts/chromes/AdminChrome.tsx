@@ -102,7 +102,7 @@ export default function AdminChrome({
             {markdown(t("adminChrome.paymentReminder.text"))}
           </Text>
           <div className="mt-2">
-            <Button width="full" href="/admin/billing">
+            <Button width="full" {...navigation.linkTo("/admin/billing")}>
               {t("adminChrome.paymentReminder.billingButton.label")}
             </Button>
           </div>

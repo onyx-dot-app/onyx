@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 import React, {
   useCallback,
   useEffect,
@@ -8,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import { useAdminNavLabels } from "@/lib/adminNavLabels";
-import { usePathname } from "next/navigation";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
@@ -52,6 +53,7 @@ export default function AdminSidebar() {
       setFocusSearch(false);
     }
   }, [focusSearch, folded]);
+  const navigation = useNavigation();
   const pathname = usePathname();
   const { adminCapabilities } = useUser();
   const settings = useSettings();
@@ -159,7 +161,8 @@ export default function AdminSidebar() {
                 <SidebarTab
                   key={link}
                   icon={icon}
-                  href={link}
+                  // SAFETY: sidebar links are the paths in `ADMIN_ROUTES`.
+                  {...navigation.linkTo(link as Route, { scroll: false })}
                   selected={pathname.startsWith(link)}
                   rightChildren={itemTag(beta)}
                 >
@@ -211,7 +214,10 @@ export default function AdminSidebar() {
         {!folded && <SidebarLayouts.Divider />}
         <SidebarTab
           icon={SvgX}
-          href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
+          {...navigation.linkTo(
+            pathname.startsWith("/admin/craft") ? "/craft/v1" : "/app",
+            { scroll: false }
+          )}
           variant="sidebar-light"
         >
           {t("adminSidebar.exitAdminPanel.label")}

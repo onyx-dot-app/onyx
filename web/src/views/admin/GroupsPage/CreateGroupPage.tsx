@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Table, Button, Divider } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
@@ -28,7 +28,7 @@ import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -83,7 +83,7 @@ function CreateGroupPage() {
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
       await saveTokenLimits(groupId, tokenLimits, []);
       toast.success(t("create.toasts.created", { name: trimmed }));
-      router.push("/admin/groups");
+      navigation.go("/admin/groups");
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("create.toasts.createFailed")
@@ -109,7 +109,7 @@ function CreateGroupPage() {
         icon={SvgUsers}
         title={t("create.header.title")}
         divider
-        cancel={() => router.push("/admin/groups")}
+        cancel={() => navigation.go("/admin/groups")}
         actions={headerActions}
       />
 
