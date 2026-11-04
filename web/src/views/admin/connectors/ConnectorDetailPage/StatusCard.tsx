@@ -179,7 +179,7 @@ function AccessStatBlock({ accessType }: AccessStatBlockProps) {
         icon={everyone ? SvgOrganization : SvgUsers}
         title={tAccess(everyone ? "everyone.title" : "specificGroups.title")}
         color="default"
-        variant="status"
+        textColor="text-04"
       />
     </StatBlock>
   );

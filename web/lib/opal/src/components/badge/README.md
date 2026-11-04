@@ -6,11 +6,14 @@ A small coloured label for status, category or metadata: an icon and a title in 
 
 For a removable, clickable or tag-field pill, use [`Tag`](../tag/README.md). For a hover tooltip, wrap the badge in `Tooltip`. `Badge` takes no DOM attributes, but its ref and the props a wrapping `Tooltip` or popover trigger injects still reach its root.
 
-| Variant   | Background        | Icon             | Label            | Use                                     |
-| --------- | ----------------- | ---------------- | ---------------- | --------------------------------------- |
-| `default` | the color's `-01` | the color's text | the color's text | Category and metadata labels            |
-| `status`  | the color's `-01` | the color's text | `text-04`        | Status pills (Indexing, Paused, Failed) |
-| `count`   | none              | the color's text | `text-04`        | Warning and failure counts in rows      |
+| Variant   | Background        | Use                                |
+| --------- | ----------------- | ---------------------------------- |
+| `default` | the color's `-01` | Category, metadata and status pills |
+| `count`   | none              | Warning and failure counts in rows |
+
+The icon is always in the color's text. `textColor` sets the label: `"inherit"` (the default) is the
+text colour matched to the background, and any other `TextColor` (`"text-04"` for a status pill) is
+that colour.
 
 ## Props
 
@@ -19,7 +22,8 @@ For a removable, clickable or tag-field pill, use [`Tag`](../tag/README.md). For
 | `title`   | `string \| RichStr`                | **(required)** | Badge label text               |
 | `icon`    | `IconFunctionComponent`            | —              | Optional icon before the title |
 | `color`   | `StatusVariants`                   | `"default"`    | Status color                   |
-| `variant` | `"default" \| "status" \| "count"` | `"default"`    | How the color is applied       |
+| `variant` | `"default" \| "count"`             | `"default"`    | Tinted background or none      |
+| `textColor` | `TextColor`                      | `"inherit"`    | Label colour; `"inherit"` matches `color` |
 | `size`    | `4 \| 6`                           | `4`            | Height on the Tailwind scale   |
 
 ### `color`
@@ -43,9 +47,9 @@ import { SvgAlertTriangle, SvgRefreshCw } from "@opal/icons";
 
 <Badge title="Beta" color="info" />
 
-<Badge icon={SvgRefreshCw} title="Indexing" color="info" variant="status" size={6} />
+<Badge icon={SvgRefreshCw} title="Indexing" color="info" textColor="text-04" size={6} />
 
 <Tooltip tooltip="3 warnings" side="top">
-  <Badge icon={SvgAlertTriangle} title="3" color="warning" variant="count" />
+  <Badge icon={SvgAlertTriangle} title="3" color="warning" variant="count" textColor="text-04" />
 </Tooltip>
 ```

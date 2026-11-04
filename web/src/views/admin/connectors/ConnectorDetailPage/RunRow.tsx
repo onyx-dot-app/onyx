@@ -269,6 +269,7 @@ export function RunWarningsTag({ run }: RunWarningsTagProps) {
         title={format.number(warnings)}
         color="warning"
         variant="count"
+        textColor="text-04"
       />
     </Tooltip>
   );

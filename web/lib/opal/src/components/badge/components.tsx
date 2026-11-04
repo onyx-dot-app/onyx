@@ -7,6 +7,10 @@ import type {
   StatusVariants,
 } from "@opal/types";
 import { BADGE_COLORS } from "@opal/components/badge/colors";
+import {
+  TEXT_COLOR_CLASSES,
+  type TextColor,
+} from "@opal/components/text/components";
 import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
@@ -18,11 +22,12 @@ import { cn } from "@opal/utils";
 type BadgeSize = 4 | 6;
 
 /**
- * - `"default"`: tinted background, icon and label in the color's text.
- * - `"status"`: tinted background, icon in the color's text, `text-04` label.
- * - `"count"`: no background, icon in the color's text, `text-04` label.
+ * - `"default"`: tinted background.
+ * - `"count"`: no background.
+ *
+ * The icon is always in the color's text; `textColor` sets the label.
  */
-type BadgeVariant = "default" | "status" | "count";
+type BadgeVariant = "default" | "count";
 
 // Takes no DOM attributes. The ref and anything a wrapping Tooltip or
 // popover trigger injects at runtime still reach the root, so either can
@@ -39,8 +44,14 @@ type BadgeProps = {
   /** Status color. Default: `"default"`. */
   color?: StatusVariants;
 
-  /** How the color is applied. Default: `"default"`. */
+  /** Whether the pill has its tinted background. Default: `"default"`. */
   variant?: BadgeVariant;
+
+  /**
+   * The label's colour. `"inherit"` is the text colour matched to `color`'s
+   * background. Default: `"inherit"`.
+   */
+  textColor?: TextColor;
 
   /** Height on the Tailwind scale. Default: `4`. */
   size?: BadgeSize;
@@ -59,6 +70,7 @@ function Badge({
   title,
   color = "default",
   variant = "default",
+  textColor = "inherit",
   size = 4,
   ...rest
 }: BadgeProps) {
@@ -76,7 +88,7 @@ function Badge({
       className={cn(
         "opal-badge",
         variant !== "count" && config.bg,
-        variant === "default" ? config.text : "text-text-04"
+        textColor === "inherit" ? config.text : TEXT_COLOR_CLASSES[textColor]
       )}
       style={iconColorStyle}
       data-size={size}

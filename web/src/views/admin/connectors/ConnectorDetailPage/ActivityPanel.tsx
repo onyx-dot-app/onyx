@@ -81,7 +81,8 @@ export function ActivityCountTags({
             icon={SvgXOctagon}
             title={format.number(failures)}
             color="error"
-            variant={variant}
+            variant={variant === "count" ? "count" : "default"}
+            textColor="text-04"
             size={6}
           />
         </Tooltip>
@@ -92,7 +93,8 @@ export function ActivityCountTags({
             icon={SvgAlertTriangle}
             title={format.number(errors)}
             color="warning"
-            variant={variant}
+            variant={variant === "count" ? "count" : "default"}
+            textColor="text-04"
             size={6}
           />
         </Tooltip>
