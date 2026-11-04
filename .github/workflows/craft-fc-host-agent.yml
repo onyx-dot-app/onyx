@@ -1,0 +1,270 @@
+# Builds the Craft Firecracker host agent image, onyxdotapp/craft-fc-host-agent
+# (ENG-4607). See microvm/Dockerfile.
+#
+# Pull requests and pushes to main build and check the image, with no push.
+# Only a manual dispatch on main publishes it to Docker Hub.
+#
+# The image copies /craft-fc/ from onyxdotapp/craft-fc-artifacts. Until that tag
+# is published (craft-fc-artifacts.yml), the build job builds
+# deployment/craft-fc/Dockerfile.artifacts and passes it as the "artifacts"
+# build context. The publish job always uses the published artifacts image.
+name: Craft Firecracker Host Agent
+concurrency:
+  group: Craft-FC-Host-Agent-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  pull_request:
+    paths:
+      - "microvm/**"
+      - "deployment/craft-fc/**"
+      - ".github/workflows/craft-fc-host-agent.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "microvm/**"
+      - "deployment/craft-fc/**"
+      - ".github/workflows/craft-fc-host-agent.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag to publish, for example 0.1.0. An existing tag is never replaced."
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY_IMAGE: onyxdotapp/craft-fc-host-agent
+  ARTIFACTS_IMAGE: onyxdotapp/craft-fc-artifacts
+  AGENT_DIR: microvm
+  CRAFT_FC_DIR: deployment/craft-fc
+
+jobs:
+  build:
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - run-id=${{ github.run_id }}-craft-fc-host-agent
+      - extras=ecr-cache
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      artifacts-tag: ${{ steps.versions.outputs.artifacts-tag }}
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Read pinned versions
+        id: versions
+        run: |
+          set -euo pipefail
+          tag="$(sed -n 's/^ARG ARTIFACTS_TAG=//p' "${AGENT_DIR}/Dockerfile")"
+          if [ -z "${tag}" ]; then
+            echo "::error::No ARTIFACTS_TAG in ${AGENT_DIR}/Dockerfile."
+            exit 1
+          fi
+          # The same tag that craft-fc-artifacts.yml derives (no revision suffix).
+          kernel_tag="$(sed -n 's/^ARG KERNEL_TAG=//p' "${CRAFT_FC_DIR}/Dockerfile.artifacts")"
+          fc_version="$(sed -n 's/^ARG FC_VERSION=//p' "${CRAFT_FC_DIR}/Dockerfile.artifacts")"
+          kernel="${kernel_tag#microvm-kernel-}"
+          derived="${kernel%.amzn2023}-fc${fc_version#v}"
+          if [ "${tag%-r[0-9]*}" != "${derived}" ]; then
+            echo "::error::ARTIFACTS_TAG ${tag} does not match Dockerfile.artifacts (${derived})."
+            exit 1
+          fi
+          echo "artifacts-tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Artifacts tag: ${tag}"
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      # The artifacts image is published by craft-fc-artifacts.yml. Until a tag
+      # is published, build it here from Dockerfile.artifacts. Only a clear
+      # "not found" counts as absent; any other error stops the job.
+      - name: Check whether the artifacts image is published
+        id: artifacts
+        env:
+          ARTIFACTS_TAG: ${{ steps.versions.outputs.artifacts-tag }}
+        run: |
+          set -euo pipefail
+          ref="docker.io/${ARTIFACTS_IMAGE}:${ARTIFACTS_TAG}"
+          if out="$(docker buildx imagetools inspect "${ref}" 2>&1)"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${ref} is published."
+          elif grep -qiE 'not found|manifest unknown|repository does not exist' <<<"${out}"; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "${ref} is not published. Building it from ${CRAFT_FC_DIR}."
+          else
+            echo "::error::Could not check whether ${ref} exists: ${out}"
+            exit 1
+          fi
+
+      - name: Build artifacts (not published yet)
+        if: steps.artifacts.outputs.published != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ env.CRAFT_FC_DIR }}
+          file: ${{ env.CRAFT_FC_DIR }}/Dockerfile.artifacts
+          target: artifacts
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ONYX_COMMIT=${{ github.sha }}
+          outputs: type=local,dest=${{ runner.temp }}/artifacts
+          cache-from: type=gha,scope=craft-fc-artifacts
+
+      # A named "artifacts" context replaces the Dockerfile's artifacts stage.
+      - name: Build host agent
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ env.AGENT_DIR }}
+          file: ${{ env.AGENT_DIR }}/Dockerfile
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            VERSION=ci-${{ github.sha }}
+          build-contexts: ${{ steps.artifacts.outputs.published != 'true' && format('artifacts={0}/artifacts', runner.temp) || '' }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            app.onyx.craft-fc-artifacts=${{ steps.versions.outputs.artifacts-tag }}
+          tags: ${{ env.REGISTRY_IMAGE }}:ci
+          load: true
+          cache-from: type=gha,scope=craft-fc-host-agent
+          cache-to: type=gha,scope=craft-fc-host-agent,mode=max
+
+      - name: Check host agent image
+        run: bash "${AGENT_DIR}/check-image.sh" "${REGISTRY_IMAGE}:ci"
+
+  publish:
+    needs:
+      - build
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - run-id=${{ github.run_id }}-craft-fc-host-agent-publish
+      - extras=ecr-cache
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_TAG: ${{ inputs.version }}
+      ARTIFACTS_TAG: ${{ needs.build.outputs.artifacts-tag }}
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check the version input
+        run: |
+          set -euo pipefail
+          if ! [[ "${IMAGE_TAG}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must look like 0.1.0."
+            exit 1
+          fi
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      # A published agent must use a published artifacts image, never a local build.
+      - name: Require the published artifacts image
+        run: |
+          set -euo pipefail
+          ref="docker.io/${ARTIFACTS_IMAGE}:${ARTIFACTS_TAG}"
+          if ! docker buildx imagetools inspect "${ref}" >/dev/null; then
+            echo "::error::${ref} is not published. Publish it with craft-fc-artifacts.yml first."
+            exit 1
+          fi
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      # Never replace an existing tag. Only a clear "not found" counts as
+      # absent; any other error stops the job.
+      - name: Refuse to replace a published tag
+        run: |
+          set -euo pipefail
+          ref="${REGISTRY_IMAGE}:${IMAGE_TAG}"
+          if out="$(docker buildx imagetools inspect "${ref}" 2>&1)"; then
+            echo "::error::${ref} already exists. Publish a new version."
+            exit 1
+          fi
+          if grep -qiE 'not found|manifest unknown|repository does not exist' <<<"${out}"; then
+            echo "${ref} does not exist yet."
+          else
+            echo "::error::Could not check whether ${ref} exists: ${out}"
+            exit 1
+          fi
+
+      # Push by digest only (no tag), check the pushed image, then tag that
+      # exact digest. So the tag always points at a checked image.
+      - name: Push host agent by digest
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ${{ env.AGENT_DIR }}
+          file: ${{ env.AGENT_DIR }}/Dockerfile
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ARTIFACTS_TAG=${{ env.ARTIFACTS_TAG }}
+            VERSION=${{ env.IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.IMAGE_TAG }}
+            app.onyx.craft-fc-artifacts=${{ env.ARTIFACTS_TAG }}
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=craft-fc-host-agent
+
+      - name: Check the pushed image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "${REGISTRY_IMAGE}@${DIGEST}"
+          bash "${AGENT_DIR}/check-image.sh" "${REGISTRY_IMAGE}@${DIGEST}"
+
+      - name: Tag the checked image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: docker buildx imagetools create -t "${REGISTRY_IMAGE}:${IMAGE_TAG}" "${REGISTRY_IMAGE}@${DIGEST}"
