@@ -1,5 +1,6 @@
 """Check the boundary between CVE report collection and release gates."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -38,6 +39,59 @@ def resolve_image(
 
 
 class ImageResolverTests(unittest.TestCase):
+    def test_release_collects_os_reports_before_failing_the_browser_gate(self) -> None:
+        workflow = SCRIPT.parent.parent / "workflows/deployment.yml"
+        lines = workflow.read_text().splitlines()
+        step = lines.index("      - name: Run base image audit")
+        start = lines.index("        run: |", step) + 1
+        commands: list[str] = []
+        for line in lines[start:]:
+            if line and not line.startswith("          "):
+                break
+            commands.append(line[10:])
+
+        for browser_status in (0, 1, 2):
+            with (
+                self.subTest(browser_status=browser_status),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                scripts = root / ".github/scripts"
+                scripts.mkdir(parents=True)
+                resolver = scripts / SCRIPT.name
+                shutil.copyfile(SCRIPT, resolver)
+                resolver.chmod(0o755)
+                (scripts / "audit-sandbox-browser.sh").write_text(
+                    f'echo "browser audit ran" >&2\nexit {browser_status}\n'
+                )
+                for name, body in {
+                    "docker": '[ "$1" = build ] || exit 99',
+                    "uv": 'echo \'{"version":"2.1.0","runs":[]}\'',
+                }.items():
+                    executable = root / name
+                    executable.write_text(f"#!/bin/sh\n{body}\n")
+                    executable.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", "-e", "-o", "pipefail", "-c", "\n".join(commands)],
+                    cwd=root,
+                    env={
+                        **os.environ,
+                        "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                        "DHI_NODE_BUILD_ARGS": "NODE_RUNTIME_IMAGE=web:fixture",
+                        "DHI_PYTHON_BUILD_ARGS": "PYTHON_RUNTIME_IMAGE=model:fixture",
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(
+                    result.returncode, int(browser_status != 0), result.stderr
+                )
+                self.assertIn("browser audit ran", result.stderr)
+                for component in ("web", "model-server", "backend", "sandbox"):
+                    report = root / f"image-audit-{component}.sarif"
+                    self.assertEqual(json.loads(report.read_text())["version"], "2.1.0")
+
     def test_report_collection_does_not_run_the_browser_gate(self) -> None:
         for status in (1, 2, 3):
             with self.subTest(browser_status=status):
