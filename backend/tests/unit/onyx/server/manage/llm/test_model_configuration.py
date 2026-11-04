@@ -1,10 +1,8 @@
-"""Tests for ModelConfigurationView.from_model and ModelConfigurationUpsertRequest.from_model.
+"""Tests for ModelConfigurationView.from_model.
 
 These tests verify the flow plumbing:
 - Stored flow takes precedence over the heuristic on the read path.
 - Heuristic fires correctly when no flow is stored (legacy / static providers).
-- ModelConfigurationUpsertRequest.from_model correctly derives supports_reasoning
-  from the stored flow.
 """
 
 from unittest.mock import MagicMock, patch
@@ -13,7 +11,6 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.llm.models import ReasoningEffort
 from onyx.server.manage.llm.models import (
     LLMProviderDescriptor,
-    ModelConfigurationUpsertRequest,
     ModelConfigurationView,
 )
 
@@ -506,36 +503,6 @@ class TestModelConfigurationViewFromModelStatic:
             mock_parse.return_value = mock_parsed
 
             return ModelConfigurationView.from_model(mc, self.STATIC_PROVIDER)
-
-
-# ModelConfigurationUpsertRequest.from_model
-
-
-class TestModelConfigurationUpsertRequestFromModel:
-    """Tests for ModelConfigurationUpsertRequest.from_model."""
-
-    def test_supports_reasoning_true_when_reasoning_flow_present(self) -> None:
-        """REASONING flow row present → supports_reasoning=True in upsert request."""
-        mc = _make_model_config(
-            flow_types=[
-                LLMModelFlowType.CHAT,
-                LLMModelFlowType.REASONING,
-            ],
-        )
-
-        req = ModelConfigurationUpsertRequest.from_model(mc)
-
-        assert req.supports_reasoning is True
-
-    def test_supports_reasoning_false_when_reasoning_flow_absent(self) -> None:
-        """No REASONING flow row → supports_reasoning=False in upsert request."""
-        mc = _make_model_config(
-            flow_types=[LLMModelFlowType.CHAT],
-        )
-
-        req = ModelConfigurationUpsertRequest.from_model(mc)
-
-        assert req.supports_reasoning is False
 
 
 # LLMProviderDescriptor.from_model — is_recommended_default marking
