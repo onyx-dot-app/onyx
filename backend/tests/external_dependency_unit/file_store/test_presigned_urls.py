@@ -19,6 +19,7 @@ from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.file_store.file_store import (
     LEGACY_OUT_OF_SYNC_PREFIX,
     LEGACY_RETIRED_MARKER_KEY,
+    PresignableFileStore,
     PresignedUploadNotFoundError,
     PresignedUploadVerificationError,
     PresignedUrlsNotSupportedError,
@@ -82,7 +83,7 @@ def has_record(file_id: str) -> bool:
 
 
 def test_an_upload_is_finalized_and_read_back(store: S3BackedFileStore) -> None:
-    assert store.supports_presigned_urls()
+    assert isinstance(store, PresignableFileStore)
     upload = presign(store)
     assert not has_record(upload.file_id)
 

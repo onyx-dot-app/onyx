@@ -179,7 +179,7 @@ The `FileStore` abstract base class defines the following methods:
 - `get_file_with_mime_type(file_id)`: Get file with parsed MIME type
 - `change_file_id(old_file_id, new_file_id)`: Rename a file
 - `list_files_by_prefix(prefix)`: List files matching a prefix
-- `supports_presigned_urls()`, `presign_download(...)`, `presign_upload(...)`, `finalize_presigned_upload(...)`: Presigned URLs (see below)
+- `presign_download(...)`, `presign_upload(...)`, `finalize_presigned_upload(...)`: Presigned URLs, cloud backends only (see below)
 
 ## Presigned URLs
 
@@ -200,10 +200,10 @@ for one object and one method. The default TTL is 5 minutes and the maximum is
 The client must send every header in `PresignedRequest.headers` unchanged.
 An upload object that is never finalized stays in the bucket without a record.
 
-`supports_presigned_urls()` is `False` for the PostgreSQL backend, and its presign
-methods raise `PresignedUrlsNotSupportedError`. The other backends raise the same
-error when their credentials cannot sign. Callers then stream the file through
-the api_server.
+Only the cloud backends (S3, GCS, Azure) have presigned URLs. They subclass
+`PresignableFileStore`, so callers check `isinstance(store, PresignableFileStore)`.
+The PostgreSQL backend has none. A cloud backend raises
+`PresignedUrlsNotSupportedError` when its credentials cannot sign.
 
 ### S3 and S3-compatible stores
 

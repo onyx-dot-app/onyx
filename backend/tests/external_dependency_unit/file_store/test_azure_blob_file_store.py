@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import (
+    PresignableFileStore,
     PresignedUploadNotFoundError,
     PresignedUploadVerificationError,
 )
@@ -476,7 +477,7 @@ class TestAzurePresignedUrls:
     def test_an_upload_is_finalized_and_read_back(
         self, file_store: AzureBlobBackedFileStore
     ) -> None:
-        assert file_store.supports_presigned_urls()
+        assert isinstance(file_store, PresignableFileStore)
         upload = _presign(file_store)
 
         assert _send(upload.request, PRESIGN_CONTENT).status_code == 201

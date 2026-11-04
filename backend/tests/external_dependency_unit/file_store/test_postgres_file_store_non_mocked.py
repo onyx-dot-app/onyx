@@ -21,7 +21,6 @@ from onyx.db.file_content import (
     get_file_content_by_file_id,
     get_file_content_by_file_id_optional,
 )
-from onyx.file_store.file_store import PresignedUrlsNotSupportedError
 from onyx.file_store.postgres_file_store import (
     POSTGRES_BUCKET_SENTINEL,
     PostgresBackedFileStore,
@@ -495,27 +494,3 @@ class TestPostgresBackedFileStore:
 
         record = pg_file_store.read_file_record(file_id)
         assert record.file_metadata == metadata
-
-    def test_presigned_urls_are_not_supported(
-        self, pg_file_store: PostgresBackedFileStore
-    ) -> None:
-        file_id = pg_file_store.save_file(
-            content=BytesIO(b"no urls"),
-            display_name="no-urls.txt",
-            file_origin=FileOrigin.OTHER,
-            file_type="text/plain",
-        )
-
-        assert not pg_file_store.supports_presigned_urls()
-        with pytest.raises(PresignedUrlsNotSupportedError):
-            pg_file_store.presign_download(file_id)
-        with pytest.raises(PresignedUrlsNotSupportedError):
-            pg_file_store.presign_upload(
-                display_name="upload.txt",
-                file_origin=FileOrigin.OTHER,
-                file_type="text/plain",
-                size=7,
-                sha256="0" * 64,
-            )
-        with pytest.raises(PresignedUrlsNotSupportedError):
-            pg_file_store.finalize_presigned_upload("pending")

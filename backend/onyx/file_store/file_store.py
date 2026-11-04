@@ -90,8 +90,8 @@ _T = TypeVar("_T")
 
 
 class PresignedUrlsNotSupportedError(Exception):
-    """The store, or its credentials, cannot sign URLs. The caller streams the
-    file through the api_server instead."""
+    """The credentials of a cloud store cannot sign URLs, or the file is not
+    reachable through a URL (for example, only in the legacy MinIO store)."""
 
 
 class PresignedUploadNotFoundError(Exception):
@@ -418,52 +418,12 @@ class FileStore(ABC):
         List all file IDs that start with the given prefix.
         """
 
-    @abstractmethod
-    def supports_presigned_urls(self) -> bool:
-        """Whether the presign methods can work. They can still raise
-        PresignedUrlsNotSupportedError, e.g. when the credentials cannot sign."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def presign_download(
-        self,
-        file_id: str,
-        ttl: timedelta | None = None,
-        db_session: Session | None = None,
-    ) -> PresignedRequest:
-        """A GET URL for the object of an existing file record."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def presign_upload(
-        self,
-        display_name: str | None,
-        file_origin: FileOrigin,
-        file_type: str,
-        size: int,
-        sha256: str,
-        ttl: timedelta | None = None,
-    ) -> PresignedUpload:
-        """A PUT URL for a new object. Reserves a file ID and object key, but
-        writes no file_record row until finalize_presigned_upload.
-
-        sha256 is the hex digest of the content to upload.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def finalize_presigned_upload(
-        self, pending_upload_id: str, db_session: Session | None = None
-    ) -> str:
-        """Checks the size and SHA-256 of the uploaded object, then writes its
-        file_record row. On a mismatch, deletes the object and raises
-        PresignedUploadVerificationError. Returns the file ID."""
-        raise NotImplementedError
-
 
 class PresignableFileStore(FileStore):
-    """A file store on an object store that can sign URLs. The hooks take the
-    bucket, so a store for another bucket can reuse the signer."""
+    """A file store on a cloud object store (S3, GCS, Azure) that can sign URLs.
+    Callers check isinstance(store, PresignableFileStore); other stores have no
+    presigned URLs. The hooks take the bucket, so a store for another bucket can
+    reuse the signer."""
 
     @abstractmethod
     def _presign_bucket_name(self) -> str:
@@ -506,15 +466,13 @@ class PresignableFileStore(FileStore):
     def _on_presigned_upload_finalized(self, bucket_name: str, object_key: str) -> None:
         """Runs after the file_record row of a presigned upload is committed."""
 
-    def supports_presigned_urls(self) -> bool:
-        return True
-
     def presign_download(
         self,
         file_id: str,
         ttl: timedelta | None = None,
         db_session: Session | None = None,
     ) -> PresignedRequest:
+        """A GET URL for the object of an existing file record."""
         ttl_seconds = presign_ttl_seconds(ttl)
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             file_record = get_filerecord_by_file_id(
@@ -533,6 +491,9 @@ class PresignableFileStore(FileStore):
         sha256: str,
         ttl: timedelta | None = None,
     ) -> PresignedUpload:
+        """A PUT URL for a new object. Reserves a file ID and object key, but
+        writes no file_record row until finalize_presigned_upload. sha256 is
+        the hex digest of the content to upload."""
         ttl_seconds = presign_ttl_seconds(ttl)
         if size < 0:
             raise ValueError("A presigned upload size must not be negative")
@@ -565,6 +526,9 @@ class PresignableFileStore(FileStore):
     def finalize_presigned_upload(
         self, pending_upload_id: str, db_session: Session | None = None
     ) -> str:
+        """Checks the size and SHA-256 of the uploaded object, then writes its
+        file_record row. On a mismatch, deletes the object and raises
+        PresignedUploadVerificationError. Returns the file ID."""
         cache = get_cache_backend()
         cache_key = _pending_upload_cache_key(pending_upload_id)
         raw = cache.get(cache_key)
