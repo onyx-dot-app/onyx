@@ -3081,8 +3081,6 @@
           "title": "No recent indexing runs",
           "filteredTitle": "No runs match these filters.",
           "pastRuns": "{count, plural, one {# Past Run} other {# Past Runs}}",
-          "view": "View",
-          "viewAria": "{count, plural, one {View # past run} other {View # past runs}}",
           "description": "Runs are scheduled in the background and may take a moment to appear."
         },
         "units": "{count, plural, one {run} other {runs}}",

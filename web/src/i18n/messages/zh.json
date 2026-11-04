@@ -3081,8 +3081,6 @@
           "title": "暂无近期索引运行",
           "filteredTitle": "没有符合这些筛选条件的运行。",
           "pastRuns": "{count, plural, other {# 次过去的运行}}",
-          "view": "查看",
-          "viewAria": "{count, plural, other {查看 # 次过去的运行}}",
           "description": "运行在后台调度，可能需要一点时间才会显示。"
         },
         "units": "{count, plural, other {个运行}}",

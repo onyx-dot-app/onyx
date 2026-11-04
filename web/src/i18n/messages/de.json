@@ -3081,8 +3081,6 @@
           "title": "Keine aktuellen Indexläufe",
           "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
           "pastRuns": "{count, plural, one {# vergangener Lauf} other {# vergangene Läufe}}",
-          "view": "Anzeigen",
-          "viewAria": "{count, plural, one {# vergangenen Lauf anzeigen} other {# vergangene Läufe anzeigen}}",
           "description": "Läufe werden im Hintergrund geplant und erscheinen eventuell erst nach kurzer Zeit."
         },
         "units": "{count, plural, one {Lauf} other {Läufe}}",

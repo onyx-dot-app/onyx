@@ -3081,8 +3081,6 @@
           "title": "最近のインデックス実行はありません",
           "filteredTitle": "このフィルターに一致する実行はありません。",
           "pastRuns": "{count, plural, other {過去の実行 # 件}}",
-          "view": "表示",
-          "viewAria": "{count, plural, other {過去の実行 # 件を表示}}",
           "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
         },
         "units": "{count, plural, other {件の実行}}",

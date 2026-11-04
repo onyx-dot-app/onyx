@@ -168,7 +168,7 @@ describe("ConnectorList rows", () => {
     ).not.toBeNull();
   });
 
-  it("points an expanded row with no runs in its window to the older runs, and shows them on View", async () => {
+  it("points an expanded row with no runs in its window to the older runs, and shows them from the past runs row", async () => {
     page = makeConnectorsPage([makeConnectorRow()]);
     renderList();
     await setupUser().click(
@@ -178,7 +178,7 @@ describe("ConnectorList rows", () => {
     expect(await screen.findByText("120 Past Runs")).toBeInTheDocument();
     expect(screen.queryAllByTestId("run-row")).toHaveLength(0);
     await setupUser().click(
-      screen.getByRole("button", { name: "View 120 past runs" })
+      screen.getByRole("button", { name: /120 Past Runs/ })
     );
 
     expect(await screen.findAllByTestId("run-row")).toHaveLength(1);

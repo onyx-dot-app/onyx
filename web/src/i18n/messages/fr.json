@@ -3081,8 +3081,6 @@
           "title": "Aucune exécution d'indexation récente",
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
           "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
-          "view": "Afficher",
-          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}",
           "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
         },
         "units": "{count, plural, one {exécution} other {exécutions}}",
