@@ -9,8 +9,8 @@ import os
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
+import requests
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
@@ -28,6 +28,21 @@ from onyx.server.manage.llm.models import (
     OpenRouterFinalModelResponse,
     OpenRouterModelsRequest,
 )
+
+
+def _by_method(get_response: MagicMock, post_response: MagicMock) -> Any:
+    """Route the single pinned request seam by HTTP method."""
+
+    def _dispatch(url: str, **kwargs: Any) -> MagicMock:  # noqa: ARG001
+        return post_response if kwargs.get("method") == "POST" else get_response
+
+    return _dispatch
+
+
+def _http_error(status_code: int) -> requests.HTTPError:
+    response = MagicMock()
+    response.status_code = status_code
+    return requests.HTTPError(f"status {status_code}", response=response)
 
 
 class TestGetOllamaAvailableModels:
@@ -66,18 +81,17 @@ class TestGetOllamaAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             # Mock GET for /api/tags
             mock_get_response = MagicMock()
             mock_get_response.json.return_value = mock_ollama_tags_response
             mock_get_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_get_response
 
             # Mock POST for /api/show (called for each model)
             mock_post_response = MagicMock()
             mock_post_response.json.return_value = mock_ollama_show_response
             mock_post_response.raise_for_status = MagicMock()
-            mock_httpx.post.return_value = mock_post_response
+            mock_request.side_effect = _by_method(mock_get_response, mock_post_response)
 
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             results = get_ollama_available_models(request, MagicMock(), mock_session)
@@ -95,15 +109,15 @@ class TestGetOllamaAvailableModels:
     def test_unreachable_server_returns_400(self) -> None:
         """An unreachable Ollama URL maps to 400, not a 502 gateway fault.
 
-        Patch ``httpx.get``, not the whole module, so the real ``httpx``
-        exception classes remain usable in the handler's except clauses.
+        The pinned request seam is patched, so the real ``requests``
+        exception classes stay usable in the handler's except clauses.
         """
         from onyx.error_handling.error_codes import OnyxErrorCode
         from onyx.server.manage.llm.api import get_ollama_available_models
 
         with patch(
-            "onyx.server.manage.llm.api.httpx.get",
-            side_effect=httpx.ConnectError("connection refused", request=MagicMock()),
+            "onyx.server.manage.llm.api.ssrf_safe_request",
+            side_effect=requests.ConnectionError("connection refused"),
         ):
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             with pytest.raises(OnyxError) as exc_info:
@@ -117,14 +131,9 @@ class TestGetOllamaAvailableModels:
         from onyx.error_handling.error_codes import OnyxErrorCode
         from onyx.server.manage.llm.api import get_ollama_available_models
 
-        error_response = httpx.Response(
-            status_code=500, request=httpx.Request("GET", "http://localhost:11434")
-        )
         with patch(
-            "onyx.server.manage.llm.api.httpx.get",
-            side_effect=httpx.HTTPStatusError(
-                "server error", request=error_response.request, response=error_response
-            ),
+            "onyx.server.manage.llm.api.ssrf_safe_request",
+            side_effect=_http_error(500),
         ):
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             with pytest.raises(OnyxError) as exc_info:
@@ -145,7 +154,7 @@ class TestGetOllamaAvailableModels:
         mock_provider.model_configurations = []
 
         with (
-            patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
+            patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request,
             patch(
                 "onyx.db.llm.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -154,12 +163,11 @@ class TestGetOllamaAvailableModels:
             mock_get_response = MagicMock()
             mock_get_response.json.return_value = mock_ollama_tags_response
             mock_get_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_get_response
 
             mock_post_response = MagicMock()
             mock_post_response.json.return_value = mock_ollama_show_response
             mock_post_response.raise_for_status = MagicMock()
-            mock_httpx.post.return_value = mock_post_response
+            mock_request.side_effect = _by_method(mock_get_response, mock_post_response)
 
             # The bulk model insert returns the inserted (id, name) rows.
             mock_session.execute.return_value.all.return_value = [
@@ -186,16 +194,15 @@ class TestGetOllamaAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_get_response = MagicMock()
             mock_get_response.json.return_value = mock_ollama_tags_response
             mock_get_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_get_response
 
             mock_post_response = MagicMock()
             mock_post_response.json.return_value = mock_ollama_show_response
             mock_post_response.raise_for_status = MagicMock()
-            mock_httpx.post.return_value = mock_post_response
+            mock_request.side_effect = _by_method(mock_get_response, mock_post_response)
 
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             get_ollama_available_models(request, MagicMock(), mock_session)
@@ -223,16 +230,15 @@ class TestGetOllamaAvailableModels:
             ),
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_get_response = MagicMock()
             mock_get_response.json.return_value = mock_ollama_tags_response
             mock_get_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_get_response
 
             mock_post_response = MagicMock()
             mock_post_response.json.return_value = show_response
             mock_post_response.raise_for_status = MagicMock()
-            mock_httpx.post.return_value = mock_post_response
+            mock_request.side_effect = _by_method(mock_get_response, mock_post_response)
 
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             results = get_ollama_available_models(request, MagicMock(), MagicMock())
@@ -253,16 +259,15 @@ class TestGetOllamaAvailableModels:
             "parameters": "temperature                    0.6",
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_get_response = MagicMock()
             mock_get_response.json.return_value = mock_ollama_tags_response
             mock_get_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_get_response
 
             mock_post_response = MagicMock()
             mock_post_response.json.return_value = show_response
             mock_post_response.raise_for_status = MagicMock()
-            mock_httpx.post.return_value = mock_post_response
+            mock_request.side_effect = _by_method(mock_get_response, mock_post_response)
 
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             results = get_ollama_available_models(request, MagicMock(), MagicMock())
@@ -283,16 +288,15 @@ class TestGetOllamaAvailableModels:
             "parameters": None,
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_get_response = MagicMock()
             mock_get_response.json.return_value = mock_ollama_tags_response
             mock_get_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_get_response
 
             mock_post_response = MagicMock()
             mock_post_response.json.return_value = show_response
             mock_post_response.raise_for_status = MagicMock()
-            mock_httpx.post.return_value = mock_post_response
+            mock_request.side_effect = _by_method(mock_get_response, mock_post_response)
 
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             results = get_ollama_available_models(request, MagicMock(), MagicMock())
@@ -336,7 +340,7 @@ class TestGetOpenRouterAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_openrouter_response
             mock_response.raise_for_status = MagicMock()
@@ -362,7 +366,7 @@ class TestGetOpenRouterAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_openrouter_response
             mock_response.raise_for_status = MagicMock()
@@ -409,7 +413,7 @@ class TestGetOpenRouterAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_openrouter_response
             mock_response.raise_for_status = MagicMock()
@@ -442,7 +446,7 @@ class TestGetOpenRouterAvailableModels:
         mock_provider.model_configurations = []
 
         with (
-            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get,
             patch(
                 "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -498,7 +502,7 @@ class TestGetOpenRouterAvailableModels:
         mock_provider.model_configurations = [existing_model]
 
         with (
-            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get,
             patch(
                 "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -544,7 +548,7 @@ class TestGetOpenRouterAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_openrouter_response
             mock_response.raise_for_status = MagicMock()
@@ -606,11 +610,11 @@ class TestGetLMStudioAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_lm_studio_response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             results = get_lm_studio_available_models(request, MagicMock(), mock_session)
@@ -629,11 +633,11 @@ class TestGetLMStudioAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_lm_studio_response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             results = get_lm_studio_available_models(request, MagicMock(), mock_session)
@@ -668,11 +672,11 @@ class TestGetLMStudioAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             results = get_lm_studio_available_models(request, MagicMock(), mock_session)
@@ -720,11 +724,11 @@ class TestGetLMStudioAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             results = get_lm_studio_available_models(request, MagicMock(), mock_session)
@@ -743,11 +747,11 @@ class TestGetLMStudioAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_lm_studio_response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             results = get_lm_studio_available_models(request, MagicMock(), mock_session)
@@ -773,18 +777,18 @@ class TestGetLMStudioAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234/v1")
             get_lm_studio_available_models(request, MagicMock(), mock_session)
 
             # Should hit /api/v1/models, not /v1/api/v1/models
-            mock_httpx.get.assert_called_once()
-            called_url = mock_httpx.get.call_args[0][0]
+            mock_request.assert_called_once()
+            called_url = mock_request.call_args[0][0]
             assert called_url == "http://localhost:1234/api/v1/models"
 
     def test_falls_back_to_stored_api_key(self) -> None:
@@ -809,7 +813,7 @@ class TestGetLMStudioAvailableModels:
         }
 
         with (
-            patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
+            patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request,
             patch(
                 "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -818,7 +822,7 @@ class TestGetLMStudioAvailableModels:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(
                 api_base="http://localhost:1234",
@@ -828,7 +832,7 @@ class TestGetLMStudioAvailableModels:
             )
             get_lm_studio_available_models(request, MagicMock(), mock_session)
 
-            headers = mock_httpx.get.call_args[1]["headers"]
+            headers = mock_request.call_args[1]["headers"]
             assert headers["Authorization"] == "Bearer stored-secret"
 
     def test_uses_submitted_api_key_when_changed(self) -> None:
@@ -848,11 +852,11 @@ class TestGetLMStudioAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(
                 api_base="http://localhost:1234",
@@ -862,7 +866,7 @@ class TestGetLMStudioAvailableModels:
             )
             get_lm_studio_available_models(request, MagicMock(), mock_session)
 
-            headers = mock_httpx.get.call_args[1]["headers"]
+            headers = mock_request.call_args[1]["headers"]
             assert headers["Authorization"] == "Bearer new-secret"
 
     def test_raises_on_empty_models(self) -> None:
@@ -872,11 +876,11 @@ class TestGetLMStudioAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = {"models": []}
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             with pytest.raises(OnyxError):
@@ -900,11 +904,11 @@ class TestGetLMStudioAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             request = LMStudioModelsRequest(api_base="http://localhost:1234")
             with pytest.raises(OnyxError):
@@ -933,7 +937,7 @@ class TestGetLMStudioAvailableModels:
         }
 
         with (
-            patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
+            patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_request,
             patch(
                 "onyx.db.llm.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -942,7 +946,7 @@ class TestGetLMStudioAvailableModels:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
-            mock_httpx.get.return_value = mock_response
+            mock_request.return_value = mock_response
 
             mock_session.execute.return_value.all.return_value = [
                 (1, "lmstudio-community/DeepSeek-R1-8B")
@@ -1018,7 +1022,7 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_litellm_response
             mock_response.raise_for_status = MagicMock()
@@ -1039,7 +1043,7 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_litellm_response
             mock_response.raise_for_status = MagicMock()
@@ -1086,7 +1090,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_http_response = MagicMock()
             mock_http_response.json.return_value = mock_response_data
             mock_http_response.raise_for_status = MagicMock()
@@ -1109,7 +1113,7 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_litellm_response
             mock_response.raise_for_status = MagicMock()
@@ -1151,7 +1155,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
@@ -1184,7 +1188,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
@@ -1222,7 +1226,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
@@ -1257,7 +1261,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
@@ -1277,7 +1281,7 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_litellm_response
             mock_response.raise_for_status = MagicMock()
@@ -1298,7 +1302,7 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = {"data": []}
             mock_response.raise_for_status = MagicMock()
@@ -1317,7 +1321,7 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = {}
             mock_response.raise_for_status = MagicMock()
@@ -1350,7 +1354,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response_with_bad_entry
             mock_response.raise_for_status = MagicMock()
@@ -1377,7 +1381,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response_all_bad
             mock_response.raise_for_status = MagicMock()
@@ -1408,7 +1412,7 @@ class TestGetLitellmAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_litellm_response
             mock_response.raise_for_status = MagicMock()
@@ -1431,10 +1435,8 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
-            mock_get.side_effect = httpx.ConnectError(
-                "Connection refused", request=MagicMock()
-            )
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
+            mock_get.side_effect = requests.ConnectionError("Connection refused")
 
             request = LitellmModelsRequest(
                 api_base="http://litellm.example.com:4000",
@@ -1452,12 +1454,8 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
-            mock_response = MagicMock()
-            mock_response.status_code = 401
-            mock_get.side_effect = httpx.HTTPStatusError(
-                "Unauthorized", request=MagicMock(), response=mock_response
-            )
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
+            mock_get.side_effect = _http_error(401)
 
             request = LitellmModelsRequest(
                 api_base="http://litellm.example.com:4000",
@@ -1472,12 +1470,8 @@ class TestGetLitellmAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
-            mock_response = MagicMock()
-            mock_response.status_code = 404
-            mock_get.side_effect = httpx.HTTPStatusError(
-                "Not Found", request=MagicMock(), response=mock_response
-            )
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
+            mock_get.side_effect = _http_error(404)
 
             request = LitellmModelsRequest(
                 api_base="http://litellm.example.com:4000",
@@ -1519,7 +1513,7 @@ class TestGetBifrostAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_bifrost_response
             mock_response.raise_for_status = MagicMock()
@@ -1540,7 +1534,7 @@ class TestGetBifrostAvailableModels:
 
         mock_session = MagicMock()
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = mock_bifrost_response
             mock_response.raise_for_status = MagicMock()
@@ -1584,7 +1578,7 @@ class TestGetBifrostAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
@@ -1607,7 +1601,7 @@ class TestGetBifrostAvailableModels:
         mock_session = MagicMock()
         response = {"data": [{"id": "openai/gpt-4o", "name": "GPT-4o"}]}
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
@@ -1641,7 +1635,7 @@ class TestGetBifrostAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()
@@ -1663,12 +1657,10 @@ class TestGetBifrostAvailableModels:
         mock_session = MagicMock()
 
         with (
-            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get,
             patch("onyx.server.manage.llm.api.logger.warning") as mock_warning,
         ):
-            mock_get.side_effect = httpx.ConnectError(
-                "Connection refused", request=MagicMock()
-            )
+            mock_get.side_effect = requests.ConnectionError("Connection refused")
 
             request = BifrostModelsRequest(api_base="https://bifrost.example.com")
             with pytest.raises(OnyxError) as exc_info:
@@ -1699,7 +1691,7 @@ class TestGetOpenAICompatibleAvailableModels:
             ]
         }
 
-        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+        with patch("onyx.server.manage.llm.api.ssrf_safe_request") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = response
             mock_response.raise_for_status = MagicMock()

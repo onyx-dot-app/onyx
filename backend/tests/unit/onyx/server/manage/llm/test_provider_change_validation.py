@@ -10,7 +10,10 @@ from unittest.mock import patch
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.well_known_providers.constants import BIFROST_API_MODE_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import (
+    BIFROST_API_MODE_CONFIG_KEY,
+    LM_STUDIO_API_KEY_CONFIG_KEY,
+)
 from onyx.server.manage.llm.api import (
     _reject_assume_role_in_multi_tenant,
     _validate_llm_provider_change,
@@ -23,6 +26,7 @@ def _validate(
     existing_custom_config: dict[str, str] | None,
     new_custom_config: dict[str, str] | None,
     new_api_base: str = _BASE,
+    has_stored_api_key: bool = True,
 ) -> None:
     _validate_llm_provider_change(
         existing_api_base=_BASE,
@@ -30,6 +34,7 @@ def _validate(
         new_api_base=new_api_base,
         new_custom_config=new_custom_config,
         api_key_changed=False,
+        has_stored_api_key=has_stored_api_key,
     )
 
 
@@ -89,7 +94,39 @@ def test_key_change_skips_validation() -> None:
         new_api_base="https://other.example.com/v1",
         new_custom_config={"anything": "goes"},
         api_key_changed=True,
+        has_stored_api_key=True,
     )
+
+
+def test_no_stored_secret_allows_repoint() -> None:
+    # Ollama-style provider with no key anywhere: nothing to protect.
+    _validate(
+        None,
+        None,
+        new_api_base="https://other.example.com/v1",
+        has_stored_api_key=False,
+    )
+
+
+def test_fresh_custom_config_key_counts_as_key_change() -> None:
+    # LM Studio keeps its key in custom_config; a newly typed value is a rotation.
+    _validate(
+        {LM_STUDIO_API_KEY_CONFIG_KEY: "old-secret"},
+        {LM_STUDIO_API_KEY_CONFIG_KEY: "new-secret"},
+        new_api_base="https://other.example.com/v1",
+        has_stored_api_key=False,
+    )
+
+
+def test_masked_custom_config_key_still_guards_repoint() -> None:
+    # A masked resubmission restores the stored value, so it must stay pinned.
+    with pytest.raises(OnyxError):
+        _validate(
+            {LM_STUDIO_API_KEY_CONFIG_KEY: "old-secret"},
+            {LM_STUDIO_API_KEY_CONFIG_KEY: "old-secret"},
+            new_api_base="https://other.example.com/v1",
+            has_stored_api_key=False,
+        )
 
 
 @patch("onyx.server.manage.llm.api.MULTI_TENANT", True)

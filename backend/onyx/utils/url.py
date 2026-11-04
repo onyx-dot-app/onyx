@@ -432,6 +432,7 @@ def ssrf_safe_request(
     block_link_local_only: bool = False,
     https_only: bool = False,
     method: str = "GET",
+    allow_localhost_name: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -462,6 +463,7 @@ def ssrf_safe_request(
             block_loopback_and_link_local=block_loopback_and_link_local,
             block_link_local_only=block_link_local_only,
             https_only=https_only,
+            allow_localhost_name=allow_localhost_name,
         )
         parsed = urlparse(url)
         hostname = parsed.hostname or ""

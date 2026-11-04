@@ -3,13 +3,18 @@ SSRF level, let local model servers reach private hosts, and always block the
 cloud-metadata range."""
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.llm.api import _validate_llm_api_base
+from onyx.server.manage.llm.api import (
+    _validate_llm_api_base,
+    get_ollama_available_models,
+    get_openrouter_available_models,
+)
+from onyx.server.manage.llm.models import OllamaModelsRequest, OpenRouterModelsRequest
 from onyx.server.security.models import SSRFProtectionLevel
 
 
@@ -82,3 +87,24 @@ def test_empty_api_base_is_skipped() -> None:
     _validate(None)
     _validate("")
     _validate("   ")
+
+
+def test_ollama_discovery_rejects_metadata_as_validation_error() -> None:
+    # The SSRF rejection must surface as the guard's 400, not the 502 catch-all.
+    with pytest.raises(OnyxError) as exc_info:
+        get_ollama_available_models(
+            OllamaModelsRequest(api_base="http://169.254.169.254"),
+            MagicMock(),
+            MagicMock(),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+
+
+def test_openrouter_discovery_rejects_loopback_as_validation_error() -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        get_openrouter_available_models(
+            OpenRouterModelsRequest(api_base="http://127.0.0.1:9/", api_key="x"),
+            MagicMock(),
+            MagicMock(),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR

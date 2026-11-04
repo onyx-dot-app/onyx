@@ -498,6 +498,7 @@ def update_config(
                     new_api_base=config_update.api_base,
                     new_custom_config=config_update.custom_config,
                     api_key_changed=False,
+                    has_stored_api_key=old_provider.api_key is not None,
                 )
                 # Preserve existing API key when user didn't change it
                 actual_api_key = (
