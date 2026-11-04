@@ -1,9 +1,9 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import React from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import type {
   ConnectedSource,
@@ -59,12 +59,7 @@ export function KnowledgeSearchBar({
   }
 
   return (
-    <GeneralLayouts.Section
-      flexDirection="row"
-      alignItems="center"
-      gap={1}
-      height="auto"
-    >
+    <Section flexDirection="row" alignItems="center" gap={1} height="auto">
       {isSearchMode ? (
         <Button
           icon={SvgArrowLeft}
@@ -73,7 +68,7 @@ export function KnowledgeSearchBar({
           aria-label="exit-search"
         />
       ) : null}
-      <GeneralLayouts.Section height="auto">
+      <Section height="auto">
         <InputTypeIn
           searchIcon={!isSearchMode}
           value={query}
@@ -83,7 +78,7 @@ export function KnowledgeSearchBar({
           placeholder={t("search.input.placeholder")}
           variant="internal"
         />
-      </GeneralLayouts.Section>
+      </Section>
       {isSearchMode && query ? (
         <Button
           icon={SvgXCircle}
@@ -102,7 +97,7 @@ export function KnowledgeSearchBar({
           aria-label="submit-search"
         />
       ) : null}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -204,7 +199,7 @@ export function KnowledgeSearchResultsPanel({
 
   if (!committedQuery) {
     return (
-      <GeneralLayouts.Section
+      <Section
         alignItems="center"
         justifyContent="center"
         gap={2}
@@ -214,13 +209,13 @@ export function KnowledgeSearchResultsPanel({
         <Text font="secondary-body" color="text-03">
           {t("search.prompt.description")}
         </Text>
-      </GeneralLayouts.Section>
+      </Section>
     );
   }
 
   if (isSearching) {
     return (
-      <GeneralLayouts.Section
+      <Section
         alignItems="center"
         justifyContent="center"
         aria-label="search-loading"
@@ -228,13 +223,13 @@ export function KnowledgeSearchResultsPanel({
         <Text font="secondary-body" color="text-03">
           {t("search.loading.description")}
         </Text>
-      </GeneralLayouts.Section>
+      </Section>
     );
   }
 
   if (searchError && committedQuery === searchQuery) {
     return (
-      <GeneralLayouts.Section
+      <Section
         alignItems="center"
         justifyContent="center"
         gap={2}
@@ -243,7 +238,7 @@ export function KnowledgeSearchResultsPanel({
         <Text font="secondary-body" color="text-03">
           {t("search.error.description")}
         </Text>
-      </GeneralLayouts.Section>
+      </Section>
     );
   }
 
@@ -259,7 +254,7 @@ export function KnowledgeSearchResultsPanel({
 
   const listContent =
     allResults.length === 0 ? (
-      <GeneralLayouts.Section
+      <Section
         alignItems="center"
         justifyContent="center"
         gap={2}
@@ -272,9 +267,9 @@ export function KnowledgeSearchResultsPanel({
               })
             : t("search.noResults.description")}
         </Text>
-      </GeneralLayouts.Section>
+      </Section>
     ) : (
-      <GeneralLayouts.Section gap={0} alignItems="stretch" height="auto">
+      <Section gap={0} alignItems="stretch" height="auto">
         <TableLayouts.TableRow>
           <TableLayouts.CheckboxCell />
           <TableLayouts.TableCell flex>
@@ -312,7 +307,7 @@ export function KnowledgeSearchResultsPanel({
                     />
                   </TableLayouts.CheckboxCell>
                   <TableLayouts.TableCell flex>
-                    <GeneralLayouts.Section
+                    <Section
                       flexDirection="row"
                       justifyContent="start"
                       alignItems="center"
@@ -320,7 +315,7 @@ export function KnowledgeSearchResultsPanel({
                       height="auto"
                     >
                       <SvgFolder size={16} />
-                      <GeneralLayouts.Section
+                      <Section
                         flexDirection="column"
                         justifyContent="start"
                         alignItems="stretch"
@@ -349,7 +344,7 @@ export function KnowledgeSearchResultsPanel({
                               .replace(/\/+$/, "")}
                           </OverflowText>
                         )}
-                      </GeneralLayouts.Section>
+                      </Section>
                       <Button
                         icon={SvgChevronRight}
                         prominence="tertiary"
@@ -360,7 +355,7 @@ export function KnowledgeSearchResultsPanel({
                         }}
                         aria-label={`navigate-to-node-${node.id}`}
                       />
-                    </GeneralLayouts.Section>
+                    </Section>
                   </TableLayouts.TableCell>
                   <TableLayouts.TableCell width={8}>
                     <TableLayouts.SourceIconsRow>
@@ -389,7 +384,7 @@ export function KnowledgeSearchResultsPanel({
                   />
                 </TableLayouts.CheckboxCell>
                 <TableLayouts.TableCell flex>
-                  <GeneralLayouts.Section
+                  <Section
                     flexDirection="row"
                     justifyContent="start"
                     alignItems="center"
@@ -397,7 +392,7 @@ export function KnowledgeSearchResultsPanel({
                     height="auto"
                   >
                     <SvgFileText size={16} />
-                    <GeneralLayouts.Section
+                    <Section
                       flexDirection="column"
                       justifyContent="start"
                       alignItems="stretch"
@@ -423,8 +418,8 @@ export function KnowledgeSearchResultsPanel({
                           {doc.blurb}
                         </OverflowText>
                       )}
-                    </GeneralLayouts.Section>
-                  </GeneralLayouts.Section>
+                    </Section>
+                  </Section>
                 </TableLayouts.TableCell>
                 <TableLayouts.TableCell width={8}>
                   <TableLayouts.SourceIconsRow>
@@ -435,24 +430,20 @@ export function KnowledgeSearchResultsPanel({
             );
           })}
         </div>
-      </GeneralLayouts.Section>
+      </Section>
     );
 
   if (isStale) {
     return (
-      <GeneralLayouts.Section
-        alignItems="stretch"
-        justifyContent="start"
-        className="relative"
-      >
-        <GeneralLayouts.Section
+      <Section alignItems="stretch" justifyContent="start" className="relative">
+        <Section
           alignItems="stretch"
           justifyContent="start"
           className="opacity-40 pointer-events-none"
         >
           {listContent}
-        </GeneralLayouts.Section>
-        <GeneralLayouts.Section
+        </Section>
+        <Section
           alignItems="center"
           justifyContent="center"
           className="absolute inset-0 z-10"
@@ -460,8 +451,8 @@ export function KnowledgeSearchResultsPanel({
           <Text font="secondary-body" color="text-03">
             {t("search.stale.description")}
           </Text>
-        </GeneralLayouts.Section>
-      </GeneralLayouts.Section>
+        </Section>
+      </Section>
     );
   }
 

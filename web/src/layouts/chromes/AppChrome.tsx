@@ -65,7 +65,7 @@ import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { PendingRoute, useNavigation } from "@opal/navigation";
-import { PageLoader } from "@opal/loaders";
+import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -636,7 +636,7 @@ function Footer() {
 // AppChrome
 // ---------------------------------------------------------------------------
 
-interface AppChromeProps {
+export interface AppChromeProps {
   children: React.ReactNode;
 }
 
@@ -752,7 +752,7 @@ export default function AppChrome({ children }: AppChromeProps) {
             {/* Header */}
             <Header />
             <RootLayout.MainContent>
-              <PendingRoute base="/app" loader={<PageLoader />}>
+              <PendingRoute base="/app" loader={<AppChromeLoader />}>
                 {children}
               </PendingRoute>
             </RootLayout.MainContent>

@@ -16,7 +16,12 @@ import {
   Table,
   type TableColumn,
 } from "@opal/components";
-import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
+import {
+  IllustrationContent,
+  InputHorizontal,
+  toast,
+  Section,
+} from "@opal/layouts";
 import {
   SvgUsers,
   SvgTrash,
@@ -27,7 +32,6 @@ import {
 import { markdown, richNodes } from "@opal/utils";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn, Text } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";

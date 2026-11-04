@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
@@ -8,7 +9,6 @@ import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
 import { usePlans } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
-import { Section } from "@/layouts/general-layouts";
 import { InputNumber } from "@opal/components";
 import { Collapsible, Text } from "@opal/components";
 

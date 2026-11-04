@@ -5,9 +5,8 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, MessageCard, Text } from "@opal/components";
 import { SvgArrowDownCircle } from "@opal/icons";
-import { ConfirmationModalLayout, toast } from "@opal/layouts";
+import { ConfirmationModalLayout, toast, Section } from "@opal/layouts";
 import { markdown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
 import { downgradeToCommunity } from "@/lib/billing";
 
 const CHANGE_KEYS = [

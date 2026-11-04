@@ -3,8 +3,7 @@
 import type { IconFunctionComponent } from "@opal/types";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import {
   SvgArrowExchange,

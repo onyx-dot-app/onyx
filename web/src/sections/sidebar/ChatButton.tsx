@@ -55,11 +55,9 @@ const ChatButton = memo(
   ({ chatSession, project, draggable = false }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
     const appPosition = useAppPosition();
-    const activeSidebarTab = useAppPosition();
     const active = useMemo(
-      () =>
-        activeSidebarTab.isChat() && activeSidebarTab.chat() === chatSession.id,
-      [activeSidebarTab, chatSession.id]
+      () => appPosition.isChat() && appPosition.chat() === chatSession.id,
+      [appPosition, chatSession.id]
     );
     const mounted = useOnMount();
     const [displayName, setDisplayName] = useState(
@@ -264,7 +262,7 @@ const ChatButton = memo(
           await refreshCurrentProjectDetails();
 
           // Only route if the deleted chat is the currently opened chat session
-          if (active) {
+          if (appPosition.chat() === chatSession.id) {
             appPosition.openProject(project.id);
           }
         }

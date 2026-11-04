@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
@@ -26,7 +27,6 @@ import {
   SvgFolderPlus,
 } from "@opal/icons";
 import { Button, InputTypeIn, ShadowDiv, Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 

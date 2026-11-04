@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import React, {
   createContext,
   useContext,
@@ -19,7 +20,6 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-import { Section } from "@/layouts/general-layouts";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type {
   CommandMenuProps,

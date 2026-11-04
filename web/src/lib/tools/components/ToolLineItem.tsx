@@ -1,6 +1,7 @@
 "use client";
 
 import { useNavigation } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import { Fragment, useMemo } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTranslations } from "next-intl";
@@ -10,7 +11,6 @@ import { Hoverable } from "@opal/core";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import useCCPairs from "@/hooks/useCCPairs";
-import { Section } from "@/layouts/general-layouts";
 import {
   useToolOAuthStatus,
   type ToolAuthStatus,

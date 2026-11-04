@@ -27,7 +27,6 @@ import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
-import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   InputDivider,
@@ -36,6 +35,7 @@ import {
   InputVertical,
   Section as OpalSection,
   toast,
+  Section,
 } from "@opal/layouts";
 import {
   ModelSettingsPopover,

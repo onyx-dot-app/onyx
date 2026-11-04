@@ -23,8 +23,7 @@ import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import { Collapsible } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import {

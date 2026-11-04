@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { OverflowText, Tag, Text } from "@opal/components";
 import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -7,7 +8,6 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { MinimalOnyxDocument } from "@/lib/search/types";
-import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { richNodes } from "@opal/utils";
 import { timeAgo } from "@opal/time";

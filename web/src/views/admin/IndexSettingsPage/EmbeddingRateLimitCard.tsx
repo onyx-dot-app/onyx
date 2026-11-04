@@ -5,8 +5,7 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { Card, InputNumber } from "@opal/components";
-import { Content, InputHorizontal, toast } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Content, InputHorizontal, toast, Section } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useSettings } from "@/lib/settings/hooks";
 import type { Settings } from "@/lib/settings/types";
@@ -99,12 +98,7 @@ export default function EmbeddingRateLimitCard() {
   }
 
   return (
-    <GeneralLayouts.Section
-      gap={3}
-      height="fit"
-      alignItems="stretch"
-      justifyContent="start"
-    >
+    <Section gap={3} height="fit" alignItems="stretch" justifyContent="start">
       <Content
         title={t("title")}
         description={t("description")}
@@ -112,7 +106,7 @@ export default function EmbeddingRateLimitCard() {
         variant="section"
       />
       <Card border="solid" rounding={4}>
-        <GeneralLayouts.Section width="full" alignItems="stretch">
+        <Section width="full" alignItems="stretch">
           <InputHorizontal
             title={t("requests.title")}
             description={t("requests.description")}
@@ -157,8 +151,8 @@ export default function EmbeddingRateLimitCard() {
               placeholder={String(DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)}
             />
           </InputHorizontal>
-        </GeneralLayouts.Section>
+        </Section>
       </Card>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

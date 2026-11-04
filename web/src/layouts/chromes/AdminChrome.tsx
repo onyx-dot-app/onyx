@@ -18,8 +18,7 @@ import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
-import { RootLayout, useSidebarState } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { RootLayout, useSidebarState, Section } from "@opal/layouts";
 import { isVectorDbRequiredRoute, matchAdminRoute } from "@/lib/admin-routes";
 import {
   getFirstPermittedAdminRoute,

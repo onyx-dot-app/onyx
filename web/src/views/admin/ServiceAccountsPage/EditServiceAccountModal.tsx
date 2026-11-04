@@ -4,14 +4,13 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgLogOut } from "@opal/icons";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { Dropdown } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import useGroups from "@/hooks/useGroups";
 import {
   addUserToGroup,

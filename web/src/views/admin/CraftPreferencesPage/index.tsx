@@ -11,10 +11,10 @@ import {
   InputVertical,
   SettingsLayouts,
   toast,
+  Section,
 } from "@opal/layouts";
 import { SvgArrowUpRight, SvgRefreshCw } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { Section } from "@/layouts/general-layouts";
 import { InputTextArea } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";

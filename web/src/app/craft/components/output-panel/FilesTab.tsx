@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useEffect, useMemo, useRef, useCallback } from "react";
 import { useDirectoryLoading, useOutputRefreshStatus } from "@/lib/build/hooks";
 import { useUser } from "@/providers/UserProvider";
@@ -14,7 +15,6 @@ import {
   DirectoryTree,
   type DirectoryStatus,
 } from "@/app/craft/components/output-panel/DirectoryTree";
-import { Section } from "@/layouts/general-layouts";
 import { WorkspaceSearch } from "@/app/craft/components/output-panel/WorkspaceSearch";
 
 interface FilesTabProps {

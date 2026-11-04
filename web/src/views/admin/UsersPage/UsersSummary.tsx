@@ -1,11 +1,10 @@
 import { NavLink } from "@opal/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { Button, Card, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 // ---------------------------------------------------------------------------

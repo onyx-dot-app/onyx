@@ -8,12 +8,12 @@ import { useNavigation, usePathname } from "@opal/navigation";
 // corner so it never covers the sidebar. Falls back to the viewport edge when
 // there is no content area.
 
+import { Section } from "@opal/layouts";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { cn, markdown } from "@opal/utils";
 import { timeAgo } from "@opal/time";
 import { SvgChevronLeft, SvgChevronRight, SvgX } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
 import { isAuthPath } from "@/lib/auth/paths";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { getNotificationIcon, openNotificationLink } from "@/lib/notifications";

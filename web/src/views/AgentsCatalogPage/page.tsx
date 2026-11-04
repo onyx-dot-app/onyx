@@ -1,26 +1,28 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import AgentCard from "@/sections/agents/AgentCard";
-import { AgentViewer } from "@/lib/agents/components";
+import { AgentCard, AgentViewer } from "@/lib/agents/components";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
-import { Section, SettingsLayouts } from "@opal/layouts";
-import TextSeparator from "@/refresh-components/TextSeparator";
-import { Button, InputTypeIn, Tabs, Text } from "@opal/components";
+import { SettingsLayouts } from "@opal/layouts";
+import { GridSearchInput, NoItems, NoResults } from "@/lib/common/components";
+import { useSearchableGrid } from "@opal/hooks";
+import { useNavigation } from "@opal/navigation";
+import { Button, EndOfList, Tabs, Text } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
-import useOnMount from "@/hooks/useOnMount";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 
 interface AgentsSectionProps {
   title: string;
   description?: string;
   agents: MinimalAgent[];
+  /** The agent whose viewer is open, if any. */
+  viewedAgentId: number | null;
   onView: (agentId: number) => void;
 }
 
@@ -28,6 +30,7 @@ function AgentsSection({
   title,
   description,
   agents,
+  viewedAgentId,
   onView,
 }: AgentsSectionProps) {
   if (agents.length === 0) return null;
@@ -42,13 +45,15 @@ function AgentsSection({
           {description ?? ""}
         </Text>
       </div>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+      {/* Every card is the same height: 8.5rem (136px). */}
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 auto-rows-[8.5rem] gap-2">
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent) => (
             <AgentCard
               key={agent.id}
               agent={agent}
+              viewing={agent.id === viewedAgentId}
               onView={() => onView(agent.id)}
             />
           ))}
@@ -60,21 +65,32 @@ function AgentsSection({
 // e2e locator, not user copy.
 const NEW_AGENT_BUTTON_ARIA_LABEL = "AgentsPage/new-agent-button";
 
-export default function AgentsNavigationPage() {
+export default function AgentsCatalogPage() {
   const t = useTranslations("agents");
-  const { agents } = useAgents();
+  const { agents, isLoading, error } = useAgents();
   const { user, permissions } = useUser();
+  const navigation = useNavigation();
   const canCreateAgent = hasPermission(permissions, Permission.ADD_AGENTS);
   const [searchQuery, setSearchQuery] = useState("");
   // One viewer for the listing, so the id lives here rather than in whichever
   // card happened to be clicked.
   const [viewedAgentId, setViewedAgentId] = useState<number | null>(null);
+  // The card that opened the viewer: focus goes back to it on close, so Tab
+  // and the arrows carry on from where the user was.
+  const viewerOpenerRef = useRef<HTMLElement | null>(null);
+  function openViewer(agentId: number) {
+    const opener = document.activeElement;
+    viewerOpenerRef.current = opener instanceof HTMLElement ? opener : null;
+    setViewedAgentId(agentId);
+  }
+  function closeViewer() {
+    setViewedAgentId(null);
+    const opener = viewerOpenerRef.current;
+    viewerOpenerRef.current = null;
+    // After the dialog unmounts and its own focus handling runs.
+    requestAnimationFrame(() => opener?.focus());
+  }
   const [activeTab, setActiveTab] = useState<"all" | "your">("all");
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useOnMount(() => {
-    searchInputRef.current?.focus();
-  });
 
   const nonBuiltinAgents = useMemo(
     () => agents.filter((a) => !a.builtin_persona),
@@ -109,15 +125,21 @@ export default function AgentsNavigationPage() {
 
   const agentCount = featuredAgents.length + allAgents.length;
 
+  const search = useSearchableGrid({
+    query: searchQuery,
+    setQuery: setSearchQuery,
+    itemSelector: "[data-agent-card]",
+  });
+
   return (
     <SettingsLayouts.Root
+      loading={isLoading}
+      // A failed refresh keeps the agents already shown.
+      error={!!error && agents.length === 0}
       data-testid="AgentsPage/container"
       aria-label={t("navigation.page.ariaLabel")}
     >
-      <AgentViewer
-        agentId={viewedAgentId}
-        onClose={() => setViewedAgentId(null)}
-      />
+      <AgentViewer agentId={viewedAgentId} onClose={closeViewer} />
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title={t("navigation.header.title")}
@@ -125,7 +147,7 @@ export default function AgentsNavigationPage() {
         actions={[
           <Button
             key="primary"
-            href={canCreateAgent ? "/app/agents/create" : undefined}
+            {...(canCreateAgent ? navigation.linkTo("/app/agents/create") : {})}
             icon={SvgPlus}
             aria-label={NEW_AGENT_BUTTON_ARIA_LABEL}
             disabled={!canCreateAgent}
@@ -142,12 +164,11 @@ export default function AgentsNavigationPage() {
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
             <div className="flex-2">
-              <InputTypeIn
-                ref={searchInputRef}
-                placeholder={t("navigation.search.placeholder")}
+              <GridSearchInput
+                search={search}
+                item={t("navigation.empty.item")}
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                searchIcon
+                onChange={setSearchQuery}
               />
             </div>
             <div className="flex-1">
@@ -172,34 +193,45 @@ export default function AgentsNavigationPage() {
 
       {/* Agents List */}
       <SettingsLayouts.Body>
-        {agentCount === 0 ? (
-          <div className="w-full h-full py-12">
-            <Section>
-              <Text as="p" color="text-03">
-                {t("navigation.empty.description")}
-              </Text>
-            </Section>
-          </div>
+        {/* A typed search reads as "nothing matched" even when there are no
+            agents at all: that is what the user just asked. Without one, an
+            empty list is either no agents at all, or the tab and filters
+            leaving none. */}
+        {agentCount === 0 && searchQuery.trim() !== "" ? (
+          <NoResults item={t("navigation.empty.item")} />
+        ) : agentCount === 0 ? (
+          <NoItems
+            item={t("navigation.empty.item")}
+            description={
+              nonBuiltinAgents.length === 0
+                ? t("navigation.empty.description")
+                : t("navigation.empty.filteredDescription")
+            }
+          />
         ) : (
-          <>
+          // `contents`: a box for the grid navigation that adds no layout.
+          <div ref={search.gridRef} className="contents">
             <AgentsSection
               title={t("navigation.sections.featured.title")}
               description={t("navigation.sections.featured.description")}
               agents={featuredAgents}
-              onView={setViewedAgentId}
+              viewedAgentId={viewedAgentId}
+              onView={openViewer}
             />
             <AgentsSection
               title={t("navigation.sections.all.title")}
               agents={allAgents}
-              onView={setViewedAgentId}
+              viewedAgentId={viewedAgentId}
+              onView={openViewer}
             />
-            <TextSeparator
-              count={agentCount}
-              text={t("navigation.countSeparator.label", {
+            <EndOfList
+              paddingParallel={4}
+              paddingPerpendicular={2}
+              title={t("navigation.countSeparator.label", {
                 count: agentCount,
               })}
             />
-          </>
+          </div>
         )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

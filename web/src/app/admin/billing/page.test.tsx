@@ -56,12 +56,6 @@ jest.mock("@opal/layouts", () => ({
   },
 }));
 
-jest.mock("@/layouts/general-layouts", () => ({
-  Section: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
-
 jest.mock("@opal/icons", () => ({
   SvgArrowUpCircle: () => <svg />,
   SvgWallet: () => <svg />,

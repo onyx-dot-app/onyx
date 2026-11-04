@@ -1,3 +1,4 @@
+import { Section } from "@opal/layouts";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Card, Text } from "@opal/components";
@@ -12,7 +13,6 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { Section } from "@/layouts/general-layouts";
 
 interface FileReaderState {
   fileName: string | null;

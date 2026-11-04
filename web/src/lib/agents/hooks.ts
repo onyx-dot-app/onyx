@@ -34,7 +34,7 @@ import { Permission } from "@/lib/types";
  * redundant round-trips across the app.
  */
 export function useAgents() {
-  const { data, error, mutate } = useSWR<MinimalAgent[]>(
+  const { data, error, isLoading, mutate } = useSWR<MinimalAgent[]>(
     SWR_KEYS.agents,
     errorHandlingFetcher,
     {
@@ -46,7 +46,7 @@ export function useAgents() {
 
   return {
     agents: data ?? [],
-    isLoading: !error && !data,
+    isLoading,
     error,
     refresh: mutate,
   };

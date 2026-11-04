@@ -6,14 +6,13 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { ContentAction, SettingsLayouts, toast } from "@opal/layouts";
+import { ContentAction, SettingsLayouts, toast, Section } from "@opal/layouts";
 import { Button, Card, MessageCard, Text } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { downloadFile } from "@/lib/download";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.EXPORT_LOGS;
 

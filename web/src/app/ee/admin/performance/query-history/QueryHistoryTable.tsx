@@ -1,6 +1,7 @@
 "use client";
 
 import { NavLink } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -13,7 +14,6 @@ import {
 } from "@/components/ui/table";
 import { InputSingleSelect } from "@opal/components";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
-import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";

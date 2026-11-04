@@ -132,7 +132,11 @@ history API first, so the tabs follow the click, then asks Next to render a new
 route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
 `web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
 `AppPage` renders itself, so writing the URL is the whole switch; in-app links
-use its `linkTo*` props.
+use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+`web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
+URL's page loader (the agents catalog, the agent editor, the page loader, or
+blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
+loader shows while Next commits the route.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.

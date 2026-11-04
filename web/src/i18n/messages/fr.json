@@ -11192,6 +11192,9 @@
       "pin": {
         "tooltip": "Épingler à la barre latérale"
       },
+      "pinFailed": {
+        "message": "Impossible de mettre à jour l’épinglage. Réessayez."
+      },
       "share": {
         "tooltip": "Partager l'agent"
       },
@@ -11588,10 +11591,12 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {Agent} other {Agents}}"
+        "label": "{count, plural, one {# Agent} other {# Agents}}"
       },
       "empty": {
-        "description": "Aucun agent trouvé"
+        "description": "Les agents que vous créez et ceux partagés avec vous apparaissent ici.",
+        "filteredDescription": "Aucun agent ne correspond à l’onglet et aux filtres sélectionnés.",
+        "item": "agents"
       },
       "header": {
         "description": "Personnalisez le comportement et les connaissances de l'IA pour vos cas d'usage et ceux de votre équipe.",
@@ -11605,9 +11610,6 @@
       },
       "page": {
         "ariaLabel": "Page des agents"
-      },
-      "search": {
-        "placeholder": "Rechercher des agents..."
       },
       "sections": {
         "all": {
@@ -14298,6 +14300,21 @@
     },
     "appFooter": {
       "slogan": "Plateforme d'IA open source"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "Aucun élément : {item}",
+        "title": "Aucun élément"
+      },
+      "noResults": {
+        "description": "Aucun résultat correspondant à ce terme de recherche n’a été trouvé.",
+        "itemTitle": "Aucun élément trouvé : {item}",
+        "title": "Aucun résultat"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "Rechercher des {item} ou appuyer sur « / » pour activer...",
+      "placeholder": "Rechercher ou appuyer sur « / » pour activer..."
     }
   },
   "craft": {

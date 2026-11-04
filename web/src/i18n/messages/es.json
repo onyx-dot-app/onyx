@@ -11192,6 +11192,9 @@
       "pin": {
         "tooltip": "Fijar en la barra lateral"
       },
+      "pinFailed": {
+        "message": "No se pudo actualizar el anclaje. Inténtalo de nuevo."
+      },
       "share": {
         "tooltip": "Compartir el agente"
       },
@@ -11588,10 +11591,12 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {Agente} other {Agentes}}"
+        "label": "{count, plural, one {# Agente} other {# Agentes}}"
       },
       "empty": {
-        "description": "No se encontraron agentes"
+        "description": "Aquí aparecen los agentes que creas y los que se comparten contigo.",
+        "filteredDescription": "Ningún agente coincide con la pestaña y los filtros seleccionados.",
+        "item": "agentes"
       },
       "header": {
         "description": "Personaliza el comportamiento y el conocimiento de la IA para tus casos de uso y los de tu equipo.",
@@ -11605,9 +11610,6 @@
       },
       "page": {
         "ariaLabel": "Página de agentes"
-      },
-      "search": {
-        "placeholder": "Buscar agentes..."
       },
       "sections": {
         "all": {
@@ -14298,6 +14300,21 @@
     },
     "appFooter": {
       "slogan": "Plataforma de IA de código abierto"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "No hay {item}",
+        "title": "No hay elementos"
+      },
+      "noResults": {
+        "description": "No se encontraron resultados que coincidan con ese término de búsqueda.",
+        "itemTitle": "No se encontraron {item}",
+        "title": "No se encontraron resultados"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "Busca {item} o pulsa \"/\" para enfocar...",
+      "placeholder": "Busca o pulsa \"/\" para enfocar..."
     }
   },
   "craft": {

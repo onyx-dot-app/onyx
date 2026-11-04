@@ -59,6 +59,27 @@ children, animated in with [`Presence`](../../components/presence/README.md) unl
 | ------- | --------- | ------- | --------------------------------------------------- |
 | `gap`   | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
 
+### Loading
+
+A whole page while it loads: `Root` with `loading`, a `Header`, and an empty
+`Body`, so the page loader shows under the page's own title. Use it as a
+route's `loading.tsx`.
+
+| Prop          | Type                                     | Default | Description             |
+| ------------- | ---------------------------------------- | ------- | ----------------------- |
+| `icon`        | `IconFunctionComponent`                  | —       | As on `Header`          |
+| `title`       | `string \| RichStr`                      | —       | As on `Header` (required) |
+| `description` | `string \| RichStr`                      | —       | As on `Header`          |
+| `width`       | `"sm" \| "md" \| "lg" \| "xl" \| "full"` | `"md"`  | As on `Root`            |
+
+```tsx
+<SettingsLayouts.Loading
+  icon={SvgOnyxOctagon}
+  title={t("header.title")}
+  description={t("header.description")}
+/>
+```
+
 ## Usage
 
 ```tsx

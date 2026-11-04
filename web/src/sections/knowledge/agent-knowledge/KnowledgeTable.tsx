@@ -1,8 +1,8 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import React from "react";
 import { useTranslations } from "next-intl";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import {
   Text,
@@ -49,8 +49,8 @@ export function KnowledgeTable<T>({
 }: KnowledgeTableProps<T> & { ariaLabelPrefix?: string }) {
   const t = useTranslations("knowledge");
   return (
-    <GeneralLayouts.Section gap={0} alignItems="stretch" justifyContent="start">
-      <GeneralLayouts.Section
+    <Section gap={0} alignItems="stretch" justifyContent="start">
+      <Section
         flexDirection="row"
         justifyContent="start"
         alignItems="center"
@@ -58,7 +58,7 @@ export function KnowledgeTable<T>({
         height="auto"
       >
         {onSearchChange !== undefined && (
-          <GeneralLayouts.Section height="auto">
+          <Section height="auto">
             <InputTypeIn
               value={searchValue ?? ""}
               onChange={(e) => onSearchChange?.(e.target.value)}
@@ -68,10 +68,10 @@ export function KnowledgeTable<T>({
                 <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
               }
             />
-          </GeneralLayouts.Section>
+          </Section>
         )}
         {headerActions}
-      </GeneralLayouts.Section>
+      </Section>
 
       <Spacer rem={0.5} />
 
@@ -83,7 +83,7 @@ export function KnowledgeTable<T>({
             flex={!column.width}
             width={column.width}
           >
-            <GeneralLayouts.Section
+            <Section
               flexDirection="row"
               justifyContent="start"
               alignItems="center"
@@ -93,7 +93,7 @@ export function KnowledgeTable<T>({
               <Text font="secondary-body" color="text-03">
                 {column.header}
               </Text>
-            </GeneralLayouts.Section>
+            </Section>
           </TableLayouts.TableCell>
         ))}
       </TableLayouts.TableRow>
@@ -101,13 +101,13 @@ export function KnowledgeTable<T>({
       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
       {items.length === 0 ? (
-        <GeneralLayouts.Section height="auto" padding={4}>
+        <Section height="auto" padding={4}>
           <Text color="text-03" font="secondary-body">
             {emptyMessage ?? t("table.empty.description")}
           </Text>
-        </GeneralLayouts.Section>
+        </Section>
       ) : (
-        <GeneralLayouts.Section gap={0} alignItems="stretch" height="auto">
+        <Section gap={0} alignItems="stretch" height="auto">
           {items.map((item) => {
             const id = getItemId(item);
             const isSelected = selectedIds.includes(id);
@@ -139,8 +139,8 @@ export function KnowledgeTable<T>({
               </TableLayouts.TableRow>
             );
           })}
-        </GeneralLayouts.Section>
+        </Section>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

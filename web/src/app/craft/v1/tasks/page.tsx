@@ -5,8 +5,7 @@ import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   Button,
   Table,
