@@ -14,6 +14,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
+	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
@@ -30,9 +31,19 @@ type LaunchSpec struct {
 	ScratchBytes int64
 }
 
+// ProcInfo identifies a Firecracker process and its files.
+type ProcInfo struct {
+	PID int
+	// PIDStart is the process start time (/proc/<pid>/stat), to detect PID reuse.
+	PIDStart uint64
+	Chroot   string
+	APISock  string
+	VsockUDS string
+}
+
 // Process is a running Firecracker process.
 type Process interface {
-	PID() int
+	Info() ProcInfo
 	// Done is closed when the process has exited.
 	Done() <-chan struct{}
 	// Kill stops the process, waits for it to exit and removes the VM's
@@ -124,11 +135,20 @@ type Manager struct {
 	versions  Versions
 	log       *slog.Logger
 	now       func() time.Time
+	journal   *journal.Journal
+	// adopter rescans the processes for the doubt rules (doubt.go).
+	adopter Adopter
+	scanMu  sync.Mutex
 
 	mu      sync.Mutex
 	vms     map[string]*entry
 	tombs   map[string]tombstone
 	lastGen uint64
+	// doubt holds the sandboxes whose Firecracker the agent keeps running
+	// but could not verify. needScan: the UIDs of such processes are not
+	// known, so Create waits for a scan that works.
+	doubt    map[string]*doubt
+	needScan bool
 }
 
 // NewManager returns a Manager with an empty VM table.
@@ -137,7 +157,41 @@ func NewManager(cfg Config, templates *template.Store, launcher Launcher, stats 
 	return &Manager{
 		cfg: cfg, templates: templates, launcher: launcher, stats: stats, uids: uids,
 		versions: versions, log: log, now: time.Now,
-		vms: map[string]*entry{}, tombs: map[string]tombstone{},
+		vms: map[string]*entry{}, tombs: map[string]tombstone{}, doubt: map[string]*doubt{},
+	}
+}
+
+// UseJournal makes the Manager keep a durable record of each VM. Call it
+// before Recover and before the API serves.
+func (m *Manager) UseJournal(j *journal.Journal) { m.journal = j }
+
+func (t tombstone) record() *journal.Tombstone {
+	return &journal.Tombstone{Attempt: t.attempt, Generation: t.generation, StoppedAt: t.at}
+}
+
+func (m *Manager) record(e *entry, state journal.State, info ProcInfo) journal.Record {
+	return journal.Record{
+		SandboxID: e.vm.SandboxID, Attempt: e.vm.Attempt, Generation: e.vm.Generation, State: state,
+		PID: info.PID, PIDStart: info.PIDStart, UID: e.vm.UID,
+		Chroot: info.Chroot, APISock: info.APISock, VsockUDS: info.VsockUDS,
+		Template: e.vm.Template, VCPUs: e.vm.VCPUs, MemMiB: e.vm.MemMiB, ScratchGiB: e.vm.ScratchGiB,
+		StartedAt: e.vm.StartedAt,
+	}
+}
+
+func (m *Manager) writeRecord(r journal.Record) error {
+	if m.journal == nil {
+		return nil
+	}
+	return m.journal.Write(r)
+}
+
+func (m *Manager) removeRecord(id string) {
+	if m.journal == nil {
+		return
+	}
+	if err := m.journal.Remove(id); err != nil {
+		m.log.Error("remove journal record", "sandbox_id", id, "err", err)
 	}
 }
 
@@ -169,6 +223,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	}
 	if req.Attempt == 0 {
 		return VM{}, false, apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "attempt must be 1 or more")
+	}
+	if err := m.checkDoubt(ctx, req.SandboxID, true); err != nil {
+		return VM{}, false, err
 	}
 
 	for {
@@ -204,7 +261,10 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 					"cleanup of exited attempt %d failed (%v); Stop it to retry", vm.Attempt, e.cleanupErr)
 			}
 			// A newer attempt replaces an exited VM. Its files are already removed.
-			m.removeLocked(e)
+			if err := m.removeLocked(e); err != nil {
+				m.mu.Unlock()
+				return VM{}, false, err
+			}
 		}
 		if err := m.staleLocked(req); err != nil {
 			m.mu.Unlock()
@@ -244,15 +304,33 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		busy: make(chan struct{}),
 	}
 	m.vms[req.SandboxID] = e
+	starting := m.record(e, journal.Starting, ProcInfo{})
+	if t, ok := m.tombs[req.SandboxID]; ok {
+		starting.Prev = t.record()
+	}
 	m.mu.Unlock()
 
 	// The start must finish or clean up even if the caller goes away.
 	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.cfg.StartTimeout)
 	defer cancel()
 	t0 := m.now()
-	proc, launchErr := m.launcher.Launch(startCtx, LaunchSpec{
-		ID: req.SandboxID, UID: uid, Template: tpl, ScratchBytes: int64(req.ScratchGiB) * scratch.GiB,
-	})
+	var proc Process
+	// A "starting" record tells a restarted agent that this VM was never
+	// handed out, so it may clean it up.
+	launchErr := m.writeRecord(starting)
+	if launchErr == nil {
+		proc, launchErr = m.launcher.Launch(startCtx, LaunchSpec{
+			ID: req.SandboxID, UID: uid, Template: tpl, ScratchBytes: int64(req.ScratchGiB) * scratch.GiB,
+		})
+	}
+	if launchErr == nil {
+		if err := m.writeRecord(m.record(e, journal.Running, proc.Info())); err != nil {
+			launchErr = fmt.Errorf("write journal: %w", err)
+			if killErr := proc.Kill(startCtx); killErr != nil {
+				launchErr = fmt.Errorf("%w (kill: %v): %w", launchErr, killErr, ErrVMLeft)
+			}
+		}
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -267,16 +345,25 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		delete(m.vms, req.SandboxID)
 		if errors.Is(launchErr, ErrVMLeft) {
 			// Never give a second VM the UID of a process that may still run.
-			m.log.Error("VM may still run after a failed create; its UID stays reserved",
+			m.log.Error("VM may still run after a failed create; the sandbox is in doubt",
 				"sandbox_id", req.SandboxID, "uid", uid)
+			m.doubt[req.SandboxID] = &doubt{reason: "a failed start may have left its VM running", uids: []uint32{uid}}
 		} else {
 			m.uids.Put(uid)
+		}
+		// Put the stopped attempt back over the starting record.
+		if t, ok := m.tombs[req.SandboxID]; ok {
+			if err := m.writeTombstone(req.SandboxID, t); err != nil {
+				m.log.Error("write journal tombstone", "sandbox_id", req.SandboxID, "err", err)
+			}
+		} else {
+			m.removeRecord(req.SandboxID)
 		}
 		m.log.Error("create failed", "sandbox_id", req.SandboxID, "attempt", req.Attempt, "err", launchErr)
 		return VM{}, false, e.createErr
 	}
 	e.proc = proc
-	e.vm.PID = proc.PID()
+	e.vm.PID = proc.Info().PID
 	e.vm.State = pb.VMState_VM_STATE_RUNNING
 	go m.watch(req.SandboxID, e)
 	m.log.Info("created", "sandbox_id", req.SandboxID, "attempt", req.Attempt, "generation", e.vm.Generation,
@@ -337,6 +424,9 @@ type StopResult struct {
 
 // Stop stops the VM if sandbox_id, attempt and generation all match it.
 func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generation uint64) (StopResult, error) {
+	if err := m.checkDoubt(ctx, sandboxID, false); err != nil {
+		return StopResult{}, err
+	}
 	var e *entry
 	for {
 		m.mu.Lock()
@@ -377,7 +467,10 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 	// does nothing after one that worked.
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.cfg.StopTimeout)
 	defer cancel()
-	killErr := e.proc.Kill(stopCtx)
+	var killErr error
+	if e.proc != nil { // nil: a journaled VM that was gone at start-up
+		killErr = e.proc.Kill(stopCtx)
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -397,16 +490,33 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 		m.log.Error("stop failed", "sandbox_id", sandboxID, "err", killErr)
 		return StopResult{}, apierr.New(pb.ErrorReason_VMM_FAILED, "stop VM: %v", killErr)
 	}
-	m.removeLocked(e)
+	if err := m.removeLocked(e); err != nil {
+		// The process is gone. A retried Stop saves the tombstone.
+		e.vm.State = pb.VMState_VM_STATE_EXITED
+		m.log.Error("stop: save the stopped state", "sandbox_id", sandboxID, "err", err)
+		return StopResult{}, err
+	}
 	m.log.Info("stopped", "sandbox_id", sandboxID, "attempt", attempt, "generation", generation)
 	return StopResult{AlreadyStopped: exited}, nil
 }
 
-// removeLocked drops a stopped entry and keeps a tombstone.
-func (m *Manager) removeLocked(e *entry) {
+// removeLocked drops a stopped entry and keeps a tombstone, also in the
+// journal. If the journal write fails, the entry stays.
+func (m *Manager) removeLocked(e *entry) error {
+	t := tombstone{attempt: e.vm.Attempt, generation: e.vm.Generation, at: m.now()}
+	if err := m.writeTombstone(e.vm.SandboxID, t); err != nil {
+		return apierr.New(pb.ErrorReason_INTERNAL, "save the stopped state of sandbox %s: %v", e.vm.SandboxID, err)
+	}
 	delete(m.vms, e.vm.SandboxID)
 	m.uids.Put(e.vm.UID)
-	m.tombs[e.vm.SandboxID] = tombstone{attempt: e.vm.Attempt, generation: e.vm.Generation, at: m.now()}
+	m.tombs[e.vm.SandboxID] = t
+	return nil
+}
+
+func (m *Manager) writeTombstone(id string, t tombstone) error {
+	return m.writeRecord(journal.Record{
+		SandboxID: id, Attempt: t.attempt, Generation: t.generation, State: journal.Stopped, StoppedAt: t.at,
+	})
 }
 
 func (m *Manager) pruneTombstonesLocked() {
@@ -414,6 +524,9 @@ func (m *Manager) pruneTombstonesLocked() {
 	for id, t := range m.tombs {
 		if t.at.Before(cut) {
 			delete(m.tombs, id)
+			if m.vms[id] == nil {
+				m.removeRecord(id)
+			}
 		}
 	}
 }

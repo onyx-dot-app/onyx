@@ -29,6 +29,7 @@ import (
 type Proc struct {
 	ID    string
 	pid   int
+	start uint64
 	pidfd int
 	done  chan struct{}
 	l     *Launcher
@@ -42,6 +43,15 @@ type Proc struct {
 
 // PID returns the host PID of Firecracker.
 func (p *Proc) PID() int { return p.pid }
+
+// Info implements agent.Process.
+func (p *Proc) Info() agent.ProcInfo {
+	lay := p.l.Cmd.Layout
+	return agent.ProcInfo{
+		PID: p.pid, PIDStart: p.start, Chroot: lay.ChrootDir(p.ID),
+		APISock: lay.HostPath(p.ID, jailer.APISock), VsockUDS: lay.HostPath(p.ID, template.VsockUDS),
+	}
+}
 
 // Done is closed when Firecracker has exited.
 func (p *Proc) Done() <-chan struct{} { return p.done }
@@ -155,6 +165,9 @@ func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []Fil
 	p := &Proc{ID: id, pid: pid, pidfd: pidfd, done: make(chan struct{}), l: l}
 	go p.watch()
 	if err := l.checkProcess(ctx, id, pid); err != nil {
+		return nil, l.abort(p, err, &keep)
+	}
+	if p.start, err = l.procStart(pid); err != nil {
 		return nil, l.abort(p, err, &keep)
 	}
 	if err := WaitSocket(ctx, lay.HostPath(id, jailer.APISock)); err != nil {
