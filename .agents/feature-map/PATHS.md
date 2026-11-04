@@ -261,6 +261,7 @@ covers new files that match it.
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
 | `web/src/app/app/components/files/`, `web/src/sections/modals/UserFilesModal.tsx`, `web/src/sections/cards/FileCard.tsx` | file-store-and-user-files |
 | `web/src/sections/modals/PreviewModal/` | chat-frontend |
+| `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/app/plugins/` | plugins, chat-frontend |
@@ -325,7 +326,7 @@ covers new files that match it.
 | `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/lib/oauth/`, `web/src/app/anonymous/` | auth-and-identity |
 | `web/src/app/oauth-provider/`, `web/src/sections/oauth-provider/`, `web/src/lib/oauth-provider/`, `web/src/lib/sso/`, `web/src/lib/users/`, `web/src/lib/auth/` | auth-and-identity |
 | `web/src/app/admin/agents/`, `web/src/lib/agents/`, `web/src/views/admin/AgentsPage.tsx`, `web/src/views/admin/AgentsPage/`, `web/src/app/ee/agents/stats/` | agents-personas |
-| `web/src/sections/modals/AddPeoplePicker.tsx`, `web/src/sections/modals/TransferOwnershipView.tsx` | agents-personas, skills |
+| `web/src/sections/modals/AddPeoplePicker.tsx`, `web/src/sections/modals/TransferOwnershipView.tsx`, `web/src/sections/modals/ShareAccessRow.tsx`, `web/src/sections/modals/ShareModalPermissionControls.tsx` | agents-personas, skills |
 | `web/src/app/admin/chat-preferences/` | chat-preferences |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
 | `web/src/app/admin/language-models/`, `web/src/views/admin/LanguageModelsPage.tsx`, `web/src/sections/modals/languageModels/`, `web/src/lib/languageModels/`, `web/src/lib/hooks/useLLMProviderOptions.ts` | llm-providers |
