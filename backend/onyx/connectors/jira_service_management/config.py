@@ -1,15 +1,11 @@
 import re
-from typing import Annotated, ClassVar
+from typing import Annotated
 
 from pydantic import field_validator
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.connectors.atlassian_query import has_order_by
-from onyx.connectors.connector_config import (
-    ConnectorConfig,
-    CredentialBinding,
-    field_format_error,
-)
+from onyx.connectors.connector_config import field_format_error
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
@@ -18,6 +14,7 @@ from onyx.connectors.field_policy import (
     ScopeInclude,
     ScopeOpaque,
 )
+from onyx.connectors.jira.config import JiraConnectorConfig
 from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 _JQL_QUERY = "jql_query"
@@ -37,22 +34,7 @@ _PROJECT_KEY_FORMAT_ERROR = (
 )
 
 
-class JiraServiceManagementCredentialBinding(CredentialBinding):
-    """A JSM site is a Jira site, so the credential is the Jira one: a site URL
-    plus either an account email and an API token (Cloud) or a personal access
-    token (Server / Data Center)."""
-
-    site_url_fields: ClassVar[frozenset[str]] = frozenset({"jira_base_url"})
-
-    # Request document ids are browse URLs on this base URL.
-    jira_base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
-    # Only selects the API gateway: document ids keep jira_base_url.
-    scoped_token: Annotated[bool, FieldPolicy(FieldClass.COSMETIC)] = False
-
-
-class JiraServiceManagementConnectorConfig(
-    JiraServiceManagementCredentialBinding, ConnectorConfig
-):
+class JiraServiceManagementConnectorConfig(JiraConnectorConfig):
     # The service desk project whose requests are indexed. A service desk is a
     # Jira project type, so the key is a Jira project key.
     project_key: Annotated[

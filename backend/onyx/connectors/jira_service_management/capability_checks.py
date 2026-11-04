@@ -176,16 +176,17 @@ class _SignInCheck(_JsmCheck):
 
 
 class _ServiceDeskProjectCheck(_JsmCheck):
-    """The configured project is a service desk that this credential can read.
+    """The configured project exists and this credential can read it.
 
-    This is the check that tells a Jira Software project apart from a service
-    desk, which is the most common misconfiguration of this connector.
+    Deliberately uses the plain Jira project read, **not** servicedeskapi: the
+    connector supports portal-only accounts, which have no agent licence and
+    are refused by servicedeskapi. A required check must not block them.
     """
 
     def __init__(self) -> None:
         super().__init__(
             check_id="jsm_service_desk",
-            display_name="Read the service desk",
+            display_name="Read the project",
             requires_fields=_DESK_FIELDS,
             depends_on=("jsm_auth",),
             remediation=(
@@ -199,18 +200,18 @@ class _ServiceDeskProjectCheck(_JsmCheck):
         config: JiraServiceManagementConnectorConfig = self.config(context)
         project_key: str = _project_key(config)
         try:
-            desk: dict[str, Any] = _gateway(context).get_service_desk(
+            project: dict[str, Any] = _gateway(context).get_project(
                 project_key=project_key, fast=True
             )
         except JsmApiError as e:
             if e.status_code == 404:
                 raise ConnectorValidationError(
-                    f"{project_key} is not a service desk project, or the credential "
-                    "cannot see it. Enter a Jira Service Management project key.",
-                    summary="Project is not a service desk",
+                    f"Jira has no project {project_key}, or the credential cannot "
+                    "see it. Enter a Jira Service Management project key.",
+                    summary="Project not found",
                     description=(
-                        f"Jira returned no service desk for {project_key}.\n"
-                        "Check that this is a Jira Service Management project."
+                        f"Jira returned no project {project_key}.\n"
+                        "Check the project key of the service desk."
                     ),
                 ) from e
             if e.status_code in (401, 403):
@@ -235,15 +236,9 @@ class _ServiceDeskProjectCheck(_JsmCheck):
                 summary="Unexpected answer from Jira",
                 description="The site answered, but not as Jira should.",
             ) from e
-        if not desk.get("id"):
-            raise ConnectorValidationError(
-                f"Jira returned no service desk for {project_key}.",
-                summary="Project is not a service desk",
-                description="Check that this is a Jira Service Management project.",
-            )
-        name: Any = desk.get("projectName")
+        name: Any = project.get("name")
         return CheckOutput(
-            summary=f"Read the service desk {name}" if name else "Read the service desk"
+            summary=f"Read the project {name}" if name else "Read the project"
         )
 
 
