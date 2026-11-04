@@ -935,15 +935,13 @@ _PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
 
 def test_run_pipeline_owns_llm_enrichment_trace() -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
-    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
     expected_result = MagicMock()
     vision_llm = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
     with (
         patch(
-            f"{_PATCH_PREFIX}.get_active_search_settings",
-            return_value=all_search_settings,
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
         ),
         patch(f"{_PATCH_PREFIX}.get_multipass_config"),
         patch(
@@ -1029,14 +1027,12 @@ def _make_image_doc(
 
 def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
-    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
     expected_result = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
     with (
         patch(
-            f"{_PATCH_PREFIX}.get_active_search_settings",
-            return_value=all_search_settings,
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
         ),
         patch(f"{_PATCH_PREFIX}.get_multipass_config"),
         patch(

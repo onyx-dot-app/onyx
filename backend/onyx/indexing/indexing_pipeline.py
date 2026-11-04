@@ -55,7 +55,7 @@ from onyx.db.index_attempt_metrics import (
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import (
-    get_active_search_settings,
+    get_search_settings_by_id,
     lock_search_settings_for_share,
 )
 from onyx.db.tag import upsert_document_tags
@@ -1821,9 +1821,9 @@ def run_indexing_pipeline(
 
     written_search_settings_id is the id of the search settings whose index
     `document_index` writes into, as the caller resolved it when the batch
-    started (never a fresh lookup: a batch can straddle a swap). The content
-    hash is stamped only if those settings are still PRESENT when the batch
-    commits; stamp_content_hash=False skips the stamp outright (a targeted
+    started (never a fresh lookup: a batch can straddle a swap). Chunking and
+    enrichment use that row's configuration, and the content hash is stamped
+    only if those settings are still PRESENT when the batch commits; stamp_content_hash=False skips the stamp outright (a targeted
     re-index whose FUTURE twin may fail must leave the row's hash alone).
 
     force_update bypasses both change gates. Needed when the document is
@@ -1835,18 +1835,19 @@ def run_indexing_pipeline(
     placeholder (see skip_tabular_content). Only connector indexing sets it:
     user files and the ingestion API need the content they were given.
     """
+    # Chunking and enrichment follow the settings whose index is written, not
+    # whichever row is PRESENT or FUTURE at this moment.
     if db_session is not None:
-        all_search_settings = get_active_search_settings(db_session)
+        search_settings = get_search_settings_by_id(
+            db_session, written_search_settings_id
+        )
     else:
         with get_session_with_current_tenant() as _sess:
-            all_search_settings = get_active_search_settings(_sess)
-    if (
-        all_search_settings.secondary
-        and all_search_settings.secondary.status == IndexModelStatus.FUTURE
-    ):
-        search_settings = all_search_settings.secondary
-    else:
-        search_settings = all_search_settings.primary
+            search_settings = get_search_settings_by_id(
+                _sess, written_search_settings_id
+            )
+    if search_settings is None:
+        raise RuntimeError(f"Search settings {written_search_settings_id} not found")
 
     multipass_config = get_multipass_config(search_settings)
 
