@@ -178,12 +178,12 @@ export default function ServiceAccountsPage() {
           return (
             <div className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0">
               {visible.map((g) => (
-                <Badge key={g.id} title={g.name} size={5.5} />
+                <Badge key={g.id} title={g.name} size={6} />
               ))}
               {overflow > 0 && (
                 <Badge
                   title={t("table.groups.overflow.label", { count: overflow })}
-                  size={5.5}
+                  size={6}
                 />
               )}
             </div>

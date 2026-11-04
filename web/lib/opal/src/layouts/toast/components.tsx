@@ -268,7 +268,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
           <Badge
             title={strings.toastMoreCount(pileCount)}
             color="default"
-            size={5.5}
+            size={6}
           />
         </div>
       )}

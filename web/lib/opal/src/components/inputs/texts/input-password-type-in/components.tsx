@@ -161,7 +161,7 @@ function InputPasswordTypeIn({
           isExistingValue ? (
             <>
               {leftChildren}
-              <Badge icon={SvgKey} title={realValue} color="info" size={5.5} />
+              <Badge icon={SvgKey} title={realValue} color="info" size={6} />
             </>
           ) : (
             leftChildren

@@ -542,7 +542,7 @@ export function MCPAccessControl({
       value: "groups",
       title: t("groups.label"),
       description: t("groups.description"),
-      tag: { title: t("planTag"), color: "info", size: 5.5 },
+      tag: { title: t("planTag"), color: "info", size: 6 },
       disabled: !canRestrict,
       tooltip: !canRestrict ? t("planNote") : undefined,
     },

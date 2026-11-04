@@ -82,7 +82,7 @@ export function ActivityCountTags({
             title={format.number(failures)}
             color="error"
             variant={variant}
-            size={5.5}
+            size={6}
           />
         </Tooltip>
       )}
@@ -93,7 +93,7 @@ export function ActivityCountTags({
             title={format.number(errors)}
             color="warning"
             variant={variant}
-            size={5.5}
+            size={6}
           />
         </Tooltip>
       )}

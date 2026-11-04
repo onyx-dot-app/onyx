@@ -14,8 +14,8 @@ import { cn } from "@opal/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-/** Height on the Tailwind scale: `4` is 1rem, `5.5` is 1.375rem. */
-type BadgeSize = 4 | 5.5;
+/** Height on the Tailwind scale: `4` is 1rem, `6` is 1.5rem. */
+type BadgeSize = 4 | 6;
 
 /**
  * - `"default"`: tinted background, icon and label in the color's text.
