@@ -28,7 +28,14 @@ def _user(user_id: str) -> ConfluenceUser:
 
 def _run_confluence_group_sync(
     user_groups: dict[str, list[str] | Exception],
+    reported: list[ExternalUserGroup | SyncEntityFailure] | None = None,
 ) -> list[ExternalUserGroup | SyncEntityFailure]:
+    """Runs the sync. ``reported`` collects each yielded item as it arrives, so
+    a test can read what was yielded before the sync raised."""
+    items: list[ExternalUserGroup | SyncEntityFailure] = (
+        [] if reported is None else reported
+    )
+
     def _list_user_groups(user_id: str) -> Iterator[dict[str, Any]]:
         groups = user_groups[user_id]
         if isinstance(groups, Exception):
@@ -50,7 +57,9 @@ def _run_confluence_group_sync(
             return_value=source_operations,
         ),
     ):
-        return list(group_sync.confluence_group_sync("tenant", cc_pair))
+        # extend keeps what was yielded before a raise.
+        items.extend(group_sync.confluence_group_sync("tenant", cc_pair))
+    return items
 
 
 def test_failing_user_is_skipped_whole_and_reported() -> None:
@@ -81,15 +90,22 @@ def test_failing_user_is_skipped_whole_and_reported() -> None:
     }
 
 
-def test_too_many_failed_users_fail_the_sync() -> None:
+def test_too_many_failed_users_fail_the_sync_after_reporting_them() -> None:
+    reported: list[ExternalUserGroup | SyncEntityFailure] = []
     with pytest.raises(RuntimeError, match="Too many failed user group fetches"):
         _run_confluence_group_sync(
             {
                 "alice": RuntimeError("down"),
                 "bob": RuntimeError("down"),
                 "carol": ["engineering"],
-            }
+            },
+            reported,
         )
+
+    assert [
+        (item.kind, item.id) for item in reported if isinstance(item, SyncEntityFailure)
+    ] == [(SyncEntityKind.USER, "alice"), (SyncEntityKind.USER, "bob")]
+    assert not any(isinstance(item, ExternalUserGroup) for item in reported)
 
 
 def test_onyx_users_variant_skips_and_reports_a_failing_user() -> None:

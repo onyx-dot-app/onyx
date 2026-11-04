@@ -16,8 +16,8 @@ class DocSyncResume(BaseModel):
 class SyncEntityFailure(BaseModel):
     """A user or group a group sync could not read. A group is never yielded
     with partial membership. A failed Drive user's remaining folders are
-    skipped, and the folders already read stay, each with its full permission
-    list. The stale sweep removes whatever was skipped."""
+    skipped, and the folders already read stay with the permissions read for
+    them. The stale sweep removes whatever was skipped."""
 
     kind: SyncEntityKind
     id: str

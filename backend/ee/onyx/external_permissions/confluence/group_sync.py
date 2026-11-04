@@ -21,6 +21,14 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class _TooManyFailedUsersError(RuntimeError):
+    """Carries the collected failures so the sync reports them before failing."""
+
+    def __init__(self, failures: list[SyncEntityFailure]) -> None:
+        super().__init__("Too many failed user group fetches during group sync")
+        self.failures = failures
+
+
 def _build_group_member_email_map(
     source_operations: ConfluenceSourceOperations, cc_pair_id: int
 ) -> tuple[dict[str, set[str]], list[SyncEntityFailure]]:
@@ -96,7 +104,7 @@ def _build_group_member_email_map(
             )
 
     if len(failures) > MAX_FAILED_ENTITY_FRACTION * listed_user_count:
-        raise RuntimeError("Too many failed user group fetches during group sync")
+        raise _TooManyFailedUsersError(failures)
 
     if not group_member_emails:
         msg = "No groups found for any users."
@@ -208,9 +216,13 @@ def confluence_group_sync(
         connector_specific_config=cc_pair.connector.connector_specific_config,
     )
 
-    group_to_member_email_map, failures = _build_final_group_to_member_email_map(
-        source_operations, cc_pair.id
-    )
+    try:
+        group_to_member_email_map, failures = _build_final_group_to_member_email_map(
+            source_operations, cc_pair.id
+        )
+    except _TooManyFailedUsersError as e:
+        yield from e.failures
+        raise
     yield from failures
 
     all_found_emails = set()
