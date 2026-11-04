@@ -185,6 +185,12 @@ class DeepResearchAgent(Agent, RestorableFeature):
             ),
         )
 
+    @property
+    def configured_tools(self) -> list[Tool]:
+        """The tools restored and child agents receive: deep research offers its
+        tools unchanged."""
+        return self.application_tools
+
     def capture_state(self) -> DeepResearchFeatureState:
         with self._citation_lock:
             return DeepResearchFeatureState(

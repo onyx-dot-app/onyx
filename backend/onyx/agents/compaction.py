@@ -58,6 +58,21 @@ def count_tokens(text: str, *, cached_counts: Mapping[str, int] | None = None) -
     return len(_encoder().encode(text, disallowed_special=()))
 
 
+def head_and_tail_tokens(text: str, max_tokens: int) -> tuple[str, str, int]:
+    """The head and tail of `text`, decoded, that together hold `max_tokens`
+    tokens, and the token count of `text`. A text that fits is the head."""
+    tokens = _encoder().encode(text, disallowed_special=())
+    if len(tokens) <= max_tokens:
+        return text, "", len(tokens)
+    head = max_tokens // 2
+    tail = max_tokens - head
+    return (
+        _encoder().decode(tokens[:head]),
+        _encoder().decode(tokens[len(tokens) - tail :]) if tail else "",
+        len(tokens),
+    )
+
+
 def message_tokens(
     message: Message, token_counter: Callable[[str], int] = count_tokens
 ) -> int:

@@ -29,6 +29,9 @@ from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
     ChatFile,
+    CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     LlmPythonExecutionResult,
     PythonArguments,
     PythonExecutionDelta,
@@ -48,6 +51,11 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
+
+PYTHON_CODE_MODE_RESULT = CodeModeResultSpec(
+    kind=CodeModeResultKind.JSON_OBJECT,
+    model=LlmPythonExecutionResult,
+)
 
 CODE_FIELD = "code"
 CODE_INTERPRETER_DEFAULT_FILENAME = "file"
@@ -242,6 +250,10 @@ class PythonTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -252,6 +264,10 @@ class PythonTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return PYTHON_CODE_MODE_RESULT
 
     @override
     @classmethod

@@ -1,6 +1,6 @@
 """Executable tools and their invocation-scoped services."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny, model_validator
 
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.models import Message, ToolDefinition, ToolResult
+from onyx.llm.models import Message, ToolDefinition, ToolResult, ToolResultMessage
 
 if TYPE_CHECKING:
     from onyx.agents.models import AgentInfo, RunResult, RunState
@@ -145,14 +145,25 @@ class ToolInvocation:
         cancellation: CancellationSignal,
         update: ToolUpdate,
         messages: Sequence[Message] = (),
+        recorded_results: Sequence[ToolResultMessage] = (),
         agents: AgentControl | None = None,
+        trace_metadata: Mapping[str, JsonValue] | None = None,
     ) -> None:
         self.call_id = call_id
         self.call_index = call_index
         self.arguments = arguments
         self.cancellation = cancellation
         self.update = update
+        # The model's view of the conversation, after compaction, without result
+        # details. Read only.
         self.messages = messages
+        # Every recorded tool result of the conversation before this call, with
+        # details and without compaction, oldest first: earlier steps, then this
+        # step's completed results in call order. For state derived from the
+        # whole conversation. Read only.
+        self.recorded_results = recorded_results
+        # Attributes of the call's tracing span.
+        self.trace_metadata = trace_metadata
         self._agents = agents
 
     @property
@@ -174,6 +185,10 @@ class AgentTool:
 
     Optional merge_arguments combines compatible calls into one execution. Such tools
     must return ToolResult; each original call receives the pooled result.
+
+    A call that a lost execution owner left running runs again on restore, unless
+    interrupted_result is set; then that result is saved as the call's result
+    instead, with status error when it is an error.
     """
 
     def __init__(
@@ -188,12 +203,14 @@ class AgentTool:
             [dict[str, JsonValue], dict[str, JsonValue]], dict[str, JsonValue] | None
         ]
         | None = None,
+        interrupted_result: ToolResult | None = None,
     ) -> None:
         self.definition = definition
         self.execute = execute
         self.result_from_children = result_from_children
         self.execution_mode = execution_mode
         self.merge_arguments = merge_arguments
+        self.interrupted_result = interrupted_result
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
@@ -203,6 +220,7 @@ class AgentTool:
             result_from_children=self.result_from_children,
             execution_mode=self.execution_mode,
             merge_arguments=self.merge_arguments,
+            interrupted_result=self.interrupted_result,
         )
 
     @property

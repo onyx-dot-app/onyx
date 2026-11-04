@@ -137,6 +137,7 @@ COPY --from=builder \
     /usr/local/bin/supervisord \
     /usr/local/bin/supervisorctl \
     /usr/local/bin/playwright \
+    /usr/local/bin/monty \
     /usr/local/bin/
 
 # Install the Chromium build used by Playwright; its OS-level runtime libraries came with the os

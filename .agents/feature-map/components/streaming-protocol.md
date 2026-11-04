@@ -112,9 +112,34 @@ sub-turn indexes.
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
 citations, one family per tool, deep research, and the coding agent with the
-bash tool. `ToolCallArgumentDelta` streams the Python tool's code while the
-model writes it; the configured reasoning tool streams as reasoning packets
-instead (`chat/renderer.py:MessageRenderer.consume`). Other tools show their
+bash tool. `ToolCallArgumentDelta` streams the code of the tools in
+`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
+model writes it, with the tool name as `tool_type`; the configured reasoning
+tool streams as reasoning packets instead
+(`chat/renderer.py:MessageRenderer.consume`). Code mode (`code_mode_start`,
+`code_mode_delta`) renders each tool call its program makes with that tool's
+own packets at `sub_turn_index` = call index, inside the code mode tab. A
+final `code_mode_delta` with `replace_stdout` replaces live output that stopped
+at the output limit, so live output matches replay. The final delta also
+lists `stored_keys`, the keys the program saved with `store()`, and
+`tool_call_count`, the calls the cell started so far (the model's text reports
+the same count). Each `execute_code` and `wait_code` call is its own code
+mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
+arguments (`None` and 0 for `execute_code`, the cell id and 1 for
+`wait_code`, whose `code` is empty), so live and replay send the same start.
+The final delta carries the exact `cell_id` and `observation`. Its `status`
+adds `running` (the cell still runs; its open nested calls get only start
+packets) and `terminated`. A cell's closing record goes to the tab of its last
+observation, after that tab's `section_end`: the nested calls after the
+observation, one `code_mode_delta` with the new stdout, then a final delta with
+`status`, `tool_call_count`, `stored_keys` and `response_ended=True`
+(`chat/code_mode_renderer.py:CodeModeRenderer.amend`;
+`tool_renderer` picks that renderer by tool name). It follows
+the answer, live (from `ToolResultAmendedEvent`, before the stop) and on
+replay (`chat/presentation.py:replay_response` sends closing records after the
+response's messages). When the observation was recorded before a restore, the
+live stream has no tab for it, so the closing record follows the observation's
+own packets in a new tab. Other tools show their
 arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
 `ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 
@@ -203,7 +228,10 @@ its background task end ([[#pure-asgi-middleware]]).
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's
    presenter sends one `OverallStop` with `stop_reason` `finished`, tagged with
    its `model_index`. `OverallStop` does not mean success: response errors
-   arrive as `StreamingError`. After cancellation of the turn,
+   arrive as `StreamingError`. `stop_reason` is typed
+   (`backend/onyx/server/query_and_chat/streaming_models.py:StopReason`), and
+   `chat/presentation.py:overall_stop` is the one mapping from a run's status
+   and failure to it. After cancellation of the turn,
    `ChatTurnExecution._publish` drops producer packets, including stops and
    `SectionEnd`. Each response run first cancels itself at its deadline while
    turn delivery stays open. Its presenter can still send `timed_out`.

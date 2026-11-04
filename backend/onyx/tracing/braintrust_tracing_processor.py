@@ -133,10 +133,13 @@ class BraintrustTracingProcessor(TracingProcessor):
         }
 
     def _function_log_data(self, span: Span[FunctionSpanData]) -> Dict[str, Any]:
-        return {
+        data: Dict[str, Any] = {
             "input": span.span_data.input,
             "output": span.span_data.output,
         }
+        if span.span_data.metadata:
+            data["metadata"] = dict(span.span_data.metadata)
+        return data
 
     def _generation_log_data(self, span: Span[GenerationSpanData]) -> Dict[str, Any]:
         metrics = {}

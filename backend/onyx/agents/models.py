@@ -23,6 +23,7 @@ from onyx.llm.models import (
     Message,
     ToolCall,
     ToolDefinition,
+    ToolResult,
     ToolResultMessage,
 )
 
@@ -145,6 +146,13 @@ class PreparedStep(BaseModel):
             allowed_tool_names=self.allowed_tool_names,
             options=self.options.model_copy(deep=True),
         )
+
+
+class ToolResultAmendment(BaseModel):
+    """A replacement for the recorded result of one tool call of the finishing run."""
+
+    call_id: str
+    result: ToolResult
 
 
 class ToolCallContext(BaseModel):

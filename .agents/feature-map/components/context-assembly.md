@@ -118,7 +118,11 @@ document and text) with a pointer to that result
 search result JSON must keep that parse working. Later turns retain saved tool-result
 content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
 Compaction controls history growth; starting a new user turn does not rewrite
-previous evidence. `backend/onyx/chat/README.md` has worked examples of the fixed
+previous evidence. A code mode observation keeps what a later turn needs in its
+own content: the `file_id` and revised prompt of each image that the program
+generated, and every call of a program that did not complete
+(`tools/tool_implementations/code_mode/prompt.py:format_content`).
+`backend/onyx/chat/README.md` has worked examples of the fixed
 preamble and growing history.
 
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the

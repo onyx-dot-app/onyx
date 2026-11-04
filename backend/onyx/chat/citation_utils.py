@@ -3,35 +3,31 @@ from collections.abc import Mapping
 
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.models import ChatMessageMetadata
+from onyx.chat.tool_results import tool_result_sources
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
+from onyx.context.search.models import SearchDoc
+from onyx.deep_research.models import ResearchMessageMetadata
 from onyx.file_store.models import ContextFileMetadata
 from onyx.llm.models import Message, ToolResultMessage
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 
 
 def message_citation_sources(message: Message) -> CitationMapping:
-    """Read citation numbers shared by chat answers, search results, and research reports."""
+    """Read citation numbers shared by chat answers, tool results, and research reports."""
     if isinstance(message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
         return message.metadata.sources
     if not isinstance(message, ToolResultMessage):
         return {}
-    data = message.details
-    if isinstance(data, ResearchAgentCallResult):
-        return data.citation_mapping
-    if message.tool_name not in CITEABLE_TOOLS_NAMES or not isinstance(
-        data, SearchDocsResponse
-    ):
-        return {}
-    documents: dict[str, SearchDoc] = {}
-    for document in data.search_docs:
-        documents.setdefault(document.document_id, document)
-    return {
-        number: documents[document_id]
-        for number, document_id in data.citation_mapping.items()
-        if document_id in documents
-    }
+    sources = tool_result_sources(message.details)
+    return dict(sources.citations) if sources is not None else {}
+
+
+def result_cites_documents(result: ToolResultMessage) -> bool:
+    """Whether the model can cite documents from this result."""
+    if result.tool_name in CITEABLE_TOOLS_NAMES:
+        return True
+    sources = tool_result_sources(result.details)
+    return sources is not None and bool(sources.citations)
 
 
 def extract_citation_order_from_text(text: str) -> list[int]:

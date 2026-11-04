@@ -158,13 +158,62 @@ by file ID, and render once above the answer as soon as they arrive. Later tool
 calls do not hide them. An image call does not mark the
 answer as final; later search or image calls can continue the timeline.
 
-A group closes on its own `SECTION_END` or `ERROR`; a new `turn_index` or a
-stop packet adds a `SECTION_END` to each open group. Parallel tools share a
-`turn_index` and differ by `tab_index`. A subagent's child packets carry the
-parent's key plus `sub_turn_index`, which the processor ignores, so they join
-the parent group. `ResearchAgentRenderer` and `CodingAgentRenderer` split on
-`sub_turn_index`, and `app/app/message/messageComponents/toolDisplayHelpers.tsx:isToolComplete` ignores nested
-`SECTION_END` packets.
+A group closes on its own parent-level `SECTION_END` or `ERROR`
+(`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
+shared by `isToolComplete` and the packet processor); a new `turn_index` or a
+stop packet adds a parent-level `SECTION_END` to each open group. Parallel
+tools share a `turn_index` and differ by `tab_index`. The child packets of a
+subagent, a coding agent (its bash calls and thinking) or a code mode program
+carry the parent's key plus `sub_turn_index`, so they join the parent group,
+and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
+does not start the answer. Every step-kind check in that file, and
+`findRenderer`, reads only parent-level packets, so a research step with a
+nested search is a research step, not a search step. `ResearchAgentRenderer`
+draws each entry of the step's `nestedCalls` (passed down by the timeline
+renderers) with the renderer of its tool.
+`CodingAgentRenderer` splits its bash commands on `sub_turn_index` itself.
+After the answer starts, only a tool packet that opens a new group (the packet
+that makes the group a timeline step) is a new tool call and sets
+`finalAnswerComing` back to false. A later packet of a known group, such as a
+code mode closing record, joins that group, and the answer stays shown. The
+closing record follows the answer both live and on replay, and both give the
+same groups.
+The mobile app copies these rules in `mobile/src/chat/timeline/packetHelpers.ts`
+and `mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both.
+
+**Code mode steps.** Code mode runs behind the scenes: the timeline shows the
+tool calls a program makes, not the program.
+`app/app/message/messageComponents/timeline/transformers.ts:expandCodeModeSteps`
+turns each nested call of an `execute_code` or `wait_code` group into its own
+step, drawn by that tool's renderer as a direct call would be. The packet
+processor splits a group's nested calls once per packet into
+`GroupedPacket.nestedCalls` with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+It reuses the `NestedCall` object of each unchanged call, and
+`expandCodeModeSteps` reuses the step it made for that object, so memoized
+renderers of finished calls do not redraw. A cell reports a
+call in every observation until the call ends, so the latest report replaces
+the earlier ones in place; the cell id from `code_mode_start` or
+`code_mode_delta` links the observations. The program, its output, `wait_code`
+calls, yields and closing records have no step. A program without tool calls
+shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
+in one pass: a started program whose latest observation is open and whose
+cell has no running call sets it, and the timeline header reads "Working".
+The header names a step's activity from its own first packet; nested packets
+do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
+so pacing still knows restored steps. A turn group's React key is the key of
+its first step, not its position, because a cell's new call can move later
+steps into another turn group. Concurrent calls of one program show as
+sequential steps, not parallel tabs: on replay the backend emits each call's
+packets one after another, and the saved calls have no start or end order, so
+the client cannot tell which calls overlapped. Mobile uses the same functions
+in `mobile/src/chat/timeline/transformers.ts`.
+
+**Stop reasons.** `StopReason` (`app/app/services/streamingModels.ts`) is
+`finished`, `user_cancelled` or `timed_out`. `AgentMessage` shows "User has
+stopped generation" for a user stop with no answer, and "The response stopped
+because it reached its time limit." under the answer for `timed_out`. Mobile
+`MessageRow` shows the same texts.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at

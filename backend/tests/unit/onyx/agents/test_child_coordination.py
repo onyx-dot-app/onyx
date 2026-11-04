@@ -186,7 +186,7 @@ def test_child_reuse_preserves_old_records_and_rejects_stale_tool_capabilities()
     None
 ):
     requests: list[list[str]] = []
-    budgets: list[int] = []
+    budgets: list[int | None] = []
     spawned: SpawnResult | None = None
     prior_control: AgentControl | None = None
     initial = UserMessage(content="first task")
