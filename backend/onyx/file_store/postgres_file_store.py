@@ -6,6 +6,7 @@ eliminating the need for an external S3/MinIO service.
 
 import tempfile
 import uuid
+from datetime import timedelta
 from io import BytesIO
 from typing import IO, Any, cast
 
@@ -36,7 +37,8 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, PresignedUrlsNotSupportedError
+from onyx.file_store.models import PresignedRequest, PresignedUpload
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 
@@ -346,6 +348,36 @@ class PostgresBackedFileStore(FileStore):
     def list_files_by_prefix(self, prefix: str) -> list[FileRecord]:
         with get_session_with_current_tenant() as session:
             return get_filerecord_by_prefix(prefix=prefix, db_session=session)
+
+    # Large Objects have no URL, so callers stream files through the api_server.
+    def supports_presigned_urls(self) -> bool:
+        return False
+
+    def presign_download(
+        self,
+        file_id: str,  # noqa: ARG002
+        ttl: timedelta | None = None,  # noqa: ARG002
+        db_session: Session | None = None,  # noqa: ARG002
+    ) -> PresignedRequest:
+        raise PresignedUrlsNotSupportedError("The Postgres file store has no URLs")
+
+    def presign_upload(
+        self,
+        display_name: str | None,  # noqa: ARG002
+        file_origin: FileOrigin,  # noqa: ARG002
+        file_type: str,  # noqa: ARG002
+        size: int,  # noqa: ARG002
+        sha256: str,  # noqa: ARG002
+        ttl: timedelta | None = None,  # noqa: ARG002
+    ) -> PresignedUpload:
+        raise PresignedUrlsNotSupportedError("The Postgres file store has no URLs")
+
+    def finalize_presigned_upload(
+        self,
+        pending_upload_id: str,  # noqa: ARG002
+        db_session: Session | None = None,  # noqa: ARG002
+    ) -> str:
+        raise PresignedUrlsNotSupportedError("The Postgres file store has no URLs")
 
     @staticmethod
     def _read_content_bytes(content: IO) -> bytes:

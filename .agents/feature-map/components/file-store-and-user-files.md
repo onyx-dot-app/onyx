@@ -224,7 +224,10 @@ preview.
     failed MinIO write leaves an out-of-sync marker for
     `python -m onyx.file_store.legacy_copy`. A new method that writes, deletes
     or reads objects must use the same helpers, or files written before the
-    upgrade disappear.
+    upgrade disappear. A presigned upload skips the dual write, so its finalize
+    leaves the marker instead
+    (`file_store/file_store.py:S3BackedFileStore._on_presigned_upload_finalized`),
+    and a file only in MinIO gets no download URL.
 
 ---
 

@@ -2128,6 +2128,11 @@ S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
 )
 
+# Presigned file store URLs. Keep them short: an S3 URL also stops working when
+# the session credentials that signed it expire.
+FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS = 5 * 60
+FILE_STORE_PRESIGN_MAX_TTL_SECONDS = 15 * 60
+
 # The bundled MinIO that releases before the object store wrote to. A hand-run
 # upgrade keeps this endpoint in .env, so the files stay in MinIO.
 BUNDLED_LEGACY_MINIO_ENDPOINT_URL = "http://minio:9000"
