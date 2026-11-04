@@ -159,6 +159,12 @@ def _flush_batch(
         request_id=metadata.request_id,
         adapter=adapter,
         skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
+        written_search_settings_id=search_settings.id,
+        # A targeted run never stamps the hash. If a reindex builds, or starts
+        # during this batch, a stamped hash would make the poll after the swap
+        # skip a document the FUTURE twin failed on. The next poll re-indexes the
+        # document once more instead.
+        stamp_content_hash=False,
     )
 
     failed_ids: set[str] = set()
