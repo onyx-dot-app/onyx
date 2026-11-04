@@ -17,6 +17,10 @@
     {
       "name": "opal",
       "specifier": "./tools/oxlint/opal/index.ts"
+    },
+    {
+      "name": "navigation",
+      "specifier": "./tools/oxlint/navigation/index.ts"
     }
   ],
   "options": {
@@ -26,6 +30,7 @@
     "correctness": "error"
   },
   "rules": {
+    "navigation/no-naked-navigation": "error",
     "nextjs/no-img-element": "off",
     "jsx-a11y/prefer-tag-over-role": "off",
     "react/exhaustive-deps": "off",
@@ -108,6 +113,23 @@
     ]
   },
   "overrides": [
+    {
+      // @opal/navigation is where navigation lives, and tests use paths as
+      // data.
+      "files": [
+        "lib/opal/src/navigation/**",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "**/__mocks__/**",
+        "tests/**"
+      ],
+      "rules": {
+        "navigation/no-naked-navigation": "off"
+      }
+    },
     {
       "files": [
         "**/*.test.ts",
@@ -506,7 +528,6 @@
         "src/lib/tools/components/SwitchList.tsx",
         "src/refresh-components/Attachment.tsx",
         "src/refresh-components/ConnectionProviderIcon.tsx",
-        "src/refresh-components/Divider.tsx",
         "src/refresh-components/Keycap.tsx",
         "src/refresh-components/ScrollIndicatorDiv.tsx",
         "src/refresh-components/TextSeparator.tsx",

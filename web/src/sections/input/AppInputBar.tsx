@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import React, {
   useCallback,
@@ -22,7 +23,7 @@ import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { effectiveChatForcedToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
@@ -231,6 +232,7 @@ const AppInputBar = React.memo(
     const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
     const isTTSActuallySpeaking = isTTSPlaying || isManualTTSPlaying;
     const appPosition = useAppPosition();
+    const navigation = useNavigation();
     const isNewSession = appPosition.isNewSession();
     const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
@@ -1064,7 +1066,7 @@ const AppInputBar = React.memo(
                         sizePreset="main-ui"
                         rounding={2}
                         key="create-new"
-                        href="/app/settings/chat-preferences"
+                        {...navigation.linkTo("/app/settings/chat-preferences")}
                         icon={SvgPlus}
                         state={
                           tabbingIconIndex === sortedFilteredPrompts.length

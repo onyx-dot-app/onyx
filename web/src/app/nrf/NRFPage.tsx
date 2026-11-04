@@ -1,8 +1,8 @@
 "use client";
 
+import { useSearchParams, useNavigation } from "@opal/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -65,6 +65,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   // Shared with the tools popover in AppInputBar below. Mounted by the route.
   const { user, authTypeMetadata, refreshUser } = useUser();
 
@@ -699,7 +700,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       if (window.top) {
                         window.top.location.href = "/auth/login";
                       } else {
-                        window.location.href = "/auth/login";
+                        navigation.load("/auth/login");
                       }
                     }}
                   >
@@ -717,7 +718,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
+            navigation.load(ADMIN_ROUTES.LLM_MODELS.path);
           }}
         >
           {t("nrf.page.setupLlmButton.label")}

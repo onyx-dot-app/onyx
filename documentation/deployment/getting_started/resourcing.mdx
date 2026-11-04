@@ -95,7 +95,8 @@ The other Onyx components keep the sizes in the tables above.
 ### Sizing Calculator
 
 Use the calculator to estimate the OpenSearch storage, memory, and cluster size for your data.
-Step 1 estimates what your data needs. Step 2 puts that data on OpenSearch nodes.
+Step 1 estimates what your data needs. Start from your total storage, from the item count of each source,
+such as 2 million Google Docs, or from your number of employees. Step 2 puts that data on OpenSearch nodes.
 
 <OpenSearchSizingCalculator />
 
@@ -105,7 +106,9 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 
 | Value | Estimate | Basis |
 | --- | --- | --- |
-| Text per GB of storage | 40% for text files, 12% for office files, 4% for PDFs and slides, 5% for code | Estimate. Onyx indexes only the documentation files in a code repository. |
+| Text per GB of storage | 40% for text files, 12% for office files, 8% for email, 5% for code, 4% for PDFs and slides | Estimate. Most mailbox storage is attachments and HTML. Onyx indexes only the documentation files in a code repository. |
+| Chunks per item | 7 per document, 12 per PDF, 9 per slide deck, 10 per spreadsheet, 1 per image, 4 per wiki page, 2 per ticket, 1 per chat thread, 4 per email thread, 4 per CRM record, 12 per call, 6 per web page | Mean across Onyx Cloud tenants. Most items are smaller, but large ones set the total. The spreadsheet value is an estimate: Onyx indexes at most 24 chunks of a spreadsheet by default (`TABULAR_MAX_CHUNKS_PER_WORKBOOK`), and spreadsheets indexed with that limit average about 4 chunks. The estimate is higher to allow for large workbooks. Onyx makes one document from each chat or email thread. Change the value if you know your data. |
+| Chunks per employee per year | 1,500 | Estimate from managed deployments, which range from about 200 to 1,500. Each year, one employee adds about 50 files (500 chunks), 100 email threads (400), 300 chat threads (300), 50 tickets (100), 25 wiki pages (100), and 100 chunks from other sources. If every employee's email is indexed, email is about 4,000 chunks instead of 400, so the rate becomes about 5,100. Older years usually add less than recent ones, so a long history errs on the high side. |
 | Memory for vector search | Node RAM minus the JVM heap | The heap uses half of the RAM, at most 31 GB. The calculator counts 80% of the rest for vectors. |
 | Memory per data node | 64 GB or less | The JVM heap stops at about 31 GB. For more data, add nodes instead of larger nodes. |
 | Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |
@@ -113,8 +116,9 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 
 <Note>
   The calculator gives a planning estimate. Real chunk counts depend on your documents. Each short document,
-  such as a chat message or a ticket, uses at least one chunk, so many short documents raise the count.
-  After the first indexing run, compare the estimate with the index size that OpenSearch reports.
+  such as a chat thread or a ticket, uses at least one chunk, so many short documents raise the count.
+  Total storage counts no chunks for images. Onyx indexes each image as one chunk, so if you index many images,
+  use Each source. After the first indexing run, compare the estimate with the index size that OpenSearch reports.
 </Note>
 
 ### Memory

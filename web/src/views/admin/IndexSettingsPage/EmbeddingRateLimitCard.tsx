@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { Card, InputNumber } from "@opal/components";
 import { Content, InputHorizontal, toast } from "@opal/layouts";
@@ -40,7 +40,7 @@ function inRange(value: number, max: number): boolean {
  */
 export default function EmbeddingRateLimitCard() {
   const t = useTranslations("admin.indexSettings.embeddingRateLimit");
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
 
   const savedRequests = settings.embedding_rate_limit_requests ?? null;
@@ -84,7 +84,7 @@ export default function EmbeddingRateLimitCard() {
           embedding_rate_limit_requests: nextRequests,
           embedding_rate_limit_period_seconds: nextPeriod,
         });
-        router.refresh();
+        navigation.refresh();
         await mutate(SWR_KEYS.settings);
       } catch (error) {
         // The stored values are unknown now, so the next commit always saves.

@@ -1,7 +1,7 @@
 "use client";
 
+import { usePathname } from "@opal/navigation";
 import { type ReactElement, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, MessageCard, Modal, Text } from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
@@ -117,7 +117,7 @@ async function claimPopup(): Promise<ResourcePopupResponse> {
 }
 
 export function OpenSearchResourcePopup(): ReactElement | null {
-  const pathname: string = usePathname();
+  const pathname = usePathname();
   const { user, isAdmin } = useUser();
   // Login refreshes the user before redirecting; claim only after entering the app.
   const userId: string | undefined =

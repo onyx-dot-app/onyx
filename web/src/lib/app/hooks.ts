@@ -1,9 +1,9 @@
 "use client";
 
+import { usePathname } from "@opal/navigation";
 import { useLayoutEffect, useSyncExternalStore } from "react";
-import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCurrentSessionPersonaId } from "@/app/app/stores/useChatSessionStore";

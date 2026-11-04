@@ -39,6 +39,8 @@ export default function OpalStringsBridge({
       inputUploadAttached: t("inputUpload.attached"),
       inputUploadDropToAdd: t("inputUpload.dropToAdd"),
       inputUploadDropToReplace: t("inputUpload.dropToReplace"),
+      inputUploadSelect: t("inputUpload.select"),
+      inputMultiUploadSelect: t("inputMultiUpload.select"),
       clearFilter: t("common.clearFilter"),
       date: t("common.date"),
       dateRange: t("dateRange.label"),

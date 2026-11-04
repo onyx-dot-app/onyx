@@ -16082,14 +16082,16 @@
     "inputMultiUpload": {
       "placeholder": "Dateien hinzufügen…",
       "dropToAdd": "Dateien hier ablegen, um sie hinzuzufügen",
-      "dropToAddMore": "Hier ablegen, um weitere Dateien hinzuzufügen"
+      "dropToAddMore": "Hier ablegen, um weitere Dateien hinzuzufügen",
+      "select": "Dateien auswählen"
     },
     "inputUpload": {
       "placeholder": "Datei hinzufügen…",
       "pasted": "Eingefügter Text",
       "attached": "Datei angehängt",
       "dropToAdd": "Datei hier ablegen, um sie hinzuzufügen",
-      "dropToReplace": "Hier ablegen, um die Datei zu ersetzen"
+      "dropToReplace": "Hier ablegen, um die Datei zu ersetzen",
+      "select": "Datei auswählen"
     },
     "inputImage": {
       "alt": "Bild",

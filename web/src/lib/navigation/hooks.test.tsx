@@ -1,11 +1,14 @@
 import { renderHook } from "@tests/setup/test-utils";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 
 let mockPathname = "/app";
 let mockParams = new URLSearchParams();
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   usePathname: () => mockPathname,
   useSearchParams: () => mockParams,
   useRouter: () => mockRouter,

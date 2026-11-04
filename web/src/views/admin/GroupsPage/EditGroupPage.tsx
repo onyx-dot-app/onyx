@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
@@ -75,7 +75,7 @@ interface EditGroupPageProps {
 
 function EditGroupPage({ groupId }: EditGroupPageProps) {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const settings = useSettings();
   const { user } = useUser();
@@ -531,7 +531,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       // Membership and the incognito flag both feed chat availability.
       mutate(SWR_KEYS.incognitoAvailability);
       toast.success(t("edit.toasts.updated", { name: trimmed }));
-      router.push("/admin/groups");
+      navigation.go("/admin/groups");
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("edit.toasts.updateFailed")
@@ -548,7 +548,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       await deleteGroup(groupId);
       refreshGroupLists(mutate);
       toast.success(t("edit.toasts.deleted", { name: group?.name ?? "" }));
-      router.push("/admin/groups");
+      navigation.go("/admin/groups");
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("edit.toasts.deleteFailed")
@@ -607,7 +607,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           icon={SvgUsers}
           title={t("edit.header.title")}
           divider
-          cancel={() => router.push("/admin/groups")}
+          cancel={() => navigation.go("/admin/groups")}
           actions={headerActions}
         />
 

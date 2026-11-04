@@ -126,10 +126,13 @@ sessions in memory. It drops only idle ones: not current, in `input`, with no
 queued messages, and known not to be incognito (or still empty). An incognito chat cannot be
 rebuilt from the server, so the tab holds its only copy. A dropped chat loads
 from the server again when the user opens it, so state kept only in the store
-does not survive it. Within `/app`,
-`web/src/lib/position/hooks.ts:AppPosition` switches views by writing the URL
-with the history API, not a server navigation; in-app links use its `linkTo*`
-props.
+does not survive it. Navigation goes through
+`web/lib/opal/src/navigation/hooks.ts:Navigation.go`: it writes the URL with the
+history API first, so the tabs follow the click, then asks Next to render a new
+route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
+`web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
+`AppPage` renders itself, so writing the URL is the whole switch; in-app links
+use its `linkTo*` props.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.

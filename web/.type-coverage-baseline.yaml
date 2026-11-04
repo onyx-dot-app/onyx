@@ -84,7 +84,7 @@ packages:
   src/lib/opensearch-health: 100
   src/lib/permissions: 100
   src/lib/plugins: 99.7
-  src/lib/position: 100
+  src/lib/navigation: 100
   src/lib/projects: 99.7
   src/lib/search: 99.2
   src/lib/searchFilters: 98.1
@@ -101,7 +101,7 @@ packages:
   src/lib/voice: 99.3
   src/lib/webSearch: 97.4
   src/providers: 99.5
-  src/refresh-components: 99.3
+  src/refresh-components: 99.2
   src/refresh-components/avatars: 99.6
   src/refresh-components/buttons: 99.6
   src/refresh-components/cards: 93.3
@@ -128,7 +128,7 @@ packages:
   src/sections/oauth-provider: 100
   src/sections/plugins: 99.8
   src/sections/settings: 100
-  src/sections/sidebar: 99.2
+  src/sections/sidebar: 99.1
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4

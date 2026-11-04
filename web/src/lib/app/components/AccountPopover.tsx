@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import { useRef, useState } from "react";
 import { LOGOUT_DISABLED } from "@/lib/constants";
 import { preload } from "swr";
@@ -21,7 +22,6 @@ import {
   type DropdownMenuItem,
   type DropdownView,
 } from "@opal/components";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import NotificationsPopover from "@/lib/app/components/NotificationsPopover";
 import {
   SvgBell,
@@ -35,7 +35,7 @@ import {
   SvgNotificationBubble,
 } from "@opal/icons";
 import { ContentAction, Section, toast, useSidebarFolded } from "@opal/layouts";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
@@ -56,20 +56,18 @@ function useSettingsItems({
   const { user, userResolution } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
-  const router = useRouter();
+  const navigation = useNavigation();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const query = useSearchParams().toString();
+  const currentUrl = query ? `${pathname}?${query}` : pathname;
   const isAnonymousUser =
     user?.is_anonymous_user || checkUserIsNoAuthUser(user?.id ?? "");
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
   const showLogin = isAnonymousUser;
   const userRowRef = useRef<HTMLDivElement>(null);
 
-  const query = searchParams?.toString();
-  const currentUrl = query ? `${pathname}?${query}` : pathname;
-
   const handleLogin = () => {
-    router.push(loginPath({ next: currentUrl }));
+    navigation.go(loginPath({ next: currentUrl }));
   };
 
   const logoutFailedMessage = t("logoutFailed.message");
@@ -84,7 +82,9 @@ function useSettingsItems({
 
         // Held on the login button: with SSO as the only way in, an auto
         // start would sign the user straight back in through the IdP session.
-        router.push(loginPath({ next: currentUrl, autoRedirectToSso: false }));
+        navigation.go(
+          loginPath({ next: currentUrl, autoRedirectToSso: false })
+        );
       })
 
       .catch(() => {

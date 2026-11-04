@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   useId,
   useState,
@@ -123,6 +124,7 @@ export default function MCPAuthenticationPage({
   const formId = useId();
   const t = useTranslations("actions");
   const recommendedCopy = useTranslations("craft.llmPopover.recommended");
+  const navigation = useNavigation();
   const { appName } = useSettings();
   const { user } = useUser();
   const [initialValues] = useState(() => {
@@ -329,7 +331,7 @@ export default function MCPAuthenticationPage({
       clearMcpChatEnableIntent(chatEnableIntent);
       if (result.status === "authorization_required") {
         if (onAuthorize) onAuthorize(result.authorization_url);
-        else window.location.href = result.authorization_url;
+        else navigation.load(result.authorization_url);
         return;
       }
       persistedValues.current = values;

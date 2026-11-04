@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useId, useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
@@ -15,7 +16,6 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { InputHorizontal, InputVertical, toast } from "@opal/layouts";
 import useSWR, { useSWRConfig } from "swr";
-import { useRouter } from "next/navigation";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -99,7 +99,7 @@ export default function MCPServerDetailsPage({
   );
 
   const { user, userResolution } = useUser();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
   const {
@@ -268,7 +268,7 @@ export default function MCPServerDetailsPage({
         },
       });
       if (intent) {
-        router.push(
+        navigation.go(
           withPluginSearchParams(
             pluginDetailHref({ kind: "mcp", id: server.id }),
             {

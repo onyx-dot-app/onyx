@@ -3,11 +3,15 @@ import { render, screen, setupUser } from "@tests/setup/test-utils";
 import BuildSidebar from "@/app/craft/components/SideBar";
 import { memberPluginMessages } from "@/sections/plugins/__tests__/memberPluginFixtures";
 
-const mockPush = jest.fn();
+const mockReplace = jest.fn();
 const mockAction = jest.fn();
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockReplace }),
   usePathname: () => "/craft/v1/plugins",
+  useSearchParams: () => new URLSearchParams(),
 }));
 jest.mock("@/app/craft/contexts/BuildContext", () => ({
   useBuildContext: () => ({
@@ -66,7 +70,7 @@ test("Craft navigation opens Plugins at the unified route", async () => {
     </NextIntlClientProvider>
   );
   await setupUser().click(screen.getByRole("button", { name: /^Plugins$/ }));
-  expect(mockPush).toHaveBeenCalledWith("/craft/v1/plugins");
+  expect(mockReplace).toHaveBeenCalledWith("/craft/v1/plugins");
   expect(
     screen.queryByRole("button", { name: /^Apps$/ })
   ).not.toBeInTheDocument();

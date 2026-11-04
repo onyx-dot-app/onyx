@@ -25,6 +25,9 @@ const mockRouter = { push: mockPush, replace: mockReplace };
 let mockQuery = new URLSearchParams();
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   useSearchParams: () => mockQuery,
 }));
@@ -81,6 +84,7 @@ const json = (body: unknown, status = 200) =>
 beforeEach(() => {
   toast.clearAll();
   mockFullAdmin = true;
+  window.history.replaceState(null, "", "/");
   mockQuery = new URLSearchParams();
   mockPush.mockClear();
   mockReplace.mockClear();

@@ -14,10 +14,18 @@ import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useParams: () => ({ id: "task-id" }),
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => "/craft/v1/tasks/task-id",
 }));
+
+beforeEach(() => {
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/craft/v1/tasks/task-id");
+});
 
 const task: ScheduledTaskDetail = {
   id: "task-id",

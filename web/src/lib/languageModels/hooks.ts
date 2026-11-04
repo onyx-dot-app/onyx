@@ -1,7 +1,7 @@
 "use client";
 
+import { usePathname } from "@opal/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";

@@ -11,7 +11,7 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@opal/navigation/next";
 import {
   Button,
   Divider,

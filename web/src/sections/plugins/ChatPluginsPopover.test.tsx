@@ -30,6 +30,9 @@ const mockRouter = { push: jest.fn(), replace: jest.fn() };
 let mockChatId: string | null = "chat-a";
 let mockProjectId: number | null = null;
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   usePathname: () => "/app",
   useSearchParams: () =>
@@ -37,7 +40,7 @@ jest.mock("next/navigation", () => ({
       mockChatId ? `chatId=${mockChatId}` : `projectId=${mockProjectId}`
     ),
 }));
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
     agent: () => null,

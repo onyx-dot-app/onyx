@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState, useMemo, useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
@@ -106,6 +107,7 @@ interface CheckoutViewProps {
 export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const t = useTranslations("admin.billing");
   const locale = useLocale();
+  const navigation = useNavigation();
   const { user } = useUser();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 
@@ -150,7 +152,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
       });
 
       if (response.stripe_checkout_url) {
-        window.location.href = response.stripe_checkout_url;
+        navigation.load(response.stripe_checkout_url);
       } else {
         throw new Error("Invalid response from checkout session");
       }

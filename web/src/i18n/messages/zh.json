@@ -16082,14 +16082,16 @@
     "inputMultiUpload": {
       "placeholder": "添加文件…",
       "dropToAdd": "将文件拖放到此处以添加",
-      "dropToAddMore": "拖放到此处以添加更多文件"
+      "dropToAddMore": "拖放到此处以添加更多文件",
+      "select": "选择文件"
     },
     "inputUpload": {
       "placeholder": "添加文件…",
       "pasted": "已粘贴的文本",
       "attached": "已附加文件",
       "dropToAdd": "将文件拖放到此处以添加",
-      "dropToReplace": "拖放到此处以替换文件"
+      "dropToReplace": "拖放到此处以替换文件",
+      "select": "选择文件"
     },
     "inputImage": {
       "alt": "图片",

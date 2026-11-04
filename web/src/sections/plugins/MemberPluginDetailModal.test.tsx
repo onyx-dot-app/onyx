@@ -27,8 +27,12 @@ import {
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   usePathname: () => "/app/plugins",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 let mockCraftEnabled: boolean | undefined = true;

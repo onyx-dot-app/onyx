@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import {
   Button,
@@ -77,7 +77,7 @@ export default function ScheduleTaskForm({
 }: ScheduleTaskFormProps) {
   const t = useTranslations("craft.tasks.form");
   const tActionPolicies = useTranslations("craft.actionPolicies");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
@@ -149,7 +149,7 @@ export default function ScheduleTaskForm({
       const connectionPath = pickerEntryConnectionPath(entry);
       if (connectionPath) {
         setSkillPicker((s) => ({ ...s, open: false }));
-        router.push(connectionPath);
+        navigation.go(connectionPath);
         return;
       }
       if (!skillPicker.open) return;
@@ -172,7 +172,7 @@ export default function ScheduleTaskForm({
 
       setSkillPicker((prev) => (prev.open ? { ...prev, open: false } : prev));
     },
-    [prompt, router, skillPicker]
+    [prompt, navigation, skillPicker]
   );
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);
@@ -232,7 +232,7 @@ export default function ScheduleTaskForm({
           await mutate(SWR_KEYS.taskActionPolicies(updated.id));
           await mutate(SWR_KEYS.scheduledTasks);
           toast.success(t("toasts.updated"));
-          router.push(taskDetailPath(updated.id));
+          navigation.go(taskDetailPath(updated.id));
         } else {
           const body: ScheduledTaskCreateBody = {
             name: trimmedName,
@@ -247,7 +247,7 @@ export default function ScheduleTaskForm({
           toast.success(
             runImmediately ? t("toasts.createdAndQueued") : t("toasts.created")
           );
-          router.push(TASKS_PATH);
+          navigation.go(TASKS_PATH);
         }
       } catch (err) {
         toast.error(
@@ -265,7 +265,7 @@ export default function ScheduleTaskForm({
       mutate,
       payload,
       actionPolicies,
-      router,
+      navigation,
       trimmedName,
       trimmedPrompt,
       t,
@@ -278,7 +278,7 @@ export default function ScheduleTaskForm({
         icon={SvgClock}
         title={title}
         description={description}
-        cancel={() => router.push(TASKS_PATH)}
+        cancel={() => navigation.go(TASKS_PATH)}
         divider
         actions={[
           ...(!isEdit

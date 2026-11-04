@@ -16082,14 +16082,16 @@
     "inputMultiUpload": {
       "placeholder": "أضف ملفات…",
       "dropToAdd": "أفلت الملفات هنا لإضافتها",
-      "dropToAddMore": "أفلت هنا لإضافة مزيد من الملفات"
+      "dropToAddMore": "أفلت هنا لإضافة مزيد من الملفات",
+      "select": "اختر ملفات"
     },
     "inputUpload": {
       "placeholder": "أضف ملفًا…",
       "pasted": "نص ملصق",
       "attached": "تم إرفاق ملف",
       "dropToAdd": "أفلت الملف هنا لإضافته",
-      "dropToReplace": "أفلت هنا لاستبدال الملف"
+      "dropToReplace": "أفلت هنا لاستبدال الملف",
+      "select": "اختر ملفًا"
     },
     "inputImage": {
       "alt": "صورة",

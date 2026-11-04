@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 
 interface PageProps {

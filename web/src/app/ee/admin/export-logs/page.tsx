@@ -1,5 +1,7 @@
 "use client";
 
+import type { Route } from "next";
+import { type Navigation, useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -56,14 +58,21 @@ function extractFilename(response: Response): string {
 
 // Mirrors the export id into the URL (shallow, no navigation) so a refresh or
 // shared tab can re-attach to the export.
-function writeExportIdToUrl(exportId: string | null): void {
+function writeExportIdToUrl(
+  navigation: Navigation,
+  exportId: string | null
+): void {
   const url = new URL(window.location.href);
   if (exportId === null) {
     url.searchParams.delete(EXPORT_ID_QUERY_PARAM);
   } else {
     url.searchParams.set(EXPORT_ID_QUERY_PARAM, exportId);
   }
-  window.history.replaceState({}, "", url.toString());
+  // SAFETY: the current page with its query changed is a page of the app.
+  navigation.go(`${url.pathname}${url.search}` as Route, {
+    replace: true,
+    shallow: true,
+  });
 }
 
 type ExportLogsTranslate = ReturnType<
@@ -122,6 +131,7 @@ function WorkerStatusRow({
 export default function ExportLogsPage() {
   const t = useTranslations("admin.exportLogs");
   const adminRouteTitle = useAdminRouteTitle();
+  const navigation = useNavigation();
   const [exportId, setExportId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -148,9 +158,9 @@ export default function ExportLogsPage() {
     if (EXPORT_ID_PATTERN.test(fromUrl)) {
       setExportId(fromUrl);
     } else {
-      writeExportIdToUrl(null);
+      writeExportIdToUrl(navigation, null);
     }
-  }, []);
+  }, [navigation]);
 
   const { data: status, error: statusError } = useSWR<LogExportStatus>(
     exportId === null ? null : SWR_KEYS.logExportStatus(exportId),
@@ -195,9 +205,9 @@ export default function ExportLogsPage() {
       return;
     }
     consecutivePollFailuresRef.current = 0;
-    writeExportIdToUrl(null);
+    writeExportIdToUrl(navigation, null);
     setExportId(null);
-  }, [status, statusError, t]);
+  }, [status, statusError, t, navigation]);
 
   useEffect(() => {
     return () => {
@@ -289,7 +299,7 @@ export default function ExportLogsPage() {
       const body: { export_id: string } = await response.json();
       armedExportIdRef.current = body.export_id;
       setExportId(body.export_id);
-      writeExportIdToUrl(body.export_id);
+      writeExportIdToUrl(navigation, body.export_id);
     } catch (error) {
       console.error("Error starting log export:", error);
       toast.error(t("toasts.startFailed.message"));

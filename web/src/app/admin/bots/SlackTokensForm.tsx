@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { FieldLabel, TextFormField } from "@/components/Field";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { useTranslations } from "next-intl";
@@ -16,17 +17,16 @@ export const SlackTokensForm = ({
   initialValues,
   existingSlackBotId,
   refreshSlackBot,
-  router,
   onValuesChange,
 }: {
   isUpdate: boolean;
   initialValues: any;
   existingSlackBotId?: number;
   refreshSlackBot?: () => void;
-  router: any;
   onValuesChange?: (values: any) => void;
 }) => {
   const t = useTranslations("admin.slackBots");
+  const navigation = useNavigation();
 
   useEffect(() => {
     if (onValuesChange) {
@@ -66,7 +66,7 @@ export const SlackTokensForm = ({
               ? t("tokensForm.updated.toast")
               : t("tokensForm.created.toast")
           );
-          router.push(`/admin/bots/${encodeURIComponent(botId)}`);
+          navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
           const responseJson = await response.json();
           let errorMsg = responseJson.detail || responseJson.message;

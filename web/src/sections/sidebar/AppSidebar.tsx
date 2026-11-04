@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   useCallback,
   useMemo,
@@ -9,7 +10,7 @@ import {
   useRef,
 } from "react";
 import useNotifications from "@/hooks/useNotifications";
-import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -68,7 +69,7 @@ import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
 import { getFirstPermittedAdminRoute } from "@/lib/permissions/utils";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
@@ -219,7 +220,7 @@ export default function AppSidebar() {
   const tCraftUpgrade = useTranslations("craft.upgrade");
   const moveChatErrorMessage = t("appSidebar.moveChatError.message");
   const { folded } = useSidebarState();
-  const router = useRouter();
+  const navigation = useNavigation();
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
@@ -505,6 +506,7 @@ export default function AppSidebar() {
 
   const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
+  const craftLink = navigation.linkTo(CRAFT_PATH, { scroll: false });
   const createProjectModal = useCreateModal();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
@@ -518,7 +520,7 @@ export default function AppSidebar() {
             ? SvgOnyxOctagon
             : SvgMoreHorizontal
         }
-        href="/app/agents"
+        {...navigation.linkTo("/app/agents", { scroll: false })}
         selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
@@ -601,7 +603,7 @@ export default function AppSidebar() {
               onTryBuildMode={() => {
                 setShowIntroAnimation(false);
                 dismissBuildModeNotification();
-                router.push(CRAFT_PATH);
+                navigation.go(CRAFT_PATH);
               }}
             />
           </motion.div>
@@ -648,10 +650,13 @@ export default function AppSidebar() {
               >
                 <SidebarTab
                   icon={SvgDevKit}
-                  href={hasCraftTier ? CRAFT_PATH : undefined}
+                  href={hasCraftTier ? craftLink.href : undefined}
                   onClick={
                     hasCraftTier
-                      ? () => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)
+                      ? (event) => {
+                          track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR);
+                          craftLink.onClick(event);
+                        }
                       : undefined
                   }
                   rightChildren={
@@ -679,7 +684,7 @@ export default function AppSidebar() {
           )}
           <SidebarTab
             icon={SvgPlug}
-            href="/app/plugins"
+            {...navigation.linkTo("/app/plugins", { scroll: false })}
             selected={activeSidebarTab.isPlugins()}
           >
             {t("appSidebar.plugins.label")}
@@ -766,7 +771,11 @@ export default function AppSidebar() {
           <div>
             {hasAdminAccess && (
               <SidebarTab
-                href={getFirstPermittedAdminRoute(adminCapabilities)}
+                {...navigation.linkTo(
+                  // SAFETY: the first permitted admin route is a page of this app.
+                  getFirstPermittedAdminRoute(adminCapabilities) as Route,
+                  { scroll: false }
+                )}
                 icon={SvgSettings}
               >
                 {t("appSidebar.adminPanel.label")}

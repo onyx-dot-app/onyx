@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
@@ -82,7 +82,7 @@ import { getActionIcon } from "@/lib/tools/utils";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { MCPTool } from "@/lib/mcp/types";
 import { MCPServerCard } from "@/lib/mcp/components";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
@@ -439,7 +439,7 @@ export default function AgentEditorPage({
 }: AgentEditorPageProps) {
   const t = useTranslations("agents");
   const appPosition = useAppPosition();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
@@ -974,7 +974,7 @@ export default function AgentEditorPage({
       toast.success(t("editor.toasts.deleted"));
       deleteAgentModal.toggle(false);
       await refreshAgents();
-      router.push("/app/agents");
+      navigation.go("/app/agents");
     } catch (e) {
       console.error("Delete agent error:", e);
       toast.error(

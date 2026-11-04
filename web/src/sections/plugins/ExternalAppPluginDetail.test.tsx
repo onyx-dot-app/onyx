@@ -24,8 +24,12 @@ jest.mock("@/lib/settings/hooks", () => ({
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => "/admin/plugins/external-app/7",
+  useSearchParams: () => new URLSearchParams(),
 }));
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: () => ({ isGlobalHolder: mockFullAdmin }),
@@ -100,6 +104,7 @@ const slack: BuiltInExternalAppDescriptor = {
 };
 const slackApp: ExternalAppAdminResponse = { ...app, app_type: "SLACK" };
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   mockFullAdmin = false;
   mockCraftAvailable = true;
   mockPush.mockClear();

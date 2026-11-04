@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -53,6 +54,7 @@ export default function SetupCard({
 }: SetupCardProps) {
   const t = useTranslations("craft.setupCard");
   const tActionPolicies = useTranslations("craft.actionPolicies");
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,7 +235,9 @@ export default function SetupCard({
           {connected && (
             <Button
               prominence="tertiary"
-              href={`/craft/v1/plugins?actionPolicies=app-${externalAppId}`}
+              {...navigation.linkTo(
+                `/craft/v1/plugins?actionPolicies=app-${externalAppId}`
+              )}
             >
               {tActionPolicies("title")}
             </Button>

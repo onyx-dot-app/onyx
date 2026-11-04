@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useNavigation, usePathname } from "@opal/navigation";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
@@ -19,14 +19,14 @@ interface LayoutProps {
 }
 
 interface SettingsTab {
-  href: string;
+  href: Route;
   label: string;
 }
 
 export default function Layout({ children }: LayoutProps) {
   const t = useTranslations("settings.layout");
   const pathname = usePathname();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
@@ -44,20 +44,20 @@ export default function Layout({ children }: LayoutProps) {
       label: t("tabs.chatPreferences.label"),
     },
     ...(showAccountsAccessTab
-      ? [
+      ? ([
           {
             href: "/app/settings/accounts-access",
             label: t("tabs.accountsAccess.label"),
           },
-        ]
+        ] satisfies SettingsTab[])
       : []),
     ...(showGatewayTab
-      ? [
+      ? ([
           {
             href: "/app/settings/llm-gateway",
             label: t("tabs.llmGateway.label"),
           },
-        ]
+        ] satisfies SettingsTab[])
       : []),
     { href: "/app/settings/connectors", label: t("tabs.connectors.label") },
     { href: "/app/settings/usage", label: t("tabs.usage.label") },
@@ -93,7 +93,7 @@ export default function Layout({ children }: LayoutProps) {
               value={activeTab?.href ?? ""}
               onValueChange={(href) =>
                 // SAFETY: the options are the static hrefs in `tabs`.
-                router.push(href as Route, { scroll: false })
+                navigation.go(href as Route, { scroll: false })
               }
               placeholder={t("sectionSelect.placeholder")}
               options={tabs.map((tab) => ({
@@ -111,7 +111,7 @@ export default function Layout({ children }: LayoutProps) {
             {tabs.map((tab) => (
               <SidebarTab
                 key={tab.href}
-                href={tab.href}
+                {...navigation.linkTo(tab.href, { scroll: false })}
                 selected={pathname === tab.href}
               >
                 {tab.label}

@@ -1,12 +1,17 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
+import { IconLoader, PageLoader } from "@opal/loaders";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
-import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useAdminDocumentTitle } from "@/lib/app/hooks";
+import {
+  PendingRoute,
+  useNavigation,
+  usePathname,
+  useRouteRendering,
+} from "@opal/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
@@ -39,9 +44,13 @@ export default function AdminChrome({
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
+  // The proxy serves the EE pages under /admin/… URLs, but a direct visit to
+  // /ee/admin/… keeps that URL.
+  const base = pathname.startsWith("/ee/admin") ? "/ee/admin" : "/admin";
+  const routeRendering = useRouteRendering(base);
   const { vectorDbEnabled, isLoading, application_status } = useSettings();
   useAdminDocumentTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { adminCapabilities: liveAdminCapabilities, isUserLoading } = useUser();
 
   // Seed only in flight — otherwise logout would leave the page authorized by a stale seed.
@@ -61,15 +70,17 @@ export default function AdminChrome({
     if (!denied) return;
     // Some reach left → first permitted page; fully revoked → /app (else they'd bounce to an
     // admin page they still can't open).
-    router.replace(
+    navigation.go(
       (hasAnyAdminPermission(adminCapabilities)
         ? getFirstPermittedAdminRoute(adminCapabilities)
-        : "/app") as Route
+        : "/app") as Route,
+      { replace: true }
     );
-  }, [denied, router, adminCapabilities]);
+  }, [denied, navigation, adminCapabilities]);
 
   let content = children;
-  if (isVectorDbRequiredRoute(pathname)) {
+  // While the URL's page renders, the page being left stays as it is.
+  if (!routeRendering && isVectorDbRequiredRoute(pathname)) {
     if (isLoading) {
       content = (
         <Section padding={8}>
@@ -91,7 +102,7 @@ export default function AdminChrome({
             {markdown(t("adminChrome.paymentReminder.text"))}
           </Text>
           <div className="mt-2">
-            <Button width="full" href="/admin/billing">
+            <Button width="full" {...navigation.linkTo("/admin/billing")}>
               {t("adminChrome.paymentReminder.billingButton.label")}
             </Button>
           </div>
@@ -116,7 +127,11 @@ export default function AdminChrome({
           </RootLayout.Header>
         )}
         <OpenSearchResourceBanner />
-        <RootLayout.MainContent>{content}</RootLayout.MainContent>
+        <RootLayout.MainContent>
+          <PendingRoute base={base} loader={<PageLoader />}>
+            {content}
+          </PendingRoute>
+        </RootLayout.MainContent>
       </RootLayout.App>
     </RootLayout.Root>
   );

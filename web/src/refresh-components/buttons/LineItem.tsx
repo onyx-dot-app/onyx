@@ -1,9 +1,9 @@
+import { NavLink } from "@opal/navigation";
 import React, { useState } from "react";
 import { cn, richNodes } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import { OverflowText, Text, Tooltip, type TextFont } from "@opal/components";
 import { useOverflow } from "@opal/hooks";
-import Link from "next/link";
 import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
 import type { WithoutStyles } from "@opal/types";
@@ -378,8 +378,8 @@ export default function LineItem({
 
   if (!href) return content;
   return (
-    <Link href={href as Route} rel={rel} target={target}>
+    <NavLink href={href as Route} rel={rel} target={target}>
       {content}
-    </Link>
+    </NavLink>
   );
 }
