@@ -118,7 +118,7 @@ Vector search reads the vectors from memory, so the memory need grows with the n
 | CPU for search at peak | 75% | Stays under the 80% at which AWS recommends an alarm, with room for indexing and merges. Above it, searches queue and then fail. |
 | vCPUs per data node | 1 per 8, 4, or 2 GB of RAM | Memory-optimized (`r8g`), general purpose (`m8g`), or compute-optimized (`c8g`) nodes. The calculator picks the type whose vCPUs carry the search load on the nodes the data needs. |
 | Storage per data node | 3 TB or less | Larger disks only pay off with 1-bit quantization, and they make moving or replacing a node slow. For more storage, add nodes. |
-| Disk fill | 75% | OpenSearch stops placing shards on a node at 85% disk use |
+| Disk fill | 75% normally, 85% during a rebuild | OpenSearch stops placing new shards on a node at 85% disk use and moves shards off at 90%. A rebuild holds two indexes for hours or days, and its shards exist before the disk fills. |
 | Shard size | 15 GB or less | Amazon OpenSearch Service recommends 10 GB to 30 GB per shard for search workloads. The calculator aims low so the index can grow without a change of shard count. |
 
 <Note>
@@ -195,10 +195,10 @@ the calculator plans for 24 million chunks.
 
 | Setup | Index size, one copy | Memory for vector search, one copy | Cluster | Onyx settings |
 | --- | --- | --- | --- | --- |
-| Granite (384 dimensions), 2 copies, no search load | 106 GB | 38 GB | 2 nodes, 16 vCPUs, 128 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 2 vCPUs, 16 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Granite, 2 copies, 1 question per second at peak | 106 GB | 38 GB | 2 nodes, 32 vCPUs, 128 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
-| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 32 vCPUs, 64 GB RAM and 512 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite (384 dimensions), 2 copies, no search load | 106 GB | 38 GB | 2 nodes, 16 vCPUs, 128 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 2 vCPUs, 16 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Granite, 2 copies, 1 question per second at peak | 106 GB | 38 GB | 2 nodes, 32 vCPUs, 128 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
+| Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 32 vCPUs, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 
 The shard count makes the shard copies divide evenly over the nodes, so no node holds more than its share.
 1-bit quantization needs OpenSearch 3.6 or later. It stores vectors 32× smaller,

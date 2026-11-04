@@ -9,6 +9,9 @@ export const OpenSearchSizingCalculator = () => {
   const GRAPH_BYTES = 40;
   const DELETED_OVERHEAD = 1.05;
   const DISK_FILL = 0.75;
+  // A rebuild holds two indexes for hours or days. OpenSearch stops placing new shards on a node
+  // at 85% and starts moving them off at 90%; the rebuild's shards already exist by then.
+  const REBUILD_DISK_FILL = 0.85;
   const SHARD_BYTES = 15e9;
   const CACHE_SHARE_FOR_VECTORS = 0.8;
 
@@ -247,7 +250,7 @@ export const OpenSearchSizingCalculator = () => {
   const primariesForSize = Math.max(1, Math.ceil(indexOneCopy / SHARD_BYTES));
   const cacheFor = (ram) => (ram - Math.min(ram / 2, 31)) * CACHE_SHARE_FOR_VECTORS * 1e9;
   const layout = (c) => {
-    const provision = (indexOneCopy * c * (rebuildRoom ? 2 : 1)) / DISK_FILL;
+    const provision = Math.max((indexOneCopy * c) / DISK_FILL, rebuildRoom ? (indexOneCopy * c * 2) / REBUILD_DISK_FILL : 0);
     const hotAll = hotOneCopy * c;
     // Recommended memory is the smallest node size that fits the data and the search load on
     // one node per copy; otherwise the largest, so the cluster adds nodes instead of growing
@@ -732,7 +735,7 @@ export const OpenSearchSizingCalculator = () => {
               value: pct(rebuildRoom ? storageUse * 2 : storageUse),
               text:
                 (rebuildRoom ? "of storage used during a rebuild, " + pct(storageUse) + " normally" : "of storage holds the index") +
-                ". The plan allows " + pct(DISK_FILL) + ".",
+                ". The plan allows " + (rebuildRoom ? pct(REBUILD_DISK_FILL) + " during a rebuild and " : "") + pct(DISK_FILL) + (rebuildRoom ? " normally." : "."),
             })}
             {stat({ value: pct(memoryUse), text: "of the file cache holds vectors (" + fmtBytes(hotAll) + ")" })}
             {stat({ value: pct(cpuUse), text: "of vCPUs busy at peak search (" + fmtVcpus(vcpusForSearch * SEARCH_CPU_TARGET) + " of " + vcpusPerNode * nodes + ")" })}
