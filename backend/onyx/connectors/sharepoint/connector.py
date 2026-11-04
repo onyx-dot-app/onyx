@@ -383,6 +383,8 @@ def _convert_driveitem_to_document_with_permissions(
         metadata={"drive": drive.display_name},
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         file_id=staged_file_id,
+        source_mime_type=driveitem.mime_type,
+        source_size_bytes=driveitem.size,
     )
     return doc
 
