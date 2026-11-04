@@ -1932,6 +1932,37 @@ def test_hash_is_stamped_only_when_the_written_settings_are_present() -> None:
         stamp.assert_not_called()
 
 
+def test_pipeline_configures_from_the_written_settings() -> None:
+    """Chunking and enrichment follow the row whose index the batch writes,
+    looked up by the id the caller resolved, not by status."""
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_search_settings_by_id", return_value=search_settings
+        ) as lookup,
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=False,
+        ),
+        patch(f"{_PATCH_PREFIX}.index_doc_batch_with_handler") as handler,
+        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()),
+    ):
+        run_indexing_pipeline(
+            written_search_settings_id=7,
+            document_batch=[],
+            request_id=None,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+    assert lookup.call_args.args[1] == 7
+    assert handler.call_args.kwargs["written_search_settings_id"] == 7
+
+
 def test_caller_can_skip_the_hash_stamp() -> None:
     """A targeted re-index leaves the hash alone even on PRESENT, so a failed
     FUTURE twin cannot make the post-swap poll skip the doc."""
