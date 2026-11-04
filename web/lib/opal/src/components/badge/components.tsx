@@ -21,14 +21,6 @@ import { cn } from "@opal/utils";
 /** Height on the Tailwind scale: `4` is 1rem, `6` is 1.5rem. */
 type BadgeSize = 4 | 6;
 
-/**
- * - `"default"`: tinted background.
- * - `"count"`: no background.
- *
- * The icon is always in the color's text; `textColor` sets the label.
- */
-type BadgeVariant = "default" | "count";
-
 // Takes no DOM attributes. The ref and anything a wrapping Tooltip or
 // popover trigger injects at runtime still reach the root, so either can
 // wrap a Badge.
@@ -41,11 +33,10 @@ type BadgeProps = {
   /** Badge label text. */
   title: string | RichStr;
 
-  /** Status color. Default: `"default"`. */
+  /**
+   * Status color: the tinted background and the icon. Default: `"default"`.
+   */
   color?: StatusVariants;
-
-  /** Whether the pill has its tinted background. Default: `"default"`. */
-  variant?: BadgeVariant;
 
   /**
    * The label's colour. `"inherit"` is the text colour matched to `color`'s
@@ -69,7 +60,6 @@ function Badge({
   icon,
   title,
   color = "default",
-  variant = "default",
   textColor = "inherit",
   size = 4,
   ...rest
@@ -87,7 +77,7 @@ function Badge({
       {...rest}
       className={cn(
         "opal-badge",
-        variant !== "count" && config.bg,
+        config.bg,
         textColor === "inherit" ? config.text : TEXT_COLOR_CLASSES[textColor]
       )}
       style={iconColorStyle}
@@ -106,5 +96,5 @@ function Badge({
   );
 }
 
-export { Badge, type BadgeProps, type BadgeSize, type BadgeVariant };
+export { Badge, type BadgeProps, type BadgeSize };
 export { BADGE_COLORS } from "@opal/components/badge/colors";

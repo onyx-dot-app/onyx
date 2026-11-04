@@ -268,7 +268,6 @@ export function RunWarningsTag({ run }: RunWarningsTagProps) {
         icon={SvgAlertTriangle}
         title={format.number(warnings)}
         color="warning"
-        variant="count"
         textColor="text-04"
       />
     </Tooltip>

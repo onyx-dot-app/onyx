@@ -62,14 +62,11 @@ type Shown = "all" | ActivityGroup;
 export interface ActivityCountTagsProps {
   failures: number;
   errors: number;
-  /** `"count"` drops the tinted backgrounds, for a card header. Default: `"status"`. */
-  variant?: "status" | "count";
 }
 /** The failed runs and the runs with document errors, as two counts. A zero count shows no tag. */
 export function ActivityCountTags({
   failures,
   errors,
-  variant = "status",
 }: ActivityCountTagsProps) {
   const t = useTranslations("admin.connector.activity");
   const format = useFormatter();
@@ -81,7 +78,6 @@ export function ActivityCountTags({
             icon={SvgXOctagon}
             title={format.number(failures)}
             color="error"
-            variant={variant === "count" ? "count" : "default"}
             textColor="text-04"
             size={6}
           />
@@ -93,7 +89,6 @@ export function ActivityCountTags({
             icon={SvgAlertTriangle}
             title={format.number(errors)}
             color="warning"
-            variant={variant === "count" ? "count" : "default"}
             textColor="text-04"
             size={6}
           />
@@ -367,7 +362,6 @@ export default function ActivityPanel({
                       <ActivityCountTags
                         failures={failures.total}
                         errors={errors.total}
-                        variant="count"
                       />
                       <SelectButton
                         icon={SvgFilter}
