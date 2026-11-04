@@ -36,7 +36,6 @@ from onyx.db.models import (
     Skill,
     Skill__UserGroup,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     User,
     User__UserGroup,
     UserFile,
@@ -142,6 +141,7 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
             token_budget=1,
             period=TokenRateLimitPeriod.DAILY,
             scope=TokenRateLimitScope.USER_GROUP,
+            user_group_id=group_id,
         )
         db_session.add(rate_limit)
         db_session.flush()
@@ -151,12 +151,6 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         )
         db_session.refresh(basic_member)
         assert basic_member.is_group_manager
-        db_session.add(
-            TokenRateLimit__UserGroup(
-                rate_limit_id=rate_limit_id, user_group_id=group_id
-            )
-        )
-        db_session.flush()
 
         removed = remove_custom_user_groups__no_commit(db_session)
 

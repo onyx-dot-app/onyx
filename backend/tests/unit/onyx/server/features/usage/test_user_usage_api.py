@@ -27,7 +27,6 @@ from onyx.db.models import (
     ModelConfiguration,
     ModelCostOverride,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     TokenRateLimitScope,
     User__UserGroup,
     UserUsage,
@@ -73,7 +72,6 @@ def db_session() -> Generator[Session, None, None]:
         ModelCostOverride,
         TokenRateLimit,
         User__UserGroup,
-        TokenRateLimit__UserGroup,
     ):
         cast(Table, model.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
@@ -660,11 +658,10 @@ def test_budget_reflects_group_cost_limit(
         cost_budget_cents=100.0,
         period=TokenRateLimitPeriod.WEEKLY,
         scope=TokenRateLimitScope.USER_GROUP,
+        user_group_id=1,
     )
     db_session.add(limit)
-    db_session.flush()
     db_session.add(User__UserGroup(user_id=caller, user_group_id=1))
-    db_session.add(TokenRateLimit__UserGroup(rate_limit_id=limit.id, user_group_id=1))
     db_session.commit()
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None

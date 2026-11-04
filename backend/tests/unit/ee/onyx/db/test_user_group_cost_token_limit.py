@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
 from onyx.configs.constants import TokenRateLimitPeriod
-from onyx.db.models import TokenRateLimit, TokenRateLimit__UserGroup
+from onyx.db.models import TokenRateLimit
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 
 
@@ -33,8 +33,12 @@ def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
-    for model in (TokenRateLimit, TokenRateLimit__UserGroup):
-        cast(Table, model.__table__).create(bind=engine)
+    with engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE user_group (id INTEGER PRIMARY KEY)")
+        conn.exec_driver_sql(
+            "CREATE TABLE model_configuration (id INTEGER PRIMARY KEY)"
+        )
+    cast(Table, TokenRateLimit.__table__).create(bind=engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session

@@ -195,8 +195,10 @@ def _persona_upsert_body(*, is_public: bool, groups: list[int]) -> dict[str, Any
     }
 
 
+# Disabled: these tests check the permission gate, and the module shares one
+# group across tests, which allows only one enabled limit per period.
 _TOKEN_LIMIT_BODY: dict[str, Any] = {
-    "enabled": True,
+    "enabled": False,
     "token_budget": 1000,
     "period": "DAILY",
 }
