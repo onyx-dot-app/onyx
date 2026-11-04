@@ -5,8 +5,12 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  InputHorizontal,
+  Section,
+} from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider, Text } from "@opal/components";
 import { Collapsible } from "@opal/components";

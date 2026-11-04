@@ -1,7 +1,6 @@
 import { useLocale, useTranslations } from "next-intl";
 import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { Button, Card, Divider, Text } from "@opal/components";
 import { timeAgo } from "@opal/time";
 

@@ -14,8 +14,7 @@ import {
 } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { Content } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,

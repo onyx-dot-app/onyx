@@ -37,7 +37,6 @@ import {
 } from "@/lib/languageModels/options";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   createCostOverride,
   deleteCostOverride,
@@ -476,12 +475,7 @@ export default function CostOverridesPanel() {
   const [adding, setAdding] = useState(false);
 
   return (
-    <GeneralLayouts.Section
-      gap={3}
-      height="fit"
-      alignItems="stretch"
-      justifyContent="start"
-    >
+    <Section gap={3} height="fit" alignItems="stretch" justifyContent="start">
       <ContentAction
         title={t("panel.title")}
         description={markdown(t("panel.description"))}
@@ -524,6 +518,6 @@ export default function CostOverridesPanel() {
           description={t("empty.description")}
         />
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

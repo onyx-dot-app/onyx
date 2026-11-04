@@ -196,3 +196,12 @@
   outline-offset: 2px;
   border-radius: 0.25rem;
 }
+
+/* Revealed — `revealed` shows the item whatever the hover state. The hiding
+   rules above reach up to five selectors (group hover and focus, interaction),
+   so `!important` makes this one win over all of them rather than out-counting
+   each. */
+.hoverable-item[data-hoverable-revealed] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}

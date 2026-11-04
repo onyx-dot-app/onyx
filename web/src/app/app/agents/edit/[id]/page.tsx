@@ -3,7 +3,8 @@
 import { useNavigation } from "@opal/navigation";
 import { use, useEffect } from "react";
 import { useAgent } from "@/lib/agents/hooks";
-import AgentEditorPage from "@/views/AgentEditorPage";
+import AgentEditorPage from "@/views/AgentEditorPage/page";
+import AgentEditorLoading from "@/views/AgentEditorPage/loading";
 
 export interface PageProps {
   params: Promise<{ id: string }>;
@@ -33,8 +34,8 @@ export default function Page(props: PageProps) {
     }
   }, [isLoading, agent, navigation]);
 
-  // Show nothing while redirecting or loading
-  if (isLoading || !agent) return null;
+  // The editor's loader while the agent loads or the page redirects.
+  if (isLoading || !agent) return <AgentEditorLoading />;
 
   return <AgentEditorPage agent={agent} refreshAgent={refresh} />;
 }

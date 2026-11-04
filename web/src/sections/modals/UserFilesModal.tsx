@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
@@ -23,7 +24,6 @@ import {
 } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import { AttachmentItemButton, Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";

@@ -4,7 +4,7 @@ import { useSearchParams, useNavigation } from "@opal/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -47,7 +47,6 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
-import { Section } from "@/layouts/general-layouts";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 

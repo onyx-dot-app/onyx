@@ -12,10 +12,15 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import type { ConnectorIndexingStatusLite } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
-import { Content, IllustrationContent, StickyBox, toast } from "@opal/layouts";
+import {
+  Content,
+  IllustrationContent,
+  StickyBox,
+  toast,
+  Section,
+} from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import {
   Button,
@@ -457,9 +462,9 @@ function ProviderGroup({
         />
       </providerCreationModal.Provider>
 
-      <GeneralLayouts.Section gap={1}>
+      <Section gap={1}>
         <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
-          <GeneralLayouts.Section flexDirection="row" gap={0}>
+          <Section flexDirection="row" gap={0}>
             <Spacer orientation="horizontal" rem={0.675} />
             <div className="flex flex-row justify-between items-center w-full py-1">
               <Content
@@ -475,7 +480,7 @@ function ProviderGroup({
               />
 
               {isCloud && isConfigured ? (
-                <GeneralLayouts.Section flexDirection="row" gap={1} width="fit">
+                <Section flexDirection="row" gap={1} width="fit">
                   <Button
                     icon={SvgUnplug}
                     prominence="tertiary"
@@ -497,10 +502,10 @@ function ProviderGroup({
                     onClick={() => editCredentialsModal.toggle(true)}
                   />
                   <Spacer orientation="horizontal" rem={0.25} />
-                </GeneralLayouts.Section>
+                </Section>
               ) : undefined}
             </div>
-          </GeneralLayouts.Section>
+          </Section>
         </div>
 
         {models.map(renderModelCard)}
@@ -532,7 +537,7 @@ function ProviderGroup({
             />
           </SelectCard>
         )}
-      </GeneralLayouts.Section>
+      </Section>
     </>
   );
 }
@@ -605,8 +610,8 @@ function EmbeddingModelCard({
       onClick={onSelect}
       data-testid={`embedding-model-card:${provider.providerName}:${model.modelName}`}
     >
-      <GeneralLayouts.Section flexDirection="row" alignItems="start">
-        <GeneralLayouts.Section gap={0} padding={2} alignItems="start">
+      <Section flexDirection="row" alignItems="start">
+        <Section gap={0} padding={2} alignItems="start">
           <Content
             icon={provider.icon}
             title={model.modelName}
@@ -628,9 +633,9 @@ function EmbeddingModelCard({
           <div className="flex flex-row px-6 pt-2 gap-4">
             <EmbeddingProviderInfo providerName={provider.providerName} />
           </div>
-        </GeneralLayouts.Section>
+        </Section>
         {topRightButton && <div className="shrink-0">{topRightButton}</div>}
-      </GeneralLayouts.Section>
+      </Section>
     </SelectCard>
   );
 }
@@ -644,8 +649,8 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
   return (
-    <GeneralLayouts.Section gap={1}>
-      <GeneralLayouts.Section
+    <Section gap={1}>
+      <Section
         flexDirection="row"
         justifyContent="start"
         gap={0}
@@ -659,7 +664,7 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
           title={t("modelPicker.customModels.title")}
           sizePreset="secondary"
         />
-      </GeneralLayouts.Section>
+      </Section>
 
       <SelectCard
         state="filled"
@@ -690,7 +695,7 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
           {markdown(t("modelPicker.customModels.hint", { appName }))}
         </Text>
       </div>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -1822,7 +1827,7 @@ export default function IndexSettingsPage() {
                           })
                         )}
                         bottomChildren={
-                          <GeneralLayouts.Section
+                          <Section
                             flexDirection="row"
                             gap={2}
                             justifyContent="end"
@@ -1843,7 +1848,7 @@ export default function IndexSettingsPage() {
                             >
                               {t("reindexBanner.cancelReindex.label")}
                             </Button>
-                          </GeneralLayouts.Section>
+                          </Section>
                         }
                       />
                     )
@@ -1869,14 +1874,14 @@ export default function IndexSettingsPage() {
                           bottomChildren={
                             bannerActive ? (
                               contextualForwardChange ? (
-                                <GeneralLayouts.Section
+                                <Section
                                   flexDirection="row"
                                   alignItems="center"
                                   gap={2}
                                   padding={2}
                                   height="fit"
                                 >
-                                  <GeneralLayouts.Section
+                                  <Section
                                     flexDirection="row"
                                     gap={2}
                                     width="fit"
@@ -1892,7 +1897,7 @@ export default function IndexSettingsPage() {
                                     >
                                       {t("actions.applyForward.label")}
                                     </Button>
-                                  </GeneralLayouts.Section>
+                                  </Section>
                                   <Text
                                     font="secondary-body"
                                     color="text-03"
@@ -1900,22 +1905,22 @@ export default function IndexSettingsPage() {
                                   >
                                     {t("changesBanner.orSeparator.label")}
                                   </Text>
-                                  <GeneralLayouts.Section
+                                  <Section
                                     flexDirection="row"
                                     gap={2}
                                     height="fit"
                                     className="flex-1 min-w-0"
                                   >
-                                    <GeneralLayouts.Section
+                                    <Section
                                       height="fit"
                                       alignItems="stretch"
                                       className="flex-1 min-w-0"
                                     >
                                       {switchoverStrategySelect}
-                                    </GeneralLayouts.Section>
+                                    </Section>
                                     {rebuildButton}
-                                  </GeneralLayouts.Section>
-                                </GeneralLayouts.Section>
+                                  </Section>
+                                </Section>
                               ) : (
                                 <div className="flex flex-row items-end gap-4 p-2">
                                   {/* Cloud has no re-index strategies to pick. */}
@@ -1946,7 +1951,7 @@ export default function IndexSettingsPage() {
                     tooltip={t("reindexing.disabledTooltip")}
                   >
                     {/* ── Embedding Model ── */}
-                    <GeneralLayouts.Section
+                    <Section
                       gap={3}
                       height="fit"
                       alignItems="stretch"
@@ -1964,14 +1969,14 @@ export default function IndexSettingsPage() {
                       {NEXT_PUBLIC_CLOUD_ENABLED ? (
                         <CloudDisabled>
                           <Card border="solid" rounding={4} padding={2}>
-                            <GeneralLayouts.Section padding={2}>
+                            <Section padding={2}>
                               <Content
                                 icon={SvgVector}
                                 title={t("embeddingModel.cloudManaged.title")}
                                 sizePreset="main-ui"
                                 variant="section"
                               />
-                            </GeneralLayouts.Section>
+                            </Section>
                           </Card>
                         </CloudDisabled>
                       ) : (
@@ -1993,14 +1998,11 @@ export default function IndexSettingsPage() {
                                 <>
                                   <Tabs.Content value={MODEL_TAB_CLOUD}>
                                     {filteredCloudProviders.length > 0 ? (
-                                      <GeneralLayouts.Section
-                                        gap={2}
-                                        padding={2}
-                                      >
+                                      <Section gap={2} padding={2}>
                                         {filteredCloudProviders.map(
                                           renderCloudProviderGroup
                                         )}
-                                      </GeneralLayouts.Section>
+                                      </Section>
                                     ) : (
                                       <IllustrationContent
                                         illustration={SvgNoResult}
@@ -2017,10 +2019,7 @@ export default function IndexSettingsPage() {
                                   <Tabs.Content value={MODEL_TAB_SELF}>
                                     {filteredSelfHostedProviders.length > 0 ||
                                     customModelMatched ? (
-                                      <GeneralLayouts.Section
-                                        gap={2}
-                                        padding={2}
-                                      >
+                                      <Section gap={2} padding={2}>
                                         <Text
                                           font="secondary-body"
                                           color="text-03"
@@ -2063,7 +2062,7 @@ export default function IndexSettingsPage() {
                                             }
                                           />
                                         )}
-                                      </GeneralLayouts.Section>
+                                      </Section>
                                     ) : (
                                       <IllustrationContent
                                         illustration={SvgNoResult}
@@ -2132,7 +2131,7 @@ export default function IndexSettingsPage() {
                                   className="flex flex-row items-start w-full"
                                   data-testid="current-embedding-model"
                                 >
-                                  <GeneralLayouts.Section
+                                  <Section
                                     padding={2}
                                     gap={0}
                                     alignItems="start"
@@ -2164,7 +2163,7 @@ export default function IndexSettingsPage() {
                                       )}
                                     </div>
                                     {currentRegistryModel?.legacy && (
-                                      <GeneralLayouts.Section
+                                      <Section
                                         alignItems="start"
                                         width="auto"
                                         height="fit"
@@ -2177,9 +2176,9 @@ export default function IndexSettingsPage() {
                                         >
                                           {t("currentModel.legacyHint")}
                                         </Text>
-                                      </GeneralLayouts.Section>
+                                      </Section>
                                     )}
-                                  </GeneralLayouts.Section>
+                                  </Section>
 
                                   <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
                                     <Button
@@ -2259,7 +2258,7 @@ export default function IndexSettingsPage() {
                           </InputHorizontal>
                         </Card>
                       )}
-                    </GeneralLayouts.Section>
+                    </Section>
                   </Disabled>
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
                   <Disabled
@@ -2267,7 +2266,7 @@ export default function IndexSettingsPage() {
                     tooltip={t("reindexing.disabledTooltip")}
                   >
                     {/* ── Retrieval Optimization ── */}
-                    <GeneralLayouts.Section
+                    <Section
                       gap={3}
                       height="fit"
                       alignItems="stretch"
@@ -2321,10 +2320,7 @@ export default function IndexSettingsPage() {
                           borderColor={contextualCardBorder}
                           rounding={4}
                         >
-                          <GeneralLayouts.Section
-                            width="full"
-                            alignItems="stretch"
-                          >
+                          <Section width="full" alignItems="stretch">
                             <InputHorizontal
                               title={t("contextualRetrieval.title")}
                               description={t("contextualRetrieval.description")}
@@ -2367,10 +2363,10 @@ export default function IndexSettingsPage() {
                                 />
                               </InputHorizontal>
                             </Disabled>
-                          </GeneralLayouts.Section>
+                          </Section>
                         </Card>
                       </CloudDisabled>
-                    </GeneralLayouts.Section>
+                    </Section>
                   </Disabled>
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
                   <Disabled
@@ -2378,7 +2374,7 @@ export default function IndexSettingsPage() {
                     tooltip={t("reindexing.disabledTooltip")}
                   >
                     {/* ── Image Processing ── */}
-                    <GeneralLayouts.Section
+                    <Section
                       gap={3}
                       height="fit"
                       alignItems="stretch"
@@ -2408,10 +2404,7 @@ export default function IndexSettingsPage() {
                           borderColor={imageCardBorder}
                           rounding={4}
                         >
-                          <GeneralLayouts.Section
-                            width="full"
-                            alignItems="stretch"
-                          >
+                          <Section width="full" alignItems="stretch">
                             <InputHorizontal
                               title={t("imageExtraction.title")}
                               description={t("imageExtraction.description")}
@@ -2468,10 +2461,10 @@ export default function IndexSettingsPage() {
                                 />
                               </InputHorizontal>
                             </Disabled>
-                          </GeneralLayouts.Section>
+                          </Section>
                         </Card>
                       </Disabled>
-                    </GeneralLayouts.Section>
+                    </Section>
                   </Disabled>
 
                   {/* Outside the re-index lock: the limit matters most during a re-index. */}

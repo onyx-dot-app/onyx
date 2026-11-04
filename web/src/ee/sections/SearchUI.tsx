@@ -8,7 +8,7 @@ import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination, Text } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import { IllustrationContent, toast } from "@opal/layouts";
+import { IllustrationContent, toast, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Tag } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -19,7 +19,6 @@ import {
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Section } from "@/layouts/general-layouts";
 import { Dropdown, SelectButton, LineItemButton } from "@opal/components";
 import { SvgClock, SvgTag } from "@opal/icons";
 import { useQueryController } from "@/providers/QueryControllerProvider";

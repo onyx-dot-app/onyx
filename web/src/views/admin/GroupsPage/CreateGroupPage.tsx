@@ -5,11 +5,10 @@ import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent, toast } from "@opal/layouts";
+import { IllustrationContent, toast, Section } from "@opal/layouts";
 import { SvgUsers } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn, Text } from "@opal/components";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import {

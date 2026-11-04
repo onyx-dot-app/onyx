@@ -11192,6 +11192,9 @@
       "pin": {
         "tooltip": "تثبيت في الشريط الجانبي"
       },
+      "pinFailed": {
+        "message": "تعذّر تحديث التثبيت. حاول مرة أخرى."
+      },
       "share": {
         "tooltip": "مشاركة الوكيل"
       },
@@ -11588,10 +11591,12 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {وكيل} other {وكلاء}}"
+        "label": "{count, plural, zero {# وكيل} one {وكيل واحد} two {وكيلان} few {# وكلاء} many {# وكيلًا} other {# وكيل}}"
       },
       "empty": {
-        "description": "لم يتم العثور على وكلاء"
+        "description": "تظهر هنا الوكلاء التي تنشئها والوكلاء التي تمت مشاركتها معك.",
+        "filteredDescription": "لا يطابق أي وكيل علامة التبويب وعوامل التصفية المحددة.",
+        "item": "وكلاء"
       },
       "header": {
         "description": "خصص سلوك الذكاء الاصطناعي ومعرفته لحالات الاستخدام الخاصة بك وبفريقك.",
@@ -11605,9 +11610,6 @@
       },
       "page": {
         "ariaLabel": "صفحة الوكلاء"
-      },
-      "search": {
-        "placeholder": "البحث عن وكلاء..."
       },
       "sections": {
         "all": {
@@ -14298,6 +14300,21 @@
     },
     "appFooter": {
       "slogan": "منصة ذكاء اصطناعي مفتوحة المصدر"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "ليس هناك {item}",
+        "title": "لا توجد عناصر"
+      },
+      "noResults": {
+        "description": "لم يتم العثور على نتائج تطابق عبارة البحث هذه.",
+        "itemTitle": "لم يتم العثور على {item}",
+        "title": "لا توجد نتائج"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "ابحث في {item} أو اضغط \"/\" للتركيز...",
+      "placeholder": "ابحث أو اضغط \"/\" للتركيز..."
     }
   },
   "craft": {

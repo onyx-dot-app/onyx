@@ -13,14 +13,13 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
-import { InputVertical, toast } from "@opal/layouts";
+import { InputVertical, toast, Section } from "@opal/layouts";
 import { SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
 import useGroups from "@/hooks/useGroups";
 import { Dropdown } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { cn } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 interface ApiKeyFormModalProps {

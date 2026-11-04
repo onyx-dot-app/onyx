@@ -3,8 +3,7 @@
 import { useNavigation } from "@opal/navigation";
 import { useState, useMemo, useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Section } from "@/layouts/general-layouts";
-import { InputHorizontal } from "@opal/layouts";
+import { InputHorizontal, Section } from "@opal/layouts";
 import { Button, Divider, Text } from "@opal/components";
 import { richNodes } from "@opal/utils";
 import Card from "@/refresh-components/cards/Card";

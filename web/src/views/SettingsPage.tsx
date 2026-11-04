@@ -4,13 +4,13 @@ import { useNavigation } from "@opal/navigation";
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
-import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   ContentAction,
   InputHorizontal,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
 import { copyText, markdown } from "@opal/utils";
 import { Formik, Form } from "formik";

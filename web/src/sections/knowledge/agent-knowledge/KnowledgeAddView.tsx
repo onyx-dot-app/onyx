@@ -1,9 +1,9 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { memo } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useFormatter, useTranslations } from "next-intl";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { Text, LineItemButton } from "@opal/components";
@@ -35,13 +35,13 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
   const t = useTranslations("knowledge");
   const format = useFormatter();
   return (
-    <GeneralLayouts.Section
+    <Section
       gap={2}
       alignItems="start"
       height="auto"
       aria-label="knowledge-add-view"
     >
-      <GeneralLayouts.Section
+      <Section
         flexDirection="row"
         justifyContent="start"
         gap={2}
@@ -90,7 +90,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
             ) : undefined
           }
         />
-      </GeneralLayouts.Section>
+      </Section>
 
       {vectorDbEnabled && connectedSources.length > 0 && (
         <>
@@ -128,6 +128,6 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
           })}
         </>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 });

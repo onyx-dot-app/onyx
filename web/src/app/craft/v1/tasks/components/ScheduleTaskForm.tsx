@@ -12,8 +12,7 @@ import {
   Text,
 } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SettingsLayouts, InputVertical, toast } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { SettingsLayouts, InputVertical, toast, Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
@@ -323,7 +322,7 @@ export default function ScheduleTaskForm({
       />
 
       <SettingsLayouts.Body>
-        <GeneralLayouts.Section>
+        <Section>
           <InputVertical withLabel title={t("fields.name.label")}>
             <InputTypeIn
               value={name}
@@ -373,11 +372,11 @@ export default function ScheduleTaskForm({
               </Text>
             )}
           </InputVertical>
-        </GeneralLayouts.Section>
+        </Section>
 
         <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-        <GeneralLayouts.Section>
+        <Section>
           <InputVertical title={t("fields.schedule.label")}>
             <ScheduleEditor
               mode={mode}
@@ -387,17 +386,17 @@ export default function ScheduleTaskForm({
               error={scheduleError}
             />
           </InputVertical>
-        </GeneralLayouts.Section>
+        </Section>
 
         <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-        <GeneralLayouts.Section alignItems="stretch">
+        <Section alignItems="stretch">
           <TaskActionPolicies
             taskId={initial.taskId}
             value={actionPolicies}
             onChange={setActionPolicies}
           />
-        </GeneralLayouts.Section>
+        </Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

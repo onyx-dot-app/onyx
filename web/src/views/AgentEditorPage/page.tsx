@@ -3,8 +3,7 @@
 import { useNavigation } from "@opal/navigation";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   Button,
   Card,
@@ -362,7 +361,7 @@ function AgentStarterMessages() {
   return (
     <FieldArray name="starter_messages">
       {(arrayHelpers) => (
-        <GeneralLayouts.Section gap={2}>
+        <Section gap={2}>
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
               key={`starter_messages.${i}`}
@@ -373,7 +372,7 @@ function AgentStarterMessages() {
               onRemove={() => arrayHelpers.remove(i)}
             />
           ))}
-        </GeneralLayouts.Section>
+        </Section>
       )}
     </FieldArray>
   );
@@ -1240,14 +1239,14 @@ export default function AgentEditorPage({
                       }
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
-                      <GeneralLayouts.Section alignItems="start" gap={2}>
+                      <Section alignItems="start" gap={2}>
                         <Text color="text-05">
                           {t("editor.deleteModal.body.warning")}
                         </Text>
                         <Text color="text-05">
                           {t("editor.deleteModal.body.confirm")}
                         </Text>
-                      </GeneralLayouts.Section>
+                      </Section>
                     </ConfirmationModalLayout>
                   )}
                 </deleteAgentModal.Provider>
@@ -1306,12 +1305,8 @@ export default function AgentEditorPage({
                         />
                       )}
 
-                      <GeneralLayouts.Section
-                        flexDirection="row"
-                        gap={10}
-                        alignItems="start"
-                      >
-                        <GeneralLayouts.Section>
+                      <Section flexDirection="row" gap={10} alignItems="start">
+                        <Section>
                           <InputVertical
                             withLabel="name"
                             title={t("editor.general.name.title")}
@@ -1334,21 +1329,21 @@ export default function AgentEditorPage({
                               )}
                             />
                           </InputVertical>
-                        </GeneralLayouts.Section>
+                        </Section>
 
-                        <GeneralLayouts.Section width="fit">
+                        <Section width="fit">
                           <InputVertical
                             withLabel="agent_avatar"
                             title={t("editor.general.avatar.title")}
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputVertical>
-                        </GeneralLayouts.Section>
-                      </GeneralLayouts.Section>
+                        </Section>
+                      </Section>
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                      <GeneralLayouts.Section>
+                      <Section>
                         <InputVertical
                           withLabel="instructions"
                           title={t("editor.prompts.instructions.title")}
@@ -1376,7 +1371,7 @@ export default function AgentEditorPage({
                         >
                           <AgentStarterMessages />
                         </InputVertical>
-                      </GeneralLayouts.Section>
+                      </Section>
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
@@ -1425,18 +1420,14 @@ export default function AgentEditorPage({
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                      <GeneralLayouts.Section
-                        gap={2}
-                        alignItems="stretch"
-                        height="auto"
-                      >
+                      <Section gap={2} alignItems="stretch" height="auto">
                         <Content
                           title={t("editor.share.title")}
                           sizePreset="main-content"
                           variant="section"
                         />
                         <Card border="solid" rounding={4}>
-                          <GeneralLayouts.Section>
+                          <Section>
                             {canShare && (
                               <InputHorizontal
                                 title={t("editor.share.share.title")}
@@ -1485,10 +1476,7 @@ export default function AgentEditorPage({
                                   )}
                               </>
                             )}
-                            <GeneralLayouts.Section
-                              gap={1}
-                              alignItems="stretch"
-                            >
+                            <Section gap={1} alignItems="stretch">
                               <InputTypeInTag
                                 tags={(allLabels ?? [])
                                   .filter((label) =>
@@ -1523,10 +1511,10 @@ export default function AgentEditorPage({
                               <Text font="secondary-body" color="text-03">
                                 {t("editor.share.labels.description")}
                               </Text>
-                            </GeneralLayouts.Section>
-                          </GeneralLayouts.Section>
+                            </Section>
+                          </Section>
                         </Card>
-                      </GeneralLayouts.Section>
+                      </Section>
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
@@ -1534,7 +1522,7 @@ export default function AgentEditorPage({
                         title={t("editor.actions.title")}
                         description={t("editor.actions.description")}
                       >
-                        <GeneralLayouts.Section gap={2} alignItems="stretch">
+                        <Section gap={2} alignItems="stretch">
                           <Disabled
                             disabled={!isImageGenerationAvailable}
                             tooltip={imageGenerationDisabledTooltip}
@@ -1645,10 +1633,7 @@ export default function AgentEditorPage({
 
                             {/* MCP tools */}
                             {mcpServersWithVisibleTools.length > 0 && (
-                              <GeneralLayouts.Section
-                                gap={2}
-                                alignItems="stretch"
-                              >
+                              <Section gap={2} alignItems="stretch">
                                 {mcpServersWithVisibleTools.map(
                                   ({ server, tools, isLoading }) => (
                                     <MCPServerCard
@@ -1659,19 +1644,19 @@ export default function AgentEditorPage({
                                     />
                                   )
                                 )}
-                              </GeneralLayouts.Section>
+                              </Section>
                             )}
 
                             {/* OpenAPI tools */}
                             {openApiTools.length > 0 && (
-                              <GeneralLayouts.Section gap={2}>
+                              <Section gap={2}>
                                 {openApiTools.map((tool) => (
                                   <OpenApiToolCard key={tool.id} tool={tool} />
                                 ))}
-                              </GeneralLayouts.Section>
+                              </Section>
                             )}
                           </>
-                        </GeneralLayouts.Section>
+                        </Section>
                       </Collapsible>
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -1680,9 +1665,9 @@ export default function AgentEditorPage({
                         title={t("editor.advanced.title")}
                         description={t("editor.advanced.description")}
                       >
-                        <GeneralLayouts.Section>
+                        <Section>
                           <Card border="solid" rounding={4}>
-                            <GeneralLayouts.Section>
+                            <Section>
                               <InputHorizontal
                                 withLabel="llm_model"
                                 title={t("modals.viewer.defaultModel.title")}
@@ -1749,10 +1734,10 @@ export default function AgentEditorPage({
                               >
                                 <InputSwitchField name="replace_base_system_prompt" />
                               </InputHorizontal>
-                            </GeneralLayouts.Section>
+                            </Section>
                           </Card>
 
-                          <GeneralLayouts.Section gap={1}>
+                          <Section gap={1}>
                             <InputVertical
                               withLabel="reminders"
                               title={t("editor.advanced.reminders.title")}
@@ -1771,8 +1756,8 @@ export default function AgentEditorPage({
                             <Text font="secondary-body" color="text-03">
                               {t("editor.advanced.reminders.description")}
                             </Text>
-                          </GeneralLayouts.Section>
-                        </GeneralLayouts.Section>
+                          </Section>
+                        </Section>
                       </Collapsible>
 
                       {existingAgent && canDelete && (
@@ -1783,7 +1768,7 @@ export default function AgentEditorPage({
                           />
 
                           <Card border="solid" rounding={4}>
-                            <GeneralLayouts.Section>
+                            <Section>
                               {canUpdateFeaturedStatus && (
                                 <InputHorizontal
                                   title={
@@ -1835,7 +1820,7 @@ export default function AgentEditorPage({
                                   {t("editor.delete.button.label")}
                                 </Button>
                               </InputHorizontal>
-                            </GeneralLayouts.Section>
+                            </Section>
                           </Card>
                         </>
                       )}

@@ -11192,6 +11192,9 @@
       "pin": {
         "tooltip": "サイドバーにピン留め"
       },
+      "pinFailed": {
+        "message": "ピン留めを更新できませんでした。もう一度お試しください。"
+      },
       "share": {
         "tooltip": "エージェントを共有"
       },
@@ -11588,10 +11591,12 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {エージェント} other {エージェント}}"
+        "label": "{count, plural, one {#エージェント} other {#エージェント}}"
       },
       "empty": {
-        "description": "エージェントが見つかりません"
+        "description": "作成したエージェントと共有されたエージェントがここに表示されます。",
+        "filteredDescription": "選択したタブとフィルターに一致するエージェントはありません。",
+        "item": "エージェント"
       },
       "header": {
         "description": "あなたとチームのユースケースに合わせてAIの動作と知識をカスタマイズします。",
@@ -11605,9 +11610,6 @@
       },
       "page": {
         "ariaLabel": "エージェントページ"
-      },
-      "search": {
-        "placeholder": "エージェントを検索..."
       },
       "sections": {
         "all": {
@@ -14298,6 +14300,21 @@
     },
     "appFooter": {
       "slogan": "オープンソース AI プラットフォーム"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "{item}がありません",
+        "title": "項目がありません"
+      },
+      "noResults": {
+        "description": "その検索語に一致する結果は見つかりませんでした。",
+        "itemTitle": "{item}が見つかりません",
+        "title": "結果が見つかりません"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "{item}を検索するか「/」キーでフォーカス...",
+      "placeholder": "検索するか「/」キーでフォーカス..."
     }
   },
   "craft": {

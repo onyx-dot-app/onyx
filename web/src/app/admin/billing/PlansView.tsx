@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import {
   SvgDashboard,
   SvgHistory,
@@ -23,7 +24,6 @@ import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
 import { Button, Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 
 const SALES_URL = "https://www.onyx.app/contact-sales";
 

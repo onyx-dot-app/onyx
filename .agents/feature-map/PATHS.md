@@ -272,7 +272,7 @@ covers new files that match it.
 | `web/src/lib/tools/` | plugins |
 | `web/src/lib/tools/components/ToolsPopover.tsx` | plugins, chat-frontend |
 | `web/src/lib/onboarding/` | chat-frontend |
-| `web/src/views/AgentEditorPage.tsx`, `web/src/views/AgentsNavigationPage.tsx`, `web/src/sections/agents/` | agents-personas |
+| `web/src/views/AgentEditorPage/`, `web/src/views/AgentsCatalogPage/`, `web/src/sections/agents/` | agents-personas |
 | `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/lib/app/components/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
@@ -378,6 +378,7 @@ the admin routes and check that each has a row above, run
 | `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | Reverse-proxy templates. The `cli/` copies are generated: run `ods generate-compose --write` after you change `deployment/data/nginx/`. |
 | `cli/` | The Onyx CLI client. Only its packet parser has an owner (streaming-protocol). |
 | `tools/`, `backend/scripts/`, `backend/requirements/` | Developer tooling and dependency files. |
+| `web/src/lib/common/` | App components meant for any feature: the list states `NoResults` and `NoItems`, and `GridSearchInput`. The agents catalog is their only caller so far. Check the callers. |
 | `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
 | `web/bun.lock` | The `web/` dependency lockfile. `bun install` writes it; do not edit it by hand. |
@@ -386,5 +387,6 @@ the admin routes and check that each has a row above, run
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
 | `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, the sidebar that filters it by permission and feature flag, its labels, and the admin shell. A new admin route needs its own row above. |
 | `web/src/lib/swr-keys.ts` | The SWR cache keys of the whole app. A key belongs to the component that fetches it; invalidate through the key, never a string literal. |
+| `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
 | `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

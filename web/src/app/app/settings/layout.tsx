@@ -3,12 +3,11 @@
 import { useNavigation, usePathname } from "@opal/navigation";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, Section } from "@opal/layouts";
 import { InputSingleSelect, SidebarTab } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
-import { Section } from "@/layouts/general-layouts";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers/utils";
 import { useLanguageModels } from "@/lib/languageModels/hooks";

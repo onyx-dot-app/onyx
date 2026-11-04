@@ -18,7 +18,6 @@ import {
   useState,
 } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { Section } from "@/layouts/general-layouts";
 import { useLlmManager } from "@/lib/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
@@ -95,6 +94,7 @@ import {
   RootLayout,
   toast,
   useToastFromQuery,
+  Section,
 } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";

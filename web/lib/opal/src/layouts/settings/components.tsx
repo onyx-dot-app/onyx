@@ -26,10 +26,8 @@ import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
 // Imported from their own files: these indexes pull in @opal/layouts.
 import { PageLoader } from "@opal/loaders/page-loader/components";
-import { PageCenter } from "@opal/layouts/page-center/components";
-import { IllustrationContent } from "@opal/layouts/illustration-content/components";
+import { ErrorState } from "@opal/layouts/states/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
-import SvgPlugBroken from "@opal/illustrations/plug-broken";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -351,15 +349,10 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
     useContext(SettingsPageContext);
   const strings = useOpalStrings();
   const content = error ? (
-    <PageCenter>
-      <IllustrationContent
-        illustration={SvgPlugBroken}
-        title={strings.settingsBodyErrorTitle(pageTitle)}
-        description={
-          error === true ? strings.settingsBodyErrorDescription : error
-        }
-      />
-    </PageCenter>
+    <ErrorState
+      title={strings.settingsBodyErrorTitle(pageTitle)}
+      description={error === true ? undefined : error}
+    />
   ) : loading ? (
     <PageLoader />
   ) : (
@@ -383,7 +376,41 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Loading
+// ---------------------------------------------------------------------------
+
+type SettingsLoadingProps = Pick<
+  SettingsHeaderProps,
+  "icon" | "title" | "description"
+> &
+  Pick<SettingsRootProps, "width">;
+
+/**
+ * A whole settings page while it loads: its header over the page loader. For
+ * a route's `loading.tsx`, so it shows the page's title before the page.
+ */
+function SettingsLoading({
+  icon,
+  title,
+  description,
+  width,
+}: SettingsLoadingProps) {
+  return (
+    <SettingsRoot width={width} loading>
+      <SettingsHeader icon={icon} title={title} description={description} />
+      <SettingsBody />
+    </SettingsRoot>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
-export { SettingsRoot as Root, SettingsHeader as Header, SettingsBody as Body };
+export {
+  SettingsRoot as Root,
+  SettingsHeader as Header,
+  SettingsBody as Body,
+  SettingsLoading as Loading,
+};
+export type { SettingsLoadingProps };

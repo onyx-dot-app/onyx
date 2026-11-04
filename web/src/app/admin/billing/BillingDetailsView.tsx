@@ -4,8 +4,13 @@ import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { markdown, richNodes } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
-import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
+import {
+  Content,
+  InputErrorText,
+  InputVertical,
+  toast,
+  Section,
+} from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Button, Presence, MessageCard, Text } from "@opal/components";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";

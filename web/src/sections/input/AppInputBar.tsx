@@ -1,6 +1,7 @@
 "use client";
 
 import { useNavigation } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import React, {
   useCallback,
@@ -66,7 +67,6 @@ import {
   Text,
 } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { Section } from "@/layouts/general-layouts";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import Waveform from "@/components/voice/Waveform";

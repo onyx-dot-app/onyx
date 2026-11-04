@@ -9,8 +9,7 @@ import {
 } from "@/lib/connectors/types/source";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { Content, SettingsLayouts } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Content, SettingsLayouts, Section } from "@opal/layouts";
 import {
   useCallback,
   useDeferredValue,
@@ -228,7 +227,7 @@ export default function ConnectorsPage() {
           ref={catalogRef}
           className="@container/sourcecards flex flex-col gap-8"
         >
-          <GeneralLayouts.Section
+          <Section
             gap={3}
             height="fit"
             alignItems="stretch"
@@ -240,14 +239,14 @@ export default function ConnectorsPage() {
               sizePreset="main-content"
               variant="section"
             />
-            <GeneralLayouts.Section
+            <Section
               gap={8}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
             >
               {dedupedPopular.length > 0 && (
-                <GeneralLayouts.Section
+                <Section
                   gap={3}
                   height="fit"
                   alignItems="stretch"
@@ -262,13 +261,13 @@ export default function ConnectorsPage() {
                       />
                     ))}
                   </div>
-                </GeneralLayouts.Section>
+                </Section>
               )}
 
               {Object.entries(categorizedSources)
                 .filter(([_, sources]) => sources.length > 0)
                 .map(([category, sources]) => (
-                  <GeneralLayouts.Section
+                  <Section
                     key={category}
                     gap={3}
                     height="fit"
@@ -289,10 +288,10 @@ export default function ConnectorsPage() {
                         />
                       ))}
                     </div>
-                  </GeneralLayouts.Section>
+                  </Section>
                 ))}
-            </GeneralLayouts.Section>
-          </GeneralLayouts.Section>
+            </Section>
+          </Section>
         </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

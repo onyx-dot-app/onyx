@@ -39,8 +39,7 @@ import {
   MessageCard,
   Text,
 } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, Section } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
 import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";

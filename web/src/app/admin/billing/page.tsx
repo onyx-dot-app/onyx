@@ -4,8 +4,7 @@ import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import {
