@@ -39,6 +39,61 @@ def resolve_image(
 
 
 class ImageResolverTests(unittest.TestCase):
+    def test_browser_inventory_requires_the_version_specific_chrome_cpe(self) -> None:
+        version = "157.0.8103.38"
+        expected_cpe = f"cpe:2.3:a:google:chrome:{version}:*:*:*:*:*:*:*"
+        for cpe in (
+            None,
+            "",
+            expected_cpe.replace("google", "other"),
+            expected_cpe.replace(version, "156.0.8078.79"),
+            expected_cpe,
+        ):
+            with self.subTest(cpe=cpe), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                component = {"name": "chrome", "version": version}
+                if cpe is not None:
+                    component["cpe"] = cpe
+                inventory = root / "browser.cdx.json"
+                inventory.write_text(json.dumps({"components": [component]}))
+                docker = root / "docker"
+                docker.write_text(
+                    '#!/bin/sh\ncase "$1" in\n'
+                    "create) echo test-container;;\n"
+                    'cp) cp "$TEST_INVENTORY" "$3";;\n'
+                    'run) echo "grype ran";;\n'
+                    "rm) ;;\n"
+                    "*) exit 99;;\nesac\n"
+                )
+                docker.chmod(0o755)
+                curl = root / "curl"
+                stable_response = json.dumps(
+                    {"channels": {"Stable": {"version": version}}}
+                )
+                curl.write_text(f"#!/bin/sh\necho '{stable_response}'\n")
+                curl.chmod(0o755)
+                result = subprocess.run(
+                    [
+                        "bash",
+                        str(SCRIPT.with_name("audit-sandbox-browser.sh")),
+                        "test-image",
+                    ],
+                    env={
+                        **os.environ,
+                        "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                        "TEST_INVENTORY": str(inventory),
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if cpe == expected_cpe:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("grype ran", result.stdout)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn("grype ran", result.stdout)
+
     def test_release_collects_os_reports_before_failing_the_browser_gate(self) -> None:
         workflow = SCRIPT.parent.parent / "workflows/deployment.yml"
         lines = workflow.read_text().splitlines()
