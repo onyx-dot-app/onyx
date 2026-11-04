@@ -20,7 +20,6 @@ import {
   SvgKey,
   SvgLock,
   SvgMinusCircle,
-  SvgSlash,
   SvgPlusCircle,
   SvgTrash,
   SvgUnplug,
@@ -1111,7 +1110,11 @@ function PromptShortcuts() {
                 className="w-full grid grid-cols-[1fr_min-content] gap-x-1 gap-y-1"
               >
                 <InputTypeIn
-                  icon={SvgSlash}
+                  leftChildren={
+                    <Text font="main-ui-body" color="text-02">
+                      /
+                    </Text>
+                  }
                   placeholder={t("promptShortcuts.row.promptPlaceholder")}
                   value={shortcut.prompt}
                   onChange={(e) =>

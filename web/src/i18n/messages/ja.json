@@ -9936,7 +9936,6 @@
         "errors": {
           "budgetRequired": "コスト予算、token 予算、またはその両方を入力してください",
           "costMax": "コスト予算の上限は ${amount, number} です",
-          "costMinCents": "コスト予算は $0.01 以上にしてください",
           "costMoreThanZero": "コスト予算は 0 より大きい値にしてください",
           "groupRequired": "ユーザーグループを選択してください",
           "periodInteger": "日数は整数で入力してください",

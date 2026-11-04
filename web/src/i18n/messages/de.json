@@ -9936,7 +9936,6 @@
         "errors": {
           "budgetRequired": "Geben Sie ein Kostenbudget, ein Token-Budget oder beides ein",
           "costMax": "Das maximale Kostenbudget beträgt {amount, number} $",
-          "costMinCents": "Das Kostenbudget muss mindestens 0,01 $ betragen",
           "costMoreThanZero": "Das Kostenbudget muss größer als 0 sein",
           "groupRequired": "Wählen Sie eine Benutzergruppe aus",
           "periodInteger": "Geben Sie eine ganze Anzahl von Tagen ein",

@@ -9936,7 +9936,6 @@
         "errors": {
           "budgetRequired": "请输入费用预算、token 预算，或同时输入两者",
           "costMax": "最高费用预算为 ${amount, number}",
-          "costMinCents": "费用预算至少为 $0.01",
           "costMoreThanZero": "费用预算必须大于 0",
           "groupRequired": "请选择用户组",
           "periodInteger": "请输入整数天数",

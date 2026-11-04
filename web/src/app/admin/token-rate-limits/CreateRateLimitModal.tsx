@@ -454,11 +454,6 @@ export default function CreateRateLimitModal({
                 MAX_COST_BUDGET_DOLLARS,
                 t("modal.errors.costMax", { amount: MAX_COST_BUDGET_DOLLARS })
               )
-              .test(
-                "minimum-cents",
-                t("modal.errors.costMinCents"),
-                (value) => value == null || Math.round(value * 100) > 0
-              )
               .when("token_budget", {
                 is: (value: string | undefined) =>
                   value === undefined || value === "",
