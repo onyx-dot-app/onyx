@@ -2819,6 +2819,9 @@
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },
+        "deletionStarted": {
+          "value": "시작 {when}"
+        },
         "documents": {
           "totalLabel": "전체 인덱싱 완료 문서",
           "recentLabel": "최근에 처리된 문서",

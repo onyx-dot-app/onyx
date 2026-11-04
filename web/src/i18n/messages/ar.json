@@ -2819,6 +2819,9 @@
         "lastIndexed": {
           "value": "آخر فهرسة {when}"
         },
+        "deletionStarted": {
+          "value": "بدأ {when}"
+        },
         "documents": {
           "totalLabel": "إجمالي المستندات المفهرسة",
           "recentLabel": "مستندات عولجت مؤخرًا",

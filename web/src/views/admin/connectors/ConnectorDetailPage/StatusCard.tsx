@@ -546,7 +546,7 @@ function IndexingCard({
   panelButtonClassName,
 }: IndexingCardProps) {
   const t = useTranslations("admin.connector");
-  const tActions = useTranslations("admin.indexing.list.actions");
+  const tList = useTranslations("admin.indexing.list");
   const locale = useLocale();
   const liveDetail = useLiveRunDetail();
   const [stagesOpen, setStagesOpen] = useState(false);
@@ -600,10 +600,19 @@ function IndexingCard({
   const lastIndexed = t("statusCard.lastIndexed.value", {
     when: ago(ccPair.last_indexed, locale),
   });
-  // The queue position and a deletion's start time are not on this page's data, so those states read the last index too.
+  const deletionStartedAt = ccPair.latest_deletion_attempt?.started_at ?? null;
+  // Scheduled and Deleting read the last index time while the API has no queue place or deletion start.
   function detail(): string {
+    if (status.labelKey === "deleting" && deletionStartedAt !== null) {
+      return t("statusCard.deletionStarted.value", {
+        when: ago(deletionStartedAt, locale),
+      });
+    }
     if (paused) return lastIndexed;
     if (hold !== null) return t(`statusCard.hold.${hold.reason}`);
+    if (status.labelKey === "scheduled" && ccPair.queue_position !== null) {
+      return tList("detail.queued", { position: ccPair.queue_position });
+    }
     if (!indexing || latestAttempt === undefined) return lastIndexed;
     return liveDetail(indexRunOf(latestAttempt)) ?? lastIndexed;
   }
@@ -680,7 +689,7 @@ function IndexingCard({
                     {hints()}
                     <ErrorCountTag
                       count={latestAttempt?.open_error_count ?? 0}
-                      tooltip={tActions("viewErrors")}
+                      tooltip={tList("actions.viewErrors")}
                       onClick={() => onFocusErrors(latestAttempt?.id ?? null)}
                     />
                   </>

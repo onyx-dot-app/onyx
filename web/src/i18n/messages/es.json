@@ -2819,6 +2819,9 @@
         "lastIndexed": {
           "value": "Última indexación {when}"
         },
+        "deletionStarted": {
+          "value": "Iniciado {when}"
+        },
         "documents": {
           "totalLabel": "Total de documentos en el índice",
           "recentLabel": "Documentos procesados hace poco",

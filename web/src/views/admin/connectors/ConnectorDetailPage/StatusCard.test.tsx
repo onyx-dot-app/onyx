@@ -54,6 +54,7 @@ const KEYS = {
   title: "admin.connector.statusCard.title",
   rate: "admin.connector.runs.detail.rate",
   lastIndexed: "admin.connector.statusCard.lastIndexed.value",
+  deletionStarted: "admin.connector.statusCard.deletionStarted.value",
   indexedLabel: "admin.connector.statusCard.documents.indexedLabel",
   showActivities: "admin.connector.statusCard.actions.showActivities",
   hideActivities: "admin.connector.statusCard.actions.hideActivities",
@@ -205,6 +206,7 @@ function ccPair(overrides: Partial<CCPairFullInfo> = {}): CCPairFullInfo {
     pending_backfills: [],
     has_named_checks: false,
     indexing_hold: null,
+    queue_position: null,
     ...overrides,
   } as CCPairFullInfo;
 }
@@ -706,6 +708,87 @@ describe("Indexing card column A", () => {
     expect(within(card).queryByText(/docs\/min/)).toBeNull();
     expect(
       within(card).getByText("3,248", { exact: true })
+    ).toBeInTheDocument();
+  });
+});
+
+describe("Indexing card queue and deletion detail", () => {
+  /** A pair whose next run waits in the index queue. */
+  function seedScheduled(queuePosition: number | null) {
+    seedIndexed();
+    mockIndexAttempts = {
+      items: [
+        indexAttempt({
+          status: "not_started",
+          time_started: null,
+          time_finished: null,
+        }),
+      ],
+      total_items: 1,
+    };
+    return ccPair({ queue_position: queuePosition });
+  }
+
+  /** A pair being deleted, its deletion started `startedAt` or still waiting. */
+  function seedDeleting(startedAt: string | null) {
+    seedIndexed();
+    return ccPair({
+      status: ConnectorCredentialPairStatus.DELETING,
+      latest_deletion_attempt: {
+        connector_id: 11,
+        credential_id: 12,
+        status: startedAt === null ? "PENDING" : "STARTED",
+        started_at: startedAt,
+      },
+    });
+  }
+
+  it("a scheduled pair reads its place in the index queue", () => {
+    renderCard(seedScheduled(4));
+    const card = indexingCard();
+
+    expect(tagOf(card, badge("scheduled"))).toBeInTheDocument();
+    expect(
+      within(card).getByText("4th in queue", { exact: true })
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/^Last indexed/)).toBeNull();
+  });
+
+  it("a scheduled pair without a queue place reads Last indexed", () => {
+    renderCard(seedScheduled(null));
+    const card = indexingCard();
+
+    expect(tagOf(card, badge("scheduled"))).toBeInTheDocument();
+    expect(
+      within(card).getByText(withWhen(KEYS.lastIndexed, "2 minutes ago"), {
+        exact: true,
+      })
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/in queue/)).toBeNull();
+  });
+
+  it("a deleting pair reads when its deletion started", () => {
+    renderCard(seedDeleting(isoAgo(5 * MINUTE_MS + 10_000)));
+    const card = indexingCard();
+
+    expect(tagOf(card, badge("deleting"))).toBeInTheDocument();
+    expect(
+      within(card).getByText(withWhen(KEYS.deletionStarted, "5 minutes ago"), {
+        exact: true,
+      })
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/^Last indexed/)).toBeNull();
+  });
+
+  it("a deleting pair whose deletion waits to start reads Last indexed", () => {
+    renderCard(seedDeleting(null));
+    const card = indexingCard();
+
+    expect(tagOf(card, badge("deleting"))).toBeInTheDocument();
+    expect(
+      within(card).getByText(withWhen(KEYS.lastIndexed, "2 minutes ago"), {
+        exact: true,
+      })
     ).toBeInTheDocument();
   });
 });
