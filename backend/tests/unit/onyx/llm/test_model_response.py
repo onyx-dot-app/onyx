@@ -821,3 +821,36 @@ def test_stream_tool_call_type_normalization(call_type: str | None) -> None:
             function=ResponseFunctionCall(arguments='{"query":')
         )
     ]
+
+
+def test_strict_nulls_for_optional_tool_fields_are_dropped() -> None:
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "file_id": {"type": "string"},
+            "start_char": {"type": "integer"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["file_id"],
+    }
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="read", description="Read", parameters=parameters)]
+    )
+    arguments = '{"file_id": "f", "start_char": null, "tags": "[\\"a\\"]"}'
+    response = ModelResponse(
+        id="response",
+        created="1",
+        choice=Choice(
+            finish_reason="tool_calls",
+            message=ResponseMessage(
+                tool_calls=[
+                    WireToolCall(
+                        id="call",
+                        function=ResponseFunctionCall(name="read", arguments=arguments),
+                    )
+                ],
+            ),
+        ),
+    )
+    call = to_assistant_message(response, request).tool_calls[0]
+    assert call.arguments == {"file_id": "f", "tags": ["a"]}

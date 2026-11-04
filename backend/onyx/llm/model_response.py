@@ -33,6 +33,7 @@ from onyx.llm.models import (
     Usage,
     apply_generation_event,
 )
+from onyx.llm.strict_schema import drop_optional_nulls
 from onyx.llm.tool_parsing import (
     XmlToolCallContentFilter,
     extract_tool_calls_from_response_text,
@@ -350,8 +351,9 @@ def _normalize_arguments(
     properties = definition.parameters.get("properties")
     if not isinstance(properties, dict):
         return arguments
-    normalized = arguments.copy()
-    for name, value in arguments.items():
+    pruned = drop_optional_nulls(arguments, definition.parameters)
+    normalized = pruned.copy() if isinstance(pruned, dict) else arguments.copy()
+    for name, value in list(normalized.items()):
         schema = properties.get(name)
         if not isinstance(value, str) or not isinstance(schema, dict):
             continue

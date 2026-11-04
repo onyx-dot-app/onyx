@@ -13,6 +13,7 @@ from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import model_needs_formatting_reenabled
 from onyx.llm.models import AnyThinkingBlock, ContentPart
+from onyx.llm.strict_schema import strict_schema
 from onyx.tools.tool_name import sanitize_tool_name
 
 if TYPE_CHECKING:
@@ -161,18 +162,27 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
     raise TypeError(f"Unsupported message type: {type(message).__name__}")
 
 
-def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonValue]]:
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.parameters,
-            },
-        }
-        for tool in tools
-    ]
+def _serialize_tool(tool: app.ToolDefinition, strict: bool) -> dict[str, JsonValue]:
+    function: dict[str, JsonValue] = {
+        "name": tool.name,
+        "description": tool.description,
+        "parameters": tool.parameters,
+    }
+    converted = strict_schema(tool.parameters) if strict else None
+    if converted is not None:
+        function["parameters"] = converted
+        function["strict"] = True
+    return {"type": "function", "function": function}
+
+
+def serialize_tools(
+    tools: Sequence[app.ToolDefinition], strict: bool = False
+) -> list[dict[str, JsonValue]]:
+    """Strict tools constrain decoding to the schema, so arguments always close.
+
+    Only real OpenAI models get them: LiteLLM drops `strict` for Anthropic, and
+    OpenAI-compatible servers may reject the rewritten schema."""
+    return [_serialize_tool(tool, strict) for tool in tools]
 
 
 def cache_split_stats(
