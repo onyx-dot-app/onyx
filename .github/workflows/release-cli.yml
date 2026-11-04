@@ -37,23 +37,25 @@ jobs:
       # failed; building all up front keeps the release atomic. Remove the
       # cached Go binary before each build so the build hook recompiles for the
       # target platform instead of reusing the previous platform's binary.
+      # Windows wheels produce onyx-cli.exe, which must be removed before
+      # building the next architecture (not just the extensionless Unix name).
       - run: |
-          rm -f onyx-cli
+          rm -f onyx-cli onyx-cli.exe
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 uv build --wheel
-          rm -f onyx-cli
+          rm -f onyx-cli onyx-cli.exe
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_x86_64 \
             uv build --wheel
-          rm -f onyx-cli
+          rm -f onyx-cli onyx-cli.exe
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 uv build --wheel
-          rm -f onyx-cli
+          rm -f onyx-cli onyx-cli.exe
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
             ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_aarch64 \
             uv build --wheel
 
           for goos in windows darwin; do
             for goarch in amd64 arm64; do
-              rm -f onyx-cli
+              rm -f onyx-cli onyx-cli.exe
               GOOS="$goos" GOARCH="$goarch" uv build --wheel
             done
           done
