@@ -41,7 +41,7 @@ RUN set -eux; \
     tar -xzf "${tarball}"; \
     install -m 0755 "gh_${GH_CLI_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh
 
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS os
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
@@ -49,8 +49,6 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de
 # the image.
 ARG ENABLE_SKILLS=true
 ARG ENABLE_BROWSER=true
-ARG OPENCODE_VERSION=1.18.19
-ARG AGENT_BROWSER_VERSION=0.31.1
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
 # store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
@@ -64,12 +62,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
-COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
-    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
-    ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
 
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -93,20 +85,52 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Chromium engine + certutil (libnss3-tools imports the egress-proxy CA into
-# Chromium's NSS db). Its own layer: big and rarely-changing, so an
-# AGENT_BROWSER_VERSION bump below re-pulls only the small CLI layer, not this.
+# Chrome for Testing has an independent security release cadence from Debian.
+# Keep its dependencies and inventory in the audited OS stage.
 RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    chromium \
+    libasound2t64 \
+    libatk-bridge2.0-0t64 \
+    libatk1.0-0t64 \
+    libatspi2.0-0t64 \
+    libcups2t64 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0t64 \
+    libnss3 \
     libnss3-tools \
+    libx11-6 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
-# agent-browser CLI/daemon. Do NOT run `agent-browser install` — it fetches
-# Chrome-for-Testing (no arm64 build); we use system chromium via
-# AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts lets the npm postinstall run on
-# npm 11+.
+COPY install-browser.sh /tmp/install-browser.sh
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export CURL_CA_BUNDLE=/run/secrets/build_ca_bundle; fi && \
+    if [ "$ENABLE_BROWSER" = "true" ]; then bash /tmp/install-browser.sh; fi && \
+    rm /tmp/install-browser.sh
+
+FROM os
+ARG ENABLE_SKILLS=true
+ARG ENABLE_BROWSER=true
+ARG OPENCODE_VERSION=1.18.19
+ARG AGENT_BROWSER_VERSION=0.31.1
+
+COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
+
+# agent-browser uses the pinned browser supplied by the OS stage.
 RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     npm install -g --allow-scripts=agent-browser "agent-browser@${AGENT_BROWSER_VERSION}" && \
     agent-browser --version && \
