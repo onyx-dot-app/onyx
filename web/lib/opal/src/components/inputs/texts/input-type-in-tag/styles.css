@@ -10,7 +10,6 @@
 
 .opal-input-type-in-tag {
   @apply cursor-text items-start justify-start;
-  gap: 4px;
   min-width: 160px;
 }
 
@@ -34,13 +33,16 @@
    inside it. The 2px bleed (negative margin, matching padding) keeps an armed
    chip's outer ring inside the scroll clip. */
 .opal-input-type-in-tag-tags {
-  --opal-input-type-in-tag-row-height: 24px;
-  --opal-input-type-in-tag-row-gap: 4px;
+  /* 20px rows, the title line's text height; the 22px chips overflow them
+     by 1px each side, so a 6px row gap leaves 4px between chips. */
+  --opal-input-type-in-tag-row-height: 20px;
+  --opal-input-type-in-tag-row-gap: 6px;
   --opal-input-type-in-tag-rows: 1;
   --opal-input-type-in-tag-max-rows: 2;
   --opal-input-type-in-tag-bleed: 2px;
   @apply flex min-w-0 flex-1 flex-wrap content-start items-center overflow-y-auto overscroll-contain;
-  gap: var(--opal-input-type-in-tag-row-gap);
+  row-gap: var(--opal-input-type-in-tag-row-gap);
+  column-gap: 4px;
   margin: calc(-1 * var(--opal-input-type-in-tag-bleed));
   padding: var(--opal-input-type-in-tag-bleed);
   min-height: calc(
@@ -60,9 +62,11 @@
 }
 
 .opal-input-type-in-tag-field {
-  /* Keep the family's 24px inner rhythm: h-6 like every content row.
-     Vertical padding here made the field 28px and the whole input 42px,
-     4px taller than its siblings. */
-  @apply h-6 w-auto min-w-20 flex-1;
-  padding: 0 4px;
+  /* The title line's 20px text box, as in InputTypeIn. */
+  @apply h-5 w-auto min-w-20 flex-1 px-0.5 py-0;
+}
+
+/* The title line grows with its chip rows, which pack from the top. */
+.opal-input-row.opal-input-type-in-tag-row {
+  @apply h-auto items-start;
 }

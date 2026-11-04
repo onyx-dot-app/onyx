@@ -18,7 +18,7 @@
 
 .opal-input {
   /* `--interactive-duration` (150ms) felt too laggy, so we're using 100ms instead. */
-  @apply flex flex-row items-center justify-between h-fit p-1.5 rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
+  @apply flex flex-row items-center justify-between gap-0.5 h-fit p-1.5 rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
 }
 
 .opal-input[data-variant="primary"] {
@@ -73,9 +73,10 @@
   @apply bg-transparent border rounded-08;
 }
 
-/* The input's content row: 2px padding and a 4px gap around the leading icon
+/* The input's title line: 2px padding and a 4px gap around the leading icon
    (20px) and the text (20px), one 24px row. Trailing controls sit outside
-   it. The height is fixed so a 22px tag in it does not grow the input. */
+   it, 2px apart (the root's gap). The height is fixed so a 22px tag in it
+   does not grow the input. */
 .opal-input-row {
   @apply flex flex-1 min-w-0 h-6 items-center gap-1 p-0.5;
 }
@@ -89,12 +90,6 @@
    container is the box. */
 .opal-input-leading-icon {
   display: contents;
-}
-
-/* TagField packs chip rows from the top, with no content row: the icon takes
-   the row's 2px inset itself and centres on the first 24px row. */
-.opal-input-type-in-tag > .opal-input-leading-icon > .opal-icon-container {
-  @apply my-0.5 ms-0.5;
 }
 
 /* The search icon reads a step lighter than a chosen option's icon. */

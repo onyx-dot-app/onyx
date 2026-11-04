@@ -323,77 +323,79 @@ function TagField({
         onInputDoubleClick();
       }}
     >
-      {Icon && <InputLeadingIcon icon={Icon} />}
-      <div
-        ref={tagsRef}
-        className="opal-input-type-in-tag-tags"
-        style={
-          {
-            "--opal-input-type-in-tag-rows": minRows,
-            "--opal-input-type-in-tag-max-rows": Math.max(maxRows, minRows),
-          } as React.CSSProperties
-        }
-      >
-        {tags.map((tag) => (
-          <Chip
-            key={tag.id}
-            title={tag.label}
-            icon={tag.icon}
-            error={tag.error}
-            disabled={disabled}
-            removeInTabOrder={false}
-            onRemove={
-              tag.locked
-                ? undefined
-                : () => {
-                    onRemoveTag(tag.id);
-                    focusField();
-                  }
-            }
-          />
-        ))}
-        {readOnly ? (
-          <div
-            ref={triggerRef}
-            role="combobox"
-            tabIndex={disabled ? -1 : 0}
-            className="opal-input-type-in-tag-trigger"
-            aria-label={placeholder}
-            {...inputAriaProps}
-            // Named here as well as in the spread: the combobox role
-            // requires them, and the caller's spread is opaque to lint.
-            aria-expanded={inputAriaProps?.["aria-expanded"] ?? false}
-            aria-controls={inputAriaProps?.["aria-controls"]}
-            aria-disabled={disabled || undefined}
-            onFocus={disabled ? undefined : onInputFocus}
-            onClick={disabled ? undefined : onInputClick}
-            onKeyDown={disabled ? undefined : handleTriggerKeyDown}
-          >
-            {tags.length === 0 && placeholder && (
-              <Text font="main-ui-muted" color="text-02">
-                {placeholder}
-              </Text>
-            )}
-          </div>
-        ) : (
-          /* raw-ok: nesting InputTypeIn double-pads the composite chrome, so the inner field reuses InputTypeIn's .opal-input-field styling directly */
-          <input
-            ref={inputRef}
-            type="text"
-            // dir="auto": typed text decides the direction, as in InputTypeIn.
-            dir="auto"
-            className="opal-input-field opal-input-type-in-tag-field"
-            disabled={disabled}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onFocus={onInputFocus}
-            onClick={onInputClick}
-            onKeyDown={handleInputKeyDown}
-            placeholder={placeholder}
-            aria-label={placeholder}
-            {...inputAriaProps}
-          />
-        )}
+      <div className="opal-input-row opal-input-type-in-tag-row">
+        {Icon && <InputLeadingIcon icon={Icon} />}
+        <div
+          ref={tagsRef}
+          className="opal-input-type-in-tag-tags"
+          style={
+            {
+              "--opal-input-type-in-tag-rows": minRows,
+              "--opal-input-type-in-tag-max-rows": Math.max(maxRows, minRows),
+            } as React.CSSProperties
+          }
+        >
+          {tags.map((tag) => (
+            <Chip
+              key={tag.id}
+              title={tag.label}
+              icon={tag.icon}
+              error={tag.error}
+              disabled={disabled}
+              removeInTabOrder={false}
+              onRemove={
+                tag.locked
+                  ? undefined
+                  : () => {
+                      onRemoveTag(tag.id);
+                      focusField();
+                    }
+              }
+            />
+          ))}
+          {readOnly ? (
+            <div
+              ref={triggerRef}
+              role="combobox"
+              tabIndex={disabled ? -1 : 0}
+              className="opal-input-type-in-tag-trigger"
+              aria-label={placeholder}
+              {...inputAriaProps}
+              // Named here as well as in the spread: the combobox role
+              // requires them, and the caller's spread is opaque to lint.
+              aria-expanded={inputAriaProps?.["aria-expanded"] ?? false}
+              aria-controls={inputAriaProps?.["aria-controls"]}
+              aria-disabled={disabled || undefined}
+              onFocus={disabled ? undefined : onInputFocus}
+              onClick={disabled ? undefined : onInputClick}
+              onKeyDown={disabled ? undefined : handleTriggerKeyDown}
+            >
+              {tags.length === 0 && placeholder && (
+                <Text font="main-ui-muted" color="text-02">
+                  {placeholder}
+                </Text>
+              )}
+            </div>
+          ) : (
+            /* raw-ok: nesting InputTypeIn double-pads the composite chrome, so the inner field reuses InputTypeIn's .opal-input-field styling directly */
+            <input
+              ref={inputRef}
+              type="text"
+              // dir="auto": typed text decides the direction, as in InputTypeIn.
+              dir="auto"
+              className="opal-input-field opal-input-type-in-tag-field"
+              disabled={disabled}
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onFocus={onInputFocus}
+              onClick={onInputClick}
+              onKeyDown={handleInputKeyDown}
+              placeholder={placeholder}
+              aria-label={placeholder}
+              {...inputAriaProps}
+            />
+          )}
+        </div>
       </div>
       {children}
       {/* The clear action is the field's last control, but for a
