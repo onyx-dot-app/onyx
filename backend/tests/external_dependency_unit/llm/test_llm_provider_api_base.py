@@ -741,7 +741,7 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
                         "vertex_credentials": _mask_string(
                             original_custom_config["vertex_credentials"]
                         ),
-                        "vertex_location": "us-central1",
+                        "vertex_location": "global",
                     },
                 ),
                 user=_create_mock_admin(),
@@ -754,7 +754,77 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
             captured_llms[0].config.custom_config["vertex_credentials"]
             == original_custom_config["vertex_credentials"]
         )
-        assert captured_llms[0].config.custom_config["vertex_location"] == "us-central1"
+        assert captured_llms[0].config.custom_config["vertex_location"] == "global"
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, name)
+
+
+def test_masked_sensitive_custom_config_cannot_move_with_a_config_change(
+    db_session: Session,
+) -> None:
+    """A masked credential is a reuse of the stored secret, so changing any other
+    custom config entry alongside it is refused on every deployment."""
+    name = f"test-provider-vertex-move-{uuid4().hex[:8]}"
+    provider_name = LlmProviderNames.VERTEX_AI.value
+    default_model_name = "gemini-2.5-pro"
+    original_custom_config = {
+        "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
+        "vertex_location": "global",
+    }
+    captured_llms: list[LitellmLLM] = []
+
+    def capture_test_llm(llm: LitellmLLM) -> str:
+        captured_llms.append(llm)
+        return ""
+
+    try:
+        provider = put_llm_provider(
+            llm_provider_upsert_request=LLMProviderUpsertRequest(
+                name=name,
+                provider=provider_name,
+                custom_config=original_custom_config,
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name=default_model_name, is_visible=True
+                    )
+                ],
+                api_key_changed=False,
+                custom_config_changed=True,
+                is_auto_mode=False,
+            ),
+            is_creation=True,
+            user=_create_mock_admin(),
+            db_session=db_session,
+        )
+
+        with (
+            patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm),
+            pytest.raises(OnyxError) as exc_info,
+        ):
+            run_llm_config_test(
+                LLMTestRequest(
+                    id=provider.id,
+                    provider=provider_name,
+                    model=default_model_name,
+                    api_key_changed=False,
+                    custom_config_changed=True,
+                    custom_config={
+                        "vertex_credentials": _mask_string(
+                            original_custom_config["vertex_credentials"]
+                        ),
+                        "vertex_location": "us-central1",
+                    },
+                ),
+                user=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert "cannot be changed without changing the API key" in str(
+            exc_info.value.detail
+        )
+        assert captured_llms == []
     finally:
         db_session.rollback()
         _cleanup_provider(db_session, name)
