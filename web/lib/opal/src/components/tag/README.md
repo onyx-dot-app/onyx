@@ -2,7 +2,7 @@
 
 **Import:** `import { Tag, TAG_REMOVE_ATTR, type TagProps } from "@opal/components";`
 
-A gray, 1.375rem-tall `Interactive` pill around a `Content` (`secondary` preset): a tag-field value, a filter toggle or a popover trigger. For a coloured label that does nothing on click, use [`Badge`](../badge/README.md).
+A gray, 1.5rem-tall `Interactive` pill around a `Content` (`secondary` preset): a tag-field value, a filter toggle or a popover trigger. For a coloured label that does nothing on click, use [`Badge`](../badge/README.md).
 
 - **Static** (no `onClick` or `onRemove`): the tag look without the hover, such as a tag field's locked tag.
 - **Removable** (`onRemove`): a remove `Button` after the title, marked with `TAG_REMOVE_ATTR` for tag-field keyboard flows. Tag fields select a tag by focusing its remove button: the tag turns into a dark pill with an outer ring (Figma State=Focus). Removable titles are always capped.
