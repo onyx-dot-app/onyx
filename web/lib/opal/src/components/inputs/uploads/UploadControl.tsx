@@ -192,7 +192,7 @@ export default function UploadControl({
         <Button
           onClick={noProp(openFilePicker)}
           type="button"
-          prominence="tertiary"
+          prominence="secondary"
           size="sm"
           disabled={isNonEditable}
         >

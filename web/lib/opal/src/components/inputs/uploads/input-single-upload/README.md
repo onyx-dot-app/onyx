@@ -5,7 +5,7 @@
 
 An upload control in the input chrome, for one file in a form row. Nothing is typed: a click focuses
 it, so a copied file can be pasted; a double click, Enter or Space opens the file picker; and a file
-can be dropped on it. A "Select File" tertiary button at the end of the control is always shown, is a tab
+can be dropped on it. A "Select File" secondary button at the end of the control is always shown, is a tab
 stop, and opens the picker too. With a value, Delete or Backspace
 clears it, as the × does; clearing with the × returns focus to the control. It leads with an import icon, shows
 the placeholder until a file is in, then the file's name, with a × before the select button that clears it.
