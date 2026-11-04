@@ -85,7 +85,6 @@ function Badge({
     >
       <Content
         font="secondary-body"
-        // The body variant sets the title in secondary-body.
         width="fit"
         color="interactive"
         icon={icon}

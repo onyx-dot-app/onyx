@@ -85,7 +85,7 @@ meanings in one prop. Use `tooltip` for hover text.
 | `icon`                | `IconFunctionComponent` | —               | Left icon                                                                                                                                                                                                                    |
 | `description`         | `string`                | —               | Description below the title                                                                                                                                                                                                  |
 | `descriptionMaxLines` | `number`                | —               | Cap the description at N lines and truncate the rest. Unset wraps without a limit — a row showing user-authored text usually wants `1`                                                                                       |
-| `suffix`              | `string`                | —               | Muted text beside the title, like "(Default)". Shown only by the `heading` variant with a `main-*` `sizePreset`; the default `headline` row drops it |
+| `suffix`              | `string`                | —               | Muted text beside the title, like "(Default)"                                                                                        |
 | `badge`         | `BadgeProps`         | —        | Badge beside the title, like a plan badge                                 |
 | `font`                | `TextFont`              | `"main-ui-action"` | The title's font; sets every size |
 | `orientation`         | `"inline" \| "reverse"` | `"inline"`      | Where the icon sits |
@@ -118,6 +118,6 @@ import { LineItemButton } from "@opal/components";
   state={isSelected ? "selected" : "empty"}
   onClick={handleClick}
   title="claude-opus-4"
-  rightChildren={<Tag title="Default" color="blue" />}
+  rightChildren={<Badge title="Default" color="info" />}
 />
 ```

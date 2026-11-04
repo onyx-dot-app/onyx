@@ -10,7 +10,7 @@ A card header layout with a main content slot and a full-width `bottomChildren` 
 
 ### Why Card.Header?
 
-`Card.Header` is layout-only — it provides `children` for the main content area plus `bottomChildren` for a secondary slot. For the typical icon/title/description + right-action pattern, pass a `<ContentAction font="heading-h2" orientation="stacked" />` into `children` with `rightChildren` for the action button.
+`Card.Header` is layout-only — it provides `children` for the main content area plus `bottomChildren` for a secondary slot. For the typical icon/title/description + right-action pattern, pass a `<ContentAction font="main-ui-action" />` into `children` with `rightChildren` for the action button.
 
 ### Props
 

@@ -57,7 +57,7 @@ import SvgSettings from "@opal/icons/settings";
   icon={SvgSettings}
   title="OpenAI"
   description="GPT"
-  badge={{ title: "Default", color: "blue" }}
+  badge={{ title: "Default", color: "info" }}
   padding={2}
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />

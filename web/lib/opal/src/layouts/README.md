@@ -36,7 +36,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
   icon={SvgSettings}
   title="OpenAI"
   description="GPT"
-  badge={{ title: "Default", color: "blue" }}
+  badge={{ title: "Default", color: "info" }}
 />
 
 // Row with action button
