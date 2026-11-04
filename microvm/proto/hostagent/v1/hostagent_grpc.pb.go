@@ -24,6 +24,7 @@ const (
 	HostAgent_List_FullMethodName             = "/craft.hostagent.v1.HostAgent/List"
 	HostAgent_NodeInfo_FullMethodName         = "/craft.hostagent.v1.HostAgent/NodeInfo"
 	HostAgent_CloseConnections_FullMethodName = "/craft.hostagent.v1.HostAgent/CloseConnections"
+	HostAgent_Dial_FullMethodName             = "/craft.hostagent.v1.HostAgent/Dial"
 )
 
 // HostAgentClient is the client API for HostAgent service.
@@ -54,6 +55,13 @@ type HostAgentClient interface {
 	// api_server calls it in the daemon Init sequence after a restore, so that
 	// pooled client connections in the guest fail fast and reconnect.
 	CloseConnections(ctx context.Context, in *CloseConnectionsRequest, opts ...grpc.CallOption) (*CloseConnectionsResponse, error)
+	// Dial opens a byte stream to a vsock port of a running VM: the guest
+	// daemon or the app preview (3010). The first frame names sandbox_id and
+	// guest_port and may carry data; later frames carry data only. The
+	// response stream carries the guest's bytes and ends when the guest closes
+	// the connection. When the client ends its send side, the agent keeps
+	// reading until the guest closes (Firecracker vsock has no half-close).
+	Dial(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DialFrame, DialFrame], error)
 }
 
 type hostAgentClient struct {
@@ -114,6 +122,19 @@ func (c *hostAgentClient) CloseConnections(ctx context.Context, in *CloseConnect
 	return out, nil
 }
 
+func (c *hostAgentClient) Dial(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DialFrame, DialFrame], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HostAgent_ServiceDesc.Streams[0], HostAgent_Dial_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DialFrame, DialFrame]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HostAgent_DialClient = grpc.BidiStreamingClient[DialFrame, DialFrame]
+
 // HostAgentServer is the server API for HostAgent service.
 // All implementations must embed UnimplementedHostAgentServer
 // for forward compatibility.
@@ -142,6 +163,13 @@ type HostAgentServer interface {
 	// api_server calls it in the daemon Init sequence after a restore, so that
 	// pooled client connections in the guest fail fast and reconnect.
 	CloseConnections(context.Context, *CloseConnectionsRequest) (*CloseConnectionsResponse, error)
+	// Dial opens a byte stream to a vsock port of a running VM: the guest
+	// daemon or the app preview (3010). The first frame names sandbox_id and
+	// guest_port and may carry data; later frames carry data only. The
+	// response stream carries the guest's bytes and ends when the guest closes
+	// the connection. When the client ends its send side, the agent keeps
+	// reading until the guest closes (Firecracker vsock has no half-close).
+	Dial(grpc.BidiStreamingServer[DialFrame, DialFrame]) error
 	mustEmbedUnimplementedHostAgentServer()
 }
 
@@ -166,6 +194,9 @@ func (UnimplementedHostAgentServer) NodeInfo(context.Context, *NodeInfoRequest) 
 }
 func (UnimplementedHostAgentServer) CloseConnections(context.Context, *CloseConnectionsRequest) (*CloseConnectionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CloseConnections not implemented")
+}
+func (UnimplementedHostAgentServer) Dial(grpc.BidiStreamingServer[DialFrame, DialFrame]) error {
+	return status.Error(codes.Unimplemented, "method Dial not implemented")
 }
 func (UnimplementedHostAgentServer) mustEmbedUnimplementedHostAgentServer() {}
 func (UnimplementedHostAgentServer) testEmbeddedByValue()                   {}
@@ -278,6 +309,13 @@ func _HostAgent_CloseConnections_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HostAgent_Dial_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HostAgentServer).Dial(&grpc.GenericServerStream[DialFrame, DialFrame]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HostAgent_DialServer = grpc.BidiStreamingServer[DialFrame, DialFrame]
+
 // HostAgent_ServiceDesc is the grpc.ServiceDesc for HostAgent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -306,6 +344,13 @@ var HostAgent_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HostAgent_CloseConnections_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Dial",
+			Handler:       _HostAgent_Dial_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "hostagent/v1/hostagent.proto",
 }

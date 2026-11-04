@@ -22,6 +22,8 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes every relay connection of the VM. New connections still work. Stop and VM exit also close them. |
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
 | `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk, CPU model, Firecracker, host kernel and guest kernel versions. |
+| `CloseConnections(sandbox_id, attempt, generation)` | Closes the VM's egress relay connections (see Egress relay). |
+| `Dial(sandbox_id, guest_port)` | Byte stream to a guest vsock port (see below). |
 
 Errors are typed. Each error is a gRPC status with one `google.rpc.ErrorInfo` detail: the domain is
 `hostagent.craft.onyx.app` and the reason is an `ErrorReason` name, for example `CAPACITY_MEMORY`,
@@ -38,8 +40,25 @@ Rules for the Create parameters:
 - `generation` is unique on the node and increases with each Create. It starts from the wall clock, so it
   also increases across agent restarts.
 
-The agent serves the API on a Unix socket (`<data-dir>/run/host-agent.sock`, mode 0600). The mTLS
-listener comes in ENG-4568.
+The agent serves the API on a Unix socket (`<data-dir>/run/host-agent.sock`, mode 0600, root only) and,
+with `--listen`, on an mTLS TCP listener for the api_server (D2):
+
+- `--tls-cert`, `--tls-key`: the agent's certificate and key (PEM files; Helm mounts them, ENG-4583).
+- `--client-ca`: the api_server CA. The listener needs a client certificate that chains to it (TLS 1.3).
+  A client with no certificate, or with one from another CA, fails the handshake.
+- Both listeners serve the same API.
+
+`Dial(sandbox_id, guest_port)` is a bidirectional stream of byte frames to a vsock port of a running VM:
+the guest daemon port or the app preview (3010). Only the ports in `--dial-ports` (default `52,3010`; 52
+is the prototype daemon port until ENG-4571 fixes the daemon port) are allowed (`PORT_NOT_ALLOWED`). The
+agent does not start with an empty `--dial-ports`. If nothing in the VM accepts the connection, the call
+fails with `GUEST_UNREACHABLE`. A failed write to the guest also ends the call with `GUEST_UNREACHABLE`.
+When the client ends its send side, the agent keeps reading until the guest closes, because Firecracker
+turns a host half-close into a full close.
+
+While the agent restarts, new calls (including `Dial` and the egress relay) fail for a few seconds: 5.5 s
+in the KVM restart test, about 7 s in T6. Open `Dial` streams and relay connections end with the old
+process. VMs and their programs keep running; callers retry.
 
 ### How a VM starts
 
@@ -198,6 +217,8 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 # default /opt/harness), the PR #17174 backend (KVM_PR_BACKEND, default /opt/pr/backend), its Python env
 # (KVM_PYTHON) and Docker for Redis.
 ./hostagent-kvm.test -test.v -test.run TestEgressKVM
+# mTLS listener and Dial (test CAs from internal/testcerts).
+./hostagent-kvm.test -test.v -test.run TestDialKVM
 ```
 
 To check relay tokens against the proxy verifier on a dev machine:

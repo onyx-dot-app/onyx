@@ -539,6 +539,20 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 	return StopResult{AlreadyStopped: exited}, nil
 }
 
+// DialTarget returns the vsock UDS of a running VM, for Dial.
+func (m *Manager) DialTarget(sandboxID string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e := m.vms[sandboxID]
+	if e == nil || e.proc == nil {
+		return "", apierr.New(pb.ErrorReason_SANDBOX_NOT_FOUND, "sandbox %s has no running VM on this node", sandboxID)
+	}
+	if e.vm.State != pb.VMState_VM_STATE_RUNNING {
+		return "", apierr.New(pb.ErrorReason_SANDBOX_NOT_FOUND, "sandbox %s VM is %s", sandboxID, e.vm.State)
+	}
+	return e.proc.Info().VsockUDS, nil
+}
+
 // CloseConnections closes the egress relay connections of a running VM. It
 // has the preconditions of Stop.
 func (m *Manager) CloseConnections(sandboxID string, attempt, generation uint64) (int, error) {
