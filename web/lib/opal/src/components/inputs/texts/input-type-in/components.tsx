@@ -26,11 +26,10 @@ export interface InputTypeInProps extends WithoutStyles<
 > {
   ref?: React.Ref<HTMLInputElement>;
   variant?: InputVariants;
-  prefixText?: string;
   searchIcon?: boolean;
   /** Leading icon (a select's chosen option icon). Renders after `searchIcon`. */
   icon?: IconFunctionComponent;
-  /** Content before the text, after `prefixText` (a chosen value shown as a tag). */
+  /** Content before the text, after the leading icon (a chosen value shown as a tag). */
   leftChildren?: React.ReactNode;
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
@@ -79,7 +78,6 @@ export interface InputTypeInProps extends WithoutStyles<
 export default function InputTypeIn({
   ref,
   variant = "primary",
-  prefixText,
   leftChildren,
   searchIcon,
   icon: Icon,
@@ -116,12 +114,6 @@ export default function InputTypeIn({
       {searchIcon && <InputLeadingIcon icon={SvgSearch} muted />}
 
       {Icon && <InputLeadingIcon icon={Icon} />}
-
-      {prefixText && (
-        <span className="select-none pointer-events-none font-main-ui-body text-text-02 ps-0.5">
-          {prefixText}
-        </span>
-      )}
 
       {leftChildren}
 

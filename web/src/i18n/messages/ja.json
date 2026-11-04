@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "リセット期間ごとの最大支出額です。コスト予算、token 予算、またはその両方を設定してください。",
-          "placeholder": "コスト上限なし",
-          "title": "コスト予算",
-          "unit": "USD"
+          "title": "コスト予算"
         },
         "errors": {
           "budgetRequired": "コスト予算、token 予算、またはその両方を入力してください",

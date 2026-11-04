@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "每个重置周期的最高支出。可设置费用预算、token 预算，或同时设置两者。",
-          "placeholder": "无费用限额",
-          "title": "费用预算",
-          "unit": "USD"
+          "title": "费用预算"
         },
         "errors": {
           "budgetRequired": "请输入费用预算、token 预算，或同时输入两者",

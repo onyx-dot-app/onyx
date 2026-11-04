@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "Maximale Ausgaben pro Zurücksetzungszeitraum. Legen Sie ein Kostenbudget, ein Token-Budget oder beides fest.",
-          "placeholder": "Kein Kostenlimit",
-          "title": "Kostenbudget",
-          "unit": "USD"
+          "title": "Kostenbudget"
         },
         "errors": {
           "budgetRequired": "Geben Sie ein Kostenbudget, ein Token-Budget oder beides ein",

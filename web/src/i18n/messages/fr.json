@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "Dépense maximale par période de réinitialisation. Définissez un budget de coût, un budget de jetons, ou les deux.",
-          "placeholder": "Aucune limite de coût",
-          "title": "Budget de coût",
-          "unit": "USD"
+          "title": "Budget de coût"
         },
         "errors": {
           "budgetRequired": "Saisissez un budget de coût, un budget de jetons, ou les deux",

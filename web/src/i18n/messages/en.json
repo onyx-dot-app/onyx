@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "Maximum spend per reset period. Set a cost budget, a token budget, or both.",
-          "placeholder": "No cost limit",
-          "title": "Cost budget",
-          "unit": "USD"
+          "title": "Cost budget"
         },
         "errors": {
           "budgetRequired": "Enter a cost budget, a token budget, or both",

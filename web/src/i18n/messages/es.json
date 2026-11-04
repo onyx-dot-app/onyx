@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "Gasto máximo por periodo de restablecimiento. Define un presupuesto de coste, uno de tokens o ambos.",
-          "placeholder": "Sin límite de coste",
-          "title": "Presupuesto de coste",
-          "unit": "USD"
+          "title": "Presupuesto de coste"
         },
         "errors": {
           "budgetRequired": "Introduce un presupuesto de coste, uno de tokens o ambos",

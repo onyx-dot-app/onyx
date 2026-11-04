@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "Gasto máximo por período de reinício. Defina um orçamento de custo, um orçamento de tokens ou ambos.",
-          "placeholder": "Sem limite de custo",
-          "title": "Orçamento de custo",
-          "unit": "USD"
+          "title": "Orçamento de custo"
         },
         "errors": {
           "budgetRequired": "Digite um orçamento de custo, um orçamento de tokens ou ambos",

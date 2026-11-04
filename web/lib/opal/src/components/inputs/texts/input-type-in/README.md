@@ -2,7 +2,7 @@
 
 **Import:** `import { InputTypeIn } from "@opal/components";`
 
-A styled text input with optional search icon, prefix text, clear button, and right section slot.
+A styled text input with an optional leading icon, clear button, and right section slot.
 Visual states are driven by a `variant` prop; all border, background, and focus styles live in `styles.css`.
 
 ## Props
@@ -10,8 +10,7 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 | Prop            | Type                    | Default     | Description                                                                                  |
 | --------------- | ----------------------- | ----------- | -------------------------------------------------------------------------------------------- |
 | `variant`       | `InputVariants`         | `"primary"` | Visual state                                                                                 |
-| `prefixText`    | `string`                | —           | Non-editable prefix rendered before the input (e.g. `"https://"`)                            |
-| `leftChildren`  | `ReactNode`             | —           | Content before the text, after `prefixText` (e.g. a chosen value shown as a tag)             |
+| `leftChildren`  | `ReactNode`             | —           | Content before the text, after the leading icon (e.g. a chosen value shown as a tag)         |
 | `searchIcon`    | `boolean`               | `false`     | Show a search icon on the left and render a native `type="search"` field                     |
 | `icon`          | `IconFunctionComponent` | —           | Leading icon after the search icon (a select's chosen option icon)                           |
 | `rightChildren` | `ReactNode`             | —           | Custom content rendered to the right of the input; suppresses the built-in clear button      |
@@ -43,9 +42,6 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 
 // Error state
 <InputTypeIn variant="error" value={value} onChange={...} />
-
-// With prefix
-<InputTypeIn prefixText="https://" value={url} onChange={...} />
 
 // Custom right section (password reveal) — suppresses clear button automatically
 <InputTypeIn

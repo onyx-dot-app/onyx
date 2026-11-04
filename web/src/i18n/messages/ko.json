@@ -9931,9 +9931,7 @@
         },
         "costBudget": {
           "description": "초기화 주기당 최대 지출액입니다. 비용 예산, token 예산 또는 둘 다 설정하세요.",
-          "placeholder": "비용 한도 없음",
-          "title": "비용 예산",
-          "unit": "USD"
+          "title": "비용 예산"
         },
         "errors": {
           "budgetRequired": "비용 예산, token 예산 또는 둘 다 입력하세요",
