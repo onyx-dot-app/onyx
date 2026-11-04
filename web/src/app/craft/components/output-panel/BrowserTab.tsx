@@ -251,6 +251,9 @@ export default function BrowserTab({
   );
 }
 
+// Half of the proxy's 10 minute viewer cookie lifetime.
+const VIEWER_COOKIE_RENEW_MS = 5 * 60 * 1000;
+
 interface BrowserFrameProps {
   app: RegisteredWebapp;
   covered: boolean;
@@ -273,6 +276,15 @@ function BrowserFrame({
   useEffect(() => {
     reportLoading(!covered && !loaded);
   }, [resourceId, covered, loaded]);
+  // The sandboxed frame cannot renew its viewer cookie; this page's Onyx
+  // session can, by loading the app URL before the cookie expires.
+  useEffect(() => {
+    const renew = () => {
+      void fetch(app.url, { cache: "no-store" });
+    };
+    const timer = window.setInterval(renew, VIEWER_COOKIE_RENEW_MS);
+    return () => window.clearInterval(timer);
+  }, [app.url]);
 
   return (
     <>
@@ -285,7 +297,7 @@ function BrowserFrame({
         )}
         aria-hidden={covered}
         inert={covered || !loaded}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+        sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
         title={app.name}
       />
       {!covered && !loaded && (

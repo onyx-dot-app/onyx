@@ -9,10 +9,12 @@ from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import Request
 from starlette.responses import StreamingResponse
 
 from onyx.db.enums import SharingScope
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build import webapp_proxy as api
 from tests.common.paths import find_ancestor_containing
 
@@ -128,6 +130,10 @@ class _FakeAsyncClient:
 
 async def _fake_sandbox_url(_session_id: UUID) -> str:
     return "http://sandbox"
+
+
+async def _active_viewer(_db: object, _user_id: UUID) -> bool:
+    return True
 
 
 class _FakeACM:
@@ -550,6 +556,7 @@ class TestWebappAccessCache:
             return (SharingScope.PRIVATE, viewer.id)
 
         monkeypatch.setattr(api, "get_webapp_access_async", fake_access)
+        monkeypatch.setattr(api, "is_user_active_async", _active_viewer)
         monkeypatch.setattr(
             api, "get_async_session_context_manager", lambda: _FakeACM()
         )
@@ -558,8 +565,8 @@ class TestWebappAccessCache:
         shared = _FakeCacheBackend()
         monkeypatch.setattr(api, "get_cache_backend", lambda: shared)
 
-        await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
-        await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
+        await api._check_webapp_access(UUID(SESSION_ID), viewer.id)
+        await api._check_webapp_access(UUID(SESSION_ID), viewer.id)
 
         assert calls["n"] == 1  # second call served from cache
 
@@ -582,13 +589,14 @@ class TestWebappAccessCache:
             return (SharingScope.PRIVATE, owner_id)
 
         monkeypatch.setattr(api, "get_webapp_access_async", fake_access)
+        monkeypatch.setattr(api, "is_user_active_async", _active_viewer)
         monkeypatch.setattr(
             api, "get_async_session_context_manager", lambda: _FakeACM()
         )
 
         for _ in range(2):
-            with pytest.raises(HTTPException) as exc:
-                await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
-            assert exc.value.status_code == 404
+            with pytest.raises(OnyxError) as exc:
+                await api._check_webapp_access(UUID(SESSION_ID), viewer.id)
+            assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
 
         assert calls["n"] == 2  # denial hit the DB both times

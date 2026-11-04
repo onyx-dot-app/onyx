@@ -132,9 +132,33 @@ tenant, session, path and revision.
    CSRF tokens, `Origin` and client-identity headers, and the filter drops
    every `x-onyx-*` and `sec-fetch-*` header. A header that is in neither list
    reaches the sandbox. Add new sensitive headers there.
-4. `strip-set-cookie` **`set-cookie` from the sandbox never reaches the
-   browser.** `server/features/build/webapp_proxy.py:EXCLUDED_HEADERS` strips it, so app code cannot set a cookie on
-   the Onyx domain. Check this filter and the cache-control rule together.
+4. `strip-set-cookie` **`set-cookie` and policy headers from the sandbox never
+   reach the browser.** `server/features/build/webapp_proxy.py:EXCLUDED_HEADERS` strips them, so app code cannot set a cookie on
+   the Onyx domain, register a root-scoped service worker, or replace the
+   proxy's CSP. `_WEBAPP_SECURITY_HEADERS` puts a `sandbox` CSP without
+   `allow-same-origin` on every proxied response and on the offline page, so
+   the document gets an opaque origin: no Onyx cookies or storage, no
+   `window.parent` access from the Craft iframe, and `frame-ancestors 'self'`.
+   The Craft iframe attribute in `web/src/app/craft/components/output-panel/BrowserTab.tsx`
+   carries the same flag set. An opaque origin sends no Onyx cookie with its
+   subresource and websocket requests, so a document load the Onyx cookie
+   authenticated issues the `onyx_craft_webapp` viewer cookie
+   (`_set_viewer_cookie`: `SameSite=None`, `HttpOnly`, `Secure`, `Path` of
+   that one webapp, 10 minute grant in the shared cache keyed by a random
+   token with the tenant and session). `get_webapp` and `webapp_websocket_viewer`
+   admit a request whose grant names the session; any other session, a stale
+   token, or no cookie falls back to the Onyx cookie check. A grant never
+   renews itself, so sign-out ends preview access within the TTL; the Craft
+   iframe component above loads the app URL with the Onyx session every five
+   minutes to issue a fresh one, and a top-level visit open for ten minutes
+   needs a reload. The app's own
+   `fetch` and `import()` calls still omit the cookie (cross-origin credentials
+   from the opaque origin), only classic subresources and the HMR socket carry
+   it. The web middleware (`web/src/proxy.ts`) leaves `/api/` responses alone,
+   or its page CSP would replace this one on the dev rewrite; the Next dev
+   server still rejects `_next/*` asset requests that arrive with `Origin:
+   null`, so a preview under this isolation needs the nginx route to the API.
+   Check this filter and the cache-control rule together.
 5. `immutable-only-static-media` **Only paths under `/_next/static/media/` are
    cached as immutable.** Those files have content hashes. Dev JS chunks and
    CSS keep the same URL while the agent edits them. Caching them would serve

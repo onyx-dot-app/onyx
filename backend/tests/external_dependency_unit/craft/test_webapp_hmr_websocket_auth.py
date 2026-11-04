@@ -30,7 +30,10 @@ from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, WEB_DOMAIN
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import abandon_async_engines
 from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.server.features.build.webapp_proxy import public_build_router
+from onyx.server.features.build.webapp_proxy import (
+    public_build_router,
+    webapp_websocket_viewer,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -109,7 +112,9 @@ def test_hmr_route_uses_shared_cookie_websocket_auth() -> None:
         if isinstance(r, APIWebSocketRoute) and "{hmr_endpoint}" in r.path
     )
     dependency_calls = [d.call for d in route.dependant.dependencies]
-    assert current_user_from_websocket_cookie in dependency_calls
+    # The viewer dependency falls back to the shared cookie auth.
+    assert webapp_websocket_viewer in dependency_calls
+    assert webapp_websocket_viewer._is_websocket_auth_dependency is True  # ty: ignore[unresolved-attribute]
 
 
 def test_cookie_websocket_auth_sets_tenant_from_session_token(

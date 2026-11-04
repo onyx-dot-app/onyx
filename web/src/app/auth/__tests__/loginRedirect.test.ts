@@ -129,3 +129,20 @@ describe("requireAuth turns the stamped path into next", () => {
     expect((await requireAuth()).redirect).toBe("/auth/login");
   });
 });
+
+describe("proxy leaves API responses to the API server", () => {
+  test("sets no CSP on an /api path", async () => {
+    const res = await proxy(
+      new NextRequest(`${APP_DOMAIN}/api/build/sessions/abc/webapp`)
+    );
+    expect(res.headers.get("Content-Security-Policy")).toBeNull();
+    expect(res.headers.get(STAMPED)).toBe("/api/build/sessions/abc/webapp");
+  });
+
+  test("keeps the CSP on a page", async () => {
+    const res = await proxy(new NextRequest(`${APP_DOMAIN}/app`));
+    expect(res.headers.get("Content-Security-Policy")).toContain(
+      "frame-ancestors"
+    );
+  });
+});

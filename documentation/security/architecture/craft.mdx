@@ -177,8 +177,18 @@ Sharing exposes the generated web app, not the Craft conversation or the session
 information written into the app itself is visible to everyone who can open it.
 
 Before sending a request to the generated app server, the proxy removes the viewer's cookies, authorization headers,
-CSRF headers, forwarding headers, and identity headers. It also strips `set-cookie` from the generated app's response.
-The preview runs in a sandboxed iframe, with scripts, forms, and user-initiated navigation enabled.
+CSRF headers, forwarding headers, and identity headers.
+It also strips `set-cookie` and policy headers from the generated app's response and sets a Content Security Policy
+`sandbox` on every proxied page. The page gets an opaque origin: it cannot read Onyx cookies or storage,
+cannot call Onyx endpoints with the viewer's session, and cannot reach the Craft page that frames it.
+The preview iframe carries the same sandbox flags, with scripts, forms, and user-initiated navigation enabled.
+
+An opaque origin sends no Onyx session cookie with the page's scripts, styles, images, and hot-reload socket.
+When the viewer's Onyx session opens a generated app,
+the proxy sets a short-lived `onyx_craft_webapp` cookie that is valid only for that app's path,
+cannot be read by script, and expires 10 minutes after the page load that issued it.
+The Craft page issues a fresh one while a preview is open, and signing out stops new ones.
+The cookie is marked `Secure`, so a preview works over HTTPS and on `localhost`, not on another plain-HTTP host.
 
 <Warning>
   Generated client-side code runs in the viewer's browser.

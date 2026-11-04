@@ -9,6 +9,7 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
@@ -1139,3 +1140,15 @@ def set_user_groups__no_commit(
         db_session.execute(insert_stmt)
 
     recompute_user_permissions__no_commit(user_id, db_session)
+
+
+async def is_user_active_async(db_session: AsyncSession, user_id: UUID) -> bool:
+    """False for an unknown or deactivated account."""
+    user = (
+        await db_session.execute(
+            select(User).where(
+                User.id == user_id  # ty: ignore[invalid-argument-type]
+            )
+        )
+    ).scalar_one_or_none()
+    return user is not None and user.is_active

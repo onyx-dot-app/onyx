@@ -24,6 +24,12 @@ class StaticPreviewGrant(BaseModel):
     revisions: dict[str, str]
 
 
+class WebappViewerGrant(BaseModel):
+    tenant_id: str
+    session_id: UUID
+    user_id: UUID
+
+
 class StaticPreviewResponse(BaseModel):
     path: str
     expires_in: int

@@ -128,6 +128,13 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(ORIGINAL_PATH_HEADER, pathWithQuery);
 
+  // The API server owns its response headers. Only the dev rewrite routes /api
+  // through here, and setting the page CSP on it would replace the sandbox CSP
+  // the Craft webapp proxy sends.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
