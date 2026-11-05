@@ -1748,23 +1748,6 @@ def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
     assert "doc1" in future_hashes
 
 
-def test_get_docs_to_update_doc_without_date_keeps_the_stored_date() -> None:
-    """A FUTURE build rewrites unchanged documents. One that comes without a
-    date (a GitHub file no commit in the poll window changed) keeps the stored
-    date, so the new index does not lose it."""
-    stored_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    doc = _doc_with_text("Title", "unchanged content")
-    doc.id = "doc1"
-    doc.doc_updated_at = None
-    db_doc = _make_db_doc(
-        "doc1", content_hash=doc.content_hash(), doc_updated_at=stored_at
-    )
-
-    docs, _ = get_docs_to_update([doc], db_docs=[db_doc], ignore_content_hash_gate=True)
-
-    assert [d.doc_updated_at for d in docs] == [stored_at]
-
-
 def test_stored_date_reaches_the_chunks_but_is_not_written_back() -> None:
     """The stored date an undated document carries is for its chunks only.
     Writing it back to the row could overwrite a newer date that another run

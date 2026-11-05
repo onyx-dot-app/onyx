@@ -589,7 +589,6 @@ def _convert_file_to_document(
     branch: str,
     doc_updated_at: datetime | None,
 ) -> Document:
-    """One repository file as a document, dated ``doc_updated_at``."""
     repo_full_name = repo.full_name
     parts = repo_full_name.split("/", 1)
     owner_name = parts[0] if parts else ""
@@ -1044,10 +1043,9 @@ class GithubConnector(
         """The paths that commits on ``branch`` since ``start`` changed, each
         with the committer date of the latest of those commits.
 
-        Best effort, in at most one commit listing and MAX_POLL_COMMITS commit
-        reads; on an error it keeps what it collected. A path it misses (a
-        commit past the cap or with no date, a file past the first page of a
-        large commit) gets no date and is compared by content hash.
+        Best effort: on an error it keeps what it collected, and a path it
+        misses (a commit past MAX_POLL_COMMITS or with no date, a file past the
+        first page of a large commit) gets no date.
 
         There is no upper bound: the file read is the branch head, so a commit
         after the window end gives the date of the content read, and the next
@@ -1111,7 +1109,7 @@ class GithubConnector(
         Every run reads every listed file. The date decides how the indexing
         pipeline compares a file to its indexed copy: a date newer than the
         stored one re-embeds it, otherwise the content hash decides. A full
-        index dates every file with repo.pushed_at, as before. On a poll,
+        index dates every file with repo.pushed_at. On a poll,
         pushed_at would move with any push to any branch and re-embed every
         file, so a file that commits since the window start changed gets the
         latest such commit's date, which stays the same across polls, and any
@@ -1485,9 +1483,8 @@ class GithubConnector(
         # The non-updated issues since last poll will be shortcut-ed and not embedded
         adjusted_start_datetime = start_datetime - timedelta(hours=3)
 
-        epoch = datetime.fromtimestamp(0, tz=timezone.utc)
-        if adjusted_start_datetime < epoch:
-            adjusted_start_datetime = epoch
+        if adjusted_start_datetime < _EPOCH:
+            adjusted_start_datetime = _EPOCH
 
         return self._fetch_from_github(
             checkpoint,
