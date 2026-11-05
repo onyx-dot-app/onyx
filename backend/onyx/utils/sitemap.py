@@ -81,7 +81,7 @@ def _extract_urls_from_sitemap(
         namespace = re.match(r"\{.*\}", root.tag)
         ns = namespace.group(0) if namespace else ""
 
-        effective_url = getattr(resp, "url", None) or sitemap_url
+        effective_url = resp.url or sitemap_url
         if root.tag == f"{ns}sitemapindex":
             # This is a sitemap index
             for sitemap in root.findall(f".//{ns}loc"):
