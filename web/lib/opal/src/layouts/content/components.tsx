@@ -50,14 +50,13 @@ interface ContentEditHandle {
   startEditing: () => void;
 }
 
-interface ContentBaseProps {
-  /**
-   * The title's font. Every size derives from it: the icon container is one
-   * title line tall, so the icon is that line height less 4px.
-   * Default: `"main-ui-action"`.
-   */
-  font?: TextFont;
+/** The title fonts that take a suffix, aux icon or badge beside the title. */
+type ContentExtrasFont = Extract<
+  TextFont,
+  `main-ui-${string}` | `main-content-${string}` | `secondary-${string}`
+>;
 
+interface ContentBaseProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
 
@@ -85,18 +84,6 @@ interface ContentBaseProps {
 
   /** Strike the title through, for an option that is switched off. */
   strikethrough?: boolean;
-
-  /**
-   * Muted text beside the title. `"optional"` is the translated
-   * "(Optional)" (`OpalStrings.contentOptional`).
-   */
-  suffix?: ContentSuffix;
-
-  /** A status icon beside the title. */
-  auxIcon?: ContentAuxIcon;
-
-  /** A badge beside the title. */
-  badge?: ContentBadge;
 
   /** ARIA role on the title element. */
   role?: string;
@@ -147,8 +134,42 @@ interface ContentBaseProps {
   ref?: React.Ref<HTMLDivElement>;
 }
 
+/**
+ * The title font, and the extras beside the title that only the `main-ui-*`,
+ * `main-content-*` and `secondary-*` fonts take.
+ */
+type ContentFontProps =
+  | {
+      /**
+       * The title's font. Every size derives from it: the icon container is
+       * one title line tall, so the icon is that line height less 4px.
+       * Default: `"main-ui-action"`.
+       */
+      font?: ContentExtrasFont;
+
+      /**
+       * Muted text beside the title, in the title's size and lighter weight.
+       * `"optional"` is the translated "(Optional)".
+       */
+      suffix?: ContentSuffix;
+
+      /** A status icon beside the title. */
+      auxIcon?: ContentAuxIcon;
+
+      /** A badge beside the title. */
+      badge?: ContentBadge;
+    }
+  | {
+      /** A heading, mono or figure title font: no extras beside it. */
+      font: Exclude<TextFont, ContentExtrasFont>;
+      suffix?: never;
+      auxIcon?: never;
+      badge?: never;
+    };
+
 /** `moreIcon1` / `moreIcon2` sit in the icon row, so only a stacked layout has them. */
 type ContentProps = ContentBaseProps &
+  ContentFontProps &
   (
     | {
         orientation?: "inline";
@@ -530,6 +551,7 @@ export {
   titleColorStyle,
   type ContentProps,
   type ContentOrientation,
+  type ContentExtrasFont,
   type ContentAuxIcon,
   type ContentSuffix,
   type ContentBadge,

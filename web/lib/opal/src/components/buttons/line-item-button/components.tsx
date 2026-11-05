@@ -7,9 +7,10 @@ import type {
   RichStr,
   Rounding,
 } from "@opal/types";
-import { Tooltip, type TextFont, type TooltipSide } from "@opal/components";
+import { Tooltip, type TooltipSide } from "@opal/components";
 import type { BadgeProps } from "@opal/components/badge/components";
 import { ContentAction } from "@opal/layouts";
+import type { ContentExtrasFont } from "@opal/layouts/content/components";
 import {
   composeKeyHandler,
   guardNestedInteractiveClick,
@@ -58,7 +59,7 @@ type RowContentProps = {
   rightChildren?: React.ReactNode;
 
   /** The title's font, which sets every size. @default "main-ui-action" */
-  font?: TextFont;
+  font?: ContentExtrasFont;
 
   /**
    * Content colour mode. `"interactive"` is what lets the row's hover,
