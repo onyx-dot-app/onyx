@@ -1775,15 +1775,18 @@ def index_doc_batch(
                     db_session=db_session,
                 )
             # Same reason: a failed write leaves the reported type or size
-            # differing from the row, so the next sync retries the document.
-            update_docs_source_info__no_commit(
-                ids_to_source_info={
-                    doc.id: (doc.source_mime_type, doc.source_size_bytes)
-                    for doc in context.updatable_docs
-                    if doc.id in successfully_indexed_ids
-                },
-                db_session=db_session,
-            )
+            # differing from the row, so the next sync retries the document. A
+            # re-chunk that skips row writes fetched nothing, so it has no
+            # source type or size to write.
+            if not skip_document_row_writes:
+                update_docs_source_info__no_commit(
+                    ids_to_source_info={
+                        doc.id: (doc.source_mime_type, doc.source_size_bytes)
+                        for doc in context.updatable_docs
+                        if doc.id in successfully_indexed_ids
+                    },
+                    db_session=db_session,
+                )
 
     try:
         _maybe_push_documents(
