@@ -97,7 +97,7 @@ export default function CraftPage() {
           <Content
             sizePreset="main-ui"
             variant="section"
-            title={row.personal_name ?? email}
+            title={row.personal_name || email}
             description={row.personal_name ? email : undefined}
           />
         ),
