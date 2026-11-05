@@ -1,4 +1,3 @@
-import type { Period } from "@/app/admin/token-rate-limits/types";
 import type { UserGroupInfo, UserRow } from "@/views/admin/UsersPage/types";
 
 export interface ApiKeyDescriptor {
@@ -12,15 +11,6 @@ export interface ApiKeyDescriptor {
 /** Extends UserRow with an optional API key display for service accounts. */
 export interface MemberRow extends UserRow {
   api_key_display?: string;
-}
-
-export interface TokenRateLimitDisplay {
-  token_id: number;
-  enabled: boolean;
-  // null for a cost-only limit (matches the backend's nullable column).
-  token_budget: number | null;
-  period: Period;
-  cost_budget_cents: number | null;
 }
 
 /** Mirrors backend PermissionRegistryEntry from onyx.auth.permissions. */

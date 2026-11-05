@@ -6314,33 +6314,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "Add Limit"
-        },
-        "costLimit": {
-          "header": "Cost Limit",
-          "placeholder": "Cost limit",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only.",
-        "section": {
-          "description": "Limit number of tokens this group can use within a given time period.",
-          "title": "Token Rate Limit"
-        },
-        "timeWindow": {
-          "header": "Time Window",
-          "placeholder": "Select a period",
-          "options": {
-            "DAILY": "Daily",
-            "WEEKLY": "Weekly",
-            "MONTHLY": "Monthly"
-          }
-        },
-        "tokenLimit": {
-          "header": "Token Limit",
-          "placeholder": "Token limit (thousands)",
-          "unit": "(thousands)"
-        }
+        "disabledTooltip": "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
       },
       "builtIn": {
         "admin": {
@@ -9890,167 +9864,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "Up to {cost} or {tokens} tokens",
-          "cost": "Up to {cost}",
-          "none": "No budget set",
-          "tokens": "Up to {tokens} tokens"
-        },
-        "cadence": {
-          "label": "{period, select, DAILY {Resets every day at midnight UTC} WEEKLY {Resets every Monday at midnight UTC} other {Resets on the 1st of every month at midnight UTC}}"
-        },
-        "deleteFailed": {
-          "error": "Failed to delete token rate limit"
-        },
-        "empty": {
-          "message": "No limits yet. Create a spending limit to cap usage."
-        },
-        "loadFailed": {
-          "error": "Failed to load token rate limits"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "Delete {label}",
-            "tooltip": "Delete limit"
-          },
-          "disable": {
-            "ariaLabel": "Disable {label}"
-          },
-          "enable": {
-            "ariaLabel": "Enable {label}"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "Failed to update token rate limit"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "Cancel"
-        },
-        "costBudget": {
-          "description": "Maximum spend per reset period. Set a cost budget, a token budget, or both.",
-          "title": "Cost budget"
-        },
-        "errors": {
-          "budgetRequired": "Enter a cost budget, a token budget, or both",
-          "costMax": "The maximum cost budget is ${amount, number}",
-          "costMoreThanZero": "Cost budget must be greater than 0",
-          "groupRequired": "Select a user group",
-          "scopeRequired": "Target Scope is a required field",
-          "tokenIncrement": "Use increments of 1,000 tokens",
-          "tokenInteger": "Enter a whole number of tokens",
-          "tokenMax": "The maximum token budget is 1 trillion",
-          "tokenMin": "Use at least 1,000 tokens"
-        },
-        "groupMenu": {
-          "empty": "No user groups yet. Create one under Users & Groups."
-        },
-        "groupPicker": {
-          "placeholder": "Choose a group"
-        },
-        "header": {
-          "title": "Create spending limit"
-        },
-        "period": {
-          "description": "Budgets reset at midnight UTC",
-          "title": "Reset period",
-          "options": {
-            "DAILY": "Daily",
-            "WEEKLY": "Weekly",
-            "MONTHLY": "Monthly"
-          }
-        },
-        "scope": {
-          "caption": {
-            "global": "Everyone in the workspace shares one budget.",
-            "group": "Members of {group} share one budget.",
-            "groupUnchosen": "Members of the chosen group share one budget.",
-            "user": "Each user gets their own budget."
-          },
-          "title": "Applies to"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "Workspace"
-          },
-          "user": {
-            "title": "Per user"
-          },
-          "userGroup": {
-            "title": "User group"
-          }
-        },
-        "submit": {
-          "label": "Create limit"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} or {tokens} tokens",
-            "tokens": "{tokens} tokens"
-          },
-          "global": "{period, select, DAILY {Everyone in the workspace shares up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Everyone in the workspace shares up to {budget} every week. Usage is blocked until the period resets.} other {Everyone in the workspace shares up to {budget} every month. Usage is blocked until the period resets.}}",
-          "group": "{period, select, DAILY {Members of {group} share up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Members of {group} share up to {budget} every week. Usage is blocked until the period resets.} other {Members of {group} share up to {budget} every month. Usage is blocked until the period resets.}}",
-          "groupUnchosen": "{period, select, DAILY {Members of the chosen group share up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Members of the chosen group share up to {budget} every week. Usage is blocked until the period resets.} other {Members of the chosen group share up to {budget} every month. Usage is blocked until the period resets.}}",
-          "user": "{period, select, DAILY {Each user can spend up to {budget} every day. Usage is blocked until the period resets.} WEEKLY {Each user can spend up to {budget} every week. Usage is blocked until the period resets.} other {Each user can spend up to {budget} every month. Usage is blocked until the period resets.}}"
-        },
-        "tokenBudget": {
-          "description": "Maximum tokens per reset period",
-          "placeholder": "No token limit",
-          "title": "Token budget",
-          "unit": "tokens"
-        },
-        "userGroup": {
-          "description": "Choose which group shares this budget",
-          "title": "User group"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "Create spending limit"
-        },
-        "createFailed": {
-          "error": "Failed to create spending limit"
-        },
-        "created": {
-          "message": "Spending limit created!"
-        },
-        "embedded": {
-          "description": "Set guardrails for workspace, user, and group usage. Limits can be enabled or disabled without deleting their configuration.",
-          "title": "Manage spending limits"
-        },
-        "global": {
-          "description": "Global limits apply to all users, user groups, and API keys. When the global limit is reached, no more tokens can be spent."
-        },
-        "intro": {
-          "description": "Spending limits help you control how many tokens can be spent in a given time period.",
-          "groupLimit": "Set limits for user groups to control spend for teams.",
-          "toggleLimit": "Enable and disable limits as needed.",
-          "userLimit": "Set limits for users so no single user can spend too much.",
-          "workspaceLimit": "Set a workspace-wide limit for your team's overall spend."
-        },
-        "tabs": {
-          "global": {
-            "name": "Global"
-          },
-          "groups": {
-            "name": "Groups"
-          },
-          "users": {
-            "name": "Users"
-          }
-        },
-        "user": {
-          "description": "User limits apply to each user individually. When a user reaches a limit, they are temporarily blocked from spending tokens."
-        },
-        "userGroup": {
-          "description": "Group limits apply to all users in a group. If a user belongs to multiple groups, the most permissive limit applies."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM call traces will no longer be sent to **{label}**. Traces already sent are unaffected.",
@@ -11178,6 +10991,195 @@
         "retry": "{count, plural, one {Failed once. Next retry: {time}.} other {Failed # times. Next retry: {time}.}}",
         "scoped": "Added or changed items only",
         "failures": "{count, plural, one {# failure} other {# failures}}"
+      }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "Set spending limits to guardrail LLM spending for your organization.",
+        "loadFailed": "Couldn't load spending limits."
+      },
+      "workspace": {
+        "title": "Workspace Limits",
+        "description": "Apply to all users and accounts in this organization.",
+        "pool": {
+          "title": "Shared Budget",
+          "description": "Shared limit across everyone per reset period. Set a cost or token limit, or both.",
+          "empty": "No global workspace limit",
+          "target": "Global workspace limit",
+          "emptyDescription": "Shared limit across everyone per reset period."
+        },
+        "perUser": {
+          "title": "Per-User Limit",
+          "description": "Individual limit for each user in the organization. Set a cost or token limit, or both.",
+          "empty": "No per-user limit",
+          "target": "Global per-user limit",
+          "emptyDescription": "Individual limit for each user in the organization."
+        }
+      },
+      "groups": {
+        "title": "Group Limits",
+        "description": "Apply to certain groups in this organization.",
+        "add": {
+          "label": "Add Group Limit"
+        },
+        "picker": {
+          "placeholder": "Select a group",
+          "limitSet": "Limit set:"
+        },
+        "members": "{count, plural, one {# member} other {# members}}",
+        "empty": "Set cost/token limit for workspace, user, and group usage.",
+        "pool": {
+          "title": "Shared Group Budget",
+          "description": "Shared limit for everyone in this group. Set a cost or token limit, or both.",
+          "empty": "No shared group budget",
+          "target": "Group limit",
+          "emptyDescription": "Shared limit for everyone in this group.",
+          "members": "{count, plural, one {# member} other {# members}}"
+        },
+        "perMember": {
+          "title": "Per-Member Limit",
+          "description": "Individual limit for each member of this group. Set a cost or token limit, or both.",
+          "adminOnly": "Only an admin can change per-member limits, because they can raise a member above the workspace limit.",
+          "empty": "No per-member limit",
+          "target": "Per-member group limit",
+          "emptyDescription": "Individual limit for each member of this group.",
+          "members": "Per-member limit • {count, plural, one {# member} other {# members}}"
+        },
+        "kind": {
+          "placeholder": "Select a limit type"
+        },
+        "field": {},
+        "new": {
+          "title": "New Group Limit",
+          "pool": {
+            "description": "Shared limit for everyone in a specific group. Set a cost or token limit, or both."
+          },
+          "perMember": {
+            "description": "Individual limit for each member of a specific group. Set a cost or token limit, or both."
+          }
+        }
+      },
+      "groupPage": {
+        "title": "Spending Limits",
+        "description": "Limit what this group can spend on LLM usage."
+      },
+      "card": {
+        "addLimit": "Add Limit",
+        "addModelBudget": "Add Model Budget",
+        "modelBudget": {
+          "title": "Model Budget",
+          "description": "Cap spend on specific models. These also count toward the shared budget."
+        },
+        "cancel": "Cancel",
+        "save": "Save Updates",
+        "saved": "Spending limits saved",
+        "saveFailed": "Couldn't save spending limits: {error}",
+        "create": "Create Limit",
+        "reenable": "Re-enable",
+        "disable": {
+          "tooltip": "Turn off all limits"
+        },
+        "expand": {
+          "tooltip": "Manage"
+        },
+        "collapse": {
+          "tooltip": "Collapse"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> or <b>{tokens}</b> tokens / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> tokens / {period}",
+          "period": {
+            "DAILY": "day",
+            "WEEKLY": "week",
+            "MONTHLY": "month"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, one {# model budget} other {# model budgets}}",
+          "nextReset": "Next reset: {at}",
+          "inactive": "Inactive limit",
+          "used": "<b>{percent}%</b> used",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "Alerts",
+        "description": "Alert-only limits set through the API. They don't block usage, and saving here keeps them unchanged.",
+        "row": "{model}, {period}: {target}",
+        "allModels": "All models",
+        "percent": "{percent}% of the limit",
+        "tokens": "{tokens} tokens"
+      },
+      "row": {
+        "model": {
+          "title": "Model",
+          "placeholder": "Search models…"
+        },
+        "period": {
+          "title": "Reset Period",
+          "options": {
+            "DAILY": {
+              "title": "Daily Limit",
+              "description": "Resets every day",
+              "helper": "Resets every day at 00:00 UTC."
+            },
+            "WEEKLY": {
+              "title": "Weekly Limit",
+              "description": "Resets every Monday",
+              "helper": "Resets every Monday at 00:00 UTC."
+            },
+            "MONTHLY": {
+              "title": "Monthly Limit",
+              "description": "Resets 1st of every month",
+              "helper": "Resets 1st of every month at 00:00 UTC."
+            }
+          }
+        },
+        "nextReset": "Next reset",
+        "remove": {
+          "tooltip": "Remove limit"
+        },
+        "cost": {
+          "title": "Cost Limit",
+          "placeholder": "No cost limit",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "Token Limit",
+          "placeholder": "No token limit",
+          "suffix": "K",
+          "unit": "tokens"
+        },
+        "usage": {
+          "spent": "<mono>{amount}</mono> spent",
+          "tokens": "<mono>{tokens}</mono> tokens used",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "Usage will be blocked until next reset.",
+            "model": "Model usage will be blocked until next reset."
+          }
+        },
+        "whenReached": {
+          "title": "When This Limit Is Reached",
+          "blockAll": {
+            "title": "Block All Usage at Limit",
+            "description": "Usage from all models including chat, search, bot, and API calls stops until the next reset."
+          },
+          "blockModel": {
+            "title": "Block Model Usage at Limit",
+            "description": "Usage from this model including chat, bot, and API calls stops until the next reset.",
+            "summary": "Block model usage at limit"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "Set a cost of at least $0.01 and at most 1 trillion tokens.",
+          "budgetRequired": "Set a cost limit, a token limit, or both.",
+          "duplicate": "Another limit already uses this period.",
+          "modelRequired": "Choose a model."
+        },
+        "edit": {
+          "tooltip": "Edit"
+        }
       }
     }
   },
@@ -12857,6 +12859,9 @@
         },
         "tryAgainNow": {
           "text": "You can try again now."
+        },
+        "otherModels": {
+          "text": "Other models are still available."
         }
       },
       "resubmit": {
@@ -16765,6 +16770,9 @@
         },
         "skills": {
           "label": "Skills"
+        },
+        "spendingLimits": {
+          "label": "Spending Limits"
         }
       },
       "sections": {
