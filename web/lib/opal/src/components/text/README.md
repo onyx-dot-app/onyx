@@ -27,10 +27,10 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 
 | Value                     | Size | Weight | Line-height |
 | ------------------------- | ---- | ------ | ----------- |
-| `"heading-h1"`            | 48px | 600    | 64px        |
-| `"heading-h2"`            | 24px | 600    | 36px        |
-| `"heading-h3"`            | 18px | 600    | 28px        |
-| `"heading-h3-muted"`      | 18px | 500    | 28px        |
+| `"heading-hero"`            | 48px | 600    | 64px        |
+| `"heading-headline"`            | 24px | 600    | 36px        |
+| `"heading-section"`            | 18px | 600    | 28px        |
+| `"heading-section-muted"`      | 18px | 500    | 28px        |
 | `"main-content-body"`     | 16px | 450    | 24px        |
 | `"main-content-muted"`    | 16px | 400    | 24px        |
 | `"main-content-emphasis"` | 16px | 600    | 24px        |
@@ -73,7 +73,7 @@ import { Text } from "@opal/components";
 </Text>
 
 // Heading
-<Text font="heading-h2" color="text-05" as="h2">
+<Text font="heading-headline" color="text-05" as="h2">
   Page Title
 </Text>
 

@@ -265,7 +265,7 @@ export default function OpenAPIPluginDetailPage({
             ) : !tool ? (
               <div className="flex flex-col items-start gap-4">
                 <Content
-                  font="heading-h3-muted"
+                  font="heading-section-muted"
                   title={t(
                     loadError
                       ? "plugins.openapi.loadFailed"

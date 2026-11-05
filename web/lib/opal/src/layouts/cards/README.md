@@ -16,7 +16,7 @@ A card header layout with a main content slot and a full-width `bottomChildren` 
 
 | Prop             | Type        | Default     | Description                                                                  |
 | ---------------- | ----------- | ----------- | ---------------------------------------------------------------------------- |
-| `children`       | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction font="heading-h2" orientation="stacked" />` block. |
+| `children`       | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction font="heading-headline" orientation="stacked" />` block. |
 | `bottomChildren` | `ReactNode` | `undefined` | Content rendered below the entire header, spanning the full width.           |
 
 ### Layout Structure

@@ -52,7 +52,7 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
         {/* 1. Timestamp */}
         <span className="shrink-0 text-code-code">
           <Text
-            font="secondary-mono-label"
+            font="secondary-mono"
             color="inherit"
             wordWrap="whitespace-nowrap"
           >

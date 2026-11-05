@@ -434,7 +434,7 @@ export default function UsageReports() {
           width="full"
           height="fit"
         >
-          <Text font="heading-h3">{t("reports.title")}</Text>
+          <Text font="heading-section">{t("reports.title")}</Text>
           <Text font="secondary-body" color="text-03">
             {t("reports.description")}
           </Text>

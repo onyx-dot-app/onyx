@@ -425,7 +425,7 @@ function ModalHeader({
           <DialogPrimitive.Title asChild>
             <div>
               <Content
-                font="heading-h3"
+                font="heading-section"
                 orientation="stacked"
                 icon={icon}
                 moreIcon1={moreIcon1}

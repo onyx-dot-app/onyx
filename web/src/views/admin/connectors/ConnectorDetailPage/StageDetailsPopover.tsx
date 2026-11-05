@@ -249,7 +249,7 @@ function Average({ avgMs, stdDevMs = null }: AverageProps) {
       width="full"
       height="fit"
     >
-      <Text font="secondary-mono-label" color="text-04">
+      <Text font="secondary-mono" color="text-04">
         {formatSeconds(format, avgMs)}
       </Text>
       {stdDevMs !== null && (
@@ -455,7 +455,7 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
         </Cell>
         <Cell width={BATCHES_WIDTH} align="end">
           <ColumnTitle>{t("stageDetails.calls")}</ColumnTitle>
-          <Text font="secondary-mono-label" color="text-04">
+          <Text font="secondary-mono" color="text-04">
             {total === undefined ? "-" : format.number(total.event_count)}
           </Text>
         </Cell>

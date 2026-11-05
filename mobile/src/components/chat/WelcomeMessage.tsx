@@ -21,7 +21,7 @@ export function WelcomeMessage({ agent, isDefaultAgent }: WelcomeMessageProps) {
       <View className="items-center gap-8">
         <AgentAvatar agent={agent} size={36} />
         <Text
-          font="heading-h2"
+          font="heading-headline"
           color="text-05"
           numberOfLines={2}
           className="text-center"
@@ -35,7 +35,7 @@ export function WelcomeMessage({ agent, isDefaultAgent }: WelcomeMessageProps) {
   return (
     <View className="items-center gap-8">
       <Icon as={SvgOnyxLogo} size={32} className="text-text-05" />
-      <Text font="heading-h2" color="text-05">
+      <Text font="heading-headline" color="text-05">
         {greeting}
       </Text>
     </View>

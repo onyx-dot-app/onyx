@@ -26,13 +26,13 @@ const CONTENT_COLORS: Record<ContentColor, { title: TextColor; icon: string }> =
 // min-height = web line-height
 const XL_PRESETS = {
   headline: {
-    titleFont: "heading-h2",
+    titleFont: "heading-headline",
     iconSize: 32,
     iconMinH: "min-h-36",
     iconRowMb: "",
   },
   section: {
-    titleFont: "heading-h3",
+    titleFont: "heading-section",
     iconSize: 24,
     iconMinH: "min-h-28",
     iconRowMb: "mb-4",

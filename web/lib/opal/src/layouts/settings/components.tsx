@@ -272,7 +272,7 @@ function SettingsHeader({
         >
           <div aria-label="admin-page-title">
             <Content
-              font="heading-h2"
+              font="heading-headline"
               orientation="stacked"
               icon={Icon}
               moreIcon1={moreIcon1}

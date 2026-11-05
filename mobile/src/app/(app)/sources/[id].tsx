@@ -42,7 +42,7 @@ export default function SourcesScreen() {
           accessibilityLabel="Back"
           onPress={() => router.back()}
         />
-        <Text font="heading-h3" color="text-05" className="flex-1">
+        <Text font="heading-section" color="text-05" className="flex-1">
           Sources
         </Text>
         <Button

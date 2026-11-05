@@ -132,7 +132,7 @@ export default function ProjectContextPanel({
 
       <div className="w-(--app-page-main-content-width) mx-auto flex flex-col gap-6 pb-6">
         <Content
-          font="heading-h2"
+          font="heading-headline"
           orientation="stacked"
           icon={SvgFolderOpen}
           title={projectName}

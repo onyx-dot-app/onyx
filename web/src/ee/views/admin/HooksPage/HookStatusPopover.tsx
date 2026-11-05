@@ -56,7 +56,7 @@ function ErrorLogRow({
           height="fit"
         >
           <span className="text-code-code">
-            <Text font="secondary-mono-label" color="inherit">
+            <Text font="secondary-mono" color="inherit">
               {formatDateTimeLog(log.created_at)}
             </Text>
           </span>

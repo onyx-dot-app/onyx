@@ -56,7 +56,7 @@ function Card({
               <Icon size={ICON_SIZE_PX} />
             </div>
             <Content
-              font="heading-h2"
+              font="heading-headline"
               orientation="stacked"
               title={title}
               description={description}

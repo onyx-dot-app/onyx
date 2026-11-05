@@ -317,7 +317,7 @@ function SubscriptionCard({
       >
         <Section gap={1} alignItems="start" height="auto" width="auto">
           <PlanIcon className="w-5 h-5" />
-          <Text font="heading-h3-muted" color="text-04">
+          <Text font="heading-section-muted" color="text-04">
             {planName}
           </Text>
           <Text font="secondary-body" color="text-03">

@@ -87,7 +87,7 @@ const [open, setOpen] = useState(false);
   onClick={() => setOpen((value) => !value)}
   expandedContent={<div className="p-4">…</div>}
 >
-  <ContentAction font="heading-h2" orientation="stacked" icon={SvgPlusCircle} title="New account" />
+  <ContentAction font="heading-headline" orientation="stacked" icon={SvgPlusCircle} title="New account" />
 </SelectCard>;
 ```
 

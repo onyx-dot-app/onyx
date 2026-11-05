@@ -25,7 +25,7 @@ import SvgSettings from "@opal/icons/settings";
 import SvgNoResult from "@opal/illustrations/no-result";
 
 // Simple heading
-<Content font="heading-h2" orientation="stacked"
+<Content font="heading-headline" orientation="stacked"
   icon={SvgSettings}
   title="Account Settings"
   description="Manage your preferences"

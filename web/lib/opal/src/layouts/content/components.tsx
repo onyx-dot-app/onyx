@@ -204,14 +204,14 @@ type ContentProps = ContentBaseProps & ContentFontProps;
 
 /** Each font's line height in px, from the typography presets. */
 const FONT_LINE_HEIGHT: Record<TextFont, number> = {
-  "heading-h1": 64,
-  "heading-h2": 36,
-  "heading-h3": 28,
-  "heading-h3-muted": 28,
+  "heading-hero": 48,
+  "heading-headline": 36,
+  "heading-section": 28,
+  "heading-section-muted": 28,
   "main-content-body": 24,
   "main-content-emphasis": 24,
   "main-content-muted": 24,
-  "main-content-mono": 23,
+  "main-content-mono": 24,
   "main-ui-body": 20,
   "main-ui-muted": 20,
   "main-ui-action": 20,
@@ -219,7 +219,6 @@ const FONT_LINE_HEIGHT: Record<TextFont, number> = {
   "secondary-body": 16,
   "secondary-action": 16,
   "secondary-mono": 16,
-  "secondary-mono-label": 16,
   "figure-small-label": 12,
   "figure-small-value": 12,
   "figure-keystroke": 16,

@@ -19,7 +19,7 @@ root            0.25rem gap inline; no gap stacked
 
 - **The title font drives everything.** An icon box is a square one title line tall (`1lh` of the
   title font), with 2px padding, so the glyph is the line height less 4px. A `secondary-*` title
-  (16px line) has a 12px icon; a `heading-h2` title (36px line) has a 32px icon.
+  (16px line) has a 12px icon; a `heading-headline` title (36px line) has a 32px icon.
 - **The description** is always `secondary-body` in `text-03`, so a `figure-*` title (smaller than
   `secondary`) takes none.
 - **`moreIcon1` / `moreIcon2`** sit in the stacked icon row, so they take a `heading-*` title font
@@ -66,7 +66,7 @@ import SvgSearch from "@opal/icons/search";
 
 // A page heading, icon on top
 <Content
-  font="heading-h2"
+  font="heading-headline"
   orientation="stacked"
   icon={SvgSearch}
   title="Agent Settings"
@@ -84,7 +84,7 @@ import SvgSearch from "@opal/icons/search";
 
 // Editable title
 <Content
-  font="heading-h3"
+  font="heading-section"
   icon={SvgSearch}
   title="My Agent"
   editable
