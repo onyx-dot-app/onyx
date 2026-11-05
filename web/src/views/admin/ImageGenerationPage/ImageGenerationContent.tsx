@@ -3,6 +3,7 @@
 import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useLabelBadge } from "@/lib/badges/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -86,6 +87,7 @@ function ConnectedModelCard({
   onEdit,
 }: ConnectedModelCardProps) {
   const t = useTranslations("admin.imageGeneration");
+  const defaultBadge = useLabelBadge("default");
   const ariaTitle = typeof title === "string" ? title : title.raw;
   return (
     <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
@@ -97,11 +99,7 @@ function ConnectedModelCard({
         titleMaxLines={1}
         descriptionMaxLines={1}
         padding={2}
-        badge={
-          isDefault
-            ? { title: t("defaultTag.label"), color: "info" }
-            : undefined
-        }
+        badge={isDefault ? defaultBadge : undefined}
         rightChildren={
           <Section flexDirection="row" width="fit" height="fit" gap={0}>
             <Button

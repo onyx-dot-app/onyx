@@ -186,7 +186,6 @@
           "description": "管理しているグループを1つ以上選択してください。"
         },
         "retainedUsers": "{count, plural, other {#人のユーザーとも直接共有されています。}}",
-        "planTag": "Business",
         "planNote": "グループアクセスにはBusinessプランが必要です。"
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "接続済みモデル"
       },
-      "defaultTag": {
-        "label": "デフォルト"
-      },
       "deselectError": {
         "message": "選択を解除できませんでした"
       },
@@ -7135,9 +7131,6 @@
       "multipass": {
         "description": "ドキュメントをさまざまなサイズのチャンクとしてインデックスし、関連する情報源をより正確に特定します。",
         "disabledTooltip": "マルチパスインデックスは一時的に無効です。今後利用できるようになります。",
-        "tag": {
-          "label": "一時的に利用不可"
-        },
         "title": "マルチパスインデックス"
       },
       "openaiCompatible": {
@@ -8016,9 +8009,6 @@
         "title": "チャットを開始するには、LLM プロバイダーを設定してください。"
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "デフォルト"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} を削除"
         },
@@ -14273,10 +14263,7 @@
       "upgrade": {
         "label": "プランをアップグレード"
       },
-      "availableFor": "{plan}で利用可能",
-      "beta": {
-        "title": "ベータ"
-      }
+      "availableFor": "{plan}で利用可能"
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -14325,6 +14312,18 @@
     "gridSearch": {
       "itemPlaceholder": "{item}を検索するか「/」キーでフォーカス...",
       "placeholder": "検索するか「/」キーでフォーカス..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "アルファ",
+        "beta": "ベータ",
+        "comingSoon": "近日公開",
+        "deprecated": "非推奨",
+        "temporarilyUnavailable": "一時的に利用不可"
+      },
+      "labels": {
+        "default": "デフォルト"
+      }
     }
   },
   "craft": {

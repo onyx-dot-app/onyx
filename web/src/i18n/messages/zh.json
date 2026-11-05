@@ -186,7 +186,6 @@
           "description": "请选择至少一个您管理的用户组。"
         },
         "retainedUsers": "{count, plural, other {还直接共享给了 # 位用户。}}",
-        "planTag": "Business",
         "planNote": "用户组访问需要 Business 套餐。"
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "已连接的模型"
       },
-      "defaultTag": {
-        "label": "默认"
-      },
       "deselectError": {
         "message": "取消选择失败"
       },
@@ -7135,9 +7131,6 @@
       "multipass": {
         "description": "将文档索引为不同大小的分块，以更好地识别相关来源。",
         "disabledTooltip": "多轮索引暂时禁用，将在未来提供。",
-        "tag": {
-          "label": "暂时不可用"
-        },
         "title": "多轮索引"
       },
       "openaiCompatible": {
@@ -8016,9 +8009,6 @@
         "title": "设置一个 LLM 提供商即可开始对话。"
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "默认"
-        },
         "deleteButton": {
           "ariaLabel": "删除 {provider}"
         },
@@ -14273,10 +14263,7 @@
       "upgrade": {
         "label": "升级方案"
       },
-      "availableFor": "{plan}可用",
-      "beta": {
-        "title": "测试版"
-      }
+      "availableFor": "{plan}可用"
     },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
@@ -14325,6 +14312,18 @@
     "gridSearch": {
       "itemPlaceholder": "搜索{item}，或按“/”聚焦...",
       "placeholder": "搜索，或按“/”聚焦..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "内测版",
+        "beta": "测试版",
+        "comingSoon": "即将推出",
+        "deprecated": "已弃用",
+        "temporarilyUnavailable": "暂时不可用"
+      },
+      "labels": {
+        "default": "默认"
+      }
     }
   },
   "craft": {

@@ -2,6 +2,7 @@
 
 import { useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useLifecycleBadge } from "@/lib/badges/components";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
@@ -877,6 +878,7 @@ type ImagePersistResult = "skipped" | "saved" | "failed";
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
   const tInputSelect = useTranslations("common.inputSelect");
+  const unavailableBadge = useLifecycleBadge("temporarily-unavailable");
   const adminRouteTitle = useAdminRouteTitle();
   const navigation = useNavigation();
   const settings = useSettings();
@@ -2281,10 +2283,7 @@ export default function IndexSettingsPage() {
                           <InputHorizontal
                             title={t("multipass.title")}
                             description={t("multipass.description")}
-                            tag={{
-                              title: t("multipass.tag.label"),
-                              color: "default",
-                            }}
+                            tag={unavailableBadge}
                             withLabel
                           >
                             <InputSwitch

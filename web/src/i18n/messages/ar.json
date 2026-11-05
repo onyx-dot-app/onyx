@@ -186,7 +186,6 @@
           "description": "اختر مجموعة واحدة على الأقل تديرها."
         },
         "retainedUsers": "{count, plural, one {تمت مشاركته مباشرةً أيضًا مع مستخدم واحد.} other {تمت مشاركته مباشرةً أيضًا مع # من المستخدمين.}}",
-        "planTag": "Business",
         "planNote": "يتطلب الوصول عبر المجموعات خطة Business."
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "النماذج المتصلة"
       },
-      "defaultTag": {
-        "label": "افتراضي"
-      },
       "deselectError": {
         "message": "فشل إلغاء التحديد"
       },
@@ -7135,9 +7131,6 @@
       "multipass": {
         "description": "فهرس المستندات كأجزاء بأحجام متفاوتة لتحديد المصادر ذات الصلة بشكل أفضل.",
         "disabledTooltip": "الفهرسة متعددة التمريرات معطّلة مؤقتًا وستتاح مستقبلًا.",
-        "tag": {
-          "label": "غير متاحة مؤقتًا"
-        },
         "title": "الفهرسة متعددة التمريرات"
       },
       "openaiCompatible": {
@@ -8016,9 +8009,6 @@
         "title": "أعدّ موفر LLM لبدء المحادثة."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "افتراضي"
-        },
         "deleteButton": {
           "ariaLabel": "حذف {provider}"
         },
@@ -14273,10 +14263,7 @@
       "upgrade": {
         "label": "ترقية الخطة"
       },
-      "availableFor": "متاح في {plan}",
-      "beta": {
-        "title": "تجريبي"
-      }
+      "availableFor": "متاح في {plan}"
     },
     "placeholders": {
       "email": "albarid@sharikatuk.com",
@@ -14325,6 +14312,18 @@
     "gridSearch": {
       "itemPlaceholder": "ابحث في {item} أو اضغط \"/\" للتركيز...",
       "placeholder": "ابحث أو اضغط \"/\" للتركيز..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "ألفا",
+        "beta": "تجريبي",
+        "comingSoon": "قريبًا",
+        "deprecated": "مُهمَل",
+        "temporarilyUnavailable": "غير متاحة مؤقتًا"
+      },
+      "labels": {
+        "default": "افتراضي"
+      }
     }
   },
   "craft": {
