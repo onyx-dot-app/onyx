@@ -1,7 +1,7 @@
 """Search API endpoints (POST /api/search and POST /api/retrieve).
 
-/search runs the full SearchTool.run() pipeline — the same multi-stage search
-that powers chat mode. Returns ranked results without generating an LLM answer.
+/search runs SearchTool.search, the same multi-stage search as chat, and
+returns ranked results with no LLM answer.
 /retrieve runs the same retrieval with no LLM step, for callers that rank
 results themselves.
 
@@ -101,7 +101,6 @@ def search(
     """
     persona, persona_search_info = _load_persona(request.persona_id, user, db_session)
 
-    # 2. Get LLM
     if request.provider:
         provider_model = fetch_existing_llm_provider(request.provider, db_session)
         if not provider_model:

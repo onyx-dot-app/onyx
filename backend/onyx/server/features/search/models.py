@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field, model_validator
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag
 from onyx.tools.models import ChatMinimalTextMessage
-from onyx.tools.tool_implementations.search.constants import (
-    FULL_DOC_NUM_CHUNKS_AROUND,
-)
+
+# Public API bound, so internal expansion tuning cannot change it.
+MAX_RETRIEVE_CONTEXT_CHUNKS = 5
 
 
 class BaseSearchRequest(BaseModel):
@@ -43,16 +43,15 @@ class SearchRequest(BaseSearchRequest):
 class RetrieveRequest(BaseSearchRequest):
     # Neighboring chunks added on each side of every result.
     context_chunks: int = Field(
-        default=FULL_DOC_NUM_CHUNKS_AROUND, ge=0, le=FULL_DOC_NUM_CHUNKS_AROUND
+        default=MAX_RETRIEVE_CONTEXT_CHUNKS, ge=0, le=MAX_RETRIEVE_CONTEXT_CHUNKS
     )
 
 
 class SearchResult(BaseModel):
     citation_id: int | None
     title: str
-    # Full chunk text the LLM saw for this section. Multiple results may
-    # share a citation_id when the LLM selected multiple non-overlapping
-    # sections of the same document.
+    # Section text, with any surrounding chunks the search added. Results from
+    # one document share a citation_id.
     content: str
     link: str | None
     source_type: str

@@ -9,10 +9,10 @@ Onyx exposes three search endpoints. Which one you want depends on what you are 
 | Endpoint | Use it when |
 |----------|-------------|
 | [`POST /search`](/developers/api_reference/search/search) | You want Onyx's search results inside your own application: RAG pipelines, agents, integrations, anything that needs ranked passages rather than an answer. Runs the same retrieval pipeline as the Search action in chat. |
-| [`POST /retrieve`](/developers/api_reference/search/retrieve) | You rank or read the results yourself, for example with an agent that has its own model. Runs retrieval only, with no LLM calls, so it answers in seconds. |
+| [`POST /retrieve`](/developers/api_reference/search/retrieve) | You rank or read the results yourself, for example with an agent that has its own model. Runs retrieval only, with no LLM calls. |
 | [`POST /search/send-search-message`](/developers/api_reference/search/handle_send_search_message) | You are building a search interface. This is the endpoint behind the Onyx Search UI, and it adds keyword expansion, LLM document selection, streaming, and per-user search history. |
 
-Neither endpoint generates an answer. To have a model read the results and write a response,
+None of these endpoints generates an answer. To have a model read the results and write a response,
 use [`POST /chat/send-chat-message`](/developers/api_reference/chat/handle_send_chat_message) instead.
 
 <Note>

@@ -397,16 +397,19 @@ async def search_indexed_documents(
             )
             parsed_cutoff = None
 
-        request: SearchRequest | RetrieveRequest = (
-            RetrieveRequest(
+        request: SearchRequest | RetrieveRequest
+        if use_retrieval_only:
+            route = "/retrieve"
+            request = RetrieveRequest(
                 query=query,
                 sources=filters.source_types,
                 document_sets=document_set_names,
                 time_cutoff=parsed_cutoff,
                 persona_id=filters.persona_id,
             )
-            if use_retrieval_only
-            else SearchRequest(
+        else:
+            route = "/search"
+            request = SearchRequest(
                 query=query,
                 sources=filters.source_types,
                 document_sets=document_set_names,
@@ -414,8 +417,6 @@ async def search_indexed_documents(
                 skip_query_expansion=skip_query_expansion,
                 persona_id=filters.persona_id,
             )
-        )
-        route = "/retrieve" if use_retrieval_only else "/search"
         endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}{route}"
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
