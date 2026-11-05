@@ -232,3 +232,12 @@ def test_convert_request_to_document_and_comment_filtering() -> None:
     assert doc.metadata["request_type"] == "VPN Access"
     assert len(doc.sections) == 2
     assert "Checking gateway." in doc.sections[1].text
+def test_registry_mapping_resolves_jsm_connector_and_config() -> None:
+    from onyx.connectors.jira_service_management.config import (
+    JiraServiceManagementConnectorConfig,
+    )
+    from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+    mapping = CONNECTOR_CLASS_MAP[DocumentSource.JIRA_SERVICE_MANAGEMENT]
+    assert mapping.module_path == "onyx.connectors.jira_service_management.connector"
+    assert mapping.class_name == "JiraServiceManagementConnector"
+    assert mapping.config_class is JiraServiceManagementConnectorConfig
