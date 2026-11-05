@@ -22,18 +22,9 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import (
-    register_event_handler,
-    unregister_event_handler,
-)
 from onyx.connectors.event_inbox.models import (
     WebhookRequest,
     WebhookSourceSpec,
-)
-from onyx.connectors.event_inbox.source_registry import (
-    register_webhook_source,
-    unregister_webhook_source,
-    webhook_source_for,
 )
 from onyx.connectors.event_models import EventParseResult, ParsedEvent
 from onyx.connectors.models import Document, InputType, TextSection
@@ -53,6 +44,7 @@ from onyx.db.models import (
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.webhook_server.exceptions import WebhookAuthError
 from onyx.webhook_server.routes import build_webhook_router
+from tests.utils.event_sources import declare_event_source, event_source_registered
 
 SOURCE = DocumentSource.MOCK_CONNECTOR
 SLUG = "pipeline-test"
@@ -88,30 +80,16 @@ def _handler(
     )
 
 
-def _claim_the_source() -> None:
-    """Take the source from whatever registered it.
-
-    A source registers when its module is imported, and pytest imports every
-    test module while collecting, so another file's source can already own
-    this one before any fixture runs.
-    """
-    owner = webhook_source_for(SOURCE)
-    if owner is not None:
-        unregister_webhook_source(owner.slug)
-
-
 @pytest.fixture(autouse=True)
 def registered_source() -> Generator[None, None, None]:
-    _claim_the_source()
-    register_webhook_source(
-        WebhookSourceSpec(source=SOURCE, slug=SLUG, parser=_parser, verifier=_verifier)
-    )
-    register_event_handler(SOURCE, _handler)
-    try:
+    with event_source_registered(
+        SOURCE,
+        webhook=WebhookSourceSpec(
+            source=SOURCE, slug=SLUG, parser=_parser, verifier=_verifier
+        ),
+        handler=_handler,
+    ):
         yield
-    finally:
-        unregister_webhook_source(SLUG)
-        unregister_event_handler(SOURCE)
 
 
 @pytest.fixture
@@ -292,10 +270,9 @@ def test_the_route_refuses_a_spec_with_no_verifier(
     unsigned = WebhookSourceSpec(
         source=SOURCE, slug=SLUG, parser=_parser, verifier=None, allow_unsigned=True
     )
-    # Reproduce the state the validator forbids.
+    declare_event_source(SOURCE, webhook=unsigned, handler=_handler)
+    # Reproduce, on the registered spec, the state the validator forbids.
     object.__setattr__(unsigned, "allow_unsigned", False)
-    unregister_webhook_source(SLUG)
-    register_webhook_source(unsigned)
 
     app = FastAPI()
     register_onyx_exception_handlers(app)
@@ -328,15 +305,16 @@ def test_a_pair_still_being_set_up_can_receive(
 
 def test_a_source_gets_one_route_per_endpoint_it_declares() -> None:
     """A provider that posts to several URLs needs one route each."""
-    unregister_webhook_source(SLUG)
-    register_webhook_source(
-        WebhookSourceSpec(
+    declare_event_source(
+        SOURCE,
+        webhook=WebhookSourceSpec(
             source=SOURCE,
             slug=SLUG,
             endpoints=("/a", "/b"),
             parser=_parser,
             verifier=_verifier,
-        )
+        ),
+        handler=_handler,
     )
     app = FastAPI()
     app.include_router(build_webhook_router())

@@ -3,11 +3,11 @@
 from collections.abc import Mapping, Sequence
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.event_inbox.handlers import register_event_handler
+from onyx.connectors.event_inbox.registration import register_event_source
 from onyx.connectors.models import Document
-from onyx.context.search.enrichment.registry import register_enrichment_source
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import ConnectorEventInbox
+from tests.utils.event_sources import stub_webhook
 
 SOURCE = DocumentSource.MOCK_CONNECTOR
 
@@ -27,7 +27,10 @@ def _allowed(
     return []
 
 
-register_event_handler(SOURCE, _to_document)
-register_enrichment_source(SOURCE, _allowed)
+register_event_source(
+    webhook=stub_webhook(SOURCE, "half-registered-withheld"),
+    handler=_to_document,
+    permission_filter=_allowed,
+)
 
 raise RuntimeError("this withheld source fails after registering")

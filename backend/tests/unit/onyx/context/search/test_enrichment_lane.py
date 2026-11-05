@@ -13,17 +13,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.event_inbox.registration import (
+    get_event_source,
+    register_event_source,
+    unregister_event_source,
+)
 from onyx.connectors.event_inbox.sources import load_event_sources
-from onyx.context.search.enrichment.models import EnrichmentContext
-from onyx.context.search.enrichment.registry import (
+from onyx.context.search.enrichment.models import (
     ChunkPermissionFilter,
+    EnrichmentContext,
+)
+from onyx.context.search.enrichment.registry import (
     enrichment_source_types,
     get_enrichment_filter,
-    register_enrichment_source,
-    unregister_enrichment_source,
 )
 from onyx.context.search.models import ChunkIndexRequest, IndexFilters, InferenceChunk
 from onyx.context.search.retrieval.search_runner import search_chunks
+from tests.utils.event_sources import declare_event_source
 
 WITHHELD = DocumentSource.MOCK_CONNECTOR
 ORDINARY = DocumentSource.WEB
@@ -61,8 +67,7 @@ def _request(source_types: list[DocumentSource] | None = None) -> ChunkIndexRequ
 
 def _replace_source(permission_filter: ChunkPermissionFilter) -> None:
     """Take the source over for one test, whoever holds it."""
-    unregister_enrichment_source(WITHHELD)
-    register_enrichment_source(WITHHELD, permission_filter)
+    declare_event_source(WITHHELD, permission_filter=permission_filter)
 
 
 @pytest.fixture(autouse=True)
@@ -75,13 +80,17 @@ def restore_the_real_source() -> Generator[None, None, None]:
     in the process.
     """
     load_event_sources()
-    displaced = get_enrichment_filter(WITHHELD)
+    displaced = get_event_source(WITHHELD)
     try:
         yield
     finally:
-        unregister_enrichment_source(WITHHELD)
+        unregister_event_source(WITHHELD)
         if displaced is not None:
-            register_enrichment_source(WITHHELD, displaced)
+            register_event_source(
+                webhook=displaced.webhook,
+                handler=displaced.handler,
+                permission_filter=displaced.permission_filter,
+            )
 
 
 @pytest.fixture
@@ -413,7 +422,7 @@ def test_a_source_stays_withheld_when_its_implementation_is_absent(
     the server. A registry emptied that way must not un-withhold documents an
     earlier run already indexed, and an Onyx without the package installed
     must not serve them either. The static floor is what holds then."""
-    unregister_enrichment_source(WITHHELD)
+    unregister_event_source(WITHHELD)
     monkeypatch.setattr(
         "onyx.context.search.enrichment.registry.WITHHELD_FROM_DEFAULT_SEARCH",
         frozenset({WITHHELD}),
@@ -430,7 +439,7 @@ def test_no_lane_is_resolved_for_a_source_with_no_filter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The floor withholds it; only a registered filter can serve it."""
-    unregister_enrichment_source(WITHHELD)
+    unregister_event_source(WITHHELD)
     monkeypatch.setattr(
         "onyx.context.search.enrichment.registry.WITHHELD_FROM_DEFAULT_SEARCH",
         frozenset({WITHHELD}),
@@ -447,20 +456,19 @@ def test_a_source_in_the_floor_still_rolls_back_a_failed_import(
     "withheld" before its module runs, so a rollback that diffed the
     withheld set would miss the handler a failed import left behind."""
     from onyx.connectors.event_inbox import sources as sources_module
-    from onyx.connectors.event_inbox.handlers import get_event_handler
 
     monkeypatch.setattr(
         "onyx.context.search.enrichment.registry.WITHHELD_FROM_DEFAULT_SEARCH",
         frozenset({WITHHELD}),
     )
-    unregister_enrichment_source(WITHHELD)
+    unregister_event_source(WITHHELD)
     half = "tests.unit.onyx.context.search.half_registering_withheld_source"
-    monkeypatch.setattr(sources_module, "_loaded", False)
+    sources_module.reset_event_sources()
     monkeypatch.setattr(sources_module, "EVENT_SOURCE_MODULES", (half,))
     try:
         sources_module.load_event_sources()
 
-        assert get_event_handler(WITHHELD) is None
+        assert get_event_source(WITHHELD) is None
         assert get_enrichment_filter(WITHHELD) is None
     finally:
         sys.modules.pop(half, None)

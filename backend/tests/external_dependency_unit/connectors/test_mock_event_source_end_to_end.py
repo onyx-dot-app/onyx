@@ -20,17 +20,14 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import (
-    get_event_handler,
-    register_event_handler,
-    unregister_event_handler,
+from onyx.connectors.event_inbox.registration import (
+    get_event_source,
+    register_event_source,
+    unregister_event_source,
 )
 from onyx.connectors.event_inbox.source_registry import (
     get_webhook_source,
-    register_webhook_source,
-    unregister_webhook_source,
     webhook_callback_url,
-    webhook_source_for,
 )
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import Document, InputType
@@ -58,12 +55,9 @@ def loaded_source(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None
     """Register the source through the loader, then restore whatever held
     the source before. The cached module goes too: a module registers once
     per process."""
-    owner = webhook_source_for(mock_event_source.SOURCE)
-    handler = get_event_handler(mock_event_source.SOURCE)
+    displaced = get_event_source(mock_event_source.SOURCE)
     cached: ModuleType | None = sys.modules.pop(MODULE, None)
-    if owner is not None:
-        unregister_webhook_source(owner.slug)
-    unregister_event_handler(mock_event_source.SOURCE)
+    unregister_event_source(mock_event_source.SOURCE)
 
     monkeypatch.setattr(sources_module, "EVENT_SOURCE_MODULES", (MODULE,))
     sources_module.reset_event_sources()
@@ -71,14 +65,15 @@ def loaded_source(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None
     try:
         yield
     finally:
-        unregister_webhook_source(mock_event_source.SLUG)
-        unregister_event_handler(mock_event_source.SOURCE)
+        unregister_event_source(mock_event_source.SOURCE)
         sys.modules.pop(MODULE, None)
         sources_module.reset_event_sources()
-        if owner is not None:
-            register_webhook_source(owner)
-        if handler is not None:
-            register_event_handler(mock_event_source.SOURCE, handler)
+        if displaced is not None:
+            register_event_source(
+                webhook=displaced.webhook,
+                handler=displaced.handler,
+                permission_filter=displaced.permission_filter,
+            )
         if cached is not None:
             sys.modules[MODULE] = cached
 

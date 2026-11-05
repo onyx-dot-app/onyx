@@ -15,11 +15,7 @@ from onyx.connectors.event_inbox.connector import (
     EventInboxCheckpoint,
     EventInboxConnector,
 )
-from onyx.connectors.event_inbox.handlers import (
-    get_event_handler,
-    register_event_handler,
-    unregister_event_handler,
-)
+from onyx.connectors.event_inbox.registration import unregister_event_source
 from onyx.connectors.event_models import ParsedEvent
 from onyx.connectors.models import ConnectorFailure, Document, InputType, TextSection
 from onyx.db.connector_event_inbox import (
@@ -42,6 +38,7 @@ from onyx.db.models import (
     Credential,
     IndexAttempt,
 )
+from tests.utils.event_sources import declare_event_source, event_source_registered
 
 SOURCE = DocumentSource.MOCK_CONNECTOR
 BAD_DOCUMENT = "doc-that-cannot-be-read"
@@ -113,15 +110,8 @@ def _handler(
 
 @pytest.fixture(autouse=True)
 def registered_handler() -> Generator[None, None, None]:
-    previous = get_event_handler(SOURCE)
-    unregister_event_handler(SOURCE)
-    register_event_handler(SOURCE, _handler)
-    try:
+    with event_source_registered(SOURCE, handler=_handler):
         yield
-    finally:
-        unregister_event_handler(SOURCE)
-        if previous is not None:
-            register_event_handler(SOURCE, previous)
 
 
 def _drain(
@@ -283,7 +273,7 @@ def test_a_source_with_no_handler_fails_its_rows(
     db_session: Session, pair_and_attempt: tuple[int, int]
 ) -> None:
     pair_id, attempt_id = pair_and_attempt
-    unregister_event_handler(SOURCE)
+    unregister_event_source(SOURCE)
     record_events(
         db_session,
         pair_id,
@@ -299,7 +289,7 @@ def test_a_source_with_no_handler_fails_its_rows(
 
     assert documents == []
     assert len(failures) == 1
-    assert "No event handler registered" in failures[0].failure_message
+    assert "No event source registered" in failures[0].failure_message
     # Returned to the queue: the source may be registered on the next run,
     # and MAX_EVENT_ATTEMPTS stops it retrying for ever.
     assert count_events_by_status(db_session, pair_id) == {
@@ -482,7 +472,7 @@ def test_a_rejected_row_settles_even_if_the_run_is_abandoned(
     A row settled only after the loop would stay claimed, be released by a
     later run, fail again, and keep blocking the queue."""
     pair_id, attempt_id = pair_and_attempt
-    unregister_event_handler(SOURCE)
+    unregister_event_source(SOURCE)
     record_events(
         db_session,
         pair_id,
@@ -551,8 +541,7 @@ def test_the_claim_session_is_closed_before_a_handler_runs(
         [ParsedEvent(document_id="doc-1", event_key="k-1")],
     )
     db_session.commit()
-    unregister_event_handler(SOURCE)
-    register_event_handler(SOURCE, _watching)
+    declare_event_source(SOURCE, handler=_watching)
 
     with patch.object(connector_module, "get_session_with_current_tenant", _counting):
         _drain(
@@ -611,7 +600,7 @@ def test_a_later_batch_loses_a_tie_on_event_time_to_a_higher_id(
     the same time and a lower id must lose to the one already taken."""
     pair_id, attempt_id = pair_and_attempt
     same_time = datetime(2026, 11, 2, 15, 0, tzinfo=timezone.utc)
-    unregister_event_handler(SOURCE)
+    unregister_event_source(SOURCE)
     record_events(
         db_session,
         pair_id,
@@ -623,7 +612,7 @@ def test_a_later_batch_loses_a_tie_on_event_time_to_a_higher_id(
         _connector(pair_id, attempt_id, batch_size=10),
         EventInboxCheckpoint(has_more=True),
     )
-    register_event_handler(SOURCE, _handler)
+    declare_event_source(SOURCE, handler=_handler)
 
     record_events(
         db_session,
@@ -715,7 +704,7 @@ def test_a_row_that_keeps_failing_eventually_settles(
     """Retrying is for a provider that may recover. A row that never does
     must stop, or it blocks its document and the queue for ever."""
     pair_id, attempt_id = pair_and_attempt
-    unregister_event_handler(SOURCE)
+    unregister_event_source(SOURCE)
     record_events(
         db_session,
         pair_id,
@@ -746,7 +735,7 @@ def test_a_retried_untimestamped_change_does_not_overwrite_a_newer_one(
     change to the same document is indexed, and come back. Comparing only
     timestamps could not discard it, so it would restore the old body."""
     pair_id, attempt_id = pair_and_attempt
-    unregister_event_handler(SOURCE)
+    unregister_event_source(SOURCE)
     record_events(
         db_session,
         pair_id,
@@ -763,7 +752,7 @@ def test_a_retried_untimestamped_change_does_not_overwrite_a_newer_one(
     assert count_events_by_status(db_session, pair_id) == {
         ConnectorEventStatus.PENDING: 1
     }
-    register_event_handler(SOURCE, _handler)
+    declare_event_source(SOURCE, handler=_handler)
 
     # A later change is indexed while the first waits out its backoff.
     record_events(

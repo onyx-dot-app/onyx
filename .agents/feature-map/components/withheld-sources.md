@@ -58,8 +58,8 @@ search_chunks  (context/search/retrieval/search_runner.py)
   -> combine_retrieval_results
 ```
 
-**Two halves, deliberately split.** `onyx/context/search/enrichment/registry.py` maps a source to
-its permission filter and needs no database; `onyx/context/search/enrichment/retrieval.py:get_enrichment_contexts`
+**Two halves, deliberately split.** `onyx/context/search/enrichment/registry.py` reads a source's
+permission filter from the event source store and needs no database; `onyx/context/search/enrichment/retrieval.py:get_enrichment_contexts`
 resolves which of them are live and with whose credentials, which does. The
 chat path resolves ahead of time in `SearchTool.search` and hands the result
 down, as it already does for federated search, because the lanes then run in
@@ -180,16 +180,15 @@ sources where that matters.
 ## Recipes
 
 - `new-withheld-source` **A withheld source.** List the withheld ones with
-  `git grep -l register_enrichment_source backend/onyx`.
+  `git grep -l permission_filter= backend/onyx`.
   1. Write the permission filter: `(user_email, chunks, secrets) -> chunks`.
      Read the provider's identifiers from chunk metadata, ask the provider
      about the distinct resources, and raise if it cannot answer. Give it a
      budget of seconds, not whatever its ingest path allows
      ([[#provider-latency-is-search-latency]]).
-  2. Call `register_enrichment_source(source, filter)` in the source's own
-     module, beside the calls that claim its endpoint and its drain, so one
-     import makes the whole connector exist. The loader undoes all of them
-     together if the import then fails.
+  2. Pass it as `permission_filter` to the source's `register_event_source`
+     call ([[connectors#new-event-source]]). The loader undoes the whole
+     registration if the import then fails.
   3. Make the connector write those identifiers into `Document.metadata`.
      Without them the filter cannot ask ([[#chunk-metadata-is-the-only-handle]]).
 

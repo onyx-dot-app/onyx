@@ -2007,6 +2007,17 @@ MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 # differ: the Helm webhook ingress is on `ingress.api.host`.
 WEBHOOK_PUBLIC_URL = os.environ.get("WEBHOOK_PUBLIC_URL") or WEB_DOMAIN
 
+# Event-based connectors that are installed beside Onyx rather than shipped in
+# it, as a comma-separated list of module paths. Each module registers itself
+# with `register_event_source` at import. A path that will not import is
+# logged and skipped, so a bad entry disables one source instead of the
+# deployment.
+EXTRA_EVENT_SOURCE_MODULES: tuple[str, ...] = tuple(
+    path.strip()
+    for path in (os.environ.get("EXTRA_EVENT_SOURCE_MODULES") or "").split(",")
+    if path.strip()
+)
+
 # Global limit on indexing embedding requests (see embedding_rate_limit.py).
 # The window is stored in Redis, one entry per request, so the request count
 # is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.
