@@ -320,8 +320,8 @@ async def search_indexed_documents(
     ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
     full chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
-    short search blurb. With `retrieval_only`, ``content`` is the retrieved
-    section and its surrounding chunks.
+    short search blurb. With `retrieval_only`, results keep retrieval order
+    and ``content`` is the retrieved section and its surrounding chunks.
 
     Example usage:
     ```

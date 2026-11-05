@@ -147,7 +147,9 @@ and pass it to `SearchTool` as `auto_detect_filters`. The tool keeps no state
 between calls. It reads the turn's planning state from
 `ToolContext.search_context`
 (`tools/tool_implementations/search/models.py:SearchContext`) and returns its
-new decisions as `SearchPlanningResult` in the result metadata. After each step,
+new decisions as `SearchPlanningResult` in the result metadata. A
+`retrieval_only` call reads an empty `SearchContext` instead, so it searches
+the query as written. After each step,
 `chat/agent.py:ChatAgent._after_step` and the research agent fold them with
 `tools/tool_implementations/search/search_tool.py:update_search_context`, in
 model-call order. Each completed search adds a `SearchCycle`, also one with no

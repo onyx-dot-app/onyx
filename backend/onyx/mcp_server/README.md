@@ -129,7 +129,7 @@ The server provides three tools for searching and retrieving information:
 1. `search_indexed_documents`
 Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
 
-Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
+Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. With `retrieval_only`, the search uses the agent's knowledge scope and calls no model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
 
 `agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
 
