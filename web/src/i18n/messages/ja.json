@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "ステータス",
-          "all": "すべてのステータス"
+          "all": "すべてのステータス",
+          "running": "進行中"
         },
         "counts": {
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",

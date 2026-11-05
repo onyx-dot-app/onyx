@@ -153,7 +153,7 @@ describe("ConnectorList running pill", () => {
       "aria-pressed",
       "true"
     );
-    expect(screen.getByText("Indexing or Syncing")).toBeInTheDocument();
+    expect(screen.getByText("In Progress")).toBeInTheDocument();
 
     const callsBefore = statusParams.length;
     await setupUser().click(screen.getByRole("button", { name }));

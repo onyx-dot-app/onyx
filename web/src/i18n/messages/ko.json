@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "상태",
-          "all": "모든 상태"
+          "all": "모든 상태",
+          "running": "진행 중"
         },
         "counts": {
           "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",

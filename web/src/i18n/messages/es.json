@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "Estado",
-          "all": "Todos los estados"
+          "all": "Todos los estados",
+          "running": "En curso"
         },
         "counts": {
           "indexed": "{count, plural, one {# conector indexado} other {# conectores indexados}}",

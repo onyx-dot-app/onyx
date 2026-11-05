@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "الحالة",
-          "all": "كل الحالات"
+          "all": "كل الحالات",
+          "running": "قيد التنفيذ"
         },
         "counts": {
           "indexed": "{count, plural, one {موصل واحد مفهرس} other {# موصلات مفهرسة}}",

@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "Status",
-          "all": "All Status"
+          "all": "All Status",
+          "running": "In Progress"
         },
         "counts": {
           "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",

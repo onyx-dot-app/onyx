@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "Status",
-          "all": "Todos os status"
+          "all": "Todos os status",
+          "running": "Em andamento"
         },
         "counts": {
           "indexed": "{count, plural, one {# conector indexado} other {# conectores indexados}}",

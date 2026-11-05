@@ -224,10 +224,7 @@ export default function ConnectorList({
               {status === null
                 ? t("statusFilter.all")
                 : status === RUNNING
-                  ? format.list(
-                      RUNNING_STATUSES.map((bucket) => tBadges(bucket)),
-                      { type: "disjunction" }
-                    )
+                  ? t("statusFilter.running")
                   : tBadges(status)}
             </SelectButton>
           </Dropdown.Trigger>

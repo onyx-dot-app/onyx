@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "状态",
-          "all": "全部状态"
+          "all": "全部状态",
+          "running": "进行中"
         },
         "counts": {
           "indexed": "{count, plural, other {# 个连接器已索引}}",

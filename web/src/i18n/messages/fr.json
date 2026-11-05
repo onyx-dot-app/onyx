@@ -7485,7 +7485,8 @@
         },
         "statusFilter": {
           "label": "Statut",
-          "all": "Tous les statuts"
+          "all": "Tous les statuts",
+          "running": "En cours"
         },
         "counts": {
           "indexed": "{count, plural, one {# connecteur indexé} other {# connecteurs indexés}}",
