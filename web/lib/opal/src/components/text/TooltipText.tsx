@@ -16,10 +16,18 @@ function TooltipText({ tooltip, overflowTooltip, ref, ...props }: TextProps) {
   const overflowing = useOverflow(
     tooltip === undefined && overflowTooltip ? element : null
   );
+  // Returns a cleanup, so React no longer calls it with `null`: the cleanup
+  // clears the element and runs the caller's cleanup, or else hands the
+  // caller its `null`.
   const setRef = useCallback(
     (node: HTMLElement | null) => {
       setElement(node);
-      ref?.(node);
+      const cleanup = ref?.(node);
+      return () => {
+        setElement(null);
+        if (typeof cleanup === "function") cleanup();
+        else ref?.(null);
+      };
     },
     [ref]
   );

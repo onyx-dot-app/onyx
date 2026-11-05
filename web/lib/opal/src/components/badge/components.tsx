@@ -92,10 +92,14 @@ function Badge({
       />
     </div>
   );
-  return tooltip === undefined ? (
-    badge
-  ) : (
-    <Tooltip tooltip={tooltip} side="top">
+  // Always wrapped, and suppressed without a tooltip: adding or removing one
+  // keeps the same root, so a focused badge keeps focus.
+  return (
+    <Tooltip
+      tooltip={tooltip ?? title}
+      suppressed={tooltip === undefined}
+      side="top"
+    >
       {badge}
     </Tooltip>
   );
