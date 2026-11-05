@@ -4,7 +4,7 @@
 itself, so the happy path needs no discovery round trip. A value that does not
 resolve must fail rather than be dropped, and the error teaches the caller
 without dumping the whole inventory. `retrieval_only` sends the search to
-`/retrieve`, and the server setting can force it on.
+`/search/raw`, and the server setting can force it on.
 """
 
 import json
@@ -25,8 +25,8 @@ _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
 @dataclass
 class _Stub:
-    """Bodies the tool sent to /search or /retrieve, plus what the API server
-    returns."""
+    """Bodies the tool sent to /search or /search/raw, plus what the API
+    server returns."""
 
     search_requests: list[dict[str, Any]]
     agents: list[dict[str, Any]]
@@ -69,8 +69,10 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
             return httpx.Response(200, json=state.document_sets)
         if path.endswith("/persona"):
             return httpx.Response(200, json=state.agents)
-        if path.endswith(("/search", "/retrieve")):
-            state.search_routes.append(path[path.rindex("/") :])
+        if path.endswith(("/search", "/search/raw")):
+            state.search_routes.append(
+                "/search/raw" if path.endswith("/raw") else "/search"
+            )
             state.search_requests.append(json.loads(request.content))
             return httpx.Response(200, json={"results": []})
         return httpx.Response(404, json={"detail": f"unexpected path {path}"})
@@ -276,4 +278,4 @@ async def test_retrieval_only_calls_retrieve_when_requested_or_forced(
     )
 
     assert "error" not in payload
-    assert stub.search_routes == ["/retrieve" if sent else "/search"]
+    assert stub.search_routes == ["/search/raw" if sent else "/search"]

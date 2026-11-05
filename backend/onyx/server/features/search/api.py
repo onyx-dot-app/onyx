@@ -1,8 +1,8 @@
-"""Search API endpoints (POST /api/search and POST /api/retrieve).
+"""Search API endpoints (POST /api/search and POST /api/search/raw).
 
 /search runs SearchTool.search, the same multi-stage search as chat, and
 returns ranked results with no LLM answer.
-/retrieve runs the same retrieval with no LLM step, for callers that rank
+/search/raw runs the same retrieval with no LLM step, for callers that rank
 results themselves.
 
 Intended for programmatic consumers (onyx-cli, Craft sandbox, integrations).
@@ -45,7 +45,7 @@ from onyx.llm.factory import (
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     BaseSearchRequest,
-    RetrieveRequest,
+    RawSearchRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -71,7 +71,6 @@ from onyx.utils.fleet_query_telemetry import QueryMode, telemetry_query
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search")
-retrieve_router = APIRouter(prefix="/retrieve")
 
 
 @router.post(
@@ -97,7 +96,7 @@ def search(
     expansion, hybrid retrieval, reranking and section merging — and returns the
     ranked sections without generating an answer. Results are ordered most
     relevant first and are always filtered by the calling user's document
-    permissions. For results with no LLM calls, use `POST /retrieve`.
+    permissions. For results with no LLM calls, use `POST /search/raw`.
     """
     persona, persona_search_info = _load_persona(request.persona_id, user, db_session)
 
@@ -173,15 +172,15 @@ def search(
     )
 
 
-@retrieve_router.post(
-    "",
-    # Retrieval spends no LLM tokens, so no token budget applies.
+@router.post(
+    "/raw",
+    # Raw search spends no LLM tokens, so no token budget applies.
     dependencies=[Depends(require_vector_db), Depends(check_api_key_usage)],
     tags=PUBLIC_API_TAGS,
 )
 @telemetry_query(mode=QueryMode.SEARCH)
-def retrieve(
-    request: RetrieveRequest,
+def raw_search(
+    request: RawSearchRequest,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchResponse:
@@ -219,7 +218,7 @@ def retrieve(
         search_tool,
         request,
         user,
-        trace_name="retrieve_api",
+        trace_name="raw_search_api",
         message_history=None,
         context=ToolContext(),
     )

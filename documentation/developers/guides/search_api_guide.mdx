@@ -9,7 +9,7 @@ Onyx exposes three search endpoints. Which one you want depends on what you are 
 | Endpoint | Use it when |
 |----------|-------------|
 | [`POST /search`](/developers/api_reference/search/search) | You want Onyx's search results inside your own application: RAG pipelines, agents, integrations, anything that needs ranked passages rather than an answer. Runs the same retrieval pipeline as the Search action in chat. |
-| [`POST /retrieve`](/developers/api_reference/search/retrieve) | You rank or read the results yourself, for example with an agent that has its own model. Runs retrieval only, with no LLM calls. |
+| [`POST /search/raw`](/developers/api_reference/search/raw_search) | You rank or read the results yourself, for example with an agent that has its own model. Runs retrieval only, with no LLM calls. |
 | [`POST /search/send-search-message`](/developers/api_reference/search/handle_send_search_message) | You are building a search interface. This is the endpoint behind the Onyx Search UI, and it adds keyword expansion, LLM document selection, streaming, and per-user search history. |
 
 None of these endpoints generates an answer. To have a model read the results and write a response,
@@ -24,7 +24,7 @@ use [`POST /chat/send-chat-message`](/developers/api_reference/chat/handle_send_
 Authenticate with an API key or a Personal Access Token. A limited-access token needs the **Search &mdash; Read** scope.
 See [Authentication](/developers/overview#authentication).
 Query expansion and LLM document selection use the workspace's default LLM,
-so the same token limits that apply to chat apply to them. `POST /retrieve` makes no LLM calls,
+so the same token limits that apply to chat apply to them. `POST /search/raw` makes no LLM calls,
 so no token limit applies to it.
 
 ## POST /search
@@ -102,7 +102,7 @@ several results share one `citation_id` when the search returned multiple non-ov
   ```
 </CodeGroup>
 
-## POST /retrieve
+## POST /search/raw
 
 This endpoint runs the query as written. It makes no LLM calls: no query expansion, no source or time detection,
 no federated Slack search and no document selection.
@@ -118,7 +118,7 @@ The response has the same shape as `POST /search`. It holds up to 10 results in 
 The deployment still needs a configured LLM, but this endpoint does not call it.
 
 ```bash
-curl -s -X POST "${API_BASE_URL}/retrieve" \
+curl -s -X POST "${API_BASE_URL}/search/raw" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"query": "What is our parental leave policy?", "context_chunks": 0}' \

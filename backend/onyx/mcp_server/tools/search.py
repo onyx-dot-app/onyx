@@ -26,7 +26,7 @@ from onyx.mcp_server.utils import (
     require_access_token,
 )
 from onyx.server.features.search.models import (
-    RetrieveRequest,
+    RawSearchRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -397,10 +397,10 @@ async def search_indexed_documents(
             )
             parsed_cutoff = None
 
-        request: SearchRequest | RetrieveRequest
+        request: SearchRequest | RawSearchRequest
         if use_retrieval_only:
-            route = "/retrieve"
-            request = RetrieveRequest(
+            route = "/search/raw"
+            request = RawSearchRequest(
                 query=query,
                 sources=filters.source_types,
                 document_sets=document_set_names,

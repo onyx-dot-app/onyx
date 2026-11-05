@@ -116,7 +116,6 @@ from onyx.server.features.persona.api import admin_agents_router, agents_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
-from onyx.server.features.search.api import retrieve_router
 from onyx.server.features.search.api import router as search_api_router
 from onyx.server.features.skill.api import user_router as skill_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
@@ -611,7 +610,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, hierarchy_router)
     include_router_with_global_prefix_prepended(application, search_api_router)
-    include_router_with_global_prefix_prepended(application, retrieve_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(
         application, slack_bot_management_router

@@ -1,4 +1,4 @@
-"""Integration tests for the Search API (POST /api/search and POST /api/retrieve)."""
+"""Integration tests for the Search API (POST /api/search and POST /api/search/raw)."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _search(
     )
 
 
-@pytest.mark.parametrize("route", ["/search", "/retrieve"])
+@pytest.mark.parametrize("route", ["/search", "/search/raw"])
 def test_basic_search_returns_results(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001

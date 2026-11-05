@@ -7,7 +7,7 @@ from onyx.context.search.models import Tag
 from onyx.tools.models import ChatMinimalTextMessage
 
 # Public API bound, so internal expansion tuning cannot change it.
-MAX_RETRIEVE_CONTEXT_CHUNKS = 5
+MAX_RAW_SEARCH_CONTEXT_CHUNKS = 5
 
 
 class BaseSearchRequest(BaseModel):
@@ -40,10 +40,10 @@ class SearchRequest(BaseSearchRequest):
         return self
 
 
-class RetrieveRequest(BaseSearchRequest):
+class RawSearchRequest(BaseSearchRequest):
     # Neighboring chunks added on each side of every result.
     context_chunks: int = Field(
-        default=MAX_RETRIEVE_CONTEXT_CHUNKS, ge=0, le=MAX_RETRIEVE_CONTEXT_CHUNKS
+        default=MAX_RAW_SEARCH_CONTEXT_CHUNKS, ge=0, le=MAX_RAW_SEARCH_CONTEXT_CHUNKS
     )
 
 

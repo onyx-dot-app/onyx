@@ -25,7 +25,7 @@
   insufficient-permissions error, not a silent fallback.
 - **An API caller** sends `POST /search` and gets the selected, expanded
   sections with no LLM answer. It is for programmatic callers such as the
-  onyx-cli and the Craft sandbox. `POST /retrieve` returns the top sections
+  onyx-cli and the Craft sandbox. `POST /search/raw` returns the top sections
   in retrieval order with up to `context_chunks` neighboring chunks, and makes
   no LLM call. It is for callers that rank results themselves, such as the
   MCP tool's `retrieval_only` mode.
@@ -167,7 +167,7 @@ and expansion run whatever the flag's value. A change to this flag changes the
 LLM cost of every multi-search chat turn.
 
 **Other entry points.** `server/features/search/api.py` builds a `SearchTool`
-for `/search` and `/retrieve` and calls `SearchTool.search` outside the chat
+for `/search` and `/search/raw` and calls `SearchTool.search` outside the chat
 runtime, with its own trace and tool span. `ee/onyx/search/process_search_query.py`
 calls `search_pipeline` directly, with its own expansion and section target,
 and is the only caller of `FORCED_DOCUMENT_SET_NAMES` scope
@@ -288,10 +288,10 @@ calls the index directly for admin document inspection.
     the top sections before the decision client or selection model resolves.
     It adds `retrieval_context_chunks` neighbors with
     `tools/tool_implementations/search/search_utils.py:expand_section_with_neighbors`,
-    which reads them from the index and classifies nothing. `/retrieve` is its only API entry point and
-    runs no LLM cost, model spend or token budget check. A new model call in
-    `search` must check `retrieval_only`, or it adds cost that callers chose to
-    avoid.
+    which reads them from the index and classifies nothing. `/search/raw` is
+    its only API entry point and runs no LLM cost, model spend or token budget
+    check. A new model call in `search` must check `retrieval_only`, or it adds
+    cost that callers chose to avoid.
 
 ---
 

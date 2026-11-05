@@ -18,7 +18,7 @@ from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.search import api
-from onyx.server.features.search.models import RetrieveRequest, SearchRequest
+from onyx.server.features.search.models import RawSearchRequest, SearchRequest
 from onyx.tools.constants import SEARCH_TOOL_ID
 
 
@@ -120,13 +120,13 @@ def test_public_search_defers_unused_primary_provider_check_to_tool() -> None:
         cost.assert_not_called()
 
 
-def test_retrieve_runs_retrieval_only_with_the_callers_window() -> None:
+def test_raw_search_runs_retrieval_only_with_the_callers_window() -> None:
     with (
         public_search_dependencies(MagicMock()) as constructor,
         patch.object(api, "check_llm_cost_limit_for_provider") as cost,
     ):
-        api.retrieve(
-            RetrieveRequest(query="runbook", context_chunks=2),
+        api.raw_search(
+            RawSearchRequest(query="runbook", context_chunks=2),
             MagicMock(),
             MagicMock(),
         )
