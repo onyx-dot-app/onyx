@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from datetime import datetime, timezone
 import html
 import re
@@ -16,10 +16,7 @@ from urllib3.util.retry import Retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    basic_expert_info_representation,
-    time_str_to_utc,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -34,6 +31,11 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
+from onyx.connectors.jira_service_management.config import (
+    DEFAULT_JSM_PAGE_LIMIT,
+    DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    JiraServiceManagementConnectorConfig,
+)
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorMissingCredentialError,
@@ -42,17 +44,20 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-DEFAULT_JSM_PAGE_LIMIT = 50
 MAX_JSM_PAGE_LIMIT = 100
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_LINES_RE = re.compile(r"\n{3,}")
 _JQL_SAFE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _escape_jql_str(val: str) -> str:
+    return val.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _strip_html(raw_html: str) -> str:
@@ -204,7 +209,10 @@ def extract_user_info(user_dict: dict[str, Any] | None) -> BasicExpertInfo | Non
     email = user_dict.get("emailAddress") or user_dict.get("email") or None
     if not name and not email:
         return None
-    return basic_expert_info_representation(display_name=str(name) if name else None, email=str(email) if email else None)
+    return BasicExpertInfo(
+        display_name=str(name) if name else None,
+        email=str(email) if email else None,
+    )
 
 
 def format_sla_metric(sla_record: dict[str, Any]) -> tuple[str, bool] | None:
@@ -482,15 +490,25 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         if self.project_key:
             clauses.append(f'project = "{self.project_key}"')
         elif self.service_desk_ids:
-            pkeys = [f'"{self._service_desk_cache[s]["projectKey"]}"' for s in self.service_desk_ids if s in self._service_desk_cache and self._service_desk_cache[s].get("projectKey")]
-            if pkeys:
-                clauses.append(f"project IN ({', '.join(pkeys)})")
+            if not self._service_desk_cache:
+                self.fetch_service_desks()
+            pkeys = [
+                f'"{self._service_desk_cache[s]["projectKey"]}"'
+                for s in self.service_desk_ids
+                if s in self._service_desk_cache and self._service_desk_cache[s].get("projectKey")
+            ]
+            if not pkeys:
+                raise ConnectorValidationError(
+                    f"Unable to resolve project keys for configured service_desk_ids: {self.service_desk_ids}"
+                )
+            clauses.append(f"project IN ({', '.join(pkeys)})")
         if self.request_types:
-            clauses.append(f'"Customer Request Type" IN ({", ".join(f"{chr(34)}{r}{chr(34)}" for r in self.request_types)})')
+            escaped_rts = ", ".join(f'"{_escape_jql_str(r)}"' for r in self.request_types)
+            clauses.append(f'"Customer Request Type" IN ({escaped_rts})')
         if start is not None:
-            clauses.append(f'updated >= "{datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")}"')
+            clauses.append(f"updated >= {int(start * 1000)}")
         if end is not None:
-            clauses.append(f'updated <= "{datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")}"')
+            clauses.append(f"updated <= {int(end * 1000)}")
         if self.jql_query:
             clauses.append(f"({self.jql_query})")
         return f"{' AND '.join(clauses)} ORDER BY updated ASC" if clauses else "ORDER BY updated ASC"
@@ -619,9 +637,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         if issuetype_name:
             hdr.append(f"Issue Type: {issuetype_name}")
         if rep_info:
-            hdr.append(f"Reporter: {rep_info.get_semantic_name()}")
+            hdr.append(f"Reporter: {rep_info.display_name or rep_info.email or 'Unknown'}")
         if asg_info:
-            hdr.append(f"Assignee: {asg_info.get_semantic_name()}")
+            hdr.append(f"Assignee: {asg_info.display_name or asg_info.email or 'Unknown'}")
 
         blocks = ["\n".join(hdr)]
         if desc_parts:
@@ -643,7 +661,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             if not ctext:
                 continue
             ainfo = extract_user_info(c.get("author") if isinstance(c.get("author"), dict) else None)
-            alabel = ainfo.get_semantic_name() if ainfo else "Unknown"
+            alabel = (ainfo.display_name or ainfo.email or "Unknown") if ainfo else "Unknown"
             cdt = parse_jsm_datetime(c.get("created"))
             if cdt and (updated_dt is None or cdt > updated_dt):
                 updated_dt = cdt
@@ -669,7 +687,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         return Document(
             id=doc_link,
             sections=sections,
-            source=getattr(DocumentSource, "JIRA_SERVICE_MANAGEMENT", DocumentSource.JIRA),
+            source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
             semantic_identifier=f"{issue_key}: {summary}",
             title=f"{issue_key} {summary}",
             doc_updated_at=updated_dt,
@@ -711,11 +729,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                         continue
                 if start_dt is not None or end_dt is not None:
                     st_obj = req.get("currentStatus") if isinstance(req.get("currentStatus"), dict) else {}
-                    act_dt = parse_jsm_datetime(st_obj.get("statusDate")) or parse_jsm_datetime(req.get("createdDate"))
+                    act_dt = parse_jsm_datetime(req.get("updatedDate")) or parse_jsm_datetime(st_obj.get("statusDate")) or parse_jsm_datetime(req.get("createdDate"))
                     if act_dt is not None:
-                        if start_dt is not None and act_dt < start_dt:
-                            break
-                        if end_dt is not None and act_dt > end_dt:
+                        if (start_dt is not None and act_dt < start_dt) or (end_dt is not None and act_dt > end_dt):
                             continue
                 yield req
 
@@ -736,9 +752,26 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             pass
         jql = self._build_jql(start=start, end=end)
         batch: list[Document | HierarchyNode] = []
+        seen: set[str] = set()
+        jql_iter = self._search_issues_via_jql(jql)
         try:
-            seen: set[str] = set()
-            for j_issue in self._search_issues_via_jql(jql):
+            first_issue = next(jql_iter, None)
+        except (InsufficientPermissionsError, ConnectorValidationError):
+            for req in self._iter_service_desk_requests(start=start, end=end):
+                batch.append(self._enrich_and_build_document(req))
+                if len(batch) >= self.batch_size:
+                    yield batch
+                    batch = []
+            if batch:
+                yield batch
+            return
+
+        if first_issue is not None:
+            def _all_jql_issues() -> Iterator[dict[str, Any]]:
+                yield first_issue
+                yield from jql_iter
+
+            for j_issue in _all_jql_issues():
                 key = str(j_issue.get("key") or "").strip()
                 if not key or key in seen:
                     continue
@@ -752,22 +785,17 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
                     batch = []
             if batch:
                 yield batch
-            return
-        except (InsufficientPermissionsError, ConnectorValidationError):
-            pass
-        for req in self._iter_service_desk_requests(start=start, end=end):
-            batch.append(self._enrich_and_build_document(req))
-            if len(batch) >= self.batch_size:
-                yield batch
-                batch = []
-        if batch:
-            yield batch
 
     def retrieve_slim_documents(
-        self, start: SecondsSinceUnixEpoch | None = None, end: SecondsSinceUnixEpoch | None = None, callback: Callable[..., Any] | None = None
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         slim_batch: list[SlimDocument | HierarchyNode] = []
         for req in self._iter_service_desk_requests(start=start, end=end):
+            if callback is not None and callback.should_stop():
+                return
             key = str(req.get("issueKey") or req.get("issueId") or "").strip()
             if not key:
                 continue
@@ -776,16 +804,19 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             slim_batch.append(SlimDocument(id=link, doc_created_at=parse_jsm_datetime(req.get("createdDate"))))
             if len(slim_batch) >= self.batch_size:
                 if callback is not None:
-                    callback(slim_batch)
+                    callback.progress("retrieve_slim_documents", len(slim_batch))
                 yield slim_batch
                 slim_batch = []
         if slim_batch:
             if callback is not None:
-                callback(slim_batch)
+                callback.progress("retrieve_slim_documents", len(slim_batch))
             yield slim_batch
 
     def retrieve_all_slim_docs(
-        self, start: SecondsSinceUnixEpoch | None = None, end: SecondsSinceUnixEpoch | None = None, callback: Callable[..., Any] | None = None
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         return self.retrieve_slim_documents(start=start, end=end, callback=callback)
 
