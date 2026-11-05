@@ -114,8 +114,11 @@ def test_extract_urls_from_sitemap_index_with_relative_and_whitespace_urls() -> 
     <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
       <sitemap>
         <loc>
-          /child-sitemap.xml
+          //cdn.example.com/child-sitemap.xml
         </loc>
+      </sitemap>
+      <sitemap>
+        <loc>   </loc>
       </sitemap>
     </sitemapindex>
     """
@@ -126,13 +129,16 @@ def test_extract_urls_from_sitemap_index_with_relative_and_whitespace_urls() -> 
           /nested-page
         </loc>
       </url>
+      <url>
+        <loc>   </loc>
+      </url>
     </urlset>
     """
 
     def mock_ssrf_safe_get(url: str, **_kwargs: object) -> requests.Response:
         if url == "https://example.com/sitemap_index.xml":
             return _mock_response(index_xml)
-        elif url == "https://example.com/child-sitemap.xml":
+        elif url == "https://cdn.example.com/child-sitemap.xml":
             return _mock_response(child_xml)
         return _mock_response("", status_code=404)
 
@@ -146,7 +152,7 @@ def test_extract_urls_from_sitemap_index_with_relative_and_whitespace_urls() -> 
     ):
         urls = extract_urls_from_sitemap("https://example.com/sitemap_index.xml")
 
-    assert urls == ["https://example.com/nested-page"]
+    assert urls == ["https://cdn.example.com/nested-page"]
 
 
 def test_web_connector_sitemap_mode_populates_to_visit_list_from_index() -> None:
