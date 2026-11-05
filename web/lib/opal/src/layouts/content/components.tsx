@@ -7,7 +7,6 @@ import {
   Button,
   OverflowText,
   Text,
-  Tooltip,
   type BadgeProps,
   type TextColor,
   type TextFont,
@@ -44,7 +43,7 @@ type ContentAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 type ContentSuffix = "optional" | (string & {});
 
 /** A badge beside the title, with an optional hover tooltip. */
-type ContentBadge = BadgeProps & { tooltip?: string };
+type ContentBadge = BadgeProps;
 
 /** Starts a title edit from a control outside the content. */
 interface ContentEditHandle {
@@ -82,6 +81,12 @@ interface ContentBaseProps {
    * Omit to wrap freely.
    */
   titleMaxLines?: number;
+
+  /**
+   * With `titleMaxLines`: a tooltip on every hover of the title, in place of
+   * the full title.
+   */
+  titleTooltip?: string | RichStr;
 
   /** Clamp the description to N lines; a cut one shows in a tooltip. */
   descriptionMaxLines?: number;
@@ -360,6 +365,7 @@ function Content({
   title,
   description,
   titleMaxLines,
+  titleTooltip,
   descriptionMaxLines,
   strikethrough,
   suffix,
@@ -485,6 +491,7 @@ function Content({
                 font={font}
                 color="inherit"
                 maxLines={titleMaxLines}
+                tooltip={titleTooltip}
                 strikethrough={strikethrough}
                 role={role}
                 onClick={editable ? handleTitleClick : undefined}
@@ -525,17 +532,11 @@ function Content({
                 );
               })()}
 
-            {badge &&
-              (() => {
-                const { tooltip, ...badgeProps } = badge;
-                return (
-                  <span className="opal-content-badge">
-                    <Tooltip tooltip={tooltip} side="top">
-                      <Badge {...badgeProps} />
-                    </Tooltip>
-                  </span>
-                );
-              })()}
+            {badge && (
+              <span className="opal-content-badge">
+                <Badge {...badge} />
+              </span>
+            )}
 
             {editable && !editing && editHandle == null && (
               <div className="opal-content-edit-button" data-show={editButton}>

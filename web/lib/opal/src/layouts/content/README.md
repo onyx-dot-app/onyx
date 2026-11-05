@@ -43,11 +43,12 @@ root            0.25rem gap inline; no gap stacked or with a secondary-* / figur
 | `title`               | `string \| RichStr`                        | **(required)**     | The title                                                                                           |
 | `description`         | `string \| RichStr`                        | —                  | Text below the title                                                                                |
 | `titleMaxLines`       | `number`                                   | —                  | Clamp the title; a cut title shows in full in a tooltip                                             |
+| `titleTooltip`        | `string \| RichStr`                        | —                  | With `titleMaxLines`: shown on every hover of the title, in place of the full title                 |
 | `descriptionMaxLines` | `number`                                   | —                  | Clamp the description; a cut one shows in full in a tooltip                                         |
 | `strikethrough`       | `boolean`                                  | `false`            | Strike the title through, for an option that is switched off                                        |
 | `suffix`              | `"optional" \| string`                     | —                  | Muted text beside the title, in the title's size and lighter weight; `"optional"` is the translated "(Optional)" |
 | `auxIcon`             | `"info-gray" \| "info-blue" \| "warning" \| "error"` | —        | A status icon beside the title: a 16px box with a 12px glyph at every title size, centred on the title line |
-| `badge`               | `BadgeProps & { tooltip?: string }`        | —                  | A badge beside the title                                                                            |
+| `badge`               | `BadgeProps`                               | —                  | A badge beside the title                                                                            |
 | `role`                | `string`                                   | —                  | ARIA role on the title element                                                                      |
 | `moreIcon1`           | `IconFunctionComponent`                    | —                  | Stacked only: a connector icon after the icon, in `text-03`; its box is 12px smaller than the icon box (2px padding) |
 | `moreIcon2`           | `IconFunctionComponent`                    | —                  | Stacked only: a peer of the icon, the same size                                                     |

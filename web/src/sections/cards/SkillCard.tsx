@@ -319,12 +319,11 @@ export default function SkillCard({
             className="me-1"
           >
             {isRequired && (
-              <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
-                <Badge
-                  title={skillCopy("modals.share.installation.required")}
-                  color="info"
-                />
-              </Tooltip>
+              <Badge
+                title={skillCopy("modals.share.installation.required")}
+                color="info"
+                tooltip={t("skill.tags.required.tooltip")}
+              />
             )}
             {item.can_toggle && (
               <Section

@@ -14,9 +14,9 @@ import { cn } from "@opal/utils";
 /** Height on the Tailwind scale: `4` is 1rem, `6` is 1.5rem. */
 type BadgeSize = 4 | 6;
 
-// Takes no DOM attributes. The ref and anything a wrapping Tooltip or
-// popover trigger injects at runtime still reach the root, so either can
-// wrap a Badge.
+// Takes no DOM attributes. The ref and anything a popover trigger injects at
+// runtime still reach the root, so one can wrap a Badge. For a tooltip, use
+// the `tooltip` prop: a wrapping Tooltip nests inside the title's own.
 type BadgeProps = {
   ref?: React.Ref<HTMLDivElement>;
 
@@ -40,6 +40,13 @@ type BadgeProps = {
 
   /** Height on the Tailwind scale. Default: `4`. */
   size?: BadgeSize;
+
+  /**
+   * A tooltip on every hover. It replaces the full-title tooltip, so a cut
+   * title shows only this. Use it instead of wrapping the badge in a
+   * `Tooltip`.
+   */
+  tooltip?: string | RichStr;
 };
 
 // ---------------------------------------------------------------------------
@@ -57,6 +64,7 @@ function Badge({
   color = "default",
   titleColor,
   size = 4,
+  tooltip,
   ...rest
 }: BadgeProps) {
   return (
@@ -78,6 +86,7 @@ function Badge({
         icon={icon}
         title={title}
         titleMaxLines={1}
+        titleTooltip={tooltip}
       />
     </div>
   );

@@ -15,6 +15,7 @@ Every `Text` prop except `children`, `maxLines` and `ref`, plus:
 | ---------- | ------------------- | ------- | ----------------------------------- |
 | `children` | `string \| RichStr` | —       | The text; it also fills the tooltip |
 | `maxLines` | `number`            | `1`     | Lines shown before the text is cut  |
+| `tooltip`  | `string \| RichStr` | —       | Shown on every hover, in place of the full text |
 
 ## Notes
 

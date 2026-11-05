@@ -313,9 +313,12 @@ function Count({ icon: Icon, value, tooltip, look }: CountProps) {
   const format = useFormatter();
   if (look === "tag") {
     return (
-      <Tooltip tooltip={tooltip} side="top">
-        <Badge icon={Icon} title={format.number(value)} color="default" />
-      </Tooltip>
+      <Badge
+        icon={Icon}
+        title={format.number(value)}
+        color="default"
+        tooltip={tooltip}
+      />
     );
   }
   return (
@@ -653,9 +656,11 @@ export default function RunRow({
                 >
                   <StatusTagPill tag={tag} />
                   {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Tooltip tooltip={t("newModel.tooltip")} side="top">
-                      <Badge title={t("newModel.label")} color="info" />
-                    </Tooltip>
+                    <Badge
+                      title={t("newModel.label")}
+                      color="info"
+                      tooltip={t("newModel.tooltip")}
+                    />
                   )}
                   {run.kind === "indexing" && (
                     <StageDetailsTrigger open={open} />

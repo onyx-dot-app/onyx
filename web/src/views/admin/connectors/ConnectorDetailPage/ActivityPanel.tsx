@@ -12,7 +12,6 @@ import {
   MessageCard,
   ShadowDiv,
   Badge,
-  Tooltip,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import {
@@ -73,26 +72,24 @@ export function ActivityCountTags({
   return (
     <>
       {failures > 0 && (
-        <Tooltip tooltip={t("counts.failures", { count: failures })} side="top">
-          <Badge
-            icon={SvgXOctagon}
-            title={format.number(failures)}
-            color="error"
-            titleColor="text-04"
-            size={6}
-          />
-        </Tooltip>
+        <Badge
+          icon={SvgXOctagon}
+          title={format.number(failures)}
+          color="error"
+          titleColor="text-04"
+          size={6}
+          tooltip={t("counts.failures", { count: failures })}
+        />
       )}
       {errors > 0 && (
-        <Tooltip tooltip={t("counts.errors", { count: errors })} side="top">
-          <Badge
-            icon={SvgAlertTriangle}
-            title={format.number(errors)}
-            color="warning"
-            titleColor="text-04"
-            size={6}
-          />
-        </Tooltip>
+        <Badge
+          icon={SvgAlertTriangle}
+          title={format.number(errors)}
+          color="warning"
+          titleColor="text-04"
+          size={6}
+          tooltip={t("counts.errors", { count: errors })}
+        />
       )}
     </>
   );
