@@ -1,5 +1,5 @@
 // Claude Code hook entry for the Onyx plugin: UserPromptSubmit injects Onyx
-// results for every prompt, PreToolUse, PostToolUse and Stop run the strict gate.
+// results, PreToolUse and PostToolUse run the strict gate, Stop nudges a full search.
 import {
   mkdirSync,
   readFileSync,
@@ -25,20 +25,20 @@ const MAX_CONTEXT_CHARS = 9_500;
 const STATE_TTL_MS = 24 * 60 * 60 * 1000;
 const OWN_TOOL_PREFIX = "mcp__plugin_onyx_";
 const RETRIEVAL_TOOL_PATTERN = /search|query|retriev|lookup|find|fetch/i;
-const FULL_SEARCH_TOOL = "search_indexed_documents on the Onyx MCP server";
+const FULL_SEARCH_CALL = "search_indexed_documents on the Onyx MCP server";
 // The sections come from retrieval alone, so the header says when the full
 // pipeline (LLM selection and context expansion) is worth a tool call.
 const CONTEXT_HEADER =
   "Onyx knowledge base sections for this prompt, from fast retrieval only, ranked by relevance. " +
   "Use them before any other source and cite the url of each section you rely on. " +
-  `Call ${FULL_SEARCH_TOOL} before answering when the sections do not cover the question, ` +
+  `Call ${FULL_SEARCH_CALL} before answering when the sections do not cover the question, ` +
   "when the answer must combine several documents, or when the user asks for the current state of something.";
 const NO_RESULTS_CONTEXT =
   "Onyx fast retrieval found nothing for this prompt. " +
-  `Call ${FULL_SEARCH_TOOL} before answering from any other source.`;
+  `Call ${FULL_SEARCH_CALL} before answering from any other source.`;
 const STOP_FEEDBACK =
   "This turn answered after Onyx fast retrieval only. If the answer relies on " +
-  `company knowledge beyond the injected sections, call ${FULL_SEARCH_TOOL} now and revise. ` +
+  `company knowledge beyond the injected sections, call ${FULL_SEARCH_CALL} now and revise. ` +
   "Otherwise finish.";
 
 type HookInput = {
@@ -68,12 +68,17 @@ type PluginConfig = {
 };
 
 // consulted: Onyx answered for this prompt, so other retrieval tools may run.
-// searched: the prompt was a question the hook searched for.
-// fullSearch: Claude called the full search tool during this turn.
+// awaitingFullSearch: fast results were injected and the full tool has not run.
 type SessionState = {
   consulted: boolean;
-  searched: boolean;
-  fullSearch: boolean;
+  awaitingFullSearch: boolean;
+};
+
+// results is null when Onyx gave no usable answer. consulted stays true on an
+// HTTP error so a misconfigured token never locks the strict gate shut.
+type SearchOutcome = {
+  consulted: boolean;
+  results: SearchResult[] | null;
 };
 
 // CLAUDE_PLUGIN_OPTION_* comes from /plugin configure. The bare name covers
@@ -124,12 +129,11 @@ function readState(sessionId: string): SessionState | null {
   }
 }
 
-// Write then rename so a concurrent reader never sees a partial file. The
-// exclusive flag refuses to follow a link someone planted at the temp path.
+// Write then rename so a concurrent reader never sees a partial file.
 function writeState(sessionId: string, state: SessionState): void {
   const path = statePath(sessionId);
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state), { flag: "wx" });
+  writeFileSync(tmp, JSON.stringify(state));
   renameSync(tmp, path);
 }
 
@@ -169,12 +173,10 @@ function shouldSearch(prompt: string): boolean {
   );
 }
 
-// null means Onyx could not be reached. An HTTP error counts as an answer, so
-// a misconfigured token never locks the strict gate shut.
 async function search(
   config: PluginConfig,
   query: string,
-): Promise<SearchResult[] | null> {
+): Promise<SearchOutcome> {
   try {
     const response = await fetch(`${config.url}${SEARCH_PATH}`, {
       method: "POST",
@@ -195,13 +197,14 @@ async function search(
     });
     if (!response.ok) {
       console.error(`onyx plugin: search returned HTTP ${response.status}`);
-      return [];
+      return { consulted: true, results: null };
     }
-    return ((await response.json()) as SearchResponse).results;
+    const payload = (await response.json()) as SearchResponse;
+    return { consulted: true, results: payload.results };
   } catch (err) {
     // Only the error name: a fetch error message can quote request headers.
     console.error(`onyx plugin: search request failed (${errorName(err)})`);
-    return null;
+    return { consulted: false, results: null };
   }
 }
 
@@ -233,18 +236,16 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
   const prompt = (input.prompt ?? "").trim();
   if (!shouldSearch(prompt)) {
     // Nothing to retrieve, so the strict gate has nothing to wait for.
-    writeState(input.session_id, {
-      consulted: true,
-      searched: false,
-      fullSearch: false,
-    });
+    writeState(input.session_id, { consulted: true, awaitingFullSearch: false });
     return;
   }
-  const results = await search(config, prompt.slice(0, MAX_QUERY_CHARS));
+  const { consulted, results } = await search(
+    config,
+    prompt.slice(0, MAX_QUERY_CHARS),
+  );
   writeState(input.session_id, {
-    consulted: results !== null,
-    searched: true,
-    fullSearch: false,
+    consulted,
+    awaitingFullSearch: results !== null,
   });
   if (!results) {
     return;
@@ -280,17 +281,8 @@ function preTool(input: HookInput, config: PluginConfig): void {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
       permissionDecisionReason:
-        `Onyx strict retrieval: call ${FULL_SEARCH_TOOL} before ${tool}.`,
+        `Onyx strict retrieval: call ${FULL_SEARCH_CALL} before ${tool}.`,
     },
-  });
-}
-
-function postTool(input: HookInput): void {
-  const state = readState(input.session_id);
-  writeState(input.session_id, {
-    consulted: true,
-    searched: state?.searched ?? false,
-    fullSearch: true,
   });
 }
 
@@ -299,8 +291,7 @@ function stop(input: HookInput, config: PluginConfig): void {
   if (!config.strict || input.stop_hook_active) {
     return;
   }
-  const state = readState(input.session_id);
-  if (!state || !state.searched || state.fullSearch) {
+  if (!readState(input.session_id)?.awaitingFullSearch) {
     return;
   }
   emitContext("Stop", STOP_FEEDBACK);
@@ -320,7 +311,7 @@ async function main(): Promise<void> {
       preTool(input, config);
       break;
     case "PostToolUse":
-      postTool(input);
+      writeState(input.session_id, { consulted: true, awaitingFullSearch: false });
       break;
     case "Stop":
       stop(input, config);

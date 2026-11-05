@@ -100,9 +100,9 @@ Add the Onyx marketplace and install the plugin:
 ```
 
 Claude Code asks for your Onyx URL and the token. The plugin's hooks run with `bun` or Node 23.6 or later.
-The injected context also tells Claude when to run the full `search_indexed_documents` search instead.
+The injected context also tells Claude when to run the full `search_indexed_documents` search.
 Turn on **Strict retrieval** to block other search tools until Onyx has been consulted for the current prompt,
-and to ask Claude for a full search when a turn ends without one.
+and to ask Claude for a full search when a question turn ends without one.
 Administrators can require the plugin on every machine through [managed
 settings](https://code.claude.com/docs/en/plugins/org).
 The [plugin README](https://github.com/onyx-dot-app/onyx/tree/main/extensions/claude-code) describes each option.

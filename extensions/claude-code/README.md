@@ -49,9 +49,9 @@ Strict retrieval is for teams that want Onyx consulted before any other knowledg
 - The prompt hook's search counts as consulting Onyx. So does a call to `search_indexed_documents`.
 - Prompts the hook skips, such as slash commands, do not gate anything.
 - The denial reason tells Claude to call `search_indexed_documents` first.
-- When a turn ends after a question prompt without a full search, a `Stop` hook feeds back one instruction: if the answer relies on company knowledge beyond the injected sections, run the full search now and revise. Claude judges that with the whole conversation in view. Claude Code's stop-hook guard keeps it to one nudge per turn.
+- When a question turn ends without a full search, a `Stop` hook feeds back one instruction: if the answer relies on company knowledge beyond the injected sections, run the full search now and revise. The hook skips the continuation Claude Code marks as stop-hook driven, so it nudges once per turn.
 
-Per-session state lives under the plugin data directory and is pruned after a day.
+Per-session state lives under the plugin data directory, or under `~/.cache/onyx-claude-code` when the plugin is loaded from a directory, and is pruned after a day.
 
 ## Files
 
