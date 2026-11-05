@@ -32,6 +32,7 @@ class JiraServiceManagementConnector(JiraConnector):
         batch_size: int = INDEX_BATCH_SIZE,
         labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         jql_query: str | None = None,
+        scoped_token: bool = False,
     ) -> None:
         """Initialize the JSM connector with the same parameters as Jira connector.
 
@@ -42,6 +43,7 @@ class JiraServiceManagementConnector(JiraConnector):
             batch_size: Number of issues to fetch per API call
             labels_to_skip: Issue labels to exclude from indexing
             jql_query: Optional JQL query to further filter issues (takes precedence over project_key)
+            scoped_token: Whether to use a scoped API token (Cloud Gateway)
         """
         super().__init__(
             jira_base_url=jira_base_url,
@@ -50,6 +52,7 @@ class JiraServiceManagementConnector(JiraConnector):
             batch_size=batch_size,
             labels_to_skip=labels_to_skip,
             jql_query=jql_query,
+            scoped_token=scoped_token,
         )
 
     @override

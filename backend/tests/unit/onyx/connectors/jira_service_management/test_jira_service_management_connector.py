@@ -13,8 +13,8 @@ def test_jsm_connector_initialization() -> None:
         project_key="TEST",
     )
 
-    assert connector.jira_base_url == "https://test.atlassian.net"
-    assert connector.project_key == "TEST"
+    assert connector.jira_base == "https://test.atlassian.net"
+    assert connector.jira_project == "TEST"
     assert (
         connector.document_source == DocumentSource.JIRA_SERVICE_MANAGEMENT
     ), "JSM connector should have JIRA_SERVICE_MANAGEMENT as document source"
@@ -41,5 +41,5 @@ def test_jsm_connector_with_blacklist() -> None:
         comment_email_blacklist=blacklist,
     )
 
-    assert connector.comment_email_blacklist == blacklist
+    assert connector.comment_email_blacklist == tuple(blacklist)
     assert connector.document_source == DocumentSource.JIRA_SERVICE_MANAGEMENT

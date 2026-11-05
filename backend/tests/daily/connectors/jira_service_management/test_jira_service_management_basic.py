@@ -55,11 +55,12 @@ def test_jsm_connector_basic(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
     """Test basic JSM connector functionality: load and validate documents."""
-    docs = load_all_from_connector(
+    output = load_all_from_connector(
         connector=jsm_connector,
-        start_time=None,
-        end_time=None,
+        start=0,
+        end=None,
     )
+    docs = output.documents
 
     assert len(docs) > 0, "JSM connector should retrieve at least one document"
 
@@ -98,11 +99,12 @@ def test_jsm_connector_with_jql(
     )
     connector.validate_connector_settings()
 
-    docs = load_all_from_connector(
+    output = load_all_from_connector(
         connector=connector,
-        start_time=None,
-        end_time=None,
+        start=0,
+        end=None,
     )
+    docs = output.documents
 
     assert len(docs) > 0, "JSM connector with JQL should retrieve documents"
 
