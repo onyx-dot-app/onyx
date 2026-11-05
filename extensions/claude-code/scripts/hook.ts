@@ -9,7 +9,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 const SEARCH_PATH = "/api/search";
@@ -99,11 +99,13 @@ function readConfig(): PluginConfig | null {
   };
 }
 
+// The fallback stays inside the user's home: a shared temp directory would let
+// another local user plant symlinks under predictable session file names.
 function stateDir(): string {
   const base =
-    process.env.CLAUDE_PLUGIN_DATA ?? join(tmpdir(), "onyx-claude-code");
+    process.env.CLAUDE_PLUGIN_DATA ?? join(homedir(), ".cache", "onyx-claude-code");
   const dir = join(base, "sessions");
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;
 }
 
@@ -122,11 +124,13 @@ function readState(sessionId: string): SessionState | null {
   }
 }
 
-// Write then rename so a concurrent reader never sees a partial file.
+// Write then rename so a concurrent reader never sees a partial file. The
+// exclusive flag refuses to follow a link someone planted at the temp path.
 function writeState(sessionId: string, state: SessionState): void {
   const path = statePath(sessionId);
-  writeFileSync(`${path}.tmp`, JSON.stringify(state));
-  renameSync(`${path}.tmp`, path);
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(state), { flag: "wx" });
+  renameSync(tmp, path);
 }
 
 // Best effort: another session may prune the same file at the same time.
