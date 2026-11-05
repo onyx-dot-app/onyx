@@ -77,7 +77,7 @@ nest, and the outer tooltip can fail to open.
 - Plain text, without either prop, renders no tooltip and runs no hooks.
 
 ```tsx
-<Text font="main-ui-body" maxLines={1} overflowTooltip>
+<Text font="main-ui-body" as="p" maxLines={1} overflowTooltip>
   {message}
 </Text>
 
