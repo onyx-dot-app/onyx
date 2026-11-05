@@ -208,7 +208,7 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
                     font="secondary-body"
                     icon={SvgUser}
                     title={agent.owner?.email || "Onyx"}
-                    color="muted"
+                    titleColor="text-03"
                   />
                   <Content
                     font="secondary-body"
@@ -216,7 +216,7 @@ export function AgentCard({ agent, onView, viewing = false }: AgentCardProps) {
                     title={t("card.actionsCount.label", {
                       count: agent.tools.length,
                     })}
-                    color="muted"
+                    titleColor="text-03"
                   />
                 </Section>
               </div>

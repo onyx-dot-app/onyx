@@ -489,7 +489,7 @@ export default function AuthenticationAccountCard({
                   font="secondary-body"
                   icon={SvgLinkedDots}
                   title={t("usedBy.label", { count: credential.usages.length })}
-                  color="muted"
+                  titleColor="text-03"
                   width="fit"
                 />
                 {ownerName !== null && (
@@ -501,7 +501,7 @@ export default function AuthenticationAccountCard({
                         ? t("owner.you", { name: ownerName })
                         : ownerName
                     }
-                    color="muted"
+                    titleColor="text-03"
                     width="fit"
                   />
                 )}

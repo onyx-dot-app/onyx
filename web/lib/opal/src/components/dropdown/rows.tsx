@@ -164,7 +164,8 @@ export const Row = React.memo(function Row({
     ) : undefined,
     descriptionMaxLines:
       row.kind === "option" ? row.descriptionMaxLines : undefined,
-    color: row.kind === "action" && row.danger ? "danger" : undefined,
+    color: row.kind === "action" && row.danger ? "error" : undefined,
+    titleColor: row.kind === "action" && row.danger ? "text-03" : undefined,
     tooltip:
       row.kind === "action" || row.kind === "option" ? row.tooltip : undefined,
     // Beside the list, so it never covers the row above.

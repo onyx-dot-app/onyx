@@ -336,7 +336,8 @@ function ConnectableRow({
         icon={Logo}
         title={name}
         titleMaxLines={1}
-        color={unauth ? "muted" : undefined}
+        color={unauth ? "default" : undefined}
+        titleColor={unauth ? "text-03" : undefined}
         state={selected ? "selected" : "empty"}
         selectVariant="select-heavy"
         description={

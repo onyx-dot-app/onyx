@@ -3,16 +3,12 @@
 import SvgInfo from "@opal/icons/info";
 import { Tooltip } from "@opal/components/tooltip/components";
 import { useOpalStrings } from "@opal/strings";
-import type {
-  IconFunctionComponent,
-  RichStr,
-  StatusVariants,
-} from "@opal/types";
+import type { IconFunctionComponent, RichStr, StatusColor } from "@opal/types";
 import { cn } from "@opal/utils";
 
 /** The statuses an icon tooltip can show. */
 type IconTooltipStatus = Extract<
-  StatusVariants,
+  StatusColor,
   "default" | "info" | "success" | "warning" | "error"
 >;
 

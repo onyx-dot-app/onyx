@@ -5,12 +5,12 @@ import "@opal/components/modal/styles.css";
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import type {
-  ColorTypes,
   IconFunctionComponent,
   RichStr,
   SizeVariants,
   WithoutStyles,
 } from "@opal/types";
+import type { ContentColor } from "@opal/layouts/content/components";
 import { Button, Tooltip } from "@opal/components";
 import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
@@ -339,8 +339,8 @@ interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   icon?: IconFunctionComponent;
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
-  /** Colour mode of the icon and title, as on `Content`. */
-  color?: ColorTypes;
+  /** Colour of the icon and title, as on `Content`. */
+  color?: ContentColor;
   title: string | RichStr;
   description?: string | RichStr;
   onClose?: () => void;

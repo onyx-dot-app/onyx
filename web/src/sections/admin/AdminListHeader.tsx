@@ -85,7 +85,7 @@ export default function AdminListHeader({
           <Content
             font="main-ui-body"
             title={emptyStateText}
-            color="muted"
+            titleColor="text-03"
             width="fit"
           />
           {actionButton}

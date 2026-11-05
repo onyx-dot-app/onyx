@@ -66,7 +66,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
           font="secondary-body"
           icon={icon}
           title={title}
-          color="muted"
+          titleColor="text-03"
         />
       ) : (
         <Content

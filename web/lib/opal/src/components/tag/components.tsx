@@ -4,12 +4,12 @@ import "@opal/components/tag/styles.css";
 import type {
   IconFunctionComponent,
   RichStr,
-  StatusVariants,
+  StatusColor,
   WithoutStyles,
 } from "@opal/types";
 import { Button, Tooltip } from "@opal/components";
 import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
-import { BADGE_COLORS } from "@opal/components/badge/colors";
+import { CONTENT_STATUS_COLORS } from "@opal/layouts/content/colors";
 import { Disabled, Interactive } from "@opal/core";
 import { SvgX } from "@opal/icons";
 import { Content } from "@opal/layouts";
@@ -27,7 +27,7 @@ type TagBaseProps = Omit<
   icon?: IconFunctionComponent;
 
   /** Icon colour, when it is not the chip's gray (an orange warning icon). */
-  iconColor?: StatusVariants;
+  iconColor?: StatusColor;
 
   /** Tag label text. */
   title: string | RichStr;
@@ -131,7 +131,7 @@ function Tag(props: TagProps) {
   const iconColorStyle =
     iconColor !== undefined
       ? ({
-          "--opal-tag-icon-color": BADGE_COLORS[iconColor].fg,
+          "--opal-tag-icon-color": CONTENT_STATUS_COLORS[iconColor].fg,
         } as React.CSSProperties)
       : undefined;
 

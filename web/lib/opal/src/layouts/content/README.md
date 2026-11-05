@@ -53,8 +53,28 @@ root            0.25rem gap inline; no gap stacked
 | `editButton`          | `"hover" \| "rest"`                        | `"hover"`          | When the pencil shows: on hover of the content, or at rest too                                      |
 | `editHandle`          | `Ref<ContentEditHandle>`                   | —                  | Starts an edit from an outside control; hides the built-in pencil                                   |
 | `width`               | `"fit" \| "full"`                          | `"full"`           | Shrink-wrap or fill the parent                                                                      |
-| `color`               | `ColorTypes`                               | `"default"`        | Icon and title colour pair. `"success"` / `"warning"` / `"danger"` colour only the icon and leave the text at `text-03`; `"interactive"` follows the surrounding interactive surface |
-| `titleColor`          | `Exclude<TextColor, "inherit">`            | per `color`        | Overrides the title colour only. Inside an interactive surface it holds at rest and yields to hover, pressed, selected and disabled |
+| `color`               | `StatusColor \| "interactive"`            | `"default"`        | The content's colour (see Colours below). A status tints the title and the icon; `"interactive"` follows the surrounding interactive surface |
+| `titleColor`          | `Exclude<TextColor, "inherit">`            | per `color`        | Overrides the title colour only; the icon keeps `color`'s, except on `"default"`, where it follows. Inside an interactive surface it holds at rest and yields to hover, pressed, selected and disabled |
+
+## Colours
+
+`Content` owns the status text colours (`CONTENT_STATUS_COLORS` in `content/colors.ts`); `Badge`
+and `Tag` take theirs from it.
+
+| `color`       | Title and icon                              |
+| ------------- | ------------------------------------------- |
+| `default`     | `text-04`; the icon follows `titleColor`    |
+| `info`        | `theme-blue-05`                             |
+| `success`     | `theme-green-05`                            |
+| `warning`     | `status-warning-05`                         |
+| `pending`     | `theme-amber-05`                            |
+| `queued`      | `theme-purple-05`                           |
+| `error`       | `status-error-05`                           |
+| `interactive` | the surrounding interactive surface's colours |
+
+- A muted row: `titleColor="text-03"` (the default's icon follows).
+- A status icon beside a neutral title: `color="success" titleColor="text-03"`.
+- The description is always `text-03`.
 
 For a control beside the content (a button, an input), use [`ContentAction`](../content-action/README.md).
 

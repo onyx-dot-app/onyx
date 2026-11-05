@@ -8,7 +8,7 @@ import type {
   RichStr,
   Rounding,
   ShadowVariants,
-  StatusVariants,
+  StatusColor,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
@@ -33,7 +33,7 @@ import { useOpalStrings } from "@opal/strings";
 
 interface MessageCardBaseProps {
   /** Visual variant controlling background, border, and icon. @default "default" */
-  variant?: StatusVariants;
+  variant?: StatusColor;
 
   /** Override the default variant icon. */
   icon?: IconFunctionComponent;
@@ -113,7 +113,7 @@ type MessageCardProps = MessageCardBaseProps &
 // ---------------------------------------------------------------------------
 
 const VARIANT_CONFIG: Record<
-  StatusVariants,
+  StatusColor,
   { icon: IconFunctionComponent; iconClass: string; color: CardColor }
 > = {
   default: {

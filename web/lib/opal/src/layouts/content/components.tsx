@@ -17,10 +17,11 @@ import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
 import SvgXOctagon from "@opal/icons/x-octagon";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import { CONTENT_STATUS_COLORS } from "@opal/layouts/content/colors";
 import { widthVariants } from "@opal/shared";
 import { useOpalStrings } from "@opal/strings";
 import type {
-  ColorTypes,
+  StatusColor,
   ContainerSizeVariants,
   ExtremaSizeVariants,
   IconFunctionComponent,
@@ -49,6 +50,9 @@ type ContentBadge = BadgeProps & { tooltip?: string };
 interface ContentEditHandle {
   startEditing: () => void;
 }
+
+/** A status colour, or `"interactive"` to follow the surrounding surface. */
+type ContentColor = StatusColor | "interactive";
 
 /** The title fonts that take a suffix, aux icon or badge beside the title. */
 type ContentExtrasFont = Extract<
@@ -110,23 +114,20 @@ interface ContentBaseProps {
   width?: ExtremaSizeVariants;
 
   /**
-   * Color mode for the icon + title pair.
-   *
-   * - `"default"` — `text-04` for both icon and title
-   * - `"muted"` — `text-03` for both
-   * - `"success"` / `"warning"` / `"danger"` — the status colour on the icon,
-   *   `text-03` on the title: the icon carries the state
-   * - `"interactive"` — inherits from the parent `.interactive` element's
-   *   `--interactive-foreground` / `--interactive-foreground-icon` variables
+   * The content's colour. A status (`CONTENT_STATUS_COLORS`) tints the title
+   * and the icon; `"default"` is the neutral `text-04`, and its icon follows
+   * `titleColor`. `"interactive"` follows the surrounding interactive
+   * surface, so its hover, selected and disabled colours reach the content.
    *
    * @default "default"
    */
-  color?: ColorTypes;
+  color?: ContentColor;
 
   /**
-   * Overrides the title's colour only; `color` still picks the icon and the
-   * description. Inside an interactive surface the override holds at rest and
-   * yields to hover, pressed, selected and disabled.
+   * Overrides the title's colour only; the icon keeps `color`'s (except on
+   * `"default"`, where it follows). Inside an interactive surface the
+   * override holds at rest and yields to hover, pressed, selected and
+   * disabled.
    */
   titleColor?: Exclude<TextColor, "inherit">;
 
@@ -244,20 +245,23 @@ function suffixFont(font: TextFont): TextFont {
 }
 
 /**
- * The `titleColor` override, set inline on the colour wrapper. It rides an
- * unregistered variable that the colour modes read with the mode's tone as
- * fallback, so the disabled rule still wins.
+ * The colour variables, set inline on the colour wrapper: the status colour,
+ * and the `titleColor` override. The override rides an unregistered variable
+ * that the colour modes read with the status colour as fallback, so the
+ * disabled rule still wins.
  */
-function titleColorStyle(
+function contentColorStyle(
+  color: ContentColor,
   titleColor: Exclude<TextColor, "inherit"> | undefined
-): React.CSSProperties | undefined {
+): React.CSSProperties {
   // SAFETY: CSSProperties has no index for custom properties; the object
-  // holds only the one custom property the stylesheet reads.
-  return titleColor
-    ? ({
-        "--content-title-color": `var(--${titleColor})`,
-      } as React.CSSProperties)
-    : undefined;
+  // holds only the two custom properties the stylesheet reads.
+  return {
+    ...(color !== "interactive" && {
+      "--content-status-color": CONTENT_STATUS_COLORS[color].fg,
+    }),
+    ...(titleColor && { "--content-title-color": `var(--${titleColor})` }),
+  } as React.CSSProperties;
 }
 
 const AUX_ICON_CONFIG: Record<
@@ -402,7 +406,7 @@ function Content({
     <div
       className={widthVariants[width]}
       data-content-color={color}
-      style={titleColorStyle(titleColor)}
+      style={contentColorStyle(color, titleColor)}
     >
       <div
         ref={ref}
@@ -586,7 +590,8 @@ export {
   type ContentIndentProps,
   ContentIcon,
   FONT_LINE_HEIGHT,
-  titleColorStyle,
+  contentColorStyle,
+  type ContentColor,
   type ContentProps,
   type ContentOrientation,
   type ContentExtrasFont,

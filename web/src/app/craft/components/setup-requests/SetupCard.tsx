@@ -224,7 +224,8 @@ export default function SetupCard({
           <Content
             font="secondary-body"
             icon={Logo}
-            color={connected ? "muted" : "danger"}
+            color={connected ? "default" : "error"}
+            titleColor="text-03"
             title={
               connected
                 ? t("connected.title", { app: appName })

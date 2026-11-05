@@ -4,8 +4,12 @@ import "@opal/layouts/content/styles.css";
 import "@opal/layouts/reverse-content/styles.css";
 import { Text, type TextColor, type TextFont } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
-import { ContentIcon, titleColorStyle } from "@opal/layouts/content/components";
-import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
+import {
+  ContentIcon,
+  contentColorStyle,
+  type ContentColor,
+} from "@opal/layouts/content/components";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 
 interface ReverseContentProps {
   /** The title's font; the icon is sized from its line, as in `Content`. */
@@ -18,7 +22,7 @@ interface ReverseContentProps {
   title: string | RichStr;
 
   /** Icon and title colour pair, as in `Content`. Default: `"default"`. */
-  color?: ColorTypes;
+  color?: ContentColor;
 
   /** Overrides the title colour only, as in `Content`. */
   titleColor?: Exclude<TextColor, "inherit">;
@@ -40,7 +44,7 @@ function ReverseContent({
     <div
       className="opal-reverse-content"
       data-content-color={color}
-      style={titleColorStyle(titleColor)}
+      style={contentColorStyle(color, titleColor)}
     >
       <Text font={font} color="inherit" title={toPlainString(title)}>
         {title}

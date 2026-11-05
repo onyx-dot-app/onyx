@@ -170,7 +170,8 @@ function SharedGroupResources({
             <LineItemButton
               font="main-ui-action"
               presentational
-              color={dimmed ? "muted" : undefined}
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={getSourceMetadata(p.connector.source).icon}
               title={
                 p.name ??
@@ -205,7 +206,8 @@ function SharedGroupResources({
             <LineItemButton
               font="main-ui-action"
               presentational
-              color={dimmed ? "muted" : undefined}
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={SvgFiles}
               title={ds.name}
               titleMaxLines={1}
@@ -267,7 +269,8 @@ function SharedGroupResources({
             <LineItemButton
               font="main-ui-action"
               presentational
-              color={dimmed ? "muted" : undefined}
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               title={a.name}
               titleMaxLines={1}

@@ -766,7 +766,7 @@ export default function ModelSelectorContent({
                               <div className="ps-2 pe-1 py-1 w-full rounded-08 bg-background-tint-01">
                                 <ContentAction
                                   font="secondary-body"
-                                  color="muted"
+                                  titleColor="text-03"
                                   icon={group.Icon}
                                   title={group.displayName}
                                   padding={0}

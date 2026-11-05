@@ -1,16 +1,9 @@
 "use client";
 
 import "@opal/components/badge/styles.css";
-import type {
-  IconFunctionComponent,
-  RichStr,
-  StatusVariants,
-} from "@opal/types";
+import type { IconFunctionComponent, RichStr, StatusColor } from "@opal/types";
 import { BADGE_COLORS } from "@opal/components/badge/colors";
-import {
-  TEXT_COLOR_CLASSES,
-  type TextColor,
-} from "@opal/components/text/components";
+import type { TextColor } from "@opal/components/text/components";
 import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
@@ -36,7 +29,7 @@ type BadgeProps = {
   /**
    * Status color: the tinted background and the icon. Default: `"default"`.
    */
-  color?: StatusVariants;
+  color?: StatusColor;
 
   /**
    * The label's colour. `"inherit"` is the text colour matched to `color`'s
@@ -64,23 +57,10 @@ function Badge({
   size = 4,
   ...rest
 }: BadgeProps) {
-  const config = BADGE_COLORS[color];
-
-  // SAFETY: CSSProperties has no index for custom properties; the object
-  // holds only the one custom property the stylesheet reads.
-  const iconColorStyle = {
-    "--opal-badge-icon-color": config.fg,
-  } as React.CSSProperties;
-
   return (
     <div
       {...rest}
-      className={cn(
-        "opal-badge",
-        config.bg,
-        textColor === "inherit" ? config.text : TEXT_COLOR_CLASSES[textColor]
-      )}
-      style={iconColorStyle}
+      className={cn("opal-badge", BADGE_COLORS[color].bg)}
       data-size={size}
     >
       <Content
@@ -90,7 +70,15 @@ function Badge({
           ? { font: "figure-small-value" as const }
           : { font: "secondary-body" as const })}
         width="fit"
-        color="interactive"
+        // Content owns the status colours; a neutral badge mutes to text-03.
+        color={color}
+        titleColor={
+          textColor !== "inherit"
+            ? textColor
+            : color === "default"
+              ? "text-03"
+              : undefined
+        }
         icon={icon}
         title={title}
       />
@@ -99,4 +87,4 @@ function Badge({
 }
 
 export { Badge, type BadgeProps, type BadgeSize };
-export { BADGE_COLORS } from "@opal/components/badge/colors";
+export { BADGE_COLORS, badgeTextClass } from "@opal/components/badge/colors";

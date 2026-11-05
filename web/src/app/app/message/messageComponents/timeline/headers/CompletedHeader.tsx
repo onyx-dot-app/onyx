@@ -75,7 +75,7 @@ function MemoryTagWithTooltip({
                 icon={SvgAddLines}
                 title={operationLabel}
                 padding={1}
-                color="muted"
+                titleColor="text-03"
                 rightChildren={
                   <Button
                     prominence="tertiary"

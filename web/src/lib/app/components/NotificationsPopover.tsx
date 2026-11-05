@@ -74,7 +74,8 @@ function NotificationItem({
         title={notification.title}
         description={notification.description ?? undefined}
         rounding={2}
-        color={state === "new" ? undefined : "muted"}
+        color={state === "new" ? undefined : "default"}
+        titleColor={state === "new" ? undefined : "text-03"}
         onClick={onClick}
         rightChildren={
           <Section justifyContent="start">

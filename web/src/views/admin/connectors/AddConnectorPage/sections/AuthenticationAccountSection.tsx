@@ -470,7 +470,8 @@ export default function AuthenticationAccountSection({
             font="main-ui-body"
             icon={SvgPlusCircle}
             title={newAccountLabel}
-            color={isCreating ? "interactive" : "muted"}
+            color={isCreating ? "interactive" : "default"}
+            titleColor={isCreating ? undefined : "text-03"}
           />
         </Section>
       )}
@@ -501,7 +502,7 @@ export default function AuthenticationAccountSection({
                   title={t("add.savedAccounts.label", {
                     count: credentials?.length ?? 0,
                   })}
-                  color="muted"
+                  titleColor="text-03"
                   width="fit"
                 />
               </Section>

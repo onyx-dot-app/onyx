@@ -76,7 +76,7 @@ export default function NonAdminStep() {
               />
             )}
             title={t("nonAdminStep.confirmation.title")}
-            color="muted"
+            titleColor="text-03"
             padding={0}
             rightChildren={
               <Button

@@ -16,23 +16,25 @@ pill) is that colour.
 | --------- | ---------------------------------- | -------------- | ------------------------------ |
 | `title`   | `string \| RichStr`                | **(required)** | Badge label text               |
 | `icon`    | `IconFunctionComponent`            | —              | Optional icon before the title |
-| `color`   | `StatusVariants`                   | `"default"`    | Status color                   |
+| `color`   | `StatusColor`                   | `"default"`    | Status color                   |
 | `textColor` | `TextColor`                      | `"inherit"`    | Label colour; `"inherit"` matches `color` |
 | `size`    | `4 \| 6`                           | `4`            | Height on the Tailwind scale   |
 
 ### `color`
 
-`StatusVariants` from `@opal/types`:
+`StatusColor` from `@opal/types`. The fill is the badge's (`BADGE_COLORS`); the text and icon colours
+are `Content`'s (see the [Content README](../../layouts/content/README.md#colours)). A `default` badge
+mutes its text and icon to `text-03` on its gray fill.
 
-| Color     | Background           | Text                |
-| --------- | -------------------- | ------------------- |
-| `default` | `background-tint-02` | `text-03`           |
-| `info`    | `theme-blue-01`      | `theme-blue-05`     |
-| `success` | `theme-green-01`     | `theme-green-05`    |
-| `warning` | `status-warning-01`  | `status-warning-05` |
-| `pending` | `theme-amber-01`     | `theme-amber-05`    |
-| `queued`  | `theme-purple-01`    | `theme-purple-05`   |
-| `error`   | `status-error-01`    | `status-error-05`   |
+| Color     | Fill                 |
+| --------- | -------------------- |
+| `default` | `background-tint-02` |
+| `info`    | `theme-blue-01`      |
+| `success` | `theme-green-01`     |
+| `warning` | `status-warning-01`  |
+| `pending` | `theme-amber-01`     |
+| `queued`  | `theme-purple-01`    |
+| `error`   | `status-error-01`    |
 
 ## Usage
 

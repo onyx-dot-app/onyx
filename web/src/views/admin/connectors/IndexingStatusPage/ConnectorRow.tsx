@@ -251,7 +251,7 @@ export default function ConnectorRow({
                         font="secondary-body"
                         icon={ACCESS_ICONS[row.access_type]}
                         title={t(`access.${row.access_type}`)}
-                        color="muted"
+                        titleColor="text-03"
                         width="fit"
                       />
                       {owner !== null && (
@@ -259,7 +259,7 @@ export default function ConnectorRow({
                           font="secondary-body"
                           icon={SvgUser}
                           title={owner}
-                          color="muted"
+                          titleColor="text-03"
                           width="fit"
                         />
                       )}

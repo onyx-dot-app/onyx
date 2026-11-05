@@ -625,7 +625,7 @@ export default function RunRow({
                   font="secondary-body"
                   icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
                   title={t(`kinds.${runKindLabelKey(run)}`)}
-                  color="muted"
+                  titleColor="text-03"
                   width="fit"
                 />
                 <Text

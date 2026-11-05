@@ -21,7 +21,8 @@ export function StaticPermissionLabel({
   return (
     <Content
       font="main-ui-action"
-      color={muted ? "muted" : undefined}
+      color={muted ? "default" : undefined}
+      titleColor="text-03"
       icon={icon}
       title={label}
     />

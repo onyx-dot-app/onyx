@@ -304,7 +304,7 @@ export default function HookFormModal({
                           font="secondary-body"
                           icon={SvgShareWebhook}
                           title={t("form.hookPoint.label")}
-                          color="muted"
+                          titleColor="text-03"
                           width="fit"
                         />
                         {docsUrl && (

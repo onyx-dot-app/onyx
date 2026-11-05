@@ -246,7 +246,8 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
           font="secondary-body"
           key={rule.label}
           icon={rule.met ? SvgCheckCircle : SvgXCircle}
-          color={rule.met ? "success" : "muted"}
+          color={rule.met ? "success" : "default"}
+          titleColor="text-03"
           title={rule.label}
         />
       ))}

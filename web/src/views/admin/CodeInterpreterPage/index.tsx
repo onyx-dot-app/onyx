@@ -36,7 +36,7 @@ const STATUS_CONFIG: Record<
   {
     labelKey: StatusLabelKey;
     icon: typeof SvgCheckCircle;
-    color: "success" | "danger";
+    color: "success" | "error";
   }
 > = {
   healthy: {
@@ -47,12 +47,12 @@ const STATUS_CONFIG: Record<
   unhealthy: {
     labelKey: "status.unhealthy.label",
     icon: SvgXOctagon,
-    color: "danger",
+    color: "error",
   },
   connection_lost: {
     labelKey: "status.connectionLost.label",
     icon: SvgXOctagon,
-    color: "danger",
+    color: "error",
   },
 };
 
@@ -74,7 +74,7 @@ function CheckingStatus() {
         font="main-ui-body"
         icon={IconLoader}
         title={t("status.checking.label")}
-        color="muted"
+        titleColor="text-03"
       />
     </Section>
   );
@@ -107,6 +107,7 @@ function ConnectionStatus({
       icon={icon}
       title={t(labelKey)}
       color={color}
+      titleColor="text-03"
     />
   );
 
@@ -322,7 +323,7 @@ export default function CodeInterpreterPage() {
               <Content
                 font="main-ui-action"
                 icon={SvgXOctagon}
-                color="danger"
+                color="error"
                 titleColor="text-04"
                 title={
                   status === "connection_lost"

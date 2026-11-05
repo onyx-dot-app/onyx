@@ -283,7 +283,7 @@ export default function HookStatusPopover({
                 <LineItemButton
                   font="main-ui-action"
                   rounding={2}
-                  color="muted"
+                  titleColor="text-03"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
@@ -338,7 +338,7 @@ export default function HookStatusPopover({
                 <LineItemButton
                   font="main-ui-action"
                   rounding={2}
-                  color="muted"
+                  titleColor="text-03"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
@@ -365,7 +365,7 @@ export default function HookStatusPopover({
                 <LineItemButton
                   font="main-ui-action"
                   rounding={2}
-                  color="muted"
+                  titleColor="text-03"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);

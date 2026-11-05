@@ -4,11 +4,11 @@ import "@opal/layouts/inputs/styles.css";
 import { useContext } from "react";
 import { useField, FormikContext } from "formik";
 import type {
-  ColorTypes,
   IconFunctionComponent,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
+import type { ContentColor } from "@opal/layouts/content/components";
 import { Text, Divider, type BadgeProps } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
@@ -293,7 +293,7 @@ function InputErrorText({
   ref,
 }: InputErrorTextProps) {
   const Icon = type === "error" ? SvgXOctagon : SvgAlertCircle;
-  const color: ColorTypes = type === "error" ? "danger" : "warning";
+  const color: ContentColor = type === "error" ? "error" : "warning";
 
   return (
     <div ref={ref} className="px-1">
@@ -302,6 +302,7 @@ function InputErrorText({
         icon={Icon}
         title={children}
         color={color}
+        titleColor="text-03"
         role="alert"
       />
     </div>

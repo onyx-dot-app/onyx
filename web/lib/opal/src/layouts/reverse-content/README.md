@@ -15,7 +15,7 @@ work the same way.
 | `font`       | `TextFont`                      | `"main-ui-action"` | The title's font; the icon is sized from it   |
 | `icon`       | `IconFunctionComponent`         | **(required)**     | The icon after the title                      |
 | `title`      | `string \| RichStr`             | **(required)**     | The title                                     |
-| `color`      | `ColorTypes`                    | `"default"`        | Icon and title colour pair, as in `Content`   |
+| `color`      | `StatusColor \| "interactive"`  | `"default"`        | Title and icon colour, as in `Content`        |
 | `titleColor` | `Exclude<TextColor, "inherit">` | per `color`        | Overrides the title colour only               |
 
 ## Usage

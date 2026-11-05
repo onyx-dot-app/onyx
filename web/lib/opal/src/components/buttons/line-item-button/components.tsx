@@ -3,14 +3,17 @@ import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ExtremaSizeVariants,
   IconFunctionComponent,
-  ColorTypes,
   RichStr,
   Rounding,
 } from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
 import type { BadgeProps } from "@opal/components/badge/components";
 import { ContentAction } from "@opal/layouts";
-import type { ContentExtrasFont } from "@opal/layouts/content/components";
+import type {
+  ContentColor,
+  ContentExtrasFont,
+} from "@opal/layouts/content/components";
+import type { TextColor } from "@opal/components/text/components";
 import {
   composeKeyHandler,
   guardNestedInteractiveClick,
@@ -68,7 +71,10 @@ type RowContentProps = {
    *
    * @default "interactive"
    */
-  color?: ColorTypes;
+  color?: ContentColor;
+
+  /** Overrides the title colour only, as on `Content`. */
+  titleColor?: Exclude<TextColor, "inherit">;
 
   /** Strike the label through, e.g. a row switched off. */
   strikethrough?: boolean;
@@ -184,6 +190,7 @@ function LineItemButton({
    * as absent, so that call now means what it looks like.
    */
   color = "interactive",
+  titleColor,
 
   /*
    * Named so the row can defer to a caller's value instead of overwriting it.
@@ -257,6 +264,7 @@ function LineItemButton({
             font={font}
             strikethrough={strikethrough}
             color={color}
+            titleColor={titleColor}
             padding={padding ?? 0.5}
           />
         </div>

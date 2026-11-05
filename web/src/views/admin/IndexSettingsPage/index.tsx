@@ -194,7 +194,7 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
         font="secondary-body"
         icon={SvgServer}
         title={t("providerInfo.selfHosted.title")}
-        color="muted"
+        titleColor="text-03"
         width="fit"
       />
     );
@@ -208,7 +208,7 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
         font="secondary-body"
         icon={SvgCloud}
         title={t("providerInfo.cloudProvider.title")}
-        color="muted"
+        titleColor="text-03"
         width="fit"
       />
       {provider.costslink && (
@@ -519,7 +519,7 @@ function ProviderGroup({
               title={t("providerGroup.addConfig.title", {
                 provider: provider.displayName,
               })}
-              color="muted"
+              titleColor="text-03"
               padding={1}
               rightChildren={
                 <Button
@@ -674,7 +674,7 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
         <ContentAction
           font="secondary-body"
           title={t("modelPicker.customModel.title")}
-          color="muted"
+          titleColor="text-03"
           padding={1}
           rightChildren={
             <Button

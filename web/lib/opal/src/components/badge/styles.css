@@ -20,11 +20,3 @@
   border-radius: var(--radius-08);
   padding: 0.25rem;
 }
-
-/* The title takes the pill's text colour, and the icon --opal-badge-icon-color,
-   set inline from the tag's colour. [data-size] outranks the `.interactive`
-   Content rules, so a tag inside an interactive row keeps its own colours. */
-.opal-badge[data-size] > [data-content-color] {
-  color: inherit;
-  --content-foreground-icon: var(--opal-badge-icon-color);
-}

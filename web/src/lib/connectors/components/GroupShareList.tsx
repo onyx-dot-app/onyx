@@ -214,7 +214,7 @@ export default function GroupShareList({
                     font="secondary-body"
                     icon={row.icon}
                     title={row.note}
-                    color="muted"
+                    titleColor="text-03"
                   />
                 );
                 if (row.role === undefined) return note;

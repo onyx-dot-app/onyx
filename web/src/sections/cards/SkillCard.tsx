@@ -307,7 +307,7 @@ export default function SkillCard({
               font="secondary-body"
               icon={dependency ? SvgPlug : SvgUser}
               title={dependencyStatus ?? authorTitle}
-              color="muted"
+              titleColor="text-03"
             />
           </Section>
           <Section

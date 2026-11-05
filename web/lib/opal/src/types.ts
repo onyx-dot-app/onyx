@@ -173,29 +173,7 @@ export type CardColor =
   | "theme-purple-01";
 
 // ---------------------------------------------------------------------------
-// Color Types
-// ---------------------------------------------------------------------------
-
-/**
- * Semantic color roles used across the design system for foreground, border,
- * and other colorable surfaces.
- *
- * - `"default"` — standard text/border color (`text-04` / `border-01`)
- * - `"muted"` — de-emphasized color (`text-03`)
- * - `"success"` / `"warning"` / `"danger"` — a status glyph against muted body
- *   text: the icon carries the state and the text stays secondary (`text-03`)
- * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
- */
-export type ColorTypes =
-  | "default"
-  | "muted"
-  | "success"
-  | "warning"
-  | "danger"
-  | "interactive";
-
-// ---------------------------------------------------------------------------
-// Status Variants
+// Status Colors
 // ---------------------------------------------------------------------------
 
 /**
@@ -203,7 +181,7 @@ export type ColorTypes =
  * MessageCard}, {@link Card}'s `borderColor`). Each variant maps to a
  * dedicated background/border/icon palette in the design system.
  */
-export type StatusVariants =
+export type StatusColor =
   | "default"
   | "info"
   | "success"

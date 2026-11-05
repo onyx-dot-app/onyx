@@ -282,7 +282,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
               font="main-ui-body"
               icon={SvgUser}
               title={agent.owner?.email ?? "Onyx"}
-              color="muted"
+              titleColor="text-03"
               width="fit"
             />
             {agent.is_public && (
@@ -290,7 +290,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                 font="main-ui-body"
                 icon={SvgOrganization}
                 title={t("viewer.public.label")}
-                color="muted"
+                titleColor="text-03"
                 width="fit"
               />
             )}
@@ -431,7 +431,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                         font="main-ui-body"
                         icon={SvgBubbleText}
                         title={starter.message}
-                        color="muted"
+                        titleColor="text-03"
                         width="full"
                       />
                     </Interactive.Container>

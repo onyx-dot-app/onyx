@@ -41,7 +41,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
               font="main-ui-body"
               title={message}
               width="full"
-              color="muted"
+              titleColor="text-03"
             />
           </Interactive.Container>
         </Interactive.Stateless>
