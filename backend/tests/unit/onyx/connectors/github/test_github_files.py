@@ -20,6 +20,8 @@ from onyx.connectors.github.models import (
 )
 from onyx.connectors.github.source_operations import GitHubApiError
 from onyx.connectors.models import ConnectorFailure, Document
+from onyx.db.models import Document as DbDocument
+from onyx.indexing.indexing_pipeline import get_docs_to_update
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -239,6 +241,65 @@ def test_pushed_at_gate_skips_file_stage(
 
     assert _all_items(outputs) == []
     mock_source_operations.get_git_tree.assert_not_called()
+
+
+def test_file_documents_do_not_take_repo_pushed_at(
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
+) -> None:
+    """repo.pushed_at moves on any push to any branch, so it is not a file's
+    update time. Using it would make every file look changed after any push."""
+    connector = build_files_connector()
+    serve_files(
+        {"README.md": b"# Hello", "docs/guide.md": b"a guide"},
+        pushed_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+    )
+
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    assert len(docs) == 2
+    assert [d.doc_updated_at for d in docs] == [None, None]
+
+
+def test_push_reindexes_only_files_whose_content_changed(
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
+) -> None:
+    """After a push, the indexing pipeline skips unchanged files by content hash.
+
+    The stored rows keep the pushed_at timestamp that earlier versions wrote,
+    so this also covers the first run after an upgrade.
+    """
+    connector = build_files_connector()
+    first_push = datetime(2024, 6, 1, tzinfo=timezone.utc)
+    serve_files(
+        {"README.md": b"# Hello", "docs/guide.md": b"a guide"}, pushed_at=first_push
+    )
+    first_outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    stored = [
+        DbDocument(
+            id=doc.id, content_hash=doc.content_hash(), doc_updated_at=first_push
+        )
+        for doc in _all_items(first_outputs)
+        if isinstance(doc, Document)
+    ]
+    assert len(stored) == 2
+
+    serve_files(
+        {"README.md": b"# Hello", "docs/guide.md": b"an updated guide"},
+        pushed_at=datetime(2024, 6, 2, tzinfo=timezone.utc),
+    )
+    second_outputs = load_everything_from_checkpoint_connector(
+        connector, 0, time.time()
+    )
+    second_docs = [i for i in _all_items(second_outputs) if isinstance(i, Document)]
+
+    to_update, _ = get_docs_to_update(second_docs, db_docs=stored)
+
+    assert [d.id for d in to_update] == [
+        "https://github.com/test-org/test-repo/blob/main/docs/guide.md"
+    ]
 
 
 def test_files_paginated_across_checkpoints(

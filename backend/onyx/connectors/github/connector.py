@@ -588,12 +588,6 @@ def _convert_file_to_document(
     html_url = f"{repo.html_url}/blob/{branch}/{path}"
     _, extension = os.path.splitext(path)
 
-    # NOTE: GitHub's tree API does not expose per-file modification times without
-    # additional per-file commit-history calls. repo.pushed_at is the closest
-    # proxy available without extra API requests, but it reflects any push to
-    # any branch, so every file in the repo shares the same timestamp.
-    updated_at = repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
-
     doc_metadata = {
         "repo": repo_full_name,
         "hierarchy": {
@@ -609,7 +603,12 @@ def _convert_file_to_document(
         source=DocumentSource.GITHUB,
         external_access=repo_external_access,
         semantic_identifier=path,
-        doc_updated_at=updated_at,
+        # GitHub's tree API has no per-file modification time. repo.pushed_at
+        # moves on any push to any branch, so it is not a per-file change
+        # signal: an advanced doc_updated_at makes the indexing pipeline skip
+        # its content-hash check and re-embed every file. With no timestamp,
+        # the content-hash check skips unchanged files.
+        doc_updated_at=None,
         doc_metadata=doc_metadata,
         metadata={
             "object_type": "File",
