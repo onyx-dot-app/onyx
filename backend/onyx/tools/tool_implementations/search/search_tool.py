@@ -901,6 +901,7 @@ class SearchTool(Tool):
                         (
                             section,
                             self.document_index,
+                            self.user,
                             self.retrieval_context_chunks,
                         ),
                     )
@@ -1449,6 +1450,7 @@ class SearchTool(Tool):
                     user_query=user_query,
                     llm=llm,
                     document_index=document_index,
+                    user=self.user,
                     expand_override=expand_override,
                     enforce_llm_input_budget=enforce_selection_input_budget,
                     decision_client=expansion_decision_client,
@@ -1479,6 +1481,7 @@ class SearchTool(Tool):
                     user_query=secondary_flows_user_query,
                     llm=selection_llm,
                     document_index=self.document_index,
+                    user=self.user,
                     enforce_llm_input_budget=enforce_selection_input_budget,
                     decision_client=rerank_client,
                     llm_fallback=False,
