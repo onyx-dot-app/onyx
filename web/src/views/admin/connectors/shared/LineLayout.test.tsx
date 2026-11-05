@@ -154,6 +154,63 @@ describe("LineLayout", () => {
     }
   );
 
+  it.each(["row", "run"] as const)(
+    "bSpansC: a %s keeps A, B and C's columns and runs B's content over C's empty slot",
+    (variant) => {
+      // jsdom has no layout, so the columns are pinned as the same classes folded and unfolded.
+      function columns(bSpansC: boolean) {
+        const view = render(
+          <LineLayout
+            variant={variant}
+            bSpansC={bSpansC}
+            a={<span>part-a</span>}
+            b={<span>part-b</span>}
+            c={<span>part-c</span>}
+            d={<span>part-d</span>}
+          />
+        );
+        const d = screen.getByText("part-d").closest(".w-16")!;
+        const third = d.parentElement!;
+        const root = third.parentElement!;
+        const [a, b] = Array.from(root.children);
+        const c = third.children.length > 1 ? third.children[0]! : null;
+        const result = {
+          a: a!.className,
+          b: b!.className.replace(" @max-[38.75rem]:basis-full", ""),
+          third: third.className,
+          c: c?.className.replace(" @max-[38.75rem]:hidden", "") ?? null,
+          bElement: b!,
+          cElement: c,
+        };
+        view.unmount();
+        return result;
+      }
+      const folded = columns(false);
+      const unfolded = columns(true);
+
+      expect(unfolded.a).toBe(folded.a);
+      expect(unfolded.b).toBe(folded.b);
+      expect(unfolded.third).toBe(folded.third);
+      expect(unfolded.c).toBe(folded.c);
+      expect(folded.a).toContain("flex-1");
+      expect(folded.b).toContain("flex-1");
+      expect(folded.third).toContain("basis-1/3");
+
+      // C keeps its slot but draws nothing, and gives way below 640 px where B takes the line.
+      expect(unfolded.cElement).not.toBeNull();
+      expect(unfolded.cElement).toBeEmptyDOMElement();
+      expect(hasClass(unfolded.cElement!, `${BELOW_640}hidden`)).toBe(true);
+      expect(hasClass(unfolded.bElement, `${BELOW_640}basis-full`)).toBe(true);
+      // B's content is B plus C's share of the third, the third less D's 64 px.
+      const content = unfolded.bElement.firstElementChild!;
+      expect(content).toHaveTextContent("part-b");
+      expect(content).toHaveClass(
+        "w-[calc(100%_+_min(33.333cqw,13rem)_-_4rem)]"
+      );
+      expect(hasClass(content, `${BELOW_640}w-full`)).toBe(true);
+    }
+  );
+
   describe("stat", () => {
     function renderStat(c: string | null) {
       render(

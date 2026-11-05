@@ -52,7 +52,11 @@
   (`web/src/views/admin/connectors/ConnectorDetailPage/StatusCard.tsx`) shows
   the pair's status, the stage hint while it indexes, hints to the latest prune
   and check runs, the open-error count and the indexed count. It shows no
-  estimate bar, no document types and no size. Its status tag and the prune
+  estimate bar. It reads `GET /admin/cc-pair/{id}/document-types` every 60 s
+  for the type count and total size, and a fully typed pair unfolds to a bar
+  and a table per type
+  (`web/src/views/admin/connectors/ConnectorDetailPage/documentTypes.ts` labels
+  and folds them). Its status tag and the prune
   and check hints go to the Indexing tab at that run
   (`?tab=indexing&run=<id>&run_kind=<kind>`), and the stage hint opens the
   live run's stage details on the card. Its error count focuses the latest
@@ -276,7 +280,7 @@ user reaches each level.
 
 | Action | Level |
 |---|---|
-| Read the detail page, runs, errors, hierarchy breakdown | READ |
+| Read the detail page, runs, errors, hierarchy and document type breakdowns | READ |
 | Pause, resume, rename, change schedules, prune, start a permission or group sync, cancel an attempt, resolve runs, release the indexing hold | OPERATE |
 | Delete, set data-access or manage-access groups, pair a credential to a connector that has pairs | EDIT (on every existing pair of the connector, for pairing) |
 

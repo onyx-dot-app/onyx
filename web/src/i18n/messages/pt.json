@@ -2858,6 +2858,17 @@
           "viewIndexingRun": "Ver execução de indexação",
           "viewPruningRun": "Ver execução de limpeza",
           "viewChecksRun": "Ver execução de verificações"
+        },
+        "types": {
+          "count": "{count, plural, one {Tipo de documento} other {Tipos de documento}}",
+          "header": "Tipo de documento",
+          "indexed": "Indexados",
+          "size": "Tamanho",
+          "other": "Outros",
+          "countWithSize": "{count} ({size})",
+          "bytes": "bytes",
+          "loadError": "Não foi possível carregar os tipos de documento.",
+          "sizeValue": "{value} {unit}"
         }
       },
       "toasts": {

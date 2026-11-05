@@ -2858,6 +2858,17 @@
           "viewIndexingRun": "查看索引运行",
           "viewPruningRun": "查看清理运行",
           "viewChecksRun": "查看检查运行"
+        },
+        "types": {
+          "count": "{count, plural, other {种文档类型}}",
+          "header": "文档类型",
+          "indexed": "已索引",
+          "size": "大小",
+          "other": "其他",
+          "countWithSize": "{count}（{size}）",
+          "bytes": "字节",
+          "loadError": "无法加载文档类型。",
+          "sizeValue": "{value} {unit}"
         }
       },
       "toasts": {

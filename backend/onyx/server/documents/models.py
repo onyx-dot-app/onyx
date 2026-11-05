@@ -1261,6 +1261,27 @@ class ConnectorIndexingStatusLiteResponse(BaseModel):
     indexing_statuses: Sequence[ConnectorIndexingStatusLite | FederatedConnectorStatus]
 
 
+class DocumentTypeCount(BaseModel):
+    mime_type: str
+    count: int
+    # Documents of this type with a reported size. The size is complete only
+    # when this equals count.
+    sized_count: int
+    # Sum of the reported sizes. None when no document of this type has one.
+    size_bytes: int | None
+
+
+class CCPairDocumentTypeBreakdown(BaseModel):
+    """A cc-pair's indexed documents by the MIME type their source reports."""
+
+    types: list[DocumentTypeCount]
+    # Indexed documents whose source reported no type.
+    untyped_count: int
+    # The read hit its statement timeout, so the empty lists mean "unknown",
+    # not "no documents".
+    timed_out: bool = False
+
+
 class ConnectorCredentialPairIdentifier(BaseModel):
     connector_id: int
     credential_id: int

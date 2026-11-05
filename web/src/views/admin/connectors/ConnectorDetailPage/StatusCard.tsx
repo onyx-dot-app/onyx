@@ -1,10 +1,28 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { useLocale, useTranslations } from "next-intl";
-import { Button, Card, Popover, SelectButton, Text } from "@opal/components";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
+import {
+  Button,
+  Card,
+  Divider,
+  OverflowText,
+  Popover,
+  SelectButton,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { Section } from "@opal/layouts";
 import {
+  SvgChevronDown,
+  SvgChevronUp,
   SvgListCheck,
   SvgPanelRight,
   SvgPlayCircle,
@@ -25,6 +43,7 @@ import type { IndexAttemptSnapshot } from "@/lib/types";
 import { isPermSynced } from "@/lib/connectors/accessType";
 import {
   CC_PAIR_STATUS_POLL_MS,
+  useCCPairDocumentTypes,
   useLatestCCPairRun,
   useLatestIndexAttempt,
 } from "@/lib/connectors/ccPair/hooks";
@@ -42,11 +61,22 @@ import {
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import { RunDetailsHint } from "@/views/admin/connectors/ConnectorDetailPage/InlineDetails";
-import { LineFigure } from "@/views/admin/connectors/shared/LineLayout";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
-import LineLayout from "@/views/admin/connectors/shared/LineLayout";
+import LineLayout, {
+  LineFigure,
+  NO_FIGURE,
+} from "@/views/admin/connectors/shared/LineLayout";
+import {
+  OTHER_DOCUMENT_TYPE,
+  documentTypeLabel,
+  documentTypeSlices,
+  totalSize,
+  type DocumentTypeSlice,
+  type TypeColorsByPair,
+} from "@/views/admin/connectors/ConnectorDetailPage/documentTypes";
+import { formatBytes } from "@/lib/utils";
 
 // Statuses a pair keeps until its first index succeeds, a failed first run included.
 const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
@@ -168,6 +198,317 @@ function HintButton({ icon, label, onClick }: HintButtonProps) {
   );
 }
 
+interface SizeParts {
+  value: string;
+  unit: string;
+}
+
+/** A size as its number in the admin's locale and its unit: `formatBytes` picks the unit, the card sets the two in separate fonts. */
+function useSizeParts(): (bytes: number) => SizeParts {
+  const t = useTranslations("admin.connector.statusCard.types");
+  const format = useFormatter();
+  return (bytes) => {
+    const formatted = formatBytes(bytes, 1);
+    const space = formatted.lastIndexOf(" ");
+    const unit = formatted.slice(space + 1);
+    return {
+      value: format.number(parseFloat(formatted.slice(0, space)), {
+        maximumFractionDigits: 1,
+      }),
+      unit: unit === "Bytes" ? t("bytes") : unit,
+    };
+  };
+}
+
+interface SummaryLineProps {
+  value: string | RichStr;
+  unit: string | RichStr;
+}
+/** A value in 14/20 semibold before its unit in 12/16. */
+function SummaryLine({ value, unit }: SummaryLineProps) {
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="end"
+      gap={0.5}
+      width="fit"
+      height="fit"
+    >
+      <Text font="main-ui-action" color="text-03">
+        {value}
+      </Text>
+      <Text font="secondary-body" color="text-03">
+        {unit}
+      </Text>
+    </Section>
+  );
+}
+
+interface TypesSummaryProps {
+  /** Null draws a dash for a breakdown that failed to load. */
+  typeCount: number | null;
+  /** Null hides the size, which shows only when every document reports one. */
+  sizeBytes: number | null;
+}
+/** The type count over the total size, at the right of the card's figures. */
+function TypesSummary({ typeCount, sizeBytes }: TypesSummaryProps) {
+  const t = useTranslations("admin.connector.statusCard.types");
+  const format = useFormatter();
+  const sizeParts = useSizeParts();
+  const size = sizeBytes === null ? null : sizeParts(sizeBytes);
+  return (
+    <Section alignItems="end" gap={0} width="fit" height="fit">
+      <SummaryLine
+        value={typeCount === null ? NO_FIGURE : format.number(typeCount)}
+        unit={t("count", { count: typeCount ?? 0 })}
+      />
+      {typeCount === null && (
+        <Text font="secondary-body" color="text-03">
+          {t("loadError")}
+        </Text>
+      )}
+      {size !== null && <SummaryLine value={size.value} unit={size.unit} />}
+    </Section>
+  );
+}
+
+interface TypeHover {
+  hovered: string | null;
+  onHover: (key: string | null) => void;
+}
+
+/** A segment or row cell of one type: it hovers its type and mutes while another type is hovered. */
+function typeCellProps(
+  key: string,
+  { hovered, onHover }: TypeHover,
+  className?: string
+) {
+  return {
+    "data-document-type": key,
+    className: cn(
+      "transition-opacity",
+      hovered !== null && hovered !== key && "opacity-50",
+      className
+    ),
+    // A tap fires no leave until the next tap elsewhere, so touch never mutes.
+    onPointerEnter: (event: PointerEvent) => {
+      if (event.pointerType !== "touch") onHover(key);
+    },
+    onPointerLeave: () => onHover(null),
+  };
+}
+
+/** Other is a word in the admin's language, every other slice its file type. */
+function useSliceLabel(): (slice: DocumentTypeSlice) => string {
+  const t = useTranslations("admin.connector.statusCard.types");
+  return (slice) =>
+    slice.key === OTHER_DOCUMENT_TYPE
+      ? t("other")
+      : documentTypeLabel(slice.key);
+}
+
+interface TypesBarProps {
+  slices: DocumentTypeSlice[];
+  hover: TypeHover;
+}
+/** One 8 px bar in a 20 px line, a segment per type sized by its count. The table below carries the same figures. */
+function TypesBar({ slices, hover }: TypesBarProps) {
+  return (
+    <Section height={1.25} padding={0.5} aria-hidden>
+      <Section flexDirection="row" gap={0.25} height={0.5}>
+        {slices.map((slice) => (
+          <div
+            key={slice.key}
+            data-testid="document-type-segment"
+            {...typeCellProps(
+              slice.key,
+              hover,
+              cn("h-full min-w-px basis-0 rounded-[1px]", slice.colorClass)
+            )}
+            style={{ flexGrow: slice.count }}
+          />
+        ))}
+      </Section>
+    </Section>
+  );
+}
+
+interface TypeNameProps {
+  slice: DocumentTypeSlice;
+}
+/** A type's 4 x 12 color mark before its name. */
+function TypeName({ slice }: TypeNameProps) {
+  const label = useSliceLabel();
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="start"
+      gap={0}
+      height="fit"
+      className="min-w-0 max-w-full"
+    >
+      <Section width={0.5} height={1} className="shrink-0">
+        <div className={cn("h-3 w-1 rounded-[1px]", slice.colorClass)} />
+      </Section>
+      {/* An unmapped MIME subtype can run long (MS-EXCEL.SHEET.MACROENABLED.12), so it clips with a tooltip instead of covering the counts. */}
+      <OverflowText
+        font="secondary-body"
+        color="text-03"
+        data-testid="document-type-name"
+      >
+        {label(slice)}
+      </OverflowText>
+    </Section>
+  );
+}
+
+interface TypesTableProps {
+  slices: DocumentTypeSlice[];
+  hover: TypeHover;
+  onFold: () => void;
+}
+/** The unfolded types on the card's columns, or two lines per type below 640 px; the fold button sits bottom right beside the last type. */
+function TypesTable({ slices, hover, onFold }: TypesTableProps) {
+  const t = useTranslations("admin.connector.statusCard");
+  const format = useFormatter();
+  const sizeParts = useSizeParts();
+  function size(slice: DocumentTypeSlice): string {
+    if (slice.sizeBytes === null) return "";
+    const { value, unit } = sizeParts(slice.sizeBytes);
+    return t("types.sizeValue", { value, unit });
+  }
+  function column(
+    header: string,
+    font: "secondary-mono-label" | "secondary-mono",
+    color: "text-04" | "text-03",
+    value: (slice: DocumentTypeSlice) => string,
+    className: string
+  ) {
+    return (
+      <Section alignItems="end" gap={1} height="fit" className={className}>
+        <Text font="secondary-body" color="text-03">
+          {header}
+        </Text>
+        {slices.map((slice) => (
+          <Section
+            key={slice.key}
+            alignItems="end"
+            height="fit"
+            {...typeCellProps(slice.key, hover, "min-h-4")}
+          >
+            <Text font={font} color={color}>
+              {value(slice)}
+            </Text>
+          </Section>
+        ))}
+      </Section>
+    );
+  }
+  const foldLabel = t("actions.hideDetails");
+
+  return (
+    <Section height="fit" gap={0} className="@container relative">
+      <Section
+        height="fit"
+        className="@max-[38.75rem]:hidden"
+        data-testid="document-types-table"
+      >
+        <LineLayout
+          variant="row"
+          bSpansC
+          a={
+            <>
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              <Text font="secondary-body" color="text-03">
+                {t("types.header")}
+              </Text>
+              {slices.map((slice) => (
+                <Section
+                  key={slice.key}
+                  alignItems="start"
+                  height="fit"
+                  {...typeCellProps(slice.key, hover)}
+                >
+                  <TypeName slice={slice} />
+                </Section>
+              ))}
+            </>
+          }
+          b={
+            <>
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              <Section
+                flexDirection="row"
+                alignItems="start"
+                gap={4}
+                height="fit"
+              >
+                {column(
+                  t("types.indexed"),
+                  "secondary-mono-label",
+                  "text-04",
+                  (slice) => format.number(slice.count),
+                  "min-w-16 max-w-[6.5rem] flex-1"
+                )}
+                {column(
+                  t("types.size"),
+                  "secondary-mono",
+                  "text-03",
+                  size,
+                  "flex-1"
+                )}
+              </Section>
+            </>
+          }
+          c={null}
+          d={null}
+        />
+      </Section>
+      <Section
+        alignItems="stretch"
+        gap={1}
+        height="fit"
+        padding={2}
+        className="hidden @max-[38.75rem]:flex"
+        data-testid="document-types-list"
+      >
+        {slices.map((slice) => (
+          <Section
+            key={slice.key}
+            alignItems="start"
+            gap={0}
+            width="auto"
+            height="fit"
+            data-testid="document-type-item"
+            {...typeCellProps(slice.key, hover, "me-6")}
+          >
+            <TypeName slice={slice} />
+            <Text font="secondary-mono" color="text-03">
+              {slice.sizeBytes === null
+                ? format.number(slice.count)
+                : t("types.countWithSize", {
+                    count: format.number(slice.count),
+                    size: size(slice),
+                  })}
+            </Text>
+          </Section>
+        ))}
+      </Section>
+      <Section width="fit" height="fit" className="absolute bottom-1 end-1">
+        <Button
+          icon={SvgChevronUp}
+          prominence="tertiary"
+          size="md"
+          tooltip={foldLabel}
+          aria-label={foldLabel}
+          aria-expanded
+          onClick={onFold}
+        />
+      </Section>
+    </Section>
+  );
+}
+
 /** Both cards draw the design's 96 px: 7 px of padding inside the 1 px border around the 80 px line. */
 const CARD_PADDING = 1.75;
 
@@ -217,6 +558,47 @@ function IndexingCard({
   const locale = useLocale();
   const liveDetail = useLiveRunDetail();
   const [stagesOpen, setStagesOpen] = useState(false);
+  const typesRequest = useCCPairDocumentTypes(ccPair.id);
+  const breakdown = typesRequest.data;
+  // SWR keeps the last breakdown when a refresh fails, so the error alone decides: stale counts would read as current.
+  const typesLoadFailed = typesRequest.error !== undefined;
+  const [expanded, setExpanded] = useState(false);
+  const [hoveredType, setHoveredType] = useState<string | null>(null);
+  // Type colors stick per pair for the card's life, so a refresh that reorders the types never repaints them.
+  const typeColors = useRef<TypeColorsByPair>(new Map());
+  // A timed-out breakdown is unknown rather than empty, so it shows nothing, as a source without types does.
+  const types =
+    breakdown === undefined || breakdown.timed_out || typesLoadFailed
+      ? []
+      : breakdown.types;
+  // Untyped documents would leave the breakdown short of the indexed count, so it neither unfolds nor sums a size.
+  const fullyTyped = types.length > 0 && breakdown?.untyped_count === 0;
+  const open = expanded && fullyTyped;
+  const slices = useMemo(
+    () =>
+      open ? documentTypeSlices(typeColors.current, ccPair.id, types) : [],
+    [open, ccPair.id, types]
+  );
+  // A hovered type that left the slices (a refresh moved it into Other) fires no leave, so only a shown type mutes the rest.
+  const hovered = slices.some((slice) => slice.key === hoveredType)
+    ? hoveredType
+    : null;
+  const hover: TypeHover = { hovered, onHover: setHoveredType };
+  // Any fold drops the table under the pointer without a leave: the button, a timed-out or failed refresh, a new untyped document.
+  useEffect(() => {
+    if (!open) setHoveredType(null);
+  }, [open]);
+  const summary = typesLoadFailed ? (
+    <TypesSummary typeCount={null} sizeBytes={null} />
+  ) : (
+    types.length > 0 && (
+      <TypesSummary
+        typeCount={types.length}
+        sizeBytes={fullyTyped ? totalSize(types) : null}
+      />
+    )
+  );
+  const expandLabel = t("statusCard.actions.viewDetails");
   const hold = ccPair.indexing_hold;
   const paused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
   const indexing =
@@ -284,6 +666,7 @@ function IndexingCard({
         >
           <LineLayout
             variant="row"
+            bSpansC={open}
             a={
               <StatusColumn
                 title={t("statusCard.title")}
@@ -329,31 +712,94 @@ function IndexingCard({
               </StatusColumn>
             }
             b={
-              <CardFigure
-                value={ccPair.num_docs_indexed}
-                label={t("statusCard.documents.indexedLabel")}
-              />
+              open ? (
+                <Section alignItems="stretch" gap={1} height="fit">
+                  <TypesBar slices={slices} hover={hover} />
+                  <Section
+                    flexDirection="row"
+                    justifyContent="between"
+                    alignItems="start"
+                    height="fit"
+                  >
+                    <Section
+                      alignItems="start"
+                      gap={0}
+                      width="fit"
+                      height="fit"
+                    >
+                      <LineFigure
+                        value={ccPair.num_docs_indexed}
+                        label={t("statusCard.documents.indexedLabel")}
+                      />
+                    </Section>
+                    {summary}
+                  </Section>
+                </Section>
+              ) : (
+                <CardFigure
+                  value={ccPair.num_docs_indexed}
+                  label={t("statusCard.documents.indexedLabel")}
+                />
+              )
             }
-            c={null}
+            c={
+              !open &&
+              summary && (
+                <Section
+                  alignItems="end"
+                  height="fit"
+                  className="mt-6 @max-[38.75rem]:mt-0"
+                >
+                  {summary}
+                </Section>
+              )
+            }
             d={
+              // The panel button at the top, and the expand button 16 px under it at the line's foot.
               <Section
+                alignItems="end"
+                gap={4}
                 width="fit"
                 height="fit"
-                className={cn("mt-1", panelButtonClassName)}
+                className="mt-1"
               >
-                <SelectButton
-                  icon={SvgPanelRight}
-                  variant="select-light"
-                  state={panelOpen ? "selected" : "empty"}
-                  size="md"
-                  tooltip={panelLabel}
-                  aria-label={panelLabel}
-                  aria-pressed={panelOpen}
-                  onClick={onTogglePanel}
-                />
+                <Section
+                  width="fit"
+                  height="fit"
+                  className={panelButtonClassName}
+                >
+                  <SelectButton
+                    icon={SvgPanelRight}
+                    variant="select-light"
+                    state={panelOpen ? "selected" : "empty"}
+                    size="md"
+                    tooltip={panelLabel}
+                    aria-label={panelLabel}
+                    aria-pressed={panelOpen}
+                    onClick={onTogglePanel}
+                  />
+                </Section>
+                {fullyTyped && !open && (
+                  <Button
+                    icon={SvgChevronDown}
+                    prominence="tertiary"
+                    size="md"
+                    tooltip={expandLabel}
+                    aria-label={expandLabel}
+                    aria-expanded={false}
+                    onClick={() => setExpanded(true)}
+                  />
+                )}
               </Section>
             }
           />
+          {open && (
+            <TypesTable
+              slices={slices}
+              hover={hover}
+              onFold={() => setExpanded(false)}
+            />
+          )}
         </Card>
       </Popover.Anchor>
       {latestAttempt !== undefined && (
