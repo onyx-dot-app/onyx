@@ -105,13 +105,18 @@ function writeState(sessionId: string, state: SessionState): void {
   writeFileSync(statePath(sessionId), JSON.stringify(state));
 }
 
+// Best effort: another session may prune the same file at the same time.
 function pruneStaleState(): void {
   const dir = stateDir();
   const cutoff = Date.now() - STATE_TTL_MS;
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
-    if (statSync(path).mtimeMs < cutoff) {
-      unlinkSync(path);
+    try {
+      if (statSync(path).mtimeMs < cutoff) {
+        unlinkSync(path);
+      }
+    } catch {
+      continue;
     }
   }
 }
@@ -256,4 +261,10 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+// A hook that exits non-zero is a non-blocking error, but keeping exit 0 means
+// an unwritable state directory never surfaces as a hook failure to the user.
+try {
+  await main();
+} catch (err) {
+  console.error(`onyx plugin: hook failed: ${String(err)}`);
+}
