@@ -100,10 +100,11 @@ only what a row uses is what lets everything else reach the row element.
 ## Usage
 
 ```tsx
-import { LineItemButton } from "@opal/components";
+import { Badge, LineItemButton } from "@opal/components";
 
 // Simple selectable row
-<LineItemButton font="main-ui-action"
+<LineItemButton
+  font="main-ui-action"
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
   rounding={2}
@@ -112,7 +113,8 @@ import { LineItemButton } from "@opal/components";
 />
 
 // With right-side action
-<LineItemButton font="main-ui-action"
+<LineItemButton
+  font="main-ui-action"
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
   onClick={handleClick}
