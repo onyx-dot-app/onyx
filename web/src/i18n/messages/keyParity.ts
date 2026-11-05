@@ -9,6 +9,7 @@
  * Type-only module: erased at build time, nothing ships to the bundle.
  */
 import type ar from "@/i18n/messages/ar.json";
+import type az from "@/i18n/messages/az.json";
 import type de from "@/i18n/messages/de.json";
 import type en from "@/i18n/messages/en.json";
 import type es from "@/i18n/messages/es.json";
@@ -53,4 +54,8 @@ export type KoreanParity = [
 export type ArabicParity = [
   Covers<typeof ar, typeof en>,
   Covers<typeof en, typeof ar>,
+];
+export type AzerbaijaniParity = [
+  Covers<typeof az, typeof en>,
+  Covers<typeof en, typeof az>,
 ];
