@@ -2,7 +2,7 @@
 
 import "@opal/components/log/styles.css";
 import { Section } from "@opal/layouts/general/components";
-import { OverflowText } from "@opal/components/overflow-text/components";
+import { Text } from "@opal/components/text/components";
 import { Fold } from "@opal/components/fold/components";
 import { Interactive } from "@opal/core";
 import type { IconFunctionComponent, RichStr, StatusColor } from "@opal/types";
@@ -146,9 +146,14 @@ function Log({
             height="fit"
             className="shrink-0"
           >
-            <OverflowText font="secondary-action" color="text-03">
+            <Text
+              maxLines={1}
+              overflowTooltip
+              font="secondary-action"
+              color="text-03"
+            >
               {title}
-            </OverflowText>
+            </Text>
           </Section>
 
           <Section

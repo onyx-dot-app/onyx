@@ -7,7 +7,6 @@ import {
   Button,
   InputTypeIn,
   LinkButton,
-  OverflowText,
   Popover,
   ShadowDiv,
   Text,
@@ -76,13 +75,15 @@ function FailedDocRow({
           {formatDateTimeLog(error.time_created)}
         </Text>
         {error.document_name !== null && (
-          <OverflowText
+          <Text
+            maxLines={1}
+            overflowTooltip
             font="secondary-body"
             color="text-03"
             wordWrap="wrap-anywhere"
           >
             {error.document_name}
-          </OverflowText>
+          </Text>
         )}
         {/* The id stays visible under a title so it can still be copied. */}
         {id !== null ? (
@@ -95,13 +96,15 @@ function FailedDocRow({
             className="min-w-0"
           >
             <SvgFile size={12} className="shrink-0 stroke-text-02" />
-            <OverflowText
+            <Text
+              maxLines={1}
+              overflowTooltip
               font="secondary-mono"
               color="text-02"
               wordWrap="wrap-anywhere"
             >
               {id}
-            </OverflowText>
+            </Text>
             {error.document_link !== null && (
               <Button
                 icon={SvgExternalLink}
