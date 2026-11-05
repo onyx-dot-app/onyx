@@ -47,7 +47,8 @@ type BadgeProps = {
 // ---------------------------------------------------------------------------
 
 /**
- * A small coloured label: an icon and a title in a tinted pill. It does
+ * A small coloured label: an icon and a title in a tinted pill. The title
+ * is always one line, capped at 10rem with an ellipsis. It does
  * nothing on click. For a removable, clickable or field pill, use `Tag`.
  */
 function Badge({
@@ -76,6 +77,7 @@ function Badge({
         titleColor={titleColor ?? (color === "default" ? "text-03" : undefined)}
         icon={icon}
         title={title}
+        titleMaxLines={1}
       />
     </div>
   );

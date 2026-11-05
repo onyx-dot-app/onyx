@@ -20,3 +20,8 @@
   border-radius: var(--radius-08);
   padding: 0.25rem;
 }
+
+/* The title is always capped: an ellipsis past 10rem. */
+.opal-badge [data-opal-content-title] {
+  max-width: 10rem;
+}
