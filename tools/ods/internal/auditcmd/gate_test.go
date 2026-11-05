@@ -96,6 +96,18 @@ func TestRunAuditGate_failures(t *testing.T) {
 			t.Fatalf("expected the resolve error, got %v", err)
 		}
 	})
+	t.Run("unrelated resolver exit two fails closed", func(t *testing.T) {
+		fakeGateScans(t, &audit.Result{}, nil, nil, nil)
+		script := writeGateScript(t, `echo "sed: cannot read action.yml" >&2; exit 2`)
+		var stderr bytes.Buffer
+		err := runAuditGate(&AuditGateOptions{Script: script}, &bytes.Buffer{}, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "Failed to resolve the web image") {
+			t.Fatalf("expected the resolve error, got %v", err)
+		}
+		if !strings.Contains(stderr.String(), "cannot read action.yml") {
+			t.Fatalf("expected resolver diagnostics, got %s", stderr.String())
+		}
+	})
 	t.Run("component unknown to the branch is skipped", func(t *testing.T) {
 		scanned := fakeGateScans(t, &audit.Result{}, nil, map[string]*audit.Result{"a": {}, "b": {}, "c": {}}, nil)
 		script := writeGateScript(t, `case "$1" in web) echo a;; model-server) echo b;; backend) echo c;; *) echo "unknown component: $1" >&2; exit 2;; esac`)

@@ -1,6 +1,7 @@
 package auditcmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -72,12 +73,14 @@ func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 	blocking := len(result.Blocking)
 	for _, component := range gateComponents {
 		resolve := exec.Command(opts.Script, component)
-		resolve.Stderr = stderr
+		var resolveStderr bytes.Buffer
+		resolve.Stderr = io.MultiWriter(stderr, &resolveStderr)
 		out, err := resolve.Output()
 		// The resolver exits 2 for a component it does not know: a release
 		// branch from before that component joined the gate ships without it.
 		var exit *exec.ExitError
-		if errors.As(err, &exit) && exit.ExitCode() == 2 {
+		if errors.As(err, &exit) && exit.ExitCode() == 2 &&
+			strings.TrimSpace(resolveStderr.String()) == "unknown component: "+component {
 			_, _ = fmt.Fprintf(stderr, "\nSkipping %s: this branch's gate does not scan it\n", component)
 			continue
 		}
