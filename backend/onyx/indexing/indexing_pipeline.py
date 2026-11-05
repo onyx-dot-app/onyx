@@ -1774,11 +1774,10 @@ def index_doc_batch(
                     },
                     db_session=db_session,
                 )
-            # Same reason: a failed write leaves the reported type or size
-            # differing from the row, so the next sync retries the document. A
-            # re-chunk that skips row writes fetched nothing, so it has no
-            # source type or size to write.
-            if not skip_document_row_writes:
+            # Same two reasons as the hash: a FUTURE stamp would hide a failed
+            # PRESENT write from the next poll, and a failed write must differ
+            # from the row. A re-chunk that skips row writes fetched no type or size.
+            if not index_to_secondary and not skip_document_row_writes:
                 update_docs_source_info__no_commit(
                     ids_to_source_info={
                         doc.id: (doc.source_mime_type, doc.source_size_bytes)

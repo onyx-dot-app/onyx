@@ -461,14 +461,20 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
         )
 
 
-@pytest.mark.parametrize("skip_document_row_writes", [False, True])
+@pytest.mark.parametrize(
+    "skip_document_row_writes, index_to_secondary",
+    [(False, False), (True, False), (False, True)],
+)
 def test_index_batch_writes_source_info_only_for_documents_the_index_took(
     skip_document_row_writes: bool,
+    index_to_secondary: bool,
 ) -> None:
     """A document whose index write failed keeps its stored type and size, so
     the change gates still see the reported ones as new on the next sync. A
     re-chunk that skips row writes rebuilt its documents without them and
-    writes none."""
+    writes none. A FUTURE write stamps none either, as with the content hash:
+    the row is shared, so the PRESENT poll would skip a document whose PRESENT
+    write failed."""
     written = _make_doc("written")
     failed = _make_doc("failed")
     for doc in (written, failed):
@@ -527,9 +533,10 @@ def test_index_batch_writes_source_info_only_for_documents_the_index_took(
             tenant_id="tenant",
             adapter=adapter,
             skip_document_row_writes=skip_document_row_writes,
+            index_to_secondary=index_to_secondary,
         )
 
-    if skip_document_row_writes:
+    if skip_document_row_writes or index_to_secondary:
         update_source_info.assert_not_called()
         return
     update_source_info.assert_called_once()
