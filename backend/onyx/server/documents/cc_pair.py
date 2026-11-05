@@ -71,6 +71,7 @@ from onyx.db.enums import (
     CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
+    IndexAttemptErrorOrder,
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
@@ -88,6 +89,7 @@ from onyx.db.index_attempt import (
     get_latest_successful_index_attempt_for_cc_pair_id,
     get_open_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
+    get_queue_positions,
     get_waiting_index_attempt,
 )
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
@@ -462,6 +464,8 @@ def get_resolvable_cc_pair_runs_count(
     since: datetime | None = Query(None),
     until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
+    # Annotated, so a direct call that omits it gets None, not a Query object.
+    status_groups: Annotated[list[CCPairRunStatusGroup] | None, Query()] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
@@ -469,7 +473,12 @@ def get_resolvable_cc_pair_runs_count(
 ) -> CCPairRunsResolvableCountResponse:
     """How many runs ``resolve-matching`` would mark for the same filter."""
     request = CCPairRunsResolveMatchingRequest(
-        level=level, q=q, since=since, until=until, kinds=kinds
+        level=level,
+        q=q,
+        since=since,
+        until=until,
+        kinds=kinds,
+        status_groups=status_groups,
     )
     wanted, run_filters = _pair_open_levels(cc_pair_id, request, user, db_session)
     return CCPairRunsResolvableCountResponse(
@@ -782,6 +791,14 @@ def get_cc_pair_full_info(
             cc_pair.connector.source, cc_pair.connector.input_type
         ),
         has_named_checks=has_named_capability_checks(cc_pair.connector.source),
+        # The queue scan reads every queued attempt, so only a pair that can be
+        # in line pays for it on the page's poll.
+        queue_position=(
+            get_queue_positions(db_session).get(cc_pair_id)
+            if latest_attempt is not None
+            and latest_attempt.status == IndexingStatus.NOT_STARTED
+            else None
+        ),
     )
 
 
@@ -1204,6 +1221,7 @@ def get_cc_pair_indexing_errors(
     page_size: int = Query(10, ge=1, le=100),
     index_attempt_id: int | None = Query(None),
     q: str | None = Query(None, max_length=200),
+    order: IndexAttemptErrorOrder = IndexAttemptErrorOrder.TIME,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -1218,6 +1236,8 @@ def get_cc_pair_indexing_errors(
         page_size: Number of errors to return per page
         index_attempt_id: Keeps only the errors of this attempt
         q: Keeps only errors whose message or document id contains this text
+        order: ``time`` lists newest first. ``state`` lists open errors, then
+            errors resolved without retry, then closed errors, each newest first
         user: Current user; must be able to read this CC pair
         db_session: Database session
 
@@ -1243,6 +1263,7 @@ def get_cc_pair_indexing_errors(
         page_size=page_size,
         index_attempt_id=index_attempt_id,
         query=query,
+        order=order,
     )
     return PaginatedReturn(
         items=[

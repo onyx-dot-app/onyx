@@ -3,6 +3,7 @@ import {
   ConnectorCredentialPairStatus,
   type CCPairRunKind,
   type CCPairRunLevel,
+  type CCPairRunStatusGroup,
 } from "@/lib/connectors/types";
 import { toast } from "@opal/layouts";
 
@@ -113,6 +114,8 @@ export interface CCPairRunsMatchingFilter {
   since: string | null;
   until: string | null;
   kinds: CCPairRunKind[] | null;
+  /** Narrows each level's own status groups. Null or absent keeps them all. */
+  status_groups?: CCPairRunStatusGroup[] | null;
   /** The fleet route's pairs. Null or empty leaves the backend's scope, the pairs the caller operates. The pair routes reject it. */
   cc_pair_ids: number[] | null;
 }

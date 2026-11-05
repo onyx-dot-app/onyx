@@ -2818,6 +2818,9 @@
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
+        "deletionStarted": {
+          "value": "開始 {when}"
+        },
         "documents": {
           "totalLabel": "インデックス済みドキュメント合計",
           "recentLabel": "最近処理したドキュメント",

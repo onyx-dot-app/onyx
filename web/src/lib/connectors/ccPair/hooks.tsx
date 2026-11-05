@@ -696,13 +696,18 @@ export function useConnectorChoices(q: string): ConnectorChoices {
   };
 }
 
-/** How many open runs of the level, or of every level when `level` is null, the batch resolve would mark under the narrowing, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */
+/** Which open runs a batch resolve marks: one level, or every level when null, kept to the status groups unless null. */
+export interface ResolveSelection {
+  level: CCPairRunLevel | null;
+  statusGroups: CCPairRunStatusGroup[] | null;
+}
+
+/** How many open runs of the selection the batch resolve would mark under the narrowing, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */
 export function useResolvableRunsCount(
   scope: ActivityScope,
   enabled: boolean,
-  level: CCPairRunLevel | null,
   narrowing: ActivityNarrowing,
-  pollMs: number
+  { level, statusGroups, pollMs }: ResolveSelection & { pollMs: number }
 ): { count: number; isLoading: boolean } {
   const ccPairId = scopePairId(scope);
   const { q, range } = narrowing;
@@ -715,6 +720,7 @@ export function useResolvableRunsCount(
             q,
             range.since,
             range.until,
+            statusGroups,
             narrowing.ccPairIds
           )
         : SWR_KEYS.ccPairResolvableRunsCount(
@@ -722,7 +728,8 @@ export function useResolvableRunsCount(
             level,
             q,
             range.since,
-            range.until
+            range.until,
+            statusGroups
           ),
     errorHandlingFetcher,
     { refreshInterval: pollMs, keepPreviousData: true }
@@ -857,11 +864,11 @@ export function useResolveRunErrors() {
     }
   }
 
-  // Marks every open run of the level, or of every level, the panel lists under the narrowing resolved.
+  // Marks every open run of the level, or of every level, the panel lists under the narrowing and status groups resolved.
   async function resolveMatching(
     scope: ActivityScope,
-    level: CCPairRunLevel | null,
-    narrowing: ActivityNarrowing
+    narrowing: ActivityNarrowing,
+    { level, statusGroups }: ResolveSelection
   ) {
     if (resolving) return;
     setResolving(true);
@@ -874,6 +881,7 @@ export function useResolveRunErrors() {
         since: range.since,
         until: range.until,
         kinds: null,
+        status_groups: statusGroups,
         cc_pair_ids:
           ccPairId === null && narrowing.ccPairIds.length > 0
             ? [...narrowing.ccPairIds]

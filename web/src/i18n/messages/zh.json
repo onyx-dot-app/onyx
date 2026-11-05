@@ -2818,6 +2818,9 @@
         "lastIndexed": {
           "value": "上次索引 {when}"
         },
+        "deletionStarted": {
+          "value": "开始于 {when}"
+        },
         "documents": {
           "totalLabel": "已索引文档总数",
           "recentLabel": "近期处理的文档",

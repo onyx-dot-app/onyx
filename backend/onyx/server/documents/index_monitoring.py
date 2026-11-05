@@ -48,7 +48,7 @@ from onyx.db.index_attempt import (
     get_error_counts_for_index_attempts,
     get_latest_index_attempts,
     get_open_error_counts_for_index_attempts,
-    get_queued_index_attempts,
+    get_queue_positions,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
 from onyx.db.permission_sync_attempt import (
@@ -316,17 +316,6 @@ def _open_error_counts(
     return counts
 
 
-def _queue_positions(db_session: Session) -> dict[int, int]:
-    """Each pair's first queued attempt's place in line, from 1. Every attempt
-    handed to the queue counts, other pairs' and other search settings' too,
-    since they share it. The queue also serves a pair's first run ahead of
-    repeats, so the place is where the attempt stands by age."""
-    positions: dict[int, int] = {}
-    for position, attempt in enumerate(get_queued_index_attempts(db_session), 1):
-        positions.setdefault(attempt.connector_credential_pair_id, position)
-    return positions
-
-
 def _federated_rows(
     db_session: Session, query: str | None
 ) -> list[FederatedConnectorStatus]:
@@ -418,7 +407,7 @@ def get_indexing_connectors(
     docs_indexed = _docs_indexed_by_pair(
         db_session, {cc_pair.id: cc_pair for cc_pair in page}
     )
-    queue_positions = _queue_positions(db_session)
+    queue_positions = get_queue_positions(db_session)
 
     def row(cc_pair: ConnectorCredentialPair) -> IndexingConnectorRow:
         attempt = latest.get(cc_pair.id)
@@ -576,6 +565,7 @@ def get_resolvable_indexing_runs_count(
     cc_pair_ids: Annotated[
         list[int] | None, Query(max_length=CC_PAIR_RUN_BATCH_MAX)
     ] = None,
+    status_groups: Annotated[list[CCPairRunStatusGroup] | None, Query()] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
@@ -588,6 +578,7 @@ def get_resolvable_indexing_runs_count(
         since=since,
         until=until,
         kinds=kinds,
+        status_groups=status_groups,
         cc_pair_ids=cc_pair_ids,
     )
     scoped = _operated_open_levels(db_session, user, request)

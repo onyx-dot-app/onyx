@@ -77,6 +77,8 @@ export interface CCPairFullInfo {
   has_named_checks: boolean;
   // Why the first index attempt waits, or null once it can start.
   indexing_hold: IndexingHold | null;
+  // Place by age in the index queue, from 1, while an attempt of the pair waits there.
+  queue_position: number | null;
 }
 
 /** Mirrors `IndexingHoldReason` in `backend/onyx/connectors/capability_checks/indexing_hold_models.py`. */

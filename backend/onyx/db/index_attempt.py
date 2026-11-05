@@ -8,6 +8,7 @@ from sqlalchemy import (
     ColumnElement,
     Select,
     and_,
+    case,
     delete,
     desc,
     exists,
@@ -30,6 +31,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     CCPairRunKind,
     ConnectorCredentialPairStatus,
+    IndexAttemptErrorOrder,
     IndexAttemptErrorResolvedReason,
     IndexingStatus,
     IndexModelStatus,
@@ -1466,8 +1468,9 @@ def get_index_attempt_errors_with_document_names_for_cc_pair(
     page_size: int,
     index_attempt_id: int | None = None,
     query: str | None = None,
+    order: IndexAttemptErrorOrder = IndexAttemptErrorOrder.TIME,
 ) -> list[tuple[IndexAttemptError, str | None]]:
-    """One page of the pair's errors, newest first, each with the title of its
+    """One page of the pair's errors in ``order``, each with the title of its
     document. A document that never landed has no row, so its title is None."""
     stmt = _cc_pair_errors(
         select(IndexAttemptError, Document.semantic_id).outerjoin(
@@ -1478,12 +1481,28 @@ def get_index_attempt_errors_with_document_names_for_cc_pair(
         index_attempt_id,
         query,
     )
+    if order is IndexAttemptErrorOrder.STATE:
+        stmt = stmt.order_by(_error_state_rank())
+    # The id breaks time ties, so a row never moves between pages.
     stmt = (
-        stmt.order_by(desc(IndexAttemptError.time_created))
+        stmt.order_by(desc(IndexAttemptError.time_created), desc(IndexAttemptError.id))
         .offset(page * page_size)
         .limit(page_size)
     )
     return list(db_session.execute(stmt).tuples())
+
+
+def _error_state_rank() -> ColumnElement[int]:
+    """The group of an error in ``IndexAttemptErrorOrder.STATE``."""
+    return case(
+        (index_attempt_error_is_open(), 0),
+        (
+            IndexAttemptError.resolved_reason
+            == IndexAttemptErrorResolvedReason.WITHOUT_RETRY,
+            1,
+        ),
+        else_=2,
+    )
 
 
 def get_index_attempt_errors_across_connectors(
@@ -1590,6 +1609,17 @@ def get_queued_index_attempts(db_session: Session) -> Sequence[IndexAttempt]:
         )
         .order_by(IndexAttempt.time_created, IndexAttempt.id)
     ).all()
+
+
+def get_queue_positions(db_session: Session) -> dict[int, int]:
+    """Each pair's first queued attempt's place in line, from 1. Every attempt
+    handed to the queue counts, other pairs' and other search settings' too,
+    since they share it. The queue also serves a pair's first run ahead of
+    repeats, so the place is where the attempt stands by age."""
+    positions: dict[int, int] = {}
+    for position, attempt in enumerate(get_queued_index_attempts(db_session), 1):
+        positions.setdefault(attempt.connector_credential_pair_id, position)
+    return positions
 
 
 def get_waiting_index_attempt(
