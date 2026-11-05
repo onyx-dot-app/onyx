@@ -16,7 +16,7 @@ A gray, 1.5rem-tall `Interactive` pill around a `Content` (`secondary` preset): 
 | ------------------ | -------------------------------------- | -------------- | --------------------------------------------------------------------------- |
 | `title`            | `string \| RichStr`                    | **(required)** | Tag label text                                                             |
 | `icon`             | `IconFunctionComponent`                | —              | Optional icon before the title                                              |
-| `iconColor`        | `StatusVariants`                         | —              | Icon colour when it is not the tag's gray, kept in every state             |
+| `iconColor`        | `StatusColor`                         | —              | Icon colour when it is not the tag's gray, kept in every state             |
 | `onClick`          | `MouseEventHandler<HTMLButtonElement>` | —              | Makes the tag a button. `ref` is then a `Ref<HTMLButtonElement>`           |
 | `onRemove`         | `() => void`                           | —              | Renders the remove button                                                   |
 | `removeInTabOrder` | `boolean`                              | `true`         | Removable only: whether the remove button is a Tab stop                     |

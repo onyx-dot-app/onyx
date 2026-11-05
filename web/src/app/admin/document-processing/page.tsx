@@ -66,7 +66,7 @@ function Main() {
       <div className="w-full max-w-2xl">
         <CardSection className="flex flex-col gap-2">
           <div className="border-b border-border-01 pb-2">
-            <Text as="p" font="heading-h3" color="text-05">
+            <Text as="p" font="heading-section" color="text-05">
               {t("unstructured.title")}
             </Text>
           </div>

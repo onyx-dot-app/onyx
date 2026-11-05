@@ -77,7 +77,7 @@ function IllustrationContent({
         )}
       >
         <Text
-          font={size === "lg" ? "heading-h3" : "main-content-emphasis"}
+          font={size === "lg" ? "heading-section" : "main-content-emphasis"}
           color="text-04"
           as="p"
         >

@@ -139,8 +139,7 @@ export default function SpendingLimitsPage() {
       <SettingsLayouts.Body>
         <Section gap={3} alignItems="stretch" height="auto">
           <Content
-            sizePreset="main-content"
-            variant="section"
+            font="main-content-emphasis"
             title={t("workspace.title")}
             description={t("workspace.description")}
           />
@@ -179,8 +178,7 @@ export default function SpendingLimitsPage() {
         <Section gap={3} alignItems="stretch" height="auto">
           <Section flexDirection="row" gap={2} height="auto">
             <Content
-              sizePreset="main-content"
-              variant="section"
+              font="main-content-emphasis"
               title={t("groups.title")}
               description={t("groups.description")}
             />

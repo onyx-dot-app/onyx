@@ -11,7 +11,12 @@ import {
   type TableColumn,
   type TagItem,
 } from "@opal/components";
-import { Content, InputErrorText, Section } from "@opal/layouts";
+import {
+  Content,
+  InputErrorText,
+  ReverseContent,
+  Section,
+} from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -181,14 +186,13 @@ export default function GroupShareList({
       hideable: false,
       cell: (groupName, row) => (
         <Content
+          font="main-ui-action"
           title={groupName}
           description={
             row.memberCount === undefined
               ? undefined
               : t("memberCount", { count: row.memberCount })
           }
-          sizePreset="main-ui"
-          variant="section"
         />
       ),
     },
@@ -206,14 +210,11 @@ export default function GroupShareList({
             cell: (row) => {
               if (row.note) {
                 const note = (
-                  <Content
+                  <ReverseContent
+                    font="secondary-body"
                     icon={row.icon}
                     title={row.note}
-                    sizePreset="secondary"
-                    variant="body"
-                    orientation="reverse"
-                    color="muted"
-                    width="fit"
+                    titleColor="text-03"
                   />
                 );
                 if (row.role === undefined) return note;

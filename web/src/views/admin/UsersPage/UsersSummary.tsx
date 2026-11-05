@@ -85,11 +85,10 @@ function ScimCard() {
     <Card border="solid" padding={3} rounding={4}>
       <Section alignItems="start" height="fit" gap={2}>
         <ContentAction
+          font="main-ui-action"
           icon={SvgUserSync}
           title={t("summary.scim.title")}
           description={t("summary.scim.description")}
-          sizePreset="main-ui"
-          variant="section"
           padding={0}
           rightChildren={
             <NavLink href={ADMIN_ROUTES.SCIM.path}>

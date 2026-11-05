@@ -35,7 +35,6 @@ Headers are only sticky when `actions` is non-empty.
 | `moreIcon2`      | `IconFunctionComponent`   | —       | Third icon in the title's icon row (see `Content`)                                                                                                        |
 | `title`          | `string`                  | —       | Page title (required)                                                                                                                                     |
 | `description`    | `string`                  | —       | Subtitle below the title                                                                                                                                  |
-| `descriptionTag` | `TagProps`                | —       | Tag inline after the description, e.g. a status                                                                                                           |
 | `editable`       | `boolean`                 | `false` | The title can be edited in place (see `Content`)                                                                                                          |
 | `editButton`     | `"hover" \| "rest"`       | `"hover"` | When the editable title shows its pencil: on hover, or at rest too (see `Content`)                                                                      |
 | `onTitleChange`  | `(title: string) => void` | —       | Called when the user commits a title edit                                                                                                                 |

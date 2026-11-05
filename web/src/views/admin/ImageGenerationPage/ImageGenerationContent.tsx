@@ -90,15 +90,14 @@ function ConnectedModelCard({
   return (
     <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
-        tag={
+        badge={
           isDefault
             ? { title: t("defaultTag.label"), color: "info" }
             : undefined
@@ -147,13 +146,12 @@ function AvailableModelCard({
   return (
     <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
@@ -474,9 +472,8 @@ export default function ImageGenerationContent() {
             justifyContent="start"
           >
             <Content
+              font="main-content-emphasis"
               title={t("connectedModels.title")}
-              sizePreset="main-content"
-              variant="section"
             />
             <Section gap={2} height="fit" alignItems="stretch">
               {configs.map((config) => {
@@ -539,10 +536,9 @@ export default function ImageGenerationContent() {
           justifyContent="start"
         >
           <Content
+            font="main-content-emphasis"
             title={t("availableModels.title")}
             description={t("availableModels.description")}
-            sizePreset="main-content"
-            variant="section"
           />
           <Tabs
             variant="pill"

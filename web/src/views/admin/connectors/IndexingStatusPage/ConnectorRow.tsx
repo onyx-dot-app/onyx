@@ -226,20 +226,18 @@ export default function ConnectorRow({
                         className="w-full hover:underline"
                       >
                         <Content
+                          font="main-ui-action"
                           icon={getSourceMetadata(row.source).icon}
                           title={row.name}
                           titleMaxLines={1}
-                          sizePreset="main-ui"
-                          variant="section"
                         />
                       </NavLink>
                     ) : (
                       <Content
+                        font="main-ui-action"
                         icon={getSourceMetadata(row.source).icon}
                         title={row.name}
                         titleMaxLines={1}
-                        sizePreset="main-ui"
-                        variant="section"
                       />
                     )}
                     <Section
@@ -250,20 +248,18 @@ export default function ConnectorRow({
                       wrap
                     >
                       <Content
+                        font="secondary-body"
                         icon={ACCESS_ICONS[row.access_type]}
                         title={t(`access.${row.access_type}`)}
-                        sizePreset="secondary"
-                        variant="body"
-                        color="muted"
+                        titleColor="text-03"
                         width="fit"
                       />
                       {owner !== null && (
                         <Content
+                          font="secondary-body"
                           icon={SvgUser}
                           title={owner}
-                          sizePreset="secondary"
-                          variant="body"
-                          color="muted"
+                          titleColor="text-03"
                           width="fit"
                         />
                       )}
@@ -300,7 +296,7 @@ export default function ConnectorRow({
                             icon={SvgAlertTriangle}
                             title={format.number(warnings)}
                             color="warning"
-                            textColor="text-04"
+                            titleColor="text-04"
                           />
                         </Tooltip>
                       )}

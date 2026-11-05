@@ -123,12 +123,11 @@ export default function ChatPluginsPopover({
       <Popover open={open} onOpenChange={changeOpen}>
         <Popover.Trigger asChild>
           <LineItemButton
+            font="main-ui-action"
             ref={trigger}
             disabled={disabled}
             icon={SvgPlug}
             title={t("chat.trigger.label")}
-            sizePreset="main-ui"
-            variant="section"
             rounding={2}
             interaction={open ? "hover" : "rest"}
             aria-label={t("chat.trigger.label")}
@@ -196,11 +195,11 @@ export default function ChatPluginsPopover({
             gap={1}
             footer={
               <LineItemButton
+                font="main-ui-action"
                 title={t("chat.browse.label")}
                 icon={SvgPlug}
                 href={browseLink.href}
                 onClick={handleBrowse}
-                sizePreset="main-ui"
                 padding={0}
                 rounding={2}
               />
@@ -261,6 +260,7 @@ export default function ChatPluginsPopover({
                 const enabled = isChatPluginEnabled(group, toolConfiguration);
                 return (
                   <LineItemButton
+                    font="main-ui-action"
                     key={`${reference.kind}:${reference.id}`}
                     title={name}
                     titleMaxLines={1}
@@ -278,7 +278,6 @@ export default function ChatPluginsPopover({
                           )
                         : SvgCodeFile
                     }
-                    sizePreset="main-ui"
                     padding={0}
                     rounding={2}
                     presentational

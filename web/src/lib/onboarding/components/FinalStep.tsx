@@ -38,11 +38,10 @@ function FinalStepItemInner({
       onClick={() => navigation.go(buttonHref)}
     >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button

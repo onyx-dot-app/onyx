@@ -219,7 +219,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Badge title={t("required.label")} color="default" textColor="text-04" />
+    <Badge title={t("required.label")} color="default" titleColor="text-04" />
   ) : undefined;
 
   // A required expected check cannot be skipped.
@@ -610,14 +610,13 @@ export function CheckCardView({
 
   const header = (
     <ContentAction
+      font="main-content-emphasis"
       // A run that broke has no counts, so the ring would read as complete;
       // a red X stands in, without dimming the title.
       icon={notice ? ChecksFailedIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
       description={summary}
-      sizePreset="main-content"
-      variant="section"
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
@@ -800,10 +799,9 @@ export default function CredentialChecksCard({
     return (
       <Card border="solid" rounding={4} padding={4}>
         <ContentAction
+          font="main-content-emphasis"
           title={promptT("title")}
           description={promptT("description", { appName })}
-          sizePreset="main-content"
-          variant="section"
           center
           padding={0}
           rightChildren={

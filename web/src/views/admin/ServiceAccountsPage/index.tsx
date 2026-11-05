@@ -141,9 +141,8 @@ export default function ServiceAccountsPage() {
         weight: 25,
         cell: (value) => (
           <Content
+            font="main-ui-body"
             title={value || t("table.name.unnamed")}
-            sizePreset="main-ui"
-            variant="body"
           />
         ),
       },

@@ -35,8 +35,7 @@ import type { User } from "@/lib/types";
 function renderNameColumn(email: string, row: UserRow) {
   return (
     <Content
-      sizePreset="main-ui"
-      variant="section"
+      font="main-ui-action"
       title={row.personal_name ?? email}
       description={row.personal_name ? email : undefined}
     />

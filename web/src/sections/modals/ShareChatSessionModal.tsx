@@ -70,8 +70,7 @@ function PrivacyOption({
       aria-label={ariaLabel}
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={Icon}
         title={title}
         description={description}

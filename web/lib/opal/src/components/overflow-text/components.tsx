@@ -14,6 +14,11 @@ type OverflowTextProps = DistributiveOmit<
   children: string | RichStr;
   /** Lines shown before the text is cut with an ellipsis. Default: `1`. */
   maxLines?: number;
+  /**
+   * A tooltip shown on every hover, in place of the full text: a cut text
+   * then shows only this.
+   */
+  tooltip?: string | RichStr;
 };
 
 /**
@@ -24,6 +29,7 @@ type OverflowTextProps = DistributiveOmit<
 function OverflowText({
   children,
   maxLines = 1,
+  tooltip,
   ...textProps
 }: OverflowTextProps) {
   const [element, setElement] = useState<HTMLElement | null>(null);
@@ -33,10 +39,10 @@ function OverflowText({
   // shape, which remounts the text and loses the element the measure reads.
   return (
     <Tooltip
-      tooltip={children}
-      suppressed={!overflowing}
+      tooltip={tooltip ?? children}
+      suppressed={!tooltip && !overflowing}
       side="top"
-      align="start"
+      align={tooltip ? "center" : "start"}
     >
       <Text {...textProps} ref={setElement} maxLines={maxLines}>
         {children}

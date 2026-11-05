@@ -83,10 +83,9 @@ export default function AdminListHeader({
       <Card rounding={4} border="solid">
         <div className="flex flex-row items-center justify-between gap-3">
           <Content
+            font="main-ui-body"
             title={emptyStateText}
-            sizePreset="main-ui"
-            variant="body"
-            color="muted"
+            titleColor="text-03"
             width="fit"
           />
           {actionButton}

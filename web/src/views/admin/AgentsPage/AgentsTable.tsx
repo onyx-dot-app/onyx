@@ -77,8 +77,7 @@ export default function AgentsTable() {
     ) {
       return (
         <Content
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           icon={SvgUser}
           titleMaxLines={1}
           title={
@@ -102,8 +101,7 @@ export default function AgentsTable() {
     function renderAccessColumn(_isPublic: boolean, row: Agent) {
       return (
         <Content
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           title={getAccessTitle(row)}
           titleMaxLines={1}
           descriptionMaxLines={1}

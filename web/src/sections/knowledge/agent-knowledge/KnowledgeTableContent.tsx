@@ -46,12 +46,7 @@ export function DocumentSetsTableContent({
       header: t("table.columns.name.header"),
       sortable: true,
       render: (ds) => (
-        <Content
-          icon={SvgFolder}
-          title={ds.name}
-          sizePreset="main-ui"
-          variant="section"
-        />
+        <Content font="main-ui-action" icon={SvgFolder} title={ds.name} />
       ),
     },
     {
@@ -173,12 +168,7 @@ export function RecentFilesTableContent({
       header: t("table.columns.name.header"),
       sortable: true,
       render: (file) => (
-        <Content
-          icon={SvgFiles}
-          title={file.name}
-          sizePreset="main-ui"
-          variant="section"
-        />
+        <Content font="main-ui-action" icon={SvgFiles} title={file.name} />
       ),
     },
     {

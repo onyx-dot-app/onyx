@@ -10,7 +10,6 @@ import {
   SelectButton,
   Tag,
   Badge,
-  Tooltip,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -55,7 +54,7 @@ import {
   runWarnings,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
-// A Badge is clickable only with an onClick, and the popover trigger around it handles the click.
+// A Tag is clickable only with an onClick, and the popover trigger around it handles the click.
 const NOOP = () => {};
 
 const GROUP_STYLE: Record<
@@ -379,9 +378,11 @@ export default function ActivityCard({
                   className="min-w-0"
                 >
                   {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Tooltip tooltip={tRuns("newModel.tooltip")} side="top">
-                      <Badge title={tRuns("newModel.label")} color="info" />
-                    </Tooltip>
+                    <Badge
+                      title={tRuns("newModel.label")}
+                      color="info"
+                      tooltip={tRuns("newModel.tooltip")}
+                    />
                   )}
                   <OverflowText font="secondary-body" color={mutedColor}>
                     {identity}

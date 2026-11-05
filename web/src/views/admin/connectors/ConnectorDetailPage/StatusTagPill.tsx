@@ -16,7 +16,7 @@ export default function StatusTagPill({ tag }: StatusTagPillProps) {
       icon={tag.icon}
       title={tBadges(tag.labelKey)}
       color={tag.color}
-      textColor="text-04"
+      titleColor="text-04"
     />
   );
 }

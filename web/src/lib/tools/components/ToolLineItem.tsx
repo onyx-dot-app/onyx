@@ -277,14 +277,18 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   return (
     <Hoverable.Root group={HOVER_GROUP}>
       <LineItemButton
+        font="main-ui-action"
         title={label}
         icon={getIconForAction(tool)}
-        sizePreset="main-ui"
-        variant="section"
         rounding={2}
         state={isForced ? "selected" : "empty"}
         strikethrough={isDisabled}
-        color={(isUnavailable && isForced) || isDisabled ? "muted" : undefined}
+        color={
+          (isUnavailable && isForced) || isDisabled ? "default" : undefined
+        }
+        titleColor={
+          (isUnavailable && isForced) || isDisabled ? "text-03" : undefined
+        }
         disabled={needsConnectors || (isUnavailable && !isForced)}
         tooltip={getToolTooltip(
           tool,
