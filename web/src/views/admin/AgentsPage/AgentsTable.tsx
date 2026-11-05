@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { OverflowText, Table, type TableColumn } from "@opal/components";
+import { Text, Table, type TableColumn } from "@opal/components";
 import { Content, IllustrationContent, toast, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { PageLoader } from "@opal/loaders";
@@ -130,9 +130,14 @@ export default function AgentsTable() {
         title: t("table.nameColumn.header"),
         weight: 25,
         cell: (value) => (
-          <OverflowText font="main-ui-body" color="text-05">
+          <Text
+            maxLines={1}
+            overflowTooltip
+            font="main-ui-body"
+            color="text-05"
+          >
             {value}
-          </OverflowText>
+          </Text>
         ),
       },
       {
@@ -142,9 +147,14 @@ export default function AgentsTable() {
         title: t("table.descriptionColumn.header"),
         weight: 35,
         cell: (value) => (
-          <OverflowText font="main-ui-body" color="text-03">
+          <Text
+            maxLines={1}
+            overflowTooltip
+            font="main-ui-body"
+            color="text-03"
+          >
             {value || BLANK_CELL}
-          </OverflowText>
+          </Text>
         ),
       },
       {

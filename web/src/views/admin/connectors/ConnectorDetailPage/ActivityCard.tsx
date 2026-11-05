@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
-  OverflowText,
   Popover,
   SelectButton,
   Tag,
@@ -384,9 +383,14 @@ export default function ActivityCard({
                       tooltip={tRuns("newModel.tooltip")}
                     />
                   )}
-                  <OverflowText font="secondary-body" color={mutedColor}>
+                  <Text
+                    maxLines={1}
+                    overflowTooltip
+                    font="secondary-body"
+                    color={mutedColor}
+                  >
                     {identity}
-                  </OverflowText>
+                  </Text>
                   <IdentityIcon size={12} className="shrink-0 stroke-text-02" />
                 </Section>
               </Section>

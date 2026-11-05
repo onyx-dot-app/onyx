@@ -5,7 +5,6 @@ import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   Badge,
   Button,
-  OverflowText,
   Text,
   type BadgeProps,
   type TextColor,
@@ -83,8 +82,8 @@ interface ContentBaseProps {
   titleMaxLines?: number;
 
   /**
-   * With `titleMaxLines`: a tooltip on every hover of the title, in place of
-   * the full title.
+   * A tooltip on every hover of the title. It replaces the full-title tooltip
+   * of `titleMaxLines`, so a cut title shows only this.
    */
   titleTooltip?: string | RichStr;
 
@@ -331,20 +330,15 @@ function ContentDescription({
   return (
     <div className="opal-content-description">
       {/* Clamped, the full description shows in a tooltip when it is cut. */}
-      {maxLines ? (
-        <OverflowText
-          font="secondary-body"
-          color="inherit"
-          as="p"
-          maxLines={maxLines}
-        >
-          {description}
-        </OverflowText>
-      ) : (
-        <Text font="secondary-body" color="inherit" as="p">
-          {description}
-        </Text>
-      )}
+      <Text
+        font="secondary-body"
+        color="inherit"
+        as="p"
+        maxLines={maxLines}
+        overflowTooltip={maxLines !== undefined}
+      >
+        {description}
+      </Text>
     </div>
   );
 }
@@ -484,27 +478,23 @@ function Content({
                   }}
                 />
               </div>
-            ) : titleMaxLines ? (
-              <OverflowText
+            ) : (
+              <Text
                 // Lets a host (a toast) measure whether a clamped title overflows.
                 data-opal-content-title=""
                 font={font}
                 color="inherit"
                 maxLines={titleMaxLines}
+                // Clamped, a cut title shows in full in a tooltip.
+                overflowTooltip={titleMaxLines !== undefined}
                 tooltip={titleTooltip}
                 strikethrough={strikethrough}
-                role={role}
-                onClick={editable ? handleTitleClick : undefined}
-              >
-                {title}
-              </OverflowText>
-            ) : (
-              <Text
-                data-opal-content-title=""
-                font={font}
-                color="inherit"
-                strikethrough={strikethrough}
-                title={toPlainString(title)}
+                // Unclamped and without a tooltip, the native title shows it.
+                title={
+                  titleMaxLines === undefined && titleTooltip === undefined
+                    ? toPlainString(title)
+                    : undefined
+                }
                 role={role}
                 onClick={editable ? handleTitleClick : undefined}
               >

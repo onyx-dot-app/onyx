@@ -20,7 +20,6 @@ import {
   LinkButton,
   Log,
   type LogVariant,
-  OverflowText,
   SelectCard,
   Badge,
   Text,
@@ -351,14 +350,16 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
         gap={2}
         className="min-w-0"
       >
-        <OverflowText
+        <Text
+          maxLines={1}
+          overflowTooltip
           as="p"
           font={messageFont}
           color={messageColor}
           textPosition="text-start"
         >
           {check.summary ?? (check.message || t(detail))}
-        </OverflowText>
+        </Text>
         {required}
       </Section>
     ),

@@ -161,12 +161,6 @@ export {
   type IconTooltipStatus,
 } from "@opal/components/icon-tooltip/components";
 
-/* OverflowText */
-export {
-  OverflowText,
-  type OverflowTextProps,
-} from "@opal/components/overflow-text/components";
-
 /* Log */
 export {
   Log,

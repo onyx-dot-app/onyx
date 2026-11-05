@@ -14,7 +14,9 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 | `as`           | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"`                                                               | `"span"`         | HTML tag to render                                                                                                    |
 | `wordWrap`     | `"whitespace-nowrap" \| "wrap-normal" \| "wrap-break-word" \| "wrap-anywhere" \| "break-all" \| "break-keep"` | —                | How a run of characters with nowhere to wrap behaves; unset leaves normal CSS wrapping                                |
 | `textPosition` | `"text-start" \| "text-center" \| "text-end" \| "text-justify"`                                               | —                | How the text sits within its own box; logical, so it follows reading direction. Only offered when `as` is a block tag |
-| `maxLines`     | `number`                                                                                                      | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`)                        |
+| `maxLines`     | `number`                                                                                                      | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`). It only clamps        |
+| `overflowTooltip` | `boolean` | `false` | With `maxLines`: on hover, show the full text in a tooltip while the clamp cuts it. Needs string or `RichStr` children |
+| `tooltip` | `string \| RichStr` | — | A tooltip on every hover. It replaces the overflow tooltip, so a cut text shows only this |
 | `children`     | `string \| RichStr \| RichNodes`                                                                              | —                | Plain string, `markdown()` for inline markdown, or `richNodes()` for inline React nodes                               |
 
 > **No `className` or `style`.** `Text` strips both (its props extend `WithoutStyles`); every
@@ -61,6 +63,28 @@ numbers are progressively fainter.
 | Status — warning   | `status-warning-05`                                              | Warnings that need attention without reading as an error                                          |
 | Theme — amber      | `theme-amber-05`                                                 | The paused state, plus legacy warnings not yet moved to `status-warning-05`                       |
 | Special            | `inherit`                                                        | Inherit the surrounding text color (no color class applied) — useful when a parent sets the color |
+
+## Tooltips
+
+`Text` owns at most one tooltip. Do not wrap it in `Tooltip` while it has one: the two triggers
+nest, and the outer tooltip can fail to open.
+
+- `maxLines` only clamps. Add `overflowTooltip` to show the full text on hover while it is cut.
+  Text that fits gets no tooltip.
+- `tooltip` shows on every hover. It replaces the overflow tooltip.
+- Overflow is measured with `useOverflow`, so it updates when the text's box resizes or a webfont
+  loads. A one-line clamp needs a block box: render the text as a flex item or with a block `as`.
+- Plain text, without either prop, renders no tooltip and runs no hooks.
+
+```tsx
+<Text font="main-ui-body" maxLines={1} overflowTooltip>
+  {message}
+</Text>
+
+<Text font="secondary-body" tooltip="Your organization admin requires this">
+  Required
+</Text>
+```
 
 ## Usage Examples
 

@@ -5,6 +5,7 @@ import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import type { RichNodes, RichStr, WithoutStyles } from "@opal/types";
 import { cn, isRichNodes } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { TooltipText } from "@opal/components/text/TooltipText";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,8 +51,18 @@ interface TextBaseProps extends WithoutStyles<
     | "break-all"
     | "break-keep";
 
-  /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
+  /**
+   * Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+`
+   * uses `-webkit-line-clamp`. It only clamps: add `overflowTooltip` to show
+   * the cut text on hover.
+   */
   maxLines?: number;
+
+  /**
+   * A tooltip on every hover. It replaces the `overflowTooltip`, so a cut text
+   * shows only this.
+   */
+  tooltip?: string | RichStr;
 
   /**
    * Strike the text through. This is a presentational state (e.g. an option
@@ -74,28 +85,43 @@ interface TextBaseProps extends WithoutStyles<
 }
 
 /**
+ * With `maxLines`, the full text shows in a tooltip on hover while the clamp
+ * cuts it; text that fits gets none. The text fills the tooltip, so it must be
+ * string-derivable.
+ */
+type TextOverflowTooltipProps =
+  | { overflowTooltip?: false }
+  | { overflowTooltip: boolean; children?: string | RichStr };
+
+/**
  * `textPosition` is only offered on a tag that makes a block box. On an inline
  * `span` the property has nothing to align against — `text-align` positions a
  * block's inline content, not the element itself — so allowing it there would
  * be a prop that silently does nothing.
  */
-type TextProps =
-  | (TextBaseProps & {
-      /** HTML tag to render. Default: `"span"`. */
-      as?: "span";
-      textPosition?: never;
-    })
-  | (TextBaseProps & {
-      /** HTML tag to render. */
-      as: BlockTag;
+type TextProps = TextOverflowTooltipProps &
+  (
+    | (TextBaseProps & {
+        /** HTML tag to render. Default: `"span"`. */
+        as?: "span";
+        textPosition?: never;
+      })
+    | (TextBaseProps & {
+        /** HTML tag to render. */
+        as: BlockTag;
 
-      /**
-       * How the text sits within this element's box. Logical values, so they
-       * follow the reading direction rather than the screen: `"text-start"` is
-       * left in an LTR locale and right in an RTL one.
-       */
-      textPosition?: "text-start" | "text-center" | "text-end" | "text-justify";
-    });
+        /**
+         * How the text sits within this element's box. Logical values, so they
+         * follow the reading direction rather than the screen: `"text-start"` is
+         * left in an LTR locale and right in an RTL one.
+         */
+        textPosition?:
+          | "text-start"
+          | "text-center"
+          | "text-end"
+          | "text-justify";
+      })
+  );
 
 // ---------------------------------------------------------------------------
 // Config
@@ -153,7 +179,20 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
 // Text
 // ---------------------------------------------------------------------------
 
-function Text({
+/**
+ * Text in a font and colour. With `tooltip` or `overflowTooltip` it renders
+ * through `TooltipText`, which measures and owns the one tooltip; plain text
+ * stays hook-free.
+ */
+function Text(props: TextProps) {
+  if (props.tooltip !== undefined || props.overflowTooltip) {
+    return <TooltipText {...props} />;
+  }
+  return <TextElement {...props} />;
+}
+
+/** The text element alone: no tooltip, no hooks. */
+function TextElement({
   font = "main-ui-body",
   color = "text-04",
   as: Tag = "span",
@@ -162,6 +201,8 @@ function Text({
   maxLines,
   strikethrough,
   children,
+  tooltip: _tooltip,
+  overflowTooltip: _overflowTooltip,
   ...rest
 }: TextProps) {
   const resolvedClassName = cn(
@@ -194,6 +235,11 @@ function Text({
   );
 }
 
-export { Text, COLOR_CONFIG as TEXT_COLOR_CLASSES, type TextProps };
+export {
+  Text,
+  TextElement,
+  COLOR_CONFIG as TEXT_COLOR_CLASSES,
+  type TextProps,
+};
 // Re-export the shared unions so existing `@opal/components` consumers are unchanged.
 export type { TextFont, TextColor };

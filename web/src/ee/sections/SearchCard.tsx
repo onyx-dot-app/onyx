@@ -1,7 +1,7 @@
 "use client";
 
 import { Section } from "@opal/layouts";
-import { OverflowText, Badge, Text } from "@opal/components";
+import { Badge, Text } from "@opal/components";
 import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
@@ -72,14 +72,16 @@ export default function SearchCard({
               <SourceIcon sourceType={document.source_type} iconSize={16} />
             )}
 
-            <OverflowText
+            <Text
+              maxLines={1}
+              overflowTooltip
               as="p"
               textPosition="text-start"
               font="main-ui-action"
               color="text-05"
             >
               {document.semantic_identifier}
-            </OverflowText>
+            </Text>
           </Section>
 
           {/* Body Row */}
