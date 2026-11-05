@@ -81,7 +81,7 @@ def explicit_cache_breakpoints(
             }
         )
         marked = True
-    return result, EXPLICIT_CACHE_MODE if marked else None
+    return result, dict(EXPLICIT_CACHE_MODE) if marked else None
 
 
 class OpenAIPromptCacheProvider(PromptCacheProvider):

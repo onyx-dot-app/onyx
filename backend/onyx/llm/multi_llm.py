@@ -191,7 +191,9 @@ _ANTHROPIC_MIN_THINKING_BUDGET_TOKENS = 1024
 _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
-_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset({"temperature"})
+_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
+    {"temperature", "prompt_cache_options"}
+)
 
 # Substrings provider 400s use to name each strippable kwarg (errors may
 # cite only inner fields like budget_tokens or effort).
@@ -201,6 +203,7 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
     "reasoning": ("reasoning", "effort"),
     "reasoning_effort": ("reasoning_effort", "effort"),
     "temperature": ("temperature",),
+    "prompt_cache_options": ("prompt_cache_options", "prompt_cache_breakpoint"),
 }
 
 # Substring of the OpenAI-family 400 that names "none" as the only effort
@@ -1079,15 +1082,6 @@ class LitellmLLM(LLM):
         if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
-        # OpenAI caching has no write cost, and the moving per-step reminder
-        # defeats implicit prefix reuse, so tool results carry breakpoints.
-        if (
-            is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES
-        ) and uses_explicit_cache_breakpoints(model_identity_names, self._api_base):
-            prompt, cache_options = explicit_cache_breakpoints(prompt)
-            if cache_options is not None:
-                optional_kwargs["prompt_cache_options"] = cache_options
-
         # Settle before anything reads it, so every branch below and tracing
         # see the same effort the provider will.
         reasoning_effort = resolve_reasoning_effort(
@@ -1313,9 +1307,31 @@ class LitellmLLM(LLM):
 
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
-            model_kwargs=self._model_kwargs,
+            model_kwargs=dict(self._model_kwargs),
             user_identity=user_identity,
         )
+
+        # Match LiteLLM's api_base-over-base_url precedence, including custom config.
+        base_url = passthrough_kwargs.pop("base_url", self._api_base) or None
+        effective_base = passthrough_kwargs.get("api_base") or base_url
+        if not effective_base and not litellm.api_base and env_injection_enabled:
+            effective_base = self._env_only_custom_config.get("OPENAI_BASE_URL") or (
+                self._env_only_custom_config.get("OPENAI_API_BASE")
+            )
+        cache_prompt = None
+        if (
+            is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES
+        ) and uses_explicit_cache_breakpoints(
+            model_identity_names,
+            effective_base if isinstance(effective_base, str) else None,
+        ):
+            cache_prompt, cache_options = explicit_cache_breakpoints(prompt)
+            if cache_options is not None:
+                configured = passthrough_kwargs.pop("prompt_cache_options", None)
+                optional_kwargs["prompt_cache_options"] = {
+                    **(configured if isinstance(configured, dict) else {}),
+                    **cache_options,
+                }
 
         # OpenRouter: inject session_id and user into extra_body.
         #
@@ -1461,10 +1477,17 @@ class LitellmLLM(LLM):
                         "LiteLLMModelResponse | CustomStreamWrapper",
                         litellm.completion(
                             model=model,
-                            base_url=self._api_base or None,
+                            base_url=base_url,
                             api_version=api_version,
                             custom_llm_provider=self._custom_llm_provider or None,
-                            messages=messages,
+                            messages=(
+                                _strip_thinking_blocks_from_messages(
+                                    _prompt_to_dicts(cache_prompt)
+                                )
+                                if cache_prompt is not None
+                                and "prompt_cache_options" in opts
+                                else messages
+                            ),
                             # None (omitted) rather than [] — some OpenAI-compatible
                             # servers reject requests with an empty tools array.
                             tools=tools or None,
