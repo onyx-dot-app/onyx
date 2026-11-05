@@ -57,8 +57,12 @@
    --content-status-color) tints the title and the icon; `titleColor`
    overrides the title only. */
 [data-content-color]:not([data-content-color="interactive"]) {
-  --content-foreground: var(--content-title-color, var(--content-status-color));
-  --content-foreground-icon: var(--content-status-color);
+  /* text-04 when no status colour is set, so nothing renders transparent. */
+  --content-foreground: var(
+    --content-title-color,
+    var(--content-status-color, var(--text-04))
+  );
+  --content-foreground-icon: var(--content-status-color, var(--text-04));
   color: var(--content-foreground);
 }
 
@@ -67,7 +71,7 @@
 [data-content-color="default"] {
   --content-foreground-icon: var(
     --content-title-color,
-    var(--content-status-color)
+    var(--content-status-color, var(--text-04))
   );
 }
 

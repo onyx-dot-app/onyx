@@ -228,10 +228,10 @@ StyleDictionary.registerFormat({
 // that mobile/tailwind.config.js registers as NativeWind utilities (via tailwindcss
 // `plugin` + addUtilities). This is what lets mobile write `font-heading-hero` exactly
 // like web. Values share js/native-vars' textPresets resolution (same numeric
-// magnitudes) but are serialized differently: CSS-ish px strings here (e.g. "48px")
+// magnitudes) but are serialized differently: CSS-ish px strings here (e.g. "32px")
 // vs bare RN-style numbers there — NativeWind parses these strings into RN text styles.
 // e.g.  text.heading-hero  ->  ".font-heading-hero": { fontFamily: "Hanken Grotesk",
-//         fontSize: "48px", fontWeight: "600", lineHeight: "64px", letterSpacing: "-0.48px" }
+//         fontSize: "32px", fontWeight: "500", lineHeight: "48px", letterSpacing: "-0.32px" }
 StyleDictionary.registerFormat({
   name: "js/nativewind-typography",
   format: ({ dictionary }) => {

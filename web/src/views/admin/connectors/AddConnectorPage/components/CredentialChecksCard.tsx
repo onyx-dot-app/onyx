@@ -219,7 +219,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Badge title={t("required.label")} color="default" textColor="text-04" />
+    <Badge title={t("required.label")} color="default" titleColor="text-04" />
   ) : undefined;
 
   // A required expected check cannot be skipped.

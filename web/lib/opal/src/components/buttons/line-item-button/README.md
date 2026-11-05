@@ -89,7 +89,7 @@ meanings in one prop. Use `tooltip` for hover text.
 | `badge`         | `BadgeProps`         | —        | Badge beside the title, like a plan badge                                 |
 | `font`                | `TextFont`              | `"main-ui-action"` | The title's font; sets every size |
 | `rightChildren`       | `ReactNode`             | —               | Content after the label (e.g. action button)                                                                                                                                                                                 |
-| `color`               | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
+| `color`               | `StatusColor \| "interactive"` | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
 | `strikethrough`       | `boolean`               | `false`         | Strike the label through, e.g. a row switched off                                                                                                                                                                            |
 
 That table is the entire content surface. The remaining `ContentAction` /

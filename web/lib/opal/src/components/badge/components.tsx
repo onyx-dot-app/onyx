@@ -32,10 +32,11 @@ type BadgeProps = {
   color?: StatusColor;
 
   /**
-   * The label's colour. `"inherit"` is the text colour matched to `color`'s
-   * background. Default: `"inherit"`.
+   * Overrides the label's colour, as on `Content`: the icon keeps `color`'s,
+   * except on `"default"`, where it follows. Unset, the label is `color`'s
+   * text colour (`text-03` on the neutral badge).
    */
-  textColor?: TextColor;
+  titleColor?: Exclude<TextColor, "inherit">;
 
   /** Height on the Tailwind scale. Default: `4`. */
   size?: BadgeSize;
@@ -53,7 +54,7 @@ function Badge({
   icon,
   title,
   color = "default",
-  textColor = "inherit",
+  titleColor,
   size = 4,
   ...rest
 }: BadgeProps) {
@@ -72,13 +73,7 @@ function Badge({
         width="fit"
         // Content owns the status colours; a neutral badge mutes to text-03.
         color={color}
-        titleColor={
-          textColor !== "inherit"
-            ? textColor
-            : color === "default"
-              ? "text-03"
-              : undefined
-        }
+        titleColor={titleColor ?? (color === "default" ? "text-03" : undefined)}
         icon={icon}
         title={title}
       />

@@ -2,6 +2,7 @@ import "@opal/layouts/content-action/styles.css";
 import {
   Content,
   ContentDescription,
+  contentColorStyle,
   type ContentProps,
 } from "@opal/layouts/content/components";
 import { cn } from "@opal/utils";
@@ -126,7 +127,15 @@ function ContentAction({
         className="opal-content-action-responsive w-full min-w-0"
         data-fill={fillRight || undefined}
         data-content-color={contentProps.color ?? "default"}
-        style={paddingStyle}
+        // The same colour variables Content sets, so the description and the
+        // control inherit the content's colours.
+        style={{
+          ...paddingStyle,
+          ...contentColorStyle(
+            contentProps.color ?? "default",
+            contentProps.titleColor
+          ),
+        }}
       >
         <div className="opal-content-action-responsive-title">
           <Content {...(titleProps as ContentProps)} />

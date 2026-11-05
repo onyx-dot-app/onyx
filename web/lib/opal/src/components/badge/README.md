@@ -6,9 +6,9 @@ A small coloured label for status, category or metadata: an icon and a title in 
 
 For a removable, clickable or tag-field pill, use [`Tag`](../tag/README.md). For a hover tooltip, wrap the badge in `Tooltip`. `Badge` takes no DOM attributes, but its ref and the props a wrapping `Tooltip` or popover trigger injects still reach its root.
 
-`color` sets the tinted background and the icon. `textColor` sets the label: `"inherit"` (the default)
-is the text colour matched to the background, and any other `TextColor` (`"text-04"` for a status
-pill) is that colour.
+`color` sets the tinted background, and the label and icon colours (`Content`'s status colours, see
+the [Content README](../../layouts/content/README.md#colours)). `titleColor` overrides the label, as on
+`Content`: the icon keeps `color`'s, except on `default`, where it follows the label.
 
 ## Props
 
@@ -17,7 +17,7 @@ pill) is that colour.
 | `title`   | `string \| RichStr`                | **(required)** | Badge label text               |
 | `icon`    | `IconFunctionComponent`            | —              | Optional icon before the title |
 | `color`   | `StatusColor`                   | `"default"`    | Status color                   |
-| `textColor` | `TextColor`                      | `"inherit"`    | Label colour; `"inherit"` matches `color` |
+| `titleColor` | `Exclude<TextColor, "inherit">` | per `color` | Overrides the label colour, as on `Content` |
 | `size`    | `4 \| 6`                           | `4`            | Height on the Tailwind scale   |
 
 ### `color`
@@ -44,9 +44,9 @@ import { SvgAlertTriangle, SvgRefreshCw } from "@opal/icons";
 
 <Badge title="Beta" color="info" />
 
-<Badge icon={SvgRefreshCw} title="Indexing" color="info" textColor="text-04" size={6} />
+<Badge icon={SvgRefreshCw} title="Indexing" color="info" titleColor="text-04" size={6} />
 
 <Tooltip tooltip="3 warnings" side="top">
-  <Badge icon={SvgAlertTriangle} title="3" color="warning" textColor="text-04" />
+  <Badge icon={SvgAlertTriangle} title="3" color="warning" titleColor="text-04" />
 </Tooltip>
 ```
