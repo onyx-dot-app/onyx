@@ -8,7 +8,7 @@ sets every size, and `orientation` places the icon.
 ## Structure
 
 ```
-root            0.25rem gap inline; no gap stacked
+root            0.25rem gap inline; no gap stacked or with a secondary-* / figure-* title
 ├─ icon row     icon (+ moreIcon1, moreIcon2 when stacked)
 └─ text         no gap
    ├─ title row title, suffix, aux icon, badge, edit pencil
@@ -20,6 +20,9 @@ root            0.25rem gap inline; no gap stacked
 - **The title font drives everything.** An icon box is a square one title line tall (`1lh` of the
   title font), with 2px padding, so the glyph is the line height less 4px. A `secondary-*` title
   (16px line) has a 12px icon; a `heading-headline` title (36px line) has a 32px icon.
+- **The icon gap** is 0.25rem, except with a `secondary-*` or `figure-*` title, where the icon sits
+  flush against the text. `ContentIndent`, `ContentAction`'s responsive description and
+  `ReverseContent` follow the same rule.
 - **The description** is always `secondary-body` in `text-03`, so a `figure-*` title (smaller than
   `secondary`) takes none.
 - **`moreIcon1` / `moreIcon2`** sit in the stacked icon row, so they take a `heading-*` title font
@@ -81,7 +84,8 @@ For a control beside the content (a button, an input), use [`ContentAction`](../
 ## ContentIndent
 
 `<ContentIndent font={…}>` lines its children up under a `Content`'s title and description: it
-indents them by one icon box (the title font's line height) and the 0.25rem gap. Use it for a row
+indents them by one icon box (the title font's line height) and the icon gap (0.25rem, or none for
+`secondary-*` and `figure-*` titles). Use it for a row
 that continues a `Content` with an icon, such as a docs link or a detail line, instead of a
 hand-written inset that drifts when `Content` changes.
 

@@ -7,6 +7,7 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   ContentIcon,
   contentColorStyle,
+  hasIconGap,
   type ContentColor,
 } from "@opal/layouts/content/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -44,6 +45,7 @@ function ReverseContent({
     <div
       className="opal-reverse-content"
       data-content-color={color}
+      data-flush={!hasIconGap(font) || undefined}
       style={contentColorStyle(color, titleColor)}
     >
       <Text font={font} color="inherit" title={toPlainString(title)}>

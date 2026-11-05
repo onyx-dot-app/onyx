@@ -6,3 +6,9 @@
   @apply flex flex-row items-start w-fit;
   gap: 0.25rem;
 }
+
+/* `secondary-*` and `figure-*` titles put the icon flush against the text,
+   as in `Content`. */
+.opal-reverse-content[data-flush] {
+  gap: 0;
+}

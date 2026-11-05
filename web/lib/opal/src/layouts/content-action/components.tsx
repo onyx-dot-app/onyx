@@ -3,6 +3,7 @@ import {
   Content,
   ContentDescription,
   contentColorStyle,
+  hasIconGap,
   type ContentProps,
 } from "@opal/layouts/content/components";
 import { cn } from "@opal/utils";
@@ -152,6 +153,7 @@ function ContentAction({
               indent && `font-${font}`
             )}
             data-indent={indent || undefined}
+            data-flush={(indent && !hasIconGap(font)) || undefined}
           >
             <ContentDescription
               description={description}

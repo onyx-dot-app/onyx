@@ -72,9 +72,13 @@
   }
 
   /* With an icon, the description sits under the title: one icon box (`1lh`
-     of the title font) and the 0.25rem gap in. */
+     of the title font) and the 0.25rem gap in. Flush titles have no gap. */
   .opal-content-action-responsive-description[data-indent] {
     padding-inline-start: calc(1lh + 0.25rem);
+  }
+
+  .opal-content-action-responsive-description[data-indent][data-flush] {
+    padding-inline-start: 1lh;
   }
 
   /* Form-input rows: the control column grows to the input column max

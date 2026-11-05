@@ -245,6 +245,14 @@ function suffixFont(font: TextFont): TextFont {
 }
 
 /**
+ * Whether the icon sits 0.25rem from the text. `secondary-*` and `figure-*`
+ * titles put the icon flush against it.
+ */
+function hasIconGap(font: TextFont): boolean {
+  return !font.startsWith("secondary-") && !font.startsWith("figure-");
+}
+
+/**
  * The colour variables, set inline on the colour wrapper: the status colour,
  * and the `titleColor` override. The override rides an unregistered variable
  * that the colour modes read with the status colour as fallback, so the
@@ -413,6 +421,7 @@ function Content({
         className="opal-content"
         data-opal-content
         data-orientation={orientation}
+        data-flush={!hasIconGap(font) || undefined}
       >
         {hasIconRow && (
           <div className="opal-content-icon-row">
@@ -566,13 +575,16 @@ interface ContentIndentProps {
 
 /**
  * Lines its children up under a `Content`'s title and description: indented
- * by one icon box (the title's line height) and the 0.25rem gap. Use it for
+ * by one icon box (the title's line height) and the icon gap. Use it for
  * rows that continue a `Content` with an icon, such as a link or a detail line.
  */
 function ContentIndent({ font, children }: ContentIndentProps) {
+  const gap = hasIconGap(font) ? 4 : 0;
   return (
     <div
-      style={{ paddingInlineStart: `${(FONT_LINE_HEIGHT[font] + 4) / 16}rem` }}
+      style={{
+        paddingInlineStart: `${(FONT_LINE_HEIGHT[font] + gap) / 16}rem`,
+      }}
     >
       {children}
     </div>
@@ -591,6 +603,7 @@ export {
   ContentIcon,
   FONT_LINE_HEIGHT,
   contentColorStyle,
+  hasIconGap,
   type ContentColor,
   type ContentProps,
   type ContentOrientation,

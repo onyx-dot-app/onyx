@@ -124,7 +124,8 @@
 /* ===========================================================================
    Content — layout
 
-   Root (0.25rem gap inline, none stacked) > icon row, then the
+   Root (0.25rem gap inline, none stacked or for `secondary-*` and
+   `figure-*` titles) > icon row, then the
    text (no gap)
    > title row, then description. Every size derives from the title font:
    an icon box is `1lh` of it, with 2px padding, so the glyph is the line
@@ -140,6 +141,11 @@
 
 .opal-content[data-orientation="inline"] {
   @apply flex-row;
+}
+
+/* `secondary-*` and `figure-*` titles put the icon flush against the text. */
+.opal-content[data-flush] {
+  gap: 0;
 }
 
 /* Stacked, the icon row sits directly on the title, with no gap. */
