@@ -175,13 +175,18 @@ export class ChatPage {
     const citations = this.aiMessage().locator("p button");
     await expect(citations).toHaveCount(count);
     for (const citation of await citations.all()) {
-      const fits = await citation.evaluate((el) => {
-        const paragraph = el.closest("p");
-        if (!paragraph) return false;
-        const lineHeight = parseFloat(getComputedStyle(paragraph).lineHeight);
-        return el.getBoundingClientRect().height <= lineHeight;
-      });
-      expect(fits).toBe(true);
+      await expect
+        .poll(() =>
+          citation.evaluate((el) => {
+            const paragraph = el.closest("p");
+            if (!paragraph) return false;
+            const lineHeight = parseFloat(
+              getComputedStyle(paragraph).lineHeight
+            );
+            return el.getBoundingClientRect().height <= lineHeight;
+          })
+        )
+        .toBe(true);
     }
   }
 
