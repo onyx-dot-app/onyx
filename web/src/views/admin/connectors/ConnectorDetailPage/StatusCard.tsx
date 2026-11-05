@@ -13,7 +13,6 @@ import {
   Button,
   Card,
   Divider,
-  OverflowText,
   Popover,
   SelectButton,
   Text,
@@ -356,13 +355,15 @@ function TypeName({ slice }: TypeNameProps) {
         <div className={cn("h-3 w-1 rounded-[1px]", slice.colorClass)} />
       </Section>
       {/* An unmapped MIME subtype can run long (MS-EXCEL.SHEET.MACROENABLED.12), so it clips with a tooltip instead of covering the counts. */}
-      <OverflowText
+      <Text
+        maxLines={1}
+        overflowTooltip
         font="secondary-body"
         color="text-03"
         data-testid="document-type-name"
       >
         {label(slice)}
-      </OverflowText>
+      </Text>
     </Section>
   );
 }
