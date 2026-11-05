@@ -497,7 +497,16 @@ class JiraSourceOperations(SourceOperations):
                     params={"expand": "requestType"},
                     base=_SERVICEDESK_BASE_URL,
                 )
-        except (JiraApiError, JIRAError, requests.RequestException):
+        # JiraCloudIdError (tenant_info without a cloud id) and ValueError
+        # (tenant_info answer that is not JSON) come from the cloud-id lookup
+        # inside _api_url, which _translate_errors does not convert.
+        except (
+            JiraApiError,
+            JiraCloudIdError,
+            ValueError,
+            JIRAError,
+            requests.RequestException,
+        ):
             return None
 
     @source_operation(
@@ -516,7 +525,13 @@ class JiraSourceOperations(SourceOperations):
                 return self._client(fast=fast)._get_json(
                     f"request/{issue_key}/sla", base=_SERVICEDESK_BASE_URL
                 )
-        except (JiraApiError, JIRAError, requests.RequestException):
+        except (
+            JiraApiError,
+            JiraCloudIdError,
+            ValueError,
+            JIRAError,
+            requests.RequestException,
+        ):
             return None
 
 
