@@ -25,9 +25,10 @@
   insufficient-permissions error, not a silent fallback.
 - **An API caller** sends `POST /search` and gets the selected, expanded
   sections with no LLM answer. It is for programmatic callers such as the
-  onyx-cli and the Craft sandbox. With `retrieval_only`, it gets the top
-  sections in retrieval order with their neighboring chunks, and the search
-  makes no LLM call.
+  onyx-cli and the Craft sandbox. `POST /retrieve` returns the top sections
+  in retrieval order with up to `context_chunks` neighboring chunks, and makes
+  no LLM call. It is for callers that rank results themselves, such as the
+  MCP tool's `retrieval_only` mode.
 - **An EE user** on the Search page gets ranked documents and the LLM's picks.
   If selection fails, the page still shows the documents.
 - When no connector, federated connector or user file exists, or the vector DB
@@ -166,8 +167,8 @@ and expansion run whatever the flag's value. A change to this flag changes the
 LLM cost of every multi-search chat turn.
 
 **Other entry points.** `server/features/search/api.py` builds a `SearchTool`
-and calls `SearchTool.search` outside the chat runtime, with its own trace and
-tool span. `ee/onyx/search/process_search_query.py`
+for `/search` and `/retrieve` and calls `SearchTool.search` outside the chat
+runtime, with its own trace and tool span. `ee/onyx/search/process_search_query.py`
 calls `search_pipeline` directly, with its own expansion and section target,
 and is the only caller of `FORCED_DOCUMENT_SET_NAMES` scope
 (`context/search/forced_document_set.py`). `backend/onyx/server/query_and_chat/query_backend.py:admin_search`
@@ -285,11 +286,12 @@ calls the index directly for admin document inspection.
     `tools/tool_implementations/search/search_tool.py:SearchTool.search` skips
     query expansion, scope and time detection, and the Slack lane, and returns
     the top sections before the decision client or selection model resolves.
-    It adds context with `expand_section_with_context(expand_override=True)`,
-    which reads neighboring chunks from the index and classifies nothing.
-    The `/search` API skips the primary cost and model spend checks for it. A
-    new model call in `search` must check `retrieval_only`, or it adds cost that
-    callers chose to avoid.
+    It adds `retrieval_context_chunks` neighbors with
+    `tools/tool_implementations/search/search_utils.py:expand_section_with_neighbors`,
+    which reads them from the index and classifies nothing. `/retrieve` is its only API entry point and
+    runs no LLM cost, model spend or token budget check. A new model call in
+    `search` must check `retrieval_only`, or it adds cost that callers chose to
+    avoid.
 
 ---
 

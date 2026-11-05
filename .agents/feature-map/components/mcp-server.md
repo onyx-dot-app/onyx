@@ -73,6 +73,7 @@ MCP client --bearer--> /mcp  (nginx or ingress)  --> mcp_server process (port 80
     _resolve_filters -> /manage/indexed-sources, /manage/document-set, /persona
     POST /search  (same bearer)  -> require_permission(READ_SEARCH)
                                  -> SearchTool(user=caller, emitter=NullEmitter())
+    POST /retrieve  (retrieval_only, same bearer and permission)
 ```
 
 **No state of its own.** Nothing in `backend/onyx/mcp_server/` opens a
@@ -149,9 +150,9 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    is retrieval-only.**
    `tools/tool_implementations/search/search_tool.py:SearchTool.run` makes LLM
    calls, and `/search` runs the token, API-call and cloud cost checks
-   ([[rate-and-usage-limits]]). A `retrieval_only` search makes no LLM calls and
-   skips the LLM cost and model spend checks, but the token and API-call checks
-   still run ([[internal-search#retrieval-only-makes-no-model-calls]]).
+   ([[rate-and-usage-limits]]). A `retrieval_only` search calls `/retrieve`,
+   which makes no LLM calls and runs only the API-call check
+   ([[internal-search#retrieval-only-makes-no-model-calls]]).
    `MCP_SERVER_SEARCH_RETRIEVAL_ONLY` forces it for every search from this server.
    Keep a new LLM-calling tool behind the same checks.
 8. `oauth-callback-not-this-server` **`/mcp/oauth/callback` is a web page, not

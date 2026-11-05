@@ -1,4 +1,4 @@
-"""Integration tests for the Search API (POST /api/search)."""
+"""Integration tests for the Search API (POST /api/search and POST /api/retrieve)."""
 
 from __future__ import annotations
 
@@ -38,19 +38,23 @@ def _search(
     )
 
 
-@pytest.mark.parametrize("retrieval_only", [False, True])
+@pytest.mark.parametrize("route", ["/search", "/retrieve"])
 def test_basic_search_returns_results(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
-    retrieval_only: bool,
+    route: str,
 ) -> None:
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
-    # The flag in the text keeps each run's document unique in the shared index.
-    doc_content = f"search api integration test unique document {retrieval_only}"
+    # The route in the text keeps each run's document unique in the shared index.
+    doc_content = f"search api integration test unique document {route}"
     DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
 
-    resp = _search(doc_content, admin_user, retrieval_only=retrieval_only)
+    resp = client.post(
+        f"{API_SERVER_URL}{route}",
+        json={"query": doc_content},
+        headers=admin_user.headers,
+    )
     assert resp.status_code == 200
 
     # ``reset`` only wipes Postgres; OpenSearch is shared across tests, so docs

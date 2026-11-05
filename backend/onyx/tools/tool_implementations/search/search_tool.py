@@ -131,6 +131,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.search.constants import (
     DECISION_TIMEOUT_S,
+    FULL_DOC_NUM_CHUNKS_AROUND,
     KEYWORD_QUERY_HYBRID_ALPHA,
     LLM_KEYWORD_QUERY_WEIGHT,
     LLM_NON_CUSTOM_QUERY_WEIGHT,
@@ -151,6 +152,7 @@ from onyx.tools.tool_implementations.search.models import (
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
+    expand_section_with_neighbors,
     merge_overlapping_sections,
     weighted_reciprocal_rank_fusion,
 )
@@ -371,6 +373,8 @@ class SearchTool(Tool):
         # Make no LLM or decision-model calls and search the query as written.
         # Sections keep their retrieval order.
         retrieval_only: bool = False,
+        # Neighboring chunks a retrieval-only result gets on each side.
+        retrieval_context_chunks: int = FULL_DOC_NUM_CHUNKS_AROUND,
     ) -> None:
 
         self.user = user
@@ -388,6 +392,7 @@ class SearchTool(Tool):
         self.auto_detect_filters = auto_detect_filters and not retrieval_only
         self.include_link = include_link
         self.retrieval_only = retrieval_only
+        self.retrieval_context_chunks = retrieval_context_chunks
 
         self._id = tool_id
 
@@ -884,26 +889,23 @@ class SearchTool(Tool):
         )
 
     def _expand_sections_without_llm(
-        self, sections: list[InferenceSection], user_query: str
+        self, sections: list[InferenceSection]
     ) -> list[InferenceSection]:
-        """Give every section the widest neighbor window, read from the index.
-        With no relevance check to size the context, none gets less."""
-
-        def expand(section: InferenceSection) -> InferenceSection:
-            return (
-                expand_section_with_context(
-                    section=section,
-                    user_query=user_query,
-                    llm=self.llm,
-                    document_index=self.document_index,
-                    expand_override=True,
-                )
-                or section
-            )
-
+        """Give every section the caller's neighbor window, read from the index.
+        With no relevance check to size the context, all get the same one."""
         return merge_overlapping_sections(
             run_functions_tuples_in_parallel(
-                [(expand, (section,)) for section in sections]
+                [
+                    (
+                        expand_section_with_neighbors,
+                        (
+                            section,
+                            self.document_index,
+                            self.retrieval_context_chunks,
+                        ),
+                    )
+                    for section in sections
+                ]
             )
         )
 
@@ -1354,7 +1356,7 @@ class SearchTool(Tool):
             # a sandbox file, and only chat stages those files.
             return self._build_search_result(
                 sections_for_model=self._expand_sections_without_llm(
-                    top_sections[:MAX_SELECTED_SECTIONS], original_query
+                    top_sections[:MAX_SELECTED_SECTIONS]
                 ),
                 search_docs=convert_inference_sections_to_search_docs(
                     top_sections, is_internet=False

@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +18,7 @@ from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.search import api
-from onyx.server.features.search.models import SearchRequest
+from onyx.server.features.search.models import RetrieveRequest, SearchRequest
 from onyx.tools.constants import SEARCH_TOOL_ID
 
 
@@ -119,31 +120,22 @@ def test_public_search_defers_unused_primary_provider_check_to_tool() -> None:
         cost.assert_not_called()
 
 
-def test_public_search_retrieval_only_checks_no_llm_budget() -> None:
+def test_retrieve_runs_retrieval_only_with_the_callers_window() -> None:
     with (
         public_search_dependencies(MagicMock()) as constructor,
-        patch.object(
-            api,
-            "load_settings",
-            return_value=MagicMock(auto_detect_search_filters=True),
-        ),
         patch.object(api, "check_llm_cost_limit_for_provider") as cost,
     ):
-        api.search(
-            SearchRequest(query="runbook", retrieval_only=True),
+        api.retrieve(
+            RetrieveRequest(query="runbook", context_chunks=2),
             MagicMock(),
             MagicMock(),
         )
-        assert constructor.call_args.kwargs["retrieval_only"] is True
-        assert constructor.call_args.kwargs["primary_llm_cost_checked"] is False
+        kwargs = constructor.call_args.kwargs
+        assert kwargs["retrieval_only"] is True
+        assert kwargs["retrieval_context_chunks"] == 2
+        assert kwargs["primary_llm_cost_checked"] is False
         cost.assert_not_called()
-
-
-def test_public_search_rejects_a_model_with_retrieval_only() -> None:
-    with pytest.raises(ValueError, match="retrieval_only"):
-        SearchRequest(
-            query="runbook", retrieval_only=True, provider="custom", model="chosen"
-        )
+        cast(MagicMock, api.check_model_spend_limits).assert_not_called()
 
 
 @pytest.mark.parametrize("configured", [False, True])

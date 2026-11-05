@@ -63,6 +63,7 @@ def _make_tool(
     selection_llm_factory: MagicMock | None = None,
     primary_llm_cost_checked: bool = True,
     retrieval_only: bool = False,
+    retrieval_context_chunks: int = 0,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
@@ -78,6 +79,7 @@ def _make_tool(
         selection_llm_factory=selection_llm_factory,
         primary_llm_cost_checked=primary_llm_cost_checked,
         retrieval_only=retrieval_only,
+        retrieval_context_chunks=retrieval_context_chunks,
     )
 
 
@@ -265,16 +267,21 @@ def _next_chunk(
     ]
 
 
-def test_retrieval_only_expands_context_without_model_calls() -> None:
+@pytest.mark.parametrize("context_chunks", [0, 2])
+def test_retrieval_only_expands_context_without_model_calls(
+    context_chunks: int,
+) -> None:
     resolver = MagicMock()
     decide = MagicMock(return_value=None)
     tool = _make_tool(
         selection_llm_factory=resolver,
         primary_llm_cost_checked=False,
         retrieval_only=True,
+        retrieval_context_chunks=context_chunks,
     )
     tool.enable_slack_search = True
-    cast(MagicMock, tool.document_index).id_based_retrieval.side_effect = _next_chunk
+    index = cast(MagicMock, tool.document_index)
+    index.id_based_retrieval.side_effect = _next_chunk
     sections = [_section(f"doc-{i}") for i in range(MAX_SELECTED_SECTIONS + 1)]
     context = ToolContext()
     with (
@@ -301,9 +308,14 @@ def test_retrieval_only_expands_context_without_model_calls() -> None:
         section.combined_content
         for section in to_llm_string.call_args.kwargs["top_sections"]
     ] == [
-        f"content of doc-{i}\nnext chunk of doc-{i}"
+        f"content of doc-{i}" + (f"\nnext chunk of doc-{i}" if context_chunks else "")
         for i in range(MAX_SELECTED_SECTIONS)
     ]
+    # Each kept section reads only the chunks below it, up to the window.
+    assert [
+        call.kwargs["chunk_requests"][0].max_chunk_ind
+        for call in index.id_based_retrieval.call_args_list
+    ] == [context_chunks] * (MAX_SELECTED_SECTIONS if context_chunks else 0)
     # One completed search and no expansion or time decision to carry forward.
     assert len(context.search_context.search_cycles) == 1
     assert context.search_context.cached_expansion is None

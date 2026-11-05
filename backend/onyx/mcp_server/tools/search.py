@@ -26,6 +26,7 @@ from onyx.mcp_server.utils import (
     require_access_token,
 )
 from onyx.server.features.search.models import (
+    RetrieveRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -396,16 +397,26 @@ async def search_indexed_documents(
             )
             parsed_cutoff = None
 
-        request = SearchRequest(
-            query=query,
-            sources=filters.source_types,
-            document_sets=document_set_names,
-            time_cutoff=parsed_cutoff,
-            skip_query_expansion=skip_query_expansion,
-            retrieval_only=use_retrieval_only,
-            persona_id=filters.persona_id,
+        request: SearchRequest | RetrieveRequest = (
+            RetrieveRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                time_cutoff=parsed_cutoff,
+                persona_id=filters.persona_id,
+            )
+            if use_retrieval_only
+            else SearchRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                time_cutoff=parsed_cutoff,
+                skip_query_expansion=skip_query_expansion,
+                persona_id=filters.persona_id,
+            )
         )
-        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
+        route = "/retrieve" if use_retrieval_only else "/search"
+        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}{route}"
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
             return _error_payload(_extract_error_detail(response))

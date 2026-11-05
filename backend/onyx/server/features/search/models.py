@@ -5,9 +5,12 @@ from pydantic import BaseModel, Field, model_validator
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tools.tool_implementations.search.constants import (
+    FULL_DOC_NUM_CHUNKS_AROUND,
+)
 
 
-class SearchRequest(BaseModel):
+class BaseSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2048)
 
     sources: list[DocumentSource] | None = None
@@ -19,12 +22,12 @@ class SearchRequest(BaseModel):
 
     persona_id: int | None = None
 
+
+class SearchRequest(BaseSearchRequest):
     provider: str | None = None
     model: str | None = None
 
     skip_query_expansion: bool = False
-    # Make no LLM calls. Results keep their retrieval order.
-    retrieval_only: bool = False
 
     message_history: list[ChatMinimalTextMessage] | None = None
 
@@ -34,11 +37,14 @@ class SearchRequest(BaseModel):
             raise ValueError("provider is required when model is specified")
         if self.provider and not self.model:
             raise ValueError("model is required when provider is specified")
-        if self.retrieval_only and self.provider:
-            raise ValueError(
-                "retrieval_only makes no LLM calls, so omit provider and model"
-            )
         return self
+
+
+class RetrieveRequest(BaseSearchRequest):
+    # Neighboring chunks added on each side of every result.
+    context_chunks: int = Field(
+        default=FULL_DOC_NUM_CHUNKS_AROUND, ge=0, le=FULL_DOC_NUM_CHUNKS_AROUND
+    )
 
 
 class SearchResult(BaseModel):

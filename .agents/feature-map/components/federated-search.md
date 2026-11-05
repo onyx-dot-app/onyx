@@ -24,8 +24,8 @@
   The search then uses the tokens of the tenant's Slack bot, not the asker's own
   account.
 - **An API caller** of `POST /search` gets Slack results from their own
-  connected Slack account, ranked with the indexed results. A `retrieval_only`
-  call skips this Slack search. Indexed Slack documents can still match.
+  connected Slack account, ranked with the indexed results. `POST /retrieve`
+  skips this Slack search. Indexed Slack documents can still match.
 - **When it fails**, the user sees no error. With no token, an expired token, or
   a Slack API error, the search runs without Slack and the answer has no Slack
   sources. The user must reconnect Slack after the token expires.

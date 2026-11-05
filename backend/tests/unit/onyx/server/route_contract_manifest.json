@@ -673,6 +673,7 @@
   "POST /proxy/create-checkout-session": "get_optional_license_payload",
   "POST /proxy/create-customer-portal-session": "get_license_payload_allow_expired",
   "POST /proxy/seats/update": "get_license_payload",
+  "POST /retrieve": "read:search",
   "POST /scim/v2/Groups": "verify_scim_token",
   "POST /scim/v2/Users": "verify_scim_token",
   "POST /search": "current_chat_accessible_user, read:search",

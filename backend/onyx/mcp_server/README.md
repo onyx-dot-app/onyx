@@ -133,7 +133,7 @@ Pass `agent` with an agent name to run the search as that Onyx agent. The search
 
 `agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
 
-Pass `retrieval_only` to skip every LLM step (query expansion, filter detection, federated Slack search and document selection). The tool then returns up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. `MCP_SERVER_SEARCH_RETRIEVAL_ONLY=true` turns it on for every search.
+Pass `retrieval_only` to skip every LLM step (query expansion, filter detection, federated Slack search and document selection). The tool then calls `POST /retrieve` and returns up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. `MCP_SERVER_SEARCH_RETRIEVAL_ONLY=true` turns it on for every search.
 
 Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types` and `document_set_names` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
 
