@@ -1595,20 +1595,39 @@ def cc_pair_has_dispatched_index_attempts(db_session: Session, cc_pair_id: int) 
     )
 
 
+def _is_queued_attempt() -> ColumnElement[bool]:
+    """Handed to the docfetching queue and not started. An attempt held for
+    capability checks has no task yet, and a targeted reindex runs on its own
+    queue, so neither is in this line."""
+    return and_(
+        IndexAttempt.status == IndexingStatus.NOT_STARTED,
+        IndexAttempt.celery_task_id.isnot(None),
+        IndexAttempt.targeted_reindex_job_id.is_(None),
+    )
+
+
 def get_queued_index_attempts(db_session: Session) -> Sequence[IndexAttempt]:
-    """Every index attempt handed to the docfetching queue and not started,
-    oldest first, whatever its search settings and backfills included. An
-    attempt held for capability checks has no task yet, and a targeted
-    reindex runs on its own queue, so neither is in this line."""
+    """Every queued index attempt, oldest first, whatever its search settings
+    and backfills included."""
     return db_session.scalars(
         select(IndexAttempt)
-        .where(
-            IndexAttempt.status == IndexingStatus.NOT_STARTED,
-            IndexAttempt.celery_task_id.isnot(None),
-            IndexAttempt.targeted_reindex_job_id.is_(None),
-        )
+        .where(_is_queued_attempt())
         .order_by(IndexAttempt.time_created, IndexAttempt.id)
     ).all()
+
+
+def has_queued_index_attempt(db_session: Session, cc_pair_id: int) -> bool:
+    """Whether the pair has an attempt in the queue, a backfill included."""
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                    _is_queued_attempt(),
+                )
+            )
+        )
+    )
 
 
 def get_queue_positions(db_session: Session) -> dict[int, int]:

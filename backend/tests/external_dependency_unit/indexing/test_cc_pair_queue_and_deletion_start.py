@@ -105,12 +105,16 @@ def _create_cc_pair(
 
 
 def _queue_attempt(
-    db_session: Session, cc_pair: ConnectorCredentialPair, created: datetime
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    created: datetime,
+    is_backfill: bool = False,
 ) -> None:
     attempt = IndexAttempt(
         connector_credential_pair_id=cc_pair.id,
         search_settings_id=get_current_search_settings(db_session).id,
         from_beginning=False,
+        is_backfill=is_backfill,
         status=IndexingStatus.NOT_STARTED,
         # A queued attempt joins the line only once its task is sent.
         celery_task_id=f"task-{uuid4().hex}",
@@ -233,3 +237,25 @@ def test_pair_that_is_not_queued_skips_the_queue_scan(
     info = get_cc_pair_full_info(cc_pair.id, user=admin, db_session=db_session)
 
     assert info.queue_position is None
+
+
+def test_queued_backfill_after_a_finished_run_reports_its_place(
+    db_session: Session, created: _Created
+) -> None:
+    """The latest normal run finished, and a backfill waits in the queue the
+    card reads as Scheduled."""
+    cc_pair = _create_cc_pair(db_session, created, f"Backfill {uuid4().hex[:8]}")
+    finished = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=get_current_search_settings(db_session).id,
+        from_beginning=False,
+        status=IndexingStatus.SUCCESS,
+    )
+    db_session.add(finished)
+    db_session.commit()
+    _queue_attempt(db_session, cc_pair, datetime.now(timezone.utc), is_backfill=True)
+    admin: User = _create_admin(db_session, created)
+
+    info = get_cc_pair_full_info(cc_pair.id, user=admin, db_session=db_session)
+
+    assert info.queue_position is not None
