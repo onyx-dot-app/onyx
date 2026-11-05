@@ -99,7 +99,7 @@ The notices and reminders change between steps, so they stay after the stable
 prefix. The stable part gets cache markers from prompt assembly only when
 `PROMPT_CACHE_CHAT_HISTORY=true` (`chat/prompt_formatting.py:prepare_model_messages`);
 by default provider-side prefix caching uses it. Separately, the LLM adapter marks
-every tool result with an explicit breakpoint on supported OpenAI API requests
+every tool result with an explicit breakpoint on supported OpenAI and Azure API requests
 when `ENABLE_PROMPT_CACHING=true`, even with chat-history caching off
 (`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`). Requests with no
 tool results keep implicit caching. `prepare_prompt` copies

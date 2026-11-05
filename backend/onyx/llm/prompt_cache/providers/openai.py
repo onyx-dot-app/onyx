@@ -1,6 +1,6 @@
 """OpenAI provider adapter for prompt caching.
 
-OpenAI caches prompt prefixes implicitly. Requests on the OpenAI API to models
+OpenAI caches prompt prefixes implicitly. Requests on OpenAI or Azure APIs to models
 that LiteLLM's `supports_openai_prompt_cache_breakpoint` accepts also carry
 explicit prompt_cache_breakpoints on every tool result
 (`explicit_cache_breakpoints`, applied in `multi_llm.py`).
@@ -8,15 +8,12 @@ explicit prompt_cache_breakpoints on every tool result
 
 from collections.abc import Iterable, Sequence
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from pydantic import JsonValue
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
-from onyx.llm.model_request import (
-    ChatCompletionMessage,
-    ResponsesInputText,
-    ToolMessage,
-)
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
@@ -26,15 +23,23 @@ EXPLICIT_CACHE_MODE: dict[str, JsonValue] = {"mode": "explicit"}
 
 
 def uses_explicit_cache_breakpoints(
-    model_names: Iterable[str], api_base: str | None
+    model_names: Iterable[str], api_base: str | None, *, azure: bool = False
 ) -> bool:
-    """Whether requests for this model carry explicit breakpoints: prompt caching
-    is on, the model supports them, and the request goes to the OpenAI API."""
-    if not ENABLE_PROMPT_CACHING:
+    """Check model and endpoint support while holding the environment lock."""
+    if not ENABLE_PROMPT_CACHING or not _supports_breakpoint(tuple(model_names)):
         return False
+    import litellm
     from litellm.integrations.anthropic_cache_control_hook import targets_openai_api
+    from litellm.secret_managers.main import get_secret_str
 
-    return _supports_breakpoint(tuple(model_names)) and targets_openai_api(api_base)
+    if not azure:
+        return targets_openai_api(api_base)
+    # Azure resolves a different environment variable from the OpenAI handler.
+    endpoint = api_base or litellm.api_base or get_secret_str("AZURE_API_BASE")
+    host = urlparse(endpoint).hostname if isinstance(endpoint, str) else None
+    return host is not None and host.endswith(
+        (".openai.azure.com", ".cognitiveservices.azure.com", ".services.ai.azure.com")
+    )
 
 
 @lru_cache(maxsize=256)
@@ -47,8 +52,8 @@ def _supports_breakpoint(model_names: tuple[str, ...]) -> bool:
 
 
 def explicit_cache_breakpoints(
-    messages: Sequence[ChatCompletionMessage],
-) -> tuple[list[ChatCompletionMessage], dict[str, JsonValue] | None]:
+    messages: Sequence[dict[str, JsonValue]],
+) -> tuple[list[dict[str, JsonValue]], dict[str, JsonValue] | None]:
     """The messages with every tool result marked with an explicit breakpoint,
     and the request's prompt_cache_options; None before the first tool result,
     so that request keeps implicit caching.
@@ -64,22 +69,19 @@ def explicit_cache_breakpoints(
     result = list(messages)
     marked = False
     for index, message in enumerate(result):
-        if not isinstance(message, ToolMessage):
+        content = message.get("content")
+        if message.get("role") != "tool" or not isinstance(content, str):
             continue
-        text = (
-            message.content
-            if isinstance(message.content, str)
-            else "".join(part.text for part in message.content)
-        )
-        result[index] = message.model_copy(
-            update={
-                "content": [
-                    ResponsesInputText(
-                        text=text, prompt_cache_breakpoint=EXPLICIT_CACHE_MODE
-                    )
-                ]
-            }
-        )
+        result[index] = {
+            **message,
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": content,
+                    "prompt_cache_breakpoint": dict(EXPLICIT_CACHE_MODE),
+                }
+            ],
+        }
         marked = True
     return result, dict(EXPLICIT_CACHE_MODE) if marked else None
 

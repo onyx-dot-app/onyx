@@ -1,22 +1,29 @@
-"""Requests to GPT-5.6+ models on the OpenAI API mark every tool result with an
+"""Requests to GPT-5.6+ models on OpenAI and Azure APIs mark every tool result with an
 explicit prompt_cache_breakpoint and send prompt_cache_options."""
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from threading import Event
 from typing import Any
 from unittest.mock import patch
 
 import httpx
+import litellm
 import pytest
 from litellm import ModelResponse as LiteLLMModelResponse
-from litellm.exceptions import BadRequestError
 from pydantic import JsonValue
 
+from onyx.llm import multi_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationOptions,
     GenerationRequest,
     Message,
+    ReasoningEffort,
+    TextDeltaEvent,
     ToolCall,
     ToolResultMessage,
     UserMessage,
@@ -80,25 +87,6 @@ def _tool_contents(sent: Mapping[str, Any]) -> list[Any]:
     return [m["content"] for m in sent["messages"] if m["role"] == "tool"]
 
 
-def test_marks_every_tool_result() -> None:
-    sent = _sent("openai", "gpt-5.6-luna", _turn())
-    assert _tool_contents(sent) == [
-        [
-            {
-                "type": "input_text",
-                "text": text,
-                "prompt_cache_breakpoint": {"mode": "explicit"},
-            }
-        ]
-        for text in _RESULTS
-    ]
-    assert sent["prompt_cache_options"] == {"mode": "explicit"}
-    # The moving reminder itself stays plain text.
-    assert sent["messages"][-1]["content"] == (
-        "<system-reminder>Cite sources.</system-reminder>"
-    )
-
-
 @pytest.mark.parametrize(
     ("provider", "model", "api_base"),
     [
@@ -107,6 +95,8 @@ def test_marks_every_tool_result() -> None:
         ("anthropic", "claude-sonnet-5", None),
         # An OpenAI-compatible server may reject the extra keys.
         ("openai", "gpt-5.6-luna", "https://proxy.example.com/v1"),
+        ("azure", "gpt-5.6-luna", "https://proxy.example.com/v1"),
+        ("azure", "gpt-5.5", "https://test.openai.azure.com"),
     ],
 )
 def test_other_requests_keep_plain_tool_results(
@@ -145,30 +135,55 @@ def test_proxy_overrides_keep_plain_tool_results(source: str) -> None:
 
 
 def test_cache_options_merge_without_mutating_configuration() -> None:
-    configured: dict[str, JsonValue] = {"prompt_cache_options": {"ttl": "1h"}}
-    sent = _sent("openai", "gpt-5.6-luna", _turn(), model_kwargs=configured)
-    assert sent["prompt_cache_options"] == {"mode": "explicit", "ttl": "1h"}
-    sent["prompt_cache_options"]["mode"] = "changed"
-    assert configured == {"prompt_cache_options": {"ttl": "1h"}}
-    again = _sent("openai", "gpt-5.6-luna", _turn())
-    assert again["prompt_cache_options"] == {"mode": "explicit"}
+    configured: dict[str, JsonValue] = {"prompt_cache_options": {"ttl": "30m"}}
+    client = get_llm(
+        provider="openai",
+        model="gpt-5.6-luna",
+        deployment_name=None,
+        max_input_tokens=100_000,
+        model_kwargs=configured,
+    )
+    request = GenerationRequest(messages=_turn())
+    original = request.model_dump()
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        patch("litellm.completion", return_value=_RESPONSE) as completion,
+    ):
+        client.invoke(request)
+        sent = completion.call_args.kwargs
+        assert sent["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+        sent["prompt_cache_options"]["mode"] = "changed"
+        _tool_contents(sent)[0][0]["prompt_cache_breakpoint"]["mode"] = "changed"
+        client.invoke(request)
+        again = completion.call_args.kwargs
+        assert again["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+        assert _tool_contents(again)[0][0]["prompt_cache_breakpoint"] == {
+            "mode": "explicit"
+        }
+        client.invoke(GenerationRequest(messages=[UserMessage(content="Hello")]))
+        assert completion.call_args.kwargs["prompt_cache_options"] == {"ttl": "30m"}
+    assert configured == {"prompt_cache_options": {"ttl": "30m"}}
+    assert request.model_dump() == original
 
 
-@pytest.mark.parametrize(
-    "rejected", ["prompt_cache_options", "prompt_cache_breakpoint"]
-)
-def test_rejected_cache_options_retry_with_plain_results(rejected: str) -> None:
-    attempts: list[dict[str, Any]] = []
+def test_endpoint_gate_waits_for_other_requests_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://proxy.example.com/v1")
+    monkeypatch.setattr(litellm, "api_base", None)
+    monkeypatch.setattr(multi_llm, "_env_injection_enabled", lambda: True)
+    waiting = Event()
+    lock = multi_llm.temporary_env_and_lock
 
-    def complete(**kwargs: Any) -> LiteLLMModelResponse:
-        attempts.append(kwargs)
-        if "prompt_cache_options" in kwargs:
-            raise BadRequestError(
-                message=f"Unsupported {rejected}",
-                model="gpt-5.6-luna",
-                llm_provider="openai",
-            )
-        return _RESPONSE
+    @contextmanager
+    def observed_lock(
+        env: dict[str, str],
+        *,
+        deadline: float | None = None,
+    ) -> Iterator[None]:
+        waiting.set()
+        with lock(env, deadline=deadline):
+            yield
 
     client = get_llm(
         provider="openai",
@@ -176,63 +191,132 @@ def test_rejected_cache_options_retry_with_plain_results(rejected: str) -> None:
         deployment_name=None,
         max_input_tokens=100_000,
     )
-    with (
-        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
-        patch("litellm.completion", side_effect=complete),
-    ):
-        client.invoke(GenerationRequest(messages=_turn()))
-    assert "prompt_cache_options" in attempts[0]
-    assert "prompt_cache_options" not in attempts[-1]
-    assert _tool_contents(attempts[-1]) == _RESULTS
+    monkeypatch.setattr(multi_llm, "temporary_env_and_lock", observed_lock)
+    with patch("litellm.completion", return_value=_RESPONSE) as completion:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with lock({"OPENAI_BASE_URL": "https://api.openai.com/v1"}):
+                future = pool.submit(client.invoke, GenerationRequest(messages=_turn()))
+                assert waiting.wait(10)
+            future.result(timeout=10)
+    sent = completion.call_args.kwargs
+    assert "prompt_cache_options" not in sent
+    assert _tool_contents(sent) == _RESULTS
 
 
+@pytest.mark.parametrize("provider", ["openai", "azure"])
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    "rejected", [None, "prompt_cache_options", "prompt_cache_breakpoint"]
+)
 def test_real_bridge_preserves_breakpoints_in_responses_body(
     monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    stream: bool,
+    rejected: str | None,
 ) -> None:
     bodies: list[dict[str, Any]] = []
 
     def send(
         _client: httpx.Client, request: httpx.Request, **_kwargs: Any
     ) -> httpx.Response:
-        assert request.url.host == "api.openai.com"
-        assert request.url.path == "/v1/responses"
-        bodies.append(json.loads(request.content))
-        return httpx.Response(
-            200,
-            request=request,
-            json={
-                "id": "resp_test",
-                "object": "response",
-                "created_at": 1,
-                "model": "gpt-5.6-luna",
-                "status": "completed",
-                "output": [
-                    {
-                        "id": "msg_test",
-                        "type": "message",
-                        "role": "assistant",
-                        "status": "completed",
-                        "content": [
-                            {"type": "output_text", "text": "done", "annotations": []}
-                        ],
-                    }
-                ],
-                "usage": {"input_tokens": 10, "output_tokens": 1, "total_tokens": 11},
-            },
+        assert request.url.host == (
+            "api.openai.com" if provider == "openai" else "test.openai.azure.com"
         )
+        assert request.url.path.endswith("/responses")
+        body = json.loads(request.content)
+        bodies.append(body)
+        if rejected and "prompt_cache_options" in body:
+            return httpx.Response(
+                400,
+                request=request,
+                json={
+                    "error": {
+                        "message": f"Unsupported {rejected}",
+                        "type": "invalid_request_error",
+                        "param": rejected,
+                        "code": "unsupported_parameter",
+                    }
+                },
+            )
+        response = {
+            "id": "resp_test",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.6-luna",
+            "status": "completed",
+            "output": [
+                {
+                    "id": "msg_test",
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []}
+                    ],
+                }
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 1, "total_tokens": 11},
+        }
+        if stream:
+            events = [
+                {
+                    "type": "response.output_text.delta",
+                    "item_id": "msg_test",
+                    "output_index": 0,
+                    "content_index": 0,
+                    "delta": "done",
+                },
+                {"type": "response.completed", "response": response},
+            ]
+            return httpx.Response(
+                200,
+                request=request,
+                headers={"content-type": "text/event-stream"},
+                content="".join(
+                    f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
+                    for event in events
+                ),
+            )
+        return httpx.Response(200, request=request, json=response)
 
     monkeypatch.setattr(httpx.Client, "send", send)
     client = get_llm(
-        provider="openai",
+        provider=provider,
         model="gpt-5.6-luna",
-        deployment_name=None,
+        deployment_name="my-deployment" if provider == "azure" else None,
+        api_base="https://test.openai.azure.com" if provider == "azure" else None,
         api_key="test-key",
         max_input_tokens=100_000,
     )
     with patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False):
-        result = client.invoke(GenerationRequest(messages=_turn()))
-    assert result.text == "done"
-    assert len(bodies) == 1
+        request = GenerationRequest(
+            messages=_turn(),
+            options=GenerationOptions(reasoning_effort=ReasoningEffort.HIGH),
+        )
+        if stream:
+            assert (
+                "".join(
+                    event.text
+                    for event in client.stream(request)
+                    if isinstance(event, TextDeltaEvent)
+                )
+                == "done"
+            )
+        else:
+            assert client.invoke(request).text == "done"
+    if rejected:
+        assert len(bodies) == 2
+        assert bodies[-1]["reasoning"] == bodies[0]["reasoning"]
+        assert bodies[-1]["reasoning"]["effort"] == "high"
+        assert bodies[-1].get("temperature") == bodies[0].get("temperature")
+        assert "prompt_cache_options" not in bodies[-1]
+        assert [
+            item["output"]
+            for item in bodies[-1]["input"]
+            if item["type"] == "function_call_output"
+        ] == [[{"type": "input_text", "text": text}] for text in _RESULTS]
+    else:
+        assert len(bodies) == 1
     assert bodies[0]["prompt_cache_options"] == {"mode": "explicit"}
     outputs = [
         item["output"]
@@ -249,3 +333,47 @@ def test_real_bridge_preserves_breakpoints_in_responses_body(
         ]
         for text in _RESULTS
     ]
+
+    assert bodies[0]["input"][-1]["content"] == [
+        {
+            "type": "input_text",
+            "text": "<system-reminder>Cite sources.</system-reminder>",
+        }
+    ]
+
+
+@pytest.mark.parametrize("source", ["environment", "custom_config"])
+def test_azure_endpoint_sources(
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    endpoint = "https://test.openai.azure.com"
+    monkeypatch.setattr(litellm, "api_base", None)
+    if source == "environment":
+        monkeypatch.setenv("AZURE_API_BASE", endpoint)
+    sent = _sent(
+        "azure",
+        "gpt-5.6-luna",
+        _turn(),
+        custom_config={"AZURE_API_BASE": endpoint}
+        if source == "custom_config"
+        else None,
+    )
+    assert sent["prompt_cache_options"] == {"mode": "explicit"}
+
+
+def test_invalid_cache_configuration_fails_before_dispatch() -> None:
+    client = get_llm(
+        provider="openai",
+        model="gpt-5.6-luna",
+        deployment_name=None,
+        max_input_tokens=100_000,
+        model_kwargs={"prompt_cache_options": "explicit"},
+    )
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        patch("litellm.completion") as completion,
+        pytest.raises(ValueError, match="prompt_cache_options must be a JSON object"),
+    ):
+        client.invoke(GenerationRequest(messages=_turn()))
+    completion.assert_not_called()
