@@ -363,7 +363,7 @@ Keep our procedure and the public recommendations separate, with links for each.
 
 ### search_indexed_documents
 
-Search the knowledge indexed in Onyx. The search includes query expansion, retrieval, document selection,
+Search the knowledge indexed in Onyx. By default the search includes query expansion, retrieval, document selection,
 and context expansion.
 
 | Parameter | Type | Required | Description |
@@ -374,6 +374,7 @@ and context expansion.
 | `time_cutoff` | string | No | ISO 8601 timestamp. Keeps documents updated on or after this time. Include a timezone. |
 | `skip_query_expansion` | boolean | No | Defaults to `false`. Set `true` to bypass query expansion. |
 | `agent` | string | No | Name of an accessible Onyx agent whose knowledge scope and model the search should use. |
+| `retrieval_only` | boolean | No | Defaults to `false`. Set `true` to make no LLM calls. Results are up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. The search runs no query expansion, filter detection, federated Slack search or document selection. An administrator can turn it on for every search with [`MCP_SERVER_SEARCH_RETRIEVAL_ONLY`](/deployment/configuration/mcp_server#service-settings). |
 
 ```json
 {

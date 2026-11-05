@@ -681,6 +681,7 @@
   "POST /search-settings/reindex/port/resume": "admin",
   "POST /search-settings/set-new-search-settings": "admin",
   "POST /search-settings/update-inference-settings": "admin",
+  "POST /search/raw": "read:search",
   "POST /search/search-flow-classification": "read:search",
   "POST /search/send-search-message": "read:search",
   "POST /skills/bulk": "basic",

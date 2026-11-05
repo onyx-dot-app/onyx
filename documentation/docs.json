@@ -451,6 +451,7 @@
                 "icon": "magnifying-glass",
                 "pages": [
                   "developers/api_reference/search/search",
+                  "developers/api_reference/search/raw_search",
                   "developers/api_reference/search/handle_send_search_message",
                   "developers/api_reference/search/get_search_history",
                   "developers/api_reference/search/search_flow_classification",
