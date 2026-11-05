@@ -1,6 +1,7 @@
 """Unit tests for Jira Service Management connector."""
 
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.utils import get_comment_strs
@@ -148,23 +149,95 @@ def test_jsm_comment_filtering_properties_as_list() -> None:
     assert len(internal_comments) == 0
 
 
-def test_jsm_everything_scope_jql() -> None:
-    """Test that 'Everything' scope uses projectType filter, not issue type."""
+@patch("onyx.connectors.jira_service_management.connector.is_cloud_gateway")
+def test_jsm_everything_scope_jql_cloud(mock_is_cloud: MagicMock) -> None:
+    """Test that 'Everything' scope uses projectType filter on Cloud."""
+    mock_is_cloud.return_value = True
+    
     # Connector with no project_key and no jql_query (Everything scope)
     connector = JiraServiceManagementConnector(
         jira_base_url="https://test.atlassian.net",
     )
+    
+    # Mock source_operations
+    connector._source_operations = MagicMock()
     
     # Get the JQL query for an arbitrary time range
     start = 1609459200  # 2021-01-01 00:00:00 UTC
     end = 1640995200    # 2022-01-01 00:00:00 UTC
     jql = connector._get_jql_query(start, end)
     
-    # Verify that projectType filter is used, not issue type filter
+    # Verify that projectType filter is used on Cloud
     assert "projectType = service_desk" in jql, \
-        "Everything scope should filter by projectType, not issue type"
+        "Cloud Everything scope should filter by projectType"
     assert "type = service_desk" not in jql, \
         "Should not use issue type filter (would fail)"
+    assert "project IN" not in jql, \
+        "Should not use project IN on Cloud"
+    
+    # Verify time range is still included
+    assert "updated >=" in jql
+    assert "updated <=" in jql
+
+
+@patch("onyx.connectors.jira_service_management.connector.is_cloud_gateway")
+def test_jsm_everything_scope_jql_dc_with_projects(mock_is_cloud: MagicMock) -> None:
+    """Test that 'Everything' scope enumerates projects on Data Center."""
+    mock_is_cloud.return_value = False
+    
+    # Connector with no project_key and no jql_query (Everything scope)
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.example.com",
+    )
+    
+    # Mock source_operations with JSM projects
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [
+        {"key": "SUPPORT", "projectTypeKey": "service_desk"},
+        {"key": "ITHELP", "projectTypeKey": "service_desk"},
+        {"key": "PROJ", "projectTypeKey": "software"},
+    ]
+    connector._source_operations = mock_ops
+    
+    start = 1609459200
+    end = 1640995200
+    jql = connector._get_jql_query(start, end)
+    
+    # Verify that project IN filter is used on DC
+    assert "project IN (SUPPORT, ITHELP)" in jql, \
+        "DC Everything scope should enumerate JSM projects"
+    assert "projectType" not in jql, \
+        "Should not use projectType on DC (field unavailable)"
+    
+    # Verify time range is still included
+    assert "updated >=" in jql
+    assert "updated <=" in jql
+
+
+@patch("onyx.connectors.jira_service_management.connector.is_cloud_gateway")
+def test_jsm_everything_scope_jql_dc_no_projects(mock_is_cloud: MagicMock) -> None:
+    """Test that 'Everything' scope handles no JSM projects on Data Center."""
+    mock_is_cloud.return_value = False
+    
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.example.com",
+    )
+    
+    # Mock source_operations with no JSM projects
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [
+        {"key": "PROJ", "projectTypeKey": "software"},
+        {"key": "BUS", "projectTypeKey": "business"},
+    ]
+    connector._source_operations = mock_ops
+    
+    start = 1609459200
+    end = 1640995200
+    jql = connector._get_jql_query(start, end)
+    
+    # Verify that a no-match query is used when no JSM projects exist
+    assert "project = __NO_JSM_PROJECTS__" in jql, \
+        "Should use no-match query when no JSM projects found"
     
     # Verify time range is still included
     assert "updated >=" in jql

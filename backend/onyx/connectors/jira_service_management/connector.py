@@ -12,6 +12,10 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import JiraConnector, build_jql_query
+from onyx.connectors.jira.source_operations import is_cloud_gateway
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -62,6 +66,24 @@ class JiraServiceManagementConnector(JiraConnector):
         """Returns JIRA_SERVICE_MANAGEMENT to categorize JSM documents separately."""
         return DocumentSource.JIRA_SERVICE_MANAGEMENT
 
+    def _get_service_desk_project_keys(self) -> list[str]:
+        """Enumerate JSM project keys for Data Center deployments.
+        
+        Returns:
+            List of project keys that are service desk projects.
+        """
+        try:
+            projects = self.source_operations.list_projects()
+            jsm_keys = [
+                project["key"]
+                for project in projects
+                if project.get("projectTypeKey") == "service_desk"
+            ]
+            return jsm_keys
+        except Exception as e:
+            logger.warning(f"Failed to enumerate JSM projects: {e}")
+            return []
+
     @override
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch | None
@@ -71,6 +93,9 @@ class JiraServiceManagementConnector(JiraConnector):
         When neither a custom JQL query nor a project key is specified (the
         "Everything" scope), this ensures only service desk projects are indexed,
         preventing regular Jira projects from being included via the JSM connector.
+        
+        On Atlassian Cloud, uses the projectType JQL field.
+        On Data Center/Server, enumerates JSM projects and builds a project IN (...) clause.
         
         Args:
             start: Start time for the query window
@@ -83,8 +108,25 @@ class JiraServiceManagementConnector(JiraConnector):
         # If a project key is provided, use it (user specified exact project)
         # Otherwise, restrict to service desk projects only
         if not self.jql_query and not self.jira_project:
-            # Add projectType filter for "Everything" scope to only include service desks
-            jql_query = "projectType = service_desk"
+            # Everything scope: filter to only service desk projects
+            if is_cloud_gateway(self.source_operations):
+                # Cloud: use projectType JQL field
+                jql_query = "projectType = service_desk"
+            else:
+                # Data Center: enumerate JSM project keys and build project IN clause
+                jsm_keys = self._get_service_desk_project_keys()
+                if jsm_keys:
+                    # Build project IN (KEY1, KEY2, ...) clause
+                    keys_str = ", ".join(jsm_keys)
+                    jql_query = f"project IN ({keys_str})"
+                else:
+                    # No JSM projects found - use a query that matches nothing
+                    # This prevents indexing all projects when none are service desks
+                    jql_query = "project = __NO_JSM_PROJECTS__"
+                    logger.warning(
+                        "No JSM projects found on Data Center instance. "
+                        "JSM connector will not index any issues."
+                    )
         else:
             jql_query = self.jql_query
 
