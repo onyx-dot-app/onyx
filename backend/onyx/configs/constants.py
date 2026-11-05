@@ -358,6 +358,15 @@ class FederatedConnectorSource(str, Enum):
         return None
 
 
+# Sources whose documents must never reach ordinary search, whatever is
+# registered at runtime. A lane of their own retrieves them and clears every
+# chunk with the provider that owns the answer; with no such lane they are
+# simply withheld. Static on purpose: the event-source loader swallows a
+# failed import so one broken source cannot stop the server, and a registry
+# emptied that way must not un-withhold documents an earlier run indexed.
+WITHHELD_FROM_DEFAULT_SEARCH: frozenset[DocumentSource] = frozenset()
+
+
 class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"

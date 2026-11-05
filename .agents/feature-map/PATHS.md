@@ -71,6 +71,7 @@ covers new files that match it.
 |---|---|
 | `backend/onyx/context/` | internal-search |
 | `backend/onyx/context/search/federated/` | federated-search |
+| `backend/onyx/context/search/enrichment/` | withheld-sources |
 | `backend/onyx/context/search/preprocessing/access_filters.py` | access-control |
 | `backend/onyx/secondary_llm_flows/`, `backend/ee/onyx/secondary_llm_flows/`, `backend/ee/onyx/db/search.py` | internal-search |
 | `backend/onyx/server/features/search/`, `backend/onyx/server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/`, `backend/ee/onyx/search/` | internal-search |

@@ -62,13 +62,15 @@ Its neighbours own:
 ```
 SearchTool._run -> SearchTool.search
   one DB session: ACL filters, document-set check, search settings,
-  federated registry, Slack token prefetch            no DB use after this
+  federated registry, Slack token prefetch,
+  withheld-source contexts                            no DB use after this
   -> _expand_queries_and_decide_scope (parallel)
        semantic_query_rephrase, keyword_query_expansion   query_expansion.py
        decide_search_scope                                source_filter.py
        decide_time_filter                                 time_filter.py
   -> lanes in parallel, one per deduplicated query:
        _run_search_for_query -> search_pipeline -> search_chunks
+         search_chunks fans out again, below the weights  [[withheld-sources]]
        + at most one _run_slack_search lane              [[federated-search]]
   -> weighted_reciprocal_rank_fusion -> merge_individual_chunks (num_hits cap)
   -> _resolve_decision_client
@@ -100,10 +102,11 @@ keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.
 
 **Filters live in the index query.** For index lanes, source, document set,
 time, ACL, cc-pair access and project or agent scope compile into one
-`IndexFilters` in `context/search/pipeline.py:_build_index_filters`. Nothing
-filters results afterwards except EE censoring
-(`backend/onyx/access/access.py:censor_chunks_for_user`). The
-Slack lane gets none of these filters.
+`IndexFilters` in `context/search/pipeline.py:_build_index_filters`. Two things
+filter results afterwards: EE censoring
+(`backend/onyx/access/access.py:censor_chunks_for_user`), and a withheld
+source's lane, which asks its provider about every chunk it retrieved
+([[withheld-sources]]). The Slack lane gets none of these filters.
 
 **No cross-encoder.** The selection step replaces one. One LLM call, or one
 decision request, sees all candidate sections together, so it can compare
