@@ -78,6 +78,4 @@ def jira_planning_rule(
         )
     return None
 
-from onyx.connectors.jira_service_management.config import (
-    JiraServiceManagementConnectorConfig,
-)
+
