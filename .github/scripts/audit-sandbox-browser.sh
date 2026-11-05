@@ -14,14 +14,20 @@ container="$(docker create "$image")"
 docker cp "$container:/opt/chrome/browser.cdx.json" "$inventory/browser.cdx.json"
 # New Chrome advisories can precede the vulnerability database's CPE ranges.
 # Require the current stable release as well as a clean vulnerability scan.
-installed="$(jq -er '
+if ! installed="$(jq -er '
   .components | select(length == 1) | .[0]
   | select(.name == "chrome" and .cpe == ("cpe:2.3:a:google:chrome:" + .version + ":*:*:*:*:*:*:*"))
   | .version
-' "$inventory/browser.cdx.json")"
-latest="$(curl --fail --silent --show-error --location --retry 3 \
+' "$inventory/browser.cdx.json")"; then
+  echo "Invalid sandbox browser inventory: expected one Chrome component with a version-specific Google Chrome CPE." >&2
+  exit 1
+fi
+if ! latest="$(curl --fail --silent --show-error --location --retry 3 \
   https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json \
-  | jq -er '.channels.Stable.version')"
+  | jq -er '.channels.Stable.version | select(type == "string" and length > 0)')"; then
+  echo "Could not read the current stable Chrome version." >&2
+  exit 1
+fi
 if [ "$installed" != "$latest" ]; then
   echo "Sandbox Chrome ${installed} is not current stable ${latest}; update install-browser.sh and both archive hashes." >&2
   exit 1
