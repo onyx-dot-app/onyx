@@ -102,6 +102,27 @@ def test_discovery_isolates_nested_configuration_from_callers() -> None:
         assert saved.sources == ["original"]
 
 
+def test_discovery_refreshes_running_children_owned_elsewhere() -> None:
+    status = RunStatus.RUNNING
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(read_run_status=lambda *_: status)
+    )
+    coordinator.register(
+        AgentInfo(
+            id="child",
+            path="/root/child",
+            parent_id="root",
+            description="Independent work",
+            restoration_config=None,
+            latest_run_id="child-response",
+            status=status,
+        )
+    )
+    assert coordinator.discover_children("root")[0].status == RunStatus.RUNNING
+    status = RunStatus.COMPLETE
+    assert coordinator.discover_children("root")[0].status == RunStatus.COMPLETE
+
+
 def parent_agent(
     execute: Callable[[ToolInvocation], ToolResult], *, agent_id: str | None = None
 ) -> Agent:
@@ -755,6 +776,83 @@ def test_background_child_outlives_parent_and_reports_to_application() -> None:
         assert all(event.run_id == run.id for event in root_events)
         assert any(snapshot.run_id == child_run.id for snapshot in completed)
         assert coordinator.child_run(child_run.id, parent.id) is child_run
+    finally:
+        release.set()
+        assert coordinator.close(3)
+
+
+def test_stopping_parent_wait_keeps_background_child_running() -> None:
+    entered, release = threading.Event(), threading.Event()
+    spawned: list[SpawnResult] = []
+    completed: list[RunState] = []
+
+    def generate(
+        _request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        entered.set()
+        while not release.wait(0.01):
+            signal.check()
+        return AssistantMessage(content=[TextContent(text="background finished")])
+
+    child = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                child,
+                name="background",
+                description="Independent work",
+                messages=[],
+                max_steps=1,
+                lifetime=AgentLifetime.BACKGROUND,
+            )
+        )
+        return ChildRunWait(run_ids=[spawned[0].run_id])
+
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda _invocation, children: ToolResult(
+                    content=children[0].status.value
+                ),
+            )
+        ],
+    )
+    coordinator = AgentCoordinator(
+        store=FakeRunStore(save=lambda run: completed.append(run.snapshot())),
+    )
+    root = parent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert entered.wait(2)
+        assert root.wait_until_settled(2).status == RunStatus.SUSPENDED
+        root.cancel()
+        with pytest.raises(AgentCancelled):
+            root.result(3)
+        assert root.wait_for_idle(3)
+        child_run = coordinator.child_run(spawned[0].run_id, parent.id)
+        assert child_run is not None
+        assert child_run.status == RunStatus.RUNNING
+        assert not child_run.cancellation_signal.cancelled
+        release.set()
+        assert child_run.result(3).output.text == "background finished"
+        assert child_run.wait_for_idle(3)
+        assert (
+            coordinator.completion(child_run.id).result(3).status == RunStatus.COMPLETE
+        )
+        assert any(state.run_id == child_run.id for state in completed)
     finally:
         release.set()
         assert coordinator.close(3)

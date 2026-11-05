@@ -156,7 +156,7 @@ class Tool(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def id(self) -> int:
+    def id(self) -> int | None:
         raise NotImplementedError
 
     @property

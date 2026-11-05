@@ -18,6 +18,13 @@ from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.headers import HeaderItemDict
 
 
+class SubagentResult(BaseModel):
+    """Source references imported with a completed subagent's answer."""
+
+    type: Literal["subagent_result"] = "subagent_result"
+    citation_mapping: dict[int, SearchDoc] = Field(default_factory=dict)
+
+
 class CustomToolErrorInfo(BaseModel):
     is_unreachable: bool = False
     is_auth_error: bool = False
@@ -223,7 +230,7 @@ class ToolCallInfo(BaseModel):
     tab_index: int
     tool_name: str
     tool_call_id: str
-    tool_id: int
+    tool_id: int | None
     reasoning_tokens: str | None
     tool_call_arguments: dict[str, Any]
     tool_call_response: str

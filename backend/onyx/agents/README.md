@@ -282,6 +282,8 @@ Failed child cancellation records an error without skipping sibling cancellation
 A suspended foreground child releases the parent's worker without cancelling its siblings.
 Pass `lifetime=AgentLifetime.BACKGROUND` to let a child continue after its parent finishes.
 Background children do not hold the parent's cleanup open. The application must retain their coordinator.
+`ChildRunWait` can observe a background child without changing its lifetime.
+Stopping that parent stops the wait; use `cancel_run` to stop the child.
 
 Use `add_completion_cleanup(run_id, callback)` for resources that must survive suspension, such as a coding workspace.
 Register cleanup immediately after spawning the child. It runs after local execution finishes or releases ownership, once its workers drain.

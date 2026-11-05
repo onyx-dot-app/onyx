@@ -32,6 +32,10 @@ document does not repeat it.
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
+- **Independent children.** Persistent single-model Chat
+  exposes `chat/subagent_tools.py` controls to spawn, list, inspect, wait for, and
+  cancel children. These children survive the root response. Later turns use
+  the existing branch-scoped directory and run store to access them.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the

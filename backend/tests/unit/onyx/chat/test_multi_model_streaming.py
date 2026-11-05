@@ -93,6 +93,8 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.server.utils import get_json_line
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import get_current_trace
+from onyx.tracing.framework.traces import NoOpTrace
 from onyx.utils.threadpool_concurrency import (
     start_thread_future,
 )
@@ -2698,6 +2700,81 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership(
         finally:
             turn.delivery.reader.close()
             _wait_for_chat_workers(chat_workers)
+
+
+def test_finished_response_releases_chat_while_polling_background_ownership(
+    chat_workers: list[Future[Run | None]],
+) -> None:
+    released = threading.Event()
+    polled_after_release = threading.Event()
+    outcome = Future[ChatResponseOutcome]()
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    store = MagicMock(spec=ChatRunStore)
+    store.has_owned_work = True
+    turn._stores.append(store)
+    root_trace = NoOpTrace()
+
+    def release_admission() -> None:
+        turn._deadline_at -= timedelta(days=1)
+        released.set()
+
+    def check_stop(*_args: object, **_kwargs: object) -> bool:
+        assert not released.is_set(), "Finished response must not read root Stop"
+        return False
+
+    def refresh_admission() -> None:
+        assert not released.is_set(), "Finished response must not renew admission"
+
+    def poll_ownership() -> None:
+        if released.is_set():
+            assert get_current_trace() is root_trace
+            polled_after_release.set()
+
+    def generate(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        assert get_current_trace() is root_trace
+        return AssistantMessage(content=[TextContent(text="Root finished")])
+
+    store.poll_control.side_effect = poll_ownership
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    with (
+        patch("onyx.chat.execution.create_chat_agent", return_value=_chat_agent(agent)),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
+        patch("onyx.chat.execution.is_stop_requested", side_effect=check_stop),
+        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+        patch("onyx.chat.execution.PROCESSING_REFRESH_INTERVAL_S", 0),
+        patch.object(
+            turn.setup.admission, "release", side_effect=release_admission
+        ) as release_chat,
+        patch.object(turn.setup.admission, "refresh", side_effect=refresh_admission),
+        patch("onyx.chat.execution.trace", return_value=root_trace),
+        patch.object(root_trace, "finish", wraps=root_trace.finish) as end_trace,
+    ):
+        reader = _launch_turn(turn)
+        packets = start_thread_future(lambda: list(reader), name="test-reader")
+        try:
+            assert outcome.result(timeout=5).response.answer == "Root finished"
+            assert released.wait(5)
+            assert polled_after_release.wait(5)
+            assert _stop_reasons(packets.result(timeout=5)) == ["finished"]
+            assert not turn.cancellation.cancelled
+            assert not chat_turn_work.wait_idle(timeout=0)
+            end_trace.assert_not_called()
+            store.has_owned_work = False
+            turn._completion_changed.set()
+            _wait_for_chat_workers(chat_workers)
+            release_chat.assert_called_once()
+            end_trace.assert_called_once()
+        finally:
+            store.has_owned_work = False
+            turn._completion_changed.set()
+            reader.close()
+            _wait_for_chat_workers(chat_workers)
+            packets.result(timeout=5)
 
 
 def test_storage_ownership_failure_reports_failed_response_without_writing(

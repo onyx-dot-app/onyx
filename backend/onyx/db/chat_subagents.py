@@ -305,31 +305,31 @@ def _load_history(
             db_session, agent.id, visible_message_ids(db_session, responses[0])
         )
         restored.checkpoint = checkpoint_from_summary(summary)
-    roots = {
-        root.id: {
+    sources = {
+        response.id: {
             doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
-            for doc in root.search_docs
+            for doc in response.search_docs
         }
-        for root in db_session.scalars(
+        for response in db_session.scalars(
             select(ChatMessage)
-            .where(ChatMessage.id.in_({link.root_id for link in links}))
+            .where(
+                ChatMessage.id.in_({link.root_id for link in links} | set(response_ids))
+            )
             .options(selectinload(ChatMessage.search_docs))
         )
     }
     for response in reversed(responses):
         root_id = by_id[response.id].root_id
-        documents = roots.get(root_id)
-        if documents is None:
+        if root_id not in sources:
             raise ValueError("Root response is unavailable")
+        documents = {**sources[root_id], **sources.get(response.id, {})}
         for item in response.response_items:
             if item.rendering:
                 rendering = MessageRendering.model_validate(item.rendering)
                 for number, document_id in rendering.citation_documents.items():
                     document = documents.get(document_id)
                     if document is None:
-                        raise ValueError(
-                            "Cited source is unavailable on the root response"
-                        )
+                        raise ValueError("Cited source is unavailable on the response")
                     restored.sources[number] = document
     return restored
 

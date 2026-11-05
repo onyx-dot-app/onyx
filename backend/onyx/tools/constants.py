@@ -20,6 +20,8 @@ CODING_AGENT_TOOL_ID = "CodingAgentTool"
 # Tool names as referenced by tool results / tool calls (read_file)
 FILE_READER_TOOL_NAME = "read_file"
 
+SPAWN_AGENT_TOOL_NAME = "spawn_agent"
+
 INTERNAL_SEARCH_TOOL_NAME = "internal_search"
 WEB_SEARCH_TOOL_NAME = "web_search"
 

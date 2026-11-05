@@ -566,6 +566,16 @@ class AgentCoordinator:
                 info = info.model_copy(
                     update={"latest_run_id": saved.run_id, "status": saved.status}
                 )
+            elif (
+                self._directory is not None
+                and info.latest_run_id is not None
+                and (info.status is None or not info.status.is_terminal)
+            ):
+                info = info.model_copy(
+                    update={
+                        "status": self.remote_run_status(info.latest_run_id, parent_id)
+                    }
+                )
             result.append(info.model_copy(deep=True))
         return result
 

@@ -31,6 +31,13 @@ from onyx.chat.prompt_utils import (
     build_chat_prompt,
     prepare_prompt,
 )
+from onyx.chat.subagent_tools import (
+    CancelAgentTool,
+    InspectAgentTool,
+    ListAgentsTool,
+    SpawnAgentTool,
+    WaitAgentTool,
+)
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
@@ -50,7 +57,7 @@ from onyx.llm.models import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.models import ChatFile, SubagentResult, ToolContext
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
@@ -85,14 +92,18 @@ class ChatAgent(Agent, RestorableFeature):
         checkpoint: CompactionCheckpoint | None = None,
         previous_run_id: str | None = None,
         agent_id: str | None = None,
+        subagents_enabled: bool = False,
     ) -> None:
         self.max_steps = MAX_LLM_CYCLES
         self.custom_agent_prompt = custom_agent_prompt
         self.context_files = context_files
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
-        self.application_tools = list(tools)
+        # Restoration rebuilds agent-bound controls from these configured tools.
+        self.configured_tools = list(tools)
+        self.application_tools = list(self.configured_tools)
         self.stages_files = any(tool.name == PYTHON_TOOL_NAME for tool in tools)
+        self.subagents_enabled = subagents_enabled
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context
@@ -127,6 +138,37 @@ class ChatAgent(Agent, RestorableFeature):
         self.persona = persona
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
+        if subagents_enabled:
+
+            def create_child() -> Agent:
+                return ChatAgent(
+                    messages=[],
+                    tools=self.configured_tools,
+                    custom_agent_prompt=self.custom_agent_prompt,
+                    base_system_prompt=self.base_system_prompt,
+                    context_files=self.context_files,
+                    persona=self.persona,
+                    user_memory_context=self.memory,
+                    llm=self.llm,
+                    token_counter=self.token_counter,
+                    user_identity=user_identity,
+                    chat_files=self.chat_files,
+                    reasoning_effort=self.reasoning_effort,
+                    include_citations=self.include_citations,
+                    all_injected_file_metadata=self.file_metadata,
+                    inject_memories_in_prompt=self.inject_memories,
+                    reminders_enabled=self.reminders_enabled,
+                )
+
+            self.application_tools.extend(
+                [
+                    SpawnAgentTool(create_child),
+                    ListAgentsTool(),
+                    InspectAgentTool(),
+                    WaitAgentTool(),
+                    CancelAgentTool(),
+                ]
+            )
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -155,6 +197,7 @@ class ChatAgent(Agent, RestorableFeature):
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
             forced_tool_id=self.forced_tool_id,
+            subagents_enabled=self.subagents_enabled,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
             reminders_enabled=self.reminders_enabled,
@@ -178,6 +221,7 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
             or saved.forced_tool_id != self.forced_tool_id
+            or saved.subagents_enabled != self.subagents_enabled
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
             or saved.reminders_enabled != self.reminders_enabled
@@ -202,7 +246,7 @@ class ChatAgent(Agent, RestorableFeature):
                 self.has_called_search_tool = True
             if isinstance(data, SearchDocsResponse):
                 self.gathered_documents.extend(data.search_docs)
-            elif isinstance(data, ResearchAgentCallResult):
+            elif isinstance(data, (ResearchAgentCallResult, SubagentResult)):
                 self.gathered_documents.extend(data.citation_mapping.values())
             if isinstance(data, ChatSearchResult):
                 existing = {file.filename for file in self.chat_files}
@@ -212,7 +256,9 @@ class ChatAgent(Agent, RestorableFeature):
             self.citation_processor.update_citation_mapping(
                 message_citation_sources(response)
             )
-            if isinstance(data, (SearchDocsResponse, ResearchAgentCallResult)):
+            if isinstance(
+                data, (SearchDocsResponse, ResearchAgentCallResult, SubagentResult)
+            ):
                 for number in data.citation_mapping:
                     if source := self.citation_processor.citation_to_doc.get(number):
                         self.citation_mapping[number] = source.document_id

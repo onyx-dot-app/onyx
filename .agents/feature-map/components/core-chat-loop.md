@@ -160,9 +160,10 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 `ChatRunStore` renew its owner leases every 10 s. After
 `CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
 `DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
-preparation that has not started a run. When no response worker and no
-owned run remains, it finishes delivery and then releases the admission. A child
-run's owner lease also keeps the turn and its admission alive. API shutdown
+preparation that has not started a run. When response workers finish, it finishes delivery and releases admission.
+Background children keep running; the same control thread polls their owner
+leases until they finish. It no longer checks the released turn's Stop key,
+admission lease or deadline. Foreground children still drain with their parent. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's
 termination grace period is much shorter, so it ends running turns first

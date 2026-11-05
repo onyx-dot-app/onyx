@@ -25,6 +25,7 @@ from onyx.chat.models import (
     ToolRecordReference,
     ToolReplayData,
 )
+from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
@@ -56,6 +57,7 @@ from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import (
     GenerationRequestParams,
+    Message,
     UserMessage,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -1131,6 +1133,27 @@ def read_response__no_commit(
     parent_id = parent_session_id(session, agent)
     path = agent_session_path(session, agent)
     record = read_response_record(response, path)
+    messages: list[Message] = [step.message for step in record.steps]
+    restore_response_sources(
+        messages,
+        {
+            doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
+            for saved in session.scalars(
+                select(ChatMessage)
+                .where(ChatMessage.id.in_({root_id, response.id}))
+                .options(selectinload(ChatMessage.search_docs))
+                .order_by(ChatMessage.id == response.id)
+            )
+            for doc in saved.search_docs or []
+        },
+        {
+            item.id: MessageRendering.model_validate(item.rendering)
+            for item in response.response_items
+            if item.rendering is not None
+        },
+    )
+    for step, message in zip(record.steps, messages, strict=True):
+        step.message.metadata = message.metadata
     record.checkpoint = checkpoint_from_summary(
         find_summary_for_ancestry(
             session, response.chat_session_id, visible_message_ids(session, response)

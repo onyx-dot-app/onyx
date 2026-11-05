@@ -53,10 +53,12 @@ from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     LlmPythonExecutionResult,
+    SubagentResult,
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
@@ -73,8 +75,10 @@ def _message_identity(message: AssistantMessage) -> str:
 
 def _collect_tool_history(
     snapshot: RunState,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
+    *,
+    include_parent: bool = False,
 ) -> ToolHistorySnapshot:
     """Project completed and interrupted operations from one execution tree."""
     records: list[ToolCallInfo] = []
@@ -89,9 +93,9 @@ def _collect_tool_history(
                 message.metadata.sources, update_duplicate_keys=True
             )
         for index, call in enumerate(message.tool_calls):
-            tool_id = tool_ids.get(call.name)
-            if tool_id is None:
+            if call.name not in tool_ids:
                 continue
+            tool_id = tool_ids[call.name]
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
             records.append(
@@ -103,6 +107,7 @@ def _collect_tool_history(
                     snapshot,
                     step_index,
                     index,
+                    include_parent=include_parent,
                 )
             )
             if result is None:
@@ -110,12 +115,12 @@ def _collect_tool_history(
             if isinstance(result.details, SearchDocsResponse):
                 for document in result.details.search_docs:
                     documents.setdefault(document.document_id, document)
-            if isinstance(result.details, ResearchAgentCallResult):
+            if isinstance(result.details, (ResearchAgentCallResult, SubagentResult)):
                 for document in result.details.citation_mapping.values():
                     documents.setdefault(document.document_id, document)
             citations.update_citation_mapping(message_citation_sources(result))
     for child in snapshot.child_runs:
-        child_history = _collect_tool_history(child, tool_ids)
+        child_history = _collect_tool_history(child, tool_ids, include_parent=True)
         records.extend(child_history.tool_calls)
         documents.update(child_history.all_search_docs)
     return ToolHistorySnapshot(
@@ -126,13 +131,15 @@ def _collect_tool_history(
 
 
 def _tool_record(
-    tool_id: int,
+    tool_id: int | None,
     output: AssistantMessage,
     tool_response: ToolResultMessage | None,
     tool_call: ToolCall,
     snapshot: RunState,
     turn: int,
     index: int,
+    *,
+    include_parent: bool,
 ) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
     search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
@@ -156,8 +163,8 @@ def _tool_record(
 
     return ToolCallInfo(
         message_id=_message_identity(output),
-        parent_message_id=snapshot.parent_message_id,
-        parent_tool_call_id=snapshot.parent_tool_call_id,
+        parent_message_id=snapshot.parent_message_id if include_parent else None,
+        parent_tool_call_id=snapshot.parent_tool_call_id if include_parent else None,
         turn_index=turn,
         tab_index=index,
         tool_name=tool_call.name,
@@ -244,7 +251,7 @@ def message_documents(metadata: BaseModel | None) -> dict[str, SearchDoc]:
 def project_response(
     snapshot: RunState,
     *,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
     registrations: Sequence[AgentInfo] = (),
 ) -> ChatResponseSnapshot:
@@ -357,7 +364,7 @@ class ResponsePresenter:
         self,
         emitter: Emitter,
         *,
-        tool_ids: Mapping[str, int] | None = None,
+        tool_ids: Mapping[str, int | None] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
         self.emitter = emitter
@@ -491,7 +498,8 @@ def replay_response(
             packets.extend(tool_renderer.start())
             for child in response.child_runs:
                 if (
-                    child.parent_message_id != message_id
+                    call.name == SPAWN_AGENT_TOOL_NAME
+                    or child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue

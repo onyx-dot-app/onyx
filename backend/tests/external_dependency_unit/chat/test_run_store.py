@@ -1,5 +1,6 @@
 """Safe response transfer uses canonical history and one conditional resume owner."""
 
+import json
 import subprocess
 import sys
 import threading
@@ -18,6 +19,7 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionCheckpoint,
+    PreparedStep,
     RunProgress,
     RunState,
     RunStatus,
@@ -30,18 +32,31 @@ from onyx.agents.tools import (
     InputDecision,
     InputMode,
     PendingToolInput,
+    SpawnResult,
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.history_store import PostgresChatHistoryStore, get_chat_history_store
-from onyx.chat.models import ChatFeatureState, CheckpointBinding
+from onyx.chat.models import (
+    ChatFeatureState,
+    ChatMessageMetadata,
+    CheckpointBinding,
+)
 from onyx.chat.presentation import project_response
-from onyx.chat.restoration import persist_checkpoint_files
+from onyx.chat.restoration import persist_checkpoint_files, restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
+from onyx.chat.subagent_tools import (
+    CancelAgentTool,
+    InspectAgentTool,
+    ListAgentsTool,
+    SpawnAgentTool,
+    WaitAgentTool,
+)
 from onyx.chat.subagents import ChatAgentDirectory
-from onyx.configs.constants import FileOrigin, MessageType
+from onyx.configs.constants import DocumentSource, FileOrigin, MessageType
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import delete_messages_and_files_from_chat_session, root_response_id
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
@@ -63,7 +78,10 @@ from onyx.llm.models import (
     ToolResult,
     UserMessage,
 )
-from onyx.tools.models import ChatFile, FileReadResult
+from onyx.server.query_and_chat.session_loading import (
+    translate_assistant_message_to_packets,
+)
+from onyx.tools.models import ChatFile, FileReadResult, SubagentResult, ToolContext
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -655,8 +673,9 @@ def test_competing_resume_claims_and_stale_writer(
         coordinator.close(timeout=1)
 
 
+@pytest.mark.parametrize("subagents_enabled", [False, True])
 def test_checkpoint_files_use_durable_references_and_session_cleanup(
-    branch: tuple[UUID, int], db_session: Session
+    branch: tuple[UUID, int], db_session: Session, subagents_enabled: bool
 ) -> None:
     file_store = PostgresBackedFileStore()
     original_bytes = b"uploaded spreadsheet"
@@ -680,6 +699,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             feature = ChatAgent(
                 messages=[],
                 tools=[],
+                subagents_enabled=subagents_enabled,
                 custom_agent_prompt=None,
                 base_system_prompt="Help",
                 context_files=ExtractedContextFiles(
@@ -738,6 +758,17 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             state = ChatFeatureState.model_validate(
                 restored.run_state.progress.feature_state
             )
+            rebuilt = restore_chat_agent(
+                restored,
+                llm=feature.llm,
+                tools=feature.configured_tools,
+                user_identity=None,
+            )
+            assert isinstance(rebuilt, ChatAgent)
+            assert rebuilt.subagents_enabled == subagents_enabled
+            assert [tool.name for tool in rebuilt.tools] == [
+                tool.name for tool in feature.tools
+            ]
             assert all(file.content is None for file in state.chat_files)
             assert state.chat_files[0].file_id == original_id
             assert state.chat_files[0].restore().content == original_bytes
@@ -1319,3 +1350,229 @@ def test_resumed_child_keeps_its_original_response_tree(
     finally:
         assert first.close(timeout=10)
         assert second.close(timeout=10)
+
+
+@pytest.mark.parametrize("cancel_child", [False, True])
+def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+    cancel_child: bool,
+) -> None:
+    child_started = threading.Event()
+    release_child = threading.Event()
+    first_owner = store(branch)
+    first_coordinator = AgentCoordinator()
+    later_coordinator = AgentCoordinator()
+
+    def no_restore(_: ExecutionCheckpoint) -> Agent:
+        raise AssertionError("Inspecting and cancelling must not restore an agent")
+
+    def child_reply(
+        _request: GenerationRequest, cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        child_started.set()
+        for _ in range(1000):
+            cancellation.check()
+            if release_child.wait(0.01):
+                return AssistantMessage(
+                    content=[TextContent(text="Child answer [1]")],
+                )
+        raise TimeoutError("Test did not release the child")
+
+    def create_child() -> Agent:
+        return Agent(
+            FakeModelClient(child_reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            prepare_step=lambda _: PreparedStep(
+                output_metadata=ChatMessageMetadata(
+                    sources={
+                        1: SearchDoc(
+                            document_id="child-source",
+                            chunk_ind=0,
+                            semantic_identifier="Child source",
+                            blurb="Evidence",
+                            source_type=DocumentSource.WEB,
+                            boost=1,
+                            hidden=False,
+                            metadata={},
+                            match_highlights=[],
+                        )
+                    }
+                )
+            ),
+        )
+
+    first_replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="spawn",
+                        name="spawn_agent",
+                        arguments={
+                            "name": "research",
+                            "instruction": "Find the answer",
+                        },
+                    )
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="Agent started")]),
+        ]
+    )
+    first_agent = Agent(
+        FakeModelClient(lambda *_: next(first_replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id=str(branch[0]),
+        tools=[SpawnAgentTool(create_child).bind(ToolContext)],
+    )
+    first_view = first_owner.bind(
+        first_coordinator, directory=directory(first_owner), build_agent=no_restore
+    )
+    try:
+        first = first_agent.start(
+            messages=[user_message], max_steps=2, coordinator=first_view
+        )
+        assert first.result(timeout=10).output.text == "Agent started"
+        assert first.wait_for_idle(timeout=10)
+        assert child_started.wait(timeout=10)
+        spawned_result = first.snapshot().steps[0].tools["spawn"].result
+        assert spawned_result is not None
+        child = SpawnResult.model_validate_json(spawned_result.text)
+        assert (
+            first_owner.read_run_status(child.run_id, str(branch[0]))
+            == RunStatus.RUNNING
+        )
+        assert first_owner.has_owned_work
+
+        db_session.expire_all()
+        initial_response = db_session.get(ChatMessage, branch[1])
+        assert initial_response is not None
+        later_question = ChatMessage(
+            chat_session_id=branch[0],
+            parent_message_id=branch[1],
+            message="Check the agent",
+            token_count=4,
+            message_type=MessageType.USER,
+        )
+        alternate_response = ChatMessage(
+            chat_session_id=branch[0],
+            parent_message_id=initial_response.parent_message_id,
+            message="",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+        )
+        db_session.add_all([later_question, alternate_response])
+        db_session.flush()
+        later_response = ChatMessage(
+            chat_session_id=branch[0],
+            parent_message_id=later_question.id,
+            message="",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+        )
+        db_session.add(later_response)
+        db_session.commit()
+        alternate_owner = store((branch[0], alternate_response.id))
+        assert not [info for info in alternate_owner.discovery() if info.parent_id]
+        with pytest.raises(ValueError, match="unavailable on this branch"):
+            alternate_owner.read_run(child.run_id, str(branch[0]))
+        with pytest.raises(ValueError, match="unavailable on this branch"):
+            alternate_owner.cancel_run(child.run_id, str(branch[0]))
+
+        later_owner = store(
+            (branch[0], later_response.id), visible_response_ids=[branch[1]]
+        )
+        later_view = later_owner.bind(
+            later_coordinator, directory=directory(later_owner), build_agent=no_restore
+        )
+        for info in later_owner.discovery():
+            later_view.register(info)
+        later_step = 0
+
+        def later_reply(
+            request: GenerationRequest, _cancellation: CancellationSignal
+        ) -> AssistantMessage:
+            nonlocal later_step
+            if later_step == 0:
+                call = ToolCall(id="list", name="list_agents", arguments={})
+            elif later_step == 1:
+                discovered = json.loads(request.messages[-1].text)
+                assert any(item["id"] == child.agent_id for item in discovered)
+                call = ToolCall(
+                    id="inspect",
+                    name="inspect_agent",
+                    arguments={"agent_id": child.agent_id},
+                )
+            elif later_step == 2:
+                inspected = json.loads(request.messages[-1].text)
+                assert inspected["status"] == "running"
+                if cancel_child:
+                    call = ToolCall(
+                        id="cancel",
+                        name="cancel_agent",
+                        arguments={"agent_id": child.agent_id},
+                    )
+                else:
+                    release_child.set()
+                    call = ToolCall(
+                        id="wait",
+                        name="wait_agent",
+                        arguments={"agent_id": child.agent_id},
+                    )
+            else:
+                return AssistantMessage(content=[TextContent(text="Checked")])
+            later_step += 1
+            return AssistantMessage(content=[call])
+
+        later_agent = Agent(
+            FakeModelClient(later_reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id=str(branch[0]),
+            tools=[
+                tool.bind(ToolContext)
+                for tool in [
+                    ListAgentsTool(),
+                    InspectAgentTool(),
+                    CancelAgentTool(),
+                    WaitAgentTool(),
+                ]
+            ],
+        )
+        later = later_agent.start(
+            messages=[
+                UserMessage(
+                    id=f"chat:{later_question.id}", content=later_question.message
+                )
+            ],
+            max_steps=4,
+            coordinator=later_view,
+        )
+        assert later.result(timeout=15).output.text == "Checked"
+        assert later.wait_for_idle(timeout=10)
+        later_coordinator.completion(later.id).result(timeout=10)
+        first_coordinator.completion(child.run_id).result(timeout=10)
+        saved = later_owner.read_run(child.run_id, str(branch[0]))
+        assert saved is not None
+        assert saved.status == (
+            RunStatus.CANCELLED if cancel_child else RunStatus.COMPLETE
+        )
+        if not cancel_child:
+            waited = later.snapshot().steps[2].tools["wait"].result
+            assert waited is not None
+            assert waited.text == "Child answer [1]"
+            assert isinstance(waited.details, SubagentResult)
+            assert waited.details.citation_mapping[1].document_id == "child-source"
+            db_session.expire_all()
+            parent_response = db_session.get(ChatMessage, branch[1])
+            assert parent_response is not None
+            packets = translate_assistant_message_to_packets(
+                parent_response, {}, db_session
+            )
+            assert "Child answer" not in "".join(
+                packet.model_dump_json() for packet in packets
+            )
+    finally:
+        release_child.set()
+        assert later_coordinator.close(timeout=10)
+        assert first_coordinator.close(timeout=10)

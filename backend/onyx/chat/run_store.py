@@ -31,6 +31,7 @@ from onyx.chat.models import (
     ResponseStatus,
     SavedResponse,
 )
+from onyx.chat.presentation import project_response
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.configs.constants import MessageType
@@ -48,6 +49,7 @@ from onyx.db.chat_response import (
     read_response__no_commit,
     read_response_status__no_commit,
     reserve_child_response__no_commit,
+    save_chat_turn,
     save_response_record__no_commit,
 )
 from onyx.db.chat_subagents import load_session_agent_metadata
@@ -257,19 +259,51 @@ class ChatRunStore(RunStore, RunOwnership):
 
     def _save_output(self, owned: _OwnedRun, snapshot: RunState) -> None:
         response_id = int(owned.run.id)
-        record = self._record(snapshot)
+        display = None
+        if snapshot.parent_run_id is not None and snapshot.status.is_terminal:
+            display = project_response(
+                snapshot,
+                tool_ids={
+                    call.name: None
+                    for step in snapshot.steps
+                    for call in step.message.tool_calls
+                },
+                registrations=self._coordinator.registrations()
+                if self._coordinator
+                else (),
+            )
+        record = display.response if display is not None else self._record(snapshot)
+        if record is None:
+            raise ValueError("Response projection has no accepted content")
         with self._ownership_lock(response_id):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
                     session, response_id, owned.owner.ownership_version
                 )
-                save_response_record__no_commit(
-                    session, owned.owner.root_message_id, record
-                )
                 if snapshot.status.is_terminal:
                     finish_checkpoint__no_commit(session, response_id)
-                session.commit()
+                if display is None:
+                    save_response_record__no_commit(
+                        session, owned.owner.root_message_id, record
+                    )
+                    session.commit()
+                    return
+                response = find_response__no_commit(session, response_id)
+                if response is None:
+                    raise ValueError("Child response is unavailable")
+                save_chat_turn(
+                    message_text=display.answer or "",
+                    reasoning_tokens=display.reasoning,
+                    tool_calls=display.tool_calls,
+                    citation_to_doc=display.citation_to_doc,
+                    all_search_docs=display.all_search_docs,
+                    db_session=session,
+                    assistant_message=response,
+                    request_params=display.request_params,
+                    response_record=record,
+                    presentation=display.presentation,
+                )
 
     def reserve_run_id(
         self,

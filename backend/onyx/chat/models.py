@@ -62,6 +62,7 @@ from onyx.tools.models import (
     GeneratedImage,
     PersonaToolConfiguration,
     SearchToolUsage,
+    SubagentResult,
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
@@ -69,8 +70,12 @@ from onyx.tools.tool_implementations.search.models import SearchContext
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
+
 _INCOGNITO_SOURCE_DETAILS = TypeAdapter(
-    Annotated[SearchDocsResponse | ResearchAgentCallResult, Field(discriminator="type")]
+    Annotated[
+        SearchDocsResponse | ResearchAgentCallResult | SubagentResult,
+        Field(discriminator="type"),
+    ]
 )
 
 
@@ -274,7 +279,7 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
             data["details"] = message.details.model_dump(
                 mode="json", include={"type", "search_docs", "citation_mapping"}
             )
-        elif isinstance(message.details, ResearchAgentCallResult):
+        elif isinstance(message.details, (ResearchAgentCallResult, SubagentResult)):
             data["details"] = message.details.model_dump(mode="json")
     return data
 
@@ -574,6 +579,26 @@ class PersonaPromptConfig(BaseModel):
     replace_base_system_prompt: bool
 
 
+class SpawnAgentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, description="A short name for this agent.")
+    instruction: str = Field(
+        min_length=1,
+        description="A self-contained task. The child does not inherit this conversation.",
+    )
+
+
+class SubagentSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str = Field(min_length=1)
+
+
+class ListAgentsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class ChatFeatureState(BaseModel):
     """Chat settings and accumulated state needed to resume suspended execution."""
 
@@ -586,6 +611,7 @@ class ChatFeatureState(BaseModel):
     include_citations: bool
     inject_memories: bool
     forced_tool_id: int | None
+    subagents_enabled: bool = False
     base_prompt: str
     custom_prompt: str | None
     reminders_enabled: bool

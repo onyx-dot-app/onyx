@@ -38,6 +38,7 @@ from onyx.tools.models import (
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
+    SubagentResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
@@ -56,6 +57,7 @@ CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "search.planning.v1": SearchPlanningResult,
     "research.metadata.v1": ResearchMessageMetadata,
     "research.result.v1": ResearchAgentCallResult,
+    "chat.subagent_result.v1": SubagentResult,
     "coding.result.v1": CodingAgentCallResult,
     "tool.custom.v1": CustomToolCallSummary,
     "tool.file_read.v1": FileReadResult,

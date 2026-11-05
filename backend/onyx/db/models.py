@@ -158,6 +158,7 @@ from onyx.tools.models import (
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
+    SubagentResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
@@ -3790,6 +3791,7 @@ class StoredToolResult(ToolResultMessage):
         Annotated[
             SearchDocsResponse
             | ResearchAgentCallResult
+            | SubagentResult
             | CodingAgentCallResult
             | CustomToolCallSummary
             | FileReadResult

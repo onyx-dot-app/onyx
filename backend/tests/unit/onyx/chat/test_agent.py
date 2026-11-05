@@ -9,9 +9,11 @@ from unittest.mock import Mock
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentStep, StepInput
+from onyx.agents.models import AgentStep, RunState, RunStatus, StepInput
 from onyx.agents.runtime import Run
+from onyx.agents.tools import SpawnResult, ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -22,6 +24,7 @@ from onyx.chat.models import (
     PromptMetadata,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.subagent_tools import SpawnAgentTool
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
@@ -46,13 +49,14 @@ from onyx.llm.models import (
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
-from onyx.tools.models import ChatFile
+from onyx.tools.models import ChatFile, SubagentResult, ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
+    FakeRunStore,
     ScriptedLLM,
     run_agent,
 )
@@ -448,7 +452,8 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
 
 @pytest.mark.parametrize(
-    "tool_name", [WebSearchTool.NAME, SearchTool.NAME, RESEARCH_AGENT_TOOL_NAME]
+    "tool_name",
+    [WebSearchTool.NAME, SearchTool.NAME, RESEARCH_AGENT_TOOL_NAME, "wait_agent"],
 )
 @pytest.mark.parametrize("incognito", [False, True])
 def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
@@ -479,6 +484,8 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
                 intermediate_report="Evidence [4]", citation_mapping={4: document}
             )
             if tool_name == RESEARCH_AGENT_TOOL_NAME
+            else SubagentResult(citation_mapping={4: document})
+            if tool_name == "wait_agent"
             else SearchDocsResponse(
                 search_docs=[document], citation_mapping={4: "reference"}
             ),
@@ -789,3 +796,142 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
         assert "prefers bullet points" in user_info.text
         assert ("works on billing" in user_info.text) == inject_memories
         assert question.text == "Question"
+
+
+@pytest.mark.parametrize("wait_for_child", [False, True])
+def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
+    entered, release = threading.Event(), threading.Event()
+    child_requests: list[GenerationRequest] = []
+    saved: list[RunState] = []
+    spawned: list[SpawnResult] = []
+
+    class SlowTool(EchoTool):
+        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+            entered.set()
+            assert release.wait(10)
+            invocation.cancellation.check()
+            return ToolResult(content="work complete")
+
+    def reply(
+        request: GenerationRequest, cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        cancellation.check()
+        names = {tool.name for tool in request.tools}
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if "spawn_agent" not in names:
+            child_requests.append(request)
+            assert names == {"echo"}
+            assert not {"spawn_agent", "wait_agent", "cancel_agent"} & names
+            if not results:
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="work",
+                            name="echo",
+                            arguments={"value": "child"},
+                        )
+                    ]
+                )
+            assert not results[0].is_error
+            assert "work complete" in results[0].content
+            return AssistantMessage(content=[TextContent(text="Child answer")])
+        if not results:
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="spawn",
+                        name="spawn_agent",
+                        arguments={
+                            "name": "investigate",
+                            "instruction": "Independent task",
+                        },
+                    )
+                ]
+            )
+        if len(results) == 1:
+            started = SpawnResult.model_validate_json(results[0].content)
+            spawned.append(started)
+            assert entered.wait(10)
+            if wait_for_child:
+                release.set()
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="wait",
+                            name="wait_agent",
+                            arguments={"agent_id": started.agent_id},
+                        )
+                    ]
+                )
+        else:
+            assert results[-1].content == "Child answer"
+        return AssistantMessage(content=[TextContent(text="Parent answer")])
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[SlowTool()],
+        subagents_enabled=True,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=lambda text: len(text) // 4,
+    )
+    spawn = next(
+        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+    )
+    child = spawn.create_agent()
+    assert isinstance(child, ChatAgent)
+    assert child.search_context is not agent.search_context
+    assert not child.subagents_enabled
+    assert agent.capture_state().subagents_enabled
+    assert not child.capture_state().subagents_enabled
+    coordinator = AgentCoordinator(
+        store=FakeRunStore(save=lambda run: saved.append(run.snapshot()))
+    )
+    try:
+        result = run_agent(
+            agent,
+            messages=[UserMessage(content="Delegate this")],
+            max_steps=4,
+            coordinator=coordinator,
+        )
+        assert result.output.text == "Parent answer"
+        child_run = coordinator.child_run(spawned[0].run_id, agent.id)
+        assert child_run is not None
+        if not wait_for_child:
+            assert child_run.status == RunStatus.RUNNING
+            assert not child_run.cancellation_signal.cancelled
+        release.set()
+        assert child_run.result(10).output.text == "Child answer"
+        assert child_run.wait_for_idle(10)
+        assert (
+            coordinator.completion(child_run.id).result(10).status == RunStatus.COMPLETE
+        )
+        assert any(
+            state.run_id == child_run.id and state.status == RunStatus.COMPLETE
+            for state in saved
+        )
+        assert len(child_requests) == 2
+        assert any(
+            message.text == "Independent task" for message in child_requests[0].messages
+        )
+        assert all(
+            message.text != "Delegate this" for message in child_requests[0].messages
+        )
+    finally:
+        release.set()
+        assert coordinator.close(10)
