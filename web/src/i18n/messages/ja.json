@@ -3080,8 +3080,6 @@
           "title": "最近のインデックス実行はありません",
           "filteredTitle": "このフィルターに一致する実行はありません。",
           "pastRuns": "{count, plural, other {過去の実行 # 件}}",
-          "view": "表示",
-          "viewAria": "{count, plural, other {過去の実行 # 件を表示}}",
           "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
         },
         "units": "{count, plural, other {件の実行}}",
@@ -7491,8 +7489,7 @@
         },
         "counts": {
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
-          "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
-          "syncing": "{count, plural, other {# 件のコネクタが同期中}}",
+          "running": "{indexing, plural, other {インデックス中 # 件}}、{syncing, plural, other {同期中 # 件}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
           "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
           "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",

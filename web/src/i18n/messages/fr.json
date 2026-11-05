@@ -3080,8 +3080,6 @@
           "title": "Aucune exécution d'indexation récente",
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
           "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
-          "view": "Afficher",
-          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}",
           "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
         },
         "units": "{count, plural, one {exécution} other {exécutions}}",
@@ -7491,8 +7489,7 @@
         },
         "counts": {
           "indexed": "{count, plural, one {# connecteur indexé} other {# connecteurs indexés}}",
-          "indexing": "{count, plural, one {# connecteur en cours d'indexation} other {# connecteurs en cours d'indexation}}",
-          "syncing": "{count, plural, one {# connecteur en cours de synchronisation} other {# connecteurs en cours de synchronisation}}",
+          "running": "{indexing, plural, other {# en indexation}}, {syncing, plural, other {# en synchronisation}}",
           "failed": "{count, plural, one {# connecteur en échec} other {# connecteurs en échec}}",
           "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}",
           "scheduled": "{count, plural, one {# connecteur planifié} other {# connecteurs planifiés}}",

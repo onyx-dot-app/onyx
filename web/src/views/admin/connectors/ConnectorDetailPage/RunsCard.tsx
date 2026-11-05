@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { richNodes } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -22,7 +29,6 @@ import { CardLoader, IconLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgCheckCircle,
-  SvgChevronRight,
   SvgSlowMotion,
   SvgXCircle,
   SvgXOctagon,
@@ -144,8 +150,12 @@ export default function RunsCard({
   const [page, setPage] = useState(1);
   const [ownWindow, setOwnWindow] = useState<PickerWindow>(DEFAULT_PAIR_WINDOW);
   const timeWindow = sharedWindow?.window ?? ownWindow;
-  // "View" on the empty state widens the list to all time until the window or slice changes.
+  // The past runs row on the empty state widens the list to all time until the window or slice changes.
   const [widened, setWidened] = useState(false);
+  const widen = useCallback(() => {
+    setPage(1);
+    setWidened(true);
+  }, []);
   const windowRange = rangeWithin(
     pickedWindowStart({ window: timeWindow }),
     range
@@ -272,13 +282,12 @@ export default function RunsCard({
       revealedRun.current = openRun;
       setKind(openRun.kind);
       setStatusGroup(null);
-      setPage(1);
-      setWidened(true);
+      widen();
       return;
     }
     if (page * pageSize < data.total_items) setPage(page + 1);
     else openedRun.current = openRun;
-  }, [openRun, data, isLoading, items, page, pageSize, setOpen]);
+  }, [openRun, data, isLoading, items, page, pageSize, setOpen, widen]);
 
   function pickWindow(next: PickerWindow) {
     // Picking the same window again still leaves the widened view.
@@ -358,22 +367,15 @@ export default function RunsCard({
       <Section alignItems="stretch" gap={0} height="fit">
         <NoRecentRuns />
         {pastRuns > 0 && (
-          <Section flexDirection="row" alignItems="center" gap={0} height="fit">
-            <Section height="fit" className="min-w-0 flex-1">
-              <Divider title={t("empty.pastRuns", { count: pastRuns })} />
-            </Section>
-            <Button
-              icon={SvgChevronRight}
-              prominence="tertiary"
-              size="sm"
-              tooltip={t("empty.view")}
-              aria-label={t("empty.viewAria", { count: pastRuns })}
-              onClick={() => {
-                setWidened(true);
-                setPage(1);
-              }}
-            />
-          </Section>
+          // Opens nothing in place: it widens the list to all time, which replaces the empty state.
+          <Divider
+            title={t("empty.pastRuns", { count: pastRuns })}
+            foldable
+            chevronPosition="start"
+            foldedChevron="down"
+            open={false}
+            onOpenChange={widen}
+          />
         )}
       </Section>
     ) : items.length === 0 ? (

@@ -3080,8 +3080,6 @@
           "title": "최근 인덱싱 실행이 없습니다",
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
           "pastRuns": "{count, plural, other {지난 실행 #개}}",
-          "view": "보기",
-          "viewAria": "{count, plural, other {지난 실행 #개 보기}}",
           "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
         },
         "units": "{count, plural, other {실행}}",
@@ -7491,8 +7489,7 @@
         },
         "counts": {
           "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",
-          "indexing": "{count, plural, other {커넥터 #개 인덱싱 중}}",
-          "syncing": "{count, plural, other {커넥터 #개 동기화 중}}",
+          "running": "{indexing, plural, other {인덱싱 중 #개}}, {syncing, plural, other {동기화 중 #개}}",
           "failed": "{count, plural, other {커넥터 #개 실패}}",
           "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}",
           "scheduled": "{count, plural, other {커넥터 #개 예약됨}}",

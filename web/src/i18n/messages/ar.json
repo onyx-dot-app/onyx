@@ -3080,8 +3080,6 @@
           "title": "لا توجد عمليات فهرسة حديثة",
           "filteredTitle": "لا توجد عمليات تشغيل تطابق هذه المرشحات.",
           "pastRuns": "{count, plural, one {عملية تشغيل سابقة واحدة} other {# عمليات تشغيل سابقة}}",
-          "view": "عرض",
-          "viewAria": "{count, plural, one {عرض عملية التشغيل السابقة} other {عرض # عمليات تشغيل سابقة}}",
           "description": "تتم جدولة عمليات التشغيل في الخلفية وقد يستغرق ظهورها بعض الوقت."
         },
         "units": "{count, plural, one {تشغيل} other {عمليات تشغيل}}",
@@ -7491,8 +7489,7 @@
         },
         "counts": {
           "indexed": "{count, plural, one {موصل واحد مفهرس} other {# موصلات مفهرسة}}",
-          "indexing": "{count, plural, one {موصل واحد قيد الفهرسة} other {# موصلات قيد الفهرسة}}",
-          "syncing": "{count, plural, one {موصل واحد قيد المزامنة} other {# موصلات قيد المزامنة}}",
+          "running": "{indexing, plural, other {# قيد الفهرسة}}، {syncing, plural, other {# قيد المزامنة}}",
           "failed": "{count, plural, one {موصل واحد فشل} other {# موصلات فشلت}}",
           "paused": "{count, plural, one {موصل واحد متوقف مؤقتًا} other {# موصلات متوقفة مؤقتًا}}",
           "scheduled": "{count, plural, one {موصل واحد مجدول} other {# موصلات مجدولة}}",

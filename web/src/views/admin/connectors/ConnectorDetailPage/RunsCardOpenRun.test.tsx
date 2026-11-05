@@ -1,4 +1,4 @@
-/** A run the page's address points at opens its inline details, widening a list that misses it and paging back to it, and only runs with details open. */
+/** A run the page's address points at opens its inline details, widening a list that misses it and paging back to it, and only runs with details open. An empty window's past runs row widens the list. */
 import {
   copy,
   render,
@@ -322,5 +322,28 @@ describe("RunsCard openRun", () => {
       ).toHaveLength(2)
     );
     expect(screen.queryByRole("button", { name: CLOSE_STAGES })).toBeNull();
+  });
+});
+
+describe("RunsCard past runs row", () => {
+  const PAST = [indexRun(1), indexRun(2), indexRun(3)];
+
+  async function renderEmptyWindow() {
+    mockPagedRuns([], PAST);
+    render(<RunsCard ccPairId={CC_PAIR_ID} canOperate openRun={null} />);
+    return screen.findByText("3 Past Runs");
+  }
+
+  it("names the row's control with the past run count", async () => {
+    await renderEmptyWindow();
+    expect(
+      screen.getByRole("button", { name: /3 Past Runs/ })
+    ).toBeInTheDocument();
+  });
+
+  it("widens the list to all time on a click on the row title", async () => {
+    const user = setupUser();
+    await user.click(await renderEmptyWindow());
+    expect(await screen.findAllByText("indexed")).toHaveLength(PAST.length);
   });
 });
