@@ -25,14 +25,14 @@ spec:
   triggers:
     {{- if .Values.celery_worker_docfetching.autoscaling.targetCPUUtilizationPercentage }}
     - type: cpu
+      metricType: Utilization
       metadata:
-        type: Utilization
         value: "{{ .Values.celery_worker_docfetching.autoscaling.targetCPUUtilizationPercentage }}"
     {{- end }}
     {{- if .Values.celery_worker_docfetching.autoscaling.targetMemoryUtilizationPercentage }}
     - type: memory
+      metricType: Utilization
       metadata:
-        type: Utilization
         value: "{{ .Values.celery_worker_docfetching.autoscaling.targetMemoryUtilizationPercentage }}"
     {{- end }}
     {{- if .Values.celery_worker_docfetching.autoscaling.customTriggers }}
