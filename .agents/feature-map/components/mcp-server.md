@@ -28,9 +28,9 @@
   about the user's organization.
 - **A Claude Code user** installs the plugin in `extensions/claude-code/`
   instead of configuring the server by hand. The plugin connects the MCP
-  server with the user's token, runs an Onyx search for every prompt through
-  a `UserPromptSubmit` hook that posts to `/api/search` and injects the top
-  results, and with strict retrieval on denies other servers' search tools
+  server with the user's token, runs an Onyx search for every question prompt
+  through a `UserPromptSubmit` hook that posts to `/api/search` and injects
+  the top results, and with strict retrieval on denies other servers' search tools
   until Onyx has been consulted. `extensions/claude-code/README.md` is the
   user-facing description.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key

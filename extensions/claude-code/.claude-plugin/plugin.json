@@ -24,7 +24,7 @@
       "sensitive": true,
       "required": true
     },
-    "strict_retrieval": {
+    "onyx_strict_retrieval": {
       "type": "boolean",
       "title": "Strict retrieval",
       "description": "Block other search tools until Onyx has been consulted for the current prompt",

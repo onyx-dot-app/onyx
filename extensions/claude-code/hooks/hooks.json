@@ -6,8 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook",
-            "args": ["user-prompt"],
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\"",
             "timeout": 10
           }
         ]
@@ -19,8 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook",
-            "args": ["pre-tool"],
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\"",
             "timeout": 5
           }
         ]
@@ -32,8 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook",
-            "args": ["post-tool"],
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\"",
             "timeout": 5
           }
         ]

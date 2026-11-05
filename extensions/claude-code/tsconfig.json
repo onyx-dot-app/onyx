@@ -5,7 +5,7 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noEmit": true,
-    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
     "types": ["node"],
     "skipLibCheck": true
   },

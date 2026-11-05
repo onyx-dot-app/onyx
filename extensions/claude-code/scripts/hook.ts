@@ -1,5 +1,5 @@
-// Claude Code hook entry for the Onyx plugin: `user-prompt` injects Onyx results
-// for every prompt, `pre-tool` and `post-tool` run the strict-retrieval gate.
+// Claude Code hook entry for the Onyx plugin: UserPromptSubmit injects Onyx
+// results for every prompt, PreToolUse and PostToolUse run the strict gate.
 import {
   mkdirSync,
   readFileSync,
@@ -19,16 +19,14 @@ const MAX_QUERY_CHARS = 2048;
 const MIN_PROMPT_CHARS = 15;
 const MAX_RESULTS = 5;
 const MAX_CONTENT_CHARS = 1500;
-// Claude Code truncates additionalContext past 10,000 characters.
+// Past 10,000 characters Claude Code swaps additionalContext for a file path.
 const MAX_CONTEXT_CHARS = 9_500;
 const STATE_TTL_MS = 24 * 60 * 60 * 1000;
 const OWN_TOOL_PREFIX = "mcp__plugin_onyx_";
 const RETRIEVAL_TOOL_PATTERN = /search|query|retriev|lookup|find|fetch/i;
 const CONTEXT_HEADER =
   "Onyx knowledge base results for this prompt, ranked by relevance. " +
-  "Use them before any other source and cite the link of each result you rely on. " +
-  "For follow-up questions call search_indexed_documents on the Onyx MCP server " +
-  "before any other search tool.";
+  "Use them before any other source and cite the url of each result you rely on.";
 
 type HookInput = {
   session_id: string;
@@ -59,20 +57,22 @@ type SessionState = {
   consulted: boolean;
 };
 
+// CLAUDE_PLUGIN_OPTION_* comes from /plugin configure. The bare name covers
+// --plugin-dir development, where userConfig is never prompted.
+function option(name: string): string | undefined {
+  return process.env[`CLAUDE_PLUGIN_OPTION_${name}`] ?? process.env[name];
+}
+
 function readConfig(): PluginConfig | null {
-  const env = process.env;
-  // CLAUDE_PLUGIN_OPTION_* comes from /plugin configure. The plain names
-  // cover --plugin-dir development, where userConfig is never prompted.
-  const url = env.CLAUDE_PLUGIN_OPTION_ONYX_URL ?? env.ONYX_URL;
-  const token = env.CLAUDE_PLUGIN_OPTION_ONYX_API_TOKEN ?? env.ONYX_API_TOKEN;
+  const url = option("ONYX_URL");
+  const token = option("ONYX_API_TOKEN");
   if (!url || !token) {
     console.error(
-      "onyx plugin: set the Onyx URL and API token with /plugin configure onyx",
+      "onyx plugin: set the Onyx URL and API token with /plugin configure onyx@onyx",
     );
     return null;
   }
-  const strict =
-    env.CLAUDE_PLUGIN_OPTION_STRICT_RETRIEVAL ?? env.ONYX_STRICT_RETRIEVAL;
+  const strict = option("ONYX_STRICT_RETRIEVAL");
   return {
     url: url.replace(/\/+$/, ""),
     token,
@@ -124,18 +124,18 @@ function shouldSearch(prompt: string): boolean {
   return (
     !prompt.startsWith("/") &&
     prompt.length >= MIN_PROMPT_CHARS &&
-    /[a-z]/i.test(prompt)
+    /\p{L}/u.test(prompt)
   );
 }
 
-// null means Onyx did not answer. An empty list means it answered with nothing.
+// null means Onyx could not be reached. An HTTP error counts as an answer, so
+// a misconfigured token never locks the strict gate shut.
 async function search(
   config: PluginConfig,
   query: string,
 ): Promise<SearchResult[] | null> {
-  let response: Response;
   try {
-    response = await fetch(`${config.url}${SEARCH_PATH}`, {
+    const response = await fetch(`${config.url}${SEARCH_PATH}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${config.token}`,
@@ -150,16 +150,15 @@ async function search(
       }),
       signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
     });
+    if (!response.ok) {
+      console.error(`onyx plugin: search returned HTTP ${response.status}`);
+      return [];
+    }
+    return ((await response.json()) as SearchResponse).results;
   } catch (err) {
     console.error(`onyx plugin: search request failed: ${String(err)}`);
     return null;
   }
-  if (!response.ok) {
-    console.error(`onyx plugin: search returned HTTP ${response.status}`);
-    return [];
-  }
-  const payload = (await response.json()) as SearchResponse;
-  return payload.results;
 }
 
 function formatContext(results: SearchResult[]): string {
@@ -174,7 +173,7 @@ function formatContext(results: SearchResult[]): string {
       .join(", ");
     const section =
       `${index + 1}. ${result.title} (${meta})\n` +
-      `${result.link ?? "no link"}\n` +
+      `${result.link ?? "no url"}\n` +
       result.content.slice(0, MAX_CONTENT_CHARS);
     if (used + section.length > MAX_CONTEXT_CHARS) {
       break;
@@ -195,7 +194,7 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
   }
   const results = await search(config, prompt.slice(0, MAX_QUERY_CHARS));
   writeState(input.session_id, { consulted: results !== null });
-  if (!results || results.length === 0) {
+  if (!results?.length) {
     return;
   }
   emit({
@@ -206,15 +205,20 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
   });
 }
 
-function preTool(input: HookInput, config: PluginConfig): void {
-  if (!config.strict) {
-    return;
-  }
-  const tool = input.tool_name ?? "";
+function isOtherRetrievalTool(tool: string): boolean {
   if (tool.startsWith(OWN_TOOL_PREFIX)) {
-    return;
+    return false;
   }
-  if (tool.startsWith("mcp__") && !RETRIEVAL_TOOL_PATTERN.test(tool)) {
+  if (!tool.startsWith("mcp__")) {
+    return true;
+  }
+  const toolName = tool.slice(tool.lastIndexOf("__") + 2);
+  return RETRIEVAL_TOOL_PATTERN.test(toolName);
+}
+
+function preTool(input: HookInput, config: PluginConfig): void {
+  const tool = input.tool_name ?? "";
+  if (!config.strict || !isOtherRetrievalTool(tool)) {
     return;
   }
   if (readState(input.session_id).consulted) {
@@ -231,25 +235,24 @@ function preTool(input: HookInput, config: PluginConfig): void {
   });
 }
 
-function postTool(input: HookInput): void {
-  writeState(input.session_id, { consulted: true });
-}
-
 async function main(): Promise<void> {
   const input = JSON.parse(readFileSync(0, "utf8")) as HookInput;
   const config = readConfig();
   if (!config) {
     return;
   }
-  const event = process.argv[2];
-  if (event === "user-prompt") {
-    await userPrompt(input, config);
-  } else if (event === "pre-tool") {
-    preTool(input, config);
-  } else if (event === "post-tool") {
-    postTool(input);
-  } else {
-    console.error(`onyx plugin: unknown hook event '${event}'`);
+  switch (input.hook_event_name) {
+    case "UserPromptSubmit":
+      await userPrompt(input, config);
+      break;
+    case "PreToolUse":
+      preTool(input, config);
+      break;
+    case "PostToolUse":
+      writeState(input.session_id, { consulted: true });
+      break;
+    default:
+      console.error(`onyx plugin: unexpected hook event '${input.hook_event_name}'`);
   }
 }
 
