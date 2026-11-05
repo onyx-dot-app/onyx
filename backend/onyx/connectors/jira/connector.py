@@ -345,6 +345,42 @@ def _parse_issue_key(jira_base_url: str, document_id: str) -> str | None:
     return issue_key if _ISSUE_KEY_RE.fullmatch(issue_key) else None
 
 
+def build_jira_ticket_content(
+    issue: JiraIssue,
+    comment_email_blacklist: tuple[str, ...] = (),
+) -> str:
+    """The ticket text that indexing reads and the size limit measures."""
+    description: str = rich_text(get_issue_field(issue, "description"))
+    comments: list[str] = get_comment_strs(
+        issue=issue,
+        comment_email_blacklist=comment_email_blacklist,
+    )
+    return f"{description}\n" + "\n".join(
+        [f"Comment: {comment}" for comment in comments if comment]
+    )
+
+
+def jira_label_skip_reason(
+    issue: JiraIssue,
+    labels_to_skip: set[str] | None = None,
+) -> str | None:
+    """Why indexing skips this ticket because of its labels, or None."""
+    issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
+    if labels_to_skip and any(label in issue_labels for label in labels_to_skip):
+        return (
+            "it has a label to skip. Found labels: "
+            f"{issue_labels}. Labels to skip: {labels_to_skip}"
+        )
+    return None
+
+
+def jira_ticket_size_skip_reason(ticket_content: str) -> str | None:
+    """Why indexing skips this ticket because of its size, or None."""
+    if len(ticket_content.encode("utf-8")) > JIRA_CONNECTOR_MAX_TICKET_SIZE:
+        return f"it exceeds the maximum size of {JIRA_CONNECTOR_MAX_TICKET_SIZE} bytes"
+    return None
+
+
 def process_jira_issue(
     jira_base_url: str,
     issue: JiraIssue,
@@ -353,35 +389,21 @@ def process_jira_issue(
     parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
-    issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
-    if labels_to_skip:
-        if any(label in issue_labels for label in labels_to_skip):
-            logger.info(
-                "Skipping %s because it has a label to skip. Found labels: %s. Labels to skip: %s.",
-                issue_key,
-                issue_labels,
-                labels_to_skip,
-            )
-            return None
-
-    description: str = rich_text(get_issue_field(issue, "description"))
-
-    comments: list[str] = get_comment_strs(
-        issue=issue,
-        comment_email_blacklist=comment_email_blacklist,
-    )
-    ticket_content = f"{description}\n" + "\n".join(
-        [f"Comment: {comment}" for comment in comments if comment]
-    )
-
-    # Check ticket size
-    if len(ticket_content.encode("utf-8")) > JIRA_CONNECTOR_MAX_TICKET_SIZE:
-        logger.info(
-            "Skipping %s because it exceeds the maximum size of %s bytes.",
-            issue_key,
-            JIRA_CONNECTOR_MAX_TICKET_SIZE,
-        )
+    # Labels are checked before the rich-text body is parsed: an excluded
+    # ticket must not fail indexing because its description is malformed.
+    label_reason = jira_label_skip_reason(issue, labels_to_skip)
+    if label_reason is not None:
+        logger.info("Skipping %s because %s.", issue_key, label_reason)
         return None
+    ticket_content = build_jira_ticket_content(
+        issue, comment_email_blacklist=comment_email_blacklist
+    )
+    size_reason = jira_ticket_size_skip_reason(ticket_content)
+    if size_reason is not None:
+        logger.info("Skipping %s because %s.", issue_key, size_reason)
+        return None
+
+    issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
 
     page_url = build_jira_url(jira_base_url, issue_key)
 

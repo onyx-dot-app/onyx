@@ -7,7 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.background.celery.celery_utils import (
+    PruningStopRequested,
+    extract_ids_from_runnable_connector,
+)
+from onyx.background.celery.tasks.pruning.tasks import PruneCallback
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import source_prune_honors_indexing_start
 from onyx.connectors.interfaces import (
@@ -18,6 +22,7 @@ from onyx.connectors.interfaces import (
     PollConnector,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
     prune_listing_honors_indexing_start,
 )
 from onyx.connectors.models import SlimDocument
@@ -54,6 +59,18 @@ def _raising_connector(message: str) -> SlimConnector:
 
     connector.retrieve_all_slim_docs.return_value = raising_iter()
     return connector
+
+
+def _make_prune_callback(fenced: bool) -> tuple[PruneCallback, MagicMock]:
+    redis_connector = MagicMock()
+    redis_connector.stop.fenced = fenced
+    callback = PruneCallback(
+        parent_pid=0,
+        redis_connector=redis_connector,
+        redis_lock=MagicMock(),
+        redis_client=MagicMock(),
+    )
+    return callback, redis_connector
 
 
 class TestEnumerationDuration:
@@ -236,6 +253,101 @@ class _LoadConnector(LoadConnector, PollConnector):
         raise AssertionError("A prune of a load connector loads all documents.")
 
 
+class _StoppingSlimConnector(SlimConnector):
+    """Returns normally on a stop, before yielding a document."""
+
+    def __init__(self) -> None:
+        self.callbacks: list[IndexingHeartbeatInterface | None] = []
+
+    def load_credentials(self, credentials: dict[str, Any]) -> None:  # noqa: ARG002
+        return None
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        self.callbacks.append(callback)
+        if callback and callback.should_stop():
+            return
+        yield [SlimDocument(id="doc")]
+
+
+class _LateStoppingSlimConnector(SlimConnector):
+    """Yields one batch, then returns normally while the stop is set."""
+
+    def __init__(self) -> None:
+        self.callbacks: list[IndexingHeartbeatInterface | None] = []
+
+    def load_credentials(self, credentials: dict[str, Any]) -> None:  # noqa: ARG002
+        return None
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        self.callbacks.append(callback)
+        yield [SlimDocument(id="first")]
+        if callback and callback.should_stop():
+            return
+
+
+class _StoppingPermSyncConnector(SlimConnectorWithPermSync):
+    """Permission-sync variant that returns normally on a stop."""
+
+    def __init__(self) -> None:
+        self.callbacks: list[IndexingHeartbeatInterface | None] = []
+
+    def load_credentials(self, credentials: dict[str, Any]) -> None:  # noqa: ARG002
+        return None
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        self.callbacks.append(callback)
+        if callback and callback.should_stop():
+            return
+        yield [SlimDocument(id="doc")]
+
+
+@pytest.mark.parametrize(
+    "connector_class", [_StoppingSlimConnector, _StoppingPermSyncConnector]
+)
+def test_a_stopped_listing_that_returns_normally_is_an_error(
+    connector_class: type[_StoppingSlimConnector | _StoppingPermSyncConnector],
+) -> None:
+    connector = connector_class()
+    callback = MagicMock(spec=IndexingHeartbeatInterface)
+    callback.should_stop.return_value = True
+
+    with pytest.raises(PruningStopRequested):
+        extract_ids_from_runnable_connector(connector, callback=callback)
+
+    assert len(connector.callbacks) == 1
+    assert connector.callbacks[0] is not None
+
+
+def test_a_batch_followed_by_a_normal_stop_is_an_error() -> None:
+    """A yielded batch must not turn a stopped partial listing into a success."""
+    connector = _LateStoppingSlimConnector()
+    callback = MagicMock(spec=IndexingHeartbeatInterface)
+    # Pre-batch check: continue. Connector after its first batch: stop, and
+    # the guard raises so the batch cannot become a successful listing.
+    callback.should_stop.side_effect = [False, True, True]
+
+    with pytest.raises(PruningStopRequested):
+        extract_ids_from_runnable_connector(connector, callback=callback)
+
+    assert len(connector.callbacks) == 1
+    assert connector.callbacks[0] is not None
+
+
 class TestListingFromIndexingStart:
     def test_dated_slim_listing_gets_the_start(self) -> None:
         connector = _DatedSlimConnector()
@@ -320,3 +432,86 @@ def test_source_prune_honors_indexing_start(
     source: DocumentSource, expected: bool
 ) -> None:
     assert source_prune_honors_indexing_start(source) is expected
+
+
+class TestPruneCallback:
+    def test_observed_stop_survives_a_resume_clearing_the_fence(self) -> None:
+        callback, redis_connector = _make_prune_callback(fenced=True)
+
+        assert callback.should_stop()
+
+        # A resume clears the fence; the connector already saw the stop and
+        # returned a partial listing, so the callback must keep reporting it.
+        redis_connector.stop.fenced = False
+        assert callback.should_stop()
+
+    def test_connector_stop_is_raised_not_returned(self) -> None:
+        callback, _ = _make_prune_callback(fenced=True)
+        connector = MagicMock(spec=SlimConnector)
+
+        def retrieve_all_slim_docs(
+            *,
+            start: SecondsSinceUnixEpoch | None = None,
+            callback: IndexingHeartbeatInterface | None = None,
+        ) -> Iterator[list[MagicMock]]:
+            # The OneDrive shape: return no documents when the heartbeat says
+            # stop. The shared guard must turn that into an error.
+            del start
+            assert callback is not None
+            if callback.should_stop():
+                return
+            yield []
+
+        connector.retrieve_all_slim_docs.side_effect = retrieve_all_slim_docs
+
+        with pytest.raises(PruningStopRequested):
+            extract_ids_from_runnable_connector(connector, callback)
+
+    def test_swallowed_stop_still_aborts_at_post_check(self) -> None:
+        callback, redis_connector = _make_prune_callback(fenced=True)
+        connector = MagicMock(spec=SlimConnector)
+
+        def retrieve_all_slim_docs(
+            *,
+            start: SecondsSinceUnixEpoch | None = None,
+            callback: IndexingHeartbeatInterface | None = None,
+        ) -> Iterator[list[MagicMock]]:
+            # A broad except in a connector must not defeat the guard: the
+            # callback latches before it raises, so the post-check still sees
+            # the stop after a resume clears the fence.
+            del start
+            assert callback is not None
+            try:
+                callback.should_stop()
+            except PruningStopRequested:
+                pass
+            redis_connector.stop.fenced = False
+            return
+            yield []
+
+        connector.retrieve_all_slim_docs.side_effect = retrieve_all_slim_docs
+
+        with pytest.raises(RuntimeError, match="after enumeration"):
+            extract_ids_from_runnable_connector(connector, callback)
+
+    def test_complete_listing_without_a_stop_is_returned(self) -> None:
+        callback, _ = _make_prune_callback(fenced=False)
+        connector = _make_slim_connector(["doc1"])
+
+        result = extract_ids_from_runnable_connector(connector, callback)
+
+        assert list(result.raw_id_to_parent) == ["doc1"]
+
+    def test_latch_does_not_leak_to_the_next_run(self) -> None:
+        first, redis_connector = _make_prune_callback(fenced=True)
+        assert first.should_stop()
+
+        redis_connector.stop.fenced = False
+        second = PruneCallback(
+            parent_pid=0,
+            redis_connector=redis_connector,
+            redis_lock=MagicMock(),
+            redis_client=MagicMock(),
+        )
+
+        assert second.should_stop() is False

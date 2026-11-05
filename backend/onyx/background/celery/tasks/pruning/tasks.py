@@ -165,6 +165,18 @@ def _get_fence_validation_block_expiration() -> int:
 
 
 class PruneCallback(IndexingCallbackBase):
+    # A pause fence can be cleared by a resume before the caller checks the
+    # stop again after enumeration. Keep a stop that any caller has observed.
+    _stop_observed: bool = False
+
+    def should_stop(self) -> bool:
+        if self._stop_observed:
+            return True
+        if super().should_stop():
+            self._stop_observed = True
+            return True
+        return False
+
     def progress(self, tag: str, amount: int) -> None:
         self.redis_connector.prune.set_active()
         super().progress(tag, amount)

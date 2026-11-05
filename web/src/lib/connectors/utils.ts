@@ -342,6 +342,15 @@ export function createConnectorValidationSchema(
   configuration: ConnectionConfiguration = connectorConfigs[connector]
 ): Yup.ObjectSchema<Record<string, any>> {
   const fields = [...configuration.values, ...configuration.advanced_values];
+  const projectKeyLabel = fields
+    .flatMap((field) =>
+      field.type === "tab" ? field.tabs.flatMap((tab) => tab.fields) : [field]
+    )
+    .find((field) => field.name === "project_key")?.label;
+  const resolvedProjectKeyLabel =
+    typeof projectKeyLabel === "function"
+      ? projectKeyLabel(null)
+      : projectKeyLabel;
 
   const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(
     (acc, field) => {
@@ -382,6 +391,20 @@ export function createConnectorValidationSchema(
       .when("indexing_scope", {
         is: OneDriveScope.Specific,
         then: (schema) => schema.min(1, messages.oneDriveUsersRequired),
+      });
+  }
+
+  if (connector === ValidSources.JiraServiceManagement) {
+    // An empty Project key would become "all visible desks" in the backend.
+    fieldSchemas.project_key = Yup.string()
+      .trim()
+      .when("indexing_scope", {
+        is: "project",
+        then: (schema) =>
+          schema.required(
+            messages.required?.(resolvedProjectKeyLabel ?? "Project Key") ??
+              "Project Key is required"
+          ),
       });
   }
 

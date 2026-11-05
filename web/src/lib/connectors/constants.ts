@@ -98,6 +98,8 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Outline]: "sources.outline.description",
   [ValidSources.Confluence]: "sources.confluence.description",
   [ValidSources.Jira]: "sources.jira.description",
+  [ValidSources.JiraServiceManagement]:
+    "sources.jiraServiceManagement.description",
   [ValidSources.Productboard]: "sources.productboard.description",
   [ValidSources.Slab]: "sources.slab.description",
   [ValidSources.Coda]: "sources.coda.description",
@@ -368,6 +370,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
     isPopular: true,
+  },
+  jira_service_management: {
+    icon: SvgJira,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira-service-management`,
   },
   zendesk: {
     icon: SvgZendesk,

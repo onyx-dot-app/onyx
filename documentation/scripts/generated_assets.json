@@ -140,6 +140,10 @@
       "src": "logos/jira"
     },
     {
+      "out": "assets/overview/core_features/connectors/jira-service-management.svg",
+      "src": "logos/jira"
+    },
+    {
       "out": "assets/overview/core_features/connectors/linear.svg",
       "src": "logos/linear"
     },
