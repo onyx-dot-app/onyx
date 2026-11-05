@@ -46,6 +46,9 @@ type BadgeProps = {
 
   /** Height on the Tailwind scale. Default: `4`. */
   size?: BadgeSize;
+
+  /** Cap the title at 160px and truncate it with an ellipsis. */
+  truncate?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -62,6 +65,7 @@ function Badge({
   color = "default",
   textColor = "inherit",
   size = 4,
+  truncate = false,
   ...rest
 }: BadgeProps) {
   const config = BADGE_COLORS[color];
@@ -82,6 +86,7 @@ function Badge({
       )}
       style={iconColorStyle}
       data-size={size}
+      data-capped={truncate || undefined}
     >
       <Content
         // The body variant sets the title in secondary-body.
@@ -91,6 +96,7 @@ function Badge({
         color="interactive"
         icon={icon}
         title={title}
+        titleMaxLines={truncate ? 1 : undefined}
       />
     </div>
   );

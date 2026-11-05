@@ -10,6 +10,7 @@ import {
 } from "react";
 import { cn } from "@opal/utils";
 import {
+  Badge,
   OverflowText,
   Text,
   Tooltip as OpalTooltip,
@@ -32,9 +33,6 @@ export type { SourceInfo };
 
 // Variant-specific styles
 const sizeClasses = {
-  inlineCitation: {
-    container: "rounded-04 p-0.5 gap-0.5",
-  },
   tag: {
     container: "rounded-08 p-1 gap-1",
   },
@@ -183,7 +181,7 @@ const IconStack = ({
 );
 
 /**
- * Shared text styling, computed from `inlineCitation` and `isOpen`. The color
+ * Shared text styling, computed from `isOpen`. The color
  * is a class on a wrapper so that hover classes on the wrapper can override it.
  */
 interface TextStyle {
@@ -316,7 +314,7 @@ export interface SourceTagProps {
  * - Hovering opens a details card with source navigation
  *
  * **Inline Citation** (`variant="inlineCitation"`):
- * - Compact size for use within text content
+ * - An Opal `Badge` that sits on the text line
  * - Shows "+N" count for multiple sources
  *
  * **Query Mode** (`isQuery`):
@@ -386,20 +384,15 @@ const SourceTagInner = ({
 
   const extraCount = sources.length - 1;
 
-  const size = variant;
-  const styles = sizeClasses[size];
+  const styles = sizeClasses[variant === "button" ? "button" : "tag"];
 
   // Shared text styling props
   const textStyle = useMemo<TextStyle>(
     () => ({
-      font: inlineCitation ? "figure-small-value" : "secondary-body",
-      colorClass: isOpen
-        ? "text-text-inverted-05"
-        : inlineCitation
-          ? "text-text-03"
-          : "text-text-04",
+      font: "secondary-body",
+      colorClass: isOpen ? "text-text-inverted-05" : "text-text-04",
     }),
-    [inlineCitation, isOpen]
+    [isOpen]
   );
 
   // Cursor class based on mode and state
@@ -442,7 +435,21 @@ const SourceTagInner = ({
     onSourceClick?.();
   }, [isQuery, expanded, isTruncated, onSourceClick]);
 
-  const buttonContent = (
+  const buttonContent = inlineCitation ? (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex align-baseline appearance-none border-none bg-transparent p-0 rounded-04 cursor-pointer",
+        className
+      )}
+      onClick={handleClick}
+    >
+      <Badge
+        title={extraCount > 0 ? `${displayName} +${extraCount}` : displayName}
+        truncate
+      />
+    </button>
+  ) : (
     <button
       type="button"
       className={cn(
@@ -457,8 +464,7 @@ const SourceTagInner = ({
       )}
       onClick={handleClick}
     >
-      {/* Stacked icons container - only for tag variant */}
-      {!inlineCitation && !isMore && (
+      {!isMore && (
         <IconStack
           sources={uniqueSources}
           isQuery={isQuery}
@@ -469,8 +475,7 @@ const SourceTagInner = ({
 
       <div
         className={cn(
-          "flex items-baseline",
-          !inlineCitation && "pe-0.5",
+          "flex items-baseline pe-0.5",
           isQuery && expanded && "w-full max-w-full min-w-0"
         )}
       >
@@ -499,25 +504,7 @@ const SourceTagInner = ({
           </span>
         )}
 
-        {/* Count - for inline citation */}
-        {inlineCitation && sources.length > 1 && (
-          <span
-            className={cn(
-              "transition-colors duration-150",
-              isOpen ? "text-text-inverted-05" : "text-text-03",
-              !showDetailsCard &&
-                !isQuery &&
-                "group-hover:text-text-inverted-05"
-            )}
-          >
-            <Text font="figure-small-value" color="inherit">
-              {`+${extraCount}`}
-            </Text>
-          </span>
-        )}
-
-        {/* URL - for tag variant */}
-        {!inlineCitation && displayUrl && (
+        {displayUrl && (
           <span
             className={cn(
               "max-w-40 truncate transition-colors duration-150",
