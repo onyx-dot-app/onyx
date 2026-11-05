@@ -18,6 +18,7 @@ import {
   InputHorizontal,
   toast,
   useErrorToast,
+  Section,
 } from "@opal/layouts";
 import {
   Button,
@@ -33,7 +34,6 @@ import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels/utils";
 import {
   refreshLlmProviderCaches,
@@ -56,7 +56,6 @@ import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
-import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
@@ -218,7 +217,7 @@ function ExistingProviderCard({
             padding={2}
             tag={
               isDefault
-                ? { title: t("providerCard.defaultTag.label"), color: "blue" }
+                ? { title: t("providerCard.defaultTag.label"), color: "info" }
                 : undefined
             }
             rightChildren={
@@ -842,7 +841,7 @@ export default function LanguageModelsPage() {
         {/* ── Available Providers (only when providers exist) ── */}
         {hasProviders && (
           <>
-            <GeneralLayouts.Section
+            <Section
               gap={3}
               height="fit"
               alignItems="stretch"
@@ -864,7 +863,7 @@ export default function LanguageModelsPage() {
                   />
                 ))}
               </div>
-            </GeneralLayouts.Section>
+            </Section>
 
             <Divider paddingParallel={0} paddingPerpendicular={0} />
           </>
@@ -882,7 +881,7 @@ export default function LanguageModelsPage() {
         <Disabled disabled={isConfigurationDisabled}>
           <div className="flex flex-col gap-8">
             {providerGroups.map((group) => (
-              <GeneralLayouts.Section
+              <Section
                 key={group.id}
                 gap={3}
                 height="fit"
@@ -914,7 +913,7 @@ export default function LanguageModelsPage() {
                     <NewCustomProviderCard isFirstProvider={isFirstProvider} />
                   )}
                 </CardGrid>
-              </GeneralLayouts.Section>
+              </Section>
             ))}
           </div>
         </Disabled>

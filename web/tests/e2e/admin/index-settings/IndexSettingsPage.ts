@@ -273,7 +273,7 @@ export class IndexSettingsPage {
     const listbox = this.page.getByRole("listbox", { name: "Select model" });
     await expect(listbox).toBeVisible();
     await this.page
-      .getByRole("textbox", { name: "Search" })
+      .getByRole("searchbox", { name: "Search" })
       .and(this.page.locator(":focus"))
       .fill(displayName);
     await listbox.getByRole("option", { name: displayName }).click();

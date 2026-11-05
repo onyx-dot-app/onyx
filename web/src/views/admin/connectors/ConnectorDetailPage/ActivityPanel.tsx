@@ -11,7 +11,7 @@ import {
   InputTypeIn,
   MessageCard,
   ShadowDiv,
-  Tag,
+  Badge,
   Tooltip,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
@@ -62,14 +62,11 @@ type Shown = "all" | ActivityGroup;
 export interface ActivityCountTagsProps {
   failures: number;
   errors: number;
-  /** `"count"` drops the tinted backgrounds, for a card header. Default: `"status"`. */
-  variant?: "status" | "count";
 }
 /** The failed runs and the runs with document errors, as two counts. A zero count shows no tag. */
 export function ActivityCountTags({
   failures,
   errors,
-  variant = "status",
 }: ActivityCountTagsProps) {
   const t = useTranslations("admin.connector.activity");
   const format = useFormatter();
@@ -77,23 +74,23 @@ export function ActivityCountTags({
     <>
       {failures > 0 && (
         <Tooltip tooltip={t("counts.failures", { count: failures })} side="top">
-          <Tag
+          <Badge
             icon={SvgXOctagon}
             title={format.number(failures)}
-            color="red"
-            variant={variant}
-            size="md"
+            color="error"
+            textColor="text-04"
+            size={6}
           />
         </Tooltip>
       )}
       {errors > 0 && (
         <Tooltip tooltip={t("counts.errors", { count: errors })} side="top">
-          <Tag
+          <Badge
             icon={SvgAlertTriangle}
             title={format.number(errors)}
-            color="orange"
-            variant={variant}
-            size="md"
+            color="warning"
+            textColor="text-04"
+            size={6}
           />
         </Tooltip>
       )}
@@ -365,7 +362,6 @@ export default function ActivityPanel({
                       <ActivityCountTags
                         failures={failures.total}
                         errors={errors.total}
-                        variant="count"
                       />
                       <SelectButton
                         icon={SvgFilter}
@@ -407,7 +403,7 @@ export default function ActivityPanel({
               {filtersOpen && (
                 <>
                   <InputTypeIn
-                    searchIcon
+                    icon="search"
                     variant={foldFilters ? "internal" : "primary"}
                     placeholder={t("search.placeholder")}
                     maxLength={SEARCH_MAX_LENGTH}

@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -45,7 +45,7 @@ export default function OpenAPIPluginDetailPage({
   toolId,
 }: OpenAPIPluginDetailPageProps) {
   const t = useTranslations("actions");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
@@ -101,23 +101,23 @@ export default function OpenAPIPluginDetailPage({
     consumedConfigure.current.add(tool.id);
     const next = new URLSearchParams(searchParams.toString());
     next.delete("configure");
-    router.replace(
+    navigation.go(
       withPluginSearchParams(
         pluginDetailHref({ kind: "openapi", id: tool.id }),
         next
       ),
-      { scroll: false }
+      { replace: true, scroll: false }
     );
     if (can(tool, "authenticate")) {
       setTab("authentication");
       setVisited((current) => new Set([...current, "authentication"]));
     }
-  }, [tool, searchParams, router]);
+  }, [tool, searchParams, navigation]);
 
   function closeDetail() {
     if (busy) return;
     guard.requestLeave(() =>
-      router.replace("/admin/plugins", { scroll: false })
+      navigation.go("/admin/plugins", { replace: true, scroll: false })
     );
   }
 
@@ -394,7 +394,7 @@ export default function OpenAPIPluginDetailPage({
                 <Tabs.Content value="tools">
                   <div className="flex flex-col gap-4">
                     <InputTypeIn
-                      searchIcon
+                      icon="search"
                       value={toolSearch}
                       onChange={(event) => setToolSearch(event.target.value)}
                       placeholder={t("mcpTools.search")}

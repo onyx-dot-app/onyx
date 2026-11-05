@@ -1,3 +1,4 @@
+import { Section } from "@opal/layouts";
 import {
   Table,
   TableBody,
@@ -7,7 +8,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CopyButton, Text } from "@opal/components";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";

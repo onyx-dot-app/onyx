@@ -1,14 +1,13 @@
 "use client";
 
-import { OverflowText, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { OverflowText, Badge, Text } from "@opal/components";
 import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { MinimalOnyxDocument } from "@/lib/search/types";
-import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { richNodes } from "@opal/utils";
 import { timeAgo } from "@opal/time";
@@ -89,13 +88,13 @@ export default function SearchCard({
               {/* Metadata */}
               <Section flexDirection="row" justifyContent="start" gap={1}>
                 {(document.primary_owners ?? []).map((owner, index) => (
-                  <Chip key={index}>{owner}</Chip>
+                  <Badge key={index} title={owner} />
                 ))}
                 {document.metadata?.tags &&
                   (Array.isArray(document.metadata.tags)
                     ? document.metadata.tags
                     : [document.metadata.tags]
-                  ).map((tag, index) => <Chip key={index}>{tag}</Chip>)}
+                  ).map((tag, index) => <Badge key={index} title={tag} />)}
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
                     <Text font="secondary-body" color="text-02">

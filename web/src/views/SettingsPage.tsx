@@ -1,16 +1,16 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   ContentAction,
   InputHorizontal,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
 import { copyText, markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
@@ -576,8 +576,6 @@ function GeneralSettings() {
     [updateUserChatBackground, setTheme, updateUserThemePreference]
   );
   const { refreshChatSessions } = useChatSessions();
-  const router = useRouter();
-  const pathname = usePathname();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
@@ -614,7 +612,7 @@ function GeneralSettings() {
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, refreshChatSessions, t]);
+  }, [refreshChatSessions, t]);
 
   return (
     <>
@@ -1112,7 +1110,11 @@ function PromptShortcuts() {
                 className="w-full grid grid-cols-[1fr_min-content] gap-x-1 gap-y-1"
               >
                 <InputTypeIn
-                  prefixText="/"
+                  leftChildren={
+                    <Text font="main-ui-body" color="text-02">
+                      /
+                    </Text>
+                  }
                   placeholder={t("promptShortcuts.row.promptPlaceholder")}
                   value={shortcut.prompt}
                   onChange={(e) =>
@@ -1953,6 +1955,7 @@ function LLMGatewaySettings() {
 
 function AccountsAccessSettings() {
   const t = useTranslations("settings");
+  const navigation = useNavigation();
   const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -2345,7 +2348,7 @@ function AccountsAccessSettings() {
                           placeholder={t("apiKeys.list.searchPlaceholder")}
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
-                          searchIcon
+                          icon="search"
                           variant="internal"
                         />
                       )}
@@ -2457,7 +2460,10 @@ function AccountsAccessSettings() {
                     <Text font="secondary-body" color="text-03">
                       {t("apiKeys.upsell.description")}
                     </Text>
-                    <Button prominence="secondary" href="/admin/billing">
+                    <Button
+                      prominence="secondary"
+                      {...navigation.linkTo("/admin/billing")}
+                    >
                       {t("apiKeys.upsell.upgradeButton")}
                     </Button>
                   </Section>

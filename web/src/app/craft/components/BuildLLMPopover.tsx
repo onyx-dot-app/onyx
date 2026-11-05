@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
@@ -22,7 +23,6 @@ import {
 import { useUser } from "@/providers/UserProvider";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
-import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,
   AccordionContent,

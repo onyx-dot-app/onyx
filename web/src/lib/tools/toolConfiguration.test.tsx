@@ -17,7 +17,7 @@ const CHAT_KEY = "onyx:tools:chat:abc";
 // from what useAppPosition reports on each render.
 let mockChatId = "abc";
 
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
     agent: () => null,

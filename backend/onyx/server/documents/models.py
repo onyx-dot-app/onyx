@@ -1455,3 +1455,14 @@ class IndexingStatusRequest(BaseModel):
     name_filter: str | None = None
     source_to_page: dict[DocumentSource, int] = Field(default_factory=dict)
     get_all_connectors: bool = False
+
+
+class EventSourceSnapshot(BaseModel):
+    """What an admin needs to wire one source's webhook up at the provider."""
+
+    source: DocumentSource
+    # One per endpoint, in the spec's order.
+    callback_urls: list[str]
+    # False until an active event connector exists; until then a provider's
+    # validation handshake fails.
+    receiving: bool

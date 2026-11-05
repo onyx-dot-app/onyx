@@ -13,7 +13,7 @@ import {
   InputTypeIn,
   MessageCard,
   Pagination,
-  Tag,
+  Badge,
   Tooltip,
   Text,
 } from "@opal/components";
@@ -85,10 +85,10 @@ const STATUS_GROUPS: CCPairRunStatusGroup[] = [
 
 // The header counts. A group with no runs shows no tag.
 const COUNT_TAGS = [
-  { group: "succeeded", icon: SvgCheckCircle, color: "green" },
-  { group: "running", icon: IconLoader, color: "blue" },
-  { group: "failed", icon: SvgXOctagon, color: "red" },
-  { group: "canceled", icon: SvgXCircle, color: "gray" },
+  { group: "succeeded", icon: SvgCheckCircle, color: "success" },
+  { group: "running", icon: IconLoader, color: "info" },
+  { group: "failed", icon: SvgXOctagon, color: "error" },
+  { group: "canceled", icon: SvgXCircle, color: "default" },
 ] as const;
 
 const ALL = "all";
@@ -528,7 +528,7 @@ export default function RunsCard({
                 })}
                 side="top"
               >
-                <Tag
+                <Badge
                   icon={icon}
                   title={format.number(data?.status_counts[group] ?? 0)}
                   color={color}
@@ -588,7 +588,7 @@ export default function RunsCard({
           {/* The full card's filters narrow it, so only the embedded list searches. */}
           <Section height="fit" padding={2} className="min-w-0 flex-1">
             <InputTypeIn
-              searchIcon
+              icon="search"
               variant="primary"
               placeholder={t("search.placeholder")}
               value={searchInput}

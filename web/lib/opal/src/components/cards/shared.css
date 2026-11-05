@@ -33,6 +33,10 @@
   @apply border-theme-amber-02;
 }
 
+[data-opal-status-border="queued"] {
+  @apply border-theme-purple-02;
+}
+
 [data-opal-status-border="error"] {
   @apply border-status-error-02;
 }

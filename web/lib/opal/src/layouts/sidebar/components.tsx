@@ -11,16 +11,16 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@opal/navigation/next";
 import {
   Button,
   Divider,
   OverflowText,
   ShadowDiv,
   Spacer,
-  Tag,
+  Badge,
   Tooltip,
-  type TagProps,
+  type BadgeProps,
 } from "@opal/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
@@ -401,7 +401,7 @@ function SidebarFooter({ children }: SidebarFooterProps) {
 interface SidebarSectionProps {
   title?: string | RichStr;
   /** Optional tag at the end of the header, in line with tab `rightChildren`. */
-  tag?: TagProps;
+  tag?: BadgeProps;
   /** Optional action shown on hover, e.g. a "+" button. */
   action?: React.ReactNode;
   /** When true, dims the section header to indicate it is unavailable. */
@@ -432,7 +432,7 @@ function SidebarSection({
               </div>
               {tag && (
                 <div className="opal-sidebar-section__tag">
-                  <Tag {...tag} />
+                  <Badge {...tag} />
                 </div>
               )}
               {action && (

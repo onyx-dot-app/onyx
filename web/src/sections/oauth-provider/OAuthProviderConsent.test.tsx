@@ -2,6 +2,12 @@ import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import OAuthProviderConsent from "@/sections/oauth-provider/OAuthProviderConsent";
 import { submitOAuthProviderConsent } from "@/lib/oauth-provider/api";
 
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 jest.mock("@/lib/oauth-provider/api", () => ({
   submitOAuthProviderConsent: jest.fn(),
 }));

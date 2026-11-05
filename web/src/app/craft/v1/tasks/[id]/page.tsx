@@ -1,9 +1,9 @@
 "use client";
 
+import { useParams, useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import {
   ConfirmationModalLayout,
@@ -45,7 +45,7 @@ export default function ScheduledTaskDetailPage() {
   const t = useTranslations("craft.tasks.detailPage");
   const tTasks = useTranslations("craft.tasks");
   const params = useParams<{ id: string }>();
-  const router = useRouter();
+  const navigation = useNavigation();
   const taskId = params?.id;
 
   const { data, error, isLoading, mutate } = useSWR<ScheduledTaskDetail>(
@@ -64,8 +64,8 @@ export default function ScheduledTaskDetailPage() {
     : undefined;
 
   const handleBack = useCallback(() => {
-    router.push(TASKS_PATH);
-  }, [router]);
+    navigation.go(TASKS_PATH);
+  }, [navigation]);
 
   const handleToggleStatus = useCallback(async () => {
     if (!data) return;
@@ -125,14 +125,14 @@ export default function ScheduledTaskDetailPage() {
         { revalidate: false }
       );
       setConfirmDelete(false);
-      router.replace(TASKS_PATH);
+      navigation.go(TASKS_PATH, { replace: true });
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("toasts.deleteFailed")
       );
       setBusy(false);
     }
-  }, [data, globalMutate, router, t]);
+  }, [data, globalMutate, navigation, t]);
 
   if (!taskId) {
     return (
@@ -168,7 +168,7 @@ export default function ScheduledTaskDetailPage() {
                     key="edit"
                     icon={SvgEdit}
                     prominence="tertiary"
-                    href={taskEditPath(data.id)}
+                    {...navigation.linkTo(taskEditPath(data.id))}
                     disabled={busy}
                   >
                     {t("editButton")}

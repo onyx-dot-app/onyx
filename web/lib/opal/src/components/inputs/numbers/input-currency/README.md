@@ -2,11 +2,11 @@
 
 **Import:** `import { InputCurrency } from "@opal/components";`
 
-Segmented currency amount field on the shared `.opal-input` chrome. Mono segments read `$ [whole] . [fraction]`. The host locale sets the symbol, the side it sits on (`3,00 €`) and the decimal separator.
+Segmented currency amount field on the shared `.opal-input` chrome. Mono segments read as one run, `$[whole].[fraction]`. The host locale sets the symbol, the side it sits on (`3,00 €`) and the decimal separator.
 
-- Typing the locale decimal separator anywhere in the whole segment jumps to the fraction and splits the number at the caret: digits before it stay (an empty whole part becomes `0`, so `.5` reads `0 . 5`), digits after it move to the front of the fraction, clipped to the precision (`1|234` → `1 . 23`). With no fraction segment it does nothing. Arrows, Tab and Enter only move focus and fill nothing. The grouping separator (`,` in `1,200`) and other non-digits do nothing.
+- Typing the locale decimal separator anywhere in the whole segment jumps to the fraction and splits the number at the caret: digits before it stay (an empty whole part becomes `0`, so `.5` reads `0.5`), digits after it move to the front of the fraction, clipped to the precision (`1|234` → `1.23`). With no fraction segment it does nothing. Arrows, Tab and Enter only move focus and fill nothing. The grouping separator (`,` in `1,200`) and other non-digits do nothing.
 - Pasting reads the text as an amount, whichever segment has focus. Whitespace, grouping and the currency's symbol or code are dropped; the rest must be digits with at most one decimal separator:
-  - one separator replaces both segments (`1.2` → `1 . 2`, `$1,234.56` → `1234 . 56`);
+  - one separator replaces both segments (`1.2` → `1.2`, `$1,234.56` → `1234.56`);
   - none inserts the digits into the focused segment at the caret;
   - anything else (`1.2.3`, `a1b2c3`, `-5`) is ignored.
 - `precision` governs the fraction: typing past it is blocked.
@@ -19,6 +19,7 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 
 ```tsx
 <InputCurrency value={rate} onChange={setRate} precision={6} />
+<InputCurrency value={budget} onChange={setBudget} placeholder="No cost limit" suffix="USD" />
 ```
 
 ## Props
@@ -29,10 +30,11 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 | `onChange`      | `(value: number \| null) => void`        | —                         | Fires on each edit, `null` when cleared                                      |
 | `currency`      | `CurrencyCode`                                 | `"USD"`                   | ISO 4217 code. Sets the symbol, its side and the default decimals.          |
 | `precision`     | `CurrencyPrecision`                                 | the currency's (USD `2`)  | Most fraction digits; typing more is blocked. Clamped to an integer in [0, 15]; `"unlimited"` is 15. Amounts are JS numbers, which hold up to 15 significant digits exactly. `0` hides the fraction segment. |
-| `placeholder`   | `{ whole?: string; fraction?: string }`  | `"0"` / `"00"`            | Segment placeholders                                                        |
+| `placeholder`   | `string \| RichStr`                               | —                         | Shown over the empty field while it has no focus (`No cost limit`). Focus reveals the segments. |
+| `suffix`        | `string \| RichStr`                       | —                         | Muted text at the end of the field (`USD`). Hidden under the placeholder.  |
 | `error`         | `boolean`                                | `false`                   | Error chrome on the field                                                   |
 | `disabled`      | `boolean`                                | `false`                   | Disabled chrome, segments inert                                             |
-| `id`            | `string`                                 | —                         | Applied to the whole segment for `<label htmlFor>`                          |
+| `id`            | `string`                                 | —                         | Applied to the whole segment for `<label htmlFor>`; the label then names it in place of "Whole amount" |
 
 ## Locale
 

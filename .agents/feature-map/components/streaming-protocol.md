@@ -168,11 +168,11 @@ its background task end ([[#pure-asgi-middleware]]).
    `web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`
    returns `null` when no predicate matches. Keep that path for
    new families: an unguarded cast can throw instead.
-4. `emitter-sets-model-index` **Only `chat/emitter.py:Emitter.emit` sets
-   `model_index`.** It
-   overwrites what the producer set. Lines that `chat/execution.py:ChatTurnExecution`
-   or `ChatDelivery` publish directly, such as the user-cancel `OverallStop`
-   and the `STREAM_GAP` error, and heartbeats have no `model_index`.
+4. `emitter-sets-model-index` **`chat/emitter.py:Emitter.emit` sets a producer's
+   `model_index`.** It overwrites what the producer set. The turn's direct
+   cancellation fallbacks also set `Placement.model_index`, one per response
+   without a delivered stop. Direct `STREAM_GAP` errors and heartbeats have no
+   `model_index`.
 5. `not-every-line-is-a-packet` **Not every line is a packet, and heartbeats are
    the consumer's job.** Clients must check for `obj` before they read it, as
    `web/src/hooks/useChatSessionController.ts` does on resume. On web, the name
@@ -203,12 +203,17 @@ its background task end ([[#pure-asgi-middleware]]).
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's
    presenter sends one `OverallStop` with `stop_reason` `finished`, tagged with
    its `model_index`. `OverallStop` does not mean success: response errors
-   arrive as `StreamingError`. After any cancellation,
-   `ChatTurnExecution._publish` drops all producer packets, including that
-   stop and the `SectionEnd` of open sections. A user Stop then ends with one
-   untagged `OverallStop` with `user_cancelled`, sent after the saves report.
-   A cancellation by the deadline, lost admission or a control failure ends
-   the body with no `OverallStop` and no error. Clients must treat the end of
+   arrive as `StreamingError`. After cancellation of the turn,
+   `ChatTurnExecution._publish` drops producer packets, including stops and
+   `SectionEnd`. Each response run first cancels itself at its deadline while
+   turn delivery stays open. Its presenter can still send `timed_out`.
+   A user Stop or deadline backstop cancels the turn. After all work drains,
+   the control thread sends one tagged fallback for each model without a delivered
+   stop. It uses the saved response outcome when available, including `finished`
+   for a completed response. Otherwise it uses the turn's reason: `user_cancelled`
+   for Stop or `timed_out` for the deadline backstop. This includes preparation
+   and runs that finish after the backstop. Lost admission or a control failure
+   can still end the body with no stop and no error. Clients must treat the end of
    the body as the end of rendering and close open sections there. A tool
    failure sends
    `backend/onyx/server/query_and_chat/streaming_models.py:PacketException` in

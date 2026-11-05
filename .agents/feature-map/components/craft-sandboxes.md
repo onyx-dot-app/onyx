@@ -278,6 +278,16 @@ the stored token on each request, so a new token takes effect at once.
 
 ## Decisions
 
+- **Browser security updates do not wait for Debian.**
+  `backend/onyx/server/features/build/sandbox/image/install-browser.sh` pins
+  Chrome for Testing and verifies the selected archive with its architecture's
+  checksum. Release gates require current stable Chrome and run Grype on its
+  inventory before ODS scans apt. CVE report collection uses `--report` to
+  resolve the image without enforcing the browser gate, so browser failures
+  cannot stop unrelated alerts.
+  Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
+  use the ODS allowlist or automatic issue tracking.
+
 - **One sandbox per user, not per session.** Sessions share a warm pod, the
   managed skills and the user library.
 - **A signed sidecar for file and snapshot work.** The main container never

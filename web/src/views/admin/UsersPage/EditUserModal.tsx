@@ -4,14 +4,13 @@ import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut } from "@opal/icons";
-import { ContentAction, toast } from "@opal/layouts";
+import { ContentAction, toast, Section } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { Dropdown } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup } from "./svc";
 import type { UserRow } from "./types";
@@ -174,7 +173,7 @@ export default function EditUserModal({
                       setPopoverOpen(true);
                     }}
                     placeholder={t("editModal.search.placeholder")}
-                    searchIcon
+                    icon="search"
                     aria-label={t("editModal.search.placeholder")}
                   />
                 </Dropdown.Trigger>

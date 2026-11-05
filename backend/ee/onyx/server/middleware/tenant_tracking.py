@@ -37,6 +37,7 @@ TENANT_RESOLUTION_SKIP_PATHS = frozenset(
         "/health",
         "/health/ready",
         "/metrics",
+        "/build/sandbox-node/signing-key",
         "/openapi.json",
         "/oauth-provider/metadata",
         "/oauth-provider/register",

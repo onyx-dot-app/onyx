@@ -7,7 +7,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   BasicModalFooter,
   Button,
@@ -17,7 +17,7 @@ import {
   MessageCard,
   Modal,
   Table,
-  Tag,
+  Badge,
   Text,
   type TableColumn,
 } from "@opal/components";
@@ -48,7 +48,6 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
 import EditServiceAccountModal from "@/views/admin/ServiceAccountsPage/EditServiceAccountModal";
-import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
@@ -179,12 +178,12 @@ export default function ServiceAccountsPage() {
           return (
             <div className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0">
               {visible.map((g) => (
-                <Tag key={g.id} title={g.name} size="md" />
+                <Badge key={g.id} title={g.name} size={6} />
               ))}
               {overflow > 0 && (
-                <Tag
+                <Badge
                   title={t("table.groups.overflow.label", { count: overflow })}
-                  size="md"
+                  size={6}
                 />
               )}
             </div>

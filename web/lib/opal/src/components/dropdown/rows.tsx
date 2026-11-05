@@ -3,6 +3,9 @@
 import React from "react";
 import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { InputSwitch } from "@opal/components/inputs/booleans/input-switch/components";
+import { Text } from "@opal/components/text/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import { isRichNodes } from "@opal/utils";
 import { rowElementId } from "@opal/components/dropdown/model";
 import type {
   DropdownMode,
@@ -115,6 +118,18 @@ export const Row = React.memo(function Row({
     );
   }
 
+  // A linked option is already an <a>, so its note shows markdown links as
+  // plain text; an anchor must not hold another.
+  const info =
+    row.kind === "option" &&
+    row.href !== undefined &&
+    row.info !== undefined &&
+    !isRichNodes(row.info)
+      ? toPlainString(row.info)
+      : row.kind === "option"
+        ? row.info
+        : undefined;
+
   const content = {
     selectVariant: "select-heavy",
     state: isSelected ? "selected" : "empty",
@@ -126,6 +141,19 @@ export const Row = React.memo(function Row({
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
     tag: row.kind === "option" ? row.tag : undefined,
+    rightChildren: info ? (
+      <div className="opal-dropdown-info">
+        <Text
+          as="p"
+          font="secondary-body"
+          color="inherit"
+          textPosition="text-end"
+          wordWrap="wrap-anywhere"
+        >
+          {info}
+        </Text>
+      </div>
+    ) : undefined,
     descriptionMaxLines:
       row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,

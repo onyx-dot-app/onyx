@@ -1,4 +1,5 @@
 "use client";
+import { useNavigation } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Formik } from "formik";
 import { useTranslations } from "next-intl";
@@ -149,6 +150,7 @@ function MCPSetupSession({
   setupGuide,
 }: Omit<MCPPluginSetupModalProps, "open">) {
   const t = useTranslations("actions");
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
   const [enableChat, setEnableChat] = useState(true);
@@ -383,7 +385,7 @@ function MCPSetupSession({
                         : details.values.users,
                     });
                     if (result.status === "authorization_required") {
-                      window.location.href = result.authorization_url;
+                      navigation.load(result.authorization_url);
                       return;
                     }
                     await Promise.all([

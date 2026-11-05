@@ -1,7 +1,7 @@
 "use client";
 
-import { Button, OverflowText, Tag, Text } from "@opal/components";
-import type { TagProps, TextFont } from "@opal/components";
+import { Button, OverflowText, Badge, Text } from "@opal/components";
+import type { BadgeProps, TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -45,8 +45,8 @@ interface ContentXlProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
-  /** Tag rendered inline after the description. */
-  descriptionTag?: TagProps;
+  /** Badge rendered inline after the description. */
+  descriptionTag?: BadgeProps;
 
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
@@ -287,7 +287,7 @@ function ContentXl({
                 {description}
               </Text>
             ))}
-          {descriptionTag && <Tag {...descriptionTag} />}
+          {descriptionTag && <Badge {...descriptionTag} />}
         </div>
       )}
     </div>

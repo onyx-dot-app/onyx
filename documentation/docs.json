@@ -616,23 +616,6 @@
                 ]
               },
               {
-                "group": "Token Limits",
-                "icon": "gauge",
-                "pages": [
-                  "developers/api_reference/miscellaneous/get_global_token_limit_settings",
-                  "developers/api_reference/miscellaneous/create_global_token_limit_settings",
-                  "developers/api_reference/miscellaneous/update_token_limit_settings",
-                  "developers/api_reference/miscellaneous/delete_token_limit_settings",
-                  "developers/api_reference/miscellaneous/get_all_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/get_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/create_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/update_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/delete_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/get_user_token_limit_settings",
-                  "developers/api_reference/miscellaneous/create_user_token_limit_settings"
-                ]
-              },
-              {
                 "group": "Usage & Cost",
                 "icon": "chart-line",
                 "pages": [
@@ -795,6 +778,50 @@
     }
   },
   "redirects": [
+    {
+      "source": "/developers/api_reference/miscellaneous/get_global_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/create_global_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/update_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/delete_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/get_all_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/get_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/create_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/update_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/delete_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/get_user_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/create_user_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
     {
       "source": "/admins/advanced_configs/doc_processing",
       "destination": "/admins/managing_features/rag_and_search"

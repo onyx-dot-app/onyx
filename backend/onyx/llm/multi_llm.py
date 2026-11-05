@@ -6,7 +6,7 @@ import time
 from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, get_type_hints
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
@@ -319,7 +319,7 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
         return
     signal = _DeadlineCancellationSignal(parent, context.total_timeout_s)
     with (
-        parent.on_cancel(signal.cancel),
+        parent.on_cancel(lambda: signal.cancel(parent.reason or "requested")),
         cancellation_scope(signal),
     ):
         parent.check()
@@ -560,6 +560,83 @@ def _is_mistral_family_name(identity_names: list[str]) -> bool:
         for name in identity_names
         for marker in _MISTRAL_FAMILY_MARKERS
     )
+
+
+_JSON_SCHEMA_LITERAL_KEYS = frozenset({"const", "default", "enum", "examples"})
+
+
+def _convert_type_arrays(schema: JsonValue) -> None:
+    """Gemini takes one `type` per schema, so rewrite JSON Schema type arrays
+    (e.g. ["string", "null"]) as `nullable` plus a single type or `anyOf`."""
+    if isinstance(schema, list):
+        for item in schema:
+            _convert_type_arrays(item)
+        return
+    if not isinstance(schema, dict):
+        return
+    for key, value in schema.items():
+        if key == "properties" and isinstance(value, dict):
+            for property_schema in value.values():
+                _convert_type_arrays(property_schema)
+        elif key not in _JSON_SCHEMA_LITERAL_KEYS:
+            _convert_type_arrays(value)
+    type_value = schema.get("type")
+    if not isinstance(type_value, list):
+        return
+    types = [t for t in type_value if isinstance(t, str) and t != "null"]
+    if len(types) < len(type_value):
+        schema["nullable"] = True
+    if len(types) == 1:
+        schema["type"] = types[0]
+        return
+    del schema["type"]
+    if types and "anyOf" not in schema:
+        schema["anyOf"] = [{"type": t} for t in types]
+
+
+def _gemini_compatible_tools(
+    tools: list[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
+    """Gemini parses function parameters as its OpenAPI Schema subset and
+    rejects other JSON Schema keywords (e.g. exclusiveMinimum) with a 400.
+    LiteLLM's native Gemini route normalizes them to that subset, but
+    OpenAI-compatible routes forward them as-is."""
+    from litellm.litellm_core_utils.prompt_templates.common_utils import (
+        DEFS_MAX_INLINED_BYTES,
+        unpack_defs,
+    )
+    from litellm.llms.vertex_ai.common_utils import (
+        add_object_type,
+        convert_anyof_null_to_nullable,
+        filter_schema_fields,
+        process_items,
+    )
+    from litellm.types.llms.vertex_ai import Schema
+
+    schema_fields = set(get_type_hints(Schema))
+    sanitized = copy.deepcopy(tools)
+    for tool in sanitized:
+        function = tool.get("function")
+        parameters = function.get("parameters") if isinstance(function, dict) else None
+        if isinstance(function, dict) and isinstance(parameters, dict):
+            original = copy.deepcopy(parameters)
+            try:
+                unpack_defs(
+                    parameters,
+                    parameters.pop("$defs", {}),
+                    max_inlined_bytes=DEFS_MAX_INLINED_BYTES,
+                )
+                _convert_type_arrays(parameters)
+                convert_anyof_null_to_nullable(parameters)
+                process_items(parameters)
+                add_object_type(parameters)
+                function["parameters"] = filter_schema_fields(parameters, schema_fields)
+            except (AttributeError, RecursionError, TypeError, ValueError) as e:
+                # Schemas the LiteLLM helpers cannot parse (e.g. boolean
+                # subschemas) go to the provider unchanged.
+                logger.warning("Could not convert tool schema for Gemini: %s", e)
+                function["parameters"] = original
+    return sanitized
 
 
 def _messages_contain_tool_content(messages: list[dict[str, JsonValue]]) -> bool:
@@ -1314,6 +1391,13 @@ class LitellmLLM(LLM):
             )
             if is_mistral_model:
                 messages = _fix_tool_user_message_ordering(messages)
+
+            if (
+                tools
+                and self._api_surface in OPENAI_COMPATIBLE_SURFACES
+                and any("gemini" in name.lower() for name in model_identity_names)
+            ):
+                tools = _gemini_compatible_tools(tools)
 
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.

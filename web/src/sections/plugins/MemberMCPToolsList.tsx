@@ -26,7 +26,7 @@ export default function MemberMCPToolsList({ tools }: MemberMCPToolsListProps) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <InputTypeIn
-        searchIcon
+        icon="search"
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder={t("mcpTools.search")}

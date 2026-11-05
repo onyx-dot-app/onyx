@@ -10,7 +10,7 @@ A sidebar navigation tab built on `Interactive.Stateful` > `Interactive.Containe
 div.opal-sidebar-tab      <- folded styling hook (see styles.css)
   └─ Interactive.Stateful        <- variant (sidebar-heavy | sidebar-light), state, disabled
        └─ Interactive.Container  <- rounding, height, width
-            ├─ Link | button?    (absolute overlay — the click target; also the tooltip trigger)
+            ├─ NavLink | button? (absolute overlay — the click target; also the tooltip trigger)
             ├─ rightChildren?    (absolute, above the overlay for inline actions)
             └─ content row       (icon + title + truncation spacer; see styles.css)
 ```
@@ -18,7 +18,7 @@ div.opal-sidebar-tab      <- folded styling hook (see styles.css)
 - **`sidebar-heavy`** (default) — muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
 - **`sidebar-light`** — uniformly muted across all states (text-02/text-02)
 - **Disabled** — both variants use text-02 foreground, transparent background, no hover/active states
-- **The click target** is an absolutely positioned overlay: a `<Link>` when `href` is set, a `<button>` when only `onClick` is set. Both are keyboard focusable. The overlay stays a sibling of the content, so `rightChildren` can sit above it with `pointer-events-auto` and remain a valid nested control. A passive `Tag` (no `onClick` or `onRemove`) in `rightChildren` lets clicks pass through to the overlay.
+- **The click target** is an absolutely positioned overlay: a `<NavLink>` when `href` is set, a `<button>` when only `onClick` is set. Both are keyboard focusable. The overlay stays a sibling of the content, so `rightChildren` can sit above it with `pointer-events-auto` and remain a valid nested control. A passive `Tag` (no `onClick` or `onRemove`) in `rightChildren` lets clicks pass through to the overlay.
 - **The overlay's name** comes from `aria-label` for a string label, and from `aria-labelledby` on the content row otherwise. The tab therefore keeps a name when the label is hidden.
 
 ## Folded state

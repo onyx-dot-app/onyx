@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
@@ -10,7 +11,6 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
-import { useRouter } from "next/navigation";
 import {
   Button,
   Card,
@@ -85,7 +85,7 @@ export default function SkillEditorPage({
   const isCreating = skillId === undefined;
   const hasAppContext = externalAppId !== undefined;
   const isCreatingForApp = isCreating && hasAppContext;
-  const router = useRouter();
+  const navigation = useNavigation();
   const { isAdmin, user } = useUser();
   const creationDraft = useMemo(
     () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
@@ -207,7 +207,7 @@ export default function SkillEditorPage({
     !isSaving;
 
   function leaveEditor() {
-    router.push(
+    navigation.go(
       hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
     );
   }
@@ -262,10 +262,11 @@ export default function SkillEditorPage({
           console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(t("editor.toasts.created", { name: created.name }));
-        router.replace(
+        navigation.go(
           isCreatingForApp
             ? externalAppAdminUrl(externalAppId)
-            : "/craft/v1/skills"
+            : "/craft/v1/skills",
+          { replace: true }
         );
         return;
       }

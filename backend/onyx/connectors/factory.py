@@ -18,6 +18,7 @@ from onyx.connectors.capability_checks.recorder import (
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.event_inbox.connector import EventInboxConnector
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
     BaseConnector,
@@ -101,9 +102,11 @@ def _validate_connector_supports_input_type(
         )
     )
 
-    event_unsupported = input_type == InputType.EVENT
+    # EVENT needs nothing of the source's own class: the drain reads the
+    # inbox, and the per-source meaning of a row comes from the handler
+    # registry, which reports a row-level failure when a source has none.
 
-    if any([load_state_unsupported, poll_unsupported, event_unsupported]):
+    if any([load_state_unsupported, poll_unsupported]):
         raise ConnectorMissingException(
             f"Connector for source={source} does not accept input_type={input_type}"
         )
@@ -113,6 +116,11 @@ def identify_connector_class(
     source: DocumentSource,
     input_type: InputType | None = None,
 ) -> Type[BaseConnector]:
+    # An event pair is drained, not fetched: every source shares one
+    # connector, so the source's own class is never loaded.
+    if input_type == InputType.EVENT:
+        return EventInboxConnector
+
     # Load the connector class using lazy loading
     connector = _load_connector_class(source)
 
@@ -201,8 +209,12 @@ def instantiate_connector(
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
-    connector = connector_class(
-        **build_connector_kwargs(source, connector_specific_config)
+    connector = (
+        EventInboxConnector()
+        if input_type == InputType.EVENT
+        else connector_class(
+            **build_connector_kwargs(source, connector_specific_config)
+        )
     )
 
     if isinstance(connector, CredentialsConnector):

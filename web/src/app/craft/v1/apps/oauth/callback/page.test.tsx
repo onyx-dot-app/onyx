@@ -8,7 +8,11 @@ const push = jest.fn();
 const params = new URLSearchParams({ code: "code", state: "state" });
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ replace, push }),
+  usePathname: () => "/craft/v1/apps/oauth/callback",
   useSearchParams: () => params,
 }));
 jest.mock("@/app/craft/services/externalAppsService", () => ({

@@ -16,8 +16,13 @@ import { BasicModalFooter, Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  InputVertical,
+  toast,
+  Section,
+} from "@opal/layouts";
 import {
   createHook,
   updateHook,

@@ -106,6 +106,8 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  /** The turn reached its execution deadline. */
+  TIMED_OUT = "timed_out",
 }
 
 export interface Stop extends BaseObj {
@@ -149,7 +151,7 @@ export interface SearchToolDocumentsDelta extends BaseObj {
 
 export type ImageShape = "square" | "landscape" | "portrait";
 
-interface GeneratedImage {
+export interface GeneratedImage {
   file_id: string;
   url: string;
   revised_prompt: string;

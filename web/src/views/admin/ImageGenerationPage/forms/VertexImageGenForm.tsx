@@ -8,7 +8,6 @@ import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn } from "@opal/components";
 import { InputSingleUploadField } from "@opal/form";
 import { InputSingleSelect } from "@opal/components";
-import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -205,9 +204,14 @@ function VertexFormFields(
                   messages={{
                     idle: t.rich("form.credentials.idle", {
                       link: (chunks) => (
-                        <InlineExternalLink href={SERVICE_ACCOUNTS_URL}>
+                        <a
+                          href={SERVICE_ACCOUNTS_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline"
+                        >
                           {chunks}
-                        </InlineExternalLink>
+                        </a>
                       ),
                     }),
                     error: meta.error,
@@ -288,9 +292,14 @@ function VertexFormFields(
               messages={{
                 idle: t.rich("form.location.idle", {
                   link: (chunks) => (
-                    <InlineExternalLink href={VERTEX_LOCATIONS_DOCS_URL}>
+                    <a
+                      href={VERTEX_LOCATIONS_DOCS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
                       {chunks}
-                    </InlineExternalLink>
+                    </a>
                   ),
                 }),
                 error: meta.error,

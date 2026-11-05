@@ -27,13 +27,37 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
+      # A change made only of documentation files needs none of the web setup or
+      # widget tests below. The docs hooks need only Python and bun (prettier runs
+      # through bunx). The check is an allow-list of docs file types: any other
+      # file, such as a script prek tags as JavaScript (any case, or an
+      # extensionless Node script), runs the full setup because oxlint needs web/.
+      - name: Detect a docs-only change
+        id: changes
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: |
+          # --no-renames lists both paths of a rename. Here-strings avoid a pipe, so an
+          # early grep exit cannot fail the pipeline under pipefail and invert the check.
+          files="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
+          # The folder match is case-sensitive; only the file extension ignores case.
+          docs_file='\.(md|mdx|json|css|svg|png|jpe?g|gif|webp|ico|mp4|txt|ya?ml|py)$'
+          if [ -n "$files" ] \
+            && ! grep -qv '^documentation/' <<<"$files" \
+            && ! grep -qviE "$docs_file" <<<"$files"; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Setup Terraform
+        if: steps.changes.outputs.docs_only != 'true'
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # ratchet:hashicorp/setup-terraform@v4.0.1
       - name: Setup bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
         with:
           bun-version: "1.3.13"
       - name: Install node dependencies
+        if: steps.changes.outputs.docs_only != 'true'
         working-directory: ./web
         run: bun install --frozen-lockfile
       # web/ has its own lockfile; widget/, examples/widget/ and desktop/ live in
@@ -41,8 +65,10 @@ jobs:
       # the root node_modules, and prek never runs the post-checkout hook that
       # would install it.
       - name: Install root workspace dependencies
+        if: steps.changes.outputs.docs_only != 'true'
         run: bun install --frozen-lockfile
       - name: Run widget tests
+        if: steps.changes.outputs.docs_only != 'true'
         working-directory: ./widget
         run: bun run test
       - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece

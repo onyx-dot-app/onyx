@@ -91,9 +91,21 @@ describe("SimpleModelSelector", () => {
     await user.click(screen.getByRole("combobox"));
     // One provider: no divider, and the list carries a search field.
     expect(screen.queryByText("OpenAI")).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Search" })).toHaveFocus();
+    expect(screen.getByRole("searchbox", { name: "Search" })).toHaveFocus();
     await user.click(screen.getByRole("option", { name: /GPT-4\.1/ }));
     expect(handleChange).toHaveBeenCalledWith(12);
+  });
+
+  test("shows the fallback row for a chosen model the listing has not loaded", () => {
+    render(
+      <SimpleModelSelector
+        providers={providers}
+        value={99}
+        selectedFallback={{ value: "99", title: "Claude Opus" }}
+        onChange={jest.fn()}
+      />
+    );
+    expect(screen.getByRole("combobox")).toHaveValue("Claude Opus");
   });
 
   test("non-nullable: re-picking the chosen model changes nothing", async () => {
@@ -272,7 +284,7 @@ describe("SimpleModelSelector", () => {
       expect(modelPaging.loadMore).toHaveBeenCalledTimes(1);
       expect(modelPaging.loadMore).toHaveBeenCalledWith([1]);
 
-      const search = screen.getByRole("textbox", { name: "Search" });
+      const search = screen.getByRole("searchbox", { name: "Search" });
       await user.type(search, "gpt");
       jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
       expect(modelPaging.search).not.toHaveBeenCalled();
@@ -340,13 +352,16 @@ describe("SimpleModelSelector", () => {
       await user.click(screen.getByRole("combobox"));
       // The lone provider keeps its header under the decision section.
       expect(screen.getByText("OpenAI")).toBeInTheDocument();
-      await user.type(screen.getByRole("textbox", { name: "Search" }), "luna");
+      await user.type(
+        screen.getByRole("searchbox", { name: "Search" }),
+        "luna"
+      );
       jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
       // Only the decision copy is loaded; the language copy may be on a later page.
       expect(modelPaging.search).toHaveBeenCalledWith("luna");
 
       // A header match is not a row match, so the server is still asked.
-      const search = screen.getByRole("textbox", { name: "Search" });
+      const search = screen.getByRole("searchbox", { name: "Search" });
       await user.clear(search);
       await user.type(search, "openai");
       jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);

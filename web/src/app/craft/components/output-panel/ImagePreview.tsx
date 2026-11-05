@@ -1,11 +1,11 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgImage } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
 
 interface ImagePreviewProps {
   src: string;

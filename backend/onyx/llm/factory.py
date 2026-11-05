@@ -17,6 +17,8 @@ from onyx.db.llm import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.decisions.client import DEFAULT_DECISION_TIMEOUT_S, DecisionClient
 from onyx.llm.decisions.factory import build_decision_client
@@ -229,6 +231,19 @@ def get_llm_for_persona(
                 additional_headers=additional_headers,
                 policy_fn=policy_fn,
                 user_defaults=user_defaults,
+            )
+
+        # Checked after access so a caller without access learns nothing about
+        # the provider's models. A name with no saved configuration runs outside
+        # visibility, price overrides and usage attribution.
+        if (
+            mc_id_override is None
+            and model_version_override
+            and not any(mc.name == model for mc in provider_model.model_configurations)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Model '{model}' is not configured on this provider.",
             )
 
         llm_provider = LLMProviderView.from_model(provider_model)

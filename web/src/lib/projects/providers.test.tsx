@@ -12,12 +12,14 @@ const mockToastWarning = jest.fn();
 const mockGetUserFileStatuses = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useSearchParams: () => ({
-    get: () => null,
-  }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  usePathname: () => "/app",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({ openNewSession: jest.fn() }),
 }));
 

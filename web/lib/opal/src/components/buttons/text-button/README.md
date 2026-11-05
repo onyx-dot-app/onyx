@@ -15,14 +15,14 @@ slots).
 
 ```
 Interactive.Stateless              <- always variant="default" / prominence="tertiary"; disabled, href, onClick
-  └─ <Link> / <button>             <- .opal-text-label.interactive-foreground, no height/rounding/padding/border
+  └─ <NavLink> / <button>          <- .opal-text-label.interactive-foreground, no height/rounding/padding/border
        └─ <Text font={font} color="inherit" as="p">
 ```
 
 - **No separate surface component.** `Button` needs `Interactive.Container` because it
   has to _discover_ `href`/`disabled`/etc. from Radix `Slot`-injected props (it's a
   generic primitive reused by many callers). `TextButton` already has `href`/`target`/
-  `disabled` in scope as its own props, so it renders `<Link>`/`<button>` directly as
+  `disabled` in scope as its own props, so it renders `<NavLink>`/`<button>` directly as
   `Interactive.Stateless`'s single child. Radix `Slot` auto-merges `className` (joins
   both), `style` (merges objects), and event handlers (chains them) onto that element —
   everything else falls through untouched — so no manual prop-merging is needed.

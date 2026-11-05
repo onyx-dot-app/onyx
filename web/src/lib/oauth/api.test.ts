@@ -1,6 +1,15 @@
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 
-const location = { href: "https://onyx.example.com/app" };
+const location = {
+  href: "https://onyx.example.com/app",
+  // `loadPage` makes a full page load through these.
+  assign(url: string) {
+    location.href = url;
+  },
+  replace(url: string) {
+    location.href = url;
+  },
+};
 
 beforeEach(() => {
   location.href = "https://onyx.example.com/app";

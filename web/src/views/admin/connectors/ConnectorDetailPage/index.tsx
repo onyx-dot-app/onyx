@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
@@ -80,7 +80,7 @@ const CC_PAIR_POLL_MS = 5000;
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
   const tActivities = useTranslations("admin.indexing.activities");
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const {
     data: ccPair,
@@ -124,8 +124,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }, [ccPairId]);
 
   const finishConnectorDeletion = useCallback(() => {
-    router.push(ADMIN_ROUTES.INDEXING_STATUS.path);
-  }, [router]);
+    navigation.go(ADMIN_ROUTES.INDEXING_STATUS.path);
+  }, [navigation]);
 
   const scheduleConnectorDeletion = useCallback(() => {
     if (!ccPair) return;
@@ -267,7 +267,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const canOpenEditForm =
     !isDeleting && can(ccPair, "edit") && isEditableSource(source);
   const openEditForm = () =>
-    router.push(`/admin/connectors/${source}/edit/${ccPair.id}`);
+    navigation.go(`/admin/connectors/${source}/edit/${ccPair.id}`);
   const onEdit = canOpenEditForm ? openEditForm : null;
   const canManageInlineFiles = source === "file" && can(ccPair, "edit");
   // A credential-less source's pair holds a placeholder credential with no account or checks.
@@ -565,13 +565,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
 function BackToConnectors() {
   const t = useTranslations("admin.connector");
+  const navigation = useNavigation();
   return (
     <Section alignItems="start" height="fit" padding={4}>
       <Button
         icon={SvgArrowLeft}
         prominence="tertiary"
         size="md"
-        href={ADMIN_ROUTES.INDEXING_STATUS.path}
+        {...navigation.linkTo(ADMIN_ROUTES.INDEXING_STATUS.path)}
       >
         {t("backButton.label")}
       </Button>

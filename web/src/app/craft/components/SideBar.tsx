@@ -1,10 +1,10 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { memo, useCallback, useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
-import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
 import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
@@ -279,7 +279,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   const tTasks = useTranslations("craft.tasks");
   const unviewedTaskCount = useUnviewedScheduledTaskCount();
   const { folded } = useSidebarState();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { requestNavigation } = useUnsavedChangesNavigation();
   const pathname = usePathname();
   const session = useSession();
@@ -305,8 +305,8 @@ const MemoizedBuildSidebarInner = memo(() => {
 
   // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
   const navigate = useCallback(
-    (destination: Route) => requestNavigation(() => router.push(destination)),
-    [requestNavigation, router]
+    (destination: Route) => requestNavigation(() => navigation.go(destination)),
+    [requestNavigation, navigation]
   );
 
   const handleNewBuild = useCallback(
@@ -333,12 +333,12 @@ const MemoizedBuildSidebarInner = memo(() => {
       // (one click back from any subagent transcript you were viewing).
       requestNavigation(() => {
         returnToMainAgent(sessionId);
-        router.push(
+        navigation.go(
           `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
         );
       });
     },
-    [requestNavigation, router, returnToMainAgent]
+    [requestNavigation, navigation, returnToMainAgent]
   );
 
   return (

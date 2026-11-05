@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SvgExternalLink, SvgUsers } from "@opal/icons";
@@ -22,7 +22,7 @@ import { useSettings } from "@/lib/settings/hooks";
 function GroupsPage() {
   const t = useTranslations("admin.groups");
   const { appName } = useSettings();
-  const router = useRouter();
+  const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
 
@@ -156,7 +156,7 @@ function GroupsPage() {
           emptyStateText={t("list.empty.text")}
           onAction={
             canCreateGroup
-              ? () => router.push("/admin/groups/create")
+              ? () => navigation.go("/admin/groups/create")
               : undefined
           }
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import {
   buildChatUrl,
   getAvailableContextTokens,
@@ -73,12 +74,6 @@ import {
   locationKey,
 } from "@/app/app/services/submitLocation";
 import { useTranslations } from "next-intl";
-import {
-  ReadonlyURLSearchParams,
-  usePathname,
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -144,7 +139,7 @@ interface UseChatControllerProps {
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
-  searchParams: ReadonlyURLSearchParams;
+  searchParams: URLSearchParams;
   resetInputBar: () => void;
   /** Puts a message and its files back after a send fails before it starts. */
   restoreInputBar: (message: string, files: ProjectFile[]) => void;
@@ -182,8 +177,8 @@ export default function useChatController({
     [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
   );
   const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
@@ -305,8 +300,9 @@ export default function useChatController({
     const isOnChatPage = pathname === "/app";
 
     if (isOnChatPage && !navigatingAway.current) {
-      // SAFETY: buildChatUrl with search=false builds `/app?...`.
-      router.push(newUrl as Route, { scroll: false });
+      // SAFETY: buildChatUrl with search=false builds `/app?...`. AppPage
+      // renders the query itself, so writing the URL is the whole switch.
+      navigation.go(newUrl as Route, { scroll: false, shallow: true });
     }
 
     // Refresh sidebar - the chat was already optimistically added via addPendingChatSession
@@ -424,7 +420,10 @@ export default function useChatController({
       const urlWithoutProject = locationKey(pathname, paramsWithoutProject);
       if (searchParams.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
         // SAFETY: built from the current pathname, which is a route of this app.
-        router.replace(urlWithoutProject as Route, { scroll: false });
+        navigation.go(urlWithoutProject as Route, {
+          replace: true,
+          scroll: false,
+        });
       }
 
       updateSubmittedMessage(getCurrentSessionId(), message);
@@ -561,7 +560,10 @@ export default function useChatController({
           // Put the project back in the URL so a retry stays in the project.
           if (projectId) {
             // SAFETY: built from the current pathname, which is a route of this app.
-            router.replace(startUrl as Route, { scroll: false });
+            navigation.go(startUrl as Route, {
+              replace: true,
+              scroll: false,
+            });
           }
           restoreInputBar(message, currentMessageFiles);
           return;
@@ -1702,7 +1704,7 @@ export default function useChatController({
 
         const data = await response.json();
 
-        router.push(data.redirect_url);
+        navigation.go(data.redirect_url);
       } catch (error) {
         console.error("Error seeding chat from Slack:", error);
         toast.error("Failed to load chat from Slack");
@@ -1710,7 +1712,7 @@ export default function useChatController({
     };
 
     handleSlackChatRedirect();
-  }, [searchParams, router]);
+  }, [searchParams, navigation]);
 
   // Available context tokens: if a chat session exists, fetch from the session
   // API (dynamic per session/model). Otherwise derive from the persona's max

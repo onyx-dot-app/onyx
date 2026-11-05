@@ -17,8 +17,16 @@ const mockRouter = {
   replace: jest.fn() as jest.Mock,
   refresh: jest.fn() as jest.Mock,
 };
+const MOCK_QUERY_KEYS = ["session_id", "portal_return", "retry_upgrade"];
 const mockSearchParams = {
   get: jest.fn() as jest.Mock,
+  toString: (): string =>
+    new URLSearchParams(
+      MOCK_QUERY_KEYS.flatMap((key): [string, string][] => {
+        const value: unknown = mockSearchParams.get(key);
+        return typeof value === "string" ? [[key, value]] : [];
+      })
+    ).toString(),
 };
 const mockClaimLicense = jest.fn() as jest.Mock;
 const mockRefreshBilling = jest.fn() as jest.Mock;
@@ -27,7 +35,11 @@ const mockRefreshLicense = jest.fn() as jest.Mock;
 // ---- Mocks ----
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
+  usePathname: () => "/admin/billing",
   useSearchParams: () => mockSearchParams,
 }));
 
@@ -42,12 +54,6 @@ jest.mock("@opal/layouts", () => ({
       <div data-testid="settings-body">{children}</div>
     ),
   },
-}));
-
-jest.mock("@/layouts/general-layouts", () => ({
-  Section: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
 }));
 
 jest.mock("@opal/icons", () => ({
@@ -146,6 +152,8 @@ describe("BillingPage: handleBillingReturn retry logic", () => {
     mockSearchParams.get.mockReturnValue(null);
     // Clear any activating state from prior tests
     sessionStorage.clear();
+    // `go()` skips a navigation to the URL it is already on.
+    window.history.replaceState(null, "", "/");
   });
 
   afterEach(() => {

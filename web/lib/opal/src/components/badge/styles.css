@@ -1,0 +1,35 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Tag
+
+   A coloured pill around a `Content` (secondary preset, body variant: the
+   title in secondary-body), which draws the icon and title. The height comes
+   from the 16px line and the padding: 4 is 1rem (2px inline padding), 6 is
+   1.5rem (4px all round).
+   --------------------------------------------------------------------------- */
+
+.opal-badge {
+  @apply flex flex-row items-center shrink-0;
+  border-radius: var(--radius-04);
+  padding: 0 0.125rem;
+  gap: 0;
+}
+
+.opal-badge[data-size="6"] {
+  border-radius: var(--radius-08);
+  padding: 0.25rem;
+}
+
+/* The title takes the pill's text colour, and the icon --opal-badge-icon-color,
+   set inline from the tag's colour. [data-size] outranks the `.interactive`
+   Content rules, so a tag inside an interactive row keeps its own colours. */
+.opal-badge[data-size] > [data-content-color] {
+  color: inherit;
+  --content-foreground-icon: var(--opal-badge-icon-color);
+}
+
+/* The title is always capped: an ellipsis past 10rem. */
+.opal-badge [data-opal-content] > span {
+  max-width: 10rem;
+}

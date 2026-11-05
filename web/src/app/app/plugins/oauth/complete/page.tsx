@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Card, OnyxLoader } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
@@ -14,6 +14,7 @@ import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 export default function MemberPluginOAuthCompletePage() {
   const t = useTranslations("actions.memberPlugins.oauthComplete");
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   const processed = useRef(false);
   const [status, setStatus] = useState<"checking" | "success" | "error">(
     "checking"
@@ -77,11 +78,11 @@ export default function MemberPluginOAuthCompletePage() {
               />
             )}
             <Button
-              href={
-                searchParams?.get("surface") === "craft"
+              {...navigation.linkTo(
+                searchParams.get("surface") === "craft"
                   ? CRAFT_PLUGINS_PATH
                   : "/app/plugins"
-              }
+              )}
               width="full"
             >
               {t("return.label")}

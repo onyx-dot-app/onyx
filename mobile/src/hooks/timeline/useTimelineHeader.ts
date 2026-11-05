@@ -20,15 +20,10 @@ export interface TimelineHeaderResult {
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
-  isGeneratingImage?: boolean,
 ): TimelineHeaderResult {
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
-
-    if (isGeneratingImage && !hasPackets) {
-      return { headerText: "Generating image...", hasPackets, userStopped };
-    }
 
     if (!hasPackets) {
       return { headerText: "Thinking...", hasPackets, userStopped };
@@ -101,5 +96,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };
-  }, [turnGroups, stopReason, isGeneratingImage]);
+  }, [turnGroups, stopReason]);
 }

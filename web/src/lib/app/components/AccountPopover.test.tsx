@@ -7,7 +7,10 @@ import { User } from "@/lib/types";
 // Factory mock: the global stub pins userResolution to "resolved".
 jest.mock("@/providers/UserProvider", () => ({ useUser: jest.fn() }));
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   usePathname: () => "/app",
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -15,7 +18,7 @@ jest.mock("@/lib/app/components/NotificationsPopover", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   __esModule: true,
   useAppPosition: () => ({ isUserSettings: () => false }),
 }));

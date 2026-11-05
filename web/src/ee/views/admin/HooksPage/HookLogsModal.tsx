@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
@@ -10,7 +11,6 @@ import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { downloadFile } from "@/lib/download";
-import { Section } from "@/layouts/general-layouts";
 import { hookPointName } from "@/ee/views/admin/HooksPage/hookPoints";
 import type {
   HookExecutionRecord,

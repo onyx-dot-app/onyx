@@ -28,6 +28,9 @@ import {
 } from "@/lib/searchSettings/types";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({
     push: jest.fn(),
     replace: jest.fn(),

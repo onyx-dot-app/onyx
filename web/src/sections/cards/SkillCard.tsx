@@ -7,7 +7,7 @@ import {
   Card,
   InputSwitch,
   InputCheckbox,
-  Tag,
+  Badge,
   Text,
   Tooltip,
 } from "@opal/components";
@@ -321,9 +321,9 @@ export default function SkillCard({
           >
             {isRequired && (
               <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
-                <Tag
+                <Badge
                   title={skillCopy("modals.share.installation.required")}
-                  color="blue"
+                  color="info"
                 />
               </Tooltip>
             )}
@@ -344,17 +344,20 @@ export default function SkillCard({
             )}
             {item.source === "builtin" ? (
               item.is_available ? (
-                <Tag title={t("skill.tags.builtin.label")} color="blue" />
+                <Badge title={t("skill.tags.builtin.label")} color="info" />
               ) : (
-                <Tag title={t("skill.tags.unavailable.label")} color="amber" />
+                <Badge
+                  title={t("skill.tags.unavailable.label")}
+                  color="pending"
+                />
               )
             ) : isInvalid ? (
-              <Tag title={t("skill.tags.invalid.label")} color="amber" />
+              <Badge title={t("skill.tags.invalid.label")} color="pending" />
             ) : dependency ? (
-              <Tag title={t("skill.tags.appSkill.label")} color="blue" />
+              <Badge title={t("skill.tags.appSkill.label")} color="info" />
             ) : null}
             {item.source === "custom" && (
-              <Tag
+              <Badge
                 title={t(
                   item.skill.public_permission !== null
                     ? "skill.tags.organization.label"
@@ -362,7 +365,7 @@ export default function SkillCard({
                       ? "skill.tags.personal.label"
                       : "skill.tags.shared.label"
                 )}
-                color={item.skill.is_personal ? "purple" : "blue"}
+                color={item.skill.is_personal ? "default" : "info"}
               />
             )}
           </Section>

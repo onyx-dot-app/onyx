@@ -19,7 +19,6 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/types";
-import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet, StreamCursor } from "@/app/app/services/streamingModels";
 import type { ErrorResponseBody } from "@/lib/fetcher";
@@ -267,6 +266,7 @@ export async function* sendMessage({
         scope: data.scope,
         reset_at: data.reset_at,
         retry_after_seconds: data.retry_after_seconds,
+        model: data.model,
       };
       const streamingError: StreamingError = {
         error: data.detail ?? "You've reached your usage limit.",
@@ -566,7 +566,7 @@ const PARAMS_TO_SKIP = [
 ];
 
 export function buildChatUrl(
-  existingSearchParams: ReadonlyURLSearchParams | null,
+  existingSearchParams: URLSearchParams | null,
   chatSessionId: string | null,
   personaId: number | null,
   search?: boolean,

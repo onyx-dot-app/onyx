@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from mcp.types import CallToolResult, TextContent
 
 from onyx.agents.tools import ToolInvocation, ToolResult, ToolUpdate
 from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
@@ -57,7 +58,9 @@ def test_client_records_success_once() -> None:
     with (
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value='{"ok": true}',
+            return_value=CallToolResult(
+                content=[TextContent(type="text", text='{"ok": true}')]
+            ),
         ),
         patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool."
