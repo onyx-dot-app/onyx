@@ -172,6 +172,9 @@ def test_extract_user_info_and_build_jql() -> None:
     jql = conn._build_jql(start=1700000000.0, end=1700003600.0)
     assert 'project = "ITSD"' in jql
     assert '"Customer Request Type" IN ("Get IT help")' in jql
+    assert "updated >= 1700000000000" in jql
+    assert "updated <= 1700003600000" in jql
+    assert '(priority = "High")' in jql
     assert jql.endswith("ORDER BY updated ASC")
 
 
