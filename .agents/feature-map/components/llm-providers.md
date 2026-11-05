@@ -125,7 +125,9 @@ and open a generation span. The agent runtime
 its own spans. `_completion` shapes the request
 for each model family and provider. Supported OpenAI and Azure requests mark tool
 results with explicit cache breakpoints after message normalization. Cache endpoint
-checks run under the same environment lock as dispatch. When a provider 400 names a
+checks run under the same environment lock as each dispatch. The lock releases
+before retry handling; removing cache options prevents later attempts from adding
+markers again. When a provider 400 names a
 reasoning, temperature, or explicit-cache kwarg, `_completion` retries without it
 (`_retry_attempts`). A cache fallback also removes the tool-result markers. It
 never drops tools, tool choice or messages. `_track_llm_cost` counts cost only when

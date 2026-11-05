@@ -2,8 +2,9 @@
 explicit prompt_cache_breakpoint and send prompt_cache_options."""
 
 import json
+import os
 from collections.abc import Iterator, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import Event
 from typing import Any
@@ -13,6 +14,9 @@ import httpx
 import litellm
 import pytest
 from litellm import ModelResponse as LiteLLMModelResponse
+from litellm import ModelResponseStream
+from litellm.exceptions import BadRequestError
+from litellm.types.utils import Delta, StreamingChoices
 from pydantic import JsonValue
 
 from onyx.llm import multi_llm
@@ -21,6 +25,7 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
     GenerationRequest,
+    GenerationRequestParams,
     Message,
     ReasoningEffort,
     TextDeltaEvent,
@@ -201,6 +206,93 @@ def test_endpoint_gate_waits_for_other_requests_environment(
     sent = completion.call_args.kwargs
     assert "prompt_cache_options" not in sent
     assert _tool_contents(sent) == _RESULTS
+
+
+def test_cache_retry_releases_environment_lock_and_keeps_caching_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CACHE_LOCK_TEST", raising=False)
+    monkeypatch.setattr(multi_llm, "_env_injection_enabled", lambda: True)
+    primary = get_llm(
+        provider="openai",
+        model="gpt-5.6-luna",
+        deployment_name=None,
+        max_input_tokens=100_000,
+        custom_config={"CACHE_LOCK_TEST": "primary"},
+        model_kwargs={"prompt_cache_options": {"ttl": "30m"}},
+    )
+    other = get_llm(
+        provider="openai",
+        model="gpt-4.1",
+        deployment_name=None,
+        max_input_tokens=100_000,
+    )
+    attempts: list[dict[str, Any]] = []
+    traced: list[GenerationRequestParams] = []
+    concurrent: Future[AssistantMessage] | None = None
+    rejection_names = multi_llm._rejection_names_strippable_kwargs
+
+    def classify(error: Exception, strippable: set[str]) -> bool:
+        # Run another request before retry handling can dispatch the next attempt.
+        assert concurrent is not None
+        assert concurrent.result(timeout=5).text == "done"
+        return rejection_names(error, strippable)
+
+    def complete(
+        **kwargs: Any,
+    ) -> LiteLLMModelResponse | Iterator[ModelResponseStream]:
+        nonlocal concurrent
+        if not kwargs["stream"]:
+            assert "CACHE_LOCK_TEST" not in os.environ
+            return _RESPONSE
+        assert os.environ["CACHE_LOCK_TEST"] == "primary"
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            concurrent = pool.submit(
+                other.invoke,
+                GenerationRequest(messages=[UserMessage(content="Other")]),
+            )
+            raise BadRequestError(
+                message="Unsupported prompt_cache_options",
+                model="gpt-5.6-luna",
+                llm_provider="openai",
+            )
+        return iter(
+            [
+                ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(role="assistant", content="done"),
+                            finish_reason="stop",
+                        )
+                    ]
+                )
+            ]
+        )
+
+    with (
+        patch("litellm.completion", side_effect=complete),
+        patch.object(
+            multi_llm, "_rejection_names_strippable_kwargs", side_effect=classify
+        ),
+        patch.object(multi_llm, "record_llm_request_params", side_effect=traced.append),
+        ThreadPoolExecutor(max_workers=1) as pool,
+    ):
+        assert primary.invoke(GenerationRequest(messages=_turn())).text == "done"
+
+    assert len(attempts) == 2
+    assert attempts[0]["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
+    assert "prompt_cache_options" not in attempts[1]
+    assert _tool_contents(attempts[1]) == _RESULTS
+    primary_traces = [
+        item.sent_kwargs for item in traced if item.model_name == "gpt-5.6-luna"
+    ]
+    assert (
+        primary_traces[0]["prompt_cache_options"] == attempts[0]["prompt_cache_options"]
+    )
+    assert "prompt_cache_options" not in primary_traces[1]
+    assert "CACHE_LOCK_TEST" not in os.environ
 
 
 @pytest.mark.parametrize("provider", ["openai", "azure"])

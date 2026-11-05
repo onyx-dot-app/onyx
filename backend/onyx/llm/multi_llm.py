@@ -1435,142 +1435,145 @@ class LitellmLLM(LLM):
                     raise LLMTimeoutError("LLM call exceeded its total timeout")
                 return min(read_timeout_s, remaining)
 
-            # Cache eligibility and dispatch must see the same environment.
-            # Stream consumption still happens after this lock is released.
-            env_ctx: AbstractContextManager[None] = (
-                temporary_env_and_lock(self._env_only_custom_config, deadline=deadline)
-                if env_injection_enabled
-                else nullcontext()
+            # Cache options are retry policy, including caller-supplied options.
+            configured_cache_options = passthrough_kwargs.pop(
+                "prompt_cache_options", None
             )
-            with env_ctx:
-                effective_base = passthrough_kwargs.get("api_base") or base_url
-                cache_messages = None
-                if (
-                    is_openai_model
-                    or self._api_surface is LlmApiSurface.OPENAI_RESPONSES
-                ) and uses_explicit_cache_breakpoints(
-                    model_identity_names,
-                    effective_base if isinstance(effective_base, str) else None,
-                    azure=self._model_provider == LlmProviderNames.AZURE,
-                ):
-                    cache_messages, cache_options = explicit_cache_breakpoints(messages)
-                    if cache_options is not None:
-                        configured = passthrough_kwargs.pop(
-                            "prompt_cache_options", None
-                        )
-                        if configured is not None and not isinstance(configured, dict):
-                            raise ValueError(
-                                "prompt_cache_options must be a JSON object"
-                            )
-                        optional_kwargs["prompt_cache_options"] = {
-                            **(configured or {}),
-                            **cache_options,
-                        }
+            if configured_cache_options is not None:
+                optional_kwargs["prompt_cache_options"] = configured_cache_options
+            cache_messages = messages
+            cache_options = None
+            if is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
+                cache_messages, cache_options = explicit_cache_breakpoints(messages)
+                if cache_options is not None:
+                    optional_kwargs.setdefault("prompt_cache_options", cache_options)
 
-                def _call_litellm(
-                    opts: dict[str, JsonValue],
-                ) -> "LiteLLMModelResponse | CustomStreamWrapper":
-                    timeout = _attempt_timeout()
-                    check_cancelled()
-                    # LiteLLM's overloads do not express the stream flag's return type.
-                    return cast(
-                        "LiteLLMModelResponse | CustomStreamWrapper",
-                        litellm.completion(
-                            model=model,
-                            base_url=base_url,
-                            api_version=api_version,
-                            custom_llm_provider=self._custom_llm_provider or None,
-                            messages=(
-                                cache_messages
-                                if cache_messages is not None
-                                and "prompt_cache_options" in opts
-                                else messages
-                            ),
-                            # None (omitted) rather than [] — some OpenAI-compatible
-                            # servers reject requests with an empty tools array.
-                            tools=tools or None,
-                            stream=stream,
-                            timeout=timeout,
+            # Provider 400s degrade to provider defaults with a warning instead
+            # of failing the message, or learn the "none" a provider demands.
+            attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
+            for i, opts in enumerate(attempts):
+                check_cancelled()
+                opts = dict(opts)
+                # Eligibility and dispatch share the lock for this attempt only.
+                env_ctx: AbstractContextManager[None] = (
+                    temporary_env_and_lock(
+                        self._env_only_custom_config, deadline=deadline
+                    )
+                    if env_injection_enabled
+                    else nullcontext()
+                )
+                try:
+                    with env_ctx:
+                        attempt_messages = messages
+                        if cache_options is not None and "prompt_cache_options" in opts:
+                            effective_base = (
+                                passthrough_kwargs.get("api_base") or base_url
+                            )
+                            if uses_explicit_cache_breakpoints(
+                                model_identity_names,
+                                effective_base
+                                if isinstance(effective_base, str)
+                                else None,
+                                azure=self._model_provider == LlmProviderNames.AZURE,
+                            ):
+                                configured = opts["prompt_cache_options"]
+                                if not isinstance(configured, dict):
+                                    raise ValueError(
+                                        "prompt_cache_options must be a JSON object"
+                                    )
+                                opts["prompt_cache_options"] = {
+                                    **configured,
+                                    **cache_options,
+                                }
+                                attempt_messages = cache_messages
+                            elif configured_cache_options is None:
+                                opts.pop("prompt_cache_options")
+
+                        # Last write wins: sent_kwargs holds what the returning (or
+                        # final failing) attempt sent, reasoning_effort the effective
+                        # intent. One dict, two sinks, so they cannot drift.
+                        request_params = GenerationRequestParams(
+                            model_name=self.config.model_name,
+                            model_provider=self.config.model_provider,
+                            reasoning_effort=reasoning_effort,
                             max_tokens=max_tokens,
-                            client=client,
-                            **opts,
-                            **passthrough_kwargs,
-                        ),
-                    )
-
-                # Provider 400s degrade to provider defaults with a warning instead
-                # of failing the message, or learn the "none" a provider demands.
-                attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
-
-                for i, opts in enumerate(attempts):
-                    check_cancelled()
-                    # Last write wins: sent_kwargs holds what the returning (or
-                    # final failing) attempt sent, reasoning_effort the effective
-                    # intent. One dict, two sinks, so they cannot drift.
-                    request_params = GenerationRequestParams(
-                        model_name=self.config.model_name,
-                        model_provider=self.config.model_provider,
-                        reasoning_effort=reasoning_effort,
-                        max_tokens=max_tokens,
-                        sent_kwargs={
-                            k: _json_safe(opts[k])
-                            for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
-                        },
-                    )
-                    record_llm_request_params(request_params)
-                    if operation is not None:
-                        operation.request_params = request_params
-                    try:
-                        return _call_litellm(opts)
-                    except BadRequestError as e:
-                        check_cancelled()
-                        if (
-                            _rejection_demands_reasoning_none(e)
-                            and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
-                        ):
-                            # A name the version gate cannot place learns "none" from
-                            # the 400 itself, one round trip late. Rebuilt attempts all
-                            # carry it, so the loop picks up the tail and this fires once.
-                            reasoning_effort = ReasoningEffort.OFF
-                            forced = {
-                                k: v
-                                for k, v in opts.items()
-                                if k not in _REASONING_KWARG_KEYS
-                            } | {"reasoning_effort": _OPENAI_REASONING_NONE}
-                            attempts[i + 1 :] = _retry_attempts(
-                                forced, required_kwarg_keys | {"reasoning_effort"}
-                            )
-                            _log_chat_completions_tools_disable_reasoning(
-                                model, self._api_base
-                            )
-                        elif (
-                            "prompt_cache_options" in opts
-                            and _rejection_names_strippable_kwargs(
-                                e, {"prompt_cache_options"}
-                            )
-                        ):
-                            # A cache rejection must preserve the user's reasoning choice.
-                            without_cache = {
-                                k: v
-                                for k, v in opts.items()
-                                if k != "prompt_cache_options"
-                            }
-                            attempts[i + 1 :] = _retry_attempts(
-                                without_cache, required_kwarg_keys
-                            )
-                        elif i == len(attempts) - 1:
-                            raise
-                        elif not _rejection_names_strippable_kwargs(
-                            e, set(opts) - set(attempts[-1])
-                        ):
-                            raise
-                        logger.warning(
-                            "Provider rejected request for model %s. Retrying with %s: %s",
-                            model,
-                            sorted(_BEST_EFFORT_KWARG_KEYS & attempts[i + 1].keys()),
-                            e,
+                            sent_kwargs={
+                                k: _json_safe(opts[k])
+                                for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
+                            },
                         )
-                raise RuntimeError("Provider retry attempts exhausted")
+                        record_llm_request_params(request_params)
+                        if operation is not None:
+                            operation.request_params = request_params
+                        timeout = _attempt_timeout()
+                        check_cancelled()
+                        # LiteLLM's overloads do not express the stream flag's return type.
+                        return cast(
+                            "LiteLLMModelResponse | CustomStreamWrapper",
+                            litellm.completion(
+                                model=model,
+                                base_url=base_url,
+                                api_version=api_version,
+                                custom_llm_provider=self._custom_llm_provider or None,
+                                messages=attempt_messages,
+                                # None (omitted) rather than [] — some OpenAI-compatible
+                                # servers reject requests with an empty tools array.
+                                tools=tools or None,
+                                stream=stream,
+                                timeout=timeout,
+                                max_tokens=max_tokens,
+                                client=client,
+                                **opts,
+                                **passthrough_kwargs,
+                            ),
+                        )
+                except BadRequestError as e:
+                    check_cancelled()
+                    if (
+                        _rejection_demands_reasoning_none(e)
+                        and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
+                    ):
+                        # A name the version gate cannot place learns "none" from
+                        # the 400 itself, one round trip late. Rebuilt attempts all
+                        # carry it, so the loop picks up the tail and this fires once.
+                        reasoning_effort = ReasoningEffort.OFF
+                        forced = {
+                            k: v
+                            for k, v in opts.items()
+                            if k not in _REASONING_KWARG_KEYS
+                        } | {"reasoning_effort": _OPENAI_REASONING_NONE}
+                        attempts[i + 1 :] = _retry_attempts(
+                            forced, required_kwarg_keys | {"reasoning_effort"}
+                        )
+                        _log_chat_completions_tools_disable_reasoning(
+                            model, self._api_base
+                        )
+                    elif (
+                        "prompt_cache_options" in opts
+                        and _rejection_names_strippable_kwargs(
+                            e, {"prompt_cache_options"}
+                        )
+                    ):
+                        # A cache rejection must preserve the user's reasoning choice.
+                        without_cache = {
+                            k: v for k, v in opts.items() if k != "prompt_cache_options"
+                        }
+                        attempts[i + 1 :] = _retry_attempts(
+                            without_cache, required_kwarg_keys
+                        )
+                    elif i == len(attempts) - 1:
+                        raise
+                    elif not _rejection_names_strippable_kwargs(
+                        e, set(opts) - set(attempts[-1])
+                    ):
+                        raise
+                    logger.warning(
+                        "Provider rejected request for model %s. Retrying with %s: %s",
+                        model,
+                        sorted(_BEST_EFFORT_KWARG_KEYS & attempts[i + 1].keys()),
+                        e,
+                    )
+            raise RuntimeError("Provider retry attempts exhausted")
         except Exception as e:
             check_cancelled()
             raise _as_onyx_llm_error(e)
