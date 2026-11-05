@@ -439,15 +439,13 @@ const SourceTagInner = ({
     <button
       type="button"
       className={cn(
-        "inline-flex align-baseline appearance-none border-none bg-transparent p-0 rounded-04 cursor-pointer",
+        "inline-flex align-baseline gap-0.5 appearance-none border-none bg-transparent p-0 rounded-04 cursor-pointer",
         className
       )}
       onClick={handleClick}
     >
-      <Badge
-        title={extraCount > 0 ? `${displayName} +${extraCount}` : displayName}
-        truncate
-      />
+      <Badge title={displayName} truncate />
+      {extraCount > 0 && <Badge title={`+${extraCount}`} />}
     </button>
   ) : (
     <button
