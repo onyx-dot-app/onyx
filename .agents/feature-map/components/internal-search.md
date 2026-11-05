@@ -281,13 +281,13 @@ calls the index directly for admin document inspection.
 15. `retrieval-only-makes-no-model-calls` **`retrieval_only` makes no LLM or
     decision-model call.**
     `tools/tool_implementations/search/search_tool.py:SearchTool.search` skips
-    query expansion, scope and time detection and the Slack lane, and returns
+    query expansion, scope and time detection, and the Slack lane, and returns
     the top sections before the decision client or selection model resolves.
     It adds context with `expand_section_with_context(expand_override=True)`,
     which reads neighboring chunks from the index and classifies nothing.
-    The `/search` API skips the primary cost check for it. A new model call in
-    `search` must check `retrieval_only`, or it adds cost that callers chose to
-    avoid.
+    The `/search` API skips the primary cost and model spend checks for it. A
+    new model call in `search` must check `retrieval_only`, or it adds cost that
+    callers chose to avoid.
 
 ---
 

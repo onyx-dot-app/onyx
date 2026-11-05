@@ -150,8 +150,8 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    `tools/tool_implementations/search/search_tool.py:SearchTool.run` makes LLM
    calls, and `/search` runs the token, API-call and cloud cost checks
    ([[rate-and-usage-limits]]). A `retrieval_only` search makes no LLM calls and
-   skips the cost check, but the token and API-call checks still run
-   ([[internal-search#retrieval-only-makes-no-model-calls]]).
+   skips the LLM cost and model spend checks, but the token and API-call checks
+   still run ([[internal-search#retrieval-only-makes-no-model-calls]]).
    `MCP_SERVER_SEARCH_RETRIEVAL_ONLY` forces it for every search from this server.
    Keep a new LLM-calling tool behind the same checks.
 8. `oauth-callback-not-this-server` **`/mcp/oauth/callback` is a web page, not

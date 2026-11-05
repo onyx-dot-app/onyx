@@ -310,10 +310,10 @@ async def search_indexed_documents(
     `agent` and `document_set_names` are mutually exclusive: explicit document
     sets replace an agent's knowledge scope rather than narrowing it, so passing
     both is rejected.
-    `retrieval_only` skips every LLM step (query expansion, filter detection
-    and document selection) and returns the top 10 retrieved sections in
-    retrieval order, each with up to 5 chunks of surrounding context on each
-    side. Use it when you rank results yourself: it is faster and has no LLM
+    `retrieval_only` skips every LLM step (query expansion, filter detection,
+    federated Slack search and document selection) and returns up to 10
+    sections in retrieval order, each with up to 5 chunks of surrounding
+    context on each side. Use it when you rank results yourself: it is faster and has no LLM
     cost. The server can force it on.
 
     Returns ``{"results": [{title, url, source_type, content, updated_at},

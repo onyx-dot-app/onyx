@@ -36,7 +36,7 @@ class SearchRequest(BaseModel):
             raise ValueError("model is required when provider is specified")
         if self.retrieval_only and self.provider:
             raise ValueError(
-                "retrieval_only makes no LLM calls; omit provider and model"
+                "retrieval_only makes no LLM calls, so omit provider and model"
             )
         return self
 

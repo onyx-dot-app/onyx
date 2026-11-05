@@ -883,6 +883,30 @@ class SearchTool(Tool):
             metadata=planning_result,
         )
 
+    def _expand_sections_without_llm(
+        self, sections: list[InferenceSection], user_query: str
+    ) -> list[InferenceSection]:
+        """Give every section the widest neighbor window, read from the index.
+        With no relevance check to size the context, none gets less."""
+
+        def expand(section: InferenceSection) -> InferenceSection:
+            return (
+                expand_section_with_context(
+                    section=section,
+                    user_query=user_query,
+                    llm=self.llm,
+                    document_index=self.document_index,
+                    expand_override=True,
+                )
+                or section
+            )
+
+        return merge_overlapping_sections(
+            run_functions_tuples_in_parallel(
+                [(expand, (section,)) for section in sections]
+            )
+        )
+
     @log_function_time()
     def search(
         self,
@@ -1326,30 +1350,12 @@ class SearchTool(Tool):
             )
 
         if self.retrieval_only:
-            # With no relevance check to size the context, every kept section
-            # gets the widest window. Neighboring chunks are index reads.
-            def expand_without_llm(section: InferenceSection) -> InferenceSection:
-                return (
-                    expand_section_with_context(
-                        section=section,
-                        user_query=original_query,
-                        llm=self.llm,
-                        document_index=self.document_index,
-                        expand_override=True,
-                    )
-                    or section
-                )
-
-            expanded_sections = run_functions_tuples_in_parallel(
-                [
-                    (expand_without_llm, (section,))
-                    for section in top_sections[:MAX_SELECTED_SECTIONS]
-                ]
-            )
             # No file ids: a file id replaces a section's text with a hint to
             # a sandbox file, and only chat stages those files.
             return self._build_search_result(
-                sections_for_model=merge_overlapping_sections(expanded_sections),
+                sections_for_model=self._expand_sections_without_llm(
+                    top_sections[:MAX_SELECTED_SECTIONS], original_query
+                ),
                 search_docs=convert_inference_sections_to_search_docs(
                     top_sections, is_internet=False
                 ),
