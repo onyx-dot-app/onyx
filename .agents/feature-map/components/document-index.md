@@ -219,7 +219,8 @@ it deletes the old one.
    the hash of each required pair's documents modified at or after
    `db/reindex_clear.py:get_pair_clear_bounds`' `clear_from` (FUTURE's last
    successful poll end minus the poll overlap; the reindex start when FUTURE
-   never polled), nulls the hash of documents with an `IndexAttemptError` on a
+   never polled; the epoch, so everything, for a pair with neither a seed nor
+   a port attempt), nulls the hash of documents with an `IndexAttemptError` on a
    FUTURE attempt, and turns `secondary_only_sync_pending` into a plain
    needs-sync. It runs inside the flip's transaction with `FOR UPDATE SKIP
    LOCKED`, and once more right after the commit. A batch locks its document
