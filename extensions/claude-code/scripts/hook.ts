@@ -1,6 +1,8 @@
 // Claude Code hook entry for the Onyx plugin: UserPromptSubmit steers Claude to
 // Onyx, PreToolUse and PostToolUse run the strict gate, Stop nudges a full search.
 import {
+  accessSync,
+  constants,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -135,10 +137,13 @@ function statePath(sessionId: string): string {
 }
 
 // null means no usable state. The gate treats that as unknown and stays open,
-// so broken storage never blocks the user.
+// so broken storage never blocks the user. A file the hook cannot rewrite is
+// stale by the next event, so it reads as none.
 function readState(sessionId: string): SessionState | null {
+  const path = statePath(sessionId);
   try {
-    return JSON.parse(readFileSync(statePath(sessionId), "utf8")) as SessionState;
+    accessSync(path, constants.W_OK);
+    return JSON.parse(readFileSync(path, "utf8")) as SessionState;
   } catch {
     return null;
   }
