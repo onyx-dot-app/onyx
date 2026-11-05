@@ -20,6 +20,7 @@ root            0.25rem gap inline; no gap stacked or with a secondary-* / figur
 - **The title font drives everything.** An icon box is a square one title line tall (`1lh` of the
   title font), with 2px padding, so the glyph is the line height less 4px. A `secondary-*` title
   (16px line) has a 12px icon; a `heading-headline` title (36px line) has a 32px icon.
+  A `figure-*` title is too small for that: its icon box has 1px padding.
 - **The icon gap** is 0.25rem, except with a `secondary-*` or `figure-*` title, where the icon sits
   flush against the text. `ContentIndent`, `ContentAction`'s responsive description and
   `ReverseContent` follow the same rule.

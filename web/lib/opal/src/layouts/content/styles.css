@@ -172,6 +172,11 @@
   padding: 0.125rem;
 }
 
+/* `figure-*` lines are small: 1px padding keeps the glyph readable. */
+.opal-content-icon[data-figure] {
+  padding: 1px;
+}
+
 /* `enlargedIcon`: the same box, no padding, so the glyph is the full line. */
 .opal-content-icon[data-enlarged] {
   padding: 0;

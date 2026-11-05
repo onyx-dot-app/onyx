@@ -288,7 +288,7 @@ const AUX_ICON_CONFIG: Record<
 
 /**
  * An icon in a square one title line tall (`1lh` of the title font), with
- * 2px padding, so the glyph is the line height less 4px.
+ * 2px padding (1px for `figure-*`).
  */
 function ContentIcon({
   icon: Icon,
@@ -306,6 +306,7 @@ function ContentIcon({
     <div
       className={cn("opal-content-icon", `font-${font}`, className)}
       data-enlarged={enlarged || undefined}
+      data-figure={font.startsWith("figure-") || undefined}
     >
       <Icon className="opal-content-icon-glyph" />
     </div>
