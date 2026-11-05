@@ -678,10 +678,7 @@ class GitHubSourceOperations(SourceOperations):
             f"/repos/{repo_full_name}/commits",
             {"sha": ref, "since": utc_iso_timestamp(since)},
         ):
-            committer: Any = (raw.get("commit") or {}).get("committer") or {}
-            commits.append(
-                GitHubCommitRef(sha=raw["sha"], committed_at=committer.get("date"))
-            )
+            commits.append(GitHubCommitRef.model_validate(raw))
             if len(commits) >= limit:
                 break
         return commits

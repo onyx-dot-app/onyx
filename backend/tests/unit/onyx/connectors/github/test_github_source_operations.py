@@ -297,7 +297,11 @@ def test_commit_listing_stops_at_the_limit() -> None:
         limit=2,
     )
 
-    assert [commit.sha for commit in commits] == ["c3", "c2"]
+    committed_at = datetime(2024, 6, 1, 9, tzinfo=timezone.utc)
+    assert [(commit.sha, commit.committed_at) for commit in commits] == [
+        ("c3", committed_at),
+        ("c2", committed_at),
+    ]
     assert request.call_count == 1
     assert request.call_args.kwargs["parameters"] == {
         "sha": "main",
