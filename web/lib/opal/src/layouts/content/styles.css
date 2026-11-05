@@ -189,13 +189,14 @@
 
 /* The connector between two marks: a smaller glyph, in the secondary
    foreground. */
-/* moreIcon1, the connector between two marks: a fixed 20px box with 2px
-   padding (a 16px glyph) at every title size, in the secondary foreground. */
+/* moreIcon1, the connector between two marks: a box 12px smaller than the
+   icon box (`1lh` of the title font), with 2px padding, in the secondary
+   foreground. */
 .opal-content-more-icon {
   @apply flex shrink-0 items-center justify-center;
   box-sizing: border-box;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: calc(1lh - 0.75rem);
+  height: calc(1lh - 0.75rem);
   padding: 0.125rem;
 }
 

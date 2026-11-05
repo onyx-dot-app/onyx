@@ -177,7 +177,7 @@ type ContentFontProps =
   | ({
       font: ContentHeadingFont;
       orientation: "stacked";
-      /** A connector icon after the icon: 20px box, 16px glyph, `text-03`. */
+      /** A connector icon after the icon, in `text-03`: its box is 12px smaller than the icon box. */
       moreIcon1?: IconFunctionComponent;
       /** A peer of the icon, the same size, after `moreIcon1`. */
       moreIcon2?: IconFunctionComponent;
@@ -417,9 +417,10 @@ function Content({
               <ContentIcon icon={icon} font={font} enlarged={enlargedIcon} />
             )}
             {MoreIcon1 && (
-              // The connector between two marks: smaller, and in the
-              // secondary foreground rather than the icon colour.
-              <div className="opal-content-more-icon">
+              // The connector between two marks: 12px smaller than the icon
+              // box (the title font gives its `1lh`), in the secondary
+              // foreground rather than the icon colour.
+              <div className={cn("opal-content-more-icon", `font-${font}`)}>
                 <MoreIcon1 className="opal-content-icon-glyph" />
               </div>
             )}
