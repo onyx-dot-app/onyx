@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Prints the image that holds everything the component's runtime image ships
 # outside its lockfiles: the pinned hardened runtime base for web and
-# model-server, and for backend its apt stage, built here from the checked-out
-# Dockerfile.
+# model-server, and for backend and the sandbox their apt stage, built here
+# from the checked-out Dockerfile.
 #
-# usage: base-image-ref.sh <web|model-server|backend>
+# usage: base-image-ref.sh <web|model-server|backend|sandbox> [--report]
+# Report collection uses --report so browser findings do not stop CVE alerts.
 #
 # The hardened digests come from the environment the dhi-base-images action
 # exports in CI, or straight from that action's file otherwise (a local run),
@@ -27,6 +28,14 @@ case "${component}" in
   backend)
     docker build --quiet --target os --tag onyx-backend-os:audit backend >&2
     ref="onyx-backend-os:audit"
+    ;;
+  sandbox)
+    docker build --quiet --target os --tag onyx-sandbox-os:audit backend/onyx/server/features/build/sandbox/image >&2
+    ref="onyx-sandbox-os:audit"
+    if [ "${2:-}" != "--report" ]; then
+      # Exit 2 means an unknown component to ODS, not a failed browser audit.
+      bash .github/scripts/audit-sandbox-browser.sh "$ref" >&2 || exit 1
+    fi
     ;;
   *)
     echo "unknown component: ${component}" >&2
