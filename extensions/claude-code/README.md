@@ -10,10 +10,10 @@ The hook runs with `bun` or Node 23.6 or later, whichever the machine has. Witho
 
 ## Install
 
-This directory is its own marketplace. From a checkout of the Onyx repository, add it and install the plugin:
+The marketplace file in this directory points at a zip published as a GitHub release of this repository. Add it by URL and install the plugin:
 
 ```
-/plugin marketplace add ./extensions/claude-code
+/plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/claude-code/.claude-plugin/marketplace.json
 /plugin install onyx@onyx
 ```
 
@@ -27,7 +27,7 @@ Claude Code then asks for:
 
 Run `/plugin configure onyx@onyx` to change a value later.
 
-To develop the plugin from a checkout, start Claude Code with `--plugin-dir extensions/claude-code` and set `ONYX_URL`, `ONYX_API_TOKEN` and optionally `ONYX_STRICT_RETRIEVAL=true` in the environment. The configuration dialog does not run for a plugin loaded this way.
+To develop the plugin from a checkout, start Claude Code with `--plugin-dir extensions/claude-code` and set `ONYX_URL`, `ONYX_API_TOKEN` and optionally `ONYX_STRICT_RETRIEVAL=true` in the environment. The hooks and the skill read those variables. The configuration dialog does not run for a plugin loaded this way, and the MCP server reads only the configured options, so it does not connect in this mode.
 
 Organizations can require the plugin on every machine through managed settings. See [Manage plugins for your organization](https://code.claude.com/docs/en/plugins/org).
 
@@ -55,7 +55,7 @@ Per-session state lives under the plugin data directory and is pruned after a da
 | Path | Purpose |
 | --- | --- |
 | `.claude-plugin/plugin.json` | Manifest and the options the user is asked for |
-| `.claude-plugin/marketplace.json` | Lets this directory serve as a marketplace |
+| `.claude-plugin/marketplace.json` | The hosted marketplace: the plugin version and its release zip URL |
 | `.mcp.json` | The remote Onyx MCP server, loaded upfront |
 | `hooks/hooks.json` | The prompt hook and the strict-retrieval gate |
 | `scripts/onyx-hook` | Runtime launcher for the hook |
@@ -63,3 +63,12 @@ Per-session state lives under the plugin data directory and is pruned after a da
 | `skills/onyx/SKILL.md` | Tells Claude when and how to use Onyx |
 
 Typecheck with `bunx tsgo --noEmit -p extensions/claude-code/tsconfig.json` and validate with `claude plugin validate extensions/claude-code`.
+
+## Release
+
+The plugin version lives in the marketplace entry, not in `plugin.json`, so Claude Code can see a new version before it downloads the zip. To release:
+
+1. Set `version` and the release URL in `.claude-plugin/marketplace.json` to the new version and merge that change.
+2. Push the tag `claude-code-plugin/v<version>` on the merged commit.
+
+The `release-claude-code-plugin` workflow checks the tag against the marketplace entry, zips this directory, and uploads it to a GitHub release at the listed URL. Users who added the marketplace get the new version on their next `/plugin marketplace update onyx` or through auto-update.

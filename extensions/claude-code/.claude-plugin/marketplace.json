@@ -8,8 +8,12 @@
   "plugins": [
     {
       "name": "onyx",
-      "source": "./",
-      "description": "Grounds every prompt in your Onyx knowledge base and puts Onyx first for context retrieval"
+      "description": "Grounds every prompt in your Onyx knowledge base and puts Onyx first for context retrieval",
+      "version": "0.1.0",
+      "source": {
+        "source": "archive",
+        "url": "https://github.com/onyx-dot-app/onyx/releases/download/claude-code-plugin/v0.1.0/onyx-claude-code-plugin.zip"
+      }
     }
   ]
 }

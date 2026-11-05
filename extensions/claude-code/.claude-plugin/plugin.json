@@ -1,7 +1,6 @@
 {
   "name": "onyx",
   "displayName": "Onyx",
-  "version": "0.1.0",
   "description": "Grounds every prompt in your Onyx knowledge base and puts Onyx first for context retrieval",
   "author": {
     "name": "Onyx",

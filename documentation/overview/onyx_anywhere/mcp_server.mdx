@@ -92,10 +92,10 @@ The Onyx plugin for Claude Code connects the MCP server and also searches Onyx f
 The top results reach Claude before it starts to reason, so Onyx is used before any other MCP server or plugin.
 The plugin needs a personal access token with the `read:search` scope,
 which you create under **Settings > Accounts & Access > Access Tokens**.
-Install it from a checkout of the Onyx repository:
+Add the Onyx marketplace and install the plugin:
 
 ```
-/plugin marketplace add ./extensions/claude-code
+/plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/claude-code/.claude-plugin/marketplace.json
 /plugin install onyx@onyx
 ```
 
