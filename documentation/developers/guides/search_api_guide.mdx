@@ -40,7 +40,7 @@ The request needs nothing but a query. Everything else narrows the search or cha
 | `persona_id` | Search as an Agent. The Agent's document sets, attached documents and search start date apply on top of the other filters, and its LLM is used for query expansion. |
 | `provider` / `model` | The LLM used for query expansion and section selection. Both must be sent together, and the caller must have access to the provider. Defaults to the Agent's LLM, or the deployment default. |
 | `skip_query_expansion` | Run the query as written instead of rewriting and expanding it first. Useful when the query is already precise, or when you have your own expansion step. |
-| `retrieval_only` | Make no LLM calls. The search runs the query as written, with no source or time detection, federated Slack search, document selection or context expansion. Results come back in retrieval order, and `message_history` has no effect. The deployment still needs a configured LLM. Do not send `provider` / `model` with it. |
+| `retrieval_only` | Make no LLM calls. The search runs the query as written, with no source or time detection, federated Slack search or document selection. Results are the top 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. `message_history` has no effect. The deployment still needs a configured LLM. Do not send `provider` / `model` with it. |
 | `message_history` | Preceding conversation turns, so a query like "what about last quarter?" can be interpreted in context. Defaults to `query` on its own. |
 
 Results come back most relevant first:

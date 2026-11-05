@@ -26,7 +26,8 @@
 - **An API caller** sends `POST /search` and gets the selected, expanded
   sections with no LLM answer. It is for programmatic callers such as the
   onyx-cli and the Craft sandbox. With `retrieval_only`, it gets the top
-  sections in retrieval order and the search makes no LLM call.
+  sections in retrieval order with their neighboring chunks, and the search
+  makes no LLM call.
 - **An EE user** on the Search page gets ranked documents and the LLM's picks.
   If selection fails, the page still shows the documents.
 - When no connector, federated connector or user file exists, or the vector DB
@@ -282,6 +283,8 @@ calls the index directly for admin document inspection.
     `tools/tool_implementations/search/search_tool.py:SearchTool.search` skips
     query expansion, scope and time detection and the Slack lane, and returns
     the top sections before the decision client or selection model resolves.
+    It adds context with `expand_section_with_context(expand_override=True)`,
+    which reads neighboring chunks from the index and classifies nothing.
     The `/search` API skips the primary cost check for it. A new model call in
     `search` must check `retrieval_only`, or it adds cost that callers chose to
     avoid.

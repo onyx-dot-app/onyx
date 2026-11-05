@@ -1326,10 +1326,30 @@ class SearchTool(Tool):
             )
 
         if self.retrieval_only:
+            # With no relevance check to size the context, every kept section
+            # gets the widest window. Neighboring chunks are index reads.
+            def expand_without_llm(section: InferenceSection) -> InferenceSection:
+                return (
+                    expand_section_with_context(
+                        section=section,
+                        user_query=original_query,
+                        llm=self.llm,
+                        document_index=self.document_index,
+                        expand_override=True,
+                    )
+                    or section
+                )
+
+            expanded_sections = run_functions_tuples_in_parallel(
+                [
+                    (expand_without_llm, (section,))
+                    for section in top_sections[:MAX_SELECTED_SECTIONS]
+                ]
+            )
             # No file ids: a file id replaces a section's text with a hint to
             # a sandbox file, and only chat stages those files.
             return self._build_search_result(
-                sections_for_model=top_sections,
+                sections_for_model=merge_overlapping_sections(expanded_sections),
                 search_docs=convert_inference_sections_to_search_docs(
                     top_sections, is_internet=False
                 ),

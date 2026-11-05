@@ -21,7 +21,7 @@ from onyx.context.search.models import (
     TimeFilter,
     UserAccessFilters,
 )
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -36,6 +36,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.search.constants import MAX_SELECTED_SECTIONS
 from onyx.tools.tool_implementations.search.models import (
     SearchContext,
     SearchPlanningResult,
@@ -252,7 +253,19 @@ def test_search_uses_one_selection_model_per_invocation(
     assert cost.call_count == (2 if with_slack or selection_mode != "configured" else 0)
 
 
-def test_retrieval_only_makes_no_model_calls() -> None:
+def _next_chunk(
+    chunk_requests: list[DocumentSectionRequest], **_: object
+) -> list[InferenceChunk]:
+    (request,) = chunk_requests
+    chunk = _section(request.document_id).center_chunk
+    return [
+        chunk.model_copy(
+            update={"chunk_id": 1, "content": f"next chunk of {request.document_id}"}
+        )
+    ]
+
+
+def test_retrieval_only_expands_context_without_model_calls() -> None:
     resolver = MagicMock()
     decide = MagicMock(return_value=None)
     tool = _make_tool(
@@ -261,7 +274,8 @@ def test_retrieval_only_makes_no_model_calls() -> None:
         retrieval_only=True,
     )
     tool.enable_slack_search = True
-    section = _section("doc-1")
+    cast(MagicMock, tool.document_index).id_based_retrieval.side_effect = _next_chunk
+    sections = [_section(f"doc-{i}") for i in range(MAX_SELECTED_SECTIONS + 1)]
     context = ToolContext()
     with (
         patch(f"{MODULE}.check_llm_cost_limit_for_provider") as cost,
@@ -269,7 +283,6 @@ def test_retrieval_only_makes_no_model_calls() -> None:
         patch.object(tool, "_resolve_decision_client") as decision_client,
         patch(f"{MODULE}.populate_file_ids_on_sections") as populate_file_ids,
         patch(f"{MODULE}.select_sections_for_expansion") as select,
-        patch(f"{MODULE}.expand_section_with_context") as expand,
         patch(
             f"{MODULE}.convert_inference_sections_to_llm_string",
             wraps=convert_inference_sections_to_llm_string,
@@ -280,11 +293,17 @@ def test_retrieval_only_makes_no_model_calls() -> None:
             context=context,
             connected_sources=[DocumentSource.GITHUB],
             decide_mock=decide,
-            sections=[section],
+            sections=sections,
         )
 
     assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
-    assert to_llm_string.call_args.kwargs["top_sections"] == [section]
+    assert [
+        section.combined_content
+        for section in to_llm_string.call_args.kwargs["top_sections"]
+    ] == [
+        f"content of doc-{i}\nnext chunk of doc-{i}"
+        for i in range(MAX_SELECTED_SECTIONS)
+    ]
     # One completed search and no expansion or time decision to carry forward.
     assert len(context.search_context.search_cycles) == 1
     assert context.search_context.cached_expansion is None
@@ -296,7 +315,6 @@ def test_retrieval_only_makes_no_model_calls() -> None:
         decision_client,
         resolver,
         select,
-        expand,
         cost,
         populate_file_ids,
     ):
