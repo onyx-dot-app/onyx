@@ -230,7 +230,9 @@ it deletes the old one.
    that batch, which reads PAST and stamps nothing), and the pass after the
    commit clears it. Accepted: about one poll period
    of lag after the swap; documents a FUTURE attempt failed on need Retry; a
-   load-only connector needs a manual run.
+   load-only connector needs a manual run; a crash between the flip's commit
+   and the pass after it leaves a skipped document's old hash in place (no
+   retry, that would need a persisted marker).
 11. `reclaim-forward-only` **Reclaim moves forward one step at a time.** Each
     `advance_to_*` helper in `db/search_settings.py` acts only from the exact
     prior status. Do not set `reclaim_status` outside those helpers. An
