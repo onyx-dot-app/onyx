@@ -8,13 +8,13 @@ import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import (
+    MAX_POLL_COMMITS,
     GithubConnector,
     GithubConnectorStage,
     is_indexable_path,
 )
 from onyx.connectors.github.models import (
     GitHubCommitFiles,
-    GitHubCommitRef,
     GitHubFileContent,
     GitHubGitTree,
     GitHubRepository,
@@ -252,85 +252,69 @@ _LAST_PUSH = datetime(2024, 6, 2, 12, tzinfo=timezone.utc)
 _POLL_START = datetime(2024, 6, 1, tzinfo=timezone.utc).timestamp()
 
 
-def _serve_commits(
-    gateway: MagicMock, commits: list[tuple[datetime, list[str]]]
-) -> None:
-    """Serves the commits of the poll window, newest first, as (date, paths)."""
-    paths_by_sha = {f"sha{i}": paths for i, (_date, paths) in enumerate(commits)}
-    gateway.list_commits.return_value = [
-        GitHubCommitRef(sha=f"sha{i}", committed_at=date)
-        for i, (date, _paths) in enumerate(commits)
-    ]
+def _serve_commits(gateway: MagicMock, commits: list[list[str]]) -> None:
+    """Serves the commits of the poll window as the paths each one changed."""
+    gateway.list_commits.return_value = [f"sha{i}" for i in range(len(commits))]
     gateway.get_commit_files.side_effect = lambda **kwargs: GitHubCommitFiles(
-        paths=paths_by_sha[kwargs["sha"]]
+        paths=commits[int(kwargs["sha"].removeprefix("sha"))]
     )
 
 
-def test_poll_reads_only_files_changed_by_commits_in_window(
+def _poll_dates(connector: GithubConnector) -> dict[str, datetime | None]:
+    outputs = load_everything_from_checkpoint_connector(
+        connector, _POLL_START, time.time()
+    )
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    return {d.semantic_identifier: d.doc_updated_at for d in docs}
+
+
+def test_poll_dates_only_files_changed_by_commits_in_window(
     build_files_connector: Callable[..., GithubConnector],
     mock_source_operations: MagicMock,
     serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    """A poll re-reads only the files its commits changed, dated by the latest
-    of those commits, so a push does not re-embed every file."""
+    """A poll reads every file but dates only the ones its commits changed.
+    The last push moves on any push to any branch, so dating every file with
+    it would re-embed all of them; undated files go by content hash."""
     connector = build_files_connector()
     serve_files(_REPO_FILES, pushed_at=_LAST_PUSH)
     _serve_commits(
         mock_source_operations,
-        [
-            (datetime(2024, 6, 2, 12, tzinfo=timezone.utc), ["docs/guide.md"]),
-            (
-                datetime(2024, 6, 2, 9, tzinfo=timezone.utc),
-                ["README.md", "docs/guide.md", "src/main.py", "docs/deleted.md"],
-            ),
-        ],
+        [["docs/guide.md"], ["README.md", "src/main.py", "docs/deleted.md"]],
     )
 
-    outputs = load_everything_from_checkpoint_connector(
-        connector, _POLL_START, time.time()
-    )
-
-    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
-    assert {d.semantic_identifier: d.doc_updated_at for d in docs} == {
-        "README.md": datetime(2024, 6, 2, 9, tzinfo=timezone.utc),
-        "docs/guide.md": datetime(2024, 6, 2, 12, tzinfo=timezone.utc),
+    assert _poll_dates(connector) == {
+        "README.md": _LAST_PUSH,
+        "docs/guide.md": _LAST_PUSH,
+        "docs/untouched.md": None,
     }
-    fetched = sorted(
-        c.kwargs["path"] for c in mock_source_operations.get_file_content.call_args_list
-    )
-    assert fetched == ["README.md", "docs/guide.md"]
 
 
-@pytest.mark.parametrize("case", ["commit_files_truncated", "commit_listing_fails"])
-def test_poll_lists_all_files_when_changed_files_are_unknown(
+@pytest.mark.parametrize(
+    "case", ["listing_fails", "too_many_commits", "commit_files_truncated"]
+)
+def test_poll_dates_no_file_when_changed_files_are_unknown(
     case: str,
     build_files_connector: Callable[..., GithubConnector],
     mock_source_operations: MagicMock,
     serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    """When the changed files cannot all be listed, a poll reads every file
-    with no date, so the content hash still skips the unchanged ones."""
+    """When the changed files cannot all be listed, a poll still reads every
+    file, with no date, so the content hash decides."""
     connector = build_files_connector()
     serve_files(_REPO_FILES, pushed_at=_LAST_PUSH)
-    _serve_commits(mock_source_operations, [(_LAST_PUSH, ["README.md"])])
-    if case == "commit_files_truncated":
+    _serve_commits(mock_source_operations, [["README.md"]])
+    if case == "listing_fails":
+        mock_source_operations.list_commits.side_effect = ValueError("bad commit")
+    elif case == "too_many_commits":
+        _serve_commits(mock_source_operations, [["README.md"]] * (MAX_POLL_COMMITS + 1))
+    else:
         mock_source_operations.get_commit_files.side_effect = None
         mock_source_operations.get_commit_files.return_value = GitHubCommitFiles(
             paths=["README.md"], truncated=True
         )
-    else:
-        mock_source_operations.list_commits.side_effect = GitHubApiError(
-            "500", status_code=500
-        )
 
-    outputs = load_everything_from_checkpoint_connector(
-        connector, _POLL_START, time.time()
-    )
-
-    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
-    assert {d.semantic_identifier: d.doc_updated_at for d in docs} == dict.fromkeys(
-        _REPO_FILES
-    )
+    assert _poll_dates(connector) == dict.fromkeys(_REPO_FILES)
 
 
 def test_files_paginated_across_checkpoints(

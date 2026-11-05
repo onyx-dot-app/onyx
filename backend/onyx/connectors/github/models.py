@@ -218,13 +218,6 @@ class GitHubGitTree(BaseModel):
     truncated: bool = False
 
 
-class GitHubCommitRef(BaseModel):
-    sha: str
-    # The committer date: when the commit was made on the branch, also for a
-    # pull request merged on GitHub.
-    committed_at: datetime
-
-
 class GitHubCommitFiles(BaseModel):
     # The paths the commit added, modified or removed, against its first
     # parent. A renamed file is listed at its new path.

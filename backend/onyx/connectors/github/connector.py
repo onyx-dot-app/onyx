@@ -124,8 +124,8 @@ GITHUB_PATH_DENYLIST = {
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
 # Number of files emitted per checkpoint batch in the FILES stage.
 FILE_BATCH_SIZE = 100
-# A poll lists the files changed by at most this many commits of its window
-# (one read per commit). A busier window lists the whole tree instead.
+# A poll dates the files changed by at most this many commits of its window
+# (one read per commit). A busier window dates no file.
 MAX_POLL_COMMITS = 100
 
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
@@ -641,10 +641,8 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Branch file_paths was listed from; a resumed checkpoint whose branch no
     # longer matches (connector edited, default branch changed) is re-listed.
     file_paths_branch: str | None = None
-    # The date of the latest commit of the poll window that touched each of
-    # file_paths, when file_paths lists only the files those commits changed.
-    # None when file_paths is the whole tree.
-    file_paths_updated_at: dict[str, datetime] | None = None
+    # On a poll, the file_paths that commits of the poll window changed.
+    touched_file_paths: list[str] | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -653,7 +651,7 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     def reset(self) -> None:
         """
         Resets curr_page, num_retrieved, cursor_url, file_paths,
-        file_paths_branch and file_paths_updated_at to their initial values
+        file_paths_branch and touched_file_paths to their initial values
         (0, 0, None, None, None, None)
         """
         self.curr_page = 0
@@ -661,7 +659,7 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
         self.cursor_url = None
         self.file_paths = None
         self.file_paths_branch = None
-        self.file_paths_updated_at = None
+        self.touched_file_paths = None
 
 
 def make_cursor_url_callback(
@@ -675,33 +673,6 @@ def make_cursor_url_callback(
         checkpoint.num_retrieved = num_objs
 
     return cursor_url_callback
-
-
-def _file_updated_at(
-    checkpoint: GithubConnectorCheckpoint,
-    path: str,
-    repo: GitHubRepository,
-    is_poll: bool,
-) -> datetime | None:
-    """The doc_updated_at of a repo file.
-
-    An advanced doc_updated_at makes the indexing pipeline re-embed a document
-    without comparing its content hash, so a file gets a date only when the
-    date says when that file changed:
-
-    - Files listed from the commits of a poll window: the latest of those
-      commits that touched the file.
-    - The whole tree on a full index: the repo's last push, as before. Every
-      file is indexed then anyway.
-    - The whole tree on a poll that could not list its commits: no date. The
-      last push moves on any push to any branch, so it would re-embed every
-      file; with no date, the content hash skips the unchanged ones.
-    """
-    if checkpoint.file_paths_updated_at is not None:
-        return checkpoint.file_paths_updated_at.get(path)
-    if is_poll:
-        return None
-    return _utc(repo.pushed_at)
 
 
 class GithubConnector(
@@ -1063,78 +1034,64 @@ class GithubConnector(
             )
 
     def _list_touched_files(
-        self,
-        repo: GitHubRepository,
-        branch: str,
-        start: datetime,
-        end: datetime | None,
-    ) -> dict[str, datetime] | None:
-        """The paths that the commits of the poll window changed on ``branch``,
-        each with the date of the latest of those commits that touched it.
+        self, repo: GitHubRepository, branch: str, start: datetime
+    ) -> set[str]:
+        """The paths that commits on ``branch`` since ``start`` changed.
 
-        Paths that were deleted or renamed away are included; the caller keeps
-        only paths that are still in the tree. Returns None when the list may
-        be incomplete and the caller must list the whole tree: GitHub answered
-        with an error, the window holds more than MAX_POLL_COMMITS commits, or
-        a commit changed too many files for GitHub to list them all.
-
-        GitHub selects commits by committer date, not by push time. A merge or
-        rebase on GitHub sets that date when the change lands, but a commit
-        pushed long after it was made locally falls before the window and is
-        picked up by the next full index instead.
+        Best effort: empty when the list may be incomplete (GitHub answered
+        with an error, over MAX_POLL_COMMITS commits, or a commit changed too
+        many files to list). It only decides which files get a date, so a
+        missed path is still compared by content hash.
         """
         try:
-            commits = self._call_rate_limited(
+            shas = self._call_rate_limited(
                 partial(
                     self.source_operations.list_commits,
                     repo_full_name=repo.full_name,
                     ref=branch,
                     since=start,
-                    until=end,
                     limit=MAX_POLL_COMMITS + 1,
                 )
             )
-            if len(commits) > MAX_POLL_COMMITS:
+            if len(shas) > MAX_POLL_COMMITS:
                 logger.info(
-                    "Over %s commits on %s of repo %s since %s; listing all files",
+                    "Over %s commits on %s of repo %s since %s; dating no file",
                     MAX_POLL_COMMITS,
                     branch,
                     repo.full_name,
                     start,
                 )
-                return None
-            touched: dict[str, datetime] = {}
-            for commit in commits:
+                return set()
+            touched: set[str] = set()
+            for sha in shas:
                 changed = self._call_rate_limited(
                     partial(
                         self.source_operations.get_commit_files,
                         repo_full_name=repo.full_name,
-                        sha=commit.sha,
+                        sha=sha,
                     )
                 )
                 if changed.truncated:
                     logger.info(
                         "Commit %s of repo %s changed too many files to list; "
-                        "listing all files",
-                        commit.sha,
+                        "dating no file",
+                        sha,
                         repo.full_name,
                     )
-                    return None
-                committed_at = commit.committed_at.astimezone(timezone.utc)
-                for path in changed.paths:
-                    if path not in touched or touched[path] < committed_at:
-                        touched[path] = committed_at
+                    return set()
+                touched.update(changed.paths)
             return touched
         except GitHubRateLimitError:
+            # Out of retries: fail the run, as listing the tree does.
             raise
-        except GitHubApiError as e:
+        except Exception as e:
             logger.warning(
-                "Could not list the commits of repo %s since %s; listing all files: %s",
+                "Could not list the commits of repo %s since %s; dating no file: %s",
                 repo.full_name,
                 start,
                 e,
             )
-            return None
+            return set()
 
     def _fetch_repo_files(
         self,
@@ -1143,17 +1100,22 @@ class GithubConnector(
         start: datetime | None,
         is_slim: bool,
         repo_external_access: ExternalAccess | None,
-        end: datetime | None = None,
     ) -> Generator[Document | ConnectorFailure, None, bool]:
         """Emit one batch of indexable documents for `repo`, advancing the checkpoint.
 
         On first entry for a repo (file_paths is None) it resolves and caches the
         filtered file list, applying the pushed_at gate and surfacing tree
-        truncation as a failure. A poll (``start`` after the epoch) lists only
-        the files that the commits of its window changed, when GitHub can list
-        them all, and dates each file by its latest commit. Returns True if more
-        file batches remain (the caller should return the checkpoint to
-        resume), False once drained.
+        truncation as a failure. Returns True if more file batches remain (the
+        caller should return the checkpoint to resume), False once drained.
+
+        Every run reads every listed file. The date decides how the indexing
+        pipeline compares a file to its indexed copy: a date newer than the
+        stored one re-embeds it, no date compares the content hash.
+        repo.pushed_at moves on any push to any branch, so it dates every file
+        on a full index (as before) but on a poll only the files that commits
+        of the poll window changed. The rest get no date, so the content hash
+        skips the unchanged ones and still catches a change the commit list
+        missed.
         """
         branch = self._resolve_branch(repo)
         branch_changed = (
@@ -1165,7 +1127,7 @@ class GithubConnector(
             # discard it so paths and content come from the same branch.
             checkpoint.file_paths = None
             checkpoint.file_paths_branch = None
-            checkpoint.file_paths_updated_at = None
+            checkpoint.touched_file_paths = None
             checkpoint.curr_page = 0
 
         # A full index (also the first run) starts at the epoch; slim listing
@@ -1189,28 +1151,13 @@ class GithubConnector(
                 checkpoint.file_paths = []
                 checkpoint.file_paths_branch = branch
             else:
-                # A poll re-reads only the files that commits of its window
-                # changed. Walking the whole tree would re-read every file,
-                # and stamping each with a shared date would re-embed it.
-                # A new branch (after a branch change) was never indexed, so it
-                # lists the whole tree.
-                touched = (
-                    self._list_touched_files(repo, branch, start, end)
-                    if is_poll and start is not None and not branch_changed
-                    else None
-                )
-                paths: list[str] = []
-                truncated = False
-                if touched is None or touched:
-                    logger.info("Listing files for repo: %s", repo.name)
-                    paths, truncated = self._list_indexable_files(repo)
-                    # A truncated tree may leave out changed files that still
-                    # exist, so it keeps the full listing.
-                    if touched is not None and not truncated:
-                        paths = [path for path in paths if path in touched]
-                        checkpoint.file_paths_updated_at = {
-                            path: touched[path] for path in paths
-                        }
+                logger.info("Listing files for repo: %s", repo.name)
+                paths, truncated = self._list_indexable_files(repo)
+                if is_poll and start is not None and paths:
+                    touched = self._list_touched_files(repo, branch, start)
+                    checkpoint.touched_file_paths = [
+                        path for path in paths if path in touched
+                    ]
                 checkpoint.file_paths = paths
                 checkpoint.file_paths_branch = branch
                 logger.info(
@@ -1234,6 +1181,7 @@ class GithubConnector(
         page = checkpoint.curr_page
         batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
         checkpoint.curr_page += 1
+        touched = set(checkpoint.touched_file_paths or ())
 
         for path in batch:
             if is_slim:
@@ -1251,7 +1199,9 @@ class GithubConnector(
                 path,
                 branch,
                 repo_external_access,
-                doc_updated_at=_file_updated_at(checkpoint, path, repo, is_poll),
+                doc_updated_at=(
+                    _utc(repo.pushed_at) if not is_poll or path in touched else None
+                ),
             )
 
         # True if more file batches remain for this repo.
@@ -1491,7 +1441,7 @@ class GithubConnector(
 
         if self.include_files and checkpoint.stage == GithubConnectorStage.FILES:
             has_more_file_batches = yield from self._fetch_repo_files(
-                repo, checkpoint, start, is_slim, repo_external_access, end=end
+                repo, checkpoint, start, is_slim, repo_external_access
             )
             # More file batches remain for this repo — checkpoint and resume.
             if has_more_file_batches:
@@ -1712,8 +1662,6 @@ class GithubConnector(
                 path,
                 branch,
                 repo_external_access,
-                # One file has no poll window to take a commit date from;
-                # use the last push, as a full index does.
                 doc_updated_at=_utc(repo.pushed_at),
                 reindex=True,
             )

@@ -35,7 +35,6 @@ from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.github.models import (
     GitHubBranch,
     GitHubCommitFiles,
-    GitHubCommitRef,
     GitHubCursorItem,
     GitHubFileContent,
     GitHubGitTree,
@@ -82,8 +81,8 @@ _CURSOR_FALLBACK = (
     "the same endpoint as the offset listing that the checks probe."
 )
 _COMMITS_FALLBACK = (
-    "Read only by an incremental poll of repository files; on any error the "
-    "poll falls back to the tree listing that the checks probe."
+    "Read only by an incremental poll of repository files, to date the files "
+    "that changed; on any error the poll still reads every file, undated."
 )
 # GitHub lists at most this many files on one page of a commit.
 _MAX_COMMIT_FILES_PER_PAGE = 300
@@ -673,28 +672,19 @@ class GitHubSourceOperations(SourceOperations):
         repo_full_name: str,
         ref: str,
         since: datetime,
-        until: datetime | None,
         limit: int,
-    ) -> list[GitHubCommitRef]:
-        """The commits of a branch with a committer date from ``since`` up to
-        ``until`` (None: now), newest first (``GET /repos/{repo}/commits``).
-        ``limit`` stops the listing early."""
-        params: dict[str, Any] = {"sha": ref, "since": _iso(since)}
-        if until is not None:
-            params["until"] = _iso(until)
-        commits: list[GitHubCommitRef] = []
+    ) -> list[str]:
+        """The SHAs of a branch's commits with a committer date from ``since``,
+        newest first (``GET /repos/{repo}/commits``). ``limit`` stops the
+        listing early."""
+        shas: list[str] = []
         for raw, _next_url in self._paginate(
-            f"/repos/{repo_full_name}/commits", params
+            f"/repos/{repo_full_name}/commits", {"sha": ref, "since": _iso(since)}
         ):
-            commits.append(
-                GitHubCommitRef(
-                    sha=raw["sha"],
-                    committed_at=raw["commit"]["committer"]["date"],
-                )
-            )
-            if len(commits) >= limit:
+            shas.append(str(raw["sha"]))
+            if len(shas) >= limit:
                 break
-        return commits
+        return shas
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
