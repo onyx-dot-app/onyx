@@ -14841,6 +14841,10 @@
       },
       "plusMenu": {
         "tooltip": "Dateien oder Skills hinzufügen"
+      },
+      "contextRing": {
+        "label": "Nutzung des Kontextfensters",
+        "tooltip": "{percent} % des Kontexts genutzt"
       }
     },
     "interruptHint": {

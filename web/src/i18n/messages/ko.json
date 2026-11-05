@@ -14841,6 +14841,10 @@
       },
       "plusMenu": {
         "tooltip": "파일 또는 스킬 추가"
+      },
+      "contextRing": {
+        "label": "컨텍스트 창 사용량",
+        "tooltip": "컨텍스트 {percent}% 사용"
       }
     },
     "interruptHint": {

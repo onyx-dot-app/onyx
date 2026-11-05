@@ -14841,6 +14841,10 @@
       },
       "plusMenu": {
         "tooltip": "Ajouter des fichiers ou des compétences"
+      },
+      "contextRing": {
+        "label": "Utilisation de la fenêtre de contexte",
+        "tooltip": "{percent} % du contexte utilisé"
       }
     },
     "interruptHint": {
