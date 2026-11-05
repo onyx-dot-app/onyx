@@ -1547,4 +1547,32 @@ describe("Indexing card document types", () => {
     ).toBeTruthy();
     for (const item of items) expect(item).toHaveClass("me-6");
   });
+
+  it("below 640 px a card that can unfold keeps its bar row folded, so unfolding never moves the count", async () => {
+    breakdown = { types: [sized("text/plain", 5, 75)], untyped_count: 0 };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    await within(card).findByRole("button", { name: copy(KEYS.viewDetails) });
+
+    // The open bar is a 20 px line and a 4 px gap above the count, so the folded count and summary hold the same 24 px.
+    const figure = within(card).getByText("3,248", { exact: true });
+    const summary = within(card).getByText(typesLabel(1));
+    for (const part of [figure, summary]) {
+      const held = part.closest(".mt-6");
+      expect(held).not.toBeNull();
+      expect(held).not.toHaveClass("@max-[38.75rem]:mt-0");
+    }
+  });
+
+  it("below 640 px a card that cannot unfold drops the bar row, so the wrapped count sits under column A", async () => {
+    breakdown = { types: [sized(DOCX, 4, 71_821)], untyped_count: 2 };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    const summary = await within(card).findByText(typesLabel(1));
+
+    const figure = within(card).getByText("3,248", { exact: true });
+    for (const part of [figure, summary]) {
+      expect(part.closest(".mt-6")).toHaveClass("@max-[38.75rem]:mt-0");
+    }
+  });
 });

@@ -139,14 +139,19 @@ export function FigureStatBlock({ value, label }: FigureProps) {
   );
 }
 
+interface CardFigureProps extends FigureProps {
+  /** Keeps the 24 px once the line wraps too, where the types bar opens above the count, so unfolding never moves it. */
+  holdsBarRow?: boolean;
+}
+
 /** A card's count, 24 px down so its value sits on the tag line and its label on the detail. Once the line wraps it sits under the column. */
-function CardFigure(props: FigureProps) {
+function CardFigure({ holdsBarRow = false, ...props }: CardFigureProps) {
   return (
     <Section
       alignItems="start"
       gap={0}
       height="fit"
-      className="mt-6 @max-[38.75rem]:mt-0"
+      className={cn("mt-6", !holdsBarRow && "@max-[38.75rem]:mt-0")}
     >
       <LineFigure {...props} />
     </Section>
@@ -739,6 +744,7 @@ function IndexingCard({
                 <CardFigure
                   value={ccPair.num_docs_indexed}
                   label={t("statusCard.documents.indexedLabel")}
+                  holdsBarRow={fullyTyped}
                 />
               )
             }
@@ -748,7 +754,7 @@ function IndexingCard({
                 <Section
                   alignItems="end"
                   height="fit"
-                  className="mt-6 @max-[38.75rem]:mt-0"
+                  className={cn("mt-6", !fullyTyped && "@max-[38.75rem]:mt-0")}
                 >
                   {summary}
                 </Section>
