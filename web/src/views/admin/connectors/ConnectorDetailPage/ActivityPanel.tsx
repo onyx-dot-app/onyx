@@ -252,6 +252,7 @@ function BlockList({
   const {
     onHoverAttempt,
     focusAttemptId = null,
+    focusRequest,
     outlinedAttemptIds,
     onHoverPair,
   } = links;
@@ -305,6 +306,7 @@ function BlockList({
             }
             onHoverChange={hoverChange(item, charted)}
             focused={charted && focusAttemptId === attempt.id}
+            focusRequest={focusRequest}
             outlined={
               charted && (outlinedAttemptIds ?? []).includes(attempt.id)
             }

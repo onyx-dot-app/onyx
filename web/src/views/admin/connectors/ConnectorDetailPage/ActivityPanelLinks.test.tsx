@@ -395,6 +395,22 @@ describe("Repeated focus on the same run", () => {
     await user.click(screen.getByRole("button", { name: "View Errors" }));
     await waitFor(() => expect(cardFor(withErrors)).not.toBeNull());
   });
+
+  it("scrolls the card into view again, after the list was scrolled away", async () => {
+    installActivityFeed([FAILED]);
+    const user = userEvent.setup();
+    render(<FocusedPanel attemptId={FAILED.run.attempt.id} />);
+    await waitFor(() => expect(cardFor(FAILED)).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+    );
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
+    );
+  });
 });
 
 describe("Connectors filter", () => {

@@ -168,6 +168,20 @@ describe("ConnectorList rows", () => {
     ).not.toBeNull();
   });
 
+  it("closes the expanded row when its source group folds, so its runs stop polling", async () => {
+    page = makeConnectorsPage([
+      makeConnectorRow({ cc_pair_id: 1, name: "Sales Mailbox" }),
+    ]);
+    renderList();
+    const expand = await screen.findByRole("button", { name: copy(EXPAND) });
+
+    await setupUser().click(expand);
+    expect(screen.getAllByTestId("connector-runs")).toHaveLength(1);
+    await setupUser().click(screen.getByRole("button", { name: /Gmail/ }));
+
+    expect(screen.queryByTestId("connector-runs")).toBeNull();
+  });
+
   it("points an expanded row with no runs in its window to the older runs, and shows them on View", async () => {
     page = makeConnectorsPage([makeConnectorRow()]);
     renderList();

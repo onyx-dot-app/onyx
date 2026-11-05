@@ -13,7 +13,6 @@ import {
   InputTypeIn,
   MessageCard,
   Pagination,
-  Badge,
   BadgeButton,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
@@ -69,10 +68,10 @@ function FederatedRow({ connector }: FederatedRowProps) {
         {/* The name column shrinks before the button, so the clamp has an edge. */}
         <Section alignItems="start" height="fit" className="min-w-0 flex-1">
           <Content
-            font="main-ui-action"
             icon={getSourceMetadata(connector.source).icon}
             title={connector.name}
             titleMaxLines={1}
+            font="main-ui-action"
             badge={{ title: t("federated.tag"), color: "default" }}
           />
         </Section>
@@ -276,6 +275,15 @@ export default function ConnectorList({
               foldable
               defaultOpen
               chevronPosition="start"
+              // A folded group keeps its rows mounted, so its expanded row closes to stop polling runs nobody sees.
+              onOpenChange={(open) => {
+                if (open) return;
+                setExpandedId((current) =>
+                  rows.some((row) => row.cc_pair_id === current)
+                    ? null
+                    : current
+                );
+              }}
               title={t("sourceGroup", {
                 source: getSourceMetadata(source).displayName,
                 // The API counts every source on the page, so the fallback only satisfies the partial type.

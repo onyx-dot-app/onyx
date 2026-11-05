@@ -314,6 +314,8 @@ export interface ActivityCardProps {
   onHoverChange?: (hovered: boolean) => void;
   /** Picked from the chart: the card scrolls into view and lifts. */
   focused?: boolean;
+  /** Counts the picks, so picking the same run again scrolls the card back. */
+  focusRequest?: number;
   /** A hovered chart line holds the run, so the card takes its hover edge. */
   outlined?: boolean;
   /** Tells the list a panel of this card opened or closed, so a refresh keeps the card while it is open. */
@@ -336,6 +338,7 @@ export default function ActivityCard({
   popoverPlacement,
   onHoverChange,
   focused = false,
+  focusRequest = 0,
   outlined = false,
   onPanelOpenChange,
 }: ActivityCardProps) {
@@ -378,7 +381,7 @@ export default function ActivityCard({
     if (focused) {
       rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
-  }, [focused]);
+  }, [focused, focusRequest]);
   const selected = openPopover !== null;
   const traceBeside = openPopover === "trace" && placement.trace === "beside";
   // Measured on open, when a resize moves the trace beside, and while beside whenever the card resizes, since a polled run can reword its message and move the chip.
