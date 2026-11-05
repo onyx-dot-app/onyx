@@ -11,6 +11,7 @@ Setup instructions:
    - JIRA_BASE_URL: Your Jira instance URL (e.g., "https://your-domain.atlassian.net")
 """
 
+import time
 from unittest.mock import patch
 
 import pytest
@@ -58,7 +59,7 @@ def test_jsm_connector_basic(
     output = load_all_from_connector(
         connector=jsm_connector,
         start=0,
-        end=None,
+        end=time.time(),
     )
     docs = output.documents
 
@@ -102,7 +103,7 @@ def test_jsm_connector_with_jql(
     output = load_all_from_connector(
         connector=connector,
         start=0,
-        end=None,
+        end=time.time(),
     )
     docs = output.documents
 

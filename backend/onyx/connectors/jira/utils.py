@@ -128,20 +128,52 @@ def extract_jira_project(url: str) -> tuple[str, str]:
 
 
 def get_comment_strs(
-    issue: dict[str, Any], comment_email_blacklist: tuple[str, ...] = ()
+    issue: dict[str, Any],
+    comment_email_blacklist: tuple[str, ...] = (),
+    skip_restricted: bool = False,
+    skip_jsm_internal: bool = False,
 ) -> list[str]:
+    """Extract comment text from a Jira issue.
+
+    Args:
+        issue: Raw Jira issue dict
+        comment_email_blacklist: Email addresses whose comments to skip
+        skip_restricted: When True, skip comments with visibility restrictions
+        skip_jsm_internal: When True, skip JSM internal comments (jsdPublic=False
+            or sd.public.comment property=internal). Fail closed when present
+            JSM markers cannot be determined.
+
+    Returns:
+        List of comment text strings
+    """
     comment_field: dict[str, Any] = get_issue_field(issue, "comment") or {}
     comment_strs: list[str] = []
     for comment in comment_field.get("comments", []):
         try:
             author: dict[str, Any] = comment.get("author") or {}
             if author.get("emailAddress") in comment_email_blacklist:
-                continue  # Skip adding comment if author's email is in blacklist
-
-            # Skip comments with visibility restrictions since they have
-            # narrower access than their issue
-            if comment.get("visibility") is not None:
                 continue
+
+            if skip_restricted and comment.get("visibility") is not None:
+                continue
+
+            if skip_jsm_internal:
+                jsd_public = comment.get("jsdPublic")
+                if jsd_public is not None and not jsd_public:
+                    continue
+
+                properties: Any = comment.get("properties")
+                if isinstance(properties, dict):
+                    sd_public_comment = properties.get("sd.public.comment")
+                    if isinstance(sd_public_comment, dict):
+                        internal_value = sd_public_comment.get("internal")
+                        if internal_value is None:
+                            logger.warning(
+                                "JSM comment has sd.public.comment property but internal value is missing; skipping for safety"
+                            )
+                            continue
+                        if internal_value:
+                            continue
 
             comment_strs.append(rich_text(comment.get("body")))
         except Exception as e:

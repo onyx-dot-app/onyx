@@ -173,7 +173,7 @@ def build_jql_query(
     project_key: str | None,
     jql_query: str | None,
     start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch | None,
+    end: SecondsSinceUnixEpoch,
 ) -> str:
     """JQL for the configured project/query plus the poll window.
 
@@ -181,8 +181,6 @@ def build_jql_query(
     API user's profile timezone.
     https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
     """
-    if end is None:
-        end = datetime.now().timestamp()
     time_jql: str = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
     return scope_jql(project_key=project_key, jql_query=jql_query, clause=time_jql)
 
@@ -369,9 +367,12 @@ def process_jira_issue(
 
     description: str = rich_text(get_issue_field(issue, "description"))
 
+    is_jsm = source == DocumentSource.JIRA_SERVICE_MANAGEMENT
     comments: list[str] = get_comment_strs(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
+        skip_restricted=is_jsm,
+        skip_jsm_internal=is_jsm,
     )
     ticket_content = f"{description}\n" + "\n".join(
         [f"Comment: {comment}" for comment in comments if comment]

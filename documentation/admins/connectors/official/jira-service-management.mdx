@@ -13,10 +13,11 @@ For every JSM ticket, this connector pulls:
 - Title
 - Description
 - [Common fields](#indexed-metadata)
-- Comments
+- Comments (excluding restricted and internal comments)
 
-The connector can index only the content that its JSM account can access.
-An API token does not give its owner additional JSM permissions.
+The connector skips comments with visibility restrictions and JSM internal comments to ensure
+only publicly accessible content is indexed. The connector can index only the content that its
+JSM account can access. An API token does not give its owner additional JSM permissions.
 
 ## Jira Service Management Cloud setup
 
@@ -85,7 +86,10 @@ In the Onyx admin interface:
 
   <Step title="Optional settings">
     Optionally configure:
-    - **Comment Email Blacklist**: Exclude comments from specific email addresses (useful for ignoring bot comments). The connector indexes all comments by default unless you add emails to this list.
+    - **Comment Email Blacklist**: Exclude comments from specific email addresses (useful for ignoring bot comments)
+    
+    Note: The connector automatically skips restricted comments and JSM internal comments to ensure
+    only publicly accessible content is indexed.
   </Step>
 
   <Step title="Finish">
