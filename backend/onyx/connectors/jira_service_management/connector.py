@@ -84,11 +84,14 @@ class JiraServiceManagementConnector(JiraConnector):
         # With the default "Everything" scope the inherited JQL matches every
         # project the credential can browse, including software projects.
         # Ordinary Jira issues must not index under the JSM source, so skip
-        # issues whose project is known not to be a service desk. When the
-        # payload omits projectTypeKey (some Data Center versions) the issue
-        # indexes and enrichment stays best effort, as documented.
+        # issues whose project is known not to be a service desk. JQL-only
+        # configurations also leave jira_project unset, but their scope is
+        # the user's explicit query, so the gate applies to Everything only.
+        # When the payload omits projectTypeKey (some Data Center versions)
+        # the issue indexes and enrichment stays best effort, as documented.
         if (
             not self.jira_project
+            and not self.jql_query
             and project_type is not None
             and project_type != _PROJECT_TYPE_SERVICE_DESK
         ):

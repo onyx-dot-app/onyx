@@ -47,8 +47,9 @@ SLA summary) is available only when the Service Desk API is enabled on the insta
 
 <Steps>
   <Step title="Provide credentials">
-    Go to **Admin Panel → Connectors** and select **Jira Service Management**. Select **New Jira Service Management Account**
-    and enter the connector account's email address and API token. Select **Create**.
+    Go to **Admin Panel → Connectors** and select **Jira Service Management**. Select **New Jira Service Management Account**.
+    On JSM Cloud, enter the connector account's email address and API token. On Data Center, leave the email empty and enter
+    the personal access token, as described above. Select **Create**.
   </Step>
 
   <Step title="Configure the source">
@@ -83,4 +84,4 @@ The standard Jira fields the Jira connector indexes (issue key, summary, descrip
 
 - **Request Type** - the portal request type name, such as "Get IT help"
 - **Portal Status** - the customer-visible status, such as "Waiting for support"
-- **SLA Breached** - "true" when any SLA cycle has breached, "false" otherwise
+- **SLA Breached** - "true" when any SLA cycle has breached, "false" when cycles report no breach; omitted when no SLA cycle reports breach data

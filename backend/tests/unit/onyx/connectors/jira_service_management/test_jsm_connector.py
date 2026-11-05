@@ -234,3 +234,22 @@ def test_project_scope_indexes_non_service_desk_without_enrichment(
     assert "request_type" not in docs[0].metadata
     mock_source_operations.get_service_desk_request.assert_not_called()
     mock_source_operations.get_service_desk_sla.assert_not_called()
+
+
+def test_jql_scope_keeps_and_indexes_non_service_desk_issues(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """JQL-only configs also leave jira_project unset; their explicit query
+    is the scope, so issues must not be dropped - only enrichment skips."""
+    jsm_connector.jira_project = None
+    jsm_connector.jql_query = "labels = portal"
+    software_issue = _make_issue("ENG-3", project_key="ENG")
+    software_issue["fields"]["project"]["projectTypeKey"] = "software"
+
+    docs = _documents(jsm_connector, software_issue)
+
+    assert len(docs) == 1
+    assert docs[0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
+    mock_source_operations.get_service_desk_request.assert_not_called()
+    mock_source_operations.get_service_desk_sla.assert_not_called()

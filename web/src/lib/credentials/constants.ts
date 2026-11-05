@@ -240,11 +240,7 @@ const GOOGLE_ACCOUNT_SPEC = defineCredentialSpec({
   ],
 });
 
-/**
- * The credential each source asks for. Field keys are the exact
- * `credential_json` keys the backend reads. A source with no credential, or
- * one whose credential is set up elsewhere, maps to `null`.
- */
+/** Jira credential fields, shared by the jira and jira_service_management specs. */
 const JIRA_SPEC = defineCredentialSpec({
   brandName: "Jira",
   fields: {
@@ -256,6 +252,11 @@ const JIRA_SPEC = defineCredentialSpec({
   },
 });
 
+/**
+ * The credential each source asks for. Field keys are the exact
+ * `credential_json` keys the backend reads. A source with no credential, or
+ * one whose credential is set up elsewhere, maps to `null`.
+ */
 export const CREDENTIAL_SPECS = {
   github: defineCredentialSpec({
     brandName: "GitHub",
