@@ -979,6 +979,14 @@ class JiraConnector(
             # if we didn't retrieve a full batch, we're done
             checkpoint.has_more = current_offset - starting_offset == page_size
 
+    def _include_issue_in_slim_listing(self, issue: dict[str, Any]) -> bool:  # noqa: ARG002
+        """Whether an issue from the slim JQL search belongs in this
+        connector's slim-document listing. Pruning diffs this listing against
+        the indexed set, so subclasses that filter issues during indexing
+        must apply the same filter here or stale documents are never pruned.
+        Defaults to including everything (plain Jira behavior)."""
+        return True
+
     def retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -1043,6 +1051,9 @@ class JiraConnector(
                 project_name = project.get("name") if project else None
 
                 if not project_key:
+                    continue
+
+                if not self._include_issue_in_slim_listing(issue):
                     continue
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)

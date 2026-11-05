@@ -72,34 +72,48 @@ class JiraServiceManagementConnector(JiraConnector):
         )
         return None
 
+    def _issue_project_type(self, issue: dict[str, Any]) -> str | None:
+        return ((issue.get(_FIELD_FIELDS) or {}).get(_FIELD_PROJECT) or {}).get(
+            _FIELD_PROJECT_TYPE_KEY
+        )
+
+    def _drops_issue(self, issue: dict[str, Any]) -> bool:
+        """Everything-scope gate. With the default "Everything" scope the
+        inherited JQL matches every project the credential can browse,
+        including software projects. Ordinary Jira issues must not index
+        under the JSM source, so drop issues whose project is known not to
+        be a service desk. JQL-only configurations also leave jira_project
+        unset, but their scope is the user's explicit query, so the gate
+        applies to Everything only. When the payload omits projectTypeKey
+        (some Data Center versions) the issue indexes and enrichment stays
+        best effort, as documented."""
+        project_type = self._issue_project_type(issue)
+        return (
+            not self.jira_project
+            and not self.jql_query
+            and project_type is not None
+            and project_type != _PROJECT_TYPE_SERVICE_DESK
+        )
+
+    def _include_issue_in_slim_listing(self, issue: dict[str, Any]) -> bool:
+        """Applies the Everything-scope gate to slim-document listing too.
+        Pruning diffs this listing against the indexed set; without the gate
+        an issue that moved out of its service desk project would keep a
+        stale JSM document forever."""
+        return not self._drops_issue(issue)
+
     def _issue_to_items(
         self,
         issue: dict[str, Any],
         seen_hierarchy_node_ids: set[str],
         include_permissions: bool,
     ) -> Generator[Document | HierarchyNode, None, None]:
-        project_type = ((issue.get(_FIELD_FIELDS) or {}).get(_FIELD_PROJECT) or {}).get(
-            _FIELD_PROJECT_TYPE_KEY
-        )
-        # With the default "Everything" scope the inherited JQL matches every
-        # project the credential can browse, including software projects.
-        # Ordinary Jira issues must not index under the JSM source, so skip
-        # issues whose project is known not to be a service desk. JQL-only
-        # configurations also leave jira_project unset, but their scope is
-        # the user's explicit query, so the gate applies to Everything only.
-        # When the payload omits projectTypeKey (some Data Center versions)
-        # the issue indexes and enrichment stays best effort, as documented.
-        if (
-            not self.jira_project
-            and not self.jql_query
-            and project_type is not None
-            and project_type != _PROJECT_TYPE_SERVICE_DESK
-        ):
+        if self._drops_issue(issue):
             return
         # In Project/JQL scopes the user picked the scope deliberately (JQL
         # may span project types); only skip the enrichment lookups for known
         # non-service-desk projects, which can never have portal metadata.
-        enrich = project_type in (None, _PROJECT_TYPE_SERVICE_DESK)
+        enrich = self._issue_project_type(issue) in (None, _PROJECT_TYPE_SERVICE_DESK)
         for item in super()._issue_to_items(
             issue, seen_hierarchy_node_ids, include_permissions
         ):

@@ -253,3 +253,22 @@ def test_jql_scope_keeps_and_indexes_non_service_desk_issues(
     assert docs[0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
     mock_source_operations.get_service_desk_request.assert_not_called()
     mock_source_operations.get_service_desk_sla.assert_not_called()
+
+
+def test_everything_scope_filter_applies_to_slim_listing(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    """Pruning diffs slim IDs against the indexed set: the Everything-scope
+    gate must hold there too, or moved issues keep stale JSM documents."""
+    jsm_connector.jira_project = None
+    jsm_connector.jql_query = None
+    software_issue = _make_issue("ENG-4", project_key="ENG")
+    software_issue["fields"]["project"]["projectTypeKey"] = "software"
+    desk_issue = _make_issue("HELP-6")
+
+    assert jsm_connector._include_issue_in_slim_listing(software_issue) is False
+    assert jsm_connector._include_issue_in_slim_listing(desk_issue) is True
+
+    # explicit scopes are exempt, same as indexing
+    jsm_connector.jql_query = "labels = portal"
+    assert jsm_connector._include_issue_in_slim_listing(software_issue) is True
