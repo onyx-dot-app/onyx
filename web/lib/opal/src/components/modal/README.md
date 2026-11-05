@@ -48,7 +48,7 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 | Prop                             | Type                    | Description                                                                                                                          |
 | -------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `icon`, `moreIcon1`, `moreIcon2` | `IconFunctionComponent` | Heading icons. Omitting `icon` gives the minimal (icon-less) variant                                                                 |
-| `color`                          | `StatusColor \| "interactive"` | Colour mode of the icon and title, as on `Content` (a status colours the icon only)                                                  |
+| `color`                          | `StatusColor \| "interactive"` | Colour mode of the icon and title, as on `Content` (a status colours the title and icon)                                             |
 | `title`                          | `string \| RichStr`     | Required                                                                                                                             |
 | `description`                    | `string \| RichStr`     | Optional, also wired to `aria-describedby`                                                                                           |
 | `onClose`                        | `() => void`            | Renders the close button, with a "Close" tooltip on its start side on pointer hover (not on focus, so Escape still closes the modal) |
