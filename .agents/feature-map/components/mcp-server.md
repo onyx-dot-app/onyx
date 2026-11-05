@@ -30,9 +30,10 @@
   instead of configuring the server by hand. The plugin connects the MCP
   server with the user's token, runs an Onyx search for every question prompt
   through a `UserPromptSubmit` hook that posts to `/api/search` and injects
-  the top results, and with strict retrieval on denies other servers' search tools
-  until Onyx has been consulted. `extensions/claude-code/README.md` is the
-  user-facing description.
+  the top results with rules for when to call the full search tool, and with
+  strict retrieval on denies other servers' search tools until Onyx has been
+  consulted and nudges a full search when a turn ends without one.
+  `extensions/claude-code/README.md` is the user-facing description.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key
   gets a 401 for every rejection, including an API server outage. An OAuth
   token that the API server refuses for scope gets a 403 `insufficient_scope`

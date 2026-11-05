@@ -23,7 +23,7 @@ Claude Code then asks for:
 | --- | --- |
 | Onyx URL | Your Onyx web address without a trailing slash, for example `https://cloud.onyx.app` |
 | Onyx API token | A personal access token with the `read:search` scope. Create one under Settings > Accounts & Access > Access Tokens in Onyx. |
-| Strict retrieval | Off by default. See below. |
+| Strict retrieval | Off by default. Gates other search tools and nudges a full search. See below. |
 
 Run `/plugin configure onyx@onyx` to change a value later.
 
@@ -34,6 +34,8 @@ Organizations can require the plugin on every machine through managed settings. 
 ## How the prompt hook works
 
 For each submitted prompt the hook posts the prompt text to `POST /api/search` with `retrieval_only` and `skip_query_expansion` set. It skips slash commands and prompts shorter than 15 characters. The top five results, with title, source, url and an excerpt, go to Claude as additional context under the 10,000 character limit Claude Code applies.
+
+Fast retrieval returns raw sections. The full pipeline behind `search_indexed_documents`, with LLM selection and context expansion, costs more, so the plugin tells Claude when to pay for it. The injected context names the cases: the sections do not cover the question, the answer must combine several documents, or the user asks for the current state of something. When fast retrieval finds nothing for a question, the hook injects a directive to run the full search before answering from any other source.
 
 A search that fails or times out never blocks the prompt. The hook has a 10 second budget, and the request itself 8 seconds. On a server that supports `retrieval_only` the request makes no LLM calls and returns in seconds. A server without it runs the full search pipeline, which usually exceeds the budget, so the hook adds nothing there.
 
@@ -47,6 +49,7 @@ Strict retrieval is for teams that want Onyx consulted before any other knowledg
 - The prompt hook's search counts as consulting Onyx. So does a call to `search_indexed_documents`.
 - Prompts the hook skips, such as slash commands, do not gate anything.
 - The denial reason tells Claude to call `search_indexed_documents` first.
+- When a turn ends after a question prompt without a full search, a `Stop` hook feeds back one instruction: if the answer relies on company knowledge beyond the injected sections, run the full search now and revise. Claude judges that with the whole conversation in view. Claude Code's stop-hook guard keeps it to one nudge per turn.
 
 Per-session state lives under the plugin data directory and is pruned after a day.
 

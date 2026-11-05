@@ -35,6 +35,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
