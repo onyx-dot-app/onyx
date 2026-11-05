@@ -384,7 +384,6 @@ function TypesTable({ slices, hover, onFold }: TypesTableProps) {
   }
   function column(
     header: string,
-    font: "secondary-mono-label" | "secondary-mono",
     color: "text-04" | "text-03",
     value: (slice: DocumentTypeSlice) => string,
     className: string
@@ -401,7 +400,7 @@ function TypesTable({ slices, hover, onFold }: TypesTableProps) {
             height="fit"
             {...typeCellProps(slice.key, hover, "min-h-4")}
           >
-            <Text font={font} color={color}>
+            <Text font="secondary-mono" color={color}>
               {value(slice)}
             </Text>
           </Section>
@@ -450,18 +449,11 @@ function TypesTable({ slices, hover, onFold }: TypesTableProps) {
               >
                 {column(
                   t("types.indexed"),
-                  "secondary-mono-label",
                   "text-04",
                   (slice) => format.number(slice.count),
                   "min-w-16 max-w-[6.5rem] flex-1"
                 )}
-                {column(
-                  t("types.size"),
-                  "secondary-mono",
-                  "text-03",
-                  size,
-                  "flex-1"
-                )}
+                {column(t("types.size"), "text-03", size, "flex-1")}
               </Section>
             </>
           }
