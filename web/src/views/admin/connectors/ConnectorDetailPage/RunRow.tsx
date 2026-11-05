@@ -55,6 +55,7 @@ import { CheckRunCard } from "@/views/admin/connectors/ConnectorDetailPage/Check
 import { StageDetailsCard } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
 import { RunDetailsHint } from "@/views/admin/connectors/ConnectorDetailPage/InlineDetails";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import BadgeButton from "@/views/admin/connectors/shared/BadgeButton";
 import LineLayout, {
   LineIconLabel,
   LineTags,
