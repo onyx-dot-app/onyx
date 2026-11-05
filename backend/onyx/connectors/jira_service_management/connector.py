@@ -10,7 +10,8 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.jira.connector import JiraConnector, build_jql_query
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -60,3 +61,36 @@ class JiraServiceManagementConnector(JiraConnector):
     def document_source(self) -> DocumentSource:
         """Returns JIRA_SERVICE_MANAGEMENT to categorize JSM documents separately."""
         return DocumentSource.JIRA_SERVICE_MANAGEMENT
+
+    @override
+    def _get_jql_query(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch | None
+    ) -> str:
+        """Build JQL query that restricts to service desk projects.
+        
+        When neither a custom JQL query nor a project key is specified (the
+        "Everything" scope), this ensures only service desk projects are indexed,
+        preventing regular Jira projects from being included via the JSM connector.
+        
+        Args:
+            start: Start time for the query window
+            end: End time for the query window (None for open-ended)
+            
+        Returns:
+            JQL query string restricted to service desk projects
+        """
+        # If a custom JQL query is provided, use it as-is (user controls scope)
+        # If a project key is provided, use it (user specified exact project)
+        # Otherwise, restrict to service desk projects only
+        if not self.jql_query and not self.jira_project:
+            # Add projectType filter for "Everything" scope to only include service desks
+            jql_query = "type = service_desk"
+        else:
+            jql_query = self.jql_query
+
+        return build_jql_query(
+            project_key=self.jira_project,
+            jql_query=jql_query,
+            start=start,
+            end=end,
+        )
