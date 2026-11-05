@@ -5,7 +5,7 @@ description: Onyx is the source of truth for the user's company knowledge. Use f
 
 # Onyx knowledge
 
-The Onyx plugin searches the user's knowledge base for every question prompt and injects the top results before you see it. Treat those results as the primary context for the answer, and follow the Onyx MCP server's instructions for follow-up searches.
+The Onyx plugin steers every question prompt to the Onyx MCP server, and with prefetch on it injects the top raw search results before you see the prompt. Treat Onyx as the primary context for company questions, and follow the Onyx MCP server's instructions for when and how to search.
 
 - If Onyx returns nothing relevant, say so before you use another source.
 - Use `search_web` and `open_urls` on the Onyx MCP server for public information.

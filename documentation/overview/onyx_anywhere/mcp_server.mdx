@@ -88,8 +88,9 @@ See [Claude Code's MCP documentation](https://code.claude.com/docs/en/mcp) for a
 
 #### Use the Onyx plugin
 
-The Onyx plugin for Claude Code connects the MCP server and also searches Onyx for every prompt.
-The top results reach Claude before it starts to reason, so Onyx is used before any other MCP server or plugin.
+The Onyx plugin for Claude Code connects the MCP server and tells Claude, with every prompt,
+to search Onyx before it answers from company knowledge or uses any other search tool.
+Claude decides when a question needs Onyx, so prompts are never delayed.
 The plugin needs a personal access token with the `read:search` scope,
 which you create under **Settings > Accounts & Access > Access Tokens**.
 Add the Onyx marketplace and install the plugin:
@@ -100,9 +101,9 @@ Add the Onyx marketplace and install the plugin:
 ```
 
 Claude Code asks for your Onyx URL and the token. The plugin's hooks run with `bun` or Node 23.6 or later.
-The injected context also tells Claude when to run the full `search_indexed_documents` search.
-Turn on **Strict retrieval** to block other search tools until Onyx has been consulted for the current prompt,
-and to ask Claude for a full search when a question turn ends without one.
+Turn on **Strict retrieval** to block other search tools until Onyx has been consulted for the current prompt.
+Turn on **Prefetch results** to run a raw Onyx search before each prompt and give Claude the top sections up front,
+at the cost of up to 3 seconds per prompt.
 Administrators can require the plugin on every machine through [managed
 settings](https://code.claude.com/docs/en/plugins/org).
 The [plugin README](https://github.com/onyx-dot-app/onyx/tree/main/extensions/claude-code) describes each option.

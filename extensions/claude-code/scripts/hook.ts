@@ -1,5 +1,5 @@
-// Claude Code hook entry for the Onyx plugin: UserPromptSubmit injects Onyx
-// results, PreToolUse and PostToolUse run the strict gate, Stop nudges a full search.
+// Claude Code hook entry for the Onyx plugin: UserPromptSubmit steers Claude to
+// Onyx, PreToolUse and PostToolUse run the strict gate, Stop nudges a full search.
 import {
   mkdirSync,
   readFileSync,
@@ -12,9 +12,10 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const SEARCH_PATH = "/api/search";
-const SEARCH_TIMEOUT_MS = 8_000;
-// /api/search rejects longer queries.
+// The raw route makes no LLM call, so it answers within the prefetch budget.
+const SEARCH_PATH = "/api/search/raw";
+const SEARCH_TIMEOUT_MS = 3_000;
+// /api/search/raw rejects longer queries.
 const MAX_QUERY_CHARS = 2048;
 // Shorter prompts are replies such as "yes" or "ok", not questions.
 const MIN_PROMPT_CHARS = 15;
@@ -26,18 +27,26 @@ const STATE_TTL_MS = 24 * 60 * 60 * 1000;
 const OWN_TOOL_PREFIX = "mcp__plugin_onyx_";
 const RETRIEVAL_TOOL_PATTERN = /search|query|retriev|lookup|find|fetch/i;
 const FULL_SEARCH_CALL = "search_indexed_documents on the Onyx MCP server";
-// The sections come from retrieval alone, so the header says when the full
-// pipeline (LLM selection and context expansion) is worth a tool call.
+// Injected with every question prompt. Steering costs nothing per prompt, so
+// Onyx is considered first without a search before Claude starts.
+const STEER_CONTEXT =
+  "Onyx holds this organization's knowledge base. For anything that may depend on " +
+  "company documents, people, decisions, processes, customers or internal systems, " +
+  `call ${FULL_SEARCH_CALL} before answering and before any other search tool or web search, ` +
+  "and cite the url of each result you rely on. " +
+  "Skip it for work that needs only the code and files in front of you.";
+// Prefetched sections come from retrieval alone, so the header says when the
+// full pipeline (LLM selection and context expansion) is worth a tool call.
 const CONTEXT_HEADER =
-  "Onyx knowledge base sections for this prompt, from fast retrieval only, ranked by relevance. " +
+  "Onyx knowledge base sections for this prompt, from raw retrieval only, ranked by relevance. " +
   "Use them before any other source and cite the url of each section you rely on. " +
   `Call ${FULL_SEARCH_CALL} before answering when the sections do not cover the question, ` +
   "when the answer must combine several documents, or when the user asks for the current state of something.";
 const NO_RESULTS_CONTEXT =
-  "Onyx fast retrieval found nothing for this prompt. " +
+  "Onyx raw retrieval found nothing for this prompt. " +
   `Call ${FULL_SEARCH_CALL} before answering from any other source.`;
 const STOP_FEEDBACK =
-  "This turn answered after Onyx fast retrieval only. If the answer relies on " +
+  "This turn answered after Onyx raw retrieval only. If the answer relies on " +
   `company knowledge beyond the injected sections, call ${FULL_SEARCH_CALL} now and revise. ` +
   "Otherwise finish.";
 
@@ -65,10 +74,11 @@ type PluginConfig = {
   url: string;
   token: string;
   strict: boolean;
+  prefetch: boolean;
 };
 
 // consulted: Onyx answered for this prompt, so other retrieval tools may run.
-// awaitingFullSearch: fast results were injected and the full tool has not run.
+// awaitingFullSearch: prefetched sections were injected and the full tool has not run.
 type SessionState = {
   consulted: boolean;
   awaitingFullSearch: boolean;
@@ -87,6 +97,11 @@ function option(name: string): string | undefined {
   return process.env[`CLAUDE_PLUGIN_OPTION_${name}`] ?? process.env[name];
 }
 
+function flag(name: string): boolean {
+  const value = option(name);
+  return value === "true" || value === "1";
+}
+
 function readConfig(): PluginConfig | null {
   const url = option("ONYX_URL");
   const token = option("ONYX_API_TOKEN");
@@ -96,11 +111,11 @@ function readConfig(): PluginConfig | null {
     );
     return null;
   }
-  const strict = option("ONYX_STRICT_RETRIEVAL");
   return {
     url: url.replace(/\/+$/, ""),
     token,
-    strict: strict === "true" || strict === "1",
+    strict: flag("ONYX_STRICT_RETRIEVAL"),
+    prefetch: flag("ONYX_PREFETCH"),
   };
 }
 
@@ -165,7 +180,7 @@ function errorName(err: unknown): string {
   return err instanceof Error ? err.name : "Error";
 }
 
-function shouldSearch(prompt: string): boolean {
+function isQuestionPrompt(prompt: string): boolean {
   return (
     !prompt.startsWith("/") &&
     prompt.length >= MIN_PROMPT_CHARS &&
@@ -184,13 +199,8 @@ async function search(
         Authorization: `Bearer ${config.token}`,
         "Content-Type": "application/json",
       },
-      // retrieval_only skips every LLM step so the hook answers in seconds.
-      // Servers without it ignore the field and run the full pipeline.
-      body: JSON.stringify({
-        query,
-        skip_query_expansion: true,
-        retrieval_only: true,
-      }),
+      // No neighboring chunks: the excerpt should show the matched section.
+      body: JSON.stringify({ query, context_chunks: 0 }),
       signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
       // A redirect would carry the prompt to another origin.
       redirect: "manual",
@@ -234,9 +244,14 @@ function formatContext(results: SearchResult[]): string {
 async function userPrompt(input: HookInput, config: PluginConfig): Promise<void> {
   pruneStaleState();
   const prompt = (input.prompt ?? "").trim();
-  if (!shouldSearch(prompt)) {
+  if (!isQuestionPrompt(prompt)) {
     // Nothing to retrieve, so the strict gate has nothing to wait for.
     writeState(input.session_id, { consulted: true, awaitingFullSearch: false });
+    return;
+  }
+  if (!config.prefetch) {
+    writeState(input.session_id, { consulted: false, awaitingFullSearch: false });
+    emitContext("UserPromptSubmit", STEER_CONTEXT);
     return;
   }
   const { consulted, results } = await search(
@@ -248,6 +263,7 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
     awaitingFullSearch: results !== null,
   });
   if (!results) {
+    emitContext("UserPromptSubmit", STEER_CONTEXT);
     return;
   }
   emitContext(

@@ -28,11 +28,14 @@
   about the user's organization.
 - **A Claude Code user** installs the plugin in `extensions/claude-code/`
   instead of configuring the server by hand. The plugin connects the MCP
-  server with the user's token, runs an Onyx search for every question prompt
-  through a `UserPromptSubmit` hook that posts to `/api/search` and injects
-  the top results with rules for when to call the full search tool, and with
-  strict retrieval on denies other servers' search tools until Onyx has been
-  consulted and nudges a full search when a question turn ends without one.
+  server with the user's token and, through a `UserPromptSubmit` hook, tells
+  the model with every question prompt to call `search_indexed_documents`
+  before answering from company knowledge or any other search tool. With
+  strict retrieval on it denies other servers' search tools until Onyx has
+  been consulted. With prefetch on the hook posts the prompt to
+  `/api/search/raw` and injects the top sections with rules for when the full
+  search tool is still worth a call, and with strict retrieval nudges one when
+  a question turn ends on prefetched sections alone.
   `extensions/claude-code/README.md` is the user-facing description.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key
   gets a 401 for every rejection, including an API server outage. An OAuth

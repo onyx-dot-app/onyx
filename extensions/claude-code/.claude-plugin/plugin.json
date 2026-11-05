@@ -1,7 +1,7 @@
 {
   "name": "onyx",
   "displayName": "Onyx",
-  "description": "Grounds every prompt in your Onyx knowledge base and puts Onyx first for context retrieval",
+  "description": "Puts Onyx first for context retrieval in every Claude Code session",
   "author": {
     "name": "Onyx",
     "url": "https://onyx.app"
@@ -28,6 +28,12 @@
       "type": "boolean",
       "title": "Strict retrieval",
       "description": "Block other search tools until Onyx has been consulted for the current prompt",
+      "default": false
+    },
+    "onyx_prefetch": {
+      "type": "boolean",
+      "title": "Prefetch results",
+      "description": "Run a raw Onyx search before each prompt and inject the top sections. Adds up to 3 seconds per prompt.",
       "default": false
     }
   }

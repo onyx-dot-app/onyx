@@ -1,5 +1,5 @@
 {
-  "description": "Onyx search results before every prompt, plus the optional strict-retrieval gate",
+  "description": "Onyx steering before every prompt, optional prefetch, and the optional strict-retrieval gate",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\"",
-            "timeout": 10
+            "timeout": 5
           }
         ]
       }
