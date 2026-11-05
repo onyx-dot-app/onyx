@@ -1045,6 +1045,11 @@ class JiraConnector(
                 nextPageToken=checkpoint.cursor,
                 ids_done=checkpoint.ids_done,
             ):
+                # Count every issue the search returned so the page-size check
+                # in update_checkpoint_for_next_run reflects the search page,
+                # not the number of issues kept after filtering below.
+                current_offset += 1
+
                 # Get project info
                 project = get_issue_field(issue, _FIELD_PROJECT)
                 project_key = project[_FIELD_KEY] if project else None
@@ -1104,7 +1109,6 @@ class JiraConnector(
                         doc_created_at=time_str_to_utc(created) if created else None,
                     )
                 )
-                current_offset += 1
                 if len(slim_doc_batch) >= JIRA_SLIM_PAGE_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []

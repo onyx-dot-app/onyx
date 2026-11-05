@@ -24,13 +24,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.source_operations import JiraSourceOperations
+from onyx.connectors.jira.utils import get_issue_field
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 _FIELD_KEY = "key"
-_FIELD_FIELDS = "fields"
 _FIELD_PROJECT = "project"
 _FIELD_PROJECT_TYPE_KEY = "projectTypeKey"
 _PROJECT_TYPE_SERVICE_DESK = "service_desk"
@@ -73,9 +73,8 @@ class JiraServiceManagementConnector(JiraConnector):
         return None
 
     def _issue_project_type(self, issue: dict[str, Any]) -> str | None:
-        return ((issue.get(_FIELD_FIELDS) or {}).get(_FIELD_PROJECT) or {}).get(
-            _FIELD_PROJECT_TYPE_KEY
-        )
+        project = get_issue_field(issue, _FIELD_PROJECT)
+        return project.get(_FIELD_PROJECT_TYPE_KEY) if project else None
 
     def _drops_issue(self, issue: dict[str, Any]) -> bool:
         """Everything-scope gate. With the default "Everything" scope the
