@@ -86,7 +86,11 @@ that continues a `Content` with an icon, such as a docs link or a detail line, i
 hand-written inset that drifts when `Content` changes.
 
 ```tsx
-<Content font="main-ui-action" icon={SvgHook} title="Pre-query" description="Runs before…" />
+import { LinkButton } from "@opal/components";
+import { Content, ContentIndent } from "@opal/layouts";
+import { SvgGlobe } from "@opal/icons";
+
+<Content font="main-ui-action" icon={SvgGlobe} title="Web search" description="Searches the web" />
 <ContentIndent font="main-ui-action">
   <LinkButton href={docsUrl}>Documentation</LinkButton>
 </ContentIndent>

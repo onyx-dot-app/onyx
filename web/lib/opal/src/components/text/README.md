@@ -27,24 +27,24 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 
 | Value                     | Size | Weight | Line-height |
 | ------------------------- | ---- | ------ | ----------- |
-| `"heading-hero"`            | 48px | 600    | 64px        |
-| `"heading-headline"`            | 24px | 600    | 36px        |
-| `"heading-section"`            | 18px | 600    | 28px        |
-| `"heading-section-muted"`      | 18px | 500    | 28px        |
+| `"heading-hero"`          | 32px | 500    | 48px        |
+| `"heading-headline"`      | 24px | 600    | 36px        |
+| `"heading-section"`       | 18px | 600    | 28px        |
+| `"heading-section-muted"` | 18px | 500    | 28px        |
 | `"main-content-body"`     | 16px | 450    | 24px        |
+| `"main-content-emphasis"` | 16px | 700    | 24px        |
 | `"main-content-muted"`    | 16px | 400    | 24px        |
-| `"main-content-emphasis"` | 16px | 600    | 24px        |
-| `"main-content-mono"`     | 16px | 400    | 23px        |
+| `"main-content-mono"`     | 16px | 400    | 24px        |
 | `"main-ui-body"`          | 14px | 500    | 20px        |
 | `"main-ui-muted"`         | 14px | 400    | 20px        |
 | `"main-ui-action"`        | 14px | 600    | 20px        |
 | `"main-ui-mono"`          | 14px | 400    | 20px        |
-| `"secondary-body"`        | 12px | 400    | 18px        |
-| `"secondary-action"`      | 12px | 600    | 18px        |
-| `"secondary-mono"`        | 12px | 400    | 18px        |
-| `"figure-small-label"`    | 10px | 600    | 14px        |
-| `"figure-small-value"`    | 10px | 400    | 14px        |
-| `"figure-keystroke"`      | 11px | 400    | 16px        |
+| `"secondary-body"`        | 12px | 400    | 16px        |
+| `"secondary-action"`      | 12px | 600    | 16px        |
+| `"secondary-mono"`        | 12px | 400    | 16px        |
+| `"figure-small-label"`    | 10px | 700    | 12px        |
+| `"figure-small-value"`    | 10px | 400    | 12px        |
+| `"figure-keystroke"`      | 12px | 400    | 16px        |
 
 ### `TextColor`
 
