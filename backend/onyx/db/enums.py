@@ -148,6 +148,19 @@ class CCPairRunErrors(str, PyEnum):
     NONE = "none"
 
 
+class IndexAttemptErrorResolvedReason(str, PyEnum):
+    """How an index attempt error closed."""
+
+    # A targeted re-index indexed the document.
+    RETRY = "retry"
+    # A later run indexed the document or closed the pair's entity errors
+    # clean, or a later run other than a Retry failed the document again.
+    LATER_RUN = "later_run"
+    # An admin resolved it. ``is_resolved`` stays false, since the poll cursor
+    # and Retry read it and still treat the error as open.
+    WITHOUT_RETRY = "without_retry"
+
+
 class PortAttemptStatus(str, PyEnum):
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"

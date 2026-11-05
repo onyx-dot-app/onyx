@@ -860,7 +860,9 @@ def get_connector_credential_pairs_for_source(
 
 
 def _has_unresolved_entity_error() -> ColumnElement[bool]:
-    """Correlates to the enclosing query's IndexAttempt row."""
+    """Correlates to the enclosing query's IndexAttempt row. Reads
+    ``is_resolved`` alone, since an entity an admin resolved without retry
+    still needs its time range fetched again."""
     return (
         select(IndexAttemptError.id)
         .where(

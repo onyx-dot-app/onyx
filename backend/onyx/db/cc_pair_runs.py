@@ -25,14 +25,12 @@ from sqlalchemy import (
     tuple_,
     union_all,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
-from sqlalchemy.sql.dml import ReturningInsert
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.cc_pair_run_resolution import (
-    clear_resolved_repeated_error_states__no_commit,
+    index_attempt_error_is_open,
+    resolve_runs__no_commit,
     run_is_resolved,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
@@ -49,7 +47,6 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     CapabilityCheckRun,
-    CCPairRunResolution,
     Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
@@ -63,6 +60,7 @@ from onyx.db.permission_sync_attempt import (
     relevant_external_group_sync_attempts_filter,
     source_group_sync_is_cc_pair_agnostic,
 )
+from onyx.utils.batching import batch_generator
 
 # Keyed by value, so a value two status enums share must group the same way.
 # PermissionSyncStatus and SyncStatus values are all IndexingStatus values.
@@ -104,6 +102,20 @@ _ACTIVE_GROUPS = frozenset(
 _SETTLED_GROUPS = frozenset(
     group for group in CCPairRunStatusGroup if group not in _ACTIVE_GROUPS
 )
+
+
+def _resolvable_groups(kind: CCPairRunKind) -> frozenset[CCPairRunStatusGroup]:
+    """A running index run resolves, since resolving closes its errors so far
+    and a later error or failure reopens it. Other kinds count failures without
+    a time, so a running one has nothing to resolve yet."""
+    if kind is CCPairRunKind.INDEXING:
+        return _SETTLED_GROUPS | {CCPairRunStatusGroup.RUNNING}
+    return _SETTLED_GROUPS
+
+
+# Bounds each resolve statement on a fleet-wide resolve-matching.
+_RESOLVE_BATCH_SIZE = 1000
+
 # A run supersedes the runs before it once it succeeded or failed. A
 # canceled or interrupted run, like one still going, leaves them open.
 _SUPERSEDING_GROUPS = frozenset(
@@ -323,7 +335,7 @@ def _index_attempt_runs(
         with_retries=True,
     )
     own_errors = exists().where(IndexAttemptError.index_attempt_id == IndexAttempt.id)
-    unresolved = own_errors.where(IndexAttemptError.is_resolved.is_(False))
+    unresolved = own_errors.where(index_attempt_error_is_open())
     matches_errors: ColumnElement[bool] | None
     match run_filter.errors:
         case CCPairRunErrors.UNRESOLVED:
@@ -685,12 +697,26 @@ def _id_and_pair_columns(
             return CapabilityCheckRun.id, ConnectorCredentialPair.id
 
 
-def _settled(run_filter: CCPairRunFilter, **update: object) -> CCPairRunFilter:
-    """The filter narrowed to runs that finished. A run still going can gain
-    failures after it is resolved, so it has nothing to resolve yet."""
+def _resolvable(
+    run_filter: CCPairRunFilter, kind: CCPairRunKind, **update: object
+) -> CCPairRunFilter:
+    """The filter narrowed to the kind's runs that can be resolved."""
     groups = run_filter.status_groups
-    settled = _SETTLED_GROUPS if groups is None else set(groups) & _SETTLED_GROUPS
-    return run_filter.model_copy(update={**update, "status_groups": set(settled)})
+    resolvable: set[CCPairRunStatusGroup] = set(_resolvable_groups(kind))
+    if groups is not None:
+        resolvable &= set(groups)
+    return run_filter.model_copy(update={**update, "status_groups": resolvable})
+
+
+def _run_pairs(kind: CCPairRunKind, run_filter: CCPairRunFilter) -> Select:
+    """(run id, pair id) of the kind's runs the filter keeps. A run with no
+    pair has none to resolve against, so it is left out."""
+    run_id, pair_id = _id_and_pair_columns(kind)
+    return (
+        _runs_of_kind(kind, run_filter, True)
+        .with_only_columns(run_id, pair_id)
+        .where(pair_id.is_not(None))
+    )
 
 
 def get_resolvable_runs(
@@ -699,25 +725,23 @@ def get_resolvable_runs(
     run_filter: CCPairRunFilter,
     runs: list[tuple[CCPairRunKind, int]],
 ) -> dict[tuple[CCPairRunKind, int], int]:
-    """The finished runs among ``runs`` in the feed of ``kinds`` that failed or
-    hold open errors, each with the pair it ran on. Only those have something
-    to resolve."""
+    """The runs among ``runs`` in the feed of ``kinds`` that failed or hold open
+    errors, each with the pair it ran on. Only those have something to
+    resolve."""
     found: dict[tuple[CCPairRunKind, int], int] = {}
-    open_items = (
-        run_filter.model_copy(update={"status_groups": {CCPairRunStatusGroup.FAILED}}),
-        _settled(run_filter, errors=CCPairRunErrors.UNRESOLVED),
+    failed = run_filter.model_copy(
+        update={"status_groups": {CCPairRunStatusGroup.FAILED}}
     )
     for kind in kinds:
         ids = [run_id for run_kind, run_id in runs if run_kind == kind]
         if not ids:
             continue
-        run_id, pair_id = _id_and_pair_columns(kind)
-        for narrowed in open_items:
-            stmt = (
-                _runs_of_kind(kind, narrowed, True)
-                .with_only_columns(run_id, pair_id)
-                .where(run_id.in_(ids))
-            )
+        run_id, _ = _id_and_pair_columns(kind)
+        for narrowed in (
+            failed,
+            _resolvable(run_filter, kind, errors=CCPairRunErrors.UNRESOLVED),
+        ):
+            stmt = _run_pairs(kind, narrowed).where(run_id.in_(ids))
             for found_id, found_pair in db_session.execute(stmt).all():
                 found[(kind, found_id)] = found_pair
     return found
@@ -815,9 +839,8 @@ def count_matching_runs(
     filters are one per level, so no run counts twice."""
     total = 0
     for run_filter in run_filters:
-        settled = _settled(run_filter)
         for kind in kinds:
-            matching = _runs_of_kind(kind, settled, True).subquery()
+            matching = _run_pairs(kind, _resolvable(run_filter, kind)).subquery()
             total += db_session.scalar(select(func.count()).select_from(matching)) or 0
     return total
 
@@ -828,41 +851,23 @@ def resolve_matching_runs__no_commit(
     run_filters: list[CCPairRunFilter],
     user_id: UUID | None,
 ) -> dict[int, int]:
-    """Marks every run of ``kinds`` the filters keep resolved, one INSERT from
-    SELECT per filter and kind, and returns how many it marked per pair. A run
-    resolved before keeps its first resolution and is not counted."""
-    resolved: Counter[int] = Counter()
+    """Resolves every run of ``kinds`` the filters keep and returns how many it
+    changed per pair. The run ids are read first, bounded by the open runs of
+    the operated pairs, since resolving needs them to close an index run's
+    errors, including a run resolved before that gained new ones. They resolve
+    in batches, so no statement grows with the matching history."""
+    matching: dict[tuple[CCPairRunKind, int], int] = {}
     for run_filter in run_filters:
-        settled = _settled(run_filter)
         for kind in kinds:
-            stmt = _resolution_insert(kind, settled, user_id)
-            resolved.update(db_session.scalars(stmt).all())
-    clear_resolved_repeated_error_states__no_commit(db_session, set(resolved))
-    return dict(resolved)
-
-
-def _resolution_insert(
-    kind: CCPairRunKind, settled: CCPairRunFilter, user_id: UUID | None
-) -> ReturningInsert[tuple[int]]:
-    """One INSERT from SELECT that marks the kind's runs the filter keeps and
-    returns the pair of each run it marked."""
-    run_id, pair_id = _id_and_pair_columns(kind)
-    matching = _runs_of_kind(kind, settled, True).with_only_columns(
-        literal(kind.value),
-        run_id,
-        pair_id,
-        # Typed, since Postgres reads an untyped NULL in a SELECT as text.
-        cast(literal(user_id, PGUUID(as_uuid=True)), PGUUID(as_uuid=True)),
-    )
-    return (
-        insert(CCPairRunResolution)
-        .from_select(
-            ["run_kind", "attempt_id", "cc_pair_id", "resolved_by_user_id"],
-            matching,
+            stmt = _run_pairs(kind, _resolvable(run_filter, kind))
+            for found_id, found_pair in db_session.execute(stmt).all():
+                matching[(kind, found_id)] = found_pair
+    resolved: Counter[int] = Counter()
+    for batch in batch_generator(matching.items(), _RESOLVE_BATCH_SIZE):
+        resolved.update(
+            resolve_runs__no_commit(db_session, dict(batch), user_id).values()
         )
-        .on_conflict_do_nothing(index_elements=["run_kind", "attempt_id"])
-        .returning(CCPairRunResolution.cc_pair_id)
-    )
+    return dict(resolved)
 
 
 def _status_column(kind: CCPairRunKind) -> InstrumentedAttribute:
