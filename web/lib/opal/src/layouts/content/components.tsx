@@ -505,7 +505,7 @@ function Content({
               (() => {
                 const { icon: AuxIcon, colorClass } = AUX_ICON_CONFIG[auxIcon];
                 return (
-                  <div className={cn("opal-content-icon", `font-${font}`)}>
+                  <div className="opal-content-aux-icon">
                     <AuxIcon
                       className={cn("opal-content-aux-glyph", colorClass)}
                     />
