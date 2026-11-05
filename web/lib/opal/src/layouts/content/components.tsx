@@ -134,12 +134,25 @@ interface ContentBaseProps {
   ref?: React.Ref<HTMLDivElement>;
 }
 
+/** Title fonts whose stacked layout takes `moreIcon1` / `moreIcon2`. */
+type ContentHeadingFont = Extract<TextFont, `heading-${string}`>;
+
+/** No extras beside the title. */
+type NoExtras = { suffix?: never; auxIcon?: never; badge?: never };
+
+/** No icon-row extras. */
+type NoMoreIcons = { moreIcon1?: never; moreIcon2?: never };
+
 /**
- * The title font, and the extras beside the title that only the `main-ui-*`,
- * `main-content-*` and `secondary-*` fonts take.
+ * The title font decides which extras a `Content` takes:
+ *
+ * - `main-ui-*`, `main-content-*`, `secondary-*`: `suffix`, `auxIcon` and
+ *   `badge` beside the title.
+ * - `heading-*`: `moreIcon1` / `moreIcon2` in the icon row, when stacked.
+ * - mono and figure fonts: neither.
  */
 type ContentFontProps =
-  | {
+  | ({
       /**
        * The title's font. Every size derives from it: the icon container is
        * one title line tall, so the icon is that line height less 4px.
@@ -158,32 +171,29 @@ type ContentFontProps =
 
       /** A badge beside the title. */
       badge?: ContentBadge;
-    }
-  | {
-      /** A heading, mono or figure title font: no extras beside it. */
-      font: Exclude<TextFont, ContentExtrasFont>;
-      suffix?: never;
-      auxIcon?: never;
-      badge?: never;
-    };
 
-/** `moreIcon1` / `moreIcon2` sit in the icon row, so only a stacked layout has them. */
-type ContentProps = ContentBaseProps &
-  ContentFontProps &
-  (
-    | {
-        orientation?: "inline";
-        moreIcon1?: never;
-        moreIcon2?: never;
-      }
-    | {
-        orientation: "stacked";
-        /** A small connector icon after the icon, in `text-03`. */
-        moreIcon1?: IconFunctionComponent;
-        /** A peer of the icon, the same size, after `moreIcon1`. */
-        moreIcon2?: IconFunctionComponent;
-      }
-  );
+      orientation?: ContentOrientation;
+    } & NoMoreIcons)
+  | ({
+      font: ContentHeadingFont;
+      orientation: "stacked";
+      /** A small connector icon after the icon, in `text-03`. */
+      moreIcon1?: IconFunctionComponent;
+      /** A peer of the icon, the same size, after `moreIcon1`. */
+      moreIcon2?: IconFunctionComponent;
+    } & NoExtras)
+  | ({
+      font: ContentHeadingFont;
+      orientation?: "inline";
+    } & NoExtras &
+      NoMoreIcons)
+  | ({
+      font: Exclude<TextFont, ContentExtrasFont | ContentHeadingFont>;
+      orientation?: ContentOrientation;
+    } & NoExtras &
+      NoMoreIcons);
+
+type ContentProps = ContentBaseProps & ContentFontProps;
 
 // ---------------------------------------------------------------------------
 // Font metrics
@@ -552,6 +562,7 @@ export {
   type ContentProps,
   type ContentOrientation,
   type ContentExtrasFont,
+  type ContentHeadingFont,
   type ContentAuxIcon,
   type ContentSuffix,
   type ContentBadge,

@@ -21,8 +21,8 @@ root            0.25rem gap inline; no gap stacked
   title font), with 2px padding, so the glyph is the line height less 4px. A `secondary-*` title
   (16px line) has a 12px icon; a `heading-h2` title (36px line) has a 32px icon.
 - **The description** is always `secondary-body` in `text-03`.
-- **Every prop works in every orientation**, except `moreIcon1` / `moreIcon2`, which sit in the
-  stacked icon row only.
+- **`moreIcon1` / `moreIcon2`** sit in the stacked icon row, so they take a `heading-*` title font
+  with `orientation="stacked"` only.
 - **The extras beside the title** (`suffix`, `auxIcon`, `badge`) take a `main-ui-*`,
   `main-content-*` or `secondary-*` title font only; the types reject them with a heading, mono or
   figure font.
