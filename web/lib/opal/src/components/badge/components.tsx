@@ -3,6 +3,7 @@
 import "@opal/components/badge/styles.css";
 import type { IconFunctionComponent, RichStr, StatusColor } from "@opal/types";
 import { BADGE_COLORS } from "@opal/components/badge/colors";
+import { Tooltip } from "@opal/components/tooltip/components";
 import type { TextColor } from "@opal/components/text/components";
 import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
@@ -67,7 +68,7 @@ function Badge({
   tooltip,
   ...rest
 }: BadgeProps) {
-  return (
+  const badge = (
     <div
       {...rest}
       className={cn("opal-badge", BADGE_COLORS[color].bg)}
@@ -86,9 +87,17 @@ function Badge({
         icon={icon}
         title={title}
         titleMaxLines={1}
-        titleTooltip={tooltip}
+        // A custom tooltip covers the whole badge, so the title drops its own.
+        titleOverflowTooltip={tooltip === undefined}
       />
     </div>
+  );
+  return tooltip === undefined ? (
+    badge
+  ) : (
+    <Tooltip tooltip={tooltip} side="top">
+      {badge}
+    </Tooltip>
   );
 }
 

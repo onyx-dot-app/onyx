@@ -87,6 +87,12 @@ interface ContentBaseProps {
    */
   titleTooltip?: string | RichStr;
 
+  /**
+   * With `titleMaxLines`: show a cut title in full in a tooltip. Turn it off
+   * when a host puts its own tooltip around the content. Default: `true`.
+   */
+  titleOverflowTooltip?: boolean;
+
   /** Clamp the description to N lines; a cut one shows in a tooltip. */
   descriptionMaxLines?: number;
 
@@ -360,6 +366,7 @@ function Content({
   description,
   titleMaxLines,
   titleTooltip,
+  titleOverflowTooltip = true,
   descriptionMaxLines,
   strikethrough,
   suffix,
@@ -486,7 +493,9 @@ function Content({
                 color="inherit"
                 maxLines={titleMaxLines}
                 // Clamped, a cut title shows in full in a tooltip.
-                overflowTooltip={titleMaxLines !== undefined}
+                overflowTooltip={
+                  titleMaxLines !== undefined && titleOverflowTooltip
+                }
                 tooltip={titleTooltip}
                 strikethrough={strikethrough}
                 // Unclamped and without a tooltip, the native title shows it.

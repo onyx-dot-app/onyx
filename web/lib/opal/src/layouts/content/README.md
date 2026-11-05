@@ -43,7 +43,8 @@ root            0.25rem gap inline; no gap stacked or with a secondary-* / figur
 | `title`               | `string \| RichStr`                        | **(required)**     | The title                                                                                           |
 | `description`         | `string \| RichStr`                        | —                  | Text below the title                                                                                |
 | `titleMaxLines`       | `number`                                   | —                  | Clamp the title; a cut title shows in full in a tooltip                                             |
-| `titleTooltip`        | `string \| RichStr`                        | —                  | With `titleMaxLines`: shown on every hover of the title, in place of the full title                 |
+| `titleTooltip`        | `string \| RichStr`                        | —                  | Shown on every hover of the title, in place of the full title                                       |
+| `titleOverflowTooltip` | `boolean`                                 | `true`             | With `titleMaxLines`: show a cut title in full in a tooltip. Turn it off when a host wraps the content in its own tooltip |
 | `descriptionMaxLines` | `number`                                   | —                  | Clamp the description; a cut one shows in full in a tooltip                                         |
 | `strikethrough`       | `boolean`                                  | `false`            | Strike the title through, for an option that is switched off                                        |
 | `suffix`              | `"optional" \| string`                     | —                  | Muted text beside the title, in the title's size and lighter weight; `"optional"` is the translated "(Optional)" |
