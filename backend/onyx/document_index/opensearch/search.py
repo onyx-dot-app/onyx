@@ -208,6 +208,7 @@ class DocumentQuery:
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
+            excluded_source_types=index_filters.excluded_source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
@@ -276,6 +277,7 @@ class DocumentQuery:
             access_control_list=None,
             cc_pair_access=None,
             source_types=[],
+            excluded_source_types=[],
             tags=[],
             document_sets=[],
             project_id_filter=None,
@@ -382,6 +384,7 @@ class DocumentQuery:
                 cc_pair_access=filter_cc_pair_access,
                 restricted_cc_pair_guard=cc_pair_access,
                 source_types=index_filters.source_type or [],
+                excluded_source_types=index_filters.excluded_source_type or [],
                 tags=index_filters.tags or [],
                 document_sets=index_filters.document_set or [],
                 project_id_filter=index_filters.project_id_filter,
@@ -481,6 +484,7 @@ class DocumentQuery:
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
+            excluded_source_types=index_filters.excluded_source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
@@ -580,6 +584,7 @@ class DocumentQuery:
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
+            excluded_source_types=index_filters.excluded_source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
@@ -669,6 +674,7 @@ class DocumentQuery:
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
+            excluded_source_types=index_filters.excluded_source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
@@ -735,6 +741,7 @@ class DocumentQuery:
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
+            excluded_source_types=index_filters.excluded_source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
@@ -954,6 +961,7 @@ class DocumentQuery:
         access_control_list: list[str] | None,
         cc_pair_access: CCPairAccessFilter | None,
         source_types: list[DocumentSource],
+        excluded_source_types: list[DocumentSource],
         tags: list[Tag],
         document_sets: list[str],
         project_id_filter: int | None,
@@ -1001,6 +1009,8 @@ class DocumentQuery:
                 filter; see _get_restricted_cc_pair_guard.
             source_types: If supplied, only documents of one of these source
                 types will be retrieved.
+            excluded_source_types: If supplied, no document of one of these
+                source types will be retrieved, whatever else matches.
             tags: If supplied, only documents with an entry in their metadata
                 list corresponding to a tag will be retrieved.
             document_sets: If supplied, only documents with at least one
@@ -1237,6 +1247,49 @@ class DocumentQuery:
                 "terms": {
                     SOURCE_TYPE_FIELD_NAME: [
                         source_type.value for source_type in source_types
+                    ]
+                }
+            }
+
+        def _get_excluded_source_type_filter(
+            excluded_source_types: list[DocumentSource],
+        ) -> dict[str, Any]:
+            """Returns a filter that removes these source types.
+
+            Since this returns an isolated bool clause, it can be cached in
+            OpenSearch independently of other clauses in _get_search_filters.
+
+            Args:
+                excluded_source_types: The source types to withhold.
+
+            Raises:
+                ValueError: An empty list was supplied, or more than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY were.
+
+            Returns:
+                A filter that excludes the source types.
+            """
+            if not excluded_source_types:
+                raise ValueError(
+                    "excluded_source_types cannot be empty if trying to create "
+                    "an excluded source type filter."
+                )
+            if len(excluded_source_types) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                raise ValueError(
+                    f"Too many excluded source types: {len(excluded_source_types)}. "
+                    f"Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                )
+            return {
+                "bool": {
+                    "must_not": [
+                        {
+                            "terms": {
+                                SOURCE_TYPE_FIELD_NAME: [
+                                    source_type.value
+                                    for source_type in excluded_source_types
+                                ]
+                            }
+                        }
                     ]
                 }
             }
@@ -1503,6 +1556,14 @@ class DocumentQuery:
             # retrieve documents whose source type is present in this input
             # list.
             filter_clauses.append(_get_source_type_filter(source_types))
+
+        if excluded_source_types:
+            # Its own AND clause, so it INTERSECTS with every other filter and
+            # cannot be widened by one: a withheld source stays withheld
+            # whatever else the query asks for.
+            filter_clauses.append(
+                _get_excluded_source_type_filter(excluded_source_types)
+            )
 
         if tags:
             # If at least one tag is provided, the caller will only retrieve

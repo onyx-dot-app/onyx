@@ -194,6 +194,10 @@ class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # NOTE: These strings must be formatted in the same way as the output of
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
+    # Sources this query must not return, as a standalone AND clause. Set for
+    # the default retrieval lane, which withholds the sources that have a
+    # lane of their own; that lane clears it and names its own source.
+    excluded_source_type: list[DocumentSource] | None = None
     # Only read when access_control_list is not None.
     cc_pair_access: CCPairAccessFilter | None = None
     tenant_id: str | None = None
