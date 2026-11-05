@@ -101,7 +101,9 @@ local disk inside one docprocessing task, so a large batch is never in memory.
 decides which documents to re-chunk. Gate 1 skips a document whose
 `doc_updated_at` did not advance. Gate 2 skips one whose `content_hash()` is
 unchanged. An ACL change bypasses both, and so does a reported source type or
-size that differs from the stored one. Docprocessing turns gate 1 off, because
+size that differs from the stored one. That type and size, like the content
+hash, reach an existing row only after the index write, so a failed write is
+retried on the next sync. Docprocessing turns gate 1 off, because
 the connector already filtered by time. A FUTURE attempt turns gate 2 off.
 `force_update` turns both off, for the per-document retry and the tabular
 re-chunk migration.

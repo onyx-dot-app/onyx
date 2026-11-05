@@ -13,6 +13,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db import document as document_db
 from onyx.db.document import (
     get_document_type_breakdown_for_cc_pair,
+    update_docs_source_info__no_commit,
     upsert_documents,
 )
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
@@ -129,11 +130,20 @@ def test_timeout_returns_an_empty_breakdown_marked_timed_out(
     assert session.scalar(select(1)) == 1
 
 
-def test_upsert_writes_the_source_type_and_clears_it_when_unreported(
+def test_source_type_lands_on_insert_and_on_an_existing_row_only_after_the_write(
     db_session: Session,
 ) -> None:
+    """A new row takes the reported type at once. An existing row keeps its
+    type through the upsert, so a document whose index write fails still reads
+    as changed next sync; the post-write update sets or clears it."""
     pair = _cc_pair(db_session, DocumentSource.GOOGLE_DRIVE, {}, indexed=False)
     document_id = f"type_breakdown_upsert_{uuid4().hex}"
+
+    def read() -> Document:
+        document = db_session.get(Document, document_id)
+        assert document is not None
+        db_session.refresh(document)
+        return document
 
     def upsert(mime_type: str | None, size_bytes: int | None) -> Document:
         upsert_documents(
@@ -150,16 +160,28 @@ def test_upsert_writes_the_source_type_and_clears_it_when_unreported(
                 )
             ],
         )
-        document = db_session.get(Document, document_id)
-        assert document is not None
-        db_session.refresh(document)
-        return document
+        return read()
+
+    def write_after_index(mime_type: str | None, size_bytes: int | None) -> Document:
+        update_docs_source_info__no_commit(
+            ids_to_source_info={document_id: (mime_type, size_bytes)},
+            db_session=db_session,
+        )
+        db_session.commit()
+        return read()
 
     try:
-        typed = upsert(_PDF, 2048)
-        assert (typed.source_mime_type, typed.source_size_bytes) == (_PDF, 2048)
-        untyped = upsert(None, None)
-        assert (untyped.source_mime_type, untyped.source_size_bytes) == (None, None)
+        inserted = upsert(_PDF, 2048)
+        assert (inserted.source_mime_type, inserted.source_size_bytes) == (_PDF, 2048)
+        kept = upsert("image/png", 10)
+        assert (kept.source_mime_type, kept.source_size_bytes) == (_PDF, 2048)
+        written = write_after_index("image/png", 10)
+        assert (written.source_mime_type, written.source_size_bytes) == (
+            "image/png",
+            10,
+        )
+        cleared = write_after_index(None, None)
+        assert (cleared.source_mime_type, cleared.source_size_bytes) == (None, None)
     finally:
         db_session.rollback()
         db_session.execute(delete(Document).where(Document.id == document_id))

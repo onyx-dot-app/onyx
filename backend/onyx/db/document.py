@@ -1328,8 +1328,8 @@ def upsert_documents(
         "doc_metadata": insert_stmt.excluded.doc_metadata,
         "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
         "file_id": insert_stmt.excluded.file_id,
-        "source_mime_type": insert_stmt.excluded.source_mime_type,
-        "source_size_bytes": insert_stmt.excluded.source_size_bytes,
+        # The source type and size change on an existing row only after the
+        # index write, so a failed write is retried on the next sync.
     }
     if includes_permissions:
         preserve_onedrive_permissions = exists(
@@ -1609,6 +1609,24 @@ def update_docs_content_hash__no_commit(
     )
     for doc in documents_to_update:
         doc.content_hash = ids_to_new_hash[doc.id]
+
+
+def update_docs_source_info__no_commit(
+    ids_to_source_info: dict[str, tuple[str | None, int | None]],
+    db_session: Session,
+) -> None:
+    """The reported type and size, written once the document reached the index
+    so a failed write keeps them new and the change gates let it through again.
+    A source that stops reporting sets them back to null."""
+    if not ids_to_source_info:
+        return
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(ids_to_source_info.keys()))
+        .all()
+    )
+    for doc in documents_to_update:
+        doc.source_mime_type, doc.source_size_bytes = ids_to_source_info[doc.id]
 
 
 def mark_document_as_modified__no_commit(

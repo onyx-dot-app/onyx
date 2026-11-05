@@ -17,7 +17,9 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     tabular_file_to_sections,
 )
 from onyx.connectors.models import (
+    ConnectorFailure,
     Document,
+    DocumentFailure,
     DocumentSource,
     ImageSection,
     TabularSection,
@@ -441,6 +443,7 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             return_value=([MagicMock(document_id="doc", already_existed=False)], []),
         ),
         patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(f"{_PATCH_PREFIX}.update_docs_source_info__no_commit"),
         patch(
             f"{_PATCH_PREFIX}._maybe_push_documents",
             side_effect=RuntimeError("sink down"),
@@ -456,6 +459,74 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             tenant_id="tenant",
             adapter=adapter,
         )
+
+
+def test_index_batch_writes_source_info_only_for_documents_the_index_took() -> None:
+    """A document whose index write failed keeps its stored type and size, so
+    the change gates still see the reported ones as new on the next sync."""
+    written = _make_doc("written")
+    failed = _make_doc("failed")
+    for doc in (written, failed):
+        doc.source_mime_type = "application/pdf"
+        doc.source_size_bytes = 2048
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[written, failed],
+        id_to_boost_map={},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=(
+                [MagicMock(document_id="written", already_existed=True)],
+                [
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(document_id="failed"),
+                        failure_message="write failed",
+                    )
+                ],
+            ),
+        ),
+        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(
+            f"{_PATCH_PREFIX}.update_docs_source_info__no_commit"
+        ) as update_source_info,
+        patch(f"{_PATCH_PREFIX}._maybe_push_documents"),
+    ):
+        index_doc_batch(
+            document_batch=[written, failed],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+        )
+
+    update_source_info.assert_called_once()
+    assert update_source_info.call_args.kwargs["ids_to_source_info"] == {
+        "written": ("application/pdf", 2048)
+    }
 
 
 def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:

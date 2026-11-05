@@ -41,6 +41,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
     get_documents_by_ids,
     update_docs_content_hash__no_commit,
+    update_docs_source_info__no_commit,
     upsert_document_by_connector_credential_pair,
     upsert_documents,
 )
@@ -1763,8 +1764,8 @@ def index_doc_batch(
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
             # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
             # the PRESENT poll skip the doc (cross-index suppression).
+            successfully_indexed_ids = {r.document_id for r in insertion_records}
             if not index_to_secondary:
-                successfully_indexed_ids = {r.document_id for r in insertion_records}
                 update_docs_content_hash__no_commit(
                     ids_to_new_hash={
                         doc_id: context.doc_id_to_content_hash[doc_id]
@@ -1773,6 +1774,16 @@ def index_doc_batch(
                     },
                     db_session=db_session,
                 )
+            # Same reason: a failed write leaves the reported type or size
+            # differing from the row, so the next sync retries the document.
+            update_docs_source_info__no_commit(
+                ids_to_source_info={
+                    doc.id: (doc.source_mime_type, doc.source_size_bytes)
+                    for doc in context.updatable_docs
+                    if doc.id in successfully_indexed_ids
+                },
+                db_session=db_session,
+            )
 
     try:
         _maybe_push_documents(
