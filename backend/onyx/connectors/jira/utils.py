@@ -138,6 +138,11 @@ def get_comment_strs(
             if author.get("emailAddress") in comment_email_blacklist:
                 continue  # Skip adding comment if author's email is in blacklist
 
+            # Skip comments with visibility restrictions since they have
+            # narrower access than their issue
+            if comment.get("visibility") is not None:
+                continue
+
             comment_strs.append(rich_text(comment.get("body")))
         except Exception as e:
             logger.error("Failed to process comment due to an error: %s", e)

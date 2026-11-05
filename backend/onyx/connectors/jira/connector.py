@@ -173,7 +173,7 @@ def build_jql_query(
     project_key: str | None,
     jql_query: str | None,
     start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch | None,
 ) -> str:
     """JQL for the configured project/query plus the poll window.
 
@@ -181,6 +181,8 @@ def build_jql_query(
     API user's profile timezone.
     https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
     """
+    if end is None:
+        end = datetime.now().timestamp()
     time_jql: str = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
     return scope_jql(project_key=project_key, jql_query=jql_query, clause=time_jql)
 
@@ -510,6 +512,11 @@ class JiraConnector(
         return tuple(email.strip() for email in self._comment_email_blacklist)
 
     @property
+    def document_source(self) -> DocumentSource:
+        """Returns JIRA as the document source. Subclasses may override."""
+        return DocumentSource.JIRA
+
+    @property
     def source_operations(self) -> JiraSourceOperations:
         if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira")
@@ -650,7 +657,7 @@ class JiraConnector(
         return None
 
     def _get_jql_query(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch | None
     ) -> str:
         return build_jql_query(
             project_key=self.jira_project,
@@ -662,7 +669,7 @@ class JiraConnector(
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch | None,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         return self._load_with_date_retry(
@@ -672,7 +679,7 @@ class JiraConnector(
     def load_from_checkpoint_with_perm_sync(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch | None,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         """Load documents from checkpoint with permission information included."""
@@ -683,7 +690,7 @@ class JiraConnector(
     def _load_with_date_retry(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch | None,
         checkpoint: JiraConnectorCheckpoint,
         include_permissions: bool,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
