@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   Divider,
-  OverflowText,
   Popover,
   Badge,
   Text,
@@ -325,9 +324,14 @@ export default function ConnectorRow({
                           gap={1}
                           height="fit"
                         >
-                          <OverflowText font="main-ui-action" color="text-04">
+                          <Text
+                            maxLines={1}
+                            overflowTooltip
+                            font="main-ui-action"
+                            color="text-04"
+                          >
                             {format.number(row.docs_indexed)}
-                          </OverflowText>
+                          </Text>
                           <Text font="secondary-body" color="text-03">
                             {t("docs.label")}
                           </Text>
