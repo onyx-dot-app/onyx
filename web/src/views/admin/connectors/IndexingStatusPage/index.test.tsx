@@ -75,9 +75,10 @@ describe("Add Connector", () => {
   it("shows for a global connector manager", () => {
     mockHeldPermission = Permission.MANAGE_CONNECTORS;
     render(<IndexingStatusPage />);
-    expect(
-      screen.getByRole("link", { name: "Add Connector" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add Connector" })).toHaveAttribute(
+      "href",
+      "/admin/connectors"
+    );
   });
 
   it("is absent for a viewer who only reads connectors", () => {

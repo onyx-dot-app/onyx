@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, SelectButton } from "@opal/components";
 import { Section, SettingsLayouts } from "@opal/layouts";
+import { useNavigation } from "@opal/navigation";
 import { SvgPanelRight, SvgPlus } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -107,6 +108,7 @@ function PairActivityPanel({
 /** Every connector's indexing at a glance: the fleet's counts and throughput, then each connector with its latest run, beside the fleet's activities. */
 export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
+  const navigation = useNavigation();
   // The catalog's route needs global connector management, which a scoped manager does not hold.
   const { isGlobalHolder: canAddConnector } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -179,7 +181,7 @@ export default function IndexingStatusPage() {
                 <Button
                   key="add"
                   icon={SvgPlus}
-                  href={ADMIN_ROUTES.CONNECTORS.path}
+                  {...navigation.linkTo(ADMIN_ROUTES.CONNECTORS.path)}
                 >
                   {t("addConnector")}
                 </Button>,
