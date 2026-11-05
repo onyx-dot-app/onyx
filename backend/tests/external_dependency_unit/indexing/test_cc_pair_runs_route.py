@@ -456,6 +456,7 @@ def test_status_filter_keeps_counts(db_session: Session) -> None:
     assert failed.status_counts == everything.status_counts
     assert everything.status_counts == {
         CCPairRunStatusGroup.RUNNING: 0,
+        CCPairRunStatusGroup.SCHEDULED: 0,
         CCPairRunStatusGroup.SUCCEEDED: 2,
         CCPairRunStatusGroup.FAILED: 2,
         CCPairRunStatusGroup.CANCELED: 1,

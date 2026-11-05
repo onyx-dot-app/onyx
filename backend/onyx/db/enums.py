@@ -132,6 +132,8 @@ class CCPairRunStatusGroup(str, PyEnum):
     """How the run history buckets the attempt statuses of every kind."""
 
     RUNNING = "running"
+    # Queued, not started yet.
+    SCHEDULED = "scheduled"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELED = "canceled"
