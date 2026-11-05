@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import cast
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -11,7 +12,7 @@ from onyx.connectors.jira_service_management.connector import (
 
 @pytest.fixture
 def mock_source_operations() -> MagicMock:
-    gateway = create_autospec(JiraSourceOperations, instance=True)
+    gateway = cast(MagicMock, create_autospec(JiraSourceOperations, instance=True))
     gateway._is_cloud.return_value = False
     gateway.get_service_desk_request.return_value = None
     gateway.get_service_desk_sla.return_value = None

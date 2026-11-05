@@ -90,7 +90,7 @@ class JiraServiceManagementConnector(JiraConnector):
             return
 
         request = self.source_operations.get_service_desk_request(issue_key=issue_key)
-        if request:
+        if request is not None:
             request_type = (request.get("requestType") or {}).get("name")
             if request_type:
                 document.metadata[META_REQUEST_TYPE] = request_type
@@ -99,7 +99,7 @@ class JiraServiceManagementConnector(JiraConnector):
                 document.metadata[META_PORTAL_STATUS] = portal_status
 
         sla = self.source_operations.get_service_desk_sla(issue_key=issue_key)
-        if sla:
+        if sla is not None:
             summary = _sla_breached_summary(sla)
             if summary is not None:
                 document.metadata[META_SLA_BREACHED] = summary
@@ -109,7 +109,7 @@ class JiraServiceManagementConnector(JiraConnector):
         project is not a service desk (still allowed - JQL scopes may span
         project types intentionally)."""
         super().validate_connector_settings()
-        if not self.jira_project:
+        if self.jira_project is None or not self.jira_project:
             return
         try:
             project = self.source_operations.get_project(project_key=self.jira_project)
