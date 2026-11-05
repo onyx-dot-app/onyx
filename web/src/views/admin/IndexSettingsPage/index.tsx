@@ -191,11 +191,10 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
   if (!isCloudBased(providerName)) {
     return (
       <Content
+        font="secondary-body"
         icon={SvgServer}
         title={t("providerInfo.selfHosted.title")}
-        sizePreset="secondary"
-        variant="body"
-        color="muted"
+        titleColor="text-03"
         width="fit"
       />
     );
@@ -206,11 +205,10 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
   return (
     <>
       <Content
+        font="secondary-body"
         icon={SvgCloud}
         title={t("providerInfo.cloudProvider.title")}
-        sizePreset="secondary"
-        variant="body"
-        color="muted"
+        titleColor="text-03"
         width="fit"
       />
       {provider.costslink && (
@@ -468,6 +466,7 @@ function ProviderGroup({
             <Spacer orientation="horizontal" rem={0.675} />
             <div className="flex flex-row justify-between items-center w-full py-1">
               <Content
+                font="secondary-action"
                 icon={provider.icon}
                 title={
                   provider.docsLink
@@ -476,7 +475,6 @@ function ProviderGroup({
                       )
                     : provider.displayName
                 }
-                sizePreset="secondary"
               />
 
               {isCloud && isConfigured ? (
@@ -517,12 +515,11 @@ function ProviderGroup({
             onClick={() => providerCreationModal.toggle(true)}
           >
             <ContentAction
+              font="secondary-body"
               title={t("providerGroup.addConfig.title", {
                 provider: provider.displayName,
               })}
-              sizePreset="secondary"
-              variant="body"
-              color="muted"
+              titleColor="text-03"
               padding={1}
               rightChildren={
                 <Button
@@ -613,10 +610,11 @@ function EmbeddingModelCard({
       <Section flexDirection="row" alignItems="start">
         <Section gap={0} padding={2} alignItems="start">
           <Content
+            font="main-ui-action"
             icon={provider.icon}
             title={model.modelName}
             description={embeddingModelDescription(model, t, appName)}
-            tag={
+            badge={
               model.legacy
                 ? {
                     title: t("modelCard.legacy.tag"),
@@ -630,8 +628,6 @@ function EmbeddingModelCard({
                     }
                   : undefined
             }
-            sizePreset="main-ui"
-            variant="section"
           />
           <div className="flex flex-row px-6 pt-2 gap-4">
             <EmbeddingProviderInfo providerName={provider.providerName} />
@@ -663,9 +659,9 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
       >
         <Spacer orientation="horizontal" rem={0.675} />
         <Content
+          font="secondary-action"
           icon={CUSTOM_PROVIDER.icon}
           title={t("modelPicker.customModels.title")}
-          sizePreset="secondary"
         />
       </Section>
 
@@ -676,10 +672,9 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
         onClick={onAddCustomModel}
       >
         <ContentAction
+          font="secondary-body"
           title={t("modelPicker.customModel.title")}
-          sizePreset="secondary"
-          variant="body"
-          color="muted"
+          titleColor="text-03"
           padding={1}
           rightChildren={
             <Button
@@ -1961,12 +1956,11 @@ export default function IndexSettingsPage() {
                       justifyContent="start"
                     >
                       <Content
+                        font="main-content-emphasis"
                         title={t("embeddingModel.title")}
                         description={t("embeddingModel.description", {
                           appName: settings.appName,
                         })}
-                        sizePreset="main-content"
-                        variant="section"
                       />
 
                       {NEXT_PUBLIC_CLOUD_ENABLED ? (
@@ -1974,10 +1968,9 @@ export default function IndexSettingsPage() {
                           <Card border="solid" rounding={4} padding={2}>
                             <Section padding={2}>
                               <Content
+                                font="main-ui-action"
                                 icon={SvgVector}
                                 title={t("embeddingModel.cloudManaged.title")}
-                                sizePreset="main-ui"
-                                variant="section"
                               />
                             </Section>
                           </Card>
@@ -2140,6 +2133,7 @@ export default function IndexSettingsPage() {
                                     alignItems="start"
                                   >
                                     <Content
+                                      font="main-ui-action"
                                       icon={currentProvider?.icon ?? SvgServer}
                                       title={currentEmbeddingModel.model_name}
                                       description={embeddingModelDescription(
@@ -2147,7 +2141,7 @@ export default function IndexSettingsPage() {
                                         t,
                                         settings.appName
                                       )}
-                                      tag={
+                                      badge={
                                         currentRegistryModel?.legacy
                                           ? {
                                               title: t("modelCard.legacy.tag"),
@@ -2155,8 +2149,6 @@ export default function IndexSettingsPage() {
                                             }
                                           : undefined
                                       }
-                                      sizePreset="main-ui"
-                                      variant="section"
                                     />
                                     <div className="flex flex-row items-center gap-2 pt-2 px-6">
                                       {currentProviderName && (
@@ -2276,10 +2268,9 @@ export default function IndexSettingsPage() {
                       justifyContent="start"
                     >
                       <Content
+                        font="main-content-emphasis"
                         title={t("retrieval.title")}
                         description={t("retrieval.description")}
-                        sizePreset="main-content"
-                        variant="section"
                       />
 
                       <CloudDisabled
@@ -2384,10 +2375,9 @@ export default function IndexSettingsPage() {
                       justifyContent="start"
                     >
                       <Content
+                        font="main-content-emphasis"
                         title={t("imageProcessing.title")}
                         description={t("imageProcessing.description")}
-                        sizePreset="main-content"
-                        variant="section"
                       />
 
                       <Disabled
@@ -2417,10 +2407,9 @@ export default function IndexSettingsPage() {
                                 <InputSwitchField name="image_processing_enabled" />
                                 {captioningModelMissing && (
                                   <Content
+                                    font="secondary-body"
                                     icon={SvgAlertTriangle}
                                     title={t("imageProcessing.noModelSelected")}
-                                    sizePreset="secondary"
-                                    variant="body"
                                     color="warning"
                                   />
                                 )}

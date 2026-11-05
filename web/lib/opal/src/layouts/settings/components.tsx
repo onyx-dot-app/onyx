@@ -131,8 +131,6 @@ export interface SettingsHeaderProps {
   moreIcon2?: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
-  /** Badge inline after the description, e.g. a status. */
-  descriptionTag?: BadgeProps;
   /** The title can be edited in place, as `Content` does it. */
   editable?: boolean;
   /** When the editable title shows its pencil: on hover, or at rest too. Default: `"hover"`. */
@@ -168,7 +166,6 @@ function SettingsHeader({
   moreIcon2,
   title,
   description,
-  descriptionTag,
   editable,
   editButton,
   onTitleChange,
@@ -275,17 +272,16 @@ function SettingsHeader({
         >
           <div aria-label="admin-page-title">
             <Content
+              font="heading-headline"
+              orientation="stacked"
               icon={Icon}
               moreIcon1={moreIcon1}
               moreIcon2={moreIcon2}
               title={title}
               description={description}
-              descriptionTag={descriptionTag}
               editable={editable}
               editButton={editButton}
               onTitleChange={onTitleChange}
-              sizePreset="headline"
-              variant="heading"
             />
           </div>
           {hasActions && (

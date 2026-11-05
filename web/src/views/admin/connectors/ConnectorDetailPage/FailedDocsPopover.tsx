@@ -72,7 +72,7 @@ function FailedDocRow({
         height="fit"
         className="shrink-0"
       >
-        <Text font="secondary-mono-label" color="text-04">
+        <Text font="secondary-mono" color="text-04">
           {formatDateTimeLog(error.time_created)}
         </Text>
         {error.document_name !== null && (

@@ -102,10 +102,10 @@ type TextProps =
 // ---------------------------------------------------------------------------
 
 const FONT_CONFIG: Record<TextFont, string> = {
-  "heading-h1": "font-heading-h1",
-  "heading-h2": "font-heading-h2",
-  "heading-h3": "font-heading-h3",
-  "heading-h3-muted": "font-heading-h3-muted",
+  "heading-hero": "font-heading-hero",
+  "heading-headline": "font-heading-headline",
+  "heading-section": "font-heading-section",
+  "heading-section-muted": "font-heading-section-muted",
   "main-content-body": "font-main-content-body",
   "main-content-muted": "font-main-content-muted",
   "main-content-emphasis": "font-main-content-emphasis",
@@ -117,7 +117,6 @@ const FONT_CONFIG: Record<TextFont, string> = {
   "secondary-body": "font-secondary-body",
   "secondary-action": "font-secondary-action",
   "secondary-mono": "font-secondary-mono",
-  "secondary-mono-label": "font-secondary-mono-label",
   "figure-small-label": "font-figure-small-label",
   "figure-small-value": "font-figure-small-value",
   "figure-keystroke": "font-figure-keystroke",

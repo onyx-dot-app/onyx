@@ -96,7 +96,7 @@ export function FoldableLogo({
               <OverflowText
                 as="p"
                 textPosition="text-start"
-                font="heading-h3"
+                font="heading-section"
                 color="text-05"
               >
                 {applicationName ?? ""}
@@ -189,7 +189,7 @@ export function SidebarWordmark({ size }: { size: number }) {
         <OverflowText
           as="p"
           textPosition="text-start"
-          font="heading-h3"
+          font="heading-section"
           color="text-05"
         >
           {applicationName}

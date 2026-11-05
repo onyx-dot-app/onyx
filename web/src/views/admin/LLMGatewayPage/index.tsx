@@ -45,10 +45,9 @@ export default function LLMGatewayPage() {
       <SettingsLayouts.Body>
         <Section gap={3} alignItems="stretch">
           <Content
+            font="main-content-emphasis"
             title={t("access.title")}
             description={t("access.description")}
-            sizePreset="main-content"
-            variant="section"
           />
           <Card border="solid" rounding={4}>
             <Disabled

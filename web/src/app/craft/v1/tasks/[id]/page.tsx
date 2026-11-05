@@ -30,7 +30,7 @@ import {
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
 
-import { taskStatusTag } from "@/app/craft/v1/tasks/components/StatusBadge";
+import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
   ScheduledTaskDetail,
@@ -159,11 +159,11 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           title={data?.name ?? t("fallbackTitle")}
           description={scheduleDescription}
-          descriptionTag={data ? taskStatusTag(data.status) : undefined}
           stackActionsOnMobile
           actions={
             data
               ? [
+                  <TaskStatusBadge key="status" status={data.status} />,
                   <Button
                     key="edit"
                     icon={SvgEdit}

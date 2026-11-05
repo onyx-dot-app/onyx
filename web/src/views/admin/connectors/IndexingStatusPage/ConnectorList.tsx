@@ -66,12 +66,11 @@ function FederatedRow({ connector }: FederatedRowProps) {
         {/* The name column shrinks before the button, so the clamp has an edge. */}
         <Section alignItems="start" height="fit" className="min-w-0 flex-1">
           <Content
+            font="main-ui-action"
             icon={getSourceMetadata(connector.source).icon}
             title={connector.name}
             titleMaxLines={1}
-            sizePreset="main-ui"
-            variant="section"
-            tag={{ title: t("federated.tag"), color: "default" }}
+            badge={{ title: t("federated.tag"), color: "default" }}
           />
         </Section>
         <Button

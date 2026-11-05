@@ -61,7 +61,7 @@ import {
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard, Badge, Tooltip } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
-import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
+import type { ContentEditHandle } from "@opal/layouts";
 import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
@@ -331,13 +331,12 @@ export function ModelAccessField() {
 
             <Card color="background-tint-01" border="none" padding={2}>
               <ContentAction
+                font="main-ui-action"
                 icon={SvgUserManage}
                 title={t("access.admin.title")}
                 description={t("access.memberCount.label", {
                   count: adminCount,
                 })}
-                sizePreset="main-ui"
-                variant="section"
                 rightChildren={
                   <Text font="secondary-body" color="text-03">
                     {t("access.admin.sharedNote")}
@@ -359,13 +358,12 @@ export function ModelAccessField() {
                         padding={2}
                       >
                         <ContentAction
+                          font="main-ui-action"
                           icon={SvgUsers}
                           title={group?.name ?? t("access.group.name", { id })}
                           description={t("access.memberCount.label", {
                             count: memberCount,
                           })}
-                          sizePreset="main-ui"
-                          variant="section"
                           rightChildren={
                             <Button
                               size="sm"
@@ -398,6 +396,7 @@ export function ModelAccessField() {
                         padding={2}
                       >
                         <ContentAction
+                          font="main-ui-action"
                           icon={
                             agent
                               ? () => <AgentAvatar agent={agent} size={20} />
@@ -405,8 +404,6 @@ export function ModelAccessField() {
                           }
                           title={agent?.name ?? t("access.agent.name", { id })}
                           description={t("access.agentOption.description")}
-                          sizePreset="main-ui"
-                          variant="section"
                           rightChildren={
                             <Button
                               size="sm"
@@ -426,11 +423,10 @@ export function ModelAccessField() {
             ) : (
               <div className="w-full p-2">
                 <Content
+                  font="main-ui-action"
                   icon={SvgOnyxOctagon}
                   title={t("access.noAgents.title")}
                   description={t("access.noAgents.description")}
-                  variant="section"
-                  sizePreset="main-ui"
                 />
               </div>
             )}
@@ -623,7 +619,7 @@ function ModelRow({
   onSetDefaultModel,
 }: ModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const editHandle = useRef<ContentMdEditHandle>(null);
+  const editHandle = useRef<ContentEditHandle>(null);
   // Keeps the hover-revealed actions visible while the settings popover,
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -657,7 +653,7 @@ function ModelRow({
         onPointerDownCapture={(e: React.PointerEvent) => {
           // Scoped to the title row: the checkbox also owns a hidden input.
           renamingAtPointerDown.current =
-            e.currentTarget.querySelector(".opal-content-md-title-row input") !=
+            e.currentTarget.querySelector(".opal-content-title-row input") !=
             null;
         }}
         onClick={toggleFromRow}
@@ -677,9 +673,8 @@ function ModelRow({
         <Interactive.Container width="full" size="fit" rounding={3}>
           <div className="w-full p-1.5">
             <ContentAction
+              font="main-ui-action"
               color="interactive"
-              variant="section"
-              sizePreset="main-ui"
               center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
@@ -967,8 +962,7 @@ export function ModelSelectionField({
                     >
                       <Interactive.Container type="button" width="full">
                         <Content
-                          sizePreset="secondary"
-                          variant="body"
+                          font="secondary-body"
                           title={
                             isExpanded
                               ? t("models.foldButton.label")

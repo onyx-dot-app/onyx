@@ -111,11 +111,7 @@ export default function BulkSkillSharingModal({
         <Modal.Body>
           <Section gap={4} height="auto" alignItems="stretch">
             <Section gap={2} height="auto" alignItems="stretch">
-              <Content
-                title={shareCopy("accessTitle")}
-                sizePreset="main-ui"
-                variant="section"
-              />
+              <Content font="main-ui-action" title={shareCopy("accessTitle")} />
               <SharePermissionMenu
                 value={scope}
                 onChange={setScope}
@@ -143,9 +139,8 @@ export default function BulkSkillSharingModal({
             {isAdmin && (
               <Section gap={2} height="auto" alignItems="stretch">
                 <Content
+                  font="main-ui-action"
                   title={shareCopy("installation.title")}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 <SharePermissionMenu
                   value={policy}
@@ -174,11 +169,7 @@ export default function BulkSkillSharingModal({
               </Section>
             )}
             <Section gap={2} height="auto" alignItems="stretch">
-              <Content
-                title={shareCopy("peopleTitle")}
-                sizePreset="main-ui"
-                variant="section"
-              />
+              <Content font="main-ui-action" title={shareCopy("peopleTitle")} />
               <Text font="secondary-body" color="text-03">
                 {t("addAccessDescription")}
               </Text>

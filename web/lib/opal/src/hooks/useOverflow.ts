@@ -2,10 +2,17 @@
 
 import { useLayoutEffect, useState } from "react";
 
+/**
+ * A cut adds at least an ellipsis of width or a hidden line of height. Glyphs
+ * on a tight line (a `figure-*` font) poke a few pixels past the line box, and
+ * sizes round to whole pixels, so smaller excesses are not overflow.
+ */
 function overflows(element: HTMLElement): boolean {
+  const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+  const heightSlack = Number.isNaN(lineHeight) ? 1 : lineHeight / 2;
   return (
-    element.scrollWidth > element.clientWidth ||
-    element.scrollHeight > element.clientHeight
+    element.scrollWidth - element.clientWidth > 1 ||
+    element.scrollHeight - element.clientHeight > heightSlack
   );
 }
 

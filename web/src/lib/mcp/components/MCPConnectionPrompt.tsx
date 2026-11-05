@@ -195,14 +195,13 @@ export default function MCPConnectionPrompt({
                       className="w-full rounded-12 border border-border-01 bg-background-neutral-00 p-2"
                     >
                       <ContentAction
+                        font="main-ui-action"
                         icon={connected ? SvgCheck : SvgServer}
                         color={connected ? "success" : "default"}
                         title={server.name}
                         description={
                           connected ? t("connected.label") : undefined
                         }
-                        sizePreset="main-ui"
-                        variant="section"
                         padding={2}
                         rightChildren={
                           !connected && (

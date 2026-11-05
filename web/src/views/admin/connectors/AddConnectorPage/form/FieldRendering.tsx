@@ -84,10 +84,9 @@ const TabsField: FC<TabsFieldProps> = ({
     <Section gap={2} alignItems="start">
       {tabField.label && (
         <Content
+          font="main-content-emphasis"
           title={resolvedLabel ?? ""}
           description={resolvedDescription}
-          sizePreset="main-content"
-          variant="section"
         />
       )}
 
@@ -299,11 +298,10 @@ function CheckboxField({
   return (
     <Label disabled={disabled}>
       <Content
+        font="main-ui-action"
         icon={checkboxIcon}
         title={label}
         description={description}
-        sizePreset="main-ui"
-        variant="section"
       />
     </Label>
   );

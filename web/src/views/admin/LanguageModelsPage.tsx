@@ -207,15 +207,14 @@ function ExistingProviderCard({
           onClick={() => setIsOpen(true)}
         >
           <ContentAction
+            font="main-ui-action"
             icon={icon}
             title={displayName}
             description={companyName}
             titleMaxLines={1}
             descriptionMaxLines={1}
-            sizePreset="main-ui"
-            variant="section"
             padding={2}
-            tag={
+            badge={
               isDefault
                 ? { title: t("providerCard.defaultTag.label"), color: "info" }
                 : undefined
@@ -292,13 +291,12 @@ function NewProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={productName}
         description={companyName}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
@@ -354,13 +352,12 @@ function NewCustomProviderCard({
         onClick={() => setIsOpen(true)}
       >
         <ContentAction
+          font="main-ui-action"
           icon={icon}
           title={productName}
           description={companyName}
           titleMaxLines={1}
           descriptionMaxLines={1}
-          sizePreset="main-ui"
-          variant="section"
           padding={2}
           rightChildren={
             <Button
@@ -848,9 +845,8 @@ export default function LanguageModelsPage() {
               justifyContent="start"
             >
               <Content
+                font="main-content-emphasis"
                 title={t("availableProviders.title")}
-                sizePreset="main-content"
-                variant="section"
               />
 
               <div className="flex flex-col gap-2">
@@ -890,10 +886,9 @@ export default function LanguageModelsPage() {
               >
                 {group.emphasis ? (
                   <Content
+                    font="main-content-emphasis"
                     title={group.title}
                     description={group.description}
-                    sizePreset="main-content"
-                    variant="section"
                   />
                 ) : (
                   <Text font="main-ui-action" color="text-03">

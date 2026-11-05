@@ -36,7 +36,7 @@
   --sidebar-tab-label-visibility-delay: var(--duration-sidebar-fold);
 }
 
-/* A string label's row. It reproduces the `ContentAction` > `ContentSm`
+/* A string label's row. It reproduces the `ContentAction` row
    layout the tab used before: the label and icon start-aligned with a 2px
    gap, and the truncation spacer 1rem after them. */
 .opal-sidebar-tab__row {

@@ -6,13 +6,13 @@ import type { ComponentType } from "react";
 import { render } from "@testing-library/react";
 import SvgSparkle from "@opal/icons/sparkle";
 import SvgClipboard from "@opal/icons/clipboard";
-import { BADGE_COLORS } from "@opal/components/badge/colors";
-import type { StatusVariants } from "@opal/types";
+import { BADGE_COLORS, badgeTextClass } from "@opal/components/badge/colors";
+import type { StatusColor } from "@opal/types";
 import { createRichInputTileNode } from "@/lib/richInputTile";
 
 // Guards the raw-DOM tiles against drift from their source of truth (the Opal
 // Badge + icons): the mirrored path must equal the real icon, and the fill/text
-// colors must come from BADGE_COLORS (blue for skill, gray for paste).
+// colors must come from the badge colours (blue for skill, gray for paste).
 
 function expectIconMirrors(tile: HTMLElement, realIcon: ComponentType) {
   const { container } = render(createElement(realIcon));
@@ -28,7 +28,7 @@ function expectIconMirrors(tile: HTMLElement, realIcon: ComponentType) {
   expect(tileIcon?.getAttribute("stroke-linecap")).toBe(realCap);
 }
 
-function expectColorsFromTag(tile: HTMLElement, color: StatusVariants) {
+function expectColorsFromTag(tile: HTMLElement, color: StatusColor) {
   for (const cls of BADGE_COLORS[color].bg.split(" ")) {
     expect(tile.classList.contains(cls)).toBe(true);
   }
@@ -37,7 +37,7 @@ function expectColorsFromTag(tile: HTMLElement, color: StatusVariants) {
     ".rich-input-tile-preview",
   ]) {
     const elClass = tile.querySelector(selector)?.getAttribute("class") ?? "";
-    for (const cls of BADGE_COLORS[color].text.split(" ")) {
+    for (const cls of badgeTextClass(color).split(" ")) {
       expect(elClass).toContain(cls);
     }
   }

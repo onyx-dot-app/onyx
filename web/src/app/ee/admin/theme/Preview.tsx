@@ -226,7 +226,7 @@ function PreviewStart({
               <PreviewLogo logoSrc={logoSrc} size={18} />
               <div className="max-w-[260px]">
                 <Text
-                  font="heading-h3"
+                  font="heading-section"
                   color="text-04"
                   wordWrap="wrap-break-word"
                 >

@@ -100,10 +100,9 @@ export default function EmbeddingRateLimitCard() {
   return (
     <Section gap={3} height="fit" alignItems="stretch" justifyContent="start">
       <Content
+        font="main-content-emphasis"
         title={t("title")}
         description={t("description")}
-        sizePreset="main-content"
-        variant="section"
       />
       <Card border="solid" rounding={4}>
         <Section width="full" alignItems="stretch">

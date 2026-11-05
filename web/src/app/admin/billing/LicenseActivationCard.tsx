@@ -159,7 +159,7 @@ export default function LicenseActivationCard({
             justifyContent="between"
             alignItems="center"
           >
-            <Text font="heading-h3" color="text-05">
+            <Text font="heading-section" color="text-05">
               {hasLicense
                 ? t("license.updateTitle.title")
                 : t("license.activateTitle.title")}

@@ -649,9 +649,8 @@ function GeneralSettings() {
       <Section gap={8}>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("profile.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -718,9 +717,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("appearance.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -832,9 +830,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("language.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -864,9 +861,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("dangerZone.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -1319,9 +1315,8 @@ function ChatPreferencesSettings() {
     <Section gap={8}>
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("chats.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1553,9 +1548,8 @@ function ChatPreferencesSettings() {
           />
         </InputVertical>
         <Content
+          font="main-content-emphasis"
           title={t("memory.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1607,9 +1601,8 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("promptShortcuts.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1634,9 +1627,8 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("voice.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1798,10 +1790,9 @@ function GatewayAccessSection({
   return (
     <Section gap={3}>
       <ContentAction
+        font="main-content-emphasis"
         title={t("gateway.title")}
         description={t("gateway.description", { appName })}
-        sizePreset="main-content"
-        variant="section"
         width="full"
         center
         rightChildren={
@@ -1829,12 +1820,11 @@ function GatewayAccessSection({
 
           <Section gap={2} alignItems="start">
             <Content
+              font="main-ui-action"
               title={t("gateway.models.title")}
               description={t("gateway.models.description", {
                 count: availableModelCount,
               })}
-              sizePreset="main-ui"
-              variant="section"
             />
 
             <Section gap={2} alignItems="start">
@@ -2281,9 +2271,8 @@ function AccountsAccessSettings() {
       <Section gap={8}>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("accounts.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -2321,9 +2310,8 @@ function AccountsAccessSettings() {
         {showTokensSection && (
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("apiKeys.section.title")}
-              sizePreset="main-content"
-              variant="section"
               width="full"
             />
             {canCreateTokens ? (
@@ -2491,6 +2479,7 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
     <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit">
         <Content
+          font="main-content-emphasis"
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
           description={
@@ -2498,8 +2487,6 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
               ? t("connectors.status.connected")
               : t("connectors.status.paused")
           }
-          sizePreset="main-content"
-          variant="section"
         />
       </Section>
     </Card>
@@ -2585,6 +2572,7 @@ function FederatedConnectorCard({
       <Card border="solid" padding={2} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
+            font="main-content-emphasis"
             icon={sourceMetadata.icon}
             title={sourceMetadata.displayName}
             description={
@@ -2592,8 +2580,6 @@ function FederatedConnectorCard({
                 ? t("connectors.status.connected")
                 : t("connectors.status.notConnected")
             }
-            sizePreset="main-content"
-            variant="section"
             padding={1}
             rightChildren={
               connector.has_oauth_token ? (
@@ -2659,9 +2645,8 @@ function ConnectorsSettings() {
     <Section gap={8}>
       <Section gap={3} justifyContent="start">
         <Content
+          font="main-content-emphasis"
           title={t("connectors.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         {hasConnectors ? (

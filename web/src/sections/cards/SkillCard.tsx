@@ -304,11 +304,10 @@ export default function SkillCard({
             className="min-w-0 flex-1"
           >
             <Content
+              font="secondary-body"
               icon={dependency ? SvgPlug : SvgUser}
               title={dependencyStatus ?? authorTitle}
-              sizePreset="secondary"
-              variant="body"
-              color="muted"
+              titleColor="text-03"
             />
           </Section>
           <Section
@@ -320,12 +319,11 @@ export default function SkillCard({
             className="me-1"
           >
             {isRequired && (
-              <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
-                <Badge
-                  title={skillCopy("modals.share.installation.required")}
-                  color="info"
-                />
-              </Tooltip>
+              <Badge
+                title={skillCopy("modals.share.installation.required")}
+                color="info"
+                tooltip={t("skill.tags.required.tooltip")}
+              />
             )}
             {item.can_toggle && (
               <Section

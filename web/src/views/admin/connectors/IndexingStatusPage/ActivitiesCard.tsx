@@ -86,10 +86,9 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
           className="shrink-0"
         >
           <Content
+            font="main-ui-action"
             icon={SvgActivity}
             title={t("title")}
-            sizePreset="main-ui"
-            variant="section"
           />
           <Section
             flexDirection="row"
