@@ -186,7 +186,6 @@
           "description": "Choose at least one group you manage."
         },
         "retainedUsers": "{count, plural, one {Also shared directly with # user.} other {Also shared directly with # users.}}",
-        "planTag": "Business",
         "planNote": "Group access requires a Business plan."
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "Connected Models"
       },
-      "defaultTag": {
-        "label": "Default"
-      },
       "deselectError": {
         "message": "Failed to deselect"
       },
@@ -7082,7 +7078,6 @@
           "tag": "GPU recommended"
         },
         "legacy": {
-          "tag": "Legacy",
           "tooltip": "You cannot select this model for a new index. It keeps working until you change the model."
         },
         "selectButton": {
@@ -7135,9 +7130,6 @@
       "multipass": {
         "description": "Index documents as chunks of varying sizes to better identify relevant sources.",
         "disabledTooltip": "Multipass Indexing is disabled temporarily and will be available in the future.",
-        "tag": {
-          "label": "temporarily unavailable"
-        },
         "title": "Multipass Indexing"
       },
       "openaiCompatible": {
@@ -8016,9 +8008,6 @@
         "title": "Set up an LLM provider to start chatting."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Default"
-        },
         "deleteButton": {
           "ariaLabel": "Delete {provider}"
         },
@@ -14273,10 +14262,7 @@
       "upgrade": {
         "label": "Upgrade Plan"
       },
-      "availableFor": "Available for {plan}",
-      "beta": {
-        "title": "beta"
-      }
+      "availableFor": "Available for {plan}"
     },
     "placeholders": {
       "email": "email@yourcompany.com",
@@ -14325,6 +14311,19 @@
     "gridSearch": {
       "itemPlaceholder": "Search {item} or press \"/\" to focus...",
       "placeholder": "Search or press \"/\" to focus..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "beta",
+        "comingSoon": "coming soon",
+        "deprecated": "deprecated",
+        "temporarilyUnavailable": "temporarily unavailable",
+        "legacy": "legacy"
+      },
+      "labels": {
+        "default": "Default"
+      }
     }
   },
   "craft": {
@@ -14861,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "Return Home"
       },

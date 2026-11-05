@@ -2,6 +2,7 @@
 
 import { useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useLifecycleBadge } from "@/lib/badges/components";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
@@ -555,6 +556,7 @@ function EmbeddingModelCard({
   onSelect,
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
+  const legacyBadge = useLifecycleBadge("legacy");
   const { appName } = useSettings();
   const topRightButton = (() => {
     switch (modelState) {
@@ -616,11 +618,7 @@ function EmbeddingModelCard({
             description={embeddingModelDescription(model, t, appName)}
             badge={
               model.legacy
-                ? {
-                    title: t("modelCard.legacy.tag"),
-                    color: "pending",
-                    tooltip: t("modelCard.legacy.tooltip"),
-                  }
+                ? { ...legacyBadge, tooltip: t("modelCard.legacy.tooltip") }
                 : model.gpuRecommended
                   ? {
                       title: t("modelCard.gpuRecommended.tag"),
@@ -877,6 +875,8 @@ type ImagePersistResult = "skipped" | "saved" | "failed";
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
   const tInputSelect = useTranslations("common.inputSelect");
+  const unavailableBadge = useLifecycleBadge("temporarily-unavailable");
+  const legacyBadge = useLifecycleBadge("legacy");
   const adminRouteTitle = useAdminRouteTitle();
   const navigation = useNavigation();
   const settings = useSettings();
@@ -2143,10 +2143,7 @@ export default function IndexSettingsPage() {
                                       )}
                                       badge={
                                         currentRegistryModel?.legacy
-                                          ? {
-                                              title: t("modelCard.legacy.tag"),
-                                              color: "pending",
-                                            }
+                                          ? legacyBadge
                                           : undefined
                                       }
                                     />
@@ -2281,10 +2278,7 @@ export default function IndexSettingsPage() {
                           <InputHorizontal
                             title={t("multipass.title")}
                             description={t("multipass.description")}
-                            tag={{
-                              title: t("multipass.tag.label"),
-                              color: "default",
-                            }}
+                            tag={unavailableBadge}
                             withLabel
                           >
                             <InputSwitch

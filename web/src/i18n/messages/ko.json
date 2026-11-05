@@ -186,7 +186,6 @@
           "description": "관리하는 그룹을 하나 이상 선택하세요."
         },
         "retainedUsers": "{count, plural, other {사용자 #명과도 직접 공유됩니다.}}",
-        "planTag": "Business",
         "planNote": "그룹 액세스에는 Business 요금제가 필요합니다."
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "연결된 모델"
       },
-      "defaultTag": {
-        "label": "기본값"
-      },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
       },
@@ -7082,7 +7078,6 @@
           "tag": "GPU 권장"
         },
         "legacy": {
-          "tag": "레거시",
           "tooltip": "이 모델은 새 인덱스에 선택할 수 없습니다. 모델을 변경하기 전까지는 계속 작동합니다."
         },
         "selectButton": {
@@ -7135,9 +7130,6 @@
       "multipass": {
         "description": "문서를 다양한 크기의 청크로 인덱싱하여 관련 소스를 더 정확하게 찾습니다.",
         "disabledTooltip": "멀티패스 인덱싱은 일시적으로 사용할 수 없으며 추후 제공될 예정입니다.",
-        "tag": {
-          "label": "일시적으로 사용 불가"
-        },
         "title": "멀티패스 인덱싱"
       },
       "openaiCompatible": {
@@ -8016,9 +8008,6 @@
         "title": "채팅을 시작하려면 LLM 제공자를 설정하세요."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "기본"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} 삭제"
         },
@@ -14273,10 +14262,7 @@
       "upgrade": {
         "label": "플랜 업그레이드"
       },
-      "availableFor": "{plan}에서 사용 가능",
-      "beta": {
-        "title": "베타"
-      }
+      "availableFor": "{plan}에서 사용 가능"
     },
     "placeholders": {
       "email": "ireum@hoesa.com",
@@ -14325,6 +14311,19 @@
     "gridSearch": {
       "itemPlaceholder": "{item} 검색 또는 \"/\"를 눌러 포커스...",
       "placeholder": "검색하거나 \"/\"를 눌러 포커스..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "알파",
+        "beta": "베타",
+        "comingSoon": "출시 예정",
+        "deprecated": "지원 중단",
+        "temporarilyUnavailable": "일시적으로 사용 불가",
+        "legacy": "레거시"
+      },
+      "labels": {
+        "default": "기본"
+      }
     }
   },
   "craft": {
@@ -14861,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "홈으로 돌아가기"
       },

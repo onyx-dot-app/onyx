@@ -186,7 +186,6 @@
           "description": "Wählen Sie mindestens eine Gruppe, die Sie verwalten."
         },
         "retainedUsers": "{count, plural, one {Auch direkt mit # Benutzer geteilt.} other {Auch direkt mit # Benutzern geteilt.}}",
-        "planTag": "Business",
         "planNote": "Gruppenzugriff erfordert einen Business-Tarif."
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "Verbundene Modelle"
       },
-      "defaultTag": {
-        "label": "Standard"
-      },
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
       },
@@ -7082,7 +7078,6 @@
           "tag": "GPU empfohlen"
         },
         "legacy": {
-          "tag": "Veraltet",
           "tooltip": "Sie können dieses Modell nicht für einen neuen Index auswählen. Es funktioniert weiter, bis Sie das Modell wechseln."
         },
         "selectButton": {
@@ -7135,9 +7130,6 @@
       "multipass": {
         "description": "Indexieren Sie Dokumente als Chunks unterschiedlicher Größe, um relevante Quellen besser zu erkennen.",
         "disabledTooltip": "Die Multipass-Indexierung ist vorübergehend deaktiviert und wird in Zukunft verfügbar sein.",
-        "tag": {
-          "label": "vorübergehend nicht verfügbar"
-        },
         "title": "Multipass-Indexierung"
       },
       "openaiCompatible": {
@@ -8016,9 +8008,6 @@
         "title": "Richten Sie einen LLM-Anbieter ein, um mit dem Chatten zu beginnen."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Standard"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} löschen"
         },
@@ -14273,10 +14262,7 @@
       "upgrade": {
         "label": "Tarif upgraden"
       },
-      "availableFor": "Verfügbar im {plan}",
-      "beta": {
-        "title": "beta"
-      }
+      "availableFor": "Verfügbar im {plan}"
     },
     "placeholders": {
       "email": "e-mail@ihrefirma.com",
@@ -14325,6 +14311,19 @@
     "gridSearch": {
       "itemPlaceholder": "{item} durchsuchen oder \"/\" drücken, um zu fokussieren...",
       "placeholder": "Suchen oder \"/\" drücken, um zu fokussieren..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "beta",
+        "comingSoon": "demnächst",
+        "deprecated": "veraltet",
+        "temporarilyUnavailable": "vorübergehend nicht verfügbar",
+        "legacy": "legacy"
+      },
+      "labels": {
+        "default": "Standard"
+      }
     }
   },
   "craft": {
@@ -14861,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "Zur Startseite"
       },

@@ -186,7 +186,6 @@
           "description": "Escolha pelo menos um grupo que você gerencia."
         },
         "retainedUsers": "{count, plural, one {Também compartilhado diretamente com # usuário.} other {Também compartilhado diretamente com # usuários.}}",
-        "planTag": "Business",
         "planNote": "O acesso por grupos exige um plano Business."
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "Modelos conectados"
       },
-      "defaultTag": {
-        "label": "Padrão"
-      },
       "deselectError": {
         "message": "Falha ao desmarcar"
       },
@@ -7082,7 +7078,6 @@
           "tag": "GPU recomendada"
         },
         "legacy": {
-          "tag": "Legado",
           "tooltip": "Você não pode selecionar este modelo para um novo índice. Ele continua funcionando até você trocar de modelo."
         },
         "selectButton": {
@@ -7135,9 +7130,6 @@
       "multipass": {
         "description": "Indexe documentos como chunks de tamanhos variados para identificar melhor as fontes relevantes.",
         "disabledTooltip": "A indexação multipass está desativada temporariamente e ficará disponível no futuro.",
-        "tag": {
-          "label": "temporariamente indisponível"
-        },
         "title": "Indexação multipass"
       },
       "openaiCompatible": {
@@ -8016,9 +8008,6 @@
         "title": "Configure um provedor de LLM para começar a conversar."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Padrão"
-        },
         "deleteButton": {
           "ariaLabel": "Excluir {provider}"
         },
@@ -14273,10 +14262,7 @@
       "upgrade": {
         "label": "Fazer upgrade do plano"
       },
-      "availableFor": "Disponível no {plan}",
-      "beta": {
-        "title": "beta"
-      }
+      "availableFor": "Disponível no {plan}"
     },
     "placeholders": {
       "email": "email@suaempresa.com",
@@ -14325,6 +14311,19 @@
     "gridSearch": {
       "itemPlaceholder": "Pesquise {item} ou pressione \"/\" para focar...",
       "placeholder": "Pesquise ou pressione \"/\" para focar..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alfa",
+        "beta": "beta",
+        "comingSoon": "em breve",
+        "deprecated": "obsoleto",
+        "temporarilyUnavailable": "temporariamente indisponível",
+        "legacy": "legado"
+      },
+      "labels": {
+        "default": "Padrão"
+      }
     }
   },
   "craft": {
@@ -14861,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "Voltar ao início"
       },

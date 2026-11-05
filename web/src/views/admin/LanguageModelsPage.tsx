@@ -1,6 +1,7 @@
 "use client";
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useLabelBadge } from "@/lib/badges/components";
 import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
@@ -102,6 +103,7 @@ function ExistingProviderCard({
   isLastProvider,
 }: ExistingProviderCardProps) {
   const t = useTranslations("admin.languageModels");
+  const defaultBadge = useLabelBadge("default");
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
@@ -214,11 +216,7 @@ function ExistingProviderCard({
             titleMaxLines={1}
             descriptionMaxLines={1}
             padding={2}
-            badge={
-              isDefault
-                ? { title: t("providerCard.defaultTag.label"), color: "info" }
-                : undefined
-            }
+            badge={isDefault ? defaultBadge : undefined}
             rightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item

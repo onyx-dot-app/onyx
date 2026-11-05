@@ -186,7 +186,6 @@
           "description": "Choisissez au moins un groupe que vous gérez."
         },
         "retainedUsers": "{count, plural, one {Également partagé directement avec # utilisateur.} other {Également partagé directement avec # utilisateurs.}}",
-        "planTag": "Business",
         "planNote": "L’accès par groupe nécessite un forfait Business."
       },
       "defaultChat": {
@@ -6617,9 +6616,6 @@
       "connectedModels": {
         "title": "Modèles connectés"
       },
-      "defaultTag": {
-        "label": "Par défaut"
-      },
       "deselectError": {
         "message": "Échec de la désélection"
       },
@@ -7082,7 +7078,6 @@
           "tag": "GPU recommandé"
         },
         "legacy": {
-          "tag": "Ancien",
           "tooltip": "Vous ne pouvez pas sélectionner ce modèle pour un nouvel index. Il continue de fonctionner jusqu'à ce que vous changiez de modèle."
         },
         "selectButton": {
@@ -7135,9 +7130,6 @@
       "multipass": {
         "description": "Indexez les documents en segments de tailles variables pour mieux identifier les sources pertinentes.",
         "disabledTooltip": "L'indexation multi-passes est désactivée temporairement et sera disponible plus tard.",
-        "tag": {
-          "label": "temporairement indisponible"
-        },
         "title": "Indexation multi-passes"
       },
       "openaiCompatible": {
@@ -8016,9 +8008,6 @@
         "title": "Configurez un fournisseur LLM pour commencer à discuter."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Par défaut"
-        },
         "deleteButton": {
           "ariaLabel": "Supprimer {provider}"
         },
@@ -14273,10 +14262,7 @@
       "upgrade": {
         "label": "Mettre à niveau l'offre"
       },
-      "availableFor": "Disponible avec l’{plan}",
-      "beta": {
-        "title": "bêta"
-      }
+      "availableFor": "Disponible avec l’{plan}"
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -14325,6 +14311,19 @@
     "gridSearch": {
       "itemPlaceholder": "Rechercher des {item} ou appuyer sur « / » pour activer...",
       "placeholder": "Rechercher ou appuyer sur « / » pour activer..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "bêta",
+        "comingSoon": "bientôt disponible",
+        "deprecated": "obsolète",
+        "temporarilyUnavailable": "temporairement indisponible",
+        "legacy": "ancien"
+      },
+      "labels": {
+        "default": "Par défaut"
+      }
     }
   },
   "craft": {
@@ -14861,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BÊTA"
-      },
       "returnHome": {
         "button": "Retour à l'accueil"
       },
