@@ -105,7 +105,8 @@ the connector already filtered by time. A FUTURE attempt turns gate 2 off.
 `force_update` turns both off, for the per-document retry and the tabular
 re-chunk migration. A document written without `doc_updated_at` takes the
 stored one, so a write that an ACL change or a FUTURE attempt forces keeps the
-date in the chunks.
+date in the chunks. `post_index` does not write that copied date back to the
+row, where it could overwrite a newer date another run stored meanwhile.
 
 **The write.** The enricher bakes access, document sets, boost, cc-pair IDs and
 hierarchy ancestors into each chunk. A later permission change reaches the index

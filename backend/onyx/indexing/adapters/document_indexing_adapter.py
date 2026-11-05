@@ -249,8 +249,12 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         for doc in context.updatable_docs:
             last_modified_ids.append(doc.id)
             # doc_updated_at is the source's idea (on the other end of the connector)
-            # of when the doc was last modified
-            if doc.doc_updated_at is not None:
+            # of when the doc was last modified. A date copied from the row is
+            # not, and is left out.
+            if (
+                doc.doc_updated_at is not None
+                and doc.id not in context.stored_date_doc_ids
+            ):
                 ids_to_new_updated_at[doc.id] = doc.doc_updated_at
             # doc_created_at is written to the index on this path; persist it so the
             # DB reflects that this doc's creation time is collected (the backfill

@@ -169,6 +169,10 @@ class DocumentBatchPrepareContext(BaseModel):
     id_to_boost_map: dict[str, int]
     indexable_docs: list[IndexingDocument] = []
     doc_id_to_content_hash: dict[str, str] = {}
+    # Documents that came without doc_updated_at and carry the stored one (see
+    # get_docs_to_update). The chunks take that date; post_index does not write
+    # it back, so it cannot overwrite a newer date another run stored meanwhile.
+    stored_date_doc_ids: set[str] = set()
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
@@ -699,6 +703,7 @@ def index_doc_batch_prepare(
         db_doc.id: db_doc.file_id for db_doc in db_docs if db_doc.file_id is not None
     }
 
+    undated_doc_ids = {doc.id for doc in documents if doc.doc_updated_at is None}
     updatable_docs, doc_id_to_content_hash = get_docs_to_update(
         documents=documents,
         db_docs=db_docs,
@@ -772,6 +777,11 @@ def index_doc_batch_prepare(
         updatable_docs=updatable_docs,
         id_to_boost_map=id_to_boost_map,
         doc_id_to_content_hash=doc_id_to_content_hash,
+        stored_date_doc_ids={
+            doc.id
+            for doc in updatable_docs
+            if doc.id in undated_doc_ids and doc.doc_updated_at is not None
+        },
     )
 
 
