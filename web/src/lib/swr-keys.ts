@@ -12,6 +12,7 @@ import type {
   CCPairRunStatusGroup,
   CCPairThroughputWindow,
   IndexingConnectorsQuery,
+  SyncEntityKind,
 } from "@/lib/connectors/types";
 
 /** The query string a runs feed takes, for one pair or the fleet. */
@@ -483,6 +484,28 @@ export const SWR_KEYS = {
     });
     if (query.q) params.set("q", query.q);
     return `/api/manage/admin/cc-pair/${ccPairId}/errors?${params.toString()}`;
+  },
+  // One group sync's failed users or groups, in the same state order as `ccPairAttemptErrors`.
+  ccPairSyncErrors: (
+    ccPairId: number,
+    query: {
+      attemptId: number;
+      entityKind: SyncEntityKind;
+      q: string;
+      pageNum: number;
+      pageSize: number;
+    }
+  ) => {
+    const params = new URLSearchParams({
+      attempt_id: String(query.attemptId),
+      entity_kind: query.entityKind,
+      page_num: String(query.pageNum),
+      page_size: String(query.pageSize),
+      include_resolved: "true",
+      order: "state",
+    });
+    if (query.q) params.set("q", query.q);
+    return `/api/manage/admin/cc-pair/${ccPairId}/sync-errors?${params.toString()}`;
   },
 
   // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────

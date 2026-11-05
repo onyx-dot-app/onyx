@@ -97,12 +97,16 @@ export async function resolveCCPairRuns(
   });
 }
 
-/** Closes these open errors of the pair without a reindex. Retry Doc (a retry by error id) still takes them. */
+/** The pair's failed items route: an index attempt's errors, or a group sync's failed users and groups. */
+export type FailedItemsRoute = "errors" | "sync-errors";
+
+/** Closes these open errors of the pair without a reindex. Retry Doc (a retry by error id) still takes an index error. */
 export async function resolveErrorsWithoutRetry(
   ccPairId: number,
-  errorIds: number[]
+  errorIds: number[],
+  route: FailedItemsRoute
 ): Promise<void> {
-  await postJson(`/api/manage/admin/cc-pair/${ccPairId}/errors/resolve`, {
+  await postJson(`/api/manage/admin/cc-pair/${ccPairId}/${route}/resolve`, {
     error_ids: errorIds,
   });
 }

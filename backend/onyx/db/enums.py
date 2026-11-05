@@ -171,6 +171,19 @@ class IndexAttemptErrorOrder(str, PyEnum):
     STATE = "state"
 
 
+class SyncEntityKind(str, PyEnum):
+    """What a permission sync failed to read: a user or a group."""
+
+    USER = "user"
+    GROUP = "group"
+
+
+class SyncAttemptErrorResolvedReason(str, PyEnum):
+    """How a sync attempt error closed."""
+
+    WITHOUT_RETRY = "without_retry"
+
+
 class PortAttemptStatus(str, PyEnum):
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"

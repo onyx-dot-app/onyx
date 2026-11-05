@@ -26,6 +26,7 @@ from onyx.db.enums import (
     IndexAttemptErrorResolvedReason,
     IndexingStatus,
     IndexModelStatus,
+    SyncAttemptErrorResolvedReason,
 )
 from onyx.db.models import (
     CCPairRunResolution,
@@ -33,6 +34,7 @@ from onyx.db.models import (
     IndexAttempt,
     IndexAttemptError,
     SearchSettings,
+    SyncAttemptError,
 )
 
 
@@ -42,6 +44,22 @@ def index_attempt_error_is_open(
     """An error no run closed and no admin resolved."""
     # NOT is_resolved, not `IS false`, so Postgres matches the partial index.
     return and_(~error.is_resolved, error.resolved_reason.is_(None))
+
+
+def sync_attempt_error_is_open() -> ColumnElement[bool]:
+    """A failed user or group no admin resolved."""
+    return and_(
+        ~SyncAttemptError.is_resolved, SyncAttemptError.resolved_reason.is_(None)
+    )
+
+
+def sync_attempt_error_matches(query: str) -> ColumnElement[bool]:
+    """A failed user or group whose message, id or name contains ``query``."""
+    return or_(
+        SyncAttemptError.failure_message.icontains(query, autoescape=True),
+        SyncAttemptError.entity_id.icontains(query, autoescape=True),
+        SyncAttemptError.entity_name.icontains(query, autoescape=True),
+    )
 
 
 def index_attempt_error_closure(
@@ -97,13 +115,17 @@ def resolve_runs__no_commit(
     user_id: UUID | None,
 ) -> dict[tuple[CCPairRunKind, int], int]:
     """Marks each (kind, id) resolved against the pair it maps to, closes the
-    errors each index run filed so far without retry, and returns the runs it
-    changed with their pairs. A run resolved before counts only when something
-    reopened it or it had errors to close. ``user_id`` None is the system."""
+    errors each index run filed so far and each group sync's failed users and
+    groups without retry, and returns the runs it changed with their pairs. A
+    run resolved before counts only when something reopened it or it had
+    errors to close. ``user_id`` None is the system."""
     if not runs:
         return {}
     index_run_ids: list[int] = [
         run_id for kind, run_id in runs if kind is CCPairRunKind.INDEXING
+    ]
+    group_sync_ids: list[int] = [
+        run_id for kind, run_id in runs if kind is CCPairRunKind.GROUP_SYNC
     ]
     stmt = (
         insert(CCPairRunResolution)
@@ -139,6 +161,13 @@ def resolve_runs__no_commit(
         changed.update(
             (CCPairRunKind.INDEXING, run_id) for run_id in [*reresolved, *closed]
         )
+    if group_sync_ids:
+        closed_syncs = close_sync_attempt_errors_without_retry__no_commit(
+            db_session,
+            SyncAttemptError.external_group_sync_attempt_id,
+            SyncAttemptError.external_group_sync_attempt_id.in_(group_sync_ids),
+        )
+        changed.update((CCPairRunKind.GROUP_SYNC, run_id) for run_id in closed_syncs)
     clear_resolved_repeated_error_states__no_commit(db_session, set(runs.values()))
     return {run: runs[run] for run in changed}
 
@@ -178,6 +207,28 @@ def _close_without_retry__no_commit(
                 **index_attempt_error_closure(
                     IndexAttemptErrorResolvedReason.WITHOUT_RETRY, None
                 )
+            )
+            .returning(returning)
+            .execution_options(synchronize_session=False)
+        ).all()
+    )
+
+
+def close_sync_attempt_errors_without_retry__no_commit(
+    db_session: Session,
+    returning: InstrumentedAttribute[int],
+    *scope: ColumnElement[bool],
+) -> list[int]:
+    """Marks the open failed users and groups in ``scope`` resolved without
+    retry and returns ``returning`` of each row it marked. ``is_resolved``
+    stays false, as on an index error, since only a later read fixes one."""
+    return list(
+        db_session.scalars(
+            update(SyncAttemptError)
+            .where(sync_attempt_error_is_open(), *scope)
+            .values(
+                resolved_reason=SyncAttemptErrorResolvedReason.WITHOUT_RETRY,
+                resolved_at=func.now(),
             )
             .returning(returning)
             .execution_options(synchronize_session=False)

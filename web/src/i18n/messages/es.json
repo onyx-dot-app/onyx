@@ -3206,6 +3206,8 @@
           "indexingItems": "{count, plural, one {# elemento falló} other {# elementos fallaron}}",
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
           "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
+          "users": "{count, plural, one {# usuario no se sincronizó} other {# usuarios no se sincronizaron}}",
+          "groups": "{count, plural, one {# grupo no se sincronizó} other {# grupos no se sincronizaron}}",
           "resolved": "Resuelto",
           "superseded": "Reemplazado"
         },
@@ -3235,6 +3237,18 @@
           "resolvedGroup": "Errores resueltos",
           "resolvedWithoutRetry": "Resuelto sin reintentar",
           "resolvedByLaterRun": "Resuelto por una ejecución posterior"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Usuarios fallidos",
+            "search": "Buscar usuarios…",
+            "empty": "No hay usuarios fallidos"
+          },
+          "groups": {
+            "title": "Grupos fallidos",
+            "search": "Buscar grupos…",
+            "empty": "No hay grupos fallidos"
+          }
         },
         "trace": {
           "header": "Seguimiento de pila • ID de ejecución: {id}",
