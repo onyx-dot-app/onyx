@@ -235,14 +235,12 @@ function editButtonSize(lineHeight: number): ContainerSizeVariants {
 }
 
 /**
- * The suffix: the title's size in its lighter weight. A heading without a
- * muted cut of its own takes the muted H3.
+ * The suffix: the title's size in its lightest weight. Only the `main-ui-*`,
+ * `main-content-*` and `secondary-*` titles take one.
  */
 function suffixFont(font: TextFont): TextFont {
   if (font.startsWith("main-ui")) return "main-ui-muted";
   if (font.startsWith("main-content")) return "main-content-muted";
-  if (font.startsWith("heading")) return "heading-h3-muted";
-  if (font.startsWith("figure")) return "figure-small-label";
   return "secondary-body";
 }
 
