@@ -218,6 +218,22 @@ class GitHubGitTree(BaseModel):
     truncated: bool = False
 
 
+class GitHubCommitRef(BaseModel):
+    sha: str
+    # The committer date: when the commit was made on the branch, also for a
+    # pull request merged on GitHub.
+    committed_at: datetime
+
+
+class GitHubCommitFiles(BaseModel):
+    # The paths the commit added, modified or removed, against its first
+    # parent. A renamed file is listed at its new path.
+    paths: list[str]
+    # True when GitHub may have left files out: it sends at most 300 files
+    # per page of a commit.
+    truncated: bool = False
+
+
 class GitHubFileContent(BaseModel):
     # None when GitHub does not send the content as base64 (e.g. a file over
     # 1 MB, or a Git LFS pointer).

@@ -34,6 +34,8 @@ from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.github.models import (
     GitHubBranch,
+    GitHubCommitFiles,
+    GitHubCommitRef,
     GitHubCursorItem,
     GitHubFileContent,
     GitHubGitTree,
@@ -79,6 +81,12 @@ _CURSOR_FALLBACK = (
     "Used only when GitHub refuses offset pages for a large listing; it reads "
     "the same endpoint as the offset listing that the checks probe."
 )
+_COMMITS_FALLBACK = (
+    "Read only by an incremental poll of repository files; on any error the "
+    "poll falls back to the tree listing that the checks probe."
+)
+# GitHub lists at most this many files on one page of a commit.
+_MAX_COMMIT_FILES_PER_PAGE = 300
 
 
 class BoundedGithubRetry(GithubRetry):
@@ -261,6 +269,11 @@ def _next_link(headers: dict[str, Any]) -> str | None:
 
 def _quote(value: str) -> str:
     return urllib.parse.quote(value, safe="")
+
+
+def _iso(value: datetime) -> str:
+    """A time as GitHub's ISO 8601 query parameters take it, in UTC."""
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _token_kind(token: str, scopes: list[str] | None) -> GitHubTokenKind:
@@ -646,6 +659,65 @@ class GitHubSourceOperations(SourceOperations):
                 for entry in data.get("tree") or []
             ],
             truncated=bool(data.get("truncated")),
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+        untested=_COMMITS_FALLBACK,
+    )
+    @_translated
+    def list_commits(
+        self,
+        *,
+        repo_full_name: str,
+        ref: str,
+        since: datetime,
+        until: datetime | None,
+        limit: int,
+    ) -> list[GitHubCommitRef]:
+        """The commits of a branch with a committer date from ``since`` up to
+        ``until`` (None: now), newest first (``GET /repos/{repo}/commits``).
+        ``limit`` stops the listing early."""
+        params: dict[str, Any] = {"sha": ref, "since": _iso(since)}
+        if until is not None:
+            params["until"] = _iso(until)
+        commits: list[GitHubCommitRef] = []
+        for raw, _next_url in self._paginate(
+            f"/repos/{repo_full_name}/commits", params
+        ):
+            commits.append(
+                GitHubCommitRef(
+                    sha=raw["sha"],
+                    committed_at=raw["commit"]["committer"]["date"],
+                )
+            )
+            if len(commits) >= limit:
+                break
+        return commits
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+        untested=_COMMITS_FALLBACK,
+    )
+    @_translated
+    def get_commit_files(self, *, repo_full_name: str, sha: str) -> GitHubCommitFiles:
+        """The paths one commit changed, against its first parent
+        (``GET /repos/{repo}/commits/{sha}``). GitHub sends at most 300 files
+        per page; a commit with more is marked truncated."""
+        headers, data = self._get(f"/repos/{repo_full_name}/commits/{_quote(sha)}")
+        files: list[Any] = data.get("files") or []
+        return GitHubCommitFiles(
+            paths=[
+                str(file["filename"])
+                for file in files
+                if isinstance(file, dict) and file.get("filename")
+            ],
+            truncated=(
+                len(files) >= _MAX_COMMIT_FILES_PER_PAGE
+                or _next_link(headers) is not None
+            ),
         )
 
     @source_operation(

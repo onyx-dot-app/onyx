@@ -13,6 +13,8 @@ from onyx.connectors.github.connector import (
     is_indexable_path,
 )
 from onyx.connectors.github.models import (
+    GitHubCommitFiles,
+    GitHubCommitRef,
     GitHubFileContent,
     GitHubGitTree,
     GitHubRepository,
@@ -20,8 +22,6 @@ from onyx.connectors.github.models import (
 )
 from onyx.connectors.github.source_operations import GitHubApiError
 from onyx.connectors.models import ConnectorFailure, Document
-from onyx.db.models import Document as DbDocument
-from onyx.indexing.indexing_pipeline import get_docs_to_update
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -243,63 +243,94 @@ def test_pushed_at_gate_skips_file_stage(
     mock_source_operations.get_git_tree.assert_not_called()
 
 
-def test_file_documents_do_not_take_repo_pushed_at(
-    build_files_connector: Callable[..., GithubConnector],
-    serve_files: Callable[..., GitHubRepository],
+_REPO_FILES = {
+    "README.md": b"# Hello",
+    "docs/guide.md": b"a guide",
+    "docs/untouched.md": b"not changed by any commit",
+}
+_LAST_PUSH = datetime(2024, 6, 2, 12, tzinfo=timezone.utc)
+_POLL_START = datetime(2024, 6, 1, tzinfo=timezone.utc).timestamp()
+
+
+def _serve_commits(
+    gateway: MagicMock, commits: list[tuple[datetime, list[str]]]
 ) -> None:
-    """repo.pushed_at moves on any push to any branch, so it is not a file's
-    update time. Using it would make every file look changed after any push."""
-    connector = build_files_connector()
-    serve_files(
-        {"README.md": b"# Hello", "docs/guide.md": b"a guide"},
-        pushed_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+    """Serves the commits of the poll window, newest first, as (date, paths)."""
+    paths_by_sha = {f"sha{i}": paths for i, (_date, paths) in enumerate(commits)}
+    gateway.list_commits.return_value = [
+        GitHubCommitRef(sha=f"sha{i}", committed_at=date)
+        for i, (date, _paths) in enumerate(commits)
+    ]
+    gateway.get_commit_files.side_effect = lambda **kwargs: GitHubCommitFiles(
+        paths=paths_by_sha[kwargs["sha"]]
     )
 
-    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+def test_poll_reads_only_files_changed_by_commits_in_window(
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
+) -> None:
+    """A poll re-reads only the files its commits changed, dated by the latest
+    of those commits, so a push does not re-embed every file."""
+    connector = build_files_connector()
+    serve_files(_REPO_FILES, pushed_at=_LAST_PUSH)
+    _serve_commits(
+        mock_source_operations,
+        [
+            (datetime(2024, 6, 2, 12, tzinfo=timezone.utc), ["docs/guide.md"]),
+            (
+                datetime(2024, 6, 2, 9, tzinfo=timezone.utc),
+                ["README.md", "docs/guide.md", "src/main.py", "docs/deleted.md"],
+            ),
+        ],
+    )
+
+    outputs = load_everything_from_checkpoint_connector(
+        connector, _POLL_START, time.time()
+    )
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
-    assert len(docs) == 2
-    assert [d.doc_updated_at for d in docs] == [None, None]
+    assert {d.semantic_identifier: d.doc_updated_at for d in docs} == {
+        "README.md": datetime(2024, 6, 2, 9, tzinfo=timezone.utc),
+        "docs/guide.md": datetime(2024, 6, 2, 12, tzinfo=timezone.utc),
+    }
+    fetched = sorted(
+        c.kwargs["path"] for c in mock_source_operations.get_file_content.call_args_list
+    )
+    assert fetched == ["README.md", "docs/guide.md"]
 
 
-def test_push_reindexes_only_files_whose_content_changed(
+@pytest.mark.parametrize("case", ["commit_files_truncated", "commit_listing_fails"])
+def test_poll_lists_all_files_when_changed_files_are_unknown(
+    case: str,
     build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
     serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    """After a push, the indexing pipeline skips unchanged files by content hash.
-
-    The stored rows keep the pushed_at timestamp that earlier versions wrote,
-    so this also covers the first run after an upgrade.
-    """
+    """When the changed files cannot all be listed, a poll reads every file
+    with no date, so the content hash still skips the unchanged ones."""
     connector = build_files_connector()
-    first_push = datetime(2024, 6, 1, tzinfo=timezone.utc)
-    serve_files(
-        {"README.md": b"# Hello", "docs/guide.md": b"a guide"}, pushed_at=first_push
-    )
-    first_outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
-    stored = [
-        DbDocument(
-            id=doc.id, content_hash=doc.content_hash(), doc_updated_at=first_push
+    serve_files(_REPO_FILES, pushed_at=_LAST_PUSH)
+    _serve_commits(mock_source_operations, [(_LAST_PUSH, ["README.md"])])
+    if case == "commit_files_truncated":
+        mock_source_operations.get_commit_files.side_effect = None
+        mock_source_operations.get_commit_files.return_value = GitHubCommitFiles(
+            paths=["README.md"], truncated=True
         )
-        for doc in _all_items(first_outputs)
-        if isinstance(doc, Document)
-    ]
-    assert len(stored) == 2
+    else:
+        mock_source_operations.list_commits.side_effect = GitHubApiError(
+            "500", status_code=500
+        )
 
-    serve_files(
-        {"README.md": b"# Hello", "docs/guide.md": b"an updated guide"},
-        pushed_at=datetime(2024, 6, 2, tzinfo=timezone.utc),
+    outputs = load_everything_from_checkpoint_connector(
+        connector, _POLL_START, time.time()
     )
-    second_outputs = load_everything_from_checkpoint_connector(
-        connector, 0, time.time()
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    assert {d.semantic_identifier: d.doc_updated_at for d in docs} == dict.fromkeys(
+        _REPO_FILES
     )
-    second_docs = [i for i in _all_items(second_outputs) if isinstance(i, Document)]
-
-    to_update, _ = get_docs_to_update(second_docs, db_docs=stored)
-
-    assert [d.id for d in to_update] == [
-        "https://github.com/test-org/test-repo/blob/main/docs/guide.md"
-    ]
 
 
 def test_files_paginated_across_checkpoints(
