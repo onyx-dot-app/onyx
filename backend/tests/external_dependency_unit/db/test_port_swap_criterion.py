@@ -1,11 +1,14 @@
 """External dependency unit tests for the port-aware swap criterion (T7/D8).
 
-The port-flow branch of `check_and_perform_index_swap` swaps on four conditions
+The port-flow branch of `check_and_perform_index_swap` swaps on three conditions
 rather than the legacy successful-index count: every required cc_pair's port is
-SUCCESS, a real (non-seed) FUTURE index attempt landed after the port, nothing is
-in progress, and the deferred metadata-sync backlog has drained. The push-based
-Ingestion pair is gated on its port only (it never runs a connector index attempt).
-Mode C (INSTANT) swaps immediately; the legacy (flag-off) path is untouched.
+SUCCESS, no FUTURE index attempt of a required pair is running, and no user-file
+reconcile is pending. Documents FUTURE may lack do not hold the swap: their
+content hash is cleared at the swap so the next poll on the new PRESENT
+re-indexes them, and a pending-sync flag becomes a plain needs-sync. The
+push-based Ingestion pair is gated on its port only (it never runs a connector
+index attempt). Mode C (INSTANT) swaps immediately; the legacy (flag-off) path
+is untouched.
 
 `_perform_index_swap` must flip PRESENT -> PAST and FUTURE -> PRESENT in one
 commit, so no other session ever reads a state with no PRESENT row.

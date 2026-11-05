@@ -126,11 +126,12 @@ check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
 The reindex never fetches sources again. It copies and re-embeds stored chunks
 (`document_index/opensearch/port_copy.py`), and connectors keep indexing new
 changes into both generations. Once every connector port succeeds, the reindex
-is finalizing. The swap then waits only while a FUTURE index attempt of a
-required pair runs (`db/swap_index.py:_no_writer_left_in_flight`). It does not
-wait for FUTURE to catch up with what PRESENT wrote during the port: it clears
-the content hash of those documents instead, so the next poll on the new
-PRESENT re-indexes them ([[#swap-clears-what-future-missed]]).
+is finalizing. The swap then waits for every required port to succeed, for
+pending user-file reconciles, and for any running FUTURE index attempt of a
+required pair (`db/swap_index.py:_port_swap_ready`, `_no_writer_left_in_flight`).
+It does not wait for FUTURE to catch up with what PRESENT wrote during the
+port: it clears the content hash of those documents instead, so the next poll
+on the new PRESENT re-indexes them ([[#swap-clears-what-future-missed]]).
 [[indexing-pipeline#future-attempts-first]] keeps those attempts from waiting
 behind PRESENT refreshes. Reclaim waits `OLD_INDEX_RETENTION_HOURS` in SOAKING,
 then requires the new index to be not red and to answer a count query
@@ -172,8 +173,7 @@ it deletes the old one.
    PRESENT gets their permissions on the next sync. Clearing `needs_sync`
    instead lets the port install a stale ACL. A document with no indexable cc-pair
    (`backend/onyx/db/document.py:document_has_indexable_cc_pair`) is marked
-   synced instead: the port never copies it, so its flag would hold the swap
-   for ever.
+   synced instead: the port never copies it, so its flag would never clear.
 6. `filters-in-one-place` **All index-side filtering goes through one
    builder.**
    `document_index/opensearch/search.py:DocumentQuery._get_search_filters` is

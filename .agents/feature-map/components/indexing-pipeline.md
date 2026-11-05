@@ -103,7 +103,9 @@ decides which documents to re-chunk. Gate 1 skips a document whose
 unchanged. An ACL change bypasses both. Docprocessing turns gate 1 off, because
 the connector already filtered by time. A FUTURE attempt turns gate 2 off. A
 NULL hash never matches: a reindex swap nulls the hash of what FUTURE may lack
-so the next poll re-indexes it ([[document-index#swap-clears-what-future-missed]]).
+so the next poll re-indexes it ([[document-index#swap-clears-what-future-missed]]);
+a document a FUTURE attempt failed on needs Retry, and a load-only connector a
+manual run, since no poll fetches those.
 `force_update` turns both off, for the per-document retry and the tabular
 re-chunk migration. After the write, the hash is stamped only if the settings
 the batch wrote into are still PRESENT at commit, read under a share lock
