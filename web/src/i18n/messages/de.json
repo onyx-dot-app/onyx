@@ -7078,7 +7078,6 @@
           "tag": "GPU empfohlen"
         },
         "legacy": {
-          "tag": "Veraltet",
           "tooltip": "Sie können dieses Modell nicht für einen neuen Index auswählen. Es funktioniert weiter, bis Sie das Modell wechseln."
         },
         "selectButton": {
@@ -14319,7 +14318,8 @@
         "beta": "beta",
         "comingSoon": "demnächst",
         "deprecated": "veraltet",
-        "temporarilyUnavailable": "vorübergehend nicht verfügbar"
+        "temporarilyUnavailable": "vorübergehend nicht verfügbar",
+        "legacy": "legacy"
       },
       "labels": {
         "default": "Standard"
@@ -14860,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "Zur Startseite"
       },

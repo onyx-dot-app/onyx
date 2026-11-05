@@ -7078,7 +7078,6 @@
           "tag": "GPU推奨"
         },
         "legacy": {
-          "tag": "レガシー",
           "tooltip": "このモデルは新しいインデックスには選択できません。モデルを変更するまでは引き続き動作します。"
         },
         "selectButton": {
@@ -14319,7 +14318,8 @@
         "beta": "ベータ",
         "comingSoon": "近日公開",
         "deprecated": "非推奨",
-        "temporarilyUnavailable": "一時的に利用不可"
+        "temporarilyUnavailable": "一時的に利用不可",
+        "legacy": "レガシー"
       },
       "labels": {
         "default": "デフォルト"
@@ -14860,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "ホームに戻る"
       },

@@ -20,6 +20,7 @@ export type Lifecycle =
   | "beta"
   | "coming-soon"
   | "deprecated"
+  | "legacy"
   | "temporarily-unavailable";
 
 const LIFECYCLE_BADGES: Record<
@@ -32,6 +33,7 @@ const LIFECYCLE_BADGES: Record<
       | "beta"
       | "comingSoon"
       | "deprecated"
+      | "legacy"
       | "temporarilyUnavailable";
   }
 > = {
@@ -39,6 +41,7 @@ const LIFECYCLE_BADGES: Record<
   beta: { color: "info", copyKey: "beta" },
   "coming-soon": { color: "success", copyKey: "comingSoon" },
   deprecated: { color: "default", copyKey: "deprecated" },
+  legacy: { color: "pending", copyKey: "legacy" },
   "temporarily-unavailable": {
     color: "default",
     copyKey: "temporarilyUnavailable",

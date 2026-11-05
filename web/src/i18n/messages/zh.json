@@ -7078,7 +7078,6 @@
           "tag": "建议使用 GPU"
         },
         "legacy": {
-          "tag": "旧版",
           "tooltip": "此模型不能用于新索引。在您更换模型之前，它会继续工作。"
         },
         "selectButton": {
@@ -14319,7 +14318,8 @@
         "beta": "测试版",
         "comingSoon": "即将推出",
         "deprecated": "已弃用",
-        "temporarilyUnavailable": "暂时不可用"
+        "temporarilyUnavailable": "暂时不可用",
+        "legacy": "旧版"
       },
       "labels": {
         "default": "默认"
@@ -14860,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "返回首页"
       },

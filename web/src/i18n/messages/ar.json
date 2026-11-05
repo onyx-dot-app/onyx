@@ -7078,7 +7078,6 @@
           "tag": "يُنصح باستخدام GPU"
         },
         "legacy": {
-          "tag": "قديم",
           "tooltip": "لا يمكنك اختيار هذا النموذج لفهرس جديد. يستمر في العمل حتى تغيّر النموذج."
         },
         "selectButton": {
@@ -14319,7 +14318,8 @@
         "beta": "تجريبي",
         "comingSoon": "قريبًا",
         "deprecated": "مُهمَل",
-        "temporarilyUnavailable": "غير متاحة مؤقتًا"
+        "temporarilyUnavailable": "غير متاحة مؤقتًا",
+        "legacy": "قديم"
       },
       "labels": {
         "default": "افتراضي"
@@ -14860,9 +14860,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "تجريبي"
-      },
       "returnHome": {
         "button": "العودة إلى الرئيسية"
       },
