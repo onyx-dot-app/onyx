@@ -905,7 +905,10 @@ describe("Permissions Sync card", () => {
     expect(copy(KEYS.neverTooltip)).toBe(
       "Indexed docs won't be searchable until their permissions are synced."
     );
-    await user.hover(tag);
+    // The badge's title carries its tooltip.
+    await user.hover(
+      within(tag).getByText(badge("scheduled"), { exact: false })
+    );
     const tooltip = await screen.findByRole("tooltip", {}, { timeout: 3000 });
     expect(tooltip).toHaveTextContent(copy(KEYS.neverTooltip));
   });
@@ -941,7 +944,8 @@ describe("Permissions Sync card", () => {
     // A permission sync is no index run, so the panel shows its errors unfocused.
     expect(onFocusErrors).toHaveBeenCalledWith(null);
 
-    await user.hover(tag);
+    // The badge's title carries its tooltip.
+    await user.hover(within(tag).getByText(badge("failed"), { exact: false }));
     const tooltip = await screen.findByRole("tooltip", {}, { timeout: 3000 });
     expect(tooltip).toHaveTextContent(copy(KEYS.neverTooltip));
   });

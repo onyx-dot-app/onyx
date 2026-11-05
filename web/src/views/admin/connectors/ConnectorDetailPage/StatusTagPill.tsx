@@ -1,12 +1,14 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Badge, type BadgeSize } from "@opal/components";
+import { Badge, BadgeButton, type BadgeSize } from "@opal/components";
 import type { StatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 
 interface StatusTagPillProps {
   tag: StatusTag;
   size?: BadgeSize;
+  /** Hover text on a static pill. Badge owns it, so no `Tooltip` wraps the pill. */
+  tooltip?: string;
   /** Makes the pill a button, named by its tooltip. */
   action?: { tooltip: string; onClick: () => void };
 }
@@ -15,6 +17,7 @@ interface StatusTagPillProps {
 export default function StatusTagPill({
   tag,
   size,
+  tooltip,
   action,
 }: StatusTagPillProps) {
   const tBadges = useTranslations("admin.status.badges");
@@ -25,10 +28,9 @@ export default function StatusTagPill({
     titleColor: "text-04",
     size,
   } as const;
-  // Badge takes `tooltip` and `onClick` together or not at all.
   return action === undefined ? (
-    <Badge {...props} />
+    <Badge {...props} tooltip={tooltip} />
   ) : (
-    <Badge {...props} {...action} />
+    <BadgeButton {...props} {...action} />
   );
 }

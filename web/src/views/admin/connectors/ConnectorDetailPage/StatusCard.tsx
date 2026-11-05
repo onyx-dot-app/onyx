@@ -2,14 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import {
-  Button,
-  Card,
-  Popover,
-  SelectButton,
-  Text,
-  Tooltip,
-} from "@opal/components";
+import { Button, Card, Popover, SelectButton, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import {
   SvgListCheck,
@@ -449,17 +442,13 @@ function PermissionsSyncCard({
             title={t("statusCard.sync.permissionsTitle")}
             tags={
               <>
-                <Tooltip
+                <StatusTagPill
+                  tag={shownTag}
+                  size={6}
                   tooltip={
                     unsearchable ? t("statusCard.sync.neverTooltip") : undefined
                   }
-                  side="top"
-                  align="start"
-                >
-                  <Section width="fit" height="fit">
-                    <StatusTagPill tag={shownTag} size={6} />
-                  </Section>
-                </Tooltip>
+                />
                 {shownRun !== undefined && (
                   <RunWarningsTag
                     run={shownRun}
