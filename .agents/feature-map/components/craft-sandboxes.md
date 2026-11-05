@@ -191,6 +191,20 @@ sandbox it re-mints only when `has_active_craft_pat` is false, for example
 after a password change revoked it ([[auth-and-identity]]). The proxy reads
 the stored token on each request, so a new token takes effect at once.
 
+**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
+`backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
+- `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
+  agent (stubs in `backend/onyx/microvm/generated/`).
+- `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
+  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason.
+- `backend/onyx/microvm/lifecycle.py`: wake on the first tool call, idle
+  sleep, stop only after a saved checkpoint.
+- `backend/onyx/microvm/reconcile.py`: the cluster-wide reconcile pass, run by
+  `backend/onyx/background/celery/tasks/microvm/tasks.py`.
+
+Agents become reachable when their signing-key registration carries
+`agent_address`. No sandbox manager uses this code yet (ENG-4575).
+
 ---
 
 ## Contracts and traps

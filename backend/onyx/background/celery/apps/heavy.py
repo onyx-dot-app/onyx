@@ -133,6 +133,8 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.pruning",
             # Sandbox tasks (file sync, cleanup; build feature)
             "onyx.background.celery.tasks.build",
+            # Firecracker VM reconcile (SANDBOX_RUNTIME=firecracker)
+            "onyx.background.celery.tasks.microvm",
             "onyx.background.celery.tasks.hierarchyfetching",
             "onyx.background.celery.tasks.capability_checks",
         ]
