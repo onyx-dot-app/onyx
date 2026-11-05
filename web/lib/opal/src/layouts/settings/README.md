@@ -10,7 +10,10 @@ structure with a sticky scroll-aware header, centered content container, and bod
 ### Root
 
 Scrollable wrapper that centers content at a configurable max-width. It also
-holds the page's state, which `Body` renders.
+holds the page's state, which `Body` renders. It always reserves the scrollbar
+gutter, so a page keeps the same width whether its content scrolls or not.
+Pages that share a frame (e.g. settings tabs) do not shift when you switch
+between them.
 
 | Prop    | Type                                        | Default | Description                           |
 | ------- | ------------------------------------------- | ------- | ------------------------------------- |
