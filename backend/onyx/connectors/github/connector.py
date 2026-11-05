@@ -9,7 +9,9 @@ from io import BytesIO
 from typing import Any, TypeVar
 from urllib.parse import unquote
 
+import requests
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -68,6 +70,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.file_processing.extract_file_text import file_io_to_text, is_text_file
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -124,8 +127,8 @@ GITHUB_PATH_DENYLIST = {
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
 # Number of files emitted per checkpoint batch in the FILES stage.
 FILE_BATCH_SIZE = 100
-# A poll dates the files changed by at most this many commits of its window
-# (one read per commit). A busier window dates no file.
+# A poll dates the files changed by at most this many of the latest commits
+# since its window start (one read per commit).
 MAX_POLL_COMMITS = 100
 
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
@@ -641,8 +644,9 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Branch file_paths was listed from; a resumed checkpoint whose branch no
     # longer matches (connector edited, default branch changed) is re-listed.
     file_paths_branch: str | None = None
-    # On a poll, the file_paths that commits of the poll window changed.
-    touched_file_paths: list[str] | None = None
+    # On a poll, the file_paths that commits since the window start changed,
+    # each with the date of the latest such commit.
+    touched_file_dates: dict[str, datetime] | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -651,7 +655,7 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     def reset(self) -> None:
         """
         Resets curr_page, num_retrieved, cursor_url, file_paths,
-        file_paths_branch and touched_file_paths to their initial values
+        file_paths_branch and touched_file_dates to their initial values
         (0, 0, None, None, None, None)
         """
         self.curr_page = 0
@@ -659,7 +663,7 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
         self.cursor_url = None
         self.file_paths = None
         self.file_paths_branch = None
-        self.touched_file_paths = None
+        self.touched_file_dates = None
 
 
 def make_cursor_url_callback(
@@ -1035,63 +1039,54 @@ class GithubConnector(
 
     def _list_touched_files(
         self, repo: GitHubRepository, branch: str, start: datetime
-    ) -> set[str]:
-        """The paths that commits on ``branch`` since ``start`` changed.
+    ) -> dict[str, datetime]:
+        """The paths that commits on ``branch`` since ``start`` changed, each
+        with the committer date of the latest of those commits.
 
-        Best effort: empty when the list may be incomplete (GitHub answered
-        with an error, over MAX_POLL_COMMITS commits, or a commit changed too
-        many files to list). It only decides which files get a date, so a
-        missed path is still compared by content hash.
+        Best effort, in at most one commit listing and MAX_POLL_COMMITS commit
+        reads; on an error it keeps what it collected. A path it misses (a
+        commit past the cap or with no date, a file past the first page of a
+        large commit) gets no date and is compared by content hash.
         """
+        touched: dict[str, datetime] = {}
         try:
-            shas = self._call_rate_limited(
+            commits = self._call_rate_limited(
                 partial(
                     self.source_operations.list_commits,
                     repo_full_name=repo.full_name,
                     ref=branch,
                     since=start,
-                    limit=MAX_POLL_COMMITS + 1,
+                    limit=MAX_POLL_COMMITS,
                 )
             )
-            if len(shas) > MAX_POLL_COMMITS:
-                logger.info(
-                    "Over %s commits on %s of repo %s since %s; dating no file",
-                    MAX_POLL_COMMITS,
-                    branch,
-                    repo.full_name,
-                    start,
-                )
-                return set()
-            touched: set[str] = set()
-            for sha in shas:
-                changed = self._call_rate_limited(
+            for commit in commits:
+                if commit.committed_at is None:
+                    continue
+                committed_at = datetime_to_utc(commit.committed_at)
+                paths = self._call_rate_limited(
                     partial(
                         self.source_operations.get_commit_files,
                         repo_full_name=repo.full_name,
-                        sha=sha,
+                        sha=commit.sha,
                     )
                 )
-                if changed.truncated:
-                    logger.info(
-                        "Commit %s of repo %s changed too many files to list; "
-                        "dating no file",
-                        sha,
-                        repo.full_name,
-                    )
-                    return set()
-                touched.update(changed.paths)
-            return touched
-        except GitHubRateLimitError:
-            # Out of retries: fail the run, as listing the tree does.
-            raise
-        except Exception as e:
+                for path in paths:
+                    if path not in touched or touched[path] < committed_at:
+                        touched[path] = committed_at
+        except (
+            GitHubApiError,
+            PydanticValidationError,
+            requests.RequestException,
+        ) as e:
+            # Includes a rate limit that outlasted the retries.
             logger.warning(
-                "Could not list the commits of repo %s since %s; dating no file: %s",
+                "Could not list all commits of repo %s since %s; dating %s files: %s",
                 repo.full_name,
                 start,
+                len(touched),
                 e,
             )
-            return set()
+        return touched
 
     def _fetch_repo_files(
         self,
@@ -1110,12 +1105,12 @@ class GithubConnector(
 
         Every run reads every listed file. The date decides how the indexing
         pipeline compares a file to its indexed copy: a date newer than the
-        stored one re-embeds it, no date compares the content hash.
-        repo.pushed_at moves on any push to any branch, so it dates every file
-        on a full index (as before) but on a poll only the files that commits
-        of the poll window changed. The rest get no date, so the content hash
-        skips the unchanged ones and still catches a change the commit list
-        missed.
+        stored one re-embeds it, otherwise the content hash decides. A full
+        index dates every file with repo.pushed_at, as before. On a poll,
+        pushed_at would move with any push to any branch and re-embed every
+        file, so a file that commits since the window start changed gets the
+        latest such commit's date, which stays the same across polls, and any
+        other file gets no date.
         """
         branch = self._resolve_branch(repo)
         branch_changed = (
@@ -1127,17 +1122,15 @@ class GithubConnector(
             # discard it so paths and content come from the same branch.
             checkpoint.file_paths = None
             checkpoint.file_paths_branch = None
-            checkpoint.touched_file_paths = None
+            checkpoint.touched_file_dates = None
             checkpoint.curr_page = 0
 
         # A full index (also the first run) starts at the epoch; slim listing
         # for pruning passes no start.
-        is_poll = start is not None and start > _EPOCH
+        poll_start = start if start is not None and start > _EPOCH else None
+        pushed_at = _utc(repo.pushed_at)
 
         if checkpoint.file_paths is None:
-            pushed_at = (
-                repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
-            )
             # After a branch change the new branch was never indexed, so the
             # pushed_at freshness gate must not skip the re-listing.
             if (
@@ -1153,11 +1146,11 @@ class GithubConnector(
             else:
                 logger.info("Listing files for repo: %s", repo.name)
                 paths, truncated = self._list_indexable_files(repo)
-                if is_poll and start is not None and paths:
-                    touched = self._list_touched_files(repo, branch, start)
-                    checkpoint.touched_file_paths = [
-                        path for path in paths if path in touched
-                    ]
+                if poll_start is not None and paths:
+                    touched = self._list_touched_files(repo, branch, poll_start)
+                    checkpoint.touched_file_dates = {
+                        path: touched[path] for path in paths if path in touched
+                    }
                 checkpoint.file_paths = paths
                 checkpoint.file_paths_branch = branch
                 logger.info(
@@ -1181,7 +1174,7 @@ class GithubConnector(
         page = checkpoint.curr_page
         batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
         checkpoint.curr_page += 1
-        touched = set(checkpoint.touched_file_paths or ())
+        touched_dates = checkpoint.touched_file_dates or {}
 
         for path in batch:
             if is_slim:
@@ -1200,7 +1193,7 @@ class GithubConnector(
                 branch,
                 repo_external_access,
                 doc_updated_at=(
-                    _utc(repo.pushed_at) if not is_poll or path in touched else None
+                    touched_dates.get(path) if poll_start is not None else pushed_at
                 ),
             )
 

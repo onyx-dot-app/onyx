@@ -2,25 +2,27 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import (
-    MAX_POLL_COMMITS,
     GithubConnector,
     GithubConnectorStage,
     is_indexable_path,
 )
 from onyx.connectors.github.models import (
-    GitHubCommitFiles,
+    GitHubCommitRef,
     GitHubFileContent,
     GitHubGitTree,
     GitHubRepository,
     GitHubTreeEntry,
 )
-from onyx.connectors.github.source_operations import GitHubApiError
+from onyx.connectors.github.source_operations import (
+    GitHubApiError,
+    GitHubRateLimitError,
+)
 from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -250,71 +252,105 @@ _REPO_FILES = {
 }
 _LAST_PUSH = datetime(2024, 6, 2, 12, tzinfo=timezone.utc)
 _POLL_START = datetime(2024, 6, 1, tzinfo=timezone.utc).timestamp()
+_EARLIER_COMMIT = datetime(2024, 6, 1, 9, tzinfo=timezone.utc)
+_LATER_COMMIT = datetime(2024, 6, 1, 15, tzinfo=timezone.utc)
 
 
-def _serve_commits(gateway: MagicMock, commits: list[list[str]]) -> None:
-    """Serves the commits of the poll window as the paths each one changed."""
-    gateway.list_commits.return_value = [f"sha{i}" for i in range(len(commits))]
-    gateway.get_commit_files.side_effect = lambda **kwargs: GitHubCommitFiles(
-        paths=commits[int(kwargs["sha"].removeprefix("sha"))]
-    )
+def _serve_commits(
+    gateway: MagicMock, commits: list[tuple[datetime | None, list[str]]]
+) -> None:
+    """Serves the commits since the poll start, newest first, as (committer
+    date, changed paths)."""
+    gateway.list_commits.return_value = [
+        GitHubCommitRef(sha=f"sha{i}", committed_at=date)
+        for i, (date, _paths) in enumerate(commits)
+    ]
+    gateway.get_commit_files.side_effect = lambda **kwargs: commits[
+        int(kwargs["sha"].removeprefix("sha"))
+    ][1]
 
 
 def _poll_dates(connector: GithubConnector) -> dict[str, datetime | None]:
-    outputs = load_everything_from_checkpoint_connector(
-        connector, _POLL_START, time.time()
-    )
+    with patch("onyx.connectors.github.connector.sleep_after_rate_limit_exception"):
+        outputs = load_everything_from_checkpoint_connector(
+            connector, _POLL_START, time.time()
+        )
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     return {d.semantic_identifier: d.doc_updated_at for d in docs}
 
 
-def test_poll_dates_only_files_changed_by_commits_in_window(
+def test_poll_dates_changed_files_by_their_latest_commit(
     build_files_connector: Callable[..., GithubConnector],
     mock_source_operations: MagicMock,
     serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    """A poll reads every file but dates only the ones its commits changed.
-    The last push moves on any push to any branch, so dating every file with
-    it would re-embed all of them; undated files go by content hash."""
+    """A poll reads every file. A file that commits since the window start
+    changed carries the latest such commit's date, which a later push to any
+    branch does not move, so a later poll does not re-embed it unchanged. Any
+    other file carries no date, so the content hash decides."""
     connector = build_files_connector()
     serve_files(_REPO_FILES, pushed_at=_LAST_PUSH)
     _serve_commits(
         mock_source_operations,
-        [["docs/guide.md"], ["README.md", "src/main.py", "docs/deleted.md"]],
+        [
+            (_LATER_COMMIT, ["docs/guide.md"]),
+            (
+                _EARLIER_COMMIT,
+                ["README.md", "docs/guide.md", "src/main.py", "docs/deleted.md"],
+            ),
+            # GitHub sent no committer date: the file is left to the hash.
+            (None, ["docs/untouched.md"]),
+        ],
     )
 
     assert _poll_dates(connector) == {
-        "README.md": _LAST_PUSH,
-        "docs/guide.md": _LAST_PUSH,
+        "README.md": _EARLIER_COMMIT,
+        "docs/guide.md": _LATER_COMMIT,
         "docs/untouched.md": None,
     }
 
 
 @pytest.mark.parametrize(
-    "case", ["listing_fails", "too_many_commits", "commit_files_truncated"]
+    "failing_call,error,expected_dated",
+    [
+        (
+            "get_commit_files",
+            GitHubRateLimitError("rate limited", status_code=403, secondary=False),
+            {"docs/guide.md": _LATER_COMMIT},
+        ),
+        ("list_commits", GitHubApiError("500", status_code=500), {}),
+    ],
 )
-def test_poll_dates_no_file_when_changed_files_are_unknown(
-    case: str,
+def test_poll_keeps_dates_collected_before_an_error(
+    failing_call: str,
+    error: GitHubApiError,
+    expected_dated: dict[str, datetime],
     build_files_connector: Callable[..., GithubConnector],
     mock_source_operations: MagicMock,
     serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    """When the changed files cannot all be listed, a poll still reads every
-    file, with no date, so the content hash decides."""
+    """Listing the commits is best effort: an error, even a rate limit that
+    outlasts the retries, keeps the dates collected so far and the poll still
+    reads every file. Files left undated go by content hash."""
     connector = build_files_connector()
     serve_files(_REPO_FILES, pushed_at=_LAST_PUSH)
-    _serve_commits(mock_source_operations, [["README.md"]])
-    if case == "listing_fails":
-        mock_source_operations.list_commits.side_effect = ValueError("bad commit")
-    elif case == "too_many_commits":
-        _serve_commits(mock_source_operations, [["README.md"]] * (MAX_POLL_COMMITS + 1))
+    _serve_commits(
+        mock_source_operations,
+        [(_LATER_COMMIT, ["docs/guide.md"]), (_EARLIER_COMMIT, ["README.md"])],
+    )
+    if failing_call == "list_commits":
+        mock_source_operations.list_commits.side_effect = error
     else:
-        mock_source_operations.get_commit_files.side_effect = None
-        mock_source_operations.get_commit_files.return_value = GitHubCommitFiles(
-            paths=["README.md"], truncated=True
-        )
+        serve_paths = mock_source_operations.get_commit_files.side_effect
 
-    assert _poll_dates(connector) == dict.fromkeys(_REPO_FILES)
+        def fail_second_commit(**kwargs: Any) -> list[str]:
+            if kwargs["sha"] == "sha1":
+                raise error
+            return serve_paths(**kwargs)
+
+        mock_source_operations.get_commit_files.side_effect = fail_second_commit
+
+    assert _poll_dates(connector) == {**dict.fromkeys(_REPO_FILES), **expected_dated}
 
 
 def test_files_paginated_across_checkpoints(

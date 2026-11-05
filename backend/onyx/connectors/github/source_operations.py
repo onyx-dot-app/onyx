@@ -34,7 +34,7 @@ from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.github.models import (
     GitHubBranch,
-    GitHubCommitFiles,
+    GitHubCommitRef,
     GitHubCursorItem,
     GitHubFileContent,
     GitHubGitTree,
@@ -54,6 +54,7 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
+from onyx.utils.datetime import utc_iso_timestamp
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -82,10 +83,9 @@ _CURSOR_FALLBACK = (
 )
 _COMMITS_FALLBACK = (
     "Read only by an incremental poll of repository files, to date the files "
-    "that changed; on any error the poll still reads every file, undated."
+    "that changed; on an error the poll still reads every file, and the files "
+    "it could not date are compared by content hash."
 )
-# GitHub lists at most this many files on one page of a commit.
-_MAX_COMMIT_FILES_PER_PAGE = 300
 
 
 class BoundedGithubRetry(GithubRetry):
@@ -268,11 +268,6 @@ def _next_link(headers: dict[str, Any]) -> str | None:
 
 def _quote(value: str) -> str:
     return urllib.parse.quote(value, safe="")
-
-
-def _iso(value: datetime) -> str:
-    """A time as GitHub's ISO 8601 query parameters take it, in UTC."""
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _token_kind(token: str, scopes: list[str] | None) -> GitHubTokenKind:
@@ -673,18 +668,22 @@ class GitHubSourceOperations(SourceOperations):
         ref: str,
         since: datetime,
         limit: int,
-    ) -> list[str]:
-        """The SHAs of a branch's commits with a committer date from ``since``,
-        newest first (``GET /repos/{repo}/commits``). ``limit`` stops the
-        listing early."""
-        shas: list[str] = []
+    ) -> list[GitHubCommitRef]:
+        """A branch's commits with a committer date from ``since``, newest
+        first (``GET /repos/{repo}/commits``). ``limit`` stops the listing
+        early."""
+        commits: list[GitHubCommitRef] = []
         for raw, _next_url in self._paginate(
-            f"/repos/{repo_full_name}/commits", {"sha": ref, "since": _iso(since)}
+            f"/repos/{repo_full_name}/commits",
+            {"sha": ref, "since": utc_iso_timestamp(since)},
         ):
-            shas.append(str(raw["sha"]))
-            if len(shas) >= limit:
+            committer: Any = (raw.get("commit") or {}).get("committer") or {}
+            commits.append(
+                GitHubCommitRef(sha=raw["sha"], committed_at=committer.get("date"))
+            )
+            if len(commits) >= limit:
                 break
-        return shas
+        return commits
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -692,23 +691,17 @@ class GitHubSourceOperations(SourceOperations):
         untested=_COMMITS_FALLBACK,
     )
     @_translated
-    def get_commit_files(self, *, repo_full_name: str, sha: str) -> GitHubCommitFiles:
-        """The paths one commit changed, against its first parent
-        (``GET /repos/{repo}/commits/{sha}``). GitHub sends at most 300 files
-        per page; a commit with more is marked truncated."""
-        headers, data = self._get(f"/repos/{repo_full_name}/commits/{_quote(sha)}")
+    def get_commit_files(self, *, repo_full_name: str, sha: str) -> list[str]:
+        """The paths one commit added, modified or removed, a renamed file at
+        its new path (``GET /repos/{repo}/commits/{sha}``). Only the first
+        page: GitHub lists up to 300 files per page and links the rest."""
+        _headers, data = self._get(f"/repos/{repo_full_name}/commits/{_quote(sha)}")
         files: list[Any] = data.get("files") or []
-        return GitHubCommitFiles(
-            paths=[
-                str(file["filename"])
-                for file in files
-                if isinstance(file, dict) and file.get("filename")
-            ],
-            truncated=(
-                len(files) >= _MAX_COMMIT_FILES_PER_PAGE
-                or _next_link(headers) is not None
-            ),
-        )
+        return [
+            str(file["filename"])
+            for file in files
+            if isinstance(file, dict) and file.get("filename")
+        ]
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
