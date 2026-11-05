@@ -45,7 +45,7 @@ root            0.25rem gap inline; no gap stacked
 | `auxIcon`             | `"info-gray" \| "info-blue" \| "warning" \| "error"` | —        | A status icon beside the title: a 16px box with a 12px glyph at every title size, centred on the title line |
 | `badge`               | `BadgeProps & { tooltip?: string }`        | —                  | A badge beside the title                                                                            |
 | `role`                | `string`                                   | —                  | ARIA role on the title element                                                                      |
-| `moreIcon1`           | `IconFunctionComponent`                    | —                  | Stacked only: a small connector icon after the icon, in `text-03`                                   |
+| `moreIcon1`           | `IconFunctionComponent`                    | —                  | Stacked only: a connector icon after the icon, in `text-03`: a 20px box with a 16px glyph at every title size |
 | `moreIcon2`           | `IconFunctionComponent`                    | —                  | Stacked only: a peer of the icon, the same size                                                     |
 | `editable`            | `boolean`                                  | `false`            | Edit the title in place. Clicks on the title, pencil and field stay inside, so a clickable parent does not also fire. An empty edit keeps the old title |
 | `onTitleChange`       | `(newTitle: string) => void`               | —                  | Called with the new title when an edit is committed                                                 |

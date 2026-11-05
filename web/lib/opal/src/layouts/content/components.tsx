@@ -177,7 +177,7 @@ type ContentFontProps =
   | ({
       font: ContentHeadingFont;
       orientation: "stacked";
-      /** A small connector icon after the icon, in `text-03`. */
+      /** A connector icon after the icon: 20px box, 16px glyph, `text-03`. */
       moreIcon1?: IconFunctionComponent;
       /** A peer of the icon, the same size, after `moreIcon1`. */
       moreIcon2?: IconFunctionComponent;
