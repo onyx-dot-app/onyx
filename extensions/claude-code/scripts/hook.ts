@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -93,16 +94,21 @@ function statePath(sessionId: string): string {
   return join(stateDir(), `${safeId}.json`);
 }
 
-function readState(sessionId: string): SessionState {
+// null means no usable state. The gate treats that as unknown and stays open,
+// so broken storage never blocks the user.
+function readState(sessionId: string): SessionState | null {
   try {
     return JSON.parse(readFileSync(statePath(sessionId), "utf8")) as SessionState;
   } catch {
-    return { consulted: false };
+    return null;
   }
 }
 
+// Write then rename so a concurrent reader never sees a partial file.
 function writeState(sessionId: string, state: SessionState): void {
-  writeFileSync(statePath(sessionId), JSON.stringify(state));
+  const path = statePath(sessionId);
+  writeFileSync(`${path}.tmp`, JSON.stringify(state));
+  renameSync(`${path}.tmp`, path);
 }
 
 // Best effort: another session may prune the same file at the same time.
@@ -123,6 +129,10 @@ function pruneStaleState(): void {
 
 function emit(output: object): void {
   process.stdout.write(JSON.stringify(output));
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : "Error";
 }
 
 function shouldSearch(prompt: string): boolean {
@@ -154,6 +164,8 @@ async function search(
         retrieval_only: true,
       }),
       signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+      // A redirect would carry the prompt to another origin.
+      redirect: "manual",
     });
     if (!response.ok) {
       console.error(`onyx plugin: search returned HTTP ${response.status}`);
@@ -161,7 +173,8 @@ async function search(
     }
     return ((await response.json()) as SearchResponse).results;
   } catch (err) {
-    console.error(`onyx plugin: search request failed: ${String(err)}`);
+    // Only the error name: a fetch error message can quote request headers.
+    console.error(`onyx plugin: search request failed (${errorName(err)})`);
     return null;
   }
 }
@@ -226,7 +239,8 @@ function preTool(input: HookInput, config: PluginConfig): void {
   if (!config.strict || !isOtherRetrievalTool(tool)) {
     return;
   }
-  if (readState(input.session_id).consulted) {
+  const state = readState(input.session_id);
+  if (!state || state.consulted) {
     return;
   }
   emit({
@@ -266,5 +280,5 @@ async function main(): Promise<void> {
 try {
   await main();
 } catch (err) {
-  console.error(`onyx plugin: hook failed: ${String(err)}`);
+  console.error(`onyx plugin: hook failed (${errorName(err)})`);
 }
