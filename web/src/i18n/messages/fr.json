@@ -3213,7 +3213,7 @@
           "unknownDocument": "Document inconnu",
           "empty": "Aucun document en échec",
           "loadError": "Impossible de charger les éléments en échec.",
-          "openDocument": "Ouvrir le document",
+          "open": "Ouvrir le document",
           "resolvedGroup": "Erreurs résolues",
           "resolvedWithoutRetry": "Résolu sans relance",
           "resolvedByLaterRun": "Résolu par une exécution ultérieure"

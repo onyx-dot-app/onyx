@@ -3213,7 +3213,7 @@
           "unknownDocument": "Unknown document",
           "empty": "No failed documents",
           "loadError": "Couldn't load the failed items.",
-          "openDocument": "Open Document",
+          "open": "Open Document",
           "resolvedGroup": "Resolved Errors",
           "resolvedWithoutRetry": "Resolved without Retry",
           "resolvedByLaterRun": "Resolved by Later Run"

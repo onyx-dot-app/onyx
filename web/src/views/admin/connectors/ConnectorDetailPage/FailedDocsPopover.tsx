@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { Fragment, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@opal/components";
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
+import { useNavigation } from "@opal/navigation";
 import { LineLoader } from "@opal/loaders";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import {
@@ -65,16 +67,17 @@ function errorKey(error: IndexAttemptError): number {
 }
 
 /** The Indexing tab at one index run. The page reads `run=<id>` with `run_kind=<kind>`, indexing when absent, because attempt ids are unique only per kind. */
-function indexRunHref(ccPairId: number, attemptId: number): string {
-  return `/admin/connector/${ccPairId}?tab=indexing&run=${attemptId}&run_kind=indexing`;
+function indexRunHref(ccPairId: number, attemptId: number): Route {
+  // SAFETY: /admin/connector/[id] is a page. Typed routes do not type the query string.
+  return `/admin/connector/${ccPairId}?tab=indexing&run=${attemptId}&run_kind=indexing` as Route;
 }
 
 interface RowIconButtonProps {
   icon: IconFunctionComponent;
   /** The tooltip and the accessible name. */
   label: string;
-  onClick?: () => void;
-  href?: string;
+  onClick?: React.MouseEventHandler<HTMLElement>;
+  href?: Route;
   disabled?: boolean;
 }
 
@@ -112,6 +115,7 @@ function FailedDocActions({
   onResolveWithoutRetry,
 }: FailedDocActionsProps) {
   const t = useTranslations("admin.connector.activity");
+  const navigation = useNavigation();
   // Only a document can be re-fetched. An entity-level error has nothing to target.
   const canRetryDoc = canRetry && error.document_id !== null;
   const retry = canRetryDoc && (
@@ -172,7 +176,7 @@ function FailedDocActions({
           <RowIconButton
             icon={SvgExternalLink}
             label={t("docs.resolvedByLaterRun")}
-            href={indexRunHref(ccPairId, closingRun)}
+            {...navigation.linkTo(indexRunHref(ccPairId, closingRun))}
           />
         </Section>
       );
@@ -246,8 +250,8 @@ function FailedDocIdentity({ error }: { error: IndexAttemptError }) {
           size="2xs"
           href={error.document_link}
           target="_blank"
-          aria-label={t("openDocument")}
-          tooltip={t("openDocument")}
+          aria-label={t("open")}
+          tooltip={t("open")}
         />
       )}
     </Section>

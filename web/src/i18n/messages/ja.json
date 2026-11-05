@@ -3213,7 +3213,7 @@
           "unknownDocument": "不明なドキュメント",
           "empty": "失敗したドキュメントはありません",
           "loadError": "失敗した項目を読み込めませんでした。",
-          "openDocument": "ドキュメントを開く",
+          "open": "ドキュメントを開く",
           "resolvedGroup": "解決済みのエラー",
           "resolvedWithoutRetry": "再試行せずに解決済み",
           "resolvedByLaterRun": "後続の実行で解決済み"

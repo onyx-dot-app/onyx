@@ -3213,7 +3213,7 @@
           "unknownDocument": "مستند غير معروف",
           "empty": "لا توجد مستندات فاشلة",
           "loadError": "تعذر تحميل العناصر الفاشلة.",
-          "openDocument": "فتح المستند",
+          "open": "فتح المستند",
           "resolvedGroup": "الأخطاء التي تم حلها",
           "resolvedWithoutRetry": "تم الحل دون إعادة المحاولة",
           "resolvedByLaterRun": "تم الحل في تشغيل لاحق"

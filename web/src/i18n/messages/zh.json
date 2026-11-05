@@ -3213,7 +3213,7 @@
           "unknownDocument": "未知文档",
           "empty": "没有失败的文档",
           "loadError": "无法加载失败的项目。",
-          "openDocument": "打开文档",
+          "open": "打开文档",
           "resolvedGroup": "已解决的错误",
           "resolvedWithoutRetry": "已解决但未重试",
           "resolvedByLaterRun": "已由后续运行解决"
