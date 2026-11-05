@@ -117,8 +117,8 @@ check_for_port / run_port_attempt          tasks/port/tasks.py
 check_and_perform_index_swap               db/swap_index.py, run by check_for_indexing
   INSTANT: swap at once, the port keeps filling the live index
   REINDEX / ACTIVE_ONLY: swap when _port_swap_ready
-_clear_what_future_missed: hashes PRESENT wrote after FUTURE's last poll -> NULL
-_perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit (clear repeated)
+_perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit, and in it
+  _clear_what_future_missed: hashes PRESENT wrote after FUTURE's last poll -> NULL
 check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
   PENDING -> SOAKING -> DELETING -> RECLAIMED (row kept), or BLOCKED
 ```
@@ -208,7 +208,7 @@ it deletes the old one.
    `db/swap_index.py:_perform_index_swap` uses
    `db/search_settings.py:update_search_settings_status__no_commit` twice and
    one commit. Two commits leave a moment with no PRESENT row, and
-   `get_current_search_settings` raises. The second clear pass of
+   `get_current_search_settings` raises. The clear pass of
    [[#swap-clears-what-future-missed]] runs in that same transaction, after the
    two status updates.
 10. `swap-clears-what-future-missed` **The swap clears what FUTURE may lack
@@ -221,12 +221,13 @@ it deletes the old one.
    successful poll end minus the poll overlap; the reindex start when FUTURE
    never polled), nulls the hash of documents with an `IndexAttemptError` on a
    FUTURE attempt, and turns `secondary_only_sync_pending` into a plain
-   needs-sync. It runs as a bulk pass before the flip and again inside the
-   flip's transaction with `FOR UPDATE SKIP LOCKED`: a batch locks its document
+   needs-sync. It runs inside the flip's transaction with `FOR UPDATE SKIP
+   LOCKED`, and once more right after the commit. A batch locks its document
    rows first and takes the settings share lock only at its stamp, so the flip
-   waits for stamps in flight, the second pass catches stamps that landed after
-   the bulk pass, and a row a batch still holds is skipped, never waited for
-   (that batch reads PAST and stamps nothing). Accepted: about one poll period
+   waits for every stamp in flight and the in-flip pass sees them all; a row a
+   batch still holds is skipped, never waited for (waiting could deadlock with
+   that batch, which reads PAST and stamps nothing), and the pass after the
+   commit clears it. Accepted: about one poll period
    of lag after the swap; documents a FUTURE attempt failed on need Retry; a
    load-only connector needs a manual run.
 11. `reclaim-forward-only` **Reclaim moves forward one step at a time.** Each

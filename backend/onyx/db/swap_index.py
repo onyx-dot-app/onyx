@@ -82,8 +82,9 @@ def _perform_index_swap(
 ) -> SearchSettings | None:
     """Swap the indices and expire the old one.
 
-    `clear_for_cc_pairs` (the non-INSTANT port flow) runs the second clear pass
-    inside the flip's transaction; see _clear_what_future_missed__no_commit.
+    `clear_for_cc_pairs` (the non-INSTANT port flow) clears what FUTURE may
+    lack inside the flip's transaction and once more right after the commit;
+    see _clear_what_future_missed__no_commit.
 
     Returns the old search settings if the swap was successful, otherwise None.
     """
@@ -140,14 +141,21 @@ def _perform_index_swap(
         db_session=db_session,
     )
     if clear_for_cc_pairs:
-        # Second pass, after the status updates. By now every stamp that was in
-        # flight has committed, so this catches the ones the bulk pass missed.
-        # A row still locked belongs to a batch that has not stamped yet; it
-        # will read PAST and stamp nothing, so skip it instead of waiting.
+        # After the status updates, in the same transaction: every stamp that
+        # was in flight has committed by now, and a row still locked belongs to
+        # a batch that will read PAST and stamp nothing, so skip it rather
+        # than wait (waiting here could deadlock with that batch).
         _clear_what_future_missed__no_commit(
             db_session, new_search_settings, clear_for_cc_pairs, skip_locked=True
         )
     db_session.commit()
+    if clear_for_cc_pairs:
+        # Once more after the commit, for the rows that were skipped: they are
+        # free now, and nothing can stamp into the old index anymore.
+        _clear_what_future_missed__no_commit(
+            db_session, new_search_settings, clear_for_cc_pairs, skip_locked=False
+        )
+        db_session.commit()
 
     # FUTURE is now live: cancel stragglers that dropped out of the required set
     # (paused/INVALID) so they stop writing into the live index. Skip for INSTANT —
@@ -388,9 +396,9 @@ def _clear_what_future_missed__no_commit(
     last successful poll (the bound comes from onyx.db.reindex_clear) and of
     documents a FUTURE attempt failed on; a NULL hash never matches. Turns the
     deferred-sync flags into a plain needs-sync so the new index gets their
-    permissions. Runs twice: a bulk pass before the status flip, and a short
-    pass inside the flip's transaction with `skip_locked` for stamps that
-    landed in between. Caller commits."""
+    permissions. Runs inside the flip's transaction with `skip_locked`, and
+    once more after the commit for the rows that had to be skipped. Caller
+    commits."""
     bounds = get_pair_clear_bounds(
         db_session, new_search_settings, [cc_pair.id for cc_pair in required_cc_pairs]
     )
@@ -537,12 +545,6 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         if _port_swap_ready(
             db_session, new_search_settings, required_cc_pairs, required_user_ids
         ):
-            # First pass, committed on its own so the flip's transaction stays
-            # short. The flip runs a second, small pass for late stamps.
-            _clear_what_future_missed__no_commit(
-                db_session, new_search_settings, required_cc_pairs, skip_locked=False
-            )
-            db_session.commit()
             return _perform_index_swap(
                 db_session=db_session,
                 new_search_settings=new_search_settings,
