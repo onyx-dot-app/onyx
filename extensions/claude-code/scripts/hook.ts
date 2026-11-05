@@ -12,7 +12,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// The raw route makes no LLM call, so it answers within the prefetch budget.
+// The raw route makes no LLM call, so it is the only route fast enough for the prefetch budget.
 const SEARCH_PATH = "/api/search/raw";
 const SEARCH_TIMEOUT_MS = 3_000;
 // /api/search/raw rejects longer queries.
@@ -27,8 +27,7 @@ const STATE_TTL_MS = 24 * 60 * 60 * 1000;
 const OWN_TOOL_PREFIX = "mcp__plugin_onyx_";
 const RETRIEVAL_TOOL_PATTERN = /search|query|retriev|lookup|find|fetch/i;
 const FULL_SEARCH_CALL = "search_indexed_documents on the Onyx MCP server";
-// Injected with every question prompt. Steering costs nothing per prompt, so
-// Onyx is considered first without a search before Claude starts.
+// No network call, so it is the default and the fallback when a prefetch fails.
 const STEER_CONTEXT =
   "Onyx holds this organization's knowledge base. For anything that may depend on " +
   "company documents, people, decisions, processes, customers or internal systems, " +
@@ -47,7 +46,7 @@ const NO_RESULTS_CONTEXT =
   `Call ${FULL_SEARCH_CALL} before answering from any other source.`;
 const STOP_FEEDBACK =
   "This turn answered after Onyx raw retrieval only. If the answer relies on " +
-  `company knowledge beyond the injected sections, call ${FULL_SEARCH_CALL} now and revise. ` +
+  `company knowledge beyond what the prefetch returned, call ${FULL_SEARCH_CALL} now and revise. ` +
   "Otherwise finish.";
 
 type HookInput = {
@@ -77,8 +76,9 @@ type PluginConfig = {
   prefetch: boolean;
 };
 
-// consulted: Onyx answered for this prompt, so other retrieval tools may run.
-// awaitingFullSearch: prefetched sections were injected and the full tool has not run.
+// consulted: the strict gate is open for this prompt. Set by a full search,
+// any HTTP response to a prefetch, or a prompt with nothing to retrieve.
+// awaitingFullSearch: a prefetch returned and the full tool has not run.
 type SessionState = {
   consulted: boolean;
   awaitingFullSearch: boolean;
@@ -210,7 +210,11 @@ async function search(
       return { consulted: true, results: null };
     }
     const payload = (await response.json()) as SearchResponse;
-    return { consulted: true, results: payload.results };
+    // A body without results is a server fault, not an empty search.
+    return {
+      consulted: true,
+      results: Array.isArray(payload.results) ? payload.results : null,
+    };
   } catch (err) {
     // Only the error name: a fetch error message can quote request headers.
     console.error(`onyx plugin: search request failed (${errorName(err)})`);
@@ -218,7 +222,13 @@ async function search(
   }
 }
 
-function formatContext(results: SearchResult[]): string {
+function prefetchContext(results: SearchResult[] | null): string {
+  if (!results) {
+    return STEER_CONTEXT;
+  }
+  if (!results.length) {
+    return NO_RESULTS_CONTEXT;
+  }
   const sections = [CONTEXT_HEADER];
   let used = CONTEXT_HEADER.length;
   for (const [index, result] of results.slice(0, MAX_RESULTS).entries()) {
@@ -262,14 +272,7 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
     consulted,
     awaitingFullSearch: results !== null,
   });
-  if (!results) {
-    emitContext("UserPromptSubmit", STEER_CONTEXT);
-    return;
-  }
-  emitContext(
-    "UserPromptSubmit",
-    results.length ? formatContext(results) : NO_RESULTS_CONTEXT,
-  );
+  emitContext("UserPromptSubmit", prefetchContext(results));
 }
 
 function isOtherRetrievalTool(tool: string): boolean {

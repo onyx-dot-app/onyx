@@ -2,7 +2,7 @@
 
 The plugin makes Onyx the first source of context in every Claude Code session. It does three things:
 
-- **Steers every prompt to Onyx.** A `UserPromptSubmit` hook adds a short directive to each question prompt: call `search_indexed_documents` before answering anything that may depend on company knowledge, and before any other search tool. No network call is involved, so the prompt is never delayed and nothing else installed can outrank it.
+- **Steers every prompt to Onyx.** A `UserPromptSubmit` hook adds a short directive to each question prompt: call `search_indexed_documents` before answering anything that may depend on company knowledge, and before any other search tool. No network call is involved, so the prompt is never delayed. Strict retrieval, below, is what keeps other tools from running first.
 - **Connects the Onyx MCP server.** The `search_indexed_documents`, `search_web` and `open_urls` tools are loaded at session start, not deferred, and the server's own instructions say when to call them.
 - **Optionally gates other retrieval tools.** With strict retrieval on, a `PreToolUse` hook denies other servers' search tools and web search until Onyx has been consulted for the current prompt.
 
@@ -36,14 +36,14 @@ Organizations can require the plugin on every machine through managed settings. 
 
 ## How the prompt hook works
 
-For each submitted prompt the hook injects one directive as additional context: Onyx holds the organization's knowledge base, so call `search_indexed_documents` before answering anything that may depend on company documents, people, decisions, processes, customers or internal systems, and before any other search tool or web search, and cite the url of each result. It skips slash commands and prompts shorter than 15 characters. Claude decides when the question needs Onyx, and the full search pipeline, with LLM selection and context expansion, runs only then.
+For each submitted prompt the hook injects one directive as additional context: Onyx holds the organization's knowledge base, so call `search_indexed_documents` before answering anything that may depend on company documents, people, decisions, processes, customers or internal systems, and before any other search tool or web search, and cite the url of each result. It skips slash commands, prompts shorter than 15 characters and prompts with no letters. Claude decides when the question needs Onyx, and the full search pipeline, with LLM selection and context expansion, runs only then.
 
 ## Strict retrieval
 
 Strict retrieval is for teams that want Onyx consulted before any other knowledge source, every time. When it is on:
 
 - Other MCP servers' tools whose names contain `search`, `query`, `retrieve`, `lookup`, `find` or `fetch`, and the built-in `WebSearch` tool, are denied until Onyx has been consulted for the current prompt.
-- A call to `search_indexed_documents` counts as consulting Onyx. So does a prefetch that returned.
+- A call to `search_indexed_documents` counts as consulting Onyx. So does any HTTP response to a prefetch, even an error status, so a wrong URL or an old server never locks the gate. A prefetch that times out or cannot connect does not count.
 - Prompts the hook skips, such as slash commands, do not gate anything.
 - The denial reason tells Claude to call `search_indexed_documents` first.
 
@@ -55,7 +55,7 @@ With prefetch on, the hook posts each question prompt to `POST /api/search/raw`,
 
 The request has a 3 second budget inside a 5 second hook timeout. A search that fails or times out injects the plain directive instead and never blocks the prompt. Each prompt is sent to your Onyx server, and results are filtered by your Onyx document permissions, the same as in the Onyx chat. The raw route needs an Onyx server that has it, and an older server returns 404, which the hook treats as a failed search.
 
-With strict retrieval also on, a question turn that ends on prefetched sections alone gets one `Stop` hook instruction: if the answer relies on company knowledge beyond the injected sections, run the full search now and revise. The hook skips the continuation Claude Code marks as stop-hook driven, so it nudges once per turn.
+With strict retrieval also on, a question turn that ends on the prefetch alone gets one `Stop` hook instruction: if the answer relies on company knowledge beyond what the prefetch returned, run the full search now and revise. The hook skips the continuation Claude Code marks as stop-hook driven, so it nudges once per turn.
 
 ## Files
 

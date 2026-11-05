@@ -35,7 +35,7 @@
   been consulted. With prefetch on the hook posts the prompt to
   `/api/search/raw` and injects the top sections with rules for when the full
   search tool is still worth a call, and with strict retrieval nudges one when
-  a question turn ends on prefetched sections alone.
+  a question turn ends on the prefetch alone.
   `extensions/claude-code/README.md` is the user-facing description.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key
   gets a 401 for every rejection, including an API server outage. An OAuth

@@ -20,7 +20,7 @@
     "onyx_api_token": {
       "type": "string",
       "title": "Onyx API token",
-      "description": "A personal access token or API key with the read:search scope",
+      "description": "A personal access token with the read:search scope",
       "sensitive": true,
       "required": true
     },
