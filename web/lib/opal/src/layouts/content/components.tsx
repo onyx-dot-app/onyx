@@ -149,7 +149,7 @@ type NoMoreIcons = { moreIcon1?: never; moreIcon2?: never };
  * - `main-ui-*`, `main-content-*`, `secondary-*`: `suffix`, `auxIcon` and
  *   `badge` beside the title.
  * - `heading-*`: `moreIcon1` / `moreIcon2` in the icon row, when stacked.
- * - mono and figure fonts: neither.
+ * - `figure-*`: neither, and no description (smaller than `secondary`).
  */
 type ContentFontProps =
   | ({
@@ -188,8 +188,11 @@ type ContentFontProps =
     } & NoExtras &
       NoMoreIcons)
   | ({
-      font: Exclude<TextFont, ContentExtrasFont | ContentHeadingFont>;
+      /** Figure titles are smaller than `secondary`: no description. */
+      font: Extract<TextFont, `figure-${string}`>;
       orientation?: ContentOrientation;
+      description?: never;
+      descriptionMaxLines?: never;
     } & NoExtras &
       NoMoreIcons);
 
