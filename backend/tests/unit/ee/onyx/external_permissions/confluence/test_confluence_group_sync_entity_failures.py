@@ -124,8 +124,9 @@ def test_onyx_users_variant_skips_and_reports_a_failing_user() -> None:
         patch.object(group_sync, "get_session_with_current_tenant"),
         patch.object(group_sync, "get_all_users", return_value=onyx_users),
     ):
-        group_member_emails, failures = (
-            group_sync._build_group_member_email_map_from_onyx_users(source_operations)
+        failures: list[SyncEntityFailure] = []
+        group_member_emails = group_sync._build_group_member_email_map_from_onyx_users(
+            source_operations, failures
         )
 
     assert group_member_emails == {"engineering": {"alice@a.com"}}
@@ -161,8 +162,9 @@ def test_failed_server_email_lookup_is_reported() -> None:
     source_operations.get_listed_user_email.return_value = None
     source_operations.list_user_groups.return_value = [{"name": "engineering"}]
 
-    group_member_emails, failures = group_sync._build_group_member_email_map(
-        source_operations, cc_pair_id=1
+    failures: list[SyncEntityFailure] = []
+    group_member_emails = group_sync._build_group_member_email_map(
+        source_operations, cc_pair_id=1, failures=failures
     )
 
     assert group_member_emails == {"engineering": {"alice@a.com", "carol@a.com"}}
@@ -172,7 +174,9 @@ def test_failed_server_email_lookup_is_reported() -> None:
 
     source_operations.list_users.return_value = [users[1], users[1], _user("carol")]
     with pytest.raises(RuntimeError, match="Too many failed user group fetches"):
-        group_sync._build_group_member_email_map(source_operations, cc_pair_id=1)
+        group_sync._build_group_member_email_map(
+            source_operations, cc_pair_id=1, failures=[]
+        )
 
 
 def test_onyx_users_fallback_recovers_users_the_listing_could_not_read() -> None:
@@ -200,10 +204,9 @@ def test_onyx_users_fallback_recovers_users_the_listing_could_not_read() -> None
         patch.object(group_sync, "get_session_with_current_tenant"),
         patch.object(group_sync, "get_all_users", return_value=onyx_users),
     ):
-        group_member_emails, failures = (
-            group_sync._build_final_group_to_member_email_map(
-                source_operations, cc_pair_id=1, use_onyx_users=True
-            )
+        failures: list[SyncEntityFailure] = []
+        group_member_emails = group_sync._build_final_group_to_member_email_map(
+            source_operations, cc_pair_id=1, failures=failures, use_onyx_users=True
         )
 
     assert group_member_emails == {"engineering": {"alice@a.com", "bob@a.com"}}
@@ -211,3 +214,40 @@ def test_onyx_users_fallback_recovers_users_the_listing_could_not_read() -> None
         (SyncEntityKind.USER, "key-alice"),
         (SyncEntityKind.USER, "key-bob"),
     ]
+
+
+def test_failed_listing_page_still_reports_the_users_already_failed() -> None:
+    """A user list that raises on a later page fails the sync, after the users
+    whose groups already failed are reported."""
+
+    def _list_users(variant: Any) -> Iterator[ConfluenceUser]:  # noqa: ARG001
+        yield _user("alice")
+        yield _user("bob")
+        raise RuntimeError("user list page 2 returned 500")
+
+    def _list_user_groups(user_id: str) -> Iterator[dict[str, Any]]:
+        if user_id == "bob":
+            raise RuntimeError("429 retries exhausted")
+        yield {"name": "engineering"}
+
+    source_operations = MagicMock()
+    source_operations.list_users.side_effect = _list_users
+    source_operations.list_user_groups.side_effect = _list_user_groups
+    cc_pair = MagicMock()
+    cc_pair.connector.connector_specific_config = {"is_cloud": True}
+    reported: list[ExternalUserGroup | SyncEntityFailure] = []
+    with (
+        patch.object(group_sync, "OnyxDBCredentialsProvider"),
+        patch.object(
+            group_sync,
+            "build_probed_confluence_gateway",
+            return_value=source_operations,
+        ),
+        pytest.raises(RuntimeError, match="user list page 2 returned 500"),
+    ):
+        reported.extend(group_sync.confluence_group_sync("tenant", cc_pair))
+
+    assert [
+        (item.kind, item.id) for item in reported if isinstance(item, SyncEntityFailure)
+    ] == [(SyncEntityKind.USER, "bob")]
+    assert not any(isinstance(item, ExternalUserGroup) for item in reported)

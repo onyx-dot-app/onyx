@@ -21,24 +21,18 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class _TooManyFailedUsersError(RuntimeError):
-    """Carries the collected failures so the sync reports them before failing."""
-
-    def __init__(self, failures: list[SyncEntityFailure]) -> None:
-        super().__init__("Too many failed user group fetches during group sync")
-        self.failures = failures
-
-
 def _build_group_member_email_map(
     source_operations: ConfluenceSourceOperations,
     cc_pair_id: int,
+    failures: list[SyncEntityFailure],
     cap_failures: bool = True,
-) -> tuple[dict[str, set[str]], list[SyncEntityFailure]]:
-    """A user whose groups cannot be read is left out of every group. The cap
+) -> dict[str, set[str]]:
+    """A user whose groups cannot be read is left out of every group and added
+    to ``failures``, which the caller owns so a later raise keeps them. The cap
     is off while the Onyx-users fallback runs, since it reads users this
     listing could not."""
     group_member_emails: dict[str, set[str]] = {}
-    failures: list[SyncEntityFailure] = []
+    failed_before = len(failures)
     listed_user_count: int = 0
     for user in source_operations.list_users(
         variant=user_list_variant(source_operations)
@@ -107,20 +101,22 @@ def _build_group_member_email_map(
                 "Found groups %s for user with email %s", all_users_groups, email
             )
 
-    if cap_failures and len(failures) > MAX_FAILED_ENTITY_FRACTION * listed_user_count:
-        raise _TooManyFailedUsersError(failures)
+    failed_users = len(failures) - failed_before
+    if cap_failures and failed_users > MAX_FAILED_ENTITY_FRACTION * listed_user_count:
+        raise RuntimeError("Too many failed user group fetches during group sync")
 
     if not group_member_emails:
         msg = "No groups found for any users."
         emit_background_error(msg, cc_pair_id=cc_pair_id)
         logger.error(msg)
 
-    return group_member_emails, failures
+    return group_member_emails
 
 
 def _build_group_member_email_map_from_onyx_users(
     source_operations: ConfluenceSourceOperations,
-) -> tuple[dict[str, set[str]], list[SyncEntityFailure]]:
+    failures: list[SyncEntityFailure],
+) -> dict[str, set[str]]:
     """Hacky, but it's the only way to do this as long as the
     Confluence APIs are broken.
 
@@ -139,7 +135,6 @@ def _build_group_member_email_map_from_onyx_users(
         return email.split("@")[0]
 
     group_member_emails: dict[str, set[str]] = {}
-    failures: list[SyncEntityFailure] = []
     for email in user_emails:
         logger.info("Processing groups for user with email: %s", email)
         try:
@@ -171,30 +166,32 @@ def _build_group_member_email_map_from_onyx_users(
                 "Found groups %s for user with email %s", all_users_groups, email
             )
 
-    return group_member_emails, failures
+    return group_member_emails
 
 
 def _build_final_group_to_member_email_map(
     source_operations: ConfluenceSourceOperations,
     cc_pair_id: int,
+    failures: list[SyncEntityFailure],
     # if set, will infer confluence usernames from onyx users in addition to using the
     # confluence users API. This is a hacky workaround for the fact that the Confluence
     # users API is broken before Confluence Data Center 10.1.0.
     use_onyx_users: bool = CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC,
-) -> tuple[dict[str, set[str]], list[SyncEntityFailure]]:
-    group_to_member_email_map, failures = _build_group_member_email_map(
+) -> dict[str, set[str]]:
+    group_to_member_email_map = _build_group_member_email_map(
         source_operations=source_operations,
         cc_pair_id=cc_pair_id,
+        failures=failures,
         cap_failures=not use_onyx_users,
     )
     group_to_member_email_map_from_onyx_users: dict[str, set[str]] = {}
     if use_onyx_users:
-        group_to_member_email_map_from_onyx_users, onyx_user_failures = (
+        group_to_member_email_map_from_onyx_users = (
             _build_group_member_email_map_from_onyx_users(
                 source_operations=source_operations,
+                failures=failures,
             )
         )
-        failures.extend(onyx_user_failures)
 
     all_group_ids = set(group_to_member_email_map.keys()) | set(
         group_to_member_email_map_from_onyx_users.keys()
@@ -206,7 +203,7 @@ def _build_final_group_to_member_email_map(
         ) | group_to_member_email_map_from_onyx_users.get(group_id, set())
         final_group_to_member_email_map[group_id] = group_member_emails
 
-    return final_group_to_member_email_map, failures
+    return final_group_to_member_email_map
 
 
 def confluence_group_sync(
@@ -221,12 +218,14 @@ def confluence_group_sync(
         connector_specific_config=cc_pair.connector.connector_specific_config,
     )
 
+    failures: list[SyncEntityFailure] = []
     try:
-        group_to_member_email_map, failures = _build_final_group_to_member_email_map(
-            source_operations, cc_pair.id
+        group_to_member_email_map = _build_final_group_to_member_email_map(
+            source_operations, cc_pair.id, failures
         )
-    except _TooManyFailedUsersError as e:
-        yield from e.failures
+    except Exception:
+        # The cap or a failed listing page still reports the users read so far.
+        yield from failures
         raise
     yield from failures
 
