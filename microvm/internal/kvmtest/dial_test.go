@@ -21,7 +21,6 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
-	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
@@ -85,7 +84,7 @@ func dialOnce(ctx context.Context, c pb.HostAgentClient, sandboxID string, port 
 func TestDialKVM(t *testing.T) {
 	e := loadEnv()
 	cmd := newCommand(t, e)
-	buildTemplate(t, e, cmd)
+	buildTemplate(t, &e, cmd)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -94,7 +93,7 @@ func TestDialKVM(t *testing.T) {
 	m := agent.NewManager(agent.Config{MinFreeMemMiB: 2048, MinFreeDiskBytes: 10 * uint64(scratch.GiB), MaxScratchGiB: 100,
 		StartTimeout: time.Minute, StopTimeout: 30 * time.Second, TombstoneTTL: time.Hour},
 		&template.Store{Dir: filepath.Join(e.DataDir, "templates")}, &fcvm.Launcher{Cmd: cmd, Log: log},
-		hostinfo.Stats{DataDir: e.DataDir}, uids, agent.Versions{Firecracker: binaries.FirecrackerVersion}, log)
+		hostinfo.Stats{DataDir: e.DataDir}, uids, kvmVersions(t, e), log)
 	certs, err := testcerts.Write(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

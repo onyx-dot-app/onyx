@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -109,17 +110,8 @@ type fixture struct {
 func newFixture(t *testing.T, uidCount uint32) *fixture {
 	t.Helper()
 	dir := t.TempDir()
-	tdir := filepath.Join(dir, "tpl-1")
-	if err := os.MkdirAll(tdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range []string{template.RootfsFile, template.ScratchFile, template.VMStateFile, template.MemFile} {
-		if err := os.WriteFile(filepath.Join(tdir, f), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := template.WriteManifest(tdir, template.Manifest{
-		Version: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, GuestKernel: "6.18.25", FirecrackerVersion: "v1.17.0",
+	if _, err := template.WriteFake(dir, "tpl-1", template.Key{
+		VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, GuestKernel: "6.18.25", FirecrackerVersion: "v1.17.0",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -302,6 +294,71 @@ func TestTemplateFirecrackerVersion(t *testing.T) {
 	f.m.versions.Firecracker = "v1.18.0"
 	_, _, err := f.m.Create(context.Background(), req(sb1, 1))
 	wantReason(t, err, pb.ErrorReason_TEMPLATE_INCOMPATIBLE)
+}
+
+// Firecracker checks nothing on a snapshot load, so Create refuses a template
+// whose key does not fit the node, or whose files changed, before it launches.
+func TestTemplateCheckedBeforeEveryRestore(t *testing.T) {
+	ctx := context.Background()
+	for name, change := range map[string]func(f *fixture){
+		"cpu model":    func(f *fixture) { f.m.versions.CPUModel = "Other CPU" },
+		"host kernel":  func(f *fixture) { f.m.versions.HostKernel = "6.19.0" },
+		"guest kernel": func(f *fixture) { f.m.versions.GuestKernelSHA256 = strings.Repeat("a", 64) },
+		"egress CA":    func(f *fixture) { f.m.versions.EgressCAFingerprint = strings.Repeat("b", 64) },
+		"tampered mem": func(f *fixture) {
+			p := filepath.Join(f.m.templates.Dir, "tpl-1", template.MemFile)
+			if err := os.WriteFile(p, []byte("not the snapshot"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, 10)
+			// A first Create caches the verified file state.
+			if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
+				t.Fatal(err)
+			}
+			change(f)
+			_, _, err := f.m.Create(ctx, req(sb2, 1))
+			wantReason(t, err, pb.ErrorReason_TEMPLATE_INCOMPATIBLE)
+			if f.l.count() != 1 {
+				t.Fatalf("launches %d, want 1 (the refused Create must not launch)", f.l.count())
+			}
+		})
+	}
+}
+
+func TestTemplatesInUseAndBuildSlot(t *testing.T) {
+	f := newFixture(t, 2)
+	ctx := context.Background()
+	if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if in := f.m.TemplatesInUse(); !in["tpl-1"] || len(in) != 1 {
+		t.Fatalf("in use %v", in)
+	}
+	uid, done, err := f.m.BuildSlot("tpl-abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.m.BuildSlot("tpl-abc"); err == nil {
+		t.Fatal("second build slot for the same id")
+	}
+	// The pool has 2 UIDs: one VM and one build.
+	_, _, err = f.m.Create(ctx, req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	done(false)
+	if !f.uids.Reserve(uid) {
+		t.Fatalf("build UID %d was not freed", uid)
+	}
+	f.uids.Put(uid)
+	_, done2, err := f.m.BuildSlot("tpl-def")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done2(true) // the build VM may still run: its UID stays reserved
+	_, _, err = f.m.Create(ctx, req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
 }
 
 func TestLaunchFailureReleasesSlot(t *testing.T) {

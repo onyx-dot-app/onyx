@@ -34,7 +34,9 @@ const (
 	// vcpus or mem_mib differ from the template. A snapshot restore keeps the
 	// template's shape.
 	ErrorReason_TEMPLATE_SHAPE_MISMATCH ErrorReason = 3
-	// The template was built with a different Firecracker version.
+	// The template does not fit this node (layout version, Firecracker
+	// version, CPU model, host kernel, guest kernel or egress CA), or a
+	// template file does not match the SHA256 in its manifest.
 	ErrorReason_TEMPLATE_INCOMPATIBLE ErrorReason = 4
 	// scratch_gib is smaller than the template's scratch disk. The scratch
 	// disk can only grow.
@@ -1042,8 +1044,19 @@ type TemplateInfo struct {
 	// Guest kernel release.
 	GuestKernel        string `protobuf:"bytes,5,opt,name=guest_kernel,json=guestKernel,proto3" json:"guest_kernel,omitempty"`
 	FirecrackerVersion string `protobuf:"bytes,6,opt,name=firecracker_version,json=firecrackerVersion,proto3" json:"firecracker_version,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Source image of the root drive, for example "onyxdotapp/sandbox:v5.1.0".
+	ImageRef     string `protobuf:"bytes,7,opt,name=image_ref,json=imageRef,proto3" json:"image_ref,omitempty"`
+	ImageDigest  string `protobuf:"bytes,8,opt,name=image_digest,json=imageDigest,proto3" json:"image_digest,omitempty"`
+	RootfsSha256 string `protobuf:"bytes,9,opt,name=rootfs_sha256,json=rootfsSha256,proto3" json:"rootfs_sha256,omitempty"`
+	// SHA256 of the template key (manifest.json "key").
+	KeySha256     string                 `protobuf:"bytes,10,opt,name=key_sha256,json=keySha256,proto3" json:"key_sha256,omitempty"`
+	CaFingerprint string                 `protobuf:"bytes,11,opt,name=ca_fingerprint,json=caFingerprint,proto3" json:"ca_fingerprint,omitempty"`
+	BuiltAt       *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=built_at,json=builtAt,proto3" json:"built_at,omitempty"`
+	// True when the template key fits this node. Create refuses the others
+	// with TEMPLATE_INCOMPATIBLE.
+	Compatible    bool `protobuf:"varint,13,opt,name=compatible,proto3" json:"compatible,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TemplateInfo) Reset() {
@@ -1116,6 +1129,162 @@ func (x *TemplateInfo) GetFirecrackerVersion() string {
 		return x.FirecrackerVersion
 	}
 	return ""
+}
+
+func (x *TemplateInfo) GetImageRef() string {
+	if x != nil {
+		return x.ImageRef
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetImageDigest() string {
+	if x != nil {
+		return x.ImageDigest
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetRootfsSha256() string {
+	if x != nil {
+		return x.RootfsSha256
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetKeySha256() string {
+	if x != nil {
+		return x.KeySha256
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetCaFingerprint() string {
+	if x != nil {
+		return x.CaFingerprint
+	}
+	return ""
+}
+
+func (x *TemplateInfo) GetBuiltAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.BuiltAt
+	}
+	return nil
+}
+
+func (x *TemplateInfo) GetCompatible() bool {
+	if x != nil {
+		return x.Compatible
+	}
+	return false
+}
+
+type BuildTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuildTemplateRequest) Reset() {
+	*x = BuildTemplateRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildTemplateRequest) ProtoMessage() {}
+
+func (x *BuildTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildTemplateRequest.ProtoReflect.Descriptor instead.
+func (*BuildTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{13}
+}
+
+type BuildTemplateResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Template *TemplateInfo          `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	// False when a valid template for the key was already on the node.
+	Built bool `protobuf:"varint,2,opt,name=built,proto3" json:"built,omitempty"`
+	// Build time; 0 when built is false.
+	BuildMs uint64 `protobuf:"varint,3,opt,name=build_ms,json=buildMs,proto3" json:"build_ms,omitempty"`
+	// Templates that the garbage collection removed.
+	Removed       []string `protobuf:"bytes,4,rep,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuildTemplateResponse) Reset() {
+	*x = BuildTemplateResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildTemplateResponse) ProtoMessage() {}
+
+func (x *BuildTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildTemplateResponse.ProtoReflect.Descriptor instead.
+func (*BuildTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BuildTemplateResponse) GetTemplate() *TemplateInfo {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+func (x *BuildTemplateResponse) GetBuilt() bool {
+	if x != nil {
+		return x.Built
+	}
+	return false
+}
+
+func (x *BuildTemplateResponse) GetBuildMs() uint64 {
+	if x != nil {
+		return x.BuildMs
+	}
+	return 0
+}
+
+func (x *BuildTemplateResponse) GetRemoved() []string {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
 }
 
 var File_hostagent_v1_hostagent_proto protoreflect.FileDescriptor
@@ -1197,7 +1366,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vhost_kernel\x18\a \x01(\tR\n" +
 	"hostKernel\x12#\n" +
 	"\ragent_version\x18\b \x01(\tR\fagentVersion\x12\"\n" +
-	"\rdisk_free_mib\x18\t \x01(\x04R\vdiskFreeMib\"\xcc\x01\n" +
+	"\rdisk_free_mib\x18\t \x01(\x04R\vdiskFreeMib\"\xce\x03\n" +
 	"\fTemplateInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x14\n" +
 	"\x05vcpus\x18\x02 \x01(\rR\x05vcpus\x12\x17\n" +
@@ -1205,7 +1374,24 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vscratch_gib\x18\x04 \x01(\rR\n" +
 	"scratchGib\x12!\n" +
 	"\fguest_kernel\x18\x05 \x01(\tR\vguestKernel\x12/\n" +
-	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\x88\x04\n" +
+	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion\x12\x1b\n" +
+	"\timage_ref\x18\a \x01(\tR\bimageRef\x12!\n" +
+	"\fimage_digest\x18\b \x01(\tR\vimageDigest\x12#\n" +
+	"\rrootfs_sha256\x18\t \x01(\tR\frootfsSha256\x12\x1d\n" +
+	"\n" +
+	"key_sha256\x18\n" +
+	" \x01(\tR\tkeySha256\x12%\n" +
+	"\x0eca_fingerprint\x18\v \x01(\tR\rcaFingerprint\x125\n" +
+	"\bbuilt_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\abuiltAt\x12\x1e\n" +
+	"\n" +
+	"compatible\x18\r \x01(\bR\n" +
+	"compatible\"\x16\n" +
+	"\x14BuildTemplateRequest\"\xa0\x01\n" +
+	"\x15BuildTemplateResponse\x12<\n" +
+	"\btemplate\x18\x01 \x01(\v2 .craft.hostagent.v1.TemplateInfoR\btemplate\x12\x14\n" +
+	"\x05built\x18\x02 \x01(\bR\x05built\x12\x19\n" +
+	"\bbuild_ms\x18\x03 \x01(\x04R\abuildMs\x12\x18\n" +
+	"\aremoved\x18\x04 \x03(\tR\aremoved*\x88\x04\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -1237,14 +1423,15 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x14VM_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11VM_STATE_STARTING\x10\x01\x12\x14\n" +
 	"\x10VM_STATE_RUNNING\x10\x02\x12\x13\n" +
-	"\x0fVM_STATE_EXITED\x10\x032\x82\x04\n" +
+	"\x0fVM_STATE_EXITED\x10\x032\xe8\x04\n" +
 	"\tHostAgent\x12O\n" +
 	"\x06Create\x12!.craft.hostagent.v1.CreateRequest\x1a\".craft.hostagent.v1.CreateResponse\x12I\n" +
 	"\x04Stop\x12\x1f.craft.hostagent.v1.StopRequest\x1a .craft.hostagent.v1.StopResponse\x12I\n" +
 	"\x04List\x12\x1f.craft.hostagent.v1.ListRequest\x1a .craft.hostagent.v1.ListResponse\x12U\n" +
 	"\bNodeInfo\x12#.craft.hostagent.v1.NodeInfoRequest\x1a$.craft.hostagent.v1.NodeInfoResponse\x12m\n" +
 	"\x10CloseConnections\x12+.craft.hostagent.v1.CloseConnectionsRequest\x1a,.craft.hostagent.v1.CloseConnectionsResponse\x12H\n" +
-	"\x04Dial\x12\x1d.craft.hostagent.v1.DialFrame\x1a\x1d.craft.hostagent.v1.DialFrame(\x010\x01BEZCgithub.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1b\x06proto3"
+	"\x04Dial\x12\x1d.craft.hostagent.v1.DialFrame\x1a\x1d.craft.hostagent.v1.DialFrame(\x010\x01\x12d\n" +
+	"\rBuildTemplate\x12(.craft.hostagent.v1.BuildTemplateRequest\x1a).craft.hostagent.v1.BuildTemplateResponseBEZCgithub.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1b\x06proto3"
 
 var (
 	file_hostagent_v1_hostagent_proto_rawDescOnce sync.Once
@@ -1259,7 +1446,7 @@ func file_hostagent_v1_hostagent_proto_rawDescGZIP() []byte {
 }
 
 var file_hostagent_v1_hostagent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_hostagent_v1_hostagent_proto_goTypes = []any{
 	(ErrorReason)(0),                 // 0: craft.hostagent.v1.ErrorReason
 	(VMState)(0),                     // 1: craft.hostagent.v1.VMState
@@ -1276,31 +1463,37 @@ var file_hostagent_v1_hostagent_proto_goTypes = []any{
 	(*NodeInfoRequest)(nil),          // 12: craft.hostagent.v1.NodeInfoRequest
 	(*NodeInfoResponse)(nil),         // 13: craft.hostagent.v1.NodeInfoResponse
 	(*TemplateInfo)(nil),             // 14: craft.hostagent.v1.TemplateInfo
-	(*timestamppb.Timestamp)(nil),    // 15: google.protobuf.Timestamp
+	(*BuildTemplateRequest)(nil),     // 15: craft.hostagent.v1.BuildTemplateRequest
+	(*BuildTemplateResponse)(nil),    // 16: craft.hostagent.v1.BuildTemplateResponse
+	(*timestamppb.Timestamp)(nil),    // 17: google.protobuf.Timestamp
 }
 var file_hostagent_v1_hostagent_proto_depIdxs = []int32{
 	8,  // 0: craft.hostagent.v1.CreateResponse.vm:type_name -> craft.hostagent.v1.VM
 	8,  // 1: craft.hostagent.v1.ListResponse.vms:type_name -> craft.hostagent.v1.VM
 	1,  // 2: craft.hostagent.v1.VM.state:type_name -> craft.hostagent.v1.VMState
-	15, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
+	17, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
 	14, // 4: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
-	2,  // 5: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
-	4,  // 6: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
-	6,  // 7: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
-	12, // 8: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
-	9,  // 9: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
-	10, // 10: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
-	3,  // 11: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
-	5,  // 12: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
-	7,  // 13: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
-	13, // 14: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
-	11, // 15: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
-	10, // 16: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
-	11, // [11:17] is the sub-list for method output_type
-	5,  // [5:11] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	17, // 5: craft.hostagent.v1.TemplateInfo.built_at:type_name -> google.protobuf.Timestamp
+	14, // 6: craft.hostagent.v1.BuildTemplateResponse.template:type_name -> craft.hostagent.v1.TemplateInfo
+	2,  // 7: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
+	4,  // 8: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
+	6,  // 9: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
+	12, // 10: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
+	9,  // 11: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
+	10, // 12: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
+	15, // 13: craft.hostagent.v1.HostAgent.BuildTemplate:input_type -> craft.hostagent.v1.BuildTemplateRequest
+	3,  // 14: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
+	5,  // 15: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
+	7,  // 16: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
+	13, // 17: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
+	11, // 18: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
+	10, // 19: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
+	16, // 20: craft.hostagent.v1.HostAgent.BuildTemplate:output_type -> craft.hostagent.v1.BuildTemplateResponse
+	14, // [14:21] is the sub-list for method output_type
+	7,  // [7:14] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_hostagent_v1_hostagent_proto_init() }
@@ -1314,7 +1507,7 @@ func file_hostagent_v1_hostagent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hostagent_v1_hostagent_proto_rawDesc), len(file_hostagent_v1_hostagent_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

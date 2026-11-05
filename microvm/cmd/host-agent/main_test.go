@@ -6,7 +6,7 @@ import (
 )
 
 func TestCheckRanges(t *testing.T) {
-	ok := flags{uidBase: 1000000, uidCount: 65536, maxScratchGiB: 100}
+	ok := flags{uidBase: 1000000, uidCount: 65536, maxScratchGiB: 100, tplVCPUs: 2, tplMemMiB: 4096, tplScratchGiB: 1, tplKeep: 2}
 	if err := checkRanges(ok); err != nil {
 		t.Fatal(err)
 	}
@@ -16,6 +16,8 @@ func TestCheckRanges(t *testing.T) {
 		"uid range too long": {uidBase: math.MaxUint32 - 5, uidCount: 10, maxScratchGiB: 1},
 		"zero uid count":     {uidBase: 1000, maxScratchGiB: 1},
 		"scratch wraps":      {uidBase: 1000, uidCount: 10, maxScratchGiB: math.MaxUint32 + 1},
+		"template keep 0":    {uidBase: 1000, uidCount: 10, maxScratchGiB: 10, tplVCPUs: 2, tplMemMiB: 4096, tplScratchGiB: 1},
+		"template scratch":   {uidBase: 1000, uidCount: 10, maxScratchGiB: 10, tplVCPUs: 2, tplMemMiB: 4096, tplScratchGiB: 11, tplKeep: 2},
 	} {
 		if err := checkRanges(f); err == nil {
 			t.Errorf("%s: accepted %+v", name, f)

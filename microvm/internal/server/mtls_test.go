@@ -118,16 +118,7 @@ func mtlsAgent(t *testing.T, ports ...uint32) (addr string, certs *testcerts.Set
 func mtlsAgentWith(t *testing.T, svc *Service, sans []string) (addr string, certs *testcerts.Set) {
 	t.Helper()
 	dir := t.TempDir()
-	tdir := filepath.Join(dir, "tpl", "t1")
-	if err := os.MkdirAll(tdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range []string{template.RootfsFile, template.ScratchFile, template.VMStateFile, template.MemFile} {
-		if err := os.WriteFile(filepath.Join(tdir, f), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := template.WriteManifest(tdir, template.Manifest{Version: "t1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, FirecrackerVersion: "v1.17.0"}); err != nil {
+	if _, err := template.WriteFake(filepath.Join(dir, "tpl"), "t1", template.Key{VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, FirecrackerVersion: "v1.17.0"}); err != nil {
 		t.Fatal(err)
 	}
 	uids, _ := jailer.NewUIDPool(1000, 10)

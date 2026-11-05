@@ -238,7 +238,7 @@ func TestPassthroughKVM(t *testing.T) {
 	// and the other KVM tests build theirs with the prototype agent.
 	e.Template = getenv("KVM_PT_TEMPLATE", "kvmtest-pt-1")
 	cmd := newCommand(t, e)
-	buildTemplateWith(t, e, cmd, getenv("KVM_PT_BOOT_ARGS", ptBootArgs), waitDaemon)
+	buildTemplateWith(t, &e, cmd, getenv("KVM_PT_BOOT_ARGS", ptBootArgs), waitDaemon)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Minute)
 	defer cancel()
 	cgroupns := getenv("KVM_CGROUPNS", "private")

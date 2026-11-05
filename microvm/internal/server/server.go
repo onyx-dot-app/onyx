@@ -16,6 +16,8 @@ import (
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
+	"github.com/onyx-dot-app/onyx/microvm/internal/template"
+	"github.com/onyx-dot-app/onyx/microvm/internal/tplbuild"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
@@ -31,6 +33,9 @@ type Service struct {
 	// DialPorts are the guest ports Dial allows. Nil means DefaultDialPorts.
 	// Dial refuses DaemonPort even if it is listed here.
 	DialPorts []uint32
+	// Builder builds the node template from --rootfs-dir. Nil: the
+	// agent has no root drive to build from.
+	Builder func(ctx context.Context) (tplbuild.Result, error)
 	// DaemonPort is the guest daemon's vsock port. 0 means DefaultDaemonPort.
 	DaemonPort uint32
 	// MaxDialsPerVM caps the open Dial streams of one VM. 0 means
@@ -121,12 +126,33 @@ func (s *Service) NodeInfo(context.Context, *pb.NodeInfoRequest) (*pb.NodeInfoRe
 		HostKernel: n.Versions.HostKernel, AgentVersion: n.Versions.Agent,
 	}
 	for _, t := range n.Templates {
-		out.Templates = append(out.Templates, &pb.TemplateInfo{
-			Version: t.Version, Vcpus: t.VCPUs, MemMib: t.MemMiB, ScratchGib: t.ScratchGiB,
-			GuestKernel: t.GuestKernel, FirecrackerVersion: t.FirecrackerVersion,
-		})
+		out.Templates = append(out.Templates, toTemplateInfo(t, n.Versions.NodeKey()))
 	}
 	return out, nil
+}
+
+// BuildTemplate implements pb.HostAgentServer.
+func (s *Service) BuildTemplate(ctx context.Context, _ *pb.BuildTemplateRequest) (*pb.BuildTemplateResponse, error) {
+	if s.Builder == nil {
+		return nil, toStatus(apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "the agent has no --rootfs-dir to build a template from"))
+	}
+	r, err := s.Builder(ctx)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &pb.BuildTemplateResponse{
+		Template: toTemplateInfo(r.Template, s.M.Versions().NodeKey()), Built: r.Built,
+		BuildMs: uint64(r.BuildMS), Removed: r.Removed,
+	}, nil
+}
+
+func toTemplateInfo(t *template.Template, node template.NodeKey) *pb.TemplateInfo {
+	return &pb.TemplateInfo{
+		Version: t.Version, Vcpus: t.VCPUs, MemMib: t.MemMiB, ScratchGib: t.ScratchGiB,
+		GuestKernel: t.GuestKernel, FirecrackerVersion: t.FirecrackerVersion,
+		ImageRef: t.ImageRef, ImageDigest: t.ImageDigest, RootfsSha256: t.RootfsSHA256, KeySha256: t.KeySHA256,
+		CaFingerprint: t.CAFingerprint, BuiltAt: timestamppb.New(t.BuiltAt), Compatible: t.CheckNode(node) == nil,
+	}
 }
 
 func toStatus(err error) error {

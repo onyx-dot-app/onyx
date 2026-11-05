@@ -398,3 +398,38 @@ func TestStopReportsAFailedTombstoneWrite(t *testing.T) {
 		t.Fatalf("journal %+v, uids %d", recs, f.uids.InUse())
 	}
 }
+
+// A running template build VM is not an untracked Firecracker.
+func TestRescanSkipsTemplateBuildVM(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.UseJournal(&journal.Journal{Dir: t.TempDir()})
+	table := &fakeTable{}
+	if _, err := f.m.Recover(context.Background(), table); err != nil {
+		t.Fatal(err)
+	}
+	uid, done, err := f.m.BuildSlot("tpl-0123456789ab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	table.set([]Candidate{{ID: "tpl-0123456789ab", PID: 900, UID: uid}}, nil)
+	if err := f.m.rescan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.m.mu.Lock()
+	inDoubt := f.m.doubt["tpl-0123456789ab"] != nil
+	f.m.mu.Unlock()
+	if inDoubt {
+		t.Fatal("the template build VM was put in doubt")
+	}
+	done(false)
+	// After the build, the same process would be untracked.
+	if err := f.m.rescan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.m.mu.Lock()
+	inDoubt = f.m.doubt["tpl-0123456789ab"] != nil
+	f.m.mu.Unlock()
+	if !inDoubt {
+		t.Fatal("a left-over build VM was not put in doubt")
+	}
+}

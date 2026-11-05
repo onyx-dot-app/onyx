@@ -45,6 +45,13 @@ service HostAgent {
   // the connection. When the client ends its send side, the agent keeps
   // reading until the guest closes (Firecracker vsock has no half-close).
   rpc Dial(stream DialFrame) returns (stream DialFrame);
+
+  // BuildTemplate builds the template of this node from the root drive in
+  // the agent's --rootfs-dir, unless a valid template for its key is there,
+  // and then removes old templates (the agent keeps --template-keep and the
+  // ones that VMs use). The agent also does this at start-up. A call during
+  // a build waits for it.
+  rpc BuildTemplate(BuildTemplateRequest) returns (BuildTemplateResponse);
 }
 
 // The reason of a host agent error (google.rpc.ErrorInfo.reason).
@@ -57,7 +64,9 @@ enum ErrorReason {
   // vcpus or mem_mib differ from the template. A snapshot restore keeps the
   // template's shape.
   TEMPLATE_SHAPE_MISMATCH = 3;
-  // The template was built with a different Firecracker version.
+  // The template does not fit this node (layout version, Firecracker
+  // version, CPU model, host kernel, guest kernel or egress CA), or a
+  // template file does not match the SHA256 in its manifest.
   TEMPLATE_INCOMPATIBLE = 4;
   // scratch_gib is smaller than the template's scratch disk. The scratch
   // disk can only grow.
@@ -232,4 +241,27 @@ message TemplateInfo {
   // Guest kernel release.
   string guest_kernel = 5;
   string firecracker_version = 6;
+  // Source image of the root drive, for example "onyxdotapp/sandbox:v5.1.0".
+  string image_ref = 7;
+  string image_digest = 8;
+  string rootfs_sha256 = 9;
+  // SHA256 of the template key (manifest.json "key").
+  string key_sha256 = 10;
+  string ca_fingerprint = 11;
+  google.protobuf.Timestamp built_at = 12;
+  // True when the template key fits this node. Create refuses the others
+  // with TEMPLATE_INCOMPATIBLE.
+  bool compatible = 13;
+}
+
+message BuildTemplateRequest {}
+
+message BuildTemplateResponse {
+  TemplateInfo template = 1;
+  // False when a valid template for the key was already on the node.
+  bool built = 2;
+  // Build time; 0 when built is false.
+  uint64 build_ms = 3;
+  // Templates that the garbage collection removed.
+  repeated string removed = 4;
 }

@@ -85,7 +85,7 @@ func (m *Manager) rescan(ctx context.Context) error {
 	m.mu.Lock()
 	for _, c := range cands {
 		d := m.doubt[c.ID]
-		if c.PID == 0 || (d == nil && m.vms[c.ID] != nil) {
+		if c.PID == 0 || (d == nil && (m.vms[c.ID] != nil || m.building[c.ID])) {
 			continue
 		}
 		live[c.ID] = true
