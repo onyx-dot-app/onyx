@@ -4,8 +4,8 @@
 
 `Text` clamped to a number of lines. While the clamp cuts the text, hovering it
 shows the full text in a tooltip above it, aligned to the text's start (left
-in LTR, right in RTL). Text that fits gets no tooltip, so short labels stay
-plain.
+in LTR, right in RTL). Without `tooltip`, text that fits gets no tooltip, so
+short labels stay plain. With `tooltip`, that tooltip shows on every hover.
 
 ## Props
 
