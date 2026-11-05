@@ -1362,6 +1362,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jiraServiceManagement": {
+          "description": "IT-Service-Management"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },

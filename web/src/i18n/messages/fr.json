@@ -1362,6 +1362,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Gestion des services informatiques"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },

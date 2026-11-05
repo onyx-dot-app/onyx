@@ -1362,6 +1362,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "IT サービス管理"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },

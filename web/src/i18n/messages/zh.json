@@ -1362,6 +1362,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jiraServiceManagement": {
+          "description": "IT 服务管理"
+        },
         "productboard": {
           "description": "产品管理"
         },
