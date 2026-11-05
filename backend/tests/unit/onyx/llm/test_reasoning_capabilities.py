@@ -394,6 +394,9 @@ def test_parse_gemini_version(
         ("gemini-3-flash-preview", False),
         ("gemini-3.1-pro-preview", False),
         ("gemini-2.5-flash", False),
+        ("gemini-4-argon", True),
+        ("vertex_ai/gemini-4-argon", True),
+        ("google/gemini-4-argon", True),
         ("claude-sonnet-5", False),
     ],
 )
@@ -408,6 +411,8 @@ def test_gemini_lowest_thinking_level_is_low(model_name: str, expected: bool) ->
         (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", False),
         (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", True),
         (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", True),
+        (LlmProviderNames.VERTEX_AI, "gemini-4-argon", False),
+        (LlmProviderNames.OPENROUTER, "google/gemini-4-argon", False),
     ],
 )
 def test_gemini_flash_without_off_level_hides_off(

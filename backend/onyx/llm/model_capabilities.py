@@ -722,6 +722,9 @@ def anthropic_omits_sampling_params(model_name: str) -> bool:
 
 _GEMINI_FLASH_NO_MINIMAL_MIN_VERSION = (3, 7)
 
+# Gemini 4 thinks at low, medium or high only, whatever the tier.
+_GEMINI_NO_MINIMAL_MIN_VERSION = (4, 0)
+
 _GEMINI_VERSION_PATTERN = re.compile(r"gemini-(\d+)(?:\.(\d+))?")
 
 
@@ -734,10 +737,14 @@ def parse_gemini_version(model_name: str) -> tuple[int, int] | None:
 
 def gemini_lowest_thinking_level_is_low(model_name: str) -> bool:
     name = model_name.lower().split("/")[-1]
-    if "flash" not in name or "lite" in name:
+    if "lite" in name:
         return False
     version = parse_gemini_version(name)
-    return version is not None and version >= _GEMINI_FLASH_NO_MINIMAL_MIN_VERSION
+    if version is None:
+        return False
+    if version >= _GEMINI_NO_MINIMAL_MIN_VERSION:
+        return True
+    return "flash" in name and version >= _GEMINI_FLASH_NO_MINIMAL_MIN_VERSION
 
 
 def model_identity_names(model_name: str, deployment_name: str | None) -> list[str]:
