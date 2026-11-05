@@ -36,6 +36,18 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__plugin_onyx_onyx__search_indexed_documents",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

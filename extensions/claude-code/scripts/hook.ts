@@ -144,12 +144,23 @@ function readState(sessionId: string): SessionState | null {
   }
 }
 
-// Write then rename so a concurrent reader never sees a partial file.
+// Write then rename so a concurrent reader never sees a partial file. A failed
+// write empties the old file, or a stale denial would outlive the prompt.
+// Emptying needs no free space and no directory write, and reads as no state.
 function writeState(sessionId: string, state: SessionState): void {
   const path = statePath(sessionId);
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state));
-  renameSync(tmp, path);
+  try {
+    writeFileSync(tmp, JSON.stringify(state));
+    renameSync(tmp, path);
+  } catch (err) {
+    try {
+      writeFileSync(path, "");
+    } catch {
+      // No file to empty, so there is no stale state either.
+    }
+    throw err;
+  }
 }
 
 // Best effort: another session may prune the same file at the same time.
@@ -209,16 +220,23 @@ async function search(
       console.error(`onyx plugin: search returned HTTP ${response.status}`);
       return { consulted: true, results: null };
     }
-    const payload = (await response.json()) as SearchResponse;
-    // A body without results is a server fault, not an empty search.
-    return {
-      consulted: true,
-      results: Array.isArray(payload.results) ? payload.results : null,
-    };
+    return { consulted: true, results: await readResults(response) };
   } catch (err) {
     // Only the error name: a fetch error message can quote request headers.
     console.error(`onyx plugin: search request failed (${errorName(err)})`);
     return { consulted: false, results: null };
+  }
+}
+
+// null for any body that is not a results array: a server fault is not an
+// empty search, and the response still counts as Onyx answering.
+async function readResults(response: Response): Promise<SearchResult[] | null> {
+  try {
+    const payload = (await response.json()) as SearchResponse;
+    return Array.isArray(payload.results) ? payload.results : null;
+  } catch (err) {
+    console.error(`onyx plugin: search returned an unreadable body (${errorName(err)})`);
+    return null;
   }
 }
 
@@ -329,7 +347,9 @@ async function main(): Promise<void> {
     case "PreToolUse":
       preTool(input, config);
       break;
+    // A failed call still counts: Onyx was asked, so the gate opens.
     case "PostToolUse":
+    case "PostToolUseFailure":
       writeState(input.session_id, { consulted: true, awaitingFullSearch: false });
       break;
     case "Stop":
