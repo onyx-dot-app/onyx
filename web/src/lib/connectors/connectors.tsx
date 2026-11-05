@@ -1107,16 +1107,16 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira_service_management: {
-    description: "connectors.jiraServiceManagement.description",
-    subtext: "connectors.jiraServiceManagement.subtext",
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
     values: [
       {
         type: "text",
-        label: "connectors.jiraServiceManagement.fields.jira_base_url.label",
+        label: "connectors.jira_service_management.fields.jira_base_url.label",
         name: "jira_base_url",
         optional: false,
         placeholder:
-          "connectors.jiraServiceManagement.fields.jira_base_url.placeholder",
+          "connectors.jira_service_management.fields.jira_base_url.placeholder",
         subDescription: "siteUrl",
       },
       ATLASSIAN_SCOPED_TOKEN_FIELD,
@@ -1128,45 +1128,45 @@ export const connectorConfigs: Record<
           {
             value: "everything",
             label:
-              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.everything.label",
+              "connectors.jira_service_management.fields.indexing_scope.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
                 label:
-                  "connectors.jiraServiceManagement.fields.everything.label",
+                  "connectors.jira_service_management.fields.everything.label",
                 name: "everything",
                 description:
-                  "connectors.jiraServiceManagement.fields.everything.description",
+                  "connectors.jira_service_management.fields.everything.description",
               },
             ],
           },
           {
             value: "project",
             label:
-              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.project.label",
+              "connectors.jira_service_management.fields.indexing_scope.tabs.project.label",
             fields: [
               {
                 type: "text",
                 label:
-                  "connectors.jiraServiceManagement.fields.project_key.label",
+                  "connectors.jira_service_management.fields.project_key.label",
                 name: "project_key",
                 description:
-                  "connectors.jiraServiceManagement.fields.project_key.description",
+                  "connectors.jira_service_management.fields.project_key.description",
               },
             ],
           },
           {
             value: "jql",
             label:
-              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.jql.label",
+              "connectors.jira_service_management.fields.indexing_scope.tabs.jql.label",
             fields: [
               {
                 type: "text",
                 label:
-                  "connectors.jiraServiceManagement.fields.jql_query.label",
+                  "connectors.jira_service_management.fields.jql_query.label",
                 name: "jql_query",
                 description:
-                  "connectors.jiraServiceManagement.fields.jql_query.description",
+                  "connectors.jira_service_management.fields.jql_query.description",
               },
             ],
           },
@@ -1176,10 +1176,10 @@ export const connectorConfigs: Record<
       {
         type: "list",
         label:
-          "connectors.jiraServiceManagement.fields.comment_email_blacklist.label",
+          "connectors.jira_service_management.fields.comment_email_blacklist.label",
         name: "comment_email_blacklist",
         description:
-          "connectors.jiraServiceManagement.fields.comment_email_blacklist.description",
+          "connectors.jira_service_management.fields.comment_email_blacklist.description",
         optional: true,
       },
     ],

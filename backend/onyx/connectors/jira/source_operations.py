@@ -174,6 +174,15 @@ def _bulk_fetch_batch(
         return left + right
 
 
+# The Service Desk API lives outside the versioned Jira REST root
+# (``{server}/rest/servicedeskapi/...``), so the SDK default
+# ``{server}/rest/{rest_path}/{rest_api_version}/{path}`` cannot reach it.
+# For scoped (OAuth 2.0) tokens the client server is already the
+# ``api.atlassian.com/ex/jira/{cloudId}`` gateway, under which the Service
+# Desk API is exposed as well.
+_SERVICEDESK_BASE_URL = "{server}/rest/servicedeskapi/{path}"
+
+
 class JiraSourceOperations(SourceOperations):
     source = DocumentSource.JIRA
     sdk_modules = ("jira",)
@@ -482,7 +491,7 @@ class JiraSourceOperations(SourceOperations):
         try:
             with _translate_errors(fast=fast):
                 return self._client(fast=fast)._get_json(
-                    f"rest/servicedeskapi/request/{issue_key}"
+                    f"request/{issue_key}", base=_SERVICEDESK_BASE_URL
                 )
         except (JiraApiError, JIRAError, requests.RequestException):
             return None
@@ -501,7 +510,7 @@ class JiraSourceOperations(SourceOperations):
         try:
             with _translate_errors(fast=fast):
                 return self._client(fast=fast)._get_json(
-                    f"rest/servicedeskapi/request/{issue_key}/sla"
+                    f"request/{issue_key}/sla", base=_SERVICEDESK_BASE_URL
                 )
         except (JiraApiError, JIRAError, requests.RequestException):
             return None

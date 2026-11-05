@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.source_operations import _SERVICEDESK_BASE_URL
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
     _sla_breached_summary,
@@ -137,3 +138,33 @@ def test_sla_breached_summary() -> None:
     )
     assert _sla_breached_summary({"values": []}) is None
     assert _sla_breached_summary({}) is None
+
+
+def test_service_desk_url_is_not_under_the_versioned_jira_root() -> None:
+    """Regression: the SDK's default base would resolve the Service Desk
+    calls to ``{server}/rest/api/3/rest/servicedeskapi/...`` and 404."""
+    url = _SERVICEDESK_BASE_URL.format(
+        server="https://example.atlassian.net",
+        rest_path="api",
+        rest_api_version="3",
+        path="request/IT-1",
+    )
+    assert url == "https://example.atlassian.net/rest/servicedeskapi/request/IT-1"
+    assert "/rest/api/" not in url
+
+
+def test_service_desk_ops_pass_the_servicedesk_base() -> None:
+    """The gateway ops must call the SDK with the Service Desk base."""
+    from onyx.connectors.jira.source_operations import JiraSourceOperations
+
+    client = MagicMock()
+    client._get_json.return_value = {"values": []}
+    ops = JiraSourceOperations.__new__(JiraSourceOperations)
+    ops._cached_client = client
+    ops._cached_fast_client = None
+
+    ops.get_service_desk_request(issue_key="IT-1")
+    client._get_json.assert_called_with("request/IT-1", base=_SERVICEDESK_BASE_URL)
+
+    ops.get_service_desk_sla(issue_key="IT-1")
+    client._get_json.assert_called_with("request/IT-1/sla", base=_SERVICEDESK_BASE_URL)
