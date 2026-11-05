@@ -6,11 +6,13 @@ Uses subprocess, not multiprocessing: the indexing worker is a daemon process, a
 daemons can't have multiprocessing children.
 """
 
+import os
 import pickle
 import signal
 import subprocess
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, TypeVar
 
 T = TypeVar("T")
@@ -57,12 +59,21 @@ def run_in_isolated_process(
     fn and args must be picklable.
     """
     request = pickle.dumps((fn, args, kwargs))
+    child_env = os.environ.copy()
+    backend_path = str(Path(__file__).resolve().parents[2])
+    existing_pythonpath = child_env.get("PYTHONPATH")
+    child_env["PYTHONPATH"] = (
+        os.pathsep.join((backend_path, existing_pythonpath))
+        if existing_pythonpath
+        else backend_path
+    )
     try:
         result = subprocess.run(
             [sys.executable, "-m", _RUNNER_MODULE],
             input=request,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            env=child_env,
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:

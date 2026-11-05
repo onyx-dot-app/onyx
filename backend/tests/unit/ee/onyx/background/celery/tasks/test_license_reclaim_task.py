@@ -3,6 +3,7 @@ self-hosted deployments whose license is expired or near expiry, swallows
 control-plane failures, and throttles its own control-plane attempts so its
 triggers (request-path debounce, periodic poller) can fire it freely."""
 
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -16,6 +17,13 @@ from ee.onyx.utils.license import LicenseRejectedError, StoredLicense
 from onyx.configs.constants import OnyxCeleryTask
 
 TASKS_MODULE = "ee.onyx.background.celery.tasks.license_reclaim.tasks"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_reclaim_redis() -> Iterator[None]:
+    with patch(f"{TASKS_MODULE}.get_redis_client") as mock_redis:
+        mock_redis.return_value.set.return_value = True
+        yield
 
 
 def _make_payload(
