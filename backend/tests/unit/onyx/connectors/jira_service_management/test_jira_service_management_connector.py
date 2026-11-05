@@ -148,6 +148,65 @@ def test_jsm_comment_filtering_properties_as_list() -> None:
     assert len(internal_comments) == 0
 
 
+def test_jsm_everything_scope_jql() -> None:
+    """Test that 'Everything' scope uses projectType filter, not issue type."""
+    # Connector with no project_key and no jql_query (Everything scope)
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://test.atlassian.net",
+    )
+    
+    # Get the JQL query for an arbitrary time range
+    start = 1609459200  # 2021-01-01 00:00:00 UTC
+    end = 1640995200    # 2022-01-01 00:00:00 UTC
+    jql = connector._get_jql_query(start, end)
+    
+    # Verify that projectType filter is used, not issue type filter
+    assert "projectType = service_desk" in jql, \
+        "Everything scope should filter by projectType, not issue type"
+    assert "type = service_desk" not in jql, \
+        "Should not use issue type filter (would fail)"
+    
+    # Verify time range is still included
+    assert "updated >=" in jql
+    assert "updated <=" in jql
+
+
+def test_jsm_project_scope_no_projecttype_filter() -> None:
+    """Test that specifying a project key doesn't add projectType filter."""
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://test.atlassian.net",
+        project_key="SUPPORT",
+    )
+    
+    start = 1609459200
+    end = 1640995200
+    jql = connector._get_jql_query(start, end)
+    
+    # When project is specified, projectType filter should NOT be added
+    assert "projectType" not in jql, \
+        "projectType filter should only apply to Everything scope"
+    assert 'project = "SUPPORT"' in jql or "project = SUPPORT" in jql
+    
+
+def test_jsm_custom_jql_no_projecttype_filter() -> None:
+    """Test that custom JQL doesn't add projectType filter."""
+    custom_jql = "project = 'SUPPORT' AND status = 'Open'"
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://test.atlassian.net",
+        jql_query=custom_jql,
+    )
+    
+    start = 1609459200
+    end = 1640995200
+    jql = connector._get_jql_query(start, end)
+    
+    # When custom JQL is provided, projectType filter should NOT be added
+    assert "projectType" not in jql, \
+        "projectType filter should only apply to Everything scope"
+    # Custom JQL should be preserved
+    assert custom_jql in jql
+
+
 def test_jsm_comment_filtering_string_markers() -> None:
     """Test JSM internal comment filtering with string-valued boolean markers."""
     # Comment with string "true" for jsdPublic

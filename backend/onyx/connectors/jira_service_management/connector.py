@@ -84,7 +84,7 @@ class JiraServiceManagementConnector(JiraConnector):
         # Otherwise, restrict to service desk projects only
         if not self.jql_query and not self.jira_project:
             # Add projectType filter for "Everything" scope to only include service desks
-            jql_query = "type = service_desk"
+            jql_query = "projectType = service_desk"
         else:
             jql_query = self.jql_query
 
