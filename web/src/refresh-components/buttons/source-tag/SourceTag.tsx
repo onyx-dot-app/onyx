@@ -444,7 +444,7 @@ const SourceTagInner = ({
       )}
       onClick={handleClick}
     >
-      <Badge title={displayName} truncate />
+      <Badge title={displayName} />
       {extraCount > 0 && <Badge title={`+${extraCount}`} />}
     </button>
   ) : (

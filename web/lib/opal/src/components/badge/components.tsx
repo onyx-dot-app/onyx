@@ -46,9 +46,6 @@ type BadgeProps = {
 
   /** Height on the Tailwind scale. Default: `4`. */
   size?: BadgeSize;
-
-  /** Cap the title at 160px and truncate it with an ellipsis. */
-  truncate?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -56,7 +53,8 @@ type BadgeProps = {
 // ---------------------------------------------------------------------------
 
 /**
- * A small coloured label: an icon and a title in a tinted pill. It does
+ * A small coloured label: an icon and a title in a tinted pill. The title
+ * is always one line, capped at 10rem with an ellipsis. It does
  * nothing on click. For a removable, clickable or field pill, use `Tag`.
  */
 function Badge({
@@ -65,7 +63,6 @@ function Badge({
   color = "default",
   textColor = "inherit",
   size = 4,
-  truncate = false,
   ...rest
 }: BadgeProps) {
   const config = BADGE_COLORS[color];
@@ -86,7 +83,6 @@ function Badge({
       )}
       style={iconColorStyle}
       data-size={size}
-      data-capped={truncate || undefined}
     >
       <Content
         // The body variant sets the title in secondary-body.
@@ -96,7 +92,7 @@ function Badge({
         color="interactive"
         icon={icon}
         title={title}
-        titleMaxLines={truncate ? 1 : undefined}
+        titleMaxLines={1}
       />
     </div>
   );

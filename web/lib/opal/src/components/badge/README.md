@@ -19,7 +19,6 @@ pill) is that colour.
 | `color`   | `StatusVariants`                   | `"default"`    | Status color                   |
 | `textColor` | `TextColor`                      | `"inherit"`    | Label colour; `"inherit"` matches `color` |
 | `size`    | `4 \| 6`                           | `4`            | Height on the Tailwind scale   |
-| `truncate` | `boolean`                         | `false`        | Cap the title at 160px with an ellipsis |
 
 ### `color`
 
