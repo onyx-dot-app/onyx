@@ -551,12 +551,39 @@ function Content({
 }
 
 // ---------------------------------------------------------------------------
+// ContentIndent
+// ---------------------------------------------------------------------------
+
+interface ContentIndentProps {
+  /** The title font of the `Content` above, which sets its icon box. */
+  font: TextFont;
+  children: React.ReactNode;
+}
+
+/**
+ * Lines its children up under a `Content`'s title and description: indented
+ * by one icon box (the title's line height) and the 0.25rem gap. Use it for
+ * rows that continue a `Content` with an icon, such as a link or a detail line.
+ */
+function ContentIndent({ font, children }: ContentIndentProps) {
+  return (
+    <div
+      style={{ paddingInlineStart: `${(FONT_LINE_HEIGHT[font] + 4) / 16}rem` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
 export {
   Content,
   ContentDescription,
+  ContentIndent,
+  type ContentIndentProps,
   ContentIcon,
   FONT_LINE_HEIGHT,
   titleColorStyle,

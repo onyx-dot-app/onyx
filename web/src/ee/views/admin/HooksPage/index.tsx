@@ -17,7 +17,7 @@ import { useCreateModal, useModalClose } from "@opal/components";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { escapeMarkdown, markdown } from "@opal/utils";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { Content, ContentIndent, IllustrationContent } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import {
   SvgArrowExchange,
@@ -200,11 +200,11 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
           />
 
           {spec.docs_url && (
-            <div className="ms-6">
+            <ContentIndent font="main-ui-action">
               <LinkButton href={spec.docs_url} target="_blank">
                 {t("docsLink.label")}
               </LinkButton>
-            </div>
+            </ContentIndent>
           )}
         </div>
 
@@ -382,11 +382,11 @@ function ConnectedHookCard({
               />
 
               {spec?.docs_url && (
-                <div className="ms-6">
+                <ContentIndent font="main-ui-action">
                   <LinkButton href={spec.docs_url} target="_blank">
                     {t("docsLink.label")}
                   </LinkButton>
-                </div>
+                </ContentIndent>
               )}
             </div>
 

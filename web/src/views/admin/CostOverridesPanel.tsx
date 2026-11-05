@@ -6,6 +6,7 @@ import { useSWRConfig } from "swr";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import {
+  ContentIndent,
   ConfirmationModalLayout,
   ContentAction,
   InputHorizontal,
@@ -441,23 +442,25 @@ function OverrideRow({ override }: OverrideRowProps) {
                 </Section>
               }
             />
-            {/* Lines up under the description: ContentAction padding (0.5rem) plus
-                the main-ui description indent (1.375rem). */}
-            <div className="ps-[1.875rem] pb-2">
-              <Section
-                flexDirection="row"
-                justifyContent="start"
-                alignItems="center"
-                width="fit"
-                height="fit"
-                gap={3}
-              >
-                {rateParts.map((part) => (
-                  <Text key={part} font="secondary-mono" color="text-03">
-                    {part}
-                  </Text>
-                ))}
-              </Section>
+            {/* Lines up under the description: the ContentAction padding
+                (0.5rem), then the content's icon box and gap. */}
+            <div className="ps-2 pb-2">
+              <ContentIndent font="main-ui-action">
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  alignItems="center"
+                  width="fit"
+                  height="fit"
+                  gap={3}
+                >
+                  {rateParts.map((part) => (
+                    <Text key={part} font="secondary-mono" color="text-03">
+                      {part}
+                    </Text>
+                  ))}
+                </Section>
+              </ContentIndent>
             </div>
           </Section>
         </SelectCard>

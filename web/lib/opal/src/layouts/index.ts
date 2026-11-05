@@ -1,7 +1,9 @@
 /* Content */
 export {
   Content,
+  ContentIndent,
   type ContentProps,
+  type ContentIndentProps,
   type ContentOrientation,
   type ContentBadge,
   type ContentEditHandle,

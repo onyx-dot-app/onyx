@@ -58,6 +58,20 @@ root            0.25rem gap inline; no gap stacked
 
 For a control beside the content (a button, an input), use [`ContentAction`](../content-action/README.md).
 
+## ContentIndent
+
+`<ContentIndent font={…}>` lines its children up under a `Content`'s title and description: it
+indents them by one icon box (the title font's line height) and the 0.25rem gap. Use it for a row
+that continues a `Content` with an icon, such as a docs link or a detail line, instead of a
+hand-written inset that drifts when `Content` changes.
+
+```tsx
+<Content font="main-ui-action" icon={SvgHook} title="Pre-query" description="Runs before…" />
+<ContentIndent font="main-ui-action">
+  <LinkButton href={docsUrl}>Documentation</LinkButton>
+</ContentIndent>
+```
+
 ## Usage
 
 ```tsx
