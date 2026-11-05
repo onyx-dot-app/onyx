@@ -1,0 +1,43 @@
+{
+  "description": "Onyx search results before every prompt, plus the optional strict-retrieval gate",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook",
+            "args": ["user-prompt"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook",
+            "args": ["pre-tool"],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__plugin_onyx_onyx__search_indexed_documents",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook",
+            "args": ["post-tool"],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

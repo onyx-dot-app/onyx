@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs hook.ts with whichever TypeScript runtime the machine has.
+# A missing runtime exits 0 so the plugin never blocks the user's prompt.
+script="$(dirname "$0")/hook.ts"
+if command -v bun >/dev/null 2>&1; then
+  exec bun "$script" "$@"
+fi
+if command -v node >/dev/null 2>&1; then
+  exec node "$script" "$@"
+fi
+echo "onyx plugin: bun or node 23.6+ is required to run its hooks" >&2
+exit 0

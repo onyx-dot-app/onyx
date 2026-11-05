@@ -1,0 +1,15 @@
+{
+  "name": "onyx",
+  "description": "Onyx plugins for Claude Code",
+  "owner": {
+    "name": "Onyx",
+    "url": "https://onyx.app"
+  },
+  "plugins": [
+    {
+      "name": "onyx",
+      "source": "./",
+      "description": "Grounds every prompt in your Onyx knowledge base and puts Onyx first for context retrieval"
+    }
+  ]
+}
