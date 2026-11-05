@@ -28,3 +28,8 @@
   color: inherit;
   --content-foreground-icon: var(--opal-badge-icon-color);
 }
+
+/* The title is always capped: an ellipsis past 10rem. */
+.opal-badge [data-opal-content] > span {
+  max-width: 10rem;
+}
