@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import {
   useState,
   useEffect,
@@ -15,7 +16,6 @@ import { SelectCard, Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import DocumentPreviewControls from "@/app/craft/components/output-panel/DocumentPreviewControls";
 import PreviewSidebar from "@/app/craft/components/output-panel/PreviewSidebar";
-import { Section } from "@/layouts/general-layouts";
 import {
   fetchPptxPreview,
   buildArtifactUrl,

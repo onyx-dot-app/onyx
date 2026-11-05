@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -29,11 +28,6 @@ from onyx.db.llm import (
     upsert_llm_provider,
 )
 from onyx.db.models import Base, LLMModelFlow, ModelConfiguration
-from onyx.llm.well_known_providers.auto_update_models import (
-    LLMProviderRecommendation,
-    LLMRecommendations,
-)
-from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     LLMProviderView,
@@ -71,6 +65,8 @@ def test_schema_engine() -> Generator[Engine, None, None]:
                     "llm_provider__persona",
                     "llm_provider__user_group",
                     "persona",
+                    "embedding_provider",
+                    "search_settings",
                     "user_group",
                     "user",
                 )
@@ -277,15 +273,8 @@ def test_search_selection_survives_edit_discovery_and_auto_sync(
     sync_auto_mode_models(
         db_session,
         stored,
-        LLMRecommendations(
-            version="test",
-            updated_at=datetime.now(timezone.utc),
-            providers={
-                "openai": LLMProviderRecommendation(
-                    default_model=SimpleKnownModel(name="gpt-6-luna")
-                )
-            },
-        ),
+        released_model_names=["gpt-6-luna"],
+        retired_model_names={"gpt-6-sol"},
     )
     selection = fetch_default_model(db_session, LLMModelFlowType.SEARCH_SELECTION)
     assert selection is not None
@@ -508,15 +497,8 @@ def test_auto_sync_does_not_restore_hidden_chat_naming_only_default(
     sync_auto_mode_models(
         db_session,
         stored_provider,
-        LLMRecommendations(
-            version="1",
-            updated_at=datetime.now(timezone.utc),
-            providers={
-                "openai": LLMProviderRecommendation(
-                    default_model=SimpleKnownModel(name="gpt-6-luna")
-                )
-            },
-        ),
+        released_model_names=["gpt-6-luna"],
+        retired_model_names={"gpt-6-sol"},
     )
 
     default = fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)

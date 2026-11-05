@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { FoldableLogo } from "@/lib/app/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Text } from "@opal/components";
@@ -7,7 +8,6 @@ import { MinimalAgent } from "@/lib/agents/types";
 import { useState, useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import { Section } from "@/layouts/general-layouts";
 import { SvgEyeClosed } from "@opal/icons";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useTranslations } from "next-intl";

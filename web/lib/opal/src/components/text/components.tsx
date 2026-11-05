@@ -195,6 +195,6 @@ function Text({
   );
 }
 
-export { Text, type TextProps };
+export { Text, COLOR_CONFIG as TEXT_COLOR_CLASSES, type TextProps };
 // Re-export the shared unions so existing `@opal/components` consumers are unchanged.
 export type { TextFont, TextColor };

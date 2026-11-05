@@ -698,7 +698,7 @@ export default function ModelSelectorContent({
   return (
     <Section gap={2}>
       <InputTypeIn
-        searchIcon
+        icon="search"
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}

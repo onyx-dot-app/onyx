@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
@@ -7,7 +8,6 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
 
-import { Section } from "@/layouts/general-layouts";
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 import mime from "mime";
 import {

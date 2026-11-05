@@ -126,7 +126,7 @@ function nameColumn(
         description={row.personal_name ? row.email : undefined}
         tag={
           isManager?.(row)
-            ? { title: labels.manager, color: "blue" }
+            ? { title: labels.manager, color: "info" }
             : undefined
         }
       />

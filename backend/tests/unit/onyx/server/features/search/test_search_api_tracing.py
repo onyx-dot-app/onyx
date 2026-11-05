@@ -22,43 +22,17 @@ from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.framework import set_trace_processors
 from onyx.tracing.framework.create import generation_span
-from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import FunctionSpanData, GenerationSpanData
-from onyx.tracing.framework.spans import Span
-from onyx.tracing.framework.traces import Trace
+from tests.unit.onyx.tracing.capture import CaptureProcessor
 
 _API = "onyx.server.features.search.api"
 _QUERY = "what is the refund policy"
 _LLM_FACING = json.dumps({"results": []})
 
 
-class _CaptureProcessor(TracingProcessor):
-    def __init__(self) -> None:
-        self.started_traces: list[Trace] = []
-        self.ended_spans: list[Span[Any]] = []
-
-    def on_trace_start(self, trace: Trace) -> None:
-        self.started_traces.append(trace)
-
-    def on_trace_end(self, trace: Trace) -> None:
-        pass
-
-    def on_span_start(self, span: Span[Any]) -> None:
-        pass
-
-    def on_span_end(self, span: Span[Any]) -> None:
-        self.ended_spans.append(span)
-
-    def shutdown(self) -> None:
-        pass
-
-    def force_flush(self) -> None:
-        pass
-
-
 @pytest.fixture
-def processor() -> Generator[_CaptureProcessor, None, None]:
-    capture = _CaptureProcessor()
+def processor() -> Generator[CaptureProcessor, None, None]:
+    capture = CaptureProcessor()
     set_trace_processors([capture])
     try:
         yield capture
@@ -86,6 +60,7 @@ def search_dependencies() -> Generator[MagicMock, None, None]:
     with (
         patch(f"{_API}.get_default_llm"),
         patch(f"{_API}.check_llm_cost_limit_for_provider"),
+        patch(f"{_API}.check_model_spend_limits"),
         patch(f"{_API}.get_current_search_settings"),
         patch(f"{_API}.get_default_document_index"),
         patch(f"{_API}.load_settings"),
@@ -104,7 +79,7 @@ def _run_search(user: MagicMock, persona_id: int | None = None) -> Any:
 
 
 def test_search_records_pipeline_spans_under_one_trace(
-    processor: _CaptureProcessor,
+    processor: CaptureProcessor,
     user: MagicMock,
     search_dependencies: MagicMock,
 ) -> None:
@@ -144,7 +119,7 @@ def test_search_records_pipeline_spans_under_one_trace(
 
 
 def test_search_records_persona_id_on_the_trace(
-    processor: _CaptureProcessor,
+    processor: CaptureProcessor,
     user: MagicMock,
     search_dependencies: MagicMock,
 ) -> None:
@@ -158,7 +133,7 @@ def test_search_records_persona_id_on_the_trace(
 
 
 def test_search_failure_is_recorded_on_the_tool_span(
-    processor: _CaptureProcessor,
+    processor: CaptureProcessor,
     user: MagicMock,
     search_dependencies: MagicMock,
 ) -> None:

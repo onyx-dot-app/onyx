@@ -1,12 +1,16 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  InputHorizontal,
+  Section,
+} from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider, Text } from "@opal/components";
 import { Collapsible } from "@opal/components";
@@ -189,7 +193,7 @@ export interface AgentViewerModalProps {
 }
 export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const t = useTranslations("agents.modals");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { allRecentFiles } = useProjectsContext();
   const { llmProviders } = useLanguageModelsForAgent(agent.id);
   const { appName } = useSettings();
@@ -201,9 +205,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
         [SEARCH_PARAM_NAMES.USER_PROMPT]: message,
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
-      router.push(`/app?${params.toString()}`);
+      navigation.go(`/app?${params.toString()}`);
     },
-    [agent.id, router]
+    [agent.id, navigation]
   );
 
   const hasKnowledge =

@@ -1,6 +1,6 @@
 # @opal/layouts
 
-**Import:** `import { Content, ContentAction, IllustrationContent, PageCenter } from "@opal/layouts";`
+**Import:** `import { Content, ContentAction, ErrorState, IllustrationContent, KeyValue, PageCenter, StickyBox } from "@opal/layouts";`
 
 Layout primitives for composing content blocks. These components handle sizing, font selection, icon alignment, and optional inline editing — things that are tedious to get right by hand and easy to get wrong.
 
@@ -13,6 +13,7 @@ Layout primitives for composing content blocks. These components handle sizing, 
 | [`IllustrationContent`](./illustration-content/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders.                                                  | [IllustrationContent README](./illustration-content/README.md) |
 | [`PageCenter`](./page-center/README.md) | Centres a whole-body state (loading, error, empty) in the page body, both ways. | [PageCenter README](./page-center/README.md) |
 | [`StickyBox`](./sticky-box/README.md) | A block that pins to the top or bottom of its scroll container as the page scrolls past it, with an optional shadow while pinned. | [StickyBox README](./sticky-box/README.md) |
+| [`ErrorState`](./states/README.md) | Content that failed to load, centred in place of a page body or list. | [States README](./states/README.md) |
 | [`KeyValue`](./key-value/README.md) | One read-only "label … value" row, for details of a saved object. | [KeyValue README](./key-value/README.md) |
 
 ## Quick Start
@@ -89,14 +90,20 @@ From `@opal/layouts`:
 // Components
 Content;
 ContentAction;
+ErrorState;
 IllustrationContent;
+KeyValue;
 PageCenter;
+StickyBox;
 
 // Types
 ContentProps;
 ContentActionProps;
+ErrorStateProps;
 IllustrationContentProps;
+KeyValueProps;
 PageCenterProps;
+StickyBoxRootProps;
 SizePreset;
 ContentVariant;
 ```

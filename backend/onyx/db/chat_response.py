@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session, aliased, joinedload, object_session, selecti
 
 from onyx.agents.compaction import count_tokens
 from onyx.agents.execution_records import run_input_message_id
-from onyx.agents.models import AgentInfo, RunStatus, StepRecord, ToolExecutionRecord
+from onyx.agents.models import (
+    AgentInfo,
+    RunFailureKind,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.models import (
     ChatExecutionRecord,
     ChatResponseSnapshot,
@@ -324,9 +330,17 @@ def save_chat_response_to_db(
     if response.error is not None:
         answer = response.answer or ""
     elif response.cancelled:
-        answer = (
-            (response.answer + " ... \n\n") if response.answer else ""
-        ) + "Generation was stopped by the user."
+        deadline = (
+            response.response is not None
+            and response.response.failure is not None
+            and response.response.failure.kind == RunFailureKind.DEADLINE
+        )
+        reason = (
+            "The response stopped because it reached its time limit."
+            if deadline
+            else "Generation was stopped by the user."
+        )
+        answer = ((response.answer + " ... \n\n") if response.answer else "") + reason
     else:
         if response.answer is None:
             raise RuntimeError("Agent completed without an answer")

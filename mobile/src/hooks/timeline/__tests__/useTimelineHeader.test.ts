@@ -24,11 +24,6 @@ describe("useTimelineHeader — text map", () => {
     expect(result.current.hasPackets).toBe(false);
   });
 
-  it("shows the image header when generating with no tool packets", () => {
-    const { result } = renderHook(() => useTimelineHeader([], undefined, true));
-    expect(result.current.headerText).toBe("Generating image...");
-  });
-
   it("maps each activity packet type to its label", () => {
     expect(headerFor(PacketType.REASONING_START)).toBe("Thinking");
     expect(headerFor(PacketType.FETCH_TOOL_START)).toBe("Reading");

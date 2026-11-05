@@ -100,7 +100,7 @@ function ConnectedModelCard({
         padding={2}
         tag={
           isDefault
-            ? { title: t("defaultTag.label"), color: "blue" }
+            ? { title: t("defaultTag.label"), color: "info" }
             : undefined
         }
         rightChildren={

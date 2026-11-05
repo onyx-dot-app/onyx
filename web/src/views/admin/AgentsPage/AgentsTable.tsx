@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { OverflowText, Table, type TableColumn } from "@opal/components";
-import { Content, IllustrationContent, toast } from "@opal/layouts";
+import { Content, IllustrationContent, toast, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { PageLoader } from "@opal/loaders";
 import { InputTypeIn } from "@opal/components";
@@ -15,7 +15,6 @@ import AgentRowActions from "@/views/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/lib/agents/svc";
 import { SvgUser } from "@opal/icons";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
-import { Section } from "@/layouts/general-layouts";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 import { can } from "@/lib/permissions/resource-actions";
 
@@ -223,7 +222,7 @@ export default function AgentsTable() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder={t("search.placeholder")}
-          searchIcon
+          icon="search"
         />
         <Section gap={1} flexDirection="row" justifyContent="start">
           {filterBar}

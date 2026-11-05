@@ -3,7 +3,6 @@
 import { IconLoader } from "@opal/loaders";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Section } from "@/layouts/general-layouts";
 import { Button, Card, InputPasswordTypeIn, Text } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
@@ -12,7 +11,7 @@ import {
   useDiscordGuilds,
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 

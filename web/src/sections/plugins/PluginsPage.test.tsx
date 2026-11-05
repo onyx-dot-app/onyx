@@ -29,6 +29,9 @@ let mockScopedManager = false;
 let mockCraftAvailable = true;
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   usePathname: () => "/admin/plugins",
   useSearchParams: () => mockSearchParams,
@@ -180,6 +183,7 @@ function mockNetwork({
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   mockPush.mockClear();
   mockReplace.mockClear();
   mockSearchParams = new URLSearchParams();
@@ -438,7 +442,9 @@ test("filters by description and URL and clears a search without losing either r
   render(<PluginsPage />);
   await screen.findByRole("link", { name: "Manage Workspace MCP" });
   const user = setupUser();
-  const search = screen.getByRole("textbox", { name: copy.search.placeholder });
+  const search = screen.getByRole("searchbox", {
+    name: copy.search.placeholder,
+  });
   await user.type(search, "weekly");
   expect(screen.getByRole("link", { name: "View Reports API" })).toBeVisible();
   expect(
@@ -600,7 +606,7 @@ test("opens custom MCP and shows discovered tools after setup completes", async 
   await user.click(screen.getByRole("button", { name: copy.add.mcp }));
   expect(screen.getByRole("textbox", { name: "Server URL" })).toHaveValue("");
   await user.click(screen.getByRole("button", { name: "Complete setup" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins/mcp/7?tab=tools");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins/mcp/7?tab=tools");
 });
 
 test("opens OpenAPI creation and configures authentication on its canonical detail", async () => {
@@ -610,7 +616,7 @@ test("opens OpenAPI creation and configures authentication on its canonical deta
   await user.click(screen.getByRole("button", { name: copy.add.label }));
   await user.click(screen.getByRole("menuitem", { name: copy.kind.openapi }));
   await user.click(screen.getByRole("button", { name: "Create action" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins/openapi/7");
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins/openapi/7");
 });
 
 test("a creation deep link replaces an open catalog instead of opening a second dialog", async () => {

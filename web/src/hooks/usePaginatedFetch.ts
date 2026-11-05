@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -48,7 +48,7 @@ function usePaginatedFetch<T extends PaginatedType>({
   refreshIntervalInMs = 5000,
   disableUrlSync = false,
 }: PaginationConfig): PaginatedHookReturnData<T> {
-  const router = useRouter();
+  const navigation = useNavigation();
   const currentPath = usePathname();
   const searchParams = useSearchParams();
 
@@ -182,11 +182,12 @@ function usePaginatedFetch<T extends PaginatedType>({
       const params = new URLSearchParams(searchParams);
       params.set("page", page.toString());
       // SAFETY: currentPath is the current pathname, a route of this app.
-      router.replace(`${currentPath}?${params.toString()}` as Route, {
+      navigation.go(`${currentPath}?${params.toString()}` as Route, {
+        replace: true,
         scroll: false,
       });
     },
-    [disableUrlSync, currentPath, router, searchParams]
+    [disableUrlSync, currentPath, navigation, searchParams]
   );
 
   // Updates the current page

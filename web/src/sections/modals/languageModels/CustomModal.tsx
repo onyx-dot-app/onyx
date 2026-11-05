@@ -44,8 +44,8 @@ import {
   InputPadder,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 
 // ─── Model Configuration List ─────────────────────────────────────────────────
 

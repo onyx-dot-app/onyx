@@ -12,7 +12,7 @@ import { ChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalAgent } from "@/lib/agents/types";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useAgents } from "@/lib/agents/hooks";
 import { useActiveProject } from "@/lib/projects/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";

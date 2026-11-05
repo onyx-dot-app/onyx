@@ -212,7 +212,10 @@ Policy precedence is in [[craft-external-apps]].
     fingerprint is overwritten without a conflict.
 11. `expected-failure-tool-response` **An expected failure returns an error
     `ToolResult`.** `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run`
-    catches every exception and reports an auth error for a 401,
+    preserves `CallToolResult.isError` as a failed result without marking
+    credentials for reauthentication. Text content takes precedence; a result
+    with only `structuredContent` is JSON-encoded, then parsed for the model.
+    Transport exceptions report an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
     `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a
     failed result for a blocked destination, a timeout, a connection error
@@ -238,6 +241,18 @@ Policy precedence is in [[craft-external-apps]].
     change or a delete; users who lose access are not in the
     set afterwards. The reload only restamps `mcp_config_hash`; it does not push
     skill files.
+
+14. `cancel-in-flight-request` **Chat cancellation stops an active MCP request.**
+    `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run` passes its
+    invocation signal to `server/features/mcp/client.py:call_mcp_tool`.
+    The synchronous client cancels and drains the request coroutine before
+    raising `AgentCancelled`. This bypasses ordinary tool error recovery and
+    records `cancelled`, not `error`, in MCP call metrics.
+    `utils/threadpool_concurrency.py:run_until_cancelled` owns coroutine cancellation
+    and cleanup. The MCP client supplies signal callbacks and `AgentCancelled`.
+    A result that already completed wins a concurrent cancellation. Discovery
+    calls that have no signal keep the existing synchronous behavior. Stopping
+    the local request cannot undo work already performed by the remote server.
 
 `Tool.enabled` gates MCP tools everywhere and OpenAPI tools only in Default
 Chat: see [[plugins#openapi-enabled-default-chat-only]].

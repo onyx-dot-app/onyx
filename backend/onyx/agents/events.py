@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.models import ExecutionStatus, RunStatus
+from onyx.agents.models import ExecutionStatus, RunFailure, RunOutcome
 from onyx.agents.tools import PendingToolInput, ToolProgress
 from onyx.llm.models import (
     AssistantMessage,
@@ -59,9 +59,8 @@ class InputRequiredEvent(_AgentEvent):
 
 class AgentEndEvent(_AgentEvent):
     type: Literal[AgentEventType.AGENT_END] = AgentEventType.AGENT_END
-    outcome: Literal[
-        RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
-    ]
+    outcome: RunOutcome
+    failure: RunFailure | None = None
 
 
 class _MessageEvent(_AgentEvent):

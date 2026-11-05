@@ -41,7 +41,7 @@ Headers are only sticky when `actions` is non-empty.
 | `onTitleChange`  | `(title: string) => void` | —       | Called when the user commits a title edit                                                                                                                 |
 | `actions`        | `ReactNode[]`             | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
 | `children`       | `ReactNode`               | —       | Content below the title row (e.g. search bar, filters)                                                                                                    |
-| `cancel`         | `boolean \| () => void`   | `false` | Render a secondary Cancel as the first action; `true` goes back in history, a function overrides the destination                                          |
+| `cancel`         | `boolean \| string \| () => void` | `false` | Render a secondary Cancel as the first action. `true` goes back within the app, or to `/` from a page not reached within it; a path does the same with that path as the fallback; a function replaces the action |
 | `divider`        | `boolean`                 | `false` | Show a horizontal divider at the bottom of the header                                                                                                     |
 | `stackActionsOnMobile` | `boolean`               | `false` | Place actions below the title on a full-width row on narrow screens                                                                                       |
 
@@ -58,6 +58,27 @@ children, animated in with [`Presence`](../../components/presence/README.md) unl
 | Prop    | Type      | Default | Description                                         |
 | ------- | --------- | ------- | --------------------------------------------------- |
 | `gap`   | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
+
+### Loading
+
+A whole page while it loads: `Root` with `loading`, a `Header`, and an empty
+`Body`, so the page loader shows under the page's own title. Use it as a
+route's `loading.tsx`.
+
+| Prop          | Type                                     | Default | Description             |
+| ------------- | ---------------------------------------- | ------- | ----------------------- |
+| `icon`        | `IconFunctionComponent`                  | —       | As on `Header`          |
+| `title`       | `string \| RichStr`                      | —       | As on `Header` (required) |
+| `description` | `string \| RichStr`                      | —       | As on `Header`          |
+| `width`       | `"sm" \| "md" \| "lg" \| "xl" \| "full"` | `"md"`  | As on `Root`            |
+
+```tsx
+<SettingsLayouts.Loading
+  icon={SvgOnyxOctagon}
+  title={t("header.title")}
+  description={t("header.description")}
+/>
+```
 
 ## Usage
 
@@ -87,6 +108,6 @@ import { SettingsLayouts } from "@opal/layouts";
 <SettingsLayouts.Header
   icon={SvgArrow}
   title="Edit Item"
-  cancel={() => router.push("/admin/items")}
+  cancel={() => navigation.go("/admin/items")}
 />
 ```

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   getSourceDisplayName,
@@ -175,6 +176,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     null
   );
   const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const navigation = useNavigation();
 
   const displayName = getSourceDisplayName(sourceType) || sourceType;
   const methods = getCredentialCreationMethods(oauthDetails);
@@ -210,10 +212,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     if (method === CredentialCreationMethod.OAuth && oauthDetails) {
       if (shouldRedirectToOAuth(oauthDetails)) {
         try {
-          window.location.href = await getConnectorOauthRedirectUrl(
-            sourceType,
-            {}
-          );
+          navigation.load(await getConnectorOauthRedirectUrl(sourceType, {}));
         } catch (error) {
           return errorMessage(error);
         }

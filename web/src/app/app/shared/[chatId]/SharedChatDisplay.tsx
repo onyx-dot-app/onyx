@@ -13,11 +13,11 @@ import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
-import { Section } from "@/layouts/general-layouts";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, Section } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import { Button, Text } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import useOnMount from "@/hooks/useOnMount";
@@ -39,6 +39,7 @@ export default function SharedChatDisplay({
     useState<MinimalOnyxDocument | null>(null);
 
   const isMounted = useOnMount();
+  const appPosition = useAppPosition();
 
   // The shared viewer is authenticated, so the user-facing provider list is
   // available for resolving each model's provider icon, same as the live view.
@@ -57,7 +58,7 @@ export default function SharedChatDisplay({
             title={t("notFound.title")}
             description={t("notFound.description")}
           />
-          <Button href="/app" prominence="secondary">
+          <Button {...appPosition.linkToNewSession()} prominence="secondary">
             {t("newChatButton.label")}
           </Button>
         </Section>
@@ -82,7 +83,7 @@ export default function SharedChatDisplay({
             title={t("notFound.title")}
             description={t("emptyChat.description")}
           />
-          <Button href="/app" prominence="secondary">
+          <Button {...appPosition.linkToNewSession()} prominence="secondary">
             {t("newChatButton.label")}
           </Button>
         </Section>

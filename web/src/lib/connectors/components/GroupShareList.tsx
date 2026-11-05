@@ -5,7 +5,7 @@ import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import {
   Button,
-  Chip,
+  Tag,
   InputMultiComboBox,
   Table,
   type TableColumn,
@@ -287,7 +287,7 @@ export default function GroupShareList({
           {rows.map((row) => {
             const groupId = row.groupId;
             return groupId === undefined ? null : (
-              <Chip
+              <Tag
                 key={row.id}
                 title={row.name}
                 icon={row.icon}

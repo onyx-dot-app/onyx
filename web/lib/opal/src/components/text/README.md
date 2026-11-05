@@ -33,7 +33,7 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 | `"heading-h3-muted"`      | 18px | 500    | 28px        |
 | `"main-content-body"`     | 16px | 450    | 24px        |
 | `"main-content-muted"`    | 16px | 400    | 24px        |
-| `"main-content-emphasis"` | 16px | 700    | 24px        |
+| `"main-content-emphasis"` | 16px | 600    | 24px        |
 | `"main-content-mono"`     | 16px | 400    | 23px        |
 | `"main-ui-body"`          | 14px | 500    | 20px        |
 | `"main-ui-muted"`         | 14px | 400    | 20px        |

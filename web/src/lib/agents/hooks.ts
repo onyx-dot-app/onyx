@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "@opal/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -17,7 +18,6 @@ import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
 import type { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
-import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
@@ -34,7 +34,7 @@ import { Permission } from "@/lib/types";
  * redundant round-trips across the app.
  */
 export function useAgents() {
-  const { data, error, mutate } = useSWR<MinimalAgent[]>(
+  const { data, error, isLoading, mutate } = useSWR<MinimalAgent[]>(
     SWR_KEYS.agents,
     errorHandlingFetcher,
     {
@@ -46,7 +46,7 @@ export function useAgents() {
 
   return {
     agents: data ?? [],
-    isLoading: !error && !data,
+    isLoading,
     error,
     refresh: mutate,
   };

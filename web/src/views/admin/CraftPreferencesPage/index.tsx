@@ -1,19 +1,20 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { Button, Card, Tag, Text } from "@opal/components";
+import { Button, Card, Badge, Text } from "@opal/components";
 import {
   IllustrationContent,
   InputVertical,
   SettingsLayouts,
   toast,
+  Section,
 } from "@opal/layouts";
 import { SvgArrowUpRight, SvgRefreshCw } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { Section } from "@/layouts/general-layouts";
 import { InputTextArea } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -69,6 +70,7 @@ function BaseInstructionsPreview() {
 
 export default function CraftPreferencesPage() {
   const t = useTranslations("admin.craftPreferences");
+  const navigation = useNavigation();
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const savedInstructions = settings?.craft_instructions ?? "";
@@ -190,7 +192,7 @@ export default function CraftPreferencesPage() {
           ? [
               <Button
                 key="try"
-                href="/craft"
+                {...navigation.linkTo("/craft")}
                 prominence="secondary"
                 rightIcon={SvgArrowUpRight}
               >
@@ -248,7 +250,7 @@ export default function CraftPreferencesPage() {
                   placeholder={t("defaultModel.placeholder")}
                 />
                 {isInherited && (
-                  <Tag title={t("defaultModel.inheritedTag.label")} />
+                  <Badge title={t("defaultModel.inheritedTag.label")} />
                 )}
                 {configuredSelection && (
                   <Button

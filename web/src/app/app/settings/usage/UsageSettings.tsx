@@ -3,8 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
-import { Section } from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import {
   Button,
   Collapsible,

@@ -36,7 +36,13 @@ jest.mock("@/hooks/useVoiceStatus", () => ({
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
 }));
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({}),
+}));
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     isNewSession: () => true,
     chat: () => null,

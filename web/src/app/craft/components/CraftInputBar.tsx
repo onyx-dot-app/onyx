@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   forwardRef,
   memo,
@@ -10,7 +11,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import BaseInputBar, {
@@ -133,7 +133,7 @@ const CraftInputBar = memo(
         if (typeof draft === "string") baseRef.current?.setMessage(draft);
       }, [draft, loaded, storageKey, userId]);
       const fileInputRef = useRef<HTMLInputElement>(null);
-      const router = useRouter();
+      const navigation = useNavigation();
 
       const {
         currentMessageFiles,
@@ -177,7 +177,7 @@ const CraftInputBar = memo(
         (entry: PickerEntry) => {
           const connectionPath = pickerEntryConnectionPath(entry);
           if (connectionPath) {
-            router.push(connectionPath);
+            navigation.go(connectionPath);
             return;
           }
           setActiveEntries((prev) =>
@@ -188,7 +188,7 @@ const CraftInputBar = memo(
               : [...prev, entry]
           );
         },
-        [router]
+        [navigation]
       );
 
       const removeEntry = useCallback((entryKey: string) => {
@@ -291,8 +291,8 @@ const CraftInputBar = memo(
             {
               onAttachFiles: () => fileInputRef.current?.click(),
               onSelectEntry: addEntry,
-              onBrowseSkills: () => router.push("/craft/v1/skills"),
-              onBrowseApps: () => router.push("/craft/v1/apps"),
+              onBrowseSkills: () => navigation.go("/craft/v1/skills"),
+              onBrowseApps: () => navigation.go("/craft/v1/apps"),
               libraryFiles,
               // Defer the modal until the + popover finishes closing, else it paints over it.
               onManageLibrary: () =>
@@ -300,7 +300,7 @@ const CraftInputBar = memo(
             },
             entryMenuT
           ),
-        [pickerSections, addEntry, libraryFiles, router, entryMenuT]
+        [pickerSections, addEntry, libraryFiles, navigation, entryMenuT]
       );
 
       const bottomLeftSlot = (

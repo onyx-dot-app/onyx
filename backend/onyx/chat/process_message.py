@@ -109,6 +109,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
 )
+from onyx.server.query_and_chat.token_limit import check_model_spend_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
 from onyx.tools.models import SearchToolUsage
@@ -217,6 +218,7 @@ def _select_models(
             tenant_id=get_current_tenant_id(),
             llm_provider_api_key=llm.config.api_key,
         )
+        check_model_spend_limits(user, llm.config.model_configuration_id)
         display_name = llm.config.model_name
         if override is not None:
             display_name = (
@@ -787,14 +789,14 @@ def gather_stream_full(
     response_future: Future[ChatResponseOutcome],
 ) -> ChatFullResponse:
     """Read delivery metadata and project accepted execution content."""
-    error_msg: str | None = None
+    error: StreamingError | None = None
     message_id: int | None = None
     chat_session_id: UUID | None = None
     incognito = False
 
     for packet in packets:
         if isinstance(packet, StreamingError):
-            error_msg = packet.error
+            error = packet
         elif isinstance(packet, MessageResponseIDInfo):
             message_id = packet.reserved_assistant_message_id
         elif isinstance(packet, CreateChatSessionID):
@@ -802,6 +804,14 @@ def gather_stream_full(
             incognito = packet.incognito
 
     if message_id is None:
+        if error is not None:
+            # The turn failed before it reserved a message; surface the
+            # original error as an HTTP status instead of a 500.
+            raise OnyxError(
+                OnyxErrorCode.for_code(error.error_code),
+                error.error,
+                extra=error.details,
+            )
         raise ValueError("Message ID is required")
 
     outcome = response_future.result(timeout=CHAT_RESPONSE_WAIT_TIMEOUT_S)
@@ -832,5 +842,5 @@ def gather_stream_full(
         message_id=message_id,
         chat_session_id=chat_session_id,
         incognito=incognito,
-        error_msg=outcome.error or error_msg,
+        error_msg=outcome.error or (error.error if error else None),
     )

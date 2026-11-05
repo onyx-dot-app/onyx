@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -13,7 +13,6 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Section } from "@/layouts/general-layouts";
 import { Button, Popover, SelectCard, Text } from "@opal/components";
 import { Card, Content, ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";

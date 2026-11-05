@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { installedPluginStatus, sortPlugins } from "@/lib/plugins/sort";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Dropdown, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
@@ -111,7 +111,7 @@ type PluginDialog =
 export default function PluginsPage() {
   const locale = useLocale();
   const t = useTranslations("actions.plugins");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
@@ -150,10 +150,11 @@ export default function PluginsPage() {
     setDialog({ kind: "create", creation: { kind: add } });
     const nextQuery = new URLSearchParams(currentQuery);
     nextQuery.delete("add");
-    router.replace(
-      withPluginSearchParams(ADMIN_ROUTES.PLUGINS.path, nextQuery)
+    navigation.go(
+      withPluginSearchParams(ADMIN_ROUTES.PLUGINS.path, nextQuery),
+      { replace: true }
     );
-  }, [canCreate, canManageActions, canManageApps, router, searchParams]);
+  }, [canCreate, canManageActions, canManageApps, navigation, searchParams]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredPlugins = sortPlugins(
@@ -409,7 +410,7 @@ export default function PluginsPage() {
             onCompleted={(server) => {
               setDialog(null);
               void mcp.refresh();
-              router.push(
+              navigation.go(
                 withPluginSearchParams(
                   pluginDetailHref({ kind: "mcp", id: server.id }),
                   { tab: "tools" }
@@ -425,7 +426,7 @@ export default function PluginsPage() {
             onCreated={(toolId) => {
               setDialog(null);
               void openapi.refresh();
-              router.push(pluginDetailHref({ kind: "openapi", id: toolId }));
+              navigation.go(pluginDetailHref({ kind: "openapi", id: toolId }));
             }}
           />
         )}

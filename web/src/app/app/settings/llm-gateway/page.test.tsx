@@ -8,6 +8,9 @@ import LLMGatewayPage from "@/app/app/settings/llm-gateway/page";
 const mockReplace = jest.fn();
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ replace: mockReplace }),
 }));
 jest.mock("@/lib/tiers/hooks", () => ({
@@ -34,6 +37,7 @@ const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
 describe("LLMGatewayPage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     jest.clearAllMocks();
     mockUseTierAtLeast.mockReturnValue(true);
     mockUseSettings.mockReturnValue({ isLoading: false } as ReturnType<

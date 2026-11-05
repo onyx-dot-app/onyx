@@ -1,5 +1,5 @@
+import { Section } from "@opal/layouts";
 import { Text, CopyButton } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";

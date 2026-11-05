@@ -19,7 +19,7 @@ import {
   type ContentMdProps,
   type ContentMdTag,
 } from "@opal/layouts/content/ContentMd";
-import type { TagProps, TextColor } from "@opal/components";
+import type { BadgeProps, TextColor } from "@opal/components";
 import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";
@@ -136,8 +136,8 @@ type XlContentProps = ContentBaseProps & {
   moreIcon1?: IconFunctionComponent;
   /** Optional tertiary icon rendered in the icon row (ContentXl only). */
   moreIcon2?: IconFunctionComponent;
-  /** Tag rendered inline after the description (ContentXl only). */
-  descriptionTag?: TagProps;
+  /** Badge rendered inline after the description (ContentXl only). */
+  descriptionTag?: BadgeProps;
   /** When an editable title shows its pencil: on hover, or at rest too (ContentXl only). Default: `"hover"`. */
   editButton?: "hover" | "rest";
 };
@@ -156,7 +156,7 @@ type MdContentProps = ContentBaseProps & {
   suffix?: "optional" | (string & {});
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
-  /** Tag rendered beside the title, with an optional hover tooltip. */
+  /** Badge rendered beside the title, with an optional hover tooltip. */
   tag?: ContentMdTag;
   /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
   rightChildren?: React.ReactNode;

@@ -160,6 +160,66 @@ Keep those rules scoped to the proxy pods.
 Docker deployments retain mandatory iptables enforcement. The bootstrap rejects
 disabling lockdown in Docker entrypoint mode.
 
+### Check your nodes for Craft Firecracker
+
+Craft will run sandboxes as Firecracker microVMs on sandbox nodes. Before you
+use that runtime, run the preflight check. It does not need `ENABLE_CRAFT`.
+
+```yaml
+craft:
+  firecrackerPreflight:
+    enabled: true
+```
+
+The chart then adds a DaemonSet, `<release>-craft-fc-preflight`, in the
+release namespace. It puts one pod on each node that matches
+`sandboxPod.nodeSelector` and `sandboxPod.tolerations`. It does not use
+`sandboxPod.runtimeClassName`, because gVisor and Kata hide `/dev/kvm`.
+
+Each pod runs the checks once at start, then stays idle. Read the results:
+
+```bash
+kubectl logs -n <release-namespace> --prefix --tail=-1 \
+  -l app.kubernetes.io/component=craft-fc-preflight,app.kubernetes.io/instance=<release>
+```
+
+The first line names the node. Each check line starts with `PASS`, `WARN` or
+`FAIL`. The last line of each pod is `RESULT: PASS (<N> warnings)` or
+`RESULT: FAIL (<N> failed, <M> warnings)`. A failed check does not make the
+pod unready, so `helm upgrade --wait` does not stop.
+
+| Check | Pass condition | Fix if it fails |
+|---|---|---|
+| `kvm` | `/dev/kvm` exists and opens read-write | Use a metal instance, or enable nested virtualization on the node pool |
+| `cpu-vendor` | `GenuineIntel` | Use an Intel instance type |
+| `cpu-vmx` | The `vmx` CPU flag is present | Enable nested virtualization |
+| `cgroup` | cgroup v2 | Use a node image with the unified cgroup hierarchy |
+| `kernel` | 5.10, 6.1 or 6.18 (WARN only) | Use AL2023 with kernel 6.18 |
+| `max-map-count` | `vm.max_map_count` >= 1048576 | Set the sysctl on the node pool |
+| `filesystem` | `scratchHostPath` is writable, and is XFS with reflink (WARN if not XFS) | Free space or fix permissions; on ext4, the host agent will use an XFS loop file |
+| `free-disk` | At least `minFreeDiskGi` free (WARN only) | Use a larger root disk |
+
+The filesystem and disk checks run in `scratchHostPath`
+(default `/var/lib/onyx-craft-fc-preflight`). The chart creates this directory
+on the node. Set it to a directory on the filesystem that will hold sandbox
+data.
+
+The pod is privileged by default. A non-privileged container cannot open
+`/dev/kvm`, because the container device cgroup blocks it. If the cluster runs
+a KVM device plugin, set its resource name to run the pod without privilege:
+
+```yaml
+craft:
+  firecrackerPreflight:
+    enabled: true
+    kvmDeviceResource: devices.kubevirt.io/kvm
+```
+
+The pod uses the sandbox image by default. Set `craft.firecrackerPreflight.image`
+to use a different image. The image must have a POSIX shell, awk, grep and GNU coreutils (`cp --reflink`,
+`stat -f`, `mktemp`).
+Remove the DaemonSet after the check: set `enabled: false` and upgrade.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip

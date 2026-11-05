@@ -1,8 +1,8 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { memo } from "react";
 import { useTranslations } from "next-intl";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { Text, Button } from "@opal/components";
 import { SvgArrowUpRight, SvgPlusCircle } from "@opal/icons";
@@ -32,7 +32,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
 
   if (!hasAnyKnowledge) {
     return (
-      <GeneralLayouts.Section
+      <Section
         flexDirection="row"
         justifyContent="between"
         alignItems="center"
@@ -47,7 +47,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
           prominence="tertiary"
           aria-label="knowledge-add-button"
         />
-      </GeneralLayouts.Section>
+      </Section>
     );
   }
 
@@ -59,7 +59,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
     selectedSources.length;
 
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
       justifyContent="between"
       alignItems="center"
@@ -76,6 +76,6 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
       >
         {t("mainContent.viewEdit.label")}
       </Button>
-    </GeneralLayouts.Section>
+    </Section>
   );
 });

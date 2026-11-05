@@ -36,7 +36,7 @@ test("search matches tool names and descriptions", async () => {
   render(<MemberMCPToolsList tools={tools} />);
   const user = setupUser();
   await user.type(
-    screen.getByRole("textbox", { name: "Search tools" }),
+    screen.getByRole("searchbox", { name: "Search tools" }),
     "MEMBERSHIP"
   );
   expect(screen.getByText("List teams")).toBeVisible();
@@ -48,7 +48,7 @@ test("search matches tool names and descriptions", async () => {
 test("clearing an unmatched search restores the tool list", async () => {
   render(<MemberMCPToolsList tools={tools} />);
   const user = setupUser();
-  const search = screen.getByRole("textbox", { name: "Search tools" });
+  const search = screen.getByRole("searchbox", { name: "Search tools" });
   await user.type(search, "no match");
   expect(screen.getByText("No tools found")).toBeVisible();
   await user.clear(search);

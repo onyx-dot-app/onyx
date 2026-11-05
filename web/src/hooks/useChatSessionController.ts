@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -41,6 +40,8 @@ import {
   settleChatSession,
 } from "@/lib/chat/settleChatSession";
 import { useTranslations } from "next-intl";
+import type { Route } from "next";
+import { useNavigation } from "@opal/navigation";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
 // strict mode) can't start a second tail for the same run.
@@ -48,7 +49,7 @@ const resumingRuns = new Set<number>();
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
-  searchParams: ReadonlyURLSearchParams;
+  searchParams: URLSearchParams;
   firstMessage?: string;
 
   // UI state setters
@@ -93,6 +94,7 @@ export default function useChatSessionController({
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
+  const navigation = useNavigation();
   const tReadiness = useTranslations("chat.readiness");
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
@@ -582,7 +584,9 @@ export default function useChatSessionController({
             ? "?" + currentSearchParams.toString()
             : ""
         }`;
-        window.history.replaceState({}, "", newUrl);
+        // SAFETY: the current pathname with its query trimmed is a page of
+        // the app.
+        navigation.go(newUrl as Route, { replace: true, shallow: true });
       }
     }
   }, [

@@ -1,7 +1,7 @@
 "use client";
 
-import { Button, OverflowText, Tag, Text, Tooltip } from "@opal/components";
-import type { TagProps, TextFont } from "@opal/components";
+import { Button, OverflowText, Badge, Text, Tooltip } from "@opal/components";
+import type { BadgeProps, TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgAlertCircle from "@opal/icons/alert-circle";
 import SvgAlertTriangle from "@opal/icons/alert-triangle";
@@ -23,7 +23,7 @@ type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
 type ContentMdSuffix = "optional" | (string & {});
 
-type ContentMdTag = TagProps & { tooltip?: string };
+type ContentMdTag = BadgeProps & { tooltip?: string };
 
 interface ContentMdPresetConfig {
   /** Opal font name for the title. */
@@ -91,7 +91,7 @@ interface ContentMdProps {
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: ContentMdAuxIcon;
 
-  /** Tag rendered beside the title, with an optional hover tooltip. */
+  /** Badge rendered beside the title, with an optional hover tooltip. */
   tag?: ContentMdTag;
 
   /**
@@ -331,7 +331,7 @@ function ContentMd({
               return (
                 <span className="ms-1 flex shrink-0">
                   <Tooltip tooltip={tooltip} side="top">
-                    <Tag {...tagProps} />
+                    <Badge {...tagProps} />
                   </Tooltip>
                 </span>
               );

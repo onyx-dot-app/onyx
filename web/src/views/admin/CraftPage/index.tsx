@@ -19,10 +19,10 @@ import {
   InputHorizontal,
   SettingsLayouts,
   toast,
+  Section,
 } from "@opal/layouts";
 
 import SvgNoResult from "@opal/illustrations/no-result";
-import { Section } from "@/layouts/general-layouts";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -239,7 +239,7 @@ export default function CraftPage() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={t("search.placeholder")}
-                searchIcon
+                icon="search"
               />
               <Table
                 items={realUsers}

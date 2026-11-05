@@ -15,6 +15,14 @@ jest.mock("swr", () => ({
   default: jest.fn(),
 }));
 
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  usePathname: () => "/app",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 jest.mock("@/lib/fetcher", () => ({
   errorHandlingFetcher: jest.fn(),
 }));

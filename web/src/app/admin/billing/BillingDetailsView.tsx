@@ -1,10 +1,16 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { markdown, richNodes } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
-import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
+import {
+  Content,
+  InputErrorText,
+  InputVertical,
+  toast,
+  Section,
+} from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Button, Presence, MessageCard, Text } from "@opal/components";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
@@ -173,6 +179,7 @@ function SubscriptionCard({
 }) {
   const t = useTranslations("admin.billing");
   const locale = useLocale();
+  const navigation = useNavigation();
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isEndingTrial, setIsEndingTrial] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -230,7 +237,7 @@ function SubscriptionCard({
         return_url: `${window.location.origin}/admin/billing?portal_return=true`,
       });
       if (response.stripe_customer_portal_url) {
-        window.location.href = response.stripe_customer_portal_url;
+        navigation.load(response.stripe_customer_portal_url);
       }
     } catch (error) {
       console.error("Failed to open customer portal:", error);
@@ -279,7 +286,7 @@ function SubscriptionCard({
             flow_type: StripePortalFlowType.PAYMENT_METHOD_UPDATE,
           });
           if (response.stripe_customer_portal_url) {
-            window.location.href = response.stripe_customer_portal_url;
+            navigation.load(response.stripe_customer_portal_url);
             return;
           }
         } catch (portalError) {
@@ -426,6 +433,7 @@ function SeatsCard({
 }) {
   const t = useTranslations("admin.billing");
   const locale = useLocale();
+  const navigation = useNavigation();
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -647,7 +655,7 @@ function SeatsCard({
         >
           <Button
             prominence="tertiary"
-            href="/admin/users"
+            {...navigation.linkTo("/admin/users")}
             icon={SvgExternalLink}
           >
             {t("seats.viewUsers.label")}
@@ -675,13 +683,14 @@ function SeatsCard({
 function PaymentSection({ billing }: { billing: BillingInformation }) {
   const t = useTranslations("admin.billing");
   const locale = useLocale();
+  const navigation = useNavigation();
   const handleOpenPortal = async () => {
     try {
       const response = await createCustomerPortalSession({
         return_url: `${window.location.origin}/admin/billing?portal_return=true`,
       });
       if (response.stripe_customer_portal_url) {
-        window.location.href = response.stripe_customer_portal_url;
+        navigation.load(response.stripe_customer_portal_url);
       }
     } catch (error) {
       console.error("Failed to open customer portal:", error);

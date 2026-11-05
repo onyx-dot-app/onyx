@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import React, {
   createContext,
   useCallback,
@@ -28,7 +29,6 @@ import {
   setUserDefaultModel,
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
-import { useRouter } from "next/navigation";
 import { isSupportedLocale, type Locale } from "@/i18n/config";
 
 const EMPTY_PERMISSIONS: string[] = [];
@@ -237,7 +237,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // GET /me). This effect is the one place the UI catches up: whenever
   // <html lang> lags the effective language, re-fetch /me so the cookie and
   // the cached user are current, then re-render the server layout.
-  const router = useRouter();
+  const navigation = useNavigation();
 
   // A user without a stored language follows the workspace default, which is
   // unknown until settings load.
@@ -251,12 +251,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (!isSupportedLocale(effectiveLanguage)) return;
     if (document.documentElement.lang === effectiveLanguage) return;
     mutateUser()
-      .then(() => router.refresh())
+      .then(() => navigation.refresh())
       .catch((error: unknown) => {
         // The next successful /me resolves the drift.
         console.error("Error reconciling the UI language:", error);
       });
-  }, [upToDateUser?.id, effectiveLanguage, router, mutateUser]);
+  }, [upToDateUser?.id, effectiveLanguage, navigation, mutateUser]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {

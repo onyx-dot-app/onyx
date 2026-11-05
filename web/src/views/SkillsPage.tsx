@@ -1,11 +1,11 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useRouter, useSearchParams } from "next/navigation";
 import {
   Button,
   Collapsible,
@@ -80,7 +80,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     { name: string; detail: string }[]
   >([]);
   const { appName } = useSettings();
-  const router = useRouter();
+  const navigation = useNavigation();
   const externalAppIdParam = useSearchParams().get("externalAppId");
   const focusedExternalAppId =
     externalAppIdParam !== null && /^\d+$/.test(externalAppIdParam)
@@ -162,7 +162,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   }
 
   function handleEdit(item: CustomSkillCardItem) {
-    router.push(`/craft/v1/skills/edit/${item.id}`);
+    navigation.go(`/craft/v1/skills/edit/${item.id}`);
   }
 
   async function updateSkillEnabled(
@@ -492,7 +492,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                   description: t("page.createMenu.scratch.description", {
                     appName,
                   }),
-                  onSelect: () => router.push("/craft/v1/skills/new"),
+                  onSelect: () => navigation.go("/craft/v1/skills/new"),
                 },
                 {
                   kind: "action",
@@ -525,7 +525,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             setSelectedIds(new Set());
             setBulkFailures([]);
           }}
-          searchIcon
+          icon="search"
         />
       </SettingsLayouts.Header>
 
@@ -548,7 +548,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
               appName: focusedAppName,
             })}
             rightChildren={
-              <Button prominence="secondary" href="/craft/v1/skills">
+              <Button
+                prominence="secondary"
+                {...navigation.linkTo("/craft/v1/skills")}
+              >
                 {t("page.focusedApp.showAll.label")}
               </Button>
             }
@@ -849,7 +852,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
-          router.push(`/craft/v1/skills/new?draft=${draftId}`);
+          navigation.go(`/craft/v1/skills/new?draft=${draftId}`);
         }}
       />
 

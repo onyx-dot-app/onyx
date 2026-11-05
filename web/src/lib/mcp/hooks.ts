@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import useSWR, { mutate } from "swr";
 import { useMemo, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -138,6 +139,7 @@ export function useMcpAuthentication(
     errorHandlingFetcher
   );
   const [loadingServerId, setLoadingServerId] = useState<number | null>(null);
+  const navigation = useNavigation();
   const [authenticationError, setAuthenticationError] = useState<Error | null>(
     null
   );
@@ -155,7 +157,7 @@ export function useMcpAuthentication(
         window.location.pathname + window.location.search,
         { forceReauthentication }
       );
-      window.location.href = getMCPUserOAuthNavigationUrl(result);
+      navigation.load(getMCPUserOAuthNavigationUrl(result));
     } catch (error) {
       setLoadingServerId(null);
       throw error;

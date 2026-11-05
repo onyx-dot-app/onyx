@@ -2,7 +2,7 @@
 
 **Import:** `import { TagList, type TagListProps } from "@opal/layouts";`
 
-Wrap-flowing row of `Chip`s outside an input, for any labelled list. Use it instead of hand-mapping `Chip`s at call sites.
+Wrap-flowing row of `Tag`s outside an input, for any labelled list. Use it instead of hand-mapping `Tag`s at call sites.
 
 ## Props
 

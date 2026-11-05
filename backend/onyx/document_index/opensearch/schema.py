@@ -494,8 +494,10 @@ class DocumentSchema:
                     "index_options": "offsets",
                 },
                 CONTENT_FIELD_NAME: {
+                    # Not stored separately: every read gets content from
+                    # _source. Indices created before this change still store
+                    # it until reindexed.
                     "type": "text",
-                    "store": True,
                     "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "index_options": "offsets",
                 },

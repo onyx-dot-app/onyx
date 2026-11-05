@@ -9,7 +9,7 @@ import {
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/lib/projects/svc";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { ChatSession } from "@/app/app/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/lib/agents/hooks";

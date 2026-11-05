@@ -78,6 +78,18 @@ export class ChatPage {
     return this.aiMessages.nth(index);
   }
 
+  /** Images a tool generated for an AI message, shown at the top of its answer. */
+  generatedImages(index = 0): Locator {
+    return this.aiMessage(index).getByRole("img", {
+      name: "Chat attachment",
+      exact: true,
+    });
+  }
+
+  answerText(text: string, index = 0): Locator {
+    return this.aiMessage(index).getByText(text, { exact: true });
+  }
+
   async goto(sessionId?: string): Promise<void> {
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
     await this.page.waitForLoadState("networkidle");
@@ -156,6 +168,26 @@ export class ChatPage {
 
   async expectAnswerCode(text: string): Promise<void> {
     await expect(this.aiMessage().getByRole("code")).toContainText(text);
+  }
+
+  /** Inline citations must fit the text line: no taller than its line height. */
+  async expectInlineCitationsFitLine(count: number): Promise<void> {
+    const citations = this.aiMessage().locator("p button");
+    await expect(citations).toHaveCount(count);
+    for (const citation of await citations.all()) {
+      await expect
+        .poll(() =>
+          citation.evaluate((el) => {
+            const paragraph = el.closest("p");
+            if (!paragraph) return false;
+            const lineHeight = parseFloat(
+              getComputedStyle(paragraph).lineHeight
+            );
+            return el.getBoundingClientRect().height <= lineHeight;
+          })
+        )
+        .toBe(true);
+    }
   }
 
   async expectAnswerAbsent(text: string): Promise<void> {

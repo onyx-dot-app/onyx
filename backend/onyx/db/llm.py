@@ -40,7 +40,6 @@ from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
-from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
@@ -1735,155 +1734,102 @@ def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
 def sync_auto_mode_models(
     db_session: Session,
     provider: LLMProviderModel,
-    llm_recommendations: LLMRecommendations,
+    released_model_names: list[str],
+    retired_model_names: set[str],
+    display_names: dict[str, str] | None = None,
 ) -> int:
-    """Sync models from GitHub config to a provider in Auto mode.
+    """Apply a lab's model releases and retirements to an auto-update provider.
 
-    In Auto mode, the model list and default are controlled by GitHub config.
-    The schema has:
-    - default_model: The default model config (always visible)
-    - additional_visible_models: List of additional visible models
+    Released models the provider does not have yet are added and selected.
+    Retired models are removed, unless they hold a default or back an image
+    generation config. A retired model an agent or contextual RAG uses is
+    hidden instead. The admin's selection of every other model and all
+    defaults stay as they are.
 
-    Admin only provides API credentials.
-
-    Args:
-        db_session: Database session
-        provider: LLM provider in Auto mode
-        github_config: Configuration from GitHub
-
-    Returns:
-        The number of changes made.
+    Returns the number of changes made.
     """
-    changes = 0
-
-    # Build the list of all visible models from the config
-    # All models in the config are visible (default + additional_visible_models)
-    recommended_visible_models = llm_recommendations.get_visible_models(
-        provider.provider
-    )
-    recommended_visible_model_names = [
-        model.name for model in recommended_visible_models
-    ]
-
-    # Get existing models
-    existing_models: dict[str, ModelConfiguration] = {
-        mc.name: mc
-        for mc in db_session.scalars(
-            select(ModelConfiguration).where(
+    existing_names = set(
+        db_session.scalars(
+            select(ModelConfiguration.name).where(
                 ModelConfiguration.llm_provider_id == provider.id
             )
         ).all()
-    }
+    )
 
-    # Add or update models from GitHub config
-    for model_config in recommended_visible_models:
-        if model_config.name in existing_models:
-            # Update existing model
-            existing = existing_models[model_config.name]
-            # Check each field for changes
-            updated = False
-            if existing.display_name != model_config.display_name:
-                existing.display_name = model_config.display_name
-                updated = True
-            # All models in the config are visible
-            if not existing.is_visible:
-                existing.is_visible = True
-                updated = True
-            if updated:
-                changes += 1
-        else:
-            # Add new model - all models from GitHub config are visible
-            insert_new_model_configuration__no_commit(
-                db_session=db_session,
-                llm_provider_id=provider.id,
-                model_name=model_config.name,
-                supported_flows=list(
-                    _model_protocol_flows(provider.provider, model_config.name, None)
-                ),
-                is_visible=True,
-                max_input_tokens=None,
-                display_name=model_config.display_name,
-            )
-            changes += 1
+    changes = 0
+    for model_name in released_model_names:
+        if model_name in existing_names:
+            continue
+        insert_new_model_configuration__no_commit(
+            db_session=db_session,
+            llm_provider_id=provider.id,
+            model_name=model_name,
+            supported_flows=list(
+                _model_protocol_flows(provider.provider, model_name, None)
+            ),
+            is_visible=True,
+            max_input_tokens=None,
+            display_name=(display_names or {}).get(model_name),
+        )
+        existing_names.add(model_name)
+        changes += 1
 
-    # Update the default if this provider currently holds the global CHAT default.
-    # This runs before the models the config dropped are hidden, so a model that
-    # gives up the chat default here can still be hidden below.
-    # We flush (but don't commit) so that update_default_model can see the new
-    # model rows, then commit everything atomically to avoid a window where the
-    # old default is invisible but still pointed-to.
-    db_session.flush()
-
-    recommended_default = llm_recommendations.get_default_model(provider.provider)
-    if recommended_default:
-        current_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
-
-        if (
-            current_default
-            and current_default.llm_provider_id == provider.id
-            and current_default.name != recommended_default.name
-        ):
-            _update_default_model__no_commit(
-                db_session=db_session,
-                provider_id=provider.id,
-                model=recommended_default.name,
-                flow_type=LLMModelFlowType.CHAT,
-            )
-            changes += 1
-
-    # Both statements test the default in SQL rather than from a snapshot read
-    # here. A default assigned between the two would otherwise be missed, and
-    # the model hidden anyway. They synchronize the session because sessions are
-    # built with expire_on_commit=False, so a caller holding these rows — as
-    # put_llm_provider does — would otherwise serialize stale visibility.
-    db_session.flush()
-
-    dropped_names = [
-        name for name in existing_models if name not in recommended_visible_model_names
-    ]
-    if dropped_names:
+    retired_names = existing_names & retired_model_names
+    if retired_names:
         holds_a_default = (
             select(LLMModelFlow.id)
             .where(
                 LLMModelFlow.model_configuration_id == ModelConfiguration.id,
                 LLMModelFlow.is_default == True,  # noqa: E712
-                LLMModelFlow.llm_model_flow_type.not_in(_HIDDEN_DEFAULT_FLOW_TYPES),
             )
             .exists()
         )
-        dropped_models = (
-            ModelConfiguration.llm_provider_id == provider.id,
-            ModelConfiguration.name.in_(dropped_names),
+        backs_image_generation = (
+            select(ImageGenerationConfig.model_configuration_id)
+            .where(
+                ImageGenerationConfig.model_configuration_id == ModelConfiguration.id
+            )
+            .exists()
         )
-
+        chosen_elsewhere = or_(
+            select(Persona.id)
+            .where(Persona.default_model_configuration_id == ModelConfiguration.id)
+            .exists(),
+            select(SearchSettings.id)
+            .where(
+                SearchSettings.contextual_rag_model_configuration_id
+                == ModelConfiguration.id
+            )
+            .exists(),
+        )
+        retired = (
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.in_(retired_names),
+            ~holds_a_default,
+            ~backs_image_generation,
+        )
+        # A model an agent or contextual RAG still uses is hidden, not removed.
         hidden = db_session.execute(
             update(ModelConfiguration)
             .where(
-                *dropped_models,
+                *retired,
+                chosen_elsewhere,
                 ModelConfiguration.is_visible == True,  # noqa: E712
-                ~holds_a_default,
             )
             .values(is_visible=False)
             .execution_options(synchronize_session="fetch")
         )
-
-        # An earlier sync could have hidden a model that still holds a default,
-        # so restore those rather than leaving the default unreachable forever.
-        restored = db_session.execute(
-            update(ModelConfiguration)
-            .where(
-                *dropped_models,
-                ModelConfiguration.is_visible == False,  # noqa: E712
-                holds_a_default,
-            )
-            .values(is_visible=True)
+        changes += int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
+        removed = db_session.execute(
+            delete(ModelConfiguration)
+            .where(*retired, ~chosen_elsewhere)
             .execution_options(synchronize_session="fetch")
         )
-
-        changes += int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
-        changes += int(restored.rowcount)  # ty: ignore[unresolved-attribute]
+        changes += int(removed.rowcount)  # ty: ignore[unresolved-attribute]
 
     db_session.commit()
+    if changes:
+        db_session.refresh(provider)
     return changes
 
 

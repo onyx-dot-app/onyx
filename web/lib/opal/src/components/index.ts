@@ -127,21 +127,19 @@ export {
   type CompactMarkdownProps,
 } from "@opal/components/text/CompactMarkdown";
 
+/* Badge */
+export {
+  Badge,
+  BADGE_COLORS,
+  type BadgeProps,
+} from "@opal/components/badge/components";
+
 /* Tag */
 export {
   Tag,
-  TAG_COLORS,
+  TAG_REMOVE_ATTR,
   type TagProps,
-  type TagVariant,
-  type TagColor,
 } from "@opal/components/tag/components";
-
-/* Chip */
-export {
-  Chip,
-  CHIP_REMOVE_ATTR,
-  type ChipProps,
-} from "@opal/components/chip/components";
 
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";
@@ -198,6 +196,14 @@ export {
   type ProgressBarProps,
   type ProgressBarColor,
 } from "@opal/components/progress-bar/components";
+
+/* ProgressRing */
+export {
+  ProgressRing,
+  type ProgressRingProps,
+  type ProgressRingColor,
+  type ProgressRingTrack,
+} from "@opal/components/progress-ring/components";
 
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";

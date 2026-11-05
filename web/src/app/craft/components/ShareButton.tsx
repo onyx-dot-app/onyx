@@ -7,8 +7,7 @@ import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 
 interface ShareButtonProps {
