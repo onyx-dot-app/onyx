@@ -263,7 +263,7 @@ StyleDictionary.registerFormat({
 // as RN style objects. Uses resolved values (concrete hex/numbers) since RN has no
 // var(). varsLight = primitives + light semantics; varsDark = primitives + dark.
 // e.g.  varsLight["--text-05"] = "#000000e5"   varsDark["--text-05"] = "#fffffff2"
-//       textPresets["heading-hero"] = { fontFamily: "Hanken Grotesk", fontSize: 48, ... }
+//       textPresets["heading-hero"] = { fontFamily: "Hanken Grotesk", fontSize: 32, ... }
 StyleDictionary.registerFormat({
   name: "js/native-vars",
   format: ({ dictionary }) => {
