@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { OverflowText } from "@opal/components";
 import { cn } from "@opal/utils";
 import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import type { StatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
@@ -166,9 +166,9 @@ export function LineIconLabel({ icon: Icon, label }: LineIconLabelProps) {
       <Section width={1} height={1} className="shrink-0">
         <Icon size={12} className="stroke-text-02" />
       </Section>
-      <OverflowText font="secondary-body" color="text-03">
+      <Text maxLines={1} overflowTooltip font="secondary-body" color="text-03">
         {label}
-      </OverflowText>
+      </Text>
     </Section>
   );
 }
