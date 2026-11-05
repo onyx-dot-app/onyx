@@ -20,7 +20,7 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | Item | Value |
 |---|---|
 | Binary | `/craft-fc/bin/guest-daemon` (static, `CGO_ENABLED=0`, read-only root) |
-| vsock port | **52** (in the node agent's default `--dial-ports`) |
+| vsock port | **52** (the node agent's default `--daemon-port` for the gRPC pass-through, and in its default `--dial-ports`) |
 | User and env | root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands get that env, then the Init env, then their own. |
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |

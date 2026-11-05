@@ -68,6 +68,7 @@ type flags struct {
 	dialPorts     string
 	clientSANs    string
 	dialMax       int
+	daemonPort    uint
 }
 
 func main() {
@@ -97,6 +98,7 @@ func main() {
 	flag.StringVar(&f.dialPorts, "dial-ports", "52,3010", "guest vsock ports that Dial allows")
 	flag.StringVar(&f.clientSANs, "client-allowed-sans", "", "comma-separated DNS or URI SANs; a client cert must have one (empty: any cert from --client-ca)")
 	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
+	flag.UintVar(&f.daemonPort, "daemon-port", server.DefaultDaemonPort, "guest vsock port of the guest daemon (craft.sandboxd.v1.Sandboxd pass-through)")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -136,7 +138,14 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	launcher := &fcvm.Launcher{Cmd: cmd, Log: log}
+	cgroups, err := fcvm.DetectCgroupView("/proc")
+	if err != nil {
+		return err
+	}
+	if cgroups.Private {
+		log.Info("private cgroup namespace: VM scopes are checked in the host cgroup tree", "host_cgroup_fs", cgroups.HostCgroupFS)
+	}
+	launcher := &fcvm.Launcher{Cmd: cmd, Log: log, Cgroups: cgroups}
 	m := agent.NewManager(agent.Config{
 		MinFreeMemMiB:    f.minFreeMemMiB,
 		MinFreeDiskBytes: f.minFreeDiskGB * uint64(scratch.GiB),
@@ -153,6 +162,12 @@ func run(f flags, log *slog.Logger) error {
 		log,
 	)
 	m.UseJournal(&journal.Journal{Dir: filepath.Join(f.dataDir, "journal")})
+	if f.daemonPort == 0 || f.daemonPort > math.MaxUint32 {
+		return fmt.Errorf("--daemon-port %d is not a vsock port", f.daemonPort)
+	}
+	// Registered before Recover, so a VM that exits after adoption also
+	// drops its daemon connection before its socket and UID are freed.
+	pt := server.NewPassthrough(m, uint32(f.daemonPort), log)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := setupEgress(ctx, f, m, log); err != nil {
@@ -176,7 +191,8 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	servers := []*grpc.Server{server.NewServer(svc)}
+	// Both listeners serve the HostAgent API and the daemon pass-through.
+	servers := []*grpc.Server{server.NewServer(svc, pt.ServerOptions()...)}
 	listeners := []net.Listener{ln}
 	if f.listen != "" {
 		creds, err := (&server.MTLS{
@@ -189,7 +205,7 @@ func run(f flags, log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		servers = append(servers, server.NewServer(svc, grpc.Creds(creds)))
+		servers = append(servers, server.NewServer(svc, append(pt.ServerOptions(), grpc.Creds(creds))...))
 		listeners = append(listeners, tln)
 	}
 	go func() {
@@ -199,7 +215,7 @@ func run(f flags, log *slog.Logger) error {
 			s.GracefulStop()
 		}
 	}()
-	log.Info("host agent ready", "socket", f.socket, "listen", f.listen, "dial_ports", ports,
+	log.Info("host agent ready", "socket", f.socket, "listen", f.listen, "dial_ports", ports, "daemon_port", f.daemonPort,
 		"firecracker", bins.Version, "version", version)
 	errs := make(chan error, len(servers))
 	for i := range servers {

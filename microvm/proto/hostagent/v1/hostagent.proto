@@ -87,8 +87,12 @@ enum ErrorReason {
   SANDBOX_IN_DOUBT = 16;
   // Dial: the guest port is not on the agent's allow-list.
   PORT_NOT_ALLOWED = 17;
-  // Dial: nothing in the VM accepted the connection on that port.
+  // Dial or the guest daemon pass-through: nothing in the VM accepted the
+  // connection on that port.
   GUEST_UNREACHABLE = 18;
+  // Dial or the guest daemon pass-through: the sandbox has a VM on this node,
+  // but it is not running (starting, stopping or exited).
+  VM_NOT_RUNNING = 19;
   // Dial: the VM already has the most open Dial streams that the agent
   // allows (--dial-max-streams).
   DIAL_LIMIT = 20;

@@ -54,6 +54,9 @@ This component owns:
   Kubernetes dev tooling;
 - the Firecracker runtime in development (Go): the guest daemon and the
   in-guest egress relay inside each VM, and the node agent on each KVM node.
+  The API server will reach a VM's guest daemon through the node agent: the
+  agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
+  over mTLS and then vsock, without decoding it.
 
 Neighbours:
 - [[craft-sessions]]: sessions, turns and `SessionManager`, which call this

@@ -67,8 +67,12 @@ const (
 	ErrorReason_SANDBOX_IN_DOUBT ErrorReason = 16
 	// Dial: the guest port is not on the agent's allow-list.
 	ErrorReason_PORT_NOT_ALLOWED ErrorReason = 17
-	// Dial: nothing in the VM accepted the connection on that port.
+	// Dial or the guest daemon pass-through: nothing in the VM accepted the
+	// connection on that port.
 	ErrorReason_GUEST_UNREACHABLE ErrorReason = 18
+	// Dial or the guest daemon pass-through: the sandbox has a VM on this node,
+	// but it is not running (starting, stopping or exited).
+	ErrorReason_VM_NOT_RUNNING ErrorReason = 19
 	// Dial: the VM already has the most open Dial streams that the agent
 	// allows (--dial-max-streams).
 	ErrorReason_DIAL_LIMIT ErrorReason = 20
@@ -96,6 +100,7 @@ var (
 		16: "SANDBOX_IN_DOUBT",
 		17: "PORT_NOT_ALLOWED",
 		18: "GUEST_UNREACHABLE",
+		19: "VM_NOT_RUNNING",
 		20: "DIAL_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
@@ -118,6 +123,7 @@ var (
 		"SANDBOX_IN_DOUBT":         16,
 		"PORT_NOT_ALLOWED":         17,
 		"GUEST_UNREACHABLE":        18,
+		"VM_NOT_RUNNING":           19,
 		"DIAL_LIMIT":               20,
 	}
 )
@@ -1175,7 +1181,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vscratch_gib\x18\x04 \x01(\rR\n" +
 	"scratchGib\x12!\n" +
 	"\fguest_kernel\x18\x05 \x01(\tR\vguestKernel\x12/\n" +
-	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\xc4\x03\n" +
+	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\xd8\x03\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -1197,7 +1203,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\bINTERNAL\x10\x0f\x12\x14\n" +
 	"\x10SANDBOX_IN_DOUBT\x10\x10\x12\x14\n" +
 	"\x10PORT_NOT_ALLOWED\x10\x11\x12\x15\n" +
-	"\x11GUEST_UNREACHABLE\x10\x12\x12\x0e\n" +
+	"\x11GUEST_UNREACHABLE\x10\x12\x12\x12\n" +
+	"\x0eVM_NOT_RUNNING\x10\x13\x12\x0e\n" +
 	"\n" +
 	"DIAL_LIMIT\x10\x14*e\n" +
 	"\aVMState\x12\x18\n" +

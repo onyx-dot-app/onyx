@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
@@ -116,4 +117,57 @@ func TestRemoveKillsOnlyAfterACheckThatWorked(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-exited
+}
+
+// TestScanInPrivateCgroupNamespace: in a pod's cgroup namespace a VM reads
+// "0::/../../<slice>/fcvm-<id>.scope". Scan finds it when the host tree
+// lists its PID, and skips a process the host scope does not list.
+func TestScanInPrivateCgroupNamespace(t *testing.T) {
+	host := t.TempDir()
+	l := &Launcher{ProcFS: t.TempDir(), Cmd: jailer.Command{Slice: "fcvms.slice", Layout: jailer.Layout{ChrootBase: t.TempDir()}},
+		Cgroups: CgroupView{Private: true, HostCgroupFS: host}}
+	fakeProcEntry(t, l, 4242, testID, 1000007, false)
+	podView := "0::/../../" + l.Cmd.Slice + "/" + jailer.ScopeUnit(testID) + "\n"
+	if err := os.WriteFile(filepath.Join(l.ProcFS, "4242", "cgroup"), []byte(podView), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stat := "4242 (firecracker) S" + strings.Repeat(" 0", 18) + " 777\n"
+	if err := os.WriteFile(filepath.Join(l.ProcFS, "4242", "stat"), []byte(stat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The host form, as seen from a private namespace, is a cgroup inside the pod.
+	fakeProcEntry(t, l, 4343, "22222222-2222-4222-8222-222222222222", 1000008, false)
+	// The same VM ID and pod view, but the host scope does not list the PID:
+	// Scan reaches the cgroup.procs check and skips it.
+	fakeProcEntry(t, l, 4444, testID, 1000009, false)
+	if err := os.WriteFile(filepath.Join(l.ProcFS, "4444", "cgroup"), []byte(podView), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l.ProcFS, "4444", "stat"), []byte(strings.Replace(stat, "4242", "4444", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scope := filepath.Join(host, l.Cmd.Slice, jailer.ScopeUnit(testID))
+	if err := os.MkdirAll(scope, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scope, "cgroup.procs"), []byte("4242\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cands, err := l.Scan()
+	if err != nil || len(cands) != 1 || cands[0] != (agent.Candidate{ID: testID, PID: 4242, UID: 1000007}) {
+		t.Fatalf("scan: %+v %v", cands, err)
+	}
+	if err := l.verify(testID, 4242, 0); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if err := l.verify(testID, 4444, 0); !errors.Is(err, agent.ErrGone) {
+		t.Fatalf("verify of a PID the host scope does not list: %v", err)
+	}
+	// Without the host scope the VM counts as gone, never as a match.
+	if err := os.WriteFile(filepath.Join(scope, "cgroup.procs"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.verify(testID, 4242, 0); !errors.Is(err, agent.ErrGone) {
+		t.Fatalf("verify without host listing: %v", err)
+	}
 }
