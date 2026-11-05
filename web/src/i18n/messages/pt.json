@@ -7800,6 +7800,7 @@
             "errorToast": "Falha ao buscar os modelos"
           },
           "row": {
+            "defaultLabel": "Modelo padrão",
             "decisionTag": {
               "label": "Decisão",
               "decisionOnly": "Modelo de decisão. Não está disponível no seletor de modelos de chat.",

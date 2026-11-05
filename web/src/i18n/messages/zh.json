@@ -7800,6 +7800,7 @@
             "errorToast": "获取模型失败"
           },
           "row": {
+            "defaultLabel": "默认模型",
             "decisionTag": {
               "label": "决策",
               "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
