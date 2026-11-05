@@ -490,7 +490,7 @@ describe("AC-5: resolved groups", () => {
 // ── AC-6: identity ────────────────────────────────────────────────────────
 
 describe("AC-6: row identity", () => {
-  it("AC-6: a titled document reads '{title} ({id})' with an Open Document link; an untitled one shows its id only", async () => {
+  it("AC-6: a titled document reads '{title} ({id})' with an open-document link; an untitled one shows its id only", async () => {
     installErrorsRoute(ALL_ROWS);
     renderPanel();
     await shownMessage(OPEN_TITLED);
@@ -498,7 +498,7 @@ describe("AC-6: row identity", () => {
     const titled = rowOf(OPEN_TITLED);
     expect(titled.textContent).toContain("Q3 renewal (doc-a)");
     expect(
-      within(titled).getByRole("link", { name: "Open Document" })
+      within(titled).getByRole("link", { name: "Open the document" })
     ).toHaveAttribute("href", OPEN_TITLED.document_link);
 
     const untitled = rowOf(OPEN_UNTITLED);

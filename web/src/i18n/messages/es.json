@@ -3213,7 +3213,7 @@
           "unknownDocument": "Documento desconocido",
           "empty": "No hay documentos fallidos",
           "loadError": "No se pudieron cargar los elementos fallidos.",
-          "open": "Abrir documento",
+          "open": "Abrir el documento",
           "resolvedGroup": "Errores resueltos",
           "resolvedWithoutRetry": "Resuelto sin reintentar",
           "resolvedByLaterRun": "Resuelto por una ejecución posterior"
