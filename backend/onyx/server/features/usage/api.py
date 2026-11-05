@@ -35,14 +35,15 @@ from onyx.db.system_usage import (
 )
 from onyx.db.token_limit import (
     fetch_enforced_token_rate_limits,
+    fetch_pool_usage_baselines,
     fetch_token_rate_limits_applying_to_user,
     fetch_user_group_enforced_token_rate_limits,
+    usage_baseline,
 )
 from onyx.db.user_usage import (
     cost_budget_limits,
     get_group_cost_cents_buckets_since,
     get_period_window_reset,
-    get_period_window_start,
     get_total_cost_cents_buckets_since,
     get_usage_export,
     get_usage_reset_window_start,
@@ -51,6 +52,7 @@ from onyx.db.user_usage import (
     get_user_usage_by_day_and_model,
     period_fetch_cutoff,
     reset_user_usage,
+    sum_limit_usage,
 )
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -75,7 +77,7 @@ from onyx.server.features.usage.models import (
 )
 from onyx.server.query_and_chat.token_limit import (
     BudgetUnit,
-    resolve_member_allowance,
+    fetch_member_allowance,
 )
 from onyx.utils.datetime import get_window_start
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
@@ -111,12 +113,6 @@ def _date_range_to_utc_bounds(
     return start_dt, end_dt
 
 
-def _used_from_buckets(
-    buckets: list[tuple[datetime, float]], cutoff: datetime
-) -> float:
-    return sum(c for ws, c in buckets if ws >= cutoff)
-
-
 def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget | None:
     """Effective cost budget on all models: the most binding of the per-user
     allowance, the workspace pool and the most permissive group pool."""
@@ -127,11 +123,17 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         limits: Sequence[TokenRateLimit],
         buckets: list[tuple[datetime, float]],
     ) -> None:
+        baselines = fetch_pool_usage_baselines(db_session, limits)
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = get_period_window_start(now, rl.period)
-            used = _used_from_buckets(buckets, cutoff)
+            used = sum_limit_usage(
+                buckets,
+                now,
+                rl.period,
+                rl.usage_reset_at,
+                usage_baseline(rl, baselines).cost_cents,
+            )
             candidates.append(
                 EffectiveCostBudget(
                     budget_cents=rl.cost_budget_cents,
@@ -145,29 +147,19 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     # workspace default, against the user's own usage.
     allowance = [
         window
-        for window in resolve_member_allowance(
-            list(
-                fetch_enforced_token_rate_limits(db_session, TokenRateLimitScope.USER)
-            ),
-            fetch_user_group_enforced_token_rate_limits(
-                db_session, UUID(user_id), TokenRateLimitScope.USER_GROUP_MEMBER
-            ),
-        )
+        for window in fetch_member_allowance(db_session, UUID(user_id), None)
         if window.unit == BudgetUnit.COST
     ]
     if allowance:
         user_buckets = get_user_cost_cents_buckets_since(
             db_session,
             user_id,
-            min(get_period_window_start(now, w.period) for w in allowance),
+            min(window.usage_start(now) for window in allowance),
         )
         candidates.extend(
             EffectiveCostBudget(
                 budget_cents=window.budget,
-                remaining_cents=window.budget
-                - _used_from_buckets(
-                    user_buckets, get_period_window_start(now, window.period)
-                ),
+                remaining_cents=window.budget - window.used(user_buckets, now),
                 period=window.period,
                 reset_at=get_period_window_reset(now, window.period),
             )
@@ -224,6 +216,7 @@ def _group_cost_budget_candidate(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
 
+    baselines = fetch_pool_usage_baselines(db_session, cost_rls)
     most_permissive: EffectiveCostBudget | None = None
     for group_id, limits in cost_limits_by_group.items():
         group_buckets = buckets.get(group_id, [])
@@ -231,8 +224,13 @@ def _group_cost_budget_candidate(
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = get_period_window_start(now, rl.period)
-            used = _used_from_buckets(group_buckets, cutoff)
+            used = sum_limit_usage(
+                group_buckets,
+                now,
+                rl.period,
+                rl.usage_reset_at,
+                usage_baseline(rl, baselines).cost_cents,
+            )
             remaining = rl.cost_budget_cents - used
             if group_binding is None or remaining < group_binding.remaining_cents:
                 group_binding = EffectiveCostBudget(

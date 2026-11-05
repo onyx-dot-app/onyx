@@ -18,7 +18,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.token_limit import (
-    fetch_enforced_token_rate_limits,
+    fetch_pool_usage_baselines,
     fetch_user_group_enforced_token_rate_limits,
 )
 from onyx.db.user_usage import (
@@ -33,9 +33,9 @@ from onyx.server.query_and_chat.token_limit import (
     _user_is_rate_limited_by_global,
     budget_windows,
     exhausted_windows,
+    fetch_member_allowance,
     latest_reset,
     raise_rate_limited,
-    resolve_member_allowance,
     token_buckets,
     usage_cutoff,
 )
@@ -73,19 +73,7 @@ Per-user allowance
 
 def _user_is_rate_limited(user_id: UUID, model_configuration_id: int | None) -> None:
     with get_session_with_current_tenant() as db_session:
-        windows = resolve_member_allowance(
-            list(
-                fetch_enforced_token_rate_limits(
-                    db_session, TokenRateLimitScope.USER, model_configuration_id
-                )
-            ),
-            fetch_user_group_enforced_token_rate_limits(
-                db_session,
-                user_id,
-                TokenRateLimitScope.USER_GROUP_MEMBER,
-                model_configuration_id,
-            ),
-        )
+        windows = fetch_member_allowance(db_session, user_id, model_configuration_id)
         if not windows:
             return
 
@@ -125,15 +113,17 @@ def _user_is_rate_limited_by_group(
     user_id: UUID, model_configuration_id: int | None
 ) -> None:
     with get_session_with_current_tenant() as db_session:
+        limits_by_group = fetch_user_group_enforced_token_rate_limits(
+            db_session, user_id, TokenRateLimitScope.USER_GROUP, model_configuration_id
+        )
+        baselines = fetch_pool_usage_baselines(
+            db_session,
+            [limit for limits in limits_by_group.values() for limit in limits],
+        )
         windows_by_group = {
             group_id: windows
-            for group_id, limits in fetch_user_group_enforced_token_rate_limits(
-                db_session,
-                user_id,
-                TokenRateLimitScope.USER_GROUP,
-                model_configuration_id,
-            ).items()
-            if (windows := budget_windows(limits))
+            for group_id, limits in limits_by_group.items()
+            if (windows := budget_windows(limits, group_id, baselines))
         }
         if not windows_by_group:
             return

@@ -5777,6 +5777,10 @@ class TokenRateLimit(Base):
     # An ALERT_ONLY row's percentage of the BLOCK value for the same bucket, in
     # place of absolute budgets.
     threshold_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Usage before this time does not count toward the limit's current period.
+    usage_reset_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -5809,6 +5813,26 @@ class TokenRateLimit(Base):
             unique=True,
             postgresql_where=text("enabled"),
         ),
+    )
+
+
+class TokenRateLimitUsageBaseline(Base):
+    """A user's usage in the reset day's bucket when a limit was reset. A
+    per-user limit subtracts the user's own; a pool subtracts the sum over the
+    users it covers now, so a member who leaves takes their share along."""
+
+    __tablename__ = "token_rate_limit_usage_baseline"
+
+    token_rate_limit_id: Mapped[int] = mapped_column(
+        ForeignKey("token_rate_limit.id", ondelete="CASCADE"), primary_key=True
+    )
+    token_rate_limit: Mapped[TokenRateLimit] = relationship()
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cost_cents: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
     )
 
 

@@ -11136,6 +11136,11 @@
           }
         },
         "nextReset": "Next reset",
+        "resetUsage": {
+          "label": "Reset Limit Usage Now",
+          "done": "Usage reset. This limit counts from now until its next reset.",
+          "failed": "Couldn't reset usage: {error}"
+        },
         "remove": {
           "tooltip": "Remove limit"
         },

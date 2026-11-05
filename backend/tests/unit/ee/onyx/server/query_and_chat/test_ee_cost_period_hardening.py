@@ -8,6 +8,7 @@ import pytest
 import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
 from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
+from onyx.server.query_and_chat.token_limit import budget_windows
 
 
 class _SessionCtx:
@@ -61,11 +62,8 @@ def test_user_path_fetch_cutoff_covers_every_window(
     monkeypatch.setattr(ee_token_limit, "datetime", _FixedDatetime)
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_enforced_token_rate_limits",
-        lambda *_: [weekly, monthly],
-    )
-    monkeypatch.setattr(
-        ee_token_limit, "fetch_user_group_enforced_token_rate_limits", lambda *_: {}
+        "fetch_member_allowance",
+        lambda *_: budget_windows([weekly, monthly]),
     )
     monkeypatch.setattr(
         ee_token_limit, "get_user_cost_cents_buckets_since", _capture_cutoff

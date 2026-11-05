@@ -27,6 +27,7 @@ from onyx.db.user_usage import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.query_and_chat.token_limit import budget_windows
 from onyx.tracing.flows import LLMFlow
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
@@ -136,7 +137,7 @@ def test_user_cost_isolated_and_longest_window_reported(
         _cost_limit(TokenRateLimitScope.USER, TokenRateLimitPeriod.WEEKLY),
     ]
     monkeypatch.setattr(
-        ee_token_limit, "fetch_enforced_token_rate_limits", lambda *_: limits
+        ee_token_limit, "fetch_member_allowance", lambda *_: budget_windows(limits)
     )
     monkeypatch.setattr(
         ee_token_limit, "get_user_token_buckets_since", _fail_token_query
@@ -225,8 +226,8 @@ def test_user_token_limit_resets_at_window_end(
     )
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_enforced_token_rate_limits",
-        lambda *_: [limit],
+        "fetch_member_allowance",
+        lambda *_: budget_windows([limit]),
     )
     monkeypatch.setattr(
         ee_token_limit,

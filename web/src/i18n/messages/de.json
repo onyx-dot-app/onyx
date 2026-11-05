@@ -11136,6 +11136,11 @@
           }
         },
         "nextReset": "Nächste Zurücksetzung",
+        "resetUsage": {
+          "label": "Limitnutzung jetzt zurücksetzen",
+          "done": "Nutzung zurückgesetzt. Dieses Limit zählt ab jetzt bis zur nächsten Zurücksetzung.",
+          "failed": "Nutzung konnte nicht zurückgesetzt werden: {error}"
+        },
         "remove": {
           "tooltip": "Limit entfernen"
         },

@@ -12,6 +12,7 @@ import {
   toCardDraft,
   toRequests,
   validateDraft,
+  withSavedFrom,
 } from "@/views/admin/SpendingLimitsPage/draft";
 
 function limit(overrides: Partial<SpendingLimit>): SpendingLimit {
@@ -175,5 +176,41 @@ test("the card signature ignores usage and reset times", () => {
   expect(cardSignature(refetched)).toBe(cardSignature(card));
   expect(cardSignature({ ...card, enabled: false })).not.toBe(
     cardSignature(card)
+  );
+});
+
+test("a refetch updates row usage and keeps unsaved edits", () => {
+  const draft = toCardDraft(card);
+  const edited = {
+    ...draft,
+    limits: draft.limits.map((l, i) =>
+      i === 0 ? { ...l, costDollars: 9 } : l
+    ),
+  };
+  const refetched: SpendingLimitCard = {
+    ...card,
+    limits: card.limits.map((l) =>
+      l.id === 1 ? { ...l, used_cost_cents: 0 } : l
+    ),
+  };
+
+  const updated = withSavedFrom(edited, refetched);
+
+  expect(updated.limits[0]!.costDollars).toBe(9);
+  expect(updated.limits[0]!.saved?.used_cost_cents).toBe(0);
+  expect(withSavedFrom(updated, refetched)).toBe(updated);
+});
+
+test("a refetch after a replace elsewhere points rows at the new ids", () => {
+  const draft = toCardDraft(card);
+  const replaced: SpendingLimitCard = {
+    ...card,
+    limits: card.limits.map((l) => ({ ...l, id: l.id + 100 })),
+  };
+
+  const updated = withSavedFrom(draft, replaced);
+
+  expect(updated.limits.map((l) => l.saved?.id)).toEqual(
+    draft.limits.map((l) => (l.saved?.id ?? 0) + 100)
   );
 });

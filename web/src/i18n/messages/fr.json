@@ -11136,6 +11136,11 @@
           }
         },
         "nextReset": "Prochaine réinitialisation",
+        "resetUsage": {
+          "label": "Réinitialiser l'utilisation de la limite maintenant",
+          "done": "Utilisation réinitialisée. Cette limite compte à partir de maintenant jusqu'à sa prochaine réinitialisation.",
+          "failed": "Impossible de réinitialiser l'utilisation : {error}"
+        },
         "remove": {
           "tooltip": "Supprimer la limite"
         },

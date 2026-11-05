@@ -9,6 +9,7 @@ import {
   InputCurrency,
   InputNumber,
   InputSingleSelect,
+  LinkButton,
   Text,
   type SelectOption,
 } from "@opal/components";
@@ -162,6 +163,8 @@ interface LimitRowProps {
   onOpen: () => void;
   onChange: (limit: DraftLimit) => void;
   onRemove: () => void;
+  /** Set when the caller can edit the card and the row is saved. */
+  onResetUsage?: () => void;
 }
 
 export default function LimitRow({
@@ -174,6 +177,7 @@ export default function LimitRow({
   onOpen,
   onChange,
   onRemove,
+  onResetUsage,
 }: LimitRowProps) {
   const t = useTranslations("admin.spendingLimits");
   const format = useFormatter();
@@ -339,28 +343,41 @@ export default function LimitRow({
           >
             {savedPeriodMatches && (
               <Card padding={2} rounding={2} color="background-tint-00">
-                <Section
-                  flexDirection="row"
-                  justifyContent="between"
-                  gap={1}
-                  height="auto"
-                >
-                  <Text font="secondary-body" color="text-03">
-                    {t("row.nextReset")}
-                  </Text>
-                  <Text font="secondary-action" color="text-03">
-                    {format.dateTime(new Date(saved.reset_at), {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                      weekday: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hourCycle: "h23",
-                      timeZone: "UTC",
-                      timeZoneName: "short",
-                    })}
-                  </Text>
+                <Section gap={1} alignItems="stretch" height="auto">
+                  <Section
+                    flexDirection="row"
+                    justifyContent="between"
+                    gap={1}
+                    height="auto"
+                  >
+                    <Text font="secondary-body" color="text-03">
+                      {t("row.nextReset")}
+                    </Text>
+                    <Text font="secondary-action" color="text-03">
+                      {format.dateTime(new Date(saved.reset_at), {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        weekday: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hourCycle: "h23",
+                        timeZone: "UTC",
+                        timeZoneName: "short",
+                      })}
+                    </Text>
+                  </Section>
+                  {onResetUsage && (
+                    <Section gap={0} alignItems="end" height="auto">
+                      <LinkButton
+                        external={false}
+                        disabled={disabled}
+                        onClick={onResetUsage}
+                      >
+                        {t("row.resetUsage.label")}
+                      </LinkButton>
+                    </Section>
+                  )}
                 </Section>
               </Card>
             )}

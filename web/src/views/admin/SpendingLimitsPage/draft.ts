@@ -68,6 +68,39 @@ export function toCardDraft(card: SpendingLimitCard): CardDraft {
   };
 }
 
+function savedBucketOf(limit: SpendingLimit): string {
+  return `${limit.model_configuration_id ?? "all"}:${limit.period}`;
+}
+
+/** Points each draft row at its row in a refetched card, so usage stays
+ *  current while unsaved edits stay. A replace elsewhere gives the rows new
+ *  ids, so a row is matched by id, then by bucket. Returns the same draft
+ *  when nothing changed. */
+export function withSavedFrom(
+  draft: CardDraft,
+  card: SpendingLimitCard
+): CardDraft {
+  const blocks = card.limits.filter(
+    (limit) => limit.action === LimitAction.BLOCK
+  );
+  const byId = new Map(blocks.map((limit) => [limit.id, limit]));
+  const byBucket = new Map(
+    blocks.map((limit) => [savedBucketOf(limit), limit])
+  );
+  let changed = false;
+  const limits = draft.limits.map((limit) => {
+    const saved =
+      limit.saved === null
+        ? undefined
+        : (byId.get(limit.saved.id) ??
+          byBucket.get(savedBucketOf(limit.saved)));
+    if (saved === undefined || saved === limit.saved) return limit;
+    changed = true;
+    return { ...limit, saved };
+  });
+  return changed ? { ...draft, limits } : draft;
+}
+
 export function emptyDraftLimit(
   isModelRow: boolean,
   used: DraftLimit[]

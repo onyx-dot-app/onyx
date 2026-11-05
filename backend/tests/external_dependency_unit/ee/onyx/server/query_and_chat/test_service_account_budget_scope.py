@@ -64,8 +64,8 @@ def users_over_a_per_user_budget(
 
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_enforced_token_rate_limits",
-        lambda *_: [_token_limit(TokenRateLimitScope.USER)],
+        "fetch_member_allowance",
+        lambda *_: token_limit.budget_windows([_token_limit(TokenRateLimitScope.USER)]),
     )
     monkeypatch.setattr(
         ee_token_limit, "_user_is_rate_limited_by_group", lambda *_: None
