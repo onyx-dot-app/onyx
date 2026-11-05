@@ -246,6 +246,7 @@ covers new files that match it.
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-egress.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-push.yaml`, `deployment/helm/charts/onyx/templates/sandbox-image-prepuller.yaml`, `deployment/helm/charts/onyx/templates/craft-fc-preflight.yaml`, `deployment/helm/charts/onyx/scripts/craft-fc-preflight.sh` | craft-sandboxes |
 | `deployment/helm/dev/`, `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
+| `microvm/` | craft-sandboxes |
 
 ## Frontend: chat and user surfaces
 
