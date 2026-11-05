@@ -115,8 +115,8 @@ StyleDictionary.registerFormat({
 // FORMAT -> typography.css (web/Opal). Each preset under "text" becomes a Tailwind
 // v4 @utility, byte-equivalent to Opal's hand-authored blocks. Values keep their
 // `var()` refs (font families + height metrics) so they resolve from tokens.css.
-// e.g.  text.heading-hero.{fontSize:"48px", fontWeight:"600", ...}  ->
-//         @utility font-heading-hero { font-size: 48px; font-weight: 600; ... }
+// e.g.  text.heading-hero.{fontSize:"32px", fontWeight:"500", ...}  ->
+//         @utility font-heading-hero { font-size: 32px; font-weight: 500; ... }
 const TYPO_PROP_ORDER = [
   ["fontFamily", "font-family"],
   ["fontSize", "font-size"],
