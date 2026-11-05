@@ -34,7 +34,7 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.jira_service_management.config import (
     DEFAULT_JSM_PAGE_LIMIT,
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    JiraServiceManagementConnectorConfig,
+    ,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -637,9 +637,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         if issuetype_name:
             hdr.append(f"Issue Type: {issuetype_name}")
         if rep_info:
-            hdr.append(f"Reporter: {rep_info.display_name or rep_info.email or 'Unknown'}")
+            hdr.append(f"Reporter: {rep_info.get_semantic_name()}")
         if asg_info:
-            hdr.append(f"Assignee: {asg_info.display_name or asg_info.email or 'Unknown'}")
+            hdr.append(f"Assignee: {asg_info.get_semantic_name()}")
 
         blocks = ["\n".join(hdr)]
         if desc_parts:
@@ -661,7 +661,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             if not ctext:
                 continue
             ainfo = extract_user_info(c.get("author") if isinstance(c.get("author"), dict) else None)
-            alabel = (ainfo.display_name or ainfo.email or "Unknown") if ainfo else "Unknown"
+            alabel = ainfo.get_semantic_name() if ainfo else "Unknown"
             cdt = parse_jsm_datetime(c.get("created"))
             if cdt and (updated_dt is None or cdt > updated_dt):
                 updated_dt = cdt
@@ -753,7 +753,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         jql = self._build_jql(start=start, end=end)
         batch: list[Document | HierarchyNode] = []
         seen: set[str] = set()
-        jql_iter = self._search_issues_via_jql(jql)
+        
         try:
             first_issue = next(jql_iter, None)
         except (InsufficientPermissionsError, ConnectorValidationError):
