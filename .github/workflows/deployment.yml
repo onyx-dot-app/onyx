@@ -140,8 +140,11 @@ jobs:
         run: |
           status=0
           for component in web model-server backend sandbox; do
-            image="$(.github/scripts/base-image-ref.sh "${component}")"
+            image="$(.github/scripts/base-image-ref.sh "${component}" --report)"
             uv run --no-sync ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
+            if [ "${component}" = sandbox ]; then
+              bash .github/scripts/audit-sandbox-browser.sh "${image}" || status=1
+            fi
             if [ ! -s "image-audit-${component}.sarif" ]; then
               # $schema is a literal SARIF key, not a shell variable.
               # shellcheck disable=SC2016

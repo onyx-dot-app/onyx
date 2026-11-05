@@ -777,3 +777,15 @@ Updates to an existing symlink are atomic. Replacing a legacy directory first re
 Container lookup and archive transfer retry transport and Engine server failures; rejected requests and extraction failures do not retry.
 Previous bundles remain available for 60 seconds so readers can finish.
 Cleanup accepts only direct bundle children and remains best effort under concurrent publication.
+
+## Browser security updates
+
+- **Browser security updates do not wait for Debian.**
+  `backend/onyx/server/features/build/sandbox/image/install-browser.sh` pins
+  Chrome for Testing and verifies the selected archive with its architecture's
+  checksum. Release gates require current stable Chrome and run Grype on its
+  inventory. The deployment gate scans apt before the browser. CVE report collection uses `--report` to
+  resolve the image without enforcing the browser gate, so browser failures
+  cannot stop unrelated alerts.
+  Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
+  use the ODS allowlist or automatic issue tracking.
