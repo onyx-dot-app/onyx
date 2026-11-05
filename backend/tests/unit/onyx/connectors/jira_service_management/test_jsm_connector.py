@@ -24,7 +24,11 @@ def _make_issue(key: str, project_key: str = "HELP") -> dict[str, Any]:
     return {
         "key": key,
         "fields": {
-            "project": {"key": project_key, "name": "Help Desk"},
+            "project": {
+                "key": project_key,
+                "name": "Help Desk",
+                "projectTypeKey": "service_desk",
+            },
             "summary": f"Summary for {key}",
             "description": None,
             "comment": {"comments": []},
@@ -90,10 +94,10 @@ def test_portal_metadata_is_added_when_available(
     assert docs[0].metadata["portal_status"] == "Waiting for support"
     assert docs[0].metadata["sla_breached"] == "true"
     mock_source_operations.get_service_desk_request.assert_called_once_with(
-        issue_key="HELP-2"
+        issue_key="HELP-2", fast=True
     )
     mock_source_operations.get_service_desk_sla.assert_called_once_with(
-        issue_key="HELP-2"
+        issue_key="HELP-2", fast=True
     )
 
 
@@ -164,7 +168,69 @@ def test_service_desk_ops_pass_the_servicedesk_base() -> None:
     ops._cached_fast_client = None
 
     ops.get_service_desk_request(issue_key="IT-1")
-    client._get_json.assert_called_with("request/IT-1", base=_SERVICEDESK_BASE_URL)
+    client._get_json.assert_called_with(
+        "request/IT-1",
+        params={"expand": "requestType"},
+        base=_SERVICEDESK_BASE_URL,
+    )
 
     ops.get_service_desk_sla(issue_key="IT-1")
     client._get_json.assert_called_with("request/IT-1/sla", base=_SERVICEDESK_BASE_URL)
+
+
+def test_service_desk_ops_swallow_lookup_errors() -> None:
+    """A raised _get_json error (JiraApiError / RequestException) must come
+    back as None so enrichment never breaks an indexing run."""
+    import requests
+
+    from onyx.connectors.jira.source_operations import (
+        JiraApiError,
+        JiraSourceOperations,
+    )
+
+    for exc in (
+        JiraApiError("boom", status_code=500),
+        requests.RequestException("boom"),
+    ):
+        client = MagicMock()
+        client._get_json.side_effect = exc
+        ops = JiraSourceOperations.__new__(JiraSourceOperations)
+        ops._cached_client = client
+        ops._cached_fast_client = None
+
+        assert ops.get_service_desk_request(issue_key="IT-1") is None
+        assert ops.get_service_desk_sla(issue_key="IT-1") is None
+
+
+def test_everything_scope_skips_non_service_desk_projects(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """Default Everything scope: ordinary Jira issues must not index under
+    the JSM source."""
+    jsm_connector.jira_project = None  # Everything scope
+    software_issue = _make_issue("ENG-1", project_key="ENG")
+    software_issue["fields"]["project"]["projectTypeKey"] = "software"
+
+    assert _documents(jsm_connector, software_issue) == []
+    mock_source_operations.get_service_desk_request.assert_not_called()
+    mock_source_operations.get_service_desk_sla.assert_not_called()
+
+
+def test_project_scope_indexes_non_service_desk_without_enrichment(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """Explicit Project/JQL scope is the user's choice: the issue still
+    indexes, but no portal lookups are made for a known software project."""
+    jsm_connector.jira_project = "ENG"
+    software_issue = _make_issue("ENG-2", project_key="ENG")
+    software_issue["fields"]["project"]["projectTypeKey"] = "software"
+
+    docs = _documents(jsm_connector, software_issue)
+
+    assert len(docs) == 1
+    assert docs[0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
+    assert "request_type" not in docs[0].metadata
+    mock_source_operations.get_service_desk_request.assert_not_called()
+    mock_source_operations.get_service_desk_sla.assert_not_called()

@@ -491,7 +491,11 @@ class JiraSourceOperations(SourceOperations):
         try:
             with _translate_errors(fast=fast):
                 return self._client(fast=fast)._get_json(
-                    f"request/{issue_key}", base=_SERVICEDESK_BASE_URL
+                    f"request/{issue_key}",
+                    # Without the expand the response carries only
+                    # requestTypeId, not the requestType object.
+                    params={"expand": "requestType"},
+                    base=_SERVICEDESK_BASE_URL,
                 )
         except (JiraApiError, JIRAError, requests.RequestException):
             return None

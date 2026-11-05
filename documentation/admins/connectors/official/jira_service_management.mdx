@@ -59,9 +59,9 @@ SLA summary) is available only when the Service Desk API is enabled on the insta
   <Step title="Choose what to index">
     Select one indexing mode:
 
-    - **Everything** indexes all tickets that the connector account can access.
+    - **Everything** indexes the tickets of every service desk project the connector account can access. Issues from other Jira project types (software, business) are skipped.
     - **Project** indexes one service desk project. Enter its project key, such as `IT`.
-    - **JQL Query** indexes tickets that match a custom JQL query.
+    - **JQL Query** indexes tickets that match a custom JQL query. A JQL scope can span project types; issues from non-service-desk projects index with the regular Jira fields only, without portal metadata.
     Do not include time filters or an `ORDER BY` clause.
 
     To exclude comments from specified accounts, add their email addresses to **Comment Email Blacklist**.
@@ -79,11 +79,8 @@ SLA summary) is available only when the Service Desk API is enabled on the insta
 
 ### Indexed metadata
 
-All Jira issue fields (issue key, priority, status, resolution, labels, dates, issue type, reporter, assignee, project, parent),
-plus, when the Service Desk API is reachable:
+The standard Jira fields the Jira connector indexes (issue key, summary, description, comments, priority, status, resolution, labels, dates, issue type, reporter, assignee, project, parent), plus, when the Service Desk API is reachable and the issue is a service desk request:
 
-```
-- Request Type
-- Portal Status
-- SLA Breached
-```
+- **Request Type** - the portal request type name, such as "Get IT help"
+- **Portal Status** - the customer-visible status, such as "Waiting for support"
+- **SLA Breached** - "true" when any SLA cycle has breached, "false" otherwise

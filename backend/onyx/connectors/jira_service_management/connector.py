@@ -30,6 +30,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _FIELD_KEY = "key"
+_FIELD_FIELDS = "fields"
+_FIELD_PROJECT = "project"
+_FIELD_PROJECT_TYPE_KEY = "projectTypeKey"
+_PROJECT_TYPE_SERVICE_DESK = "service_desk"
 
 # Extra metadata keys this connector adds on top of the Jira ones.
 META_REQUEST_TYPE = "request_type"
@@ -74,22 +78,47 @@ class JiraServiceManagementConnector(JiraConnector):
         seen_hierarchy_node_ids: set[str],
         include_permissions: bool,
     ) -> Generator[Document | HierarchyNode, None, None]:
+        project_type = ((issue.get(_FIELD_FIELDS) or {}).get(_FIELD_PROJECT) or {}).get(
+            _FIELD_PROJECT_TYPE_KEY
+        )
+        # With the default "Everything" scope the inherited JQL matches every
+        # project the credential can browse, including software projects.
+        # Ordinary Jira issues must not index under the JSM source, so skip
+        # issues whose project is known not to be a service desk. When the
+        # payload omits projectTypeKey (some Data Center versions) the issue
+        # indexes and enrichment stays best effort, as documented.
+        if (
+            not self.jira_project
+            and project_type is not None
+            and project_type != _PROJECT_TYPE_SERVICE_DESK
+        ):
+            return
+        # In Project/JQL scopes the user picked the scope deliberately (JQL
+        # may span project types); only skip the enrichment lookups for known
+        # non-service-desk projects, which can never have portal metadata.
+        enrich = project_type in (None, _PROJECT_TYPE_SERVICE_DESK)
         for item in super()._issue_to_items(
             issue, seen_hierarchy_node_ids, include_permissions
         ):
             if isinstance(item, Document):
-                self._mark_and_enrich_jsm_document(item)
+                self._mark_and_enrich_jsm_document(item, enrich=enrich)
             yield item
 
-    def _mark_and_enrich_jsm_document(self, document: Document) -> None:
+    def _mark_and_enrich_jsm_document(
+        self, document: Document, *, enrich: bool = True
+    ) -> None:
         """Sets the JSM source and adds portal metadata, best effort."""
         document.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+        if not enrich:
+            return
 
         issue_key = document.metadata.get(_FIELD_KEY)
         if not isinstance(issue_key, str) or not issue_key:
             return
 
-        request = self.source_operations.get_service_desk_request(issue_key=issue_key)
+        request = self.source_operations.get_service_desk_request(
+            issue_key=issue_key, fast=True
+        )
         if request is None:
             logger.debug(
                 "No JSM portal metadata for %s: request lookup returned "
@@ -104,7 +133,9 @@ class JiraServiceManagementConnector(JiraConnector):
             if portal_status:
                 document.metadata[META_PORTAL_STATUS] = portal_status
 
-        sla = self.source_operations.get_service_desk_sla(issue_key=issue_key)
+        sla = self.source_operations.get_service_desk_sla(
+            issue_key=issue_key, fast=True
+        )
         if sla is None:
             logger.debug("No JSM SLA data for %s.", issue_key)
         if sla is not None:
