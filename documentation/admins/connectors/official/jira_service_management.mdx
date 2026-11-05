@@ -36,6 +36,13 @@ Follow the same steps as the [Jira connector](/admins/connectors/official/jira#j
 
 If you use a scoped API token, it needs the Jira scopes listed on the Jira page plus `read:servicedesk-request` for portal metadata.
 
+## Jira Service Management Data Center setup
+
+For a self-managed JSM Data Center deployment, use a personal access token instead of an email + API token,
+following the [Jira Data Center setup](/admins/connectors/official/jira#jira-data-center-setup).
+Leave the email field empty and enter the personal access token. Portal metadata (request type, portal status,
+SLA summary) is available only when the Service Desk API is enabled on the instance.
+
 ## Configure the connector
 
 <Steps>
@@ -61,9 +68,8 @@ If you use a scoped API token, it needs the Jira scopes listed on the Jira page 
   </Step>
 
   <Step title="Choose document access">
-    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with Jira**.
-    **Specific Groups** and **Sync with Jira** need the Business or Enterprise tier on Onyx Cloud,
-    or the Enterprise Edition when self-hosted.
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** needs the Business or Enterprise tier on Onyx Cloud, or the Enterprise Edition when self-hosted.
   </Step>
 
   <Step title="Create the connector">

@@ -90,6 +90,12 @@ class JiraServiceManagementConnector(JiraConnector):
             return
 
         request = self.source_operations.get_service_desk_request(issue_key=issue_key)
+        if request is None:
+            logger.debug(
+                "No JSM portal metadata for %s: request lookup returned "
+                "nothing (JSM absent or no service-desk access).",
+                issue_key,
+            )
         if request is not None:
             request_type = (request.get("requestType") or {}).get("name")
             if request_type:
@@ -99,6 +105,8 @@ class JiraServiceManagementConnector(JiraConnector):
                 document.metadata[META_PORTAL_STATUS] = portal_status
 
         sla = self.source_operations.get_service_desk_sla(issue_key=issue_key)
+        if sla is None:
+            logger.debug("No JSM SLA data for %s.", issue_key)
         if sla is not None:
             summary = _sla_breached_summary(sla)
             if summary is not None:
