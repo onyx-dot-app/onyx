@@ -7800,7 +7800,6 @@
             "errorToast": "Failed to fetch models"
           },
           "row": {
-            "defaultLabel": "Default Model",
             "decisionTag": {
               "label": "Decision",
               "decisionOnly": "Decision model. Not available in the chat model picker.",

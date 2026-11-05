@@ -7800,7 +7800,6 @@
             "errorToast": "Die Modelle konnten nicht abgerufen werden"
           },
           "row": {
-            "defaultLabel": "Standardmodell",
             "decisionTag": {
               "label": "Entscheidung",
               "decisionOnly": "Entscheidungsmodell. Nicht in der Chat-Modellauswahl verfügbar.",

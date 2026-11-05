@@ -7800,7 +7800,6 @@
             "errorToast": "モデルを取得できませんでした"
           },
           "row": {
-            "defaultLabel": "デフォルトモデル",
             "decisionTag": {
               "label": "判断",
               "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",

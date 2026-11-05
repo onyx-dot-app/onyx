@@ -3,6 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { LabelBadge } from "@/lib/badges/components";
 import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
@@ -743,17 +744,7 @@ function ModelRow({
                       )}
                     </OpalSection>
                   </Hoverable.Item>
-                  {isDefaultModel && (
-                    <span className="px-1.5 py-1 text-action-selection-05">
-                      <Text
-                        font="secondary-action"
-                        wordWrap="whitespace-nowrap"
-                        color="inherit"
-                      >
-                        {t("models.row.defaultLabel")}
-                      </Text>
-                    </span>
-                  )}
+                  {isDefaultModel && <LabelBadge label="default" />}
                 </OpalSection>
               }
               editable

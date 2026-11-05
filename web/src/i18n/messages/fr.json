@@ -7800,7 +7800,6 @@
             "errorToast": "Échec de la récupération des modèles"
           },
           "row": {
-            "defaultLabel": "Modèle par défaut",
             "decisionTag": {
               "label": "Décision",
               "decisionOnly": "Modèle de décision. Non disponible dans le sélecteur de modèles de chat.",

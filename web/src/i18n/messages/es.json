@@ -7800,7 +7800,6 @@
             "errorToast": "No se pudieron obtener los modelos"
           },
           "row": {
-            "defaultLabel": "Modelo predeterminado",
             "decisionTag": {
               "label": "Decisión",
               "decisionOnly": "Modelo de decisiones. No está disponible en el selector de modelos de chat.",
