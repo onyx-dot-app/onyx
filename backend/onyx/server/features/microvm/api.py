@@ -4,6 +4,8 @@ Mounted only with `SANDBOX_RUNTIME=firecracker`.
 
 The host agent calls this at startup. Its key signs the egress identity the
 relay stamps on VM traffic; the sandbox proxy verifies with the public half.
+The optional `agent_address` (the agent's mTLS listener, `host:port`) is how
+the api_server finds the node for placement and lifecycle calls.
 """
 
 import base64
@@ -21,6 +23,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm.registry import (
     NodeSigningKeyConflictError,
     register_node_signing_key,
+    set_node_agent_address,
 )
 from onyx.server.features.build.configs import (
     SANDBOX_NODE_REGISTRATION_SECRET,
@@ -33,6 +36,8 @@ logger = setup_logger()
 SANDBOX_NODE_SIGNING_KEY_PATH = "/microvm/node/signing-key"
 
 _IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+# host:port, with a DNS name, an IPv4 address or a bracketed IPv6 address.
+_AGENT_ADDRESS_PATTERN = r"^([A-Za-z0-9][A-Za-z0-9.-]*|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$"
 
 
 def verify_sandbox_node_registration(request: Request) -> None:
@@ -57,6 +62,9 @@ class SandboxNodeSigningKeyRegistration(BaseModel):
     key_id: str = Field(min_length=1, max_length=128, pattern=_IDENTIFIER_PATTERN)
     # Base64 of the raw 32-byte Ed25519 public key.
     public_key: str = Field(min_length=1, max_length=64)
+    agent_address: str | None = Field(
+        default=None, max_length=261, pattern=_AGENT_ADDRESS_PATTERN
+    )
 
 
 router = APIRouter()
@@ -88,8 +96,16 @@ def register_sandbox_node_signing_key(
             OnyxErrorCode.CONFLICT,
             "key_id is already registered with a different key or node",
         )
+    # Only after the key registered, so a rejected request changes nothing.
+    if registration.agent_address is not None:
+        set_node_agent_address(
+            get_shared_cache_backend(),
+            node_id=registration.node_id,
+            address=registration.agent_address,
+        )
     logger.info(
-        "sandbox_node_signing_key_registered node=%s key_id=%s",
+        "sandbox_node_signing_key_registered node=%s key_id=%s agent_address=%s",
         registration.node_id,
         registration.key_id,
+        registration.agent_address,
     )
