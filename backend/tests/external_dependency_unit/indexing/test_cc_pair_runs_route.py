@@ -48,6 +48,7 @@ from onyx.server.documents.cc_pair import (
     get_cc_pair_runs,
     get_cc_pair_throughput,
 )
+from onyx.server.documents.cc_pair_throughput import THROUGHPUT_SLICES
 from onyx.server.documents.models import (
     CCPairRunsResponse,
     CCPairThroughputWindow,
@@ -57,12 +58,15 @@ from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair_and_future,
     make_future_search_settings,
+    throughput_clock_at,
 )
 
 # The sync kinds come from the EE-only sync_params helpers.
 pytestmark = pytest.mark.usefixtures("enable_ee")
 
 _T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+# On a slice boundary of every window, so the 24h window ends exactly here.
+_THROUGHPUT_NOW = datetime(2026, 1, 1, 14, tzinfo=timezone.utc)
 
 
 def _create_cc_pair(
@@ -701,7 +705,7 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
     admin = create_test_user(db_session, "runs_admin", is_admin=True)
     cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
     other = _create_cc_pair(db_session, AccessType.PUBLIC)
-    now = datetime.now(timezone.utc)
+    now = _THROUGHPUT_NOW
     recent = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     # Began before the window and ran 23 of its 24 hours inside it.
     overlapping = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
@@ -726,12 +730,13 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
     cleaned.time_updated = now - timedelta(minutes=5)
     db_session.commit()
 
-    response = get_cc_pair_throughput(
-        cc_pair_id=cc_pair.id,
-        window=CCPairThroughputWindow.HOURS_24,
-        user=admin,
-        db_session=db_session,
-    )
+    with throughput_clock_at(now):
+        response = get_cc_pair_throughput(
+            cc_pair_id=cc_pair.id,
+            window=CCPairThroughputWindow.HOURS_24,
+            user=admin,
+            db_session=db_session,
+        )
 
     assert sum(response.docs_indexed) == 100 + round(100 * 23 / 24)
     # The overlapping run is listed, so the status strip covers its slices.
@@ -748,7 +753,7 @@ def test_all_time_throughput_starts_at_the_pairs_oldest_run(
     cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
     other = _create_cc_pair(db_session, AccessType.PUBLIC)
     idle = _create_cc_pair(db_session, AccessType.PUBLIC)
-    now = datetime.now(timezone.utc)
+    now = _THROUGHPUT_NOW
     oldest = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     recent = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     foreign = _index_attempt(db_session, other, 0, IndexingStatus.SUCCESS)
@@ -763,26 +768,35 @@ def test_all_time_throughput_starts_at_the_pairs_oldest_run(
         attempt.total_docs_indexed = 100
     db_session.commit()
 
-    response = get_cc_pair_throughput(
-        cc_pair_id=cc_pair.id,
-        window=CCPairThroughputWindow.ALL,
-        user=admin,
-        db_session=db_session,
-    )
+    with throughput_clock_at(now):
+        response = get_cc_pair_throughput(
+            cc_pair_id=cc_pair.id,
+            window=CCPairThroughputWindow.ALL,
+            user=admin,
+            db_session=db_session,
+        )
 
-    assert response.window_start == oldest.time_started
+    # The oldest run starts in the first slice.
+    first = response.slices[0]
+    assert first.start <= now - timedelta(days=9, hours=1) < first.end
+    assert response.window_end >= now
     assert sum(response.docs_indexed) == 200
     assert [run.started for run in response.runs] == [
         oldest.time_started,
         recent.time_started,
     ]
 
-    # A pair with no runs still spans a day, the shortest all-time window.
-    empty = get_cc_pair_throughput(
-        cc_pair_id=idle.id,
-        window=CCPairThroughputWindow.ALL,
-        user=admin,
-        db_session=db_session,
+    # A pair with no runs spans a day, the shortest all-time span, plus the
+    # spare slice that rounding the end up needs.
+    with throughput_clock_at(now):
+        empty = get_cc_pair_throughput(
+            cc_pair_id=idle.id,
+            window=CCPairThroughputWindow.ALL,
+            user=admin,
+            db_session=db_session,
+        )
+    slice_count = THROUGHPUT_SLICES[CCPairThroughputWindow.ALL]
+    assert empty.window_end - empty.window_start == (
+        timedelta(days=1) / (slice_count - 1) * slice_count
     )
-    assert empty.window_end - empty.window_start == timedelta(days=1)
     assert sum(empty.docs_indexed) == 0

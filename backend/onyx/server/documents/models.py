@@ -720,16 +720,37 @@ class CCPairThroughputRun(BaseModel):
     status: IndexingStatus
 
 
+class CCPairThroughputSliceRun(BaseModel):
+    attempt_id: int
+    status: IndexingStatus
+    # An admin resolved the run or a newer run superseded it, so it is no open failure.
+    resolved: bool
+
+
+class CCPairThroughputSlice(BaseModel):
+    start: datetime
+    end: datetime
+    docs_indexed: int
+    # A running run is in every slice from its start to the slice holding now.
+    runs: list[CCPairThroughputSliceRun]
+
+
 class CCPairThroughputResponse(BaseModel):
     """A rough estimate of the documents indexed in each equal slice of the
     window, oldest first (each run's total spread evenly over its span, since
     nothing records when a document landed), and the runs that overlap it,
-    oldest first."""
+    oldest first. Slice boundaries are multiples of the slice width since
+    midnight 1970-01-01 in the caller's UTC offset, so a width that divides a
+    day starts on their clock and any other width keeps its own grid. The
+    window ends on the first boundary at or after now. ``slices`` repeats the
+    counts with each slice's bounds and runs; the flat ``docs_indexed`` and
+    ``runs`` stay for web pods a deploy behind."""
 
     window_start: datetime
     window_end: datetime
     docs_indexed: list[int]
     runs: list[CCPairThroughputRun]
+    slices: list[CCPairThroughputSlice]
 
 
 class IndexingOverviewResponse(BaseModel):

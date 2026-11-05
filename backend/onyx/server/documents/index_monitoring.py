@@ -61,7 +61,12 @@ from onyx.server.documents.cc_pair_runs_feed import (
     fetch_run_feed,
     open_level_filters,
 )
-from onyx.server.documents.cc_pair_throughput import throughput_of
+from onyx.server.documents.cc_pair_throughput import (
+    MAX_THROUGHPUT_BINS,
+    MAX_TZ_OFFSET_MINUTES,
+    MIN_THROUGHPUT_BINS,
+    throughput_of,
+)
 from onyx.server.documents.models import (
     CC_PAIR_RUN_BATCH_MAX,
     CCPairRef,
@@ -198,6 +203,17 @@ def _docs_indexed_by_pair(
 @router.get("/overview")
 def get_indexing_overview(
     window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_1),
+    bins: Annotated[
+        int | None, Query(ge=MIN_THROUGHPUT_BINS, le=MAX_THROUGHPUT_BINS)
+    ] = None,
+    tz_offset_minutes: Annotated[
+        int,
+        Query(
+            ge=-MAX_TZ_OFFSET_MINUTES,
+            le=MAX_TZ_OFFSET_MINUTES,
+            description="The caller's UTC offset in minutes, east positive.",
+        ),
+    ] = 0,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -210,7 +226,7 @@ def get_indexing_overview(
             OnyxErrorCode.INVALID_INPUT, "The overview has no all-time window."
         )
     pairs = _readable_cc_pairs(db_session, user)
-    throughput = throughput_of(db_session, list(pairs), window)
+    throughput = throughput_of(db_session, list(pairs), window, bins, tz_offset_minutes)
     return IndexingOverviewResponse(
         indexing_connectors=count_pairs_indexing(db_session, list(pairs)),
         active_connectors=sum(
