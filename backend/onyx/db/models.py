@@ -67,6 +67,8 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     NotificationType,
     SearchFeedbackType,
+    TokenRateLimitAction,
+    TokenRateLimitPeriod,
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
@@ -5739,6 +5741,9 @@ NOTE: `TokenRateLimit` is partially an MIT feature (global rate limit)
 
 
 class TokenRateLimit(Base):
+    """One spending limit: a budget for one period, for all models or one model.
+    At most one enabled row per (scope, group, model, period, action, threshold)."""
+
     __tablename__ = "token_rate_limit"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -5749,9 +5754,32 @@ class TokenRateLimit(Base):
     cost_budget_cents: Mapped[float | None] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=True
     )
-    period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    period: Mapped[TokenRateLimitPeriod] = mapped_column(
+        Enum(TokenRateLimitPeriod, native_enum=False), nullable=False
+    )
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
+    )
+    # Set exactly for the group scopes.
+    user_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"), nullable=True
+    )
+    # None: the limit counts usage of every model.
+    model_configuration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"), nullable=True
+    )
+    action: Mapped[TokenRateLimitAction] = mapped_column(
+        Enum(TokenRateLimitAction, native_enum=False),
+        nullable=False,
+        default=TokenRateLimitAction.BLOCK,
+        server_default=TokenRateLimitAction.BLOCK.value,
+    )
+    # An ALERT_ONLY row's percentage of the BLOCK value for the same bucket, in
+    # place of absolute budgets.
+    threshold_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Usage before this time does not count toward the limit's current period.
+    usage_reset_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -5759,20 +5787,52 @@ class TokenRateLimit(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL",
+            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL "
+            "OR threshold_percent IS NOT NULL",
             name="ck_token_rate_limit_budget_set",
+        ),
+        CheckConstraint(
+            "threshold_percent IS NULL OR (action = 'ALERT_ONLY' "
+            "AND token_budget IS NULL AND cost_budget_cents IS NULL "
+            "AND threshold_percent BETWEEN 1 AND 100)",
+            name="ck_token_rate_limit_threshold",
+        ),
+        CheckConstraint(
+            "(scope IN ('USER_GROUP', 'USER_GROUP_MEMBER')) = (user_group_id IS NOT NULL)",
+            name="ck_token_rate_limit_group",
+        ),
+        # Nullable key columns are coalesced: Postgres before 15 has no NULLS NOT DISTINCT.
+        Index(
+            "uq_token_rate_limit_bucket",
+            "scope",
+            text("COALESCE(user_group_id, 0)"),
+            text("COALESCE(model_configuration_id, 0)"),
+            "period",
+            "action",
+            text("COALESCE(threshold_percent, 0)"),
+            unique=True,
+            postgresql_where=text("enabled"),
         ),
     )
 
 
-class TokenRateLimit__UserGroup(Base):
-    __tablename__ = "token_rate_limit__user_group"
+class TokenRateLimitUsageBaseline(Base):
+    """A user's usage in the reset day's bucket when a limit was reset. A
+    per-user limit subtracts the user's own; a pool subtracts the sum over the
+    users it covers now, so a member who leaves takes their share along."""
 
-    rate_limit_id: Mapped[int] = mapped_column(
-        ForeignKey("token_rate_limit.id"), primary_key=True
+    __tablename__ = "token_rate_limit_usage_baseline"
+
+    token_rate_limit_id: Mapped[int] = mapped_column(
+        ForeignKey("token_rate_limit.id", ondelete="CASCADE"), primary_key=True
     )
-    user_group_id: Mapped[int] = mapped_column(
-        ForeignKey("user_group.id"), primary_key=True
+    token_rate_limit: Mapped[TokenRateLimit] = relationship()
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cost_cents: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
     )
 
 
@@ -6765,6 +6825,11 @@ class TenantUsage(Base):
     )
 
 
+# Coalesced so the dedup indexes collapse NULLs on Postgres before 15 (no
+# NULLS NOT DISTINCT). Upserts must name this exact expression as the conflict target.
+USAGE_MODEL_CONFIGURATION_KEY = text("COALESCE(model_configuration_id, 0)")
+
+
 class UserUsage(Base):
     """Daily user and system LLM usage rollup. ``user_usage`` is a legacy
     physical name retained for deployment compatibility; partial indexes
@@ -6804,6 +6869,9 @@ class UserUsage(Base):
     incognito: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # The saved model the call ran; None when unknown. Not a FK: a deleted
+    # configuration keeps its id here, which is harmless since ids are never reused.
+    model_configuration_id: Mapped[int | None] = mapped_column(Integer(), nullable=True)
 
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -6844,6 +6912,7 @@ class UserUsage(Base):
             "flow",
             "provider",
             "incognito",
+            USAGE_MODEL_CONFIGURATION_KEY,
             unique=True,
             postgresql_where=text("actor_kind = 'USER'"),
         ),
@@ -6854,6 +6923,7 @@ class UserUsage(Base):
             "model",
             "flow",
             "provider",
+            USAGE_MODEL_CONFIGURATION_KEY,
             unique=True,
             postgresql_where=text("actor_kind = 'SYSTEM'"),
         ),

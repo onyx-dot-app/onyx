@@ -29,6 +29,24 @@ function setupUser() {
 }
 
 describe("InputSingleSelect", () => {
+  it("shows an option's info at the end of its row", async () => {
+    const user = setupUser();
+    render(
+      <InputSingleSelect
+        placeholder="Model"
+        value=""
+        options={[
+          { value: "apple", title: "Apple", info: "Limit set" },
+          { value: "banana", title: "Banana" },
+        ]}
+      />
+    );
+    await user.click(screen.getByRole("combobox", { name: "Model" }));
+    const [apple, banana] = screen.getAllByRole("option");
+    expect(apple).toHaveTextContent("Limit set");
+    expect(banana).not.toHaveTextContent("Limit set");
+  });
+
   describe("Search and foldable dividers", () => {
     const providerOptions = [
       {

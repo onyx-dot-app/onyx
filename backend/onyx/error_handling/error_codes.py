@@ -138,6 +138,15 @@ class OnyxErrorCode(Enum):
             return canonical
         return cls.INTERNAL_ERROR if status_code >= 500 else cls.BAD_REQUEST
 
+    @classmethod
+    def for_code(cls, code: str | None) -> "OnyxErrorCode":
+        """The member whose string code is ``code``; INTERNAL_ERROR when none
+        matches, such as a chat-only code like AGENT_EXECUTION_FAILED."""
+        for member in cls:
+            if member.code == code:
+                return member
+        return cls.INTERNAL_ERROR
+
     def detail(self, message: str | None = None) -> dict[str, str]:
         """Build a structured error detail dict.
 

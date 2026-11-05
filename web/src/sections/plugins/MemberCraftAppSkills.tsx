@@ -70,7 +70,7 @@ export default function MemberCraftAppSkills({
       {loadError}
 
       <InputTypeIn
-        searchIcon
+        icon="search"
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder={t("search")}

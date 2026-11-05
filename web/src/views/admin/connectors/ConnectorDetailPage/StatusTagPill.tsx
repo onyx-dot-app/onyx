@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Tag } from "@opal/components";
+import { Badge } from "@opal/components";
 import type { StatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 
 interface StatusTagPillProps {
@@ -12,11 +12,11 @@ interface StatusTagPillProps {
 export default function StatusTagPill({ tag }: StatusTagPillProps) {
   const tBadges = useTranslations("admin.status.badges");
   return (
-    <Tag
+    <Badge
       icon={tag.icon}
       title={tBadges(tag.labelKey)}
       color={tag.color}
-      variant="status"
+      textColor="text-04"
     />
   );
 }

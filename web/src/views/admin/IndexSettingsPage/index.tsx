@@ -620,11 +620,14 @@ function EmbeddingModelCard({
               model.legacy
                 ? {
                     title: t("modelCard.legacy.tag"),
-                    color: "amber",
+                    color: "pending",
                     tooltip: t("modelCard.legacy.tooltip"),
                   }
                 : model.gpuRecommended
-                  ? { title: t("modelCard.gpuRecommended.tag"), color: "gray" }
+                  ? {
+                      title: t("modelCard.gpuRecommended.tag"),
+                      color: "default",
+                    }
                   : undefined
             }
             sizePreset="main-ui"
@@ -2086,7 +2089,7 @@ export default function IndexSettingsPage() {
                                         "modelPicker.search.placeholder"
                                       )}
                                       variant="internal"
-                                      searchIcon
+                                      icon="search"
                                       value={query}
                                       onChange={(e) => setQuery(e.target.value)}
                                     />
@@ -2148,7 +2151,7 @@ export default function IndexSettingsPage() {
                                         currentRegistryModel?.legacy
                                           ? {
                                               title: t("modelCard.legacy.tag"),
-                                              color: "amber",
+                                              color: "pending",
                                             }
                                           : undefined
                                       }
@@ -2289,7 +2292,7 @@ export default function IndexSettingsPage() {
                             description={t("multipass.description")}
                             tag={{
                               title: t("multipass.tag.label"),
-                              color: "gray",
+                              color: "default",
                             }}
                             withLabel
                           >

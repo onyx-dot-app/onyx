@@ -13,8 +13,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.configs.constants import TokenRateLimitScope
-from onyx.db.models import TokenRateLimit, UserUsage
+from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
+from onyx.db.models import TokenRateLimit, TokenRateLimitUsageBaseline, UserUsage
 from onyx.db.user_usage import (
     USER_USAGE_BUCKET_SECONDS,
     get_usage_reset_window_start,
@@ -37,7 +37,8 @@ def _compile_jsonb_sqlite(_e: object, _c: object, **_kw: object) -> str:
 @pytest.fixture
 def db() -> Generator[Session, None, None]:
     engine: Engine = create_engine("sqlite://")
-    cast(Table, UserUsage.__table__).create(bind=engine)
+    for model in (UserUsage, TokenRateLimit, TokenRateLimitUsageBaseline):
+        cast(Table, model.__table__).create(bind=engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session
@@ -87,14 +88,14 @@ class TestResetUserUsage:
                 enabled=True,
                 token_budget=100,
                 cost_budget_cents=None,
-                period_hours=48,
+                period=TokenRateLimitPeriod.DAILY,
                 scope=TokenRateLimitScope.USER,
             ),
             TokenRateLimit(
                 enabled=True,
                 token_budget=None,
                 cost_budget_cents=100.0,
-                period_hours=168,
+                period=TokenRateLimitPeriod.WEEKLY,
                 scope=TokenRateLimitScope.GLOBAL,
             ),
         ]

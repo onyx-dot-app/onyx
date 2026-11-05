@@ -8,9 +8,8 @@
    must pack from the top-left.
    --------------------------------------------------------------------------- */
 
-.opal-input-type-in-tag {
+.opal-input.opal-input-type-in-tag {
   @apply cursor-text items-start justify-start;
-  gap: 4px;
   min-width: 160px;
 }
 
@@ -30,30 +29,21 @@
   min-height: var(--opal-input-type-in-tag-row-height);
 }
 
-.opal-input-type-in-tag-icon-container {
-  @apply flex shrink-0 items-center justify-center;
-  width: 24px;
-  height: 24px;
-  padding: 4px;
-}
-
-.opal-input-type-in-tag-icon {
-  @apply text-text-03;
-  width: 100%;
-  height: 100%;
-}
-
-/* Chip rows pack from the top, grow the field up to --max-rows, then scroll
-   inside it. The 2px bleed (negative margin, matching padding) keeps an armed
-   chip's outer ring inside the scroll clip. */
+/* Tag rows pack from the top, grow the field up to --max-rows, then scroll
+   inside it. The bleed (negative margin, matching padding) keeps an armed
+   tag's outer ring inside the scroll clip: a 24px tag on a 20px row, plus its
+   2px ring, reaches 4px past the row. */
 .opal-input-type-in-tag-tags {
-  --opal-input-type-in-tag-row-height: 24px;
-  --opal-input-type-in-tag-row-gap: 4px;
+  /* 20px rows, the title line's text height. A 24px tag lays out as 20px
+     (its -2px block margins), so an 8px row gap leaves 4px between tags. */
+  --opal-input-type-in-tag-row-height: 20px;
+  --opal-input-type-in-tag-row-gap: 8px;
   --opal-input-type-in-tag-rows: 1;
   --opal-input-type-in-tag-max-rows: 2;
-  --opal-input-type-in-tag-bleed: 2px;
+  --opal-input-type-in-tag-bleed: 4px;
   @apply flex min-w-0 flex-1 flex-wrap content-start items-center overflow-y-auto overscroll-contain;
-  gap: var(--opal-input-type-in-tag-row-gap);
+  row-gap: var(--opal-input-type-in-tag-row-gap);
+  column-gap: 4px;
   margin: calc(-1 * var(--opal-input-type-in-tag-bleed));
   padding: var(--opal-input-type-in-tag-bleed);
   min-height: calc(
@@ -72,10 +62,13 @@
   );
 }
 
+/* A tag takes a 20px layout box on its 20px row, so it does not grow the
+   title line; it draws 2px past the row on each side. */
+.opal-input-type-in-tag-tags .opal-tag {
+  margin-block: -2px;
+}
+
 .opal-input-type-in-tag-field {
-  /* Keep the family's 24px inner rhythm: h-6 like every .opal-input-field.
-     Vertical padding here made the field 28px and the whole input 42px,
-     4px taller than its siblings. */
-  @apply h-6 w-auto min-w-20 flex-1;
-  padding: 0 4px;
+  /* The title line's 20px text box, as in InputTypeIn. */
+  @apply h-5 w-auto min-w-20 flex-1 px-0.5 py-0;
 }

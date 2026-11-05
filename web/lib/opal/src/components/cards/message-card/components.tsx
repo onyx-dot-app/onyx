@@ -20,6 +20,7 @@ import {
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgClock,
+  SvgHourglass,
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
@@ -139,6 +140,11 @@ const VARIANT_CONFIG: Record<
     icon: SvgClock,
     iconClass: "stroke-theme-amber-05",
     color: "theme-amber-01",
+  },
+  queued: {
+    icon: SvgHourglass,
+    iconClass: "stroke-theme-purple-05",
+    color: "theme-purple-01",
   },
   error: {
     icon: SvgXOctagon,

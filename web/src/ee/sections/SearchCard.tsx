@@ -1,7 +1,7 @@
 "use client";
 
 import { Section } from "@opal/layouts";
-import { OverflowText, Tag, Text } from "@opal/components";
+import { OverflowText, Badge, Text } from "@opal/components";
 import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
@@ -88,13 +88,13 @@ export default function SearchCard({
               {/* Metadata */}
               <Section flexDirection="row" justifyContent="start" gap={1}>
                 {(document.primary_owners ?? []).map((owner, index) => (
-                  <Tag key={index} title={owner} />
+                  <Badge key={index} title={owner} />
                 ))}
                 {document.metadata?.tags &&
                   (Array.isArray(document.metadata.tags)
                     ? document.metadata.tags
                     : [document.metadata.tags]
-                  ).map((tag, index) => <Tag key={index} title={tag} />)}
+                  ).map((tag, index) => <Badge key={index} title={tag} />)}
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
                     <Text font="secondary-body" color="text-02">

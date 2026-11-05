@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
+import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertCircle,
@@ -264,11 +264,11 @@ export function RunWarningsTag({ run }: RunWarningsTagProps) {
       })}
       side="top"
     >
-      <Tag
+      <Badge
         icon={SvgAlertTriangle}
         title={format.number(warnings)}
-        color="orange"
-        variant="count"
+        color="warning"
+        textColor="text-04"
       />
     </Tooltip>
   );
@@ -314,7 +314,7 @@ function Count({ icon: Icon, value, tooltip, look }: CountProps) {
   if (look === "tag") {
     return (
       <Tooltip tooltip={tooltip} side="top">
-        <Tag icon={Icon} title={format.number(value)} color="gray" />
+        <Badge icon={Icon} title={format.number(value)} color="default" />
       </Tooltip>
     );
   }
@@ -655,7 +655,7 @@ export default function RunRow({
                   <StatusTagPill tag={tag} />
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tooltip tooltip={t("newModel.tooltip")} side="top">
-                      <Tag title={t("newModel.label")} color="purple" />
+                      <Badge title={t("newModel.label")} color="info" />
                     </Tooltip>
                   )}
                   {run.kind === "indexing" && (

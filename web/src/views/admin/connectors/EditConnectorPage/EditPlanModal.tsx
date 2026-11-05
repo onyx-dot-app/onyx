@@ -12,7 +12,7 @@ import {
   MessageCard,
   Modal,
   SelectCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
@@ -77,8 +77,8 @@ function StepCard({ step, dropped, disabled, onDroppedChange }: StepCardProps) {
           variant="section"
           tag={
             step.required
-              ? { title: t("required.label"), color: "amber" }
-              : { title: t("optional.label"), color: "gray" }
+              ? { title: t("required.label"), color: "pending" }
+              : { title: t("optional.label"), color: "default" }
           }
           rightChildren={
             step.required ? undefined : (
@@ -93,7 +93,7 @@ function StepCard({ step, dropped, disabled, onDroppedChange }: StepCardProps) {
         />
         <Section flexDirection="row" justifyContent="start" gap={1} wrap>
           {step.reasons.map((reason) => (
-            <Tag key={reason} title={t(`reason.${reason}`)} color="blue" />
+            <Badge key={reason} title={t(`reason.${reason}`)} color="info" />
           ))}
         </Section>
         {step.field_names.length > 0 && (

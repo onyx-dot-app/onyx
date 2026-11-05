@@ -525,7 +525,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             setSelectedIds(new Set());
             setBulkFailures([]);
           }}
-          searchIcon
+          icon="search"
         />
       </SettingsLayouts.Header>
 

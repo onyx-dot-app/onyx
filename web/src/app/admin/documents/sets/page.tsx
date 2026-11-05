@@ -439,7 +439,7 @@ function Main() {
           </Text>
           <Spacer rem={0.5} />
           <InputTypeIn
-            searchIcon
+            icon="search"
             placeholder={t("sets.search.placeholder")}
             value={searchQuery}
             onChange={(e) => {

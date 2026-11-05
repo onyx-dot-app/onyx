@@ -4,7 +4,7 @@ import type { Route } from "next";
 import { useNavigation } from "@opal/navigation/hooks";
 import { cn } from "@opal/utils";
 import { Divider, Button, Presence, Spacer } from "@opal/components";
-import type { TagProps } from "@opal/components";
+import type { BadgeProps } from "@opal/components";
 import type {
   IconFunctionComponent,
   RichStr,
@@ -131,8 +131,8 @@ export interface SettingsHeaderProps {
   moreIcon2?: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
-  /** Tag inline after the description, e.g. a status. */
-  descriptionTag?: TagProps;
+  /** Badge inline after the description, e.g. a status. */
+  descriptionTag?: BadgeProps;
   /** The title can be edited in place, as `Content` does it. */
   editable?: boolean;
   /** When the editable title shows its pencil: on hover, or at rest too. Default: `"hover"`. */

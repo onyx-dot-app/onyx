@@ -6314,28 +6314,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "添加限制"
-        },
-        "costLimit": {
-          "header": "费用上限",
-          "placeholder": "费用上限",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Token 速率限制仅在 [Onyx 企业版](/admin/billing) 中提供。",
-        "section": {
-          "description": "限制此用户组在指定时间段内可以使用的 token 数量。",
-          "title": "Token 速率限制"
-        },
-        "timeWindow": {
-          "header": "时间窗口",
-          "unit": "(UTC 天)"
-        },
-        "tokenLimit": {
-          "header": "Token 上限",
-          "placeholder": "Token 上限（千）",
-          "unit": "(千)"
-        }
+        "disabledTooltip": "Token 速率限制仅在 [Onyx 企业版](/admin/billing) 中提供。"
       },
       "builtIn": {
         "admin": {
@@ -6346,9 +6325,6 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -9888,169 +9864,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "最多 {cost} 或 {tokens} 个 token",
-          "cost": "最多 {cost}",
-          "none": "未设置预算",
-          "tokens": "最多 {tokens} 个 token"
-        },
-        "cadence": {
-          "label": "{days, plural, one {每天在 UTC 午夜重置} other {每 # 天在 UTC 午夜重置}}"
-        },
-        "deleteFailed": {
-          "error": "删除 token 速率限制失败"
-        },
-        "empty": {
-          "message": "尚无限额。创建支出限额以控制用量。"
-        },
-        "loadFailed": {
-          "error": "加载 token 速率限制失败"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "删除 {label}",
-            "tooltip": "删除限额"
-          },
-          "disable": {
-            "ariaLabel": "禁用 {label}"
-          },
-          "enable": {
-            "ariaLabel": "启用 {label}"
-          },
-          "label": "{budget}，{cadence}"
-        },
-        "updateFailed": {
-          "error": "更新 token 速率限制失败"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "取消"
-        },
-        "costBudget": {
-          "description": "每个重置周期的最高支出。可设置费用预算、token 预算，或同时设置两者。",
-          "placeholder": "无费用限额",
-          "title": "费用预算",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "请输入费用预算、token 预算，或同时输入两者",
-          "costMax": "最高费用预算为 ${amount, number}",
-          "costMinCents": "费用预算至少为 $0.01",
-          "costMoreThanZero": "费用预算必须大于 0",
-          "groupRequired": "请选择用户组",
-          "periodInteger": "请输入整数天数",
-          "periodMin": "至少为 1 天",
-          "periodRequired": "请输入重置周期",
-          "scopeRequired": "目标范围为必填项",
-          "tokenIncrement": "请以 1,000 个 token 为增量",
-          "tokenInteger": "请输入整数个 token",
-          "tokenMax": "最高 token 预算为 1 万亿",
-          "tokenMin": "至少为 1,000 个 token"
-        },
-        "groupMenu": {
-          "empty": "尚无用户组。请在“用户与用户组”中创建。"
-        },
-        "groupPicker": {
-          "placeholder": "选择用户组"
-        },
-        "header": {
-          "title": "创建支出限额"
-        },
-        "period": {
-          "description": "预算在 UTC 午夜重置",
-          "title": "重置周期",
-          "unit": "天"
-        },
-        "scope": {
-          "caption": {
-            "global": "工作区中的所有人共享一个预算。",
-            "group": "{group} 的成员共享一个预算。",
-            "groupUnchosen": "所选用户组的成员共享一个预算。",
-            "user": "每位用户拥有各自的预算。"
-          },
-          "title": "应用范围"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "工作区"
-          },
-          "user": {
-            "title": "每位用户"
-          },
-          "userGroup": {
-            "title": "用户组"
-          }
-        },
-        "submit": {
-          "label": "创建限额"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} 或 {tokens} 个 token",
-            "tokens": "{tokens} 个 token"
-          },
-          "global": "{days, plural, one {工作区中的所有人每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {工作区中的所有人每 # 天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "group": "{days, plural, one {每天，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {每 # 天，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "groupUnchosen": "{days, plural, one {所选用户组的成员每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {所选用户组的成员每 # 天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "user": "{days, plural, one {每位用户每天最多可花费 {budget}。在周期重置之前将无法继续使用。} other {每位用户每 # 天最多可花费 {budget}。在周期重置之前将无法继续使用。}}"
-        },
-        "tokenBudget": {
-          "description": "每个重置周期的最大 token 数",
-          "placeholder": "无 token 限额",
-          "title": "Token 预算",
-          "unit": "token"
-        },
-        "userGroup": {
-          "description": "选择共享此预算的用户组",
-          "title": "用户组"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "创建支出限额"
-        },
-        "createFailed": {
-          "error": "创建支出限额失败"
-        },
-        "created": {
-          "message": "支出限额已创建！"
-        },
-        "embedded": {
-          "description": "为工作区、用户和用户组的用量设置护栏。可以启用或禁用限额，无需删除其配置。",
-          "title": "管理支出限额"
-        },
-        "global": {
-          "description": "全局限额适用于所有用户、用户组和 API 密钥。达到全局限额后，将无法再消耗 token。"
-        },
-        "intro": {
-          "description": "支出限额帮助您控制在给定时间段内可以消耗多少 token。",
-          "groupLimit": "为用户组设置限额，以控制团队的支出。",
-          "toggleLimit": "根据需要启用和禁用限额。",
-          "userLimit": "为用户设置限额，避免单个用户支出过多。",
-          "workspaceLimit": "设置工作区级限额，控制团队的总体支出。"
-        },
-        "tabs": {
-          "global": {
-            "name": "全局"
-          },
-          "groups": {
-            "name": "用户组"
-          },
-          "users": {
-            "name": "用户"
-          }
-        },
-        "user": {
-          "description": "用户限额分别应用于每位用户。当用户达到限额时，将暂时无法消耗 token。"
-        },
-        "userGroup": {
-          "description": "用户组限额适用于组内的所有用户。如果用户属于多个用户组，则以最宽松的限额为准。"
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM 调用追踪将不再发送到 **{label}**。已发送的追踪不受影响。",
@@ -11178,6 +10991,200 @@
         "retry": "{count, plural, other {已失败 # 次。下次重试：{time}。}}",
         "scoped": "仅限新增或更改的项目",
         "failures": "{count, plural, other {失败 # 次}}"
+      }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "设置支出限额，为组织的 LLM 支出设置护栏。",
+        "loadFailed": "无法加载支出上限。"
+      },
+      "workspace": {
+        "title": "工作区上限",
+        "description": "适用于该组织中的所有用户和账户。",
+        "pool": {
+          "title": "共享预算",
+          "description": "每个重置周期内所有人共享的限额。设置费用限额、令牌限额或两者。",
+          "empty": "无全局工作区限额",
+          "target": "全局工作区限额",
+          "emptyDescription": "每个重置周期内所有人共享的限额。"
+        },
+        "perUser": {
+          "title": "每用户上限",
+          "description": "组织中每位用户各自的限额。设置费用限额、令牌限额或两者。",
+          "empty": "无每用户限额",
+          "target": "全局每用户限额",
+          "emptyDescription": "组织中每位用户各自的限额。"
+        }
+      },
+      "groups": {
+        "title": "组上限",
+        "description": "适用于该组织中的特定群组。",
+        "add": {
+          "label": "添加组上限"
+        },
+        "picker": {
+          "placeholder": "选择组",
+          "limitSet": "已设限额："
+        },
+        "members": "{count, plural, other {# 名成员}}",
+        "empty": "为工作区、用户和群组的使用设置费用/令牌限额。",
+        "pool": {
+          "title": "组共享预算",
+          "description": "该群组所有人共享的限额。设置费用限额、令牌限额或两者。",
+          "empty": "无群组共享预算",
+          "target": "群组限额",
+          "emptyDescription": "该群组所有人共享的限额。",
+          "members": "{count, plural, other {# 名成员}}"
+        },
+        "perMember": {
+          "title": "每成员上限",
+          "description": "该群组每位成员各自的限额。设置费用限额、令牌限额或两者。",
+          "adminOnly": "每成员上限可以让成员高于工作区上限，因此只有管理员可以更改。",
+          "empty": "无每成员限额",
+          "target": "群组每位成员限额",
+          "emptyDescription": "该群组每位成员各自的限额。",
+          "members": "每位成员限额 • {count, plural, other {# 名成员}}"
+        },
+        "kind": {
+          "placeholder": "选择限额类型"
+        },
+        "field": {},
+        "new": {
+          "title": "新建群组限额",
+          "pool": {
+            "description": "特定群组所有人共享的限额。设置费用限额、令牌限额或两者。"
+          },
+          "perMember": {
+            "description": "特定群组每位成员各自的限额。设置费用限额、令牌限额或两者。"
+          }
+        }
+      },
+      "groupPage": {
+        "title": "支出上限",
+        "description": "限制此组在 LLM 使用上的支出。"
+      },
+      "card": {
+        "addLimit": "添加上限",
+        "addModelBudget": "添加模型预算",
+        "modelBudget": {
+          "title": "模型预算",
+          "description": "为特定模型的支出设上限。这些支出也计入共享预算。"
+        },
+        "cancel": "取消",
+        "save": "保存更改",
+        "saved": "支出上限已保存",
+        "saveFailed": "无法保存支出上限：{error}",
+        "create": "创建限额",
+        "reenable": "重新启用",
+        "disable": {
+          "tooltip": "关闭所有限额"
+        },
+        "expand": {
+          "tooltip": "管理"
+        },
+        "collapse": {
+          "tooltip": "收起"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> 或 <b>{tokens}</b> 个令牌 / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> 个令牌 / {period}",
+          "period": {
+            "DAILY": "天",
+            "WEEKLY": "周",
+            "MONTHLY": "月"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, other {# 个模型预算}}",
+          "nextReset": "下次重置：{at}",
+          "inactive": "已停用的限额",
+          "used": "已使用 <b>{percent}%</b>",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "提醒",
+        "description": "通过 API 设置的仅提醒上限。它们不会阻止使用，在此保存时也保持不变。",
+        "row": "{model}，{period}：{target}",
+        "allModels": "所有模型",
+        "percent": "上限的 {percent}%",
+        "tokens": "{tokens} 个令牌"
+      },
+      "row": {
+        "model": {
+          "title": "模型",
+          "placeholder": "搜索模型…"
+        },
+        "period": {
+          "title": "重置周期",
+          "options": {
+            "DAILY": {
+              "title": "每日上限",
+              "description": "每天重置",
+              "helper": "每天 00:00 UTC 重置。"
+            },
+            "WEEKLY": {
+              "title": "每周上限",
+              "description": "每周一重置",
+              "helper": "每周一 00:00 UTC 重置。"
+            },
+            "MONTHLY": {
+              "title": "每月上限",
+              "description": "每月1日重置",
+              "helper": "每月1日 00:00 UTC 重置。"
+            }
+          }
+        },
+        "nextReset": "下次重置",
+        "resetUsage": {
+          "label": "立即重置限额用量",
+          "done": "用量已重置。此限额从现在起计算，直到下次重置。",
+          "failed": "无法重置用量：{error}"
+        },
+        "remove": {
+          "tooltip": "移除上限"
+        },
+        "cost": {
+          "title": "成本上限",
+          "placeholder": "无费用限额",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "令牌上限",
+          "placeholder": "无令牌上限",
+          "suffix": "K",
+          "unit": "令牌"
+        },
+        "usage": {
+          "spent": "已花费 <mono>{amount}</mono>",
+          "tokens": "已使用 <mono>{tokens}</mono> 个令牌",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "在下次重置前将阻止使用。",
+            "model": "在下次重置前将阻止使用该模型。"
+          }
+        },
+        "whenReached": {
+          "title": "达到此上限时",
+          "blockAll": {
+            "title": "达到限额时阻止所有使用",
+            "description": "所有模型的使用（包括聊天、搜索、机器人和 API 调用）都将停止，直至下次重置。"
+          },
+          "blockModel": {
+            "title": "达到限额时阻止模型使用",
+            "description": "该模型的使用（包括聊天、机器人和 API 调用）将停止，直到下次重置。",
+            "summary": "达到限额时阻止模型使用"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "请将成本设为至少 0.01 美元，令牌数不超过 1 万亿。",
+          "budgetRequired": "请设置成本上限、令牌上限或两者。",
+          "duplicate": "另一个上限已使用此周期。",
+          "modelRequired": "请选择一个模型。"
+        },
+        "edit": {
+          "tooltip": "编辑"
+        }
       }
     }
   },
@@ -12857,6 +12864,9 @@
         },
         "tryAgainNow": {
           "text": "您现在可以重试。"
+        },
+        "otherModels": {
+          "text": "其他模型仍可使用。"
         }
       },
       "resubmit": {
@@ -14836,6 +14846,10 @@
       },
       "plusMenu": {
         "tooltip": "添加文件或技能"
+      },
+      "contextRing": {
+        "label": "上下文窗口用量",
+        "tooltip": "已使用 {percent}% 的上下文"
       }
     },
     "interruptHint": {
@@ -16765,6 +16779,9 @@
         },
         "skills": {
           "label": "技能"
+        },
+        "spendingLimits": {
+          "label": "支出上限"
         }
       },
       "sections": {

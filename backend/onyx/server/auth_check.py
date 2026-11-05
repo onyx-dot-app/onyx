@@ -94,12 +94,14 @@ PUBLIC_ENDPOINT_SPECS = [
     # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
     ("/auth/saml/{provider_name}/authorize", {"GET"}),
-    ("/auth/saml/callback", {"GET"}),
     ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/complete", {"GET"}),
     ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
+    # Firecracker host agents; the handler checks the shared cluster credential.
+    ("/build/sandbox-node/signing-key", {"PUT"}),
     # craft webapp proxy — access enforced per-session via sharing_scope in handler
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),

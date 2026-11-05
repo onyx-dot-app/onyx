@@ -93,6 +93,6 @@
 
 /* A passive tag lets clicks fall through to the row's click target. */
 .opal-sidebar-tab__actions
-  > .opal-auxiliary-tag:not([data-clickable]):not([data-type="editable"]) {
+  > .opal-badge:not([data-clickable]):not([data-type="editable"]) {
   @apply pointer-events-none;
 }

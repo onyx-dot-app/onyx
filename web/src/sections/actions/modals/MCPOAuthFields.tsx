@@ -155,7 +155,7 @@ export function MCPOAuthFields({
                 )}
                 tag={
                   recommendedMode === mode
-                    ? { title: recommendedCopy("label"), color: "green" }
+                    ? { title: recommendedCopy("label"), color: "success" }
                     : undefined
                 }
               />

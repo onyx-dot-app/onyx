@@ -210,7 +210,7 @@ export default function ChatPluginsPopover({
               <InputTypeIn
                 key="search"
                 ref={focusOnMount}
-                searchIcon
+                icon="search"
                 variant="internal"
                 value={search}
                 placeholder={t("chat.search.placeholder")}
