@@ -117,7 +117,8 @@ check_for_port / run_port_attempt          tasks/port/tasks.py
 check_and_perform_index_swap               db/swap_index.py, run by check_for_indexing
   INSTANT: swap at once, the port keeps filling the live index
   REINDEX / ACTIVE_ONLY: swap when _port_swap_ready
-_perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit
+_clear_what_future_missed: hashes PRESENT wrote after FUTURE's last poll -> NULL
+_perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit (clear repeated)
 check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
   PENDING -> SOAKING -> DELETING -> RECLAIMED (row kept), or BLOCKED
 ```
@@ -125,8 +126,11 @@ check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
 The reindex never fetches sources again. It copies and re-embeds stored chunks
 (`document_index/opensearch/port_copy.py`), and connectors keep indexing new
 changes into both generations. Once every connector port succeeds, the reindex
-is finalizing. The swap then waits while any FUTURE index attempt of a required
-pair runs (`db/swap_index.py:_no_writer_left_in_flight`).
+is finalizing. The swap then waits only while a FUTURE index attempt of a
+required pair runs (`db/swap_index.py:_no_writer_left_in_flight`). It does not
+wait for FUTURE to catch up with what PRESENT wrote during the port: it clears
+the content hash of those documents instead, so the next poll on the new
+PRESENT re-indexes them ([[#swap-clears-what-future-missed]]).
 [[indexing-pipeline#future-attempts-first]] keeps those attempts from waiting
 behind PRESENT refreshes. Reclaim waits `OLD_INDEX_RETENTION_HOURS` in SOAKING,
 then requires the new index to be not red and to answer a count query
@@ -162,9 +166,11 @@ it deletes the old one.
    that an INSTANT reindex promoted while its port still runs.
    `document_index/opensearch/opensearch_document_index.py:OpenSearchIndexPair.update`
    raises `SecondaryIndexDocumentMissingError` in both cases. The sync then sets
-   `secondary_only_sync_pending`, and the swap waits for those documents to
-   drain. Clearing `needs_sync` instead lets the
-   port install a stale ACL. A document with no indexable cc-pair
+   `secondary_only_sync_pending` and keeps re-syncing the document until the
+   copy lands. The swap does not wait for those documents: it turns the flag
+   into a plain needs-sync ([[#swap-clears-what-future-missed]]), so the new
+   PRESENT gets their permissions on the next sync. Clearing `needs_sync`
+   instead lets the port install a stale ACL. A document with no indexable cc-pair
    (`backend/onyx/db/document.py:document_has_indexable_cc_pair`) is marked
    synced instead: the port never copies it, so its flag would hold the swap
    for ever.
@@ -202,19 +208,39 @@ it deletes the old one.
    `db/swap_index.py:_perform_index_swap` uses
    `db/search_settings.py:update_search_settings_status__no_commit` twice and
    one commit. Two commits leave a moment with no PRESENT row, and
-   `get_current_search_settings` raises.
-10. `reclaim-forward-only` **Reclaim moves forward one step at a time.** Each
+   `get_current_search_settings` raises. The second clear pass of
+   [[#swap-clears-what-future-missed]] runs in that same transaction, after the
+   two status updates.
+10. `swap-clears-what-future-missed` **The swap clears what FUTURE may lack
+   instead of waiting for it.** During a port-flow reindex PRESENT keeps
+   indexing and stamping `content_hash`, so a document edited after its port
+   copy is newer in PRESENT, and the hash gate would make the new PRESENT skip
+   it for good. `db/swap_index.py:_clear_what_future_missed__no_commit` nulls
+   the hash of each required pair's documents modified at or after
+   `db/reindex_clear.py:get_pair_clear_bounds`' `clear_from` (FUTURE's last
+   successful poll end minus the poll overlap; the reindex start when FUTURE
+   never polled), nulls the hash of documents with an `IndexAttemptError` on a
+   FUTURE attempt, and turns `secondary_only_sync_pending` into a plain
+   needs-sync. It runs as a bulk pass before the flip and again inside the
+   flip's transaction with `FOR UPDATE SKIP LOCKED`: a batch locks its document
+   rows first and takes the settings share lock only at its stamp, so the flip
+   waits for stamps in flight, the second pass catches stamps that landed after
+   the bulk pass, and a row a batch still holds is skipped, never waited for
+   (that batch reads PAST and stamps nothing). Accepted: about one poll period
+   of lag after the swap; documents a FUTURE attempt failed on need Retry; a
+   load-only connector needs a manual run.
+11. `reclaim-forward-only` **Reclaim moves forward one step at a time.** Each
     `advance_to_*` helper in `db/search_settings.py` acts only from the exact
     prior status. Do not set `reclaim_status` outside those helpers. An
     abandoned FUTURE goes straight to DELETING
     (`db/search_settings.py:mark_abandoned_future_for_reclaim__no_commit`),
     because it never served search.
-11. `registry-entries-immutable` **Do not change a model that indices use.** The
+12. `registry-entries-immutable` **Do not change a model that indices use.** The
     dimension, prefixes and normalization of a registry entry are baked into
     every vector. Add a new entry instead.
     `web/src/lib/searchSettings/constants.ts` must match the registry
     (`backend/tests/unit/shared_configs/test_web_embedding_model_registry_parity.py`).
-12. `contextual-rag-validator` **Contextual-RAG settings pass one validator, and
+13. `contextual-rag-validator` **Contextual-RAG settings pass one validator, and
     the default flow follows PRESENT.**
     `server/manage/search_settings.py:validate_contextual_rag_model` rejects a
     model without the CHAT flow type, and rejects enabling the feature with no

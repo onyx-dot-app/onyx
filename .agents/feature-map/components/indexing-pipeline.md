@@ -101,7 +101,9 @@ local disk inside one docprocessing task, so a large batch is never in memory.
 decides which documents to re-chunk. Gate 1 skips a document whose
 `doc_updated_at` did not advance. Gate 2 skips one whose `content_hash()` is
 unchanged. An ACL change bypasses both. Docprocessing turns gate 1 off, because
-the connector already filtered by time. A FUTURE attempt turns gate 2 off.
+the connector already filtered by time. A FUTURE attempt turns gate 2 off. A
+NULL hash never matches: a reindex swap nulls the hash of what FUTURE may lack
+so the next poll re-indexes it ([[document-index#swap-clears-what-future-missed]]).
 `force_update` turns both off, for the per-document retry and the tabular
 re-chunk migration. After the write, the hash is stamped only if the settings
 the batch wrote into are still PRESENT at commit, read under a share lock

@@ -44,6 +44,7 @@ While a re-index with **Re-index All Connectors Then Switch** or **Re-index Acti
 new index, **Full Re-index** and connector edits that re-crawl a source are blocked.
 Such a re-index cannot start while a connector runs a Full Re-index or a backfill.
 A queued Full Re-index or backfill waits until the re-index is complete.
+Documents that change while the re-index runs can take until the connector's next sync to show in the new index.
 
 During a re-index, OpenSearch stores the current index and the new index.
 Make sure that OpenSearch has enough disk space for both. By default,
