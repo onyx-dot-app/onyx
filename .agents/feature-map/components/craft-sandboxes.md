@@ -784,7 +784,7 @@ Cleanup accepts only direct bundle children and remains best effort under concur
   `backend/onyx/server/features/build/sandbox/image/install-browser.sh` pins
   Chrome for Testing and verifies the selected archive with its architecture's
   checksum. Release gates require current stable Chrome and run Grype on its
-  inventory before ODS scans apt. CVE report collection uses `--report` to
+  inventory. The deployment gate scans apt before the browser. CVE report collection uses `--report` to
   resolve the image without enforcing the browser gate, so browser failures
   cannot stop unrelated alerts.
   Keep that scan: ODS does not detect the browser ZIP. Browser findings do not

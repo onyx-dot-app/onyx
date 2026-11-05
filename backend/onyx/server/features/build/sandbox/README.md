@@ -379,7 +379,7 @@ lives at `/opt/chrome/chrome`; Debian supplies its shared libraries and `certuti
 The build checks the installed version and writes `/opt/chrome/browser.cdx.json`.
 
 Release gates require current stable Chrome and scan its inventory with Grype
-before ODS scans Debian packages.
+alongside ODS scans of Debian packages.
 An outdated browser, critical findings, or scan errors fail the gate with status 1.
 Status 2 is reserved for an unknown component. CVE report collection uses
 `--report` to resolve images without enforcing the browser gate, so browser
