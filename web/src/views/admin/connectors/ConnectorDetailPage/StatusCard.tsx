@@ -461,7 +461,13 @@ function PermissionsSyncCard({
                   </Section>
                 </Tooltip>
                 {shownRun !== undefined && (
-                  <RunWarningsTag run={shownRun} onClick={onFocusErrors} />
+                  <RunWarningsTag
+                    run={shownRun}
+                    // The panel lists open runs, so a resolved run's count has nothing to open.
+                    onClick={
+                      shownRun.resolved_at === null ? onFocusErrors : undefined
+                    }
+                  />
                 )}
               </>
             }

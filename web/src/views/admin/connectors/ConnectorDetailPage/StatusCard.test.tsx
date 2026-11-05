@@ -968,6 +968,30 @@ describe("Permissions Sync card", () => {
     ).toBeNull();
   });
 
+  it("a resolved sync keeps its error count, but not as a View Errors button, since the panel lists open runs", () => {
+    mockIndexAttempts = { items: [indexAttempt()], total_items: 1 };
+    mockSourceKinds = ALL_KINDS;
+    const resolved = docSyncRun({
+      status: PermissionSyncStatusEnum.FAILED,
+      docs_with_permission_errors: 3,
+    });
+    mockLatestRuns = {
+      doc_permission_sync: { ...resolved, resolved_at: isoAgo(MINUTE_MS) },
+      group_sync: groupSyncRun(),
+    };
+    renderCard(
+      ccPair({
+        last_permission_sync_attempt_status: PermissionSyncStatusEnum.FAILED,
+      })
+    );
+    const card = permissionsCard();
+
+    expect(
+      within(card).queryByRole("button", { name: copy(KEYS.viewErrors) })
+    ).toBeNull();
+    expect(within(card).getByText("3")).toBeInTheDocument();
+  });
+
   it("AC-5: a running sync that has synced nothing yet reads Starting sync", () => {
     mockIndexAttempts = { items: [indexAttempt()], total_items: 1 };
     mockSourceKinds = ALL_KINDS;
