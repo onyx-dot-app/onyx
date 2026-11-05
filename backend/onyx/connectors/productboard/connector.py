@@ -3,7 +3,6 @@ from itertools import chain
 from typing import Any, cast
 
 import requests
-from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
@@ -14,6 +13,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
 )
 from onyx.connectors.models import BasicExpertInfo, Document, HierarchyNode, TextSection
+from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -47,8 +47,11 @@ class ProductboardConnector(PollConnector):
 
     @staticmethod
     def _parse_description_html(description_html: str) -> str:
-        soup = BeautifulSoup(description_html, "html.parser")
-        return soup.get_text()
+        # Productboard descriptions are rich text, so they carry the block
+        # structure of the editor. `soup.get_text()` concatenates the text nodes
+        # with nothing in between and welds the blocks together; the shared
+        # reader every other HTML connector uses keeps the boundaries.
+        return parse_html_page_basic(description_html)
 
     @staticmethod
     def _get_owner_email(productboard_obj: dict[str, Any]) -> str | None:
