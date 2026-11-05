@@ -103,7 +103,9 @@ decides which documents to re-chunk. Gate 1 skips a document whose
 unchanged. An ACL change bypasses both. Docprocessing turns gate 1 off, because
 the connector already filtered by time. A FUTURE attempt turns gate 2 off.
 `force_update` turns both off, for the per-document retry and the tabular
-re-chunk migration.
+re-chunk migration. A document written without `doc_updated_at` takes the
+stored one, so a write that an ACL change or a FUTURE attempt forces keeps the
+date in the chunks.
 
 **The write.** The enricher bakes access, document sets, boost, cc-pair IDs and
 hierarchy ancestors into each chunk. A later permission change reaches the index

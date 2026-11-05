@@ -589,6 +589,7 @@ def _convert_file_to_document(
     branch: str,
     doc_updated_at: datetime | None,
 ) -> Document:
+    """One repository file as a document, dated ``doc_updated_at``."""
     repo_full_name = repo.full_name
     parts = repo_full_name.split("/", 1)
     owner_name = parts[0] if parts else ""
@@ -1047,6 +1048,10 @@ class GithubConnector(
         reads; on an error it keeps what it collected. A path it misses (a
         commit past the cap or with no date, a file past the first page of a
         large commit) gets no date and is compared by content hash.
+
+        There is no upper bound: the file read is the branch head, so a commit
+        after the window end gives the date of the content read, and the next
+        poll gives the same date again.
         """
         touched: dict[str, datetime] = {}
         try:

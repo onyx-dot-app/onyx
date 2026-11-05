@@ -83,8 +83,10 @@ _CURSOR_FALLBACK = (
 )
 _COMMITS_FALLBACK = (
     "Read only by an incremental poll of repository files, to date the files "
-    "that changed; on an error the poll still reads every file, and the files "
-    "it could not date are compared by content hash."
+    "that changed. On a GitHub API error (also a rate limit that outlasts the "
+    "retries), an HTTP error or a response that does not validate, the poll "
+    "keeps the dates it has and still reads every file from the tree listing "
+    "that the checks probe; files it could not date are compared by content hash."
 )
 
 

@@ -8,6 +8,7 @@ import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import (
+    MAX_POLL_COMMITS,
     GithubConnector,
     GithubConnectorStage,
     is_indexable_path,
@@ -308,6 +309,10 @@ def test_poll_dates_changed_files_by_their_latest_commit(
         "docs/guide.md": _LATER_COMMIT,
         "docs/untouched.md": None,
     }
+    # The listing stops at the cap (test_commit_listing_stops_at_the_limit).
+    assert mock_source_operations.list_commits.call_args.kwargs["limit"] == (
+        MAX_POLL_COMMITS
+    )
 
 
 @pytest.mark.parametrize(

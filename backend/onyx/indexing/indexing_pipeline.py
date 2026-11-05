@@ -441,6 +441,8 @@ def get_docs_to_update(
     The returned doc_id_to_content_hash map contains hashes for all documents that
     will be indexed. These are persisted to the DB after successful vector DB writes
     so the next sync can use gate 2 without recomputing.
+
+    A returned document that came without doc_updated_at carries the stored one.
     """
     id_update_time_map = {
         doc.id: doc.doc_updated_at for doc in db_docs if doc.doc_updated_at
@@ -488,6 +490,11 @@ def get_docs_to_update(
                 continue
 
         doc_id_to_content_hash[doc.id] = content_hash
+        # A write with no date leaves the stored date on the document row, so
+        # the chunks take it too. Otherwise a write that an ACL change or a
+        # FUTURE build forces on unchanged content drops the date from the index.
+        if doc.doc_updated_at is None and doc.id in id_update_time_map:
+            doc = doc.model_copy(update={"doc_updated_at": id_update_time_map[doc.id]})
         updatable_docs.append(doc)
 
     return _DocsToUpdateResult(updatable_docs, doc_id_to_content_hash)
