@@ -11,7 +11,7 @@ import type {
   WithoutStyles,
 } from "@opal/types";
 import type { ContentColor } from "@opal/layouts/content/components";
-import { Button, Tooltip } from "@opal/components";
+import { Button, ShadowDiv, Tooltip } from "@opal/components";
 import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
@@ -480,15 +480,22 @@ function ModalBody({
       className="opal-modal-body"
       {...(twoTone && { "data-two-tone": "" })}
     >
-      <Section
-        height={height}
-        padding={padding}
-        gap={gap}
-        alignItems={alignItems}
-        {...props}
+      {/* The background stays on the body, so the mask fades only content. */}
+      <ShadowDiv
+        variant={{ top: "shadow", bottom: "mask" }}
+        containerClassName="opal-modal-body-frame"
+        className="opal-modal-body-scroll"
       >
-        {children}
-      </Section>
+        <Section
+          height={height}
+          padding={padding}
+          gap={gap}
+          alignItems={alignItems}
+          {...props}
+        >
+          {children}
+        </Section>
+      </ShadowDiv>
     </div>
   );
 }

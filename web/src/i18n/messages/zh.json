@@ -7834,7 +7834,6 @@
           "row": {
             "defaultLabel": "默认模型",
             "decisionTag": {
-              "label": "决策",
               "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
               "chatAndDecision": "支持聊天和决策任务。"
             },
@@ -7843,9 +7842,6 @@
             },
             "setDefaultButton": {
               "label": "设为默认"
-            },
-            "visionMarker": {
-              "title": "视觉"
             }
           },
           "selectAllButton": {
@@ -14349,6 +14345,10 @@
       },
       "labels": {
         "default": "默认"
+      },
+      "modelTypes": {
+        "decision": "决策",
+        "vision": "视觉"
       }
     }
   },

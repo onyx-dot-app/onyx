@@ -59,7 +59,8 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard, Badge, Tooltip } from "@opal/components";
+import { Card, EmptyMessageCard, type BadgeProps } from "@opal/components";
+import { useModelTypeBadge } from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
 import type { ContentEditHandle } from "@opal/layouts";
 import { SvgEdit } from "@opal/icons";
@@ -491,33 +492,7 @@ const FOLDED_MAX_MODELS = 10;
 
 // ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
 
-function formatContextSize(tokens: number | null | undefined): string {
-  if (!tokens || tokens <= 0) return "";
-  if (tokens >= 1_000_000) {
-    const m = tokens / 1_000_000;
-    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
-  }
-  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
-  return String(tokens);
-}
-
-// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
-// whose regional-indicator sequence actually has a flag glyph.
-const COUNTRY_CODE_ALIASES: Record<string, string> = {
-  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
-};
-
-function countryCodeToFlag(code: string | null | undefined): string {
-  if (!code || code.length !== 2) return "";
-  const upper = code.toUpperCase();
-  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
-  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
-  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
-  return String.fromCodePoint(first, second);
-}
-
-/** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
- *  providers do not, and the row description then has no metadata. */
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory). */
 function hasModelMetadata(model: ModelConfiguration): boolean {
   return (
     model.quantization != null ||
@@ -526,9 +501,6 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
   );
 }
 
-/** Row description. Several ids can share one title, so the model id comes
- *  first when the title is not the id. Metadata such as
- *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
 /** Selected models first. Providers that ship rich metadata (Nebius
  *  TokenFactory) sort by id so refetches keep the order. */
 function inherentOrder(models: ModelConfiguration[]): string[] {
@@ -561,39 +533,11 @@ function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
   };
 }
 
-function buildModelDescription(model: ModelConfiguration): string | undefined {
-  const id = modelDisplayName(model) === model.name ? undefined : model.name;
-  if (!hasModelMetadata(model)) return id;
-  const parts: string[] = id ? [id] : [];
-  const context = formatContextSize(model.max_input_tokens);
-  if (context) parts.push(context);
-  const flag = countryCodeToFlag(model.country_code);
-  if (flag) parts.push(flag);
-  if (model.quantization) parts.push(model.quantization);
-  if (model.supported_features?.length) {
-    parts.push(model.supported_features.join(", "));
-  }
-  return parts.length > 0 ? parts.join("  ·  ") : undefined;
-}
-
-/** Eye marker for vision models, shown on the right of the picker row. */
-function modelRightChildren(
-  model: ModelConfiguration,
-  visionTitle: string
-): React.ReactNode {
-  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
-  return (
-    <Text font="secondary-body" color="text-03" title={visionTitle}>
-      👁
-    </Text>
-  );
-}
-
 interface ModelRowProps {
   model: ModelConfiguration;
   isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
-  onRename: (value: string | undefined) => void;
+  onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
   onSetDefaultModel?: () => void;
 }
@@ -624,6 +568,23 @@ function ModelRow({
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const displayName = modelDisplayName(model);
+  const decisionBadge = useModelTypeBadge("decision");
+  const visionBadge = useModelTypeBadge("vision");
+  const modelTypeBadges: BadgeProps[] = [
+    ...(model.supports_decisions
+      ? [
+          {
+            ...decisionBadge,
+            tooltip: t(
+              model.supports_chat === false
+                ? "models.row.decisionTag.decisionOnly"
+                : "models.row.decisionTag.chatAndDecision"
+            ),
+          },
+        ]
+      : []),
+    ...(model.supports_image_input ? [visionBadge] : []),
+  ];
   const isSelected = model.is_visible;
   const toggleVisibility = () => onToggleVisibility(!model.is_visible);
   // A click that blurs and commits an inline rename reaches the row after the
@@ -671,14 +632,14 @@ function ModelRow({
         }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
-          <div className="w-full p-1.5">
+          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
             <ContentAction
               font="main-ui-action"
               color="interactive"
               center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
-              description={buildModelDescription(model)}
+              badge={modelTypeBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
@@ -686,25 +647,6 @@ function ModelRow({
                   height="auto"
                   gap={1}
                 >
-                  {model.supports_decisions && (
-                    <Tooltip
-                      tooltip={t(
-                        model.supports_chat === false
-                          ? "models.row.decisionTag.decisionOnly"
-                          : "models.row.decisionTag.chatAndDecision"
-                      )}
-                      side="top"
-                    >
-                      <Badge
-                        color="default"
-                        title={t("models.row.decisionTag.label")}
-                      />
-                    </Tooltip>
-                  )}
-                  {modelRightChildren(
-                    model,
-                    t("models.row.visionMarker.title")
-                  )}
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
                     <OpalSection
                       flexDirection="row"
@@ -744,11 +686,11 @@ function ModelRow({
                     </OpalSection>
                   </Hoverable.Item>
                   {isDefaultModel && (
-                    <span className="px-1.5 py-1 text-action-selection-05">
+                    <span className="px-1.5">
                       <Text
                         font="secondary-action"
                         wordWrap="whitespace-nowrap"
-                        color="inherit"
+                        color="action-selection-05"
                       >
                         {t("models.row.defaultLabel")}
                       </Text>
@@ -758,10 +700,10 @@ function ModelRow({
               }
               editable
               editHandle={editHandle}
-              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
-          </div>
+          </OpalSection>
         </Interactive.Container>
       </Interactive.Stateful>
     </Hoverable.Root>
@@ -861,11 +803,11 @@ export function ModelSelectionField({
     await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
-  function setCustomDisplayName(modelName: string, value: string | undefined) {
+  // A cleared name is null, as the API sends it, so clearing a new name is
+  // not a change.
+  function setCustomDisplayName(modelName: string, value: string | null) {
     const updated = models.map((m) =>
-      m.name === modelName
-        ? { ...m, custom_display_name: value || undefined }
-        : m
+      m.name === modelName ? { ...m, custom_display_name: value || null } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
   }
