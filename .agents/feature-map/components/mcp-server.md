@@ -22,7 +22,21 @@
   results from the knowledge base, and `search_web` and `open_urls` for the
   web. It can read resources that list the indexed sources, the document sets
   and the agents that the user can use, so it can narrow a search before it
-  runs one. Results contain only documents the user can see in Onyx.
+  runs one. Results contain only documents the user can see in Onyx. The
+  server's connect-time instructions tell the model to call
+  `search_indexed_documents` before any other retrieval tool for questions
+  about the user's organization.
+- **A Claude Code user** installs the plugin in `extensions/claude-code/`
+  instead of configuring the server by hand. The plugin connects the MCP
+  server with the user's token and, through a `UserPromptSubmit` hook, tells
+  the model with every question prompt to call `search_indexed_documents`
+  before answering from company knowledge or any other search tool. With
+  strict retrieval on it denies other servers' search tools until Onyx has
+  been consulted. With prefetch on the hook posts the prompt to
+  `/api/search/raw` and injects the top sections with rules for when the full
+  search tool is still worth a call, and with strict retrieval nudges one when
+  a question turn ends on the prefetch alone.
+  `extensions/claude-code/README.md` is the user-facing description.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key
   gets a 401 for every rejection, including an API server outage. An OAuth
   token that the API server refuses for scope gets a 403 `insufficient_scope`
