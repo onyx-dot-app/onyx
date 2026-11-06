@@ -612,6 +612,19 @@ export const CREDENTIAL_SPECS = {
   }),
   google_drive: GOOGLE_ACCOUNT_SPEC,
   gmail: GOOGLE_ACCOUNT_SPEC,
+  // Google Chat reads every space through domain-wide delegation, so it takes
+  // a service account only.
+  google_chat: defineCredentialSpec({
+    brandName: "Google",
+    fields: {
+      google_primary_admin: email("primaryAdminEmail", {
+        hint: { key: "googleChatPrimaryAdmin" },
+      }),
+      google_service_account_key: jsonFile("serviceAccountKey", {
+        hint: { key: "googleChatServiceAccountKey" },
+      }),
+    },
+  }),
   gitbook: defineCredentialSpec({
     brandName: "GitBook",
     fields: { gitbook_api_key: secret("apiToken") },

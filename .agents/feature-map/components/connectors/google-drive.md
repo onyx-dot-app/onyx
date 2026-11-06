@@ -29,8 +29,9 @@ visible to no user, the prune refuses to run.
 
 This document holds the Google Drive rules: the two credential kinds, the
 staged crawl, document ids and URL candidates, and the prune guards. It also
-covers the shared Google helpers, which the Gmail connector and the Google OAuth
-endpoints use too, so a change there reaches them. Its neighbours own:
+covers the shared Google helpers, which the Gmail and Google Chat connectors and
+the Google OAuth endpoints use too, so a change there reaches them. Its
+neighbours own:
 - [[connectors]]: the interfaces, binding, gateway and prune contracts.
 - [[connector-capability-checks]]: the check runner. Google Drive registers
   named checks, some only for one credential kind.
@@ -64,10 +65,21 @@ listings share the crawl (`GoogleDriveConnector._fetch_drive_items`).
 URL, because the URL often does not say the file type.
 
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
-Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates
-the given user with a service-account key. The gateway keeps one Drive client
-per thread (`threading.local`), because `googleapiclient` over `httplib2` is
-not thread safe.
+Drive, Admin, Gmail and Chat clients from a `GoogleService` member, and impersonates
+the given user with a service-account key. The clients use the discovery documents
+bundled with `google-api-python-client`, so a new API method needs a newer pinned
+client. The gateway keeps one Drive client per thread (`threading.local`), because
+`googleapiclient` over `httplib2` is not thread safe.
+
+**Google Chat.** `connectors/google_chat/connector.py:GoogleChatConnector` takes a
+service-account key only. Its scopes are not in
+`connectors/google_utils/shared_constants.py:GOOGLE_FAMILY_SCOPES`, so a Gmail or
+Drive OAuth sign-in never asks for Chat access. It lists the named spaces as the
+primary admin, reads each space as one of its members, and makes one document per
+space per UTC day. It tries every joined, unsuspended member of a space, and
+skips a member Google refused with a 403 in an earlier space. Its slim listing
+raises when every member of a space is refused or none can read it, so one
+unreadable space stops the prune of the whole connector.
 
 ---
 
