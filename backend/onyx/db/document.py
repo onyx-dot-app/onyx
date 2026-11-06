@@ -1606,9 +1606,9 @@ def _update_documents__no_commit(
 ) -> int:
     """Updates the documents `targets` selects (a plain id select, no DISTINCT).
     With `skip_locked`, rows another transaction holds are left out, not waited
-    for: the swap's second pass runs after the status flip, so a row a batch
-    still holds gets no new stamp from that batch (it reads PAST), and its old
-    stamp was already handled by the first pass. Returns the row count."""
+    for. The swap uses it for its pass inside the status flip: a batch that
+    still holds a row reads PAST and stamps nothing, and the pass after the
+    commit clears that row. Returns the row count."""
     if skip_locked:
         targets = targets.with_for_update(skip_locked=True)
     result = db_session.execute(
