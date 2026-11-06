@@ -6,6 +6,8 @@ connector provides a dedicated DocumentSource for JSM projects while reusing
 all the indexing, pagination, and permission sync logic from JiraConnector.
 """
 
+from typing import Any
+
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
@@ -137,3 +139,54 @@ class JiraServiceManagementConnector(JiraConnector):
             start=start,
             end=end,
         )
+
+    def _get_jsm_scope_jql(self) -> str | None:
+        """Build JSM scope filter for Everything scope, or None if scoped.
+        
+        Returns the JSM project filter when both project_key and jql_query are
+        empty (Everything scope). Returns None when either is set, indicating
+        the user has already scoped the connector.
+        
+        This is used by retry/reindex paths to apply JSM scope to key-based
+        searches, ensuring non-JSM issues are not indexed as JSM documents.
+        """
+        if self.jql_query or self.jira_project:
+            return None
+        
+        if is_cloud_gateway(self.source_operations):
+            return "projectType = service_desk"
+        else:
+            jsm_keys = self._get_service_desk_project_keys()
+            if jsm_keys:
+                keys_str = ", ".join(jsm_keys)
+                return f"project IN ({keys_str})"
+            else:
+                return "id < 0"
+
+    @override
+    def _search_issues_by_key(self, issue_keys: list[str]) -> list[dict[str, Any]]:
+        """Search for issues by key, applying JSM scope for Everything.
+        
+        Overrides the base implementation to ensure that when the connector
+        has Everything scope (no project_key or jql_query), only JSM issues
+        are returned. This prevents a non-JSM issue from being indexed as
+        JSM during retry or reindex operations.
+        """
+        from onyx.connectors.jira.connector import scope_jql
+
+        keys_jql: str = "key in (%s)" % ", ".join(f'"{key}"' for key in issue_keys)
+        
+        # Apply JSM scope if Everything scope, otherwise use base scoping
+        jsm_scope = self._get_jsm_scope_jql()
+        if jsm_scope:
+            # Everything scope: add JSM filter to key search
+            scoped_jql = f"({jsm_scope}) AND {keys_jql}"
+        else:
+            # User-scoped: use base scope_jql logic
+            scoped_jql = scope_jql(
+                project_key=self.jira_project,
+                jql_query=self.jql_query,
+                clause=keys_jql,
+            )
+        
+        return list(self._search_all_issues(scoped_jql))

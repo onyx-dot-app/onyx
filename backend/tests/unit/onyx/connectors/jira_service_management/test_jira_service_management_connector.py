@@ -370,3 +370,122 @@ def test_jsm_comment_filtering_string_markers() -> None:
         internal_property_string_issue, skip_jsm_internal=True
     )
     assert len(internal_property_comments) == 0
+
+
+@patch("onyx.connectors.jira_service_management.connector.is_cloud_gateway")
+def test_jsm_search_by_key_everything_scope_cloud(mock_is_cloud: MagicMock) -> None:
+    """Test that _search_issues_by_key applies JSM scope for Everything on Cloud."""
+    mock_is_cloud.return_value = True
+    
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://test.atlassian.net",
+    )
+    
+    mock_ops = MagicMock()
+    connector._source_operations = mock_ops
+    
+    # Mock _search_all_issues to capture the JQL
+    captured_jql: list[str] = []
+    def capture_jql(jql: str) -> list[dict[str, Any]]:
+        captured_jql.append(jql)
+        return []
+    
+    connector._search_all_issues = capture_jql  # type: ignore[method-assign]
+    
+    # Call _search_issues_by_key with test keys
+    connector._search_issues_by_key(["TEST-1", "TEST-2"])
+    
+    # Verify JSM scope was applied
+    assert len(captured_jql) == 1
+    jql = captured_jql[0]
+    assert "projectType = service_desk" in jql, \
+        "Everything scope should apply JSM filter in retry/reindex"
+    assert 'key in ("TEST-1", "TEST-2")' in jql, \
+        "Should include the key clause"
+
+
+@patch("onyx.connectors.jira_service_management.connector.is_cloud_gateway")
+def test_jsm_search_by_key_everything_scope_dc(mock_is_cloud: MagicMock) -> None:
+    """Test that _search_issues_by_key applies JSM scope for Everything on DC."""
+    mock_is_cloud.return_value = False
+    
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.example.com",
+    )
+    
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [
+        {"key": "SUPPORT", "projectTypeKey": "service_desk"},
+        {"key": "ITHELP", "projectTypeKey": "service_desk"},
+    ]
+    connector._source_operations = mock_ops
+    
+    captured_jql: list[str] = []
+    def capture_jql(jql: str) -> list[dict[str, Any]]:
+        captured_jql.append(jql)
+        return []
+    
+    connector._search_all_issues = capture_jql  # type: ignore[method-assign]
+    
+    connector._search_issues_by_key(["TEST-1", "TEST-2"])
+    
+    assert len(captured_jql) == 1
+    jql = captured_jql[0]
+    assert "project IN (SUPPORT, ITHELP)" in jql, \
+        "DC Everything scope should enumerate JSM projects in retry/reindex"
+    assert 'key in ("TEST-1", "TEST-2")' in jql
+
+
+def test_jsm_search_by_key_project_scoped() -> None:
+    """Test that _search_issues_by_key does not add JSM filter when project is set."""
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://test.atlassian.net",
+        project_key="SUPPORT",
+    )
+    
+    mock_ops = MagicMock()
+    connector._source_operations = mock_ops
+    
+    captured_jql: list[str] = []
+    def capture_jql(jql: str) -> list[dict[str, Any]]:
+        captured_jql.append(jql)
+        return []
+    
+    connector._search_all_issues = capture_jql  # type: ignore[method-assign]
+    
+    connector._search_issues_by_key(["TEST-1"])
+    
+    assert len(captured_jql) == 1
+    jql = captured_jql[0]
+    assert "projectType" not in jql, \
+        "Should not add JSM filter when project is explicitly set"
+    assert "project IN" not in jql, \
+        "Should not enumerate projects when project key is set"
+    assert 'project = "SUPPORT"' in jql
+
+
+def test_jsm_search_by_key_jql_scoped() -> None:
+    """Test that _search_issues_by_key does not add JSM filter when JQL is set."""
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://test.atlassian.net",
+        jql_query="project = SUPPORT AND status = Open",
+    )
+    
+    mock_ops = MagicMock()
+    connector._source_operations = mock_ops
+    
+    captured_jql: list[str] = []
+    def capture_jql(jql: str) -> list[dict[str, Any]]:
+        captured_jql.append(jql)
+        return []
+    
+    connector._search_all_issues = capture_jql  # type: ignore[method-assign]
+    
+    connector._search_issues_by_key(["TEST-1"])
+    
+    assert len(captured_jql) == 1
+    jql = captured_jql[0]
+    assert "projectType" not in jql, \
+        "Should not add JSM filter when custom JQL is set"
+    assert "project = SUPPORT AND status = Open" in jql, \
+        "Should use custom JQL when provided"
