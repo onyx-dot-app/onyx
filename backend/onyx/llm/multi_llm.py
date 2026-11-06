@@ -8,7 +8,7 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast, get_type_hints
 
-from pydantic import BaseModel, Field, JsonValue, TypeAdapter
+from pydantic import BaseModel, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
 
 from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
@@ -109,7 +109,7 @@ from onyx.llm.prompt_cache.providers.openai import (
     explicit_cache_breakpoints,
     uses_explicit_cache_breakpoints,
 )
-from onyx.llm.strict_schema import prepare_strict_tools
+from onyx.llm.strict_schema import PreparedTools, ToolSchemaState, prepare_strict_tools
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
@@ -169,6 +169,7 @@ _env_rwlock = rwlock.RWLockWrite()
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper, HTTPHandler
     from litellm import ModelResponse as LiteLLMModelResponse
+    from litellm.exceptions import BadRequestError
 
 
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
@@ -291,12 +292,37 @@ def _retry_attempts(
     return attempts
 
 
+def _rejects_strict_tools(error: "BadRequestError") -> bool:
+    """Recognize schema failures without treating unrelated 400s as strict failures."""
+    body = error.body
+    if isinstance(body, dict):
+        details = body.get("error", body)
+        if isinstance(details, dict):
+            if details.get("code") == "invalid_function_parameters":
+                return True
+            param = details.get("param")
+            if (
+                isinstance(param, str)
+                and param.startswith("tools")
+                and param.endswith(".strict")
+            ):
+                return True
+    message = str(error).lower()
+    return "invalid_function_parameters" in message or any(
+        phrase in message
+        for phrase in (
+            "invalid strict tool schema",
+            "unsupported parameter: 'strict'",
+            'unsupported parameter: "strict"',
+        )
+    )
+
+
 class ProviderOperation(BaseModel):
-    """Diagnostics for one provider call, including its retry attempts."""
+    """Request-local dispatch state and diagnostics across provider attempts."""
 
     request_params: GenerationRequestParams | None = None
-    restore_strict_arguments: bool = False
-    strict_tools: set[str] = Field(default_factory=set)
+    tool_schemas: ToolSchemaState | None = None
 
 
 def _event_with_request_params(
@@ -1452,10 +1478,10 @@ class LitellmLLM(LLM):
                     optional_kwargs.setdefault("prompt_cache_options", cache_options)
 
             strict_disabled = False
-            strict_names: set[str] = set()
             strict_model = (
-                operation is not None
-                and operation.restore_strict_arguments
+                bool(tools)
+                and operation is not None
+                and operation.tool_schemas is not None
                 and self._model_provider == LlmProviderNames.OPENAI
                 and not model_bare.startswith("ft:")
                 and is_true_openai_model(LlmProviderNames.OPENAI, model_bare)
@@ -1466,15 +1492,14 @@ class LitellmLLM(LLM):
                 is True
             )
 
-            converted_tools, converted_names = (
-                prepare_strict_tools(tools or [])
-                if strict_model
-                else (tools or [], set())
+            original_tools = PreparedTools(tools or [])
+            converted_tools = (
+                prepare_strict_tools(tools or []) if strict_model else original_tools
             )
-            plain_tools, _ = (
+            plain_tools = (
                 prepare_strict_tools(tools or [], enabled=False)
                 if strict_model
-                else (tools or [], set())
+                else original_tools
             )
 
             # Provider 400s degrade to provider defaults with a warning instead
@@ -1491,24 +1516,20 @@ class LitellmLLM(LLM):
                     if env_injection_enabled
                     else nullcontext()
                 )
+                selected_tools = original_tools
                 try:
                     with env_ctx:
                         from litellm.integrations.anthropic_cache_control_hook import (
                             targets_openai_api,
                         )
 
-                        strict_names.clear()
                         effective_base = passthrough_kwargs.get("api_base") or base_url
-                        attempt_tools = tools
                         if strict_model and targets_openai_api(effective_base):
-                            attempt_tools = (
+                            selected_tools = (
                                 plain_tools if strict_disabled else converted_tools
                             )
-                            if not strict_disabled:
-                                strict_names.update(converted_names)
-                        if operation is not None:
-                            operation.strict_tools.clear()
-                            operation.strict_tools.update(strict_names)
+                        if operation is not None and operation.tool_schemas is not None:
+                            operation.tool_schemas.active = selected_tools
                         attempt_messages = messages
                         if cache_options is not None and "prompt_cache_options" in opts:
                             effective_base = (
@@ -1563,7 +1584,7 @@ class LitellmLLM(LLM):
                                 messages=attempt_messages,
                                 # None (omitted) rather than [] — some OpenAI-compatible
                                 # servers reject requests with an empty tools array.
-                                tools=attempt_tools or None,
+                                tools=selected_tools.tools or None,
                                 stream=stream,
                                 timeout=timeout,
                                 max_tokens=max_tokens,
@@ -1574,10 +1595,7 @@ class LitellmLLM(LLM):
                         )
                 except BadRequestError as e:
                     check_cancelled()
-                    if strict_names and (
-                        "invalid_function_parameters" in str(e)
-                        or "strict" in str(e).lower()
-                    ):
+                    if selected_tools.strict_names and _rejects_strict_tools(e):
                         strict_disabled = True
                         attempts.insert(i + 1, dict(opts))
                         logger.warning(
@@ -2008,7 +2026,7 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
         context = context or GenerationContext()
-        operation = ProviderOperation(restore_strict_arguments=True)
+        operation = ProviderOperation(tool_schemas=ToolSchemaState())
         messages, cache_stats = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
         with (
@@ -2043,7 +2061,11 @@ class LitellmLLM(LLM):
                 if signal.cancelled:
                     raise AgentCancelled()
                 return to_assistant_message(
-                    response, request, strict_tools=operation.strict_tools
+                    response,
+                    request,
+                    strict_tools=operation.tool_schemas.active.strict_names
+                    if operation.tool_schemas
+                    else frozenset(),
                 )
             except (Exception, AgentCancelled) as error:
                 span.set_error(
@@ -2061,9 +2083,9 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:
         context = context or GenerationContext()
-        operation = ProviderOperation(restore_strict_arguments=True)
+        operation = ProviderOperation(tool_schemas=ToolSchemaState())
         accumulator = MessageAccumulator(
-            request.tools, strict_tools=operation.strict_tools
+            request.tools, tool_schemas=operation.tool_schemas
         )
         messages, cache_stats = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None

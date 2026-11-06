@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import pytest
 from pydantic import JsonValue
 
 from onyx.llm.strict_schema import drop_optional_nulls, strict_schema
@@ -165,5 +166,19 @@ def test_nullable_type_with_nonnullable_enum_accepts_omission() -> None:
 def test_explicit_empty_additional_properties_remains_open() -> None:
     assert (
         strict_schema({"type": "object", "properties": {}, "additionalProperties": {}})
+        is None
+    )
+
+
+@pytest.mark.parametrize("value", [[], {}, 123, None])
+def test_malformed_format_remains_non_strict(value: JsonValue) -> None:
+    assert (
+        strict_schema(
+            {
+                "type": "object",
+                "properties": {"value": {"type": "string", "format": value}},
+                "required": ["value"],
+            }
+        )
         is None
     )

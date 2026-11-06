@@ -1,11 +1,26 @@
 """Convert tool parameter schemas to OpenAI strict function-calling form."""
 
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import cast
 
 from pydantic import JsonValue
 
 JsonSchema = dict[str, JsonValue]
+
+
+@dataclass(frozen=True)
+class PreparedTools:
+    tools: list[dict[str, JsonValue]] = field(default_factory=list)
+    strict_names: frozenset[str] = frozenset()
+
+
+@dataclass
+class ToolSchemaState:
+    """The schemas selected for one request and their argument restoration."""
+
+    active: PreparedTools = field(default_factory=PreparedTools)
+
 
 # Keywords OpenAI strict mode accepts; anything else makes the tool non-strict.
 _ALLOWED_KEYWORDS = frozenset(
@@ -80,7 +95,10 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
     result: JsonSchema = {
         key: value for key, value in schema.items() if key in _ALLOWED_KEYWORDS
     }
-    if "format" in result and result["format"] not in _SUPPORTED_FORMATS:
+    if "format" in result and (
+        not isinstance(result["format"], str)
+        or result["format"] not in _SUPPORTED_FORMATS
+    ):
         raise _NotStrictCompatible()
     declared = schema.get("type")
     is_object = declared == "object" or (
@@ -191,7 +209,7 @@ def drop_optional_nulls(value: JsonValue, schema: JsonValue) -> JsonValue:
 
 def prepare_strict_tools(
     tools: list[dict[str, JsonValue]], *, enabled: bool = True
-) -> tuple[list[dict[str, JsonValue]], set[str]]:
+) -> PreparedTools:
     """Copy compatible function schemas and identify their response normalizers."""
     result: list[dict[str, JsonValue]] = []
     names: set[str] = set()
@@ -214,4 +232,4 @@ def prepare_strict_tools(
             {**tool, "function": {**function, "parameters": converted, "strict": True}}
         )
         names.add(name)
-    return result, names
+    return PreparedTools(result, frozenset(names))

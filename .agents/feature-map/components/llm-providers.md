@@ -353,13 +353,13 @@ requests to catalogued, non-fine-tuned models with function-calling support.
 The adapter checks the effective endpoint under the per-attempt environment
 lock. Azure, gateways, and custom endpoints keep their existing tool format.
 
-Optional fields become required and nullable. Request-local provider state
-records which tools were converted; their native and text-recovered calls have these
+Optional fields become required and nullable. A request-local tool-schema state selects the wire tools together with their
+restoration metadata; their native and text-recovered calls have these
 null placeholders removed. Optional fields that already accept null, object
 unions, open dictionaries, and unsupported constraints stay non-strict.
 Strict-schema rejection retries the original schemas with explicit strict=false
 and preserves other request options. Streaming and complete responses share
-the same argument restoration. Raw gateway calls do not opt into conversion;
+the same argument restoration, after JSON-string fields are decoded. Raw gateway calls do not opt into conversion;
 the shared invoke/stream paths explicitly opt into argument restoration. Fine-tunes are excluded because parallel calls
 can disable strict enforcement.
 

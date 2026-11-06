@@ -33,7 +33,7 @@ from onyx.llm.models import (
     Usage,
     apply_generation_event,
 )
-from onyx.llm.strict_schema import drop_optional_nulls
+from onyx.llm.strict_schema import ToolSchemaState, drop_optional_nulls
 from onyx.llm.tool_parsing import (
     XmlToolCallContentFilter,
     extract_tool_calls_from_response_text,
@@ -354,11 +354,8 @@ def _normalize_arguments(
     properties = definition.parameters.get("properties")
     if not isinstance(properties, dict):
         return arguments
-    pruned = (
-        drop_optional_nulls(arguments, definition.parameters) if strict else arguments
-    )
-    normalized = pruned.copy() if isinstance(pruned, dict) else arguments.copy()
-    for name, value in list(normalized.items()):
+    normalized = arguments.copy()
+    for name, value in arguments.items():
         schema = properties.get(name)
         if not isinstance(value, str) or not isinstance(schema, dict):
             continue
@@ -377,7 +374,10 @@ def _normalize_arguments(
             "object" in accepted_types and isinstance(decoded, dict)
         ):
             normalized[name] = decoded
-    return normalized
+    restored = (
+        drop_optional_nulls(normalized, definition.parameters) if strict else normalized
+    )
+    return restored if isinstance(restored, dict) else normalized
 
 
 def _finish_tool_call(
@@ -404,7 +404,7 @@ def to_assistant_message(
     response: ModelResponse,
     request: GenerationRequest,
     *,
-    strict_tools: set[str] | None = None,
+    strict_tools: frozenset[str] | set[str] | None = None,
 ) -> AssistantMessage:
     """Convert a complete provider response without creating stream events."""
     source = response.choice.message
@@ -464,9 +464,11 @@ class MessageAccumulator:
         self,
         tools: Sequence[ToolDefinition] = (),
         *,
-        strict_tools: set[str] | None = None,
+        tool_schemas: ToolSchemaState | None = None,
     ) -> None:
-        self.strict_tools = strict_tools if strict_tools is not None else set()
+        self.tool_schemas = (
+            tool_schemas if tool_schemas is not None else ToolSchemaState()
+        )
         self.tools = {tool.name: tool for tool in tools}
         self.message = AssistantMessage()
         self.calls: dict[int, _PendingToolCall] = {}
@@ -644,7 +646,7 @@ class MessageAccumulator:
                         ]
                     ),
                     request,
-                    strict_tools=self.strict_tools,
+                    strict_tools=self.tool_schemas.active.strict_names,
                 )
             tail = content_filter.flush() if content_filter is not None else ""
             if tail:
@@ -675,7 +677,7 @@ class MessageAccumulator:
                     pending.call,
                     pending.call.raw_arguments,
                     self.tools.get(pending.call.name),
-                    strict=pending.call.name in self.strict_tools,
+                    strict=pending.call.name in self.tool_schemas.active.strict_names,
                 )
             pending.finalized = True
 
@@ -704,7 +706,7 @@ def recover_tool_calls(
     message: AssistantMessage,
     request: GenerationRequest,
     *,
-    strict_tools: set[str] | None = None,
+    strict_tools: frozenset[str] | set[str] | None = None,
 ) -> AssistantMessage:
     """Recover provider text tool payloads when native calls are absent."""
     if message.tool_calls or request.options.tool_choice == ToolChoiceOptions.NONE:

@@ -40,6 +40,7 @@ from onyx.llm.models import (
     UserMessage,
     apply_generation_event,
 )
+from onyx.llm.strict_schema import PreparedTools, ToolSchemaState
 from tests.unit.onyx.agents.fakes import ScriptedLLM, collect_generation
 
 
@@ -863,10 +864,11 @@ def test_strict_nulls_for_optional_tool_fields_are_dropped(strict: bool) -> None
     )
 
 
+@pytest.mark.parametrize("encoded", [False, True])
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("strict", [False, True])
 def test_recovered_strict_calls_restore_nested_optional_arguments(
-    stream: bool, strict: bool
+    stream: bool, strict: bool, encoded: bool
 ) -> None:
     payload = '{"name":"search","arguments":{"limit":null,"rows":[{"value":null}]}}'
     request = GenerationRequest(
@@ -892,9 +894,18 @@ def test_recovered_strict_calls_restore_nested_optional_arguments(
         ],
         options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
     )
+    if encoded:
+        recovered = json.loads(payload)
+        recovered["arguments"]["rows"] = json.dumps(recovered["arguments"]["rows"])
+        payload = json.dumps(recovered)
     strict_tools = {"search"} if strict else set()
     if stream:
-        accumulator = MessageAccumulator(request.tools, strict_tools=strict_tools)
+        accumulator = MessageAccumulator(
+            request.tools,
+            tool_schemas=ToolSchemaState(
+                PreparedTools(strict_names=frozenset(strict_tools))
+            ),
+        )
         list(
             accumulator.consume(
                 iter(
