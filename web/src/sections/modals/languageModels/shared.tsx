@@ -537,7 +537,7 @@ interface ModelRowProps {
   model: ModelConfiguration;
   isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
-  onRename: (value: string | undefined) => void;
+  onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
   onSetDefaultModel?: () => void;
 }
@@ -700,7 +700,7 @@ function ModelRow({
               }
               editable
               editHandle={editHandle}
-              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
           </OpalSection>
@@ -803,11 +803,11 @@ export function ModelSelectionField({
     await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
-  function setCustomDisplayName(modelName: string, value: string | undefined) {
+  // A cleared name is null, as the API sends it, so clearing a new name is
+  // not a change.
+  function setCustomDisplayName(modelName: string, value: string | null) {
     const updated = models.map((m) =>
-      m.name === modelName
-        ? { ...m, custom_display_name: value || undefined }
-        : m
+      m.name === modelName ? { ...m, custom_display_name: value || null } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
   }
