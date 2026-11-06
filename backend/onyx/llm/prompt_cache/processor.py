@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.model_request import UserMessage as ProviderUserMessage
-from onyx.llm.models import TextContentPart, UserMessage
+from onyx.llm.models import UserMessage
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
@@ -150,13 +150,4 @@ def cached_user_message(llm_config: LLMConfig, prefix: str, suffix: str) -> User
     message = prepared[0]
     if not isinstance(message, ProviderUserMessage):
         raise TypeError("User prompt caching must preserve the message role")
-    if message.cache_control:
-        content = (
-            [TextContentPart(text=message.content)]
-            if isinstance(message.content, str)
-            else [part.model_copy(deep=True) for part in message.content]
-        )
-        if content and isinstance(content[-1], TextContentPart):
-            content[-1].cache_control = message.cache_control
-        return UserMessage(content=content)
     return UserMessage(content=message.content)
