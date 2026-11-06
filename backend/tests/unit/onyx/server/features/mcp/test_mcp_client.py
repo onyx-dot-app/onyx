@@ -2,11 +2,11 @@ import asyncio
 import threading
 from collections.abc import Coroutine
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from mcp import ClientSession
-from mcp.types import CallToolResult, TextContent
+from mcp.types import CallToolRequest, CallToolResult, TextContent
 
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp import client
@@ -128,6 +128,7 @@ def test_call_tool_preserves_server_error_flag() -> None:
         content=[TextContent(type="text", text="Tool request failed")], isError=True
     )
     session = AsyncMock(spec=ClientSession)
+    session._tool_output_schemas = {}
     session.call_tool.return_value = result
 
     received = asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
@@ -174,46 +175,14 @@ def test_cancellation_stops_a_running_call(monkeypatch: pytest.MonkeyPatch) -> N
     assert not cancellation._callbacks
 
 
-def test_call_tool_seeds_output_schema_and_avoids_list_tools() -> None:
-    session = AsyncMock(spec=ClientSession)
-    session.call_tool.return_value = CallToolResult(content=[])
-
-    asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
-
-    assert session._tool_output_schemas["lookup"] is None
-    session.initialize.assert_awaited_once()
-    session.call_tool.assert_awaited_once_with("lookup", {"id": 1})
-
-
-def test_call_tool_seeds_custom_output_schema() -> None:
-    session = AsyncMock(spec=ClientSession)
-    session.call_tool.return_value = CallToolResult(content=[])
-    schema = {"type": "object", "properties": {"success": {"type": "boolean"}}}
-
-    asyncio.run(
-        client._call_mcp_tool("lookup", {"id": 1}, output_schema=schema)(session)
-    )
-
-    assert session._tool_output_schemas["lookup"] == schema
-
-
-def test_call_tool_on_real_client_session_does_not_fetch_tools_list() -> None:
-    from unittest.mock import MagicMock
-
-    from mcp import types
-
+def test_call_tool_does_not_fetch_tools_list() -> None:
     session = ClientSession(MagicMock(), MagicMock())
-    session.initialize = AsyncMock(
-        return_value=types.InitializeResult(
-            protocolVersion="2024-11-05",
-            capabilities=types.ServerCapabilities(),
-            serverInfo=types.Implementation(name="test", version="1.0.0"),
-        )
-    )
-    session.send_request = AsyncMock(return_value=types.CallToolResult(content=[]))
-    session.list_tools = AsyncMock()
+    session.initialize = AsyncMock()
+    session.send_request = AsyncMock(return_value=CallToolResult(content=[]))
 
     result = asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
 
-    assert isinstance(result, types.CallToolResult)
-    assert not session.list_tools.called
+    assert result == CallToolResult(content=[])
+    session.send_request.assert_awaited_once()
+    request = session.send_request.await_args_list[0].args[0]
+    assert isinstance(request.root, CallToolRequest)

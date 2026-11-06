@@ -256,20 +256,13 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
 
 
 def _call_mcp_tool(
-    tool_name: str,
-    arguments: dict[str, Any],
-    output_schema: dict[str, Any] | None = None,
+    tool_name: str, arguments: dict[str, Any]
 ) -> MCPClientFunction[CallToolResult]:
     async def call_tool(session: ClientSession) -> CallToolResult:
         await session.initialize()
-        # Seed the output schema cache so ClientSession.call_tool does not
-        # trigger an extra tools/list network round-trip on every call.
-        try:
-            session._tool_output_schemas[tool_name] = output_schema
-        except AttributeError:
-            session._tool_output_schemas = {tool_name: output_schema}
-        except Exception:
-            pass
+        # python-sdk#3513: an unknown tool makes call_tool fetch tools/list to
+        # validate output. Onyx does not rely on that validation, so skip it.
+        session._tool_output_schemas[tool_name] = None
         return await session.call_tool(tool_name, arguments)
 
     return call_tool
@@ -283,11 +276,10 @@ def call_mcp_tool(
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
     cancellation: CancellationSignal | None = None,
-    output_schema: dict[str, Any] | None = None,
 ) -> CallToolResult:
     """Call a tool until it completes or the caller cancels the request."""
     return _call_mcp_client_function_sync(
-        _call_mcp_tool(tool_name, arguments, output_schema=output_schema),
+        _call_mcp_tool(tool_name, arguments),
         server_url,
         connection_headers,
         transport,
