@@ -31,7 +31,7 @@ from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
 from onyx.db.backfill_models import PendingBackfill
-from onyx.db.cc_pair_runs_models import CCPairRunPage
+from onyx.db.cc_pair_runs_models import CCPairRunPage, GroupSyncErrorCounts
 from onyx.db.enums import (
     AccessType,
     CapabilityCheckRunStatus,
@@ -519,13 +519,20 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
     total_users_processed: int
     total_groups_processed: int
     total_group_memberships_synced: int
+    # Users and groups the sync could not read, resolved ones included.
+    failed_users: int
+    failed_groups: int
+    # Of those, the ones no admin resolved.
+    open_error_count: int
     time_created: str
     time_started: str | None
     time_finished: str | None
 
     @classmethod
     def from_external_group_sync_attempt_db_model(
-        cls, attempt: ExternalGroupPermissionSyncAttempt
+        cls,
+        attempt: ExternalGroupPermissionSyncAttempt,
+        error_counts: GroupSyncErrorCounts,
     ) -> "ExternalGroupSyncAttemptSnapshot":
         return ExternalGroupSyncAttemptSnapshot(
             id=attempt.id,
@@ -535,6 +542,9 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             total_users_processed=attempt.total_users_processed or 0,
             total_groups_processed=attempt.total_groups_processed or 0,
             total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            failed_users=error_counts.users,
+            failed_groups=error_counts.groups,
+            open_error_count=error_counts.open_count,
             time_created=attempt.time_created.isoformat(),
             time_started=(
                 attempt.time_started.isoformat() if attempt.time_started else None

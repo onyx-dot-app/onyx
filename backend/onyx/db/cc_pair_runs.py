@@ -32,8 +32,14 @@ from onyx.db.cc_pair_run_resolution import (
     index_attempt_error_is_open,
     resolve_runs__no_commit,
     run_is_resolved,
+    sync_attempt_error_is_open,
+    sync_attempt_error_matches,
 )
-from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
+from onyx.db.cc_pair_runs_models import (
+    CCPairRunFilter,
+    CCPairRunPage,
+    GroupSyncErrorCounts,
+)
 from onyx.db.enums import (
     CapabilityCheckRunStatus,
     CCPairRunErrors,
@@ -42,6 +48,7 @@ from onyx.db.enums import (
     IndexingStatus,
     IndexModelStatus,
     PermissionSyncStatus,
+    SyncEntityKind,
     SyncStatus,
     SyncType,
 )
@@ -54,6 +61,7 @@ from onyx.db.models import (
     IndexAttempt,
     IndexAttemptError,
     SearchSettings,
+    SyncAttemptError,
     SyncRecord,
 )
 from onyx.db.permission_sync_attempt import (
@@ -454,19 +462,45 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
     stmt = select(ExternalGroupPermissionSyncAttempt).where(
         _group_sync_scope(run_filter)
     )
-    # A group sync records no per-item errors, so it either fails or succeeds.
+    # The users and groups the sync could not read. They stay open until an
+    # admin resolves them, so a newer sync does not supersede a run that has
+    # them, failed or not, and the Errors level agrees with the row list and
+    # the open count.
+    own_errors = exists().where(
+        SyncAttemptError.external_group_sync_attempt_id
+        == ExternalGroupPermissionSyncAttempt.id
+    )
+    unresolved = own_errors.where(sync_attempt_error_is_open())
+    matches_errors: ColumnElement[bool] | None
+    match run_filter.errors:
+        case CCPairRunErrors.UNRESOLVED:
+            matches_errors = unresolved
+        case CCPairRunErrors.RESOLVED:
+            matches_errors = and_(own_errors, ~unresolved)
+        case CCPairRunErrors.NONE:
+            matches_errors = ~own_errors
+        case None:
+            matches_errors = None
+
+    # A search also reads who the sync failed on.
+    def matches_error(query: str) -> ColumnElement[bool]:
+        return or_(
+            ExternalGroupPermissionSyncAttempt.error_message.icontains(
+                query, autoescape=True
+            ),
+            own_errors.where(sync_attempt_error_matches(query)),
+        )
+
     return _narrowed(
         stmt,
         run_filter,
         ExternalGroupPermissionSyncAttempt.time_created,
-        lambda query: ExternalGroupPermissionSyncAttempt.error_message.icontains(
-            query, autoescape=True
-        ),
+        matches_error,
         ExternalGroupPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,
-        _no_item_errors(run_filter),
-        _group_sync_has_newer_run(run_filter),
+        matches_errors,
+        and_(_group_sync_has_newer_run(run_filter), ~unresolved),
         None,
         run_is_resolved(
             CCPairRunKind.GROUP_SYNC, ExternalGroupPermissionSyncAttempt.id
@@ -717,6 +751,30 @@ def _run_pairs(kind: CCPairRunKind, run_filter: CCPairRunFilter) -> Select:
         .with_only_columns(run_id, pair_id)
         .where(pair_id.is_not(None))
     )
+
+
+def get_group_sync_error_counts(
+    db_session: Session, attempt_ids: list[int]
+) -> dict[int, GroupSyncErrorCounts]:
+    """Per group sync, its failed users and groups. Syncs with none are absent."""
+    if not attempt_ids:
+        return {}
+    stmt = (
+        select(
+            SyncAttemptError.external_group_sync_attempt_id,
+            func.count().filter(SyncAttemptError.entity_kind == SyncEntityKind.USER),
+            func.count().filter(SyncAttemptError.entity_kind == SyncEntityKind.GROUP),
+            func.count().filter(sync_attempt_error_is_open()),
+        )
+        .where(SyncAttemptError.external_group_sync_attempt_id.in_(attempt_ids))
+        .group_by(SyncAttemptError.external_group_sync_attempt_id)
+    )
+    return {
+        attempt_id: GroupSyncErrorCounts(
+            users=users, groups=groups, open_count=open_count
+        )
+        for attempt_id, users, groups, open_count in db_session.execute(stmt).all()
+    }
 
 
 def get_resolvable_runs(

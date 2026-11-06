@@ -310,8 +310,8 @@ on the admin routes.
 - **The pause route returns at once.** It sets signals and lets running tasks
   stop themselves, so the admin does not wait on a worker.
 - **Resolve without retry keeps `is_resolved` false.** Resolving a run adds a
-  `CCPairRunResolution` row and marks the errors the run filed so far
-  `resolved_reason = without_retry`. `POST /admin/cc-pair/{id}/errors/resolve`
+  `CCPairRunResolution` row and marks the errors the run filed so far, or a
+  group sync's failed users and groups, `resolved_reason = without_retry`. `POST /admin/cc-pair/{id}/errors/resolve`
   does the same for chosen errors. Both keep `IndexAttemptError.is_resolved`
   false, because the poll cursor and the targeted reindex (Retry) read that
   flag. An open error has neither (`db/cc_pair_run_resolution.py:index_attempt_error_is_open`).

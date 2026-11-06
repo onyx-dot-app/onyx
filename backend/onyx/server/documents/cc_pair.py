@@ -344,10 +344,11 @@ def get_cc_pair_runs(
     """The pair's index attempts and permission syncs as one feed, newest
     first. ``since`` and ``until`` window on creation time, ``until``
     exclusive, though a run still going is listed however old it is. ``q``
-    matches error messages, including an index attempt's document errors,
-    ``errors`` keeps only runs with document errors, open or resolved,
-    ``superseded`` leaves out or keeps the failed runs a newer run of their
-    kind followed, and ``resolved`` the runs an admin resolved."""
+    matches error messages, including an index attempt's document errors and
+    a group sync's failed users and groups, ``errors`` keeps only runs with
+    such errors, open or resolved, ``superseded`` leaves out or keeps the
+    failed runs a newer run of their kind followed, and ``resolved`` the runs
+    an admin resolved."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     cc_pair = get_readable_connector_credential_pair_for_user(
         cc_pair_id, db_session, user

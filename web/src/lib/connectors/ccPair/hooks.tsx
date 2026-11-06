@@ -10,6 +10,7 @@ import {
   resolveErrorsWithoutRetry,
   resolveMatchingRuns,
   setCCPairStatus,
+  type FailedItemsRoute,
 } from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
@@ -849,12 +850,16 @@ export function useResolveRunErrors() {
     }
   }
 
-  // Closes these errors without a reindex. Retry Doc still takes them.
-  async function resolveWithoutRetry(ccPairId: number, errorIds: number[]) {
+  // Closes these errors without a reindex. Retry Doc still takes an index error.
+  async function resolveWithoutRetry(
+    ccPairId: number,
+    errorIds: number[],
+    route: FailedItemsRoute
+  ) {
     if (resolving) return;
     setResolving(true);
     try {
-      await resolveErrorsWithoutRetry(ccPairId, errorIds);
+      await resolveErrorsWithoutRetry(ccPairId, errorIds, route);
       await refreshFeeds([ccPairId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

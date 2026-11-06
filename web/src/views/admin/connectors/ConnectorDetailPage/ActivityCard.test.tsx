@@ -1,7 +1,13 @@
 /** FE-9: a message card's identity, footer chips and actions, rendered in the activity panel over the faked feed routes. */
 import { render, screen, waitFor, within } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
-import { SvgCheckAll, SvgCheckSquare, SvgRefreshCw } from "@opal/icons";
+import {
+  SvgCheckAll,
+  SvgCheckSquare,
+  SvgRefreshCw,
+  SvgUser,
+  SvgUsers,
+} from "@opal/icons";
 import englishMessages from "@/i18n/messages/en.json";
 import type { ActivityScope } from "@/lib/connectors/ccPair/hooks";
 import { getSourceMetadata } from "@/lib/connectors/utils";
@@ -197,6 +203,49 @@ describe("AC-5: footer chips", () => {
     expect(chipTexts(card)).toEqual(["Stack Trace"]);
     expect(card).not.toHaveTextContent(/failed to sync/);
     expect(chipTexts(await shownCard(GROUP_SYNC))).toEqual(["Stack Trace"]);
+  });
+
+  it("AC-5: a group sync shows its failed users and groups after Stack Trace, each with its icon, and no chip at zero; a doc sync shows none", async () => {
+    const USERS_AND_GROUPS = groupSyncRun({
+      id: 702,
+      status: "completed_with_errors",
+      minutesAgo: 3,
+      trace: "Traceback: two users",
+      failedUsers: 2,
+      failedGroups: 1,
+      openErrors: 1,
+    });
+    const GROUPS_ONLY = groupSyncRun({
+      id: 703,
+      status: "completed_with_errors",
+      minutesAgo: 5,
+      failedGroups: 3,
+      openErrors: 3,
+    });
+    installActivityFeed([USERS_AND_GROUPS, GROUPS_ONLY, PERM_SYNC]);
+    renderPanel();
+    const card = await shownCard(USERS_AND_GROUPS);
+
+    await waitFor(() =>
+      expect(chipTexts(card)).toEqual([
+        "Stack Trace",
+        "2 users failed to sync",
+        "1 group failed to sync",
+      ])
+    );
+    const usersChip = within(card).getByRole("button", {
+      name: "2 users failed to sync",
+    });
+    const groupsChip = within(card).getByRole("button", {
+      name: "1 group failed to sync",
+    });
+    expect(holdsIcon(usersChip, referencePaths(SvgUser))).toBe(true);
+    expect(holdsIcon(groupsChip, referencePaths(SvgUsers))).toBe(true);
+
+    expect(chipTexts(await shownCard(GROUPS_ONLY))).toEqual([
+      "3 groups failed to sync",
+    ]);
+    expect(await shownCard(PERM_SYNC)).not.toHaveTextContent(/failed to sync/);
   });
 });
 

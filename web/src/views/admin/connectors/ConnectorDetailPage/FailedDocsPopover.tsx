@@ -22,9 +22,16 @@ import {
   SvgExternalLink,
   SvgFile,
   SvgRefreshCw,
+  SvgUser,
+  SvgUsers,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import type { IndexAttemptError } from "@/lib/connectors/types";
+import type { FailedItemsRoute } from "@/lib/ccPair";
+import type {
+  IndexAttemptError,
+  SyncAttemptError,
+  SyncEntityKind,
+} from "@/lib/connectors/types";
 import {
   useLoadMorePages,
   useResolveRunErrors,
@@ -41,22 +48,99 @@ import {
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/shared/search";
 
-// The errors route's largest page.
+// The errors and sync-errors routes' largest page.
 const PAGE_SIZE = 100;
 const CLAMPED_LINES = 5;
 // Hidden until the row is hovered or focused. Touch screens always show it.
 const ON_ROW_HOVER =
   "opacity-0 no-hover:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100";
 
+/** What the list holds: an index attempt's failed documents and entities, or a group sync's failed users or groups. */
+export type FailedItemsKind = "docs" | "users" | "groups";
+
+interface FailedItemsConfig {
+  icon: IconFunctionComponent;
+  route: FailedItemsRoute;
+  /** Keys under `admin.connector.activity`. */
+  title: string;
+  search: string;
+  empty: string;
+}
+
+const KINDS = {
+  docs: {
+    icon: SvgFile,
+    route: "errors",
+    title: "docs.title",
+    search: "docs.search.placeholder",
+    empty: "docs.empty",
+  },
+  users: {
+    icon: SvgUser,
+    route: "sync-errors",
+    title: "syncErrors.users.title",
+    search: "syncErrors.users.search",
+    empty: "syncErrors.users.empty",
+  },
+  groups: {
+    icon: SvgUsers,
+    route: "sync-errors",
+    title: "syncErrors.groups.title",
+    search: "syncErrors.groups.search",
+    empty: "syncErrors.groups.empty",
+  },
+} as const satisfies Record<FailedItemsKind, FailedItemsConfig>;
+
+const SYNC_ENTITY_KINDS = {
+  users: "user",
+  groups: "group",
+} satisfies Record<Exclude<FailedItemsKind, "docs">, SyncEntityKind>;
+
+/** What a row reads. An index error is one as it is. A failed user or group has no document, so it never retries. */
+type FailedItem = Pick<
+  IndexAttemptError,
+  | "id"
+  | "time_created"
+  | "failure_message"
+  | "is_resolved"
+  | "resolved_reason"
+  | "resolved_by_index_attempt_id"
+  | "document_id"
+  | "document_link"
+  | "document_name"
+  | "entity_id"
+>;
+
+function isSyncError(
+  error: IndexAttemptError | SyncAttemptError
+): error is SyncAttemptError {
+  return "entity_kind" in error;
+}
+
+function syncItem(error: SyncAttemptError): FailedItem {
+  return {
+    id: error.id,
+    time_created: error.time_created,
+    failure_message: error.failure_message,
+    is_resolved: error.is_resolved,
+    resolved_reason: error.resolved_reason,
+    resolved_by_index_attempt_id: null,
+    document_id: null,
+    document_link: null,
+    document_name: error.entity_name,
+    entity_id: error.entity_id,
+  };
+}
+
 type ErrorGroup = "open" | "withoutRetry" | "closed";
 
 /** Closed by a run, a retry or a legacy resolve; resolved without retry (Retry Doc still takes it); or open. */
-function errorGroup(error: IndexAttemptError): ErrorGroup {
+function errorGroup(error: FailedItem): ErrorGroup {
   if (error.is_resolved) return "closed";
   return error.resolved_reason === "without_retry" ? "withoutRetry" : "open";
 }
 
-function errorKey(error: IndexAttemptError): number {
+function errorKey(error: { id: number }): number {
   return error.id;
 }
 
@@ -84,7 +168,7 @@ function RowIconButton({ icon, label, ...rest }: RowIconButtonProps) {
 
 interface FailedDocActionsProps {
   ccPairId: number;
-  error: IndexAttemptError;
+  error: FailedItem;
   canRetry: boolean;
   canResolveErrors: boolean;
   busy: boolean;
@@ -143,10 +227,12 @@ function FailedDocActions({
     case "withoutRetry":
       return (
         <Section width="fit" height="fit" gap={1} padding={0.5}>
-          {/* A button only for its tooltip and accessible name. The row stays retryable, so Retry Doc is its one action. */}
+          {/* A button only for its tooltip and accessible name. Retry Doc, on a row with a document, is its one action. */}
           <RowIconButton
             icon={SvgCheckSquare}
-            label={t("docs.resolvedWithoutRetry")}
+            label={
+              canRetryDoc ? t("docs.resolvedWithoutRetry") : t("tags.resolved")
+            }
           />
           {retry && (
             <Section width="fit" height="fit" className={ON_ROW_HOVER}>
@@ -174,8 +260,13 @@ function FailedDocActions({
   }
 }
 
+interface FailedDocIdentityProps {
+  error: FailedItem;
+  icon: IconFunctionComponent;
+}
+
 /** "{title} ({id})" on one line: the title truncates first, the id keeps up to 120 px. Only the id when the title is unknown or hidden. */
-function FailedDocIdentity({ error }: { error: IndexAttemptError }) {
+function FailedDocIdentity({ error, icon: Icon }: FailedDocIdentityProps) {
   const t = useTranslations("admin.connector.activity.docs");
   const id = error.document_id ?? error.entity_id;
   if (id === null) {
@@ -198,7 +289,7 @@ function FailedDocIdentity({ error }: { error: IndexAttemptError }) {
       className="min-w-0 max-w-60"
     >
       <Section width="fit" height="fit" padding={0.5}>
-        <SvgFile size={12} className="stroke-text-02" />
+        <Icon size={12} className="stroke-text-02" />
       </Section>
       {title !== null && (
         <Section
@@ -248,8 +339,11 @@ function FailedDocIdentity({ error }: { error: IndexAttemptError }) {
   );
 }
 
-/** One failed item, a document or a whole entity: when, which, why, and its actions. */
-function FailedDocRow(props: FailedDocActionsProps) {
+/** One failed item, a document, a whole entity, a user or a group: when, which, why, and its actions. */
+function FailedDocRow({
+  icon,
+  ...props
+}: FailedDocActionsProps & { icon: IconFunctionComponent }) {
   const { error } = props;
   const t = useTranslations("admin.connector.activity.docs");
   const [expanded, setExpanded] = useState(false);
@@ -277,7 +371,7 @@ function FailedDocRow(props: FailedDocActionsProps) {
         <Text font="secondary-mono" color={tone}>
           {formatDateTimeLog(error.time_created)}
         </Text>
-        <FailedDocIdentity error={error} />
+        <FailedDocIdentity error={error} icon={icon} />
       </Section>
       {/* The toggle follows the clamped text, so "More" sits right after the ellipsis. */}
       <Section
@@ -316,7 +410,9 @@ function FailedDocRow(props: FailedDocActionsProps) {
 
 export interface FailedDocsPopoverContentProps {
   ccPairId: number;
-  indexAttemptId: number;
+  /** The index attempt for `docs`, the group sync for `users` and `groups`. */
+  attemptId: number;
+  kind: FailedItemsKind;
   /** Whether the viewer may re-fetch single documents of this pair. */
   canResolve: boolean;
   /** Whether Retry All Docs shows: the viewer may retry and the run has open documents, which the loaded rows cannot tell. Default: `canResolve`. */
@@ -326,7 +422,10 @@ export interface FailedDocsPopoverContentProps {
   /** Retries these errors by a targeted reindex, or every open error of the attempt when `null`. */
   onResolve: (errorIds: number[] | null) => void;
   /** Closes these errors without a reindex and refreshes the feeds. Default: the list's own resolve. */
-  onResolveWithoutRetry?: (errorIds: number[]) => Promise<void>;
+  onResolveWithoutRetry?: (
+    errorIds: number[],
+    route: FailedItemsRoute
+  ) => Promise<void>;
   /** A retry or resolve is in flight, so the actions wait for it. */
   resolving: boolean;
 }
@@ -334,7 +433,8 @@ export interface FailedDocsPopoverContentProps {
 /** The searchable list. It lives inside the content, so a closed popover fetches nothing. */
 function FailedDocsBody({
   ccPairId,
-  indexAttemptId,
+  attemptId,
+  kind,
   canResolve,
   canRetryAll = canResolve,
   canResolveErrors = canResolve,
@@ -345,30 +445,42 @@ function FailedDocsBody({
   const t = useTranslations("admin.connector.activity");
   // Serves a panel rendered without a card, which passes no `onResolveWithoutRetry`.
   const fallback = useResolveRunErrors();
+  const { icon, route } = KINDS[kind];
   const resolveWithoutRetry =
     onResolveWithoutRetry ??
-    ((errorIds: number[]) => fallback.resolveWithoutRetry(ccPairId, errorIds));
+    ((errorIds: number[], via: FailedItemsRoute) =>
+      fallback.resolveWithoutRetry(ccPairId, errorIds, via));
   const [searchInput, setSearchInput] = useState("");
   const q = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
-  const pages = useLoadMorePages<IndexAttemptError>(
+  const pages = useLoadMorePages<IndexAttemptError | SyncAttemptError>(
     (pageIndex) =>
-      SWR_KEYS.ccPairAttemptErrors(ccPairId, {
-        indexAttemptId,
-        q,
-        pageNum: pageIndex,
-        pageSize: PAGE_SIZE,
-      }),
+      kind === "docs"
+        ? SWR_KEYS.ccPairAttemptErrors(ccPairId, {
+            indexAttemptId: attemptId,
+            q,
+            pageNum: pageIndex,
+            pageSize: PAGE_SIZE,
+          })
+        : SWR_KEYS.ccPairSyncErrors(ccPairId, {
+            attemptId,
+            entityKind: SYNC_ENTITY_KINDS[kind],
+            q,
+            pageNum: pageIndex,
+            pageSize: PAGE_SIZE,
+          }),
     errorKey,
     PAGE_SIZE,
     RUNS_POLL_MS
   );
-  const { items } = pages;
-  // The route orders by state, so the resolved groups start at the first row that is not open.
+  const items: FailedItem[] = pages.items.map((error) =>
+    isSyncError(error) ? syncItem(error) : error
+  );
+  // Both routes order by state, so the resolved groups start at the first row that is not open.
   const firstResolved = items.findIndex((item) => errorGroup(item) !== "open");
   const busy = resolving || fallback.resolving;
 
   async function resolveRow(errorId: number) {
-    await resolveWithoutRetry([errorId]);
+    await resolveWithoutRetry([errorId], route);
     await pages.mutate();
   }
 
@@ -392,7 +504,7 @@ function FailedDocsBody({
           <InputTypeIn
             icon="search"
             variant="internal"
-            placeholder={t("docs.search.placeholder")}
+            placeholder={t(KINDS[kind].search)}
             maxLength={SEARCH_MAX_LENGTH}
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
@@ -426,7 +538,7 @@ function FailedDocsBody({
       ) : items.length === 0 ? (
         <Section padding={1} height="fit">
           <Text font="secondary-body" color="text-03">
-            {q !== "" ? t("empty.filtered") : t("docs.empty")}
+            {q !== "" ? t("empty.filtered") : t(KINDS[kind].empty)}
           </Text>
         </Section>
       ) : (
@@ -443,6 +555,7 @@ function FailedDocsBody({
               )}
               <FailedDocRow
                 ccPairId={ccPairId}
+                icon={icon}
                 error={item}
                 canRetry={canResolve}
                 canResolveErrors={canResolveErrors}
@@ -465,17 +578,17 @@ function FailedDocsBody({
   );
 }
 
-/** One attempt's errors, open then resolved, documents and whole entities, under its card. Radix mounts the content only while open, so nothing is fetched until then. */
+/** One attempt's errors, open then resolved, under its card: an index attempt's documents and whole entities, or a group sync's users or groups. Radix mounts the content only while open, so nothing is fetched until then. */
 export default function FailedDocsPopoverContent({
   placement,
   ...props
 }: FailedDocsPopoverContentProps & { placement: PopoverPlacement }) {
-  const t = useTranslations("admin.connector.activity.docs");
+  const t = useTranslations("admin.connector.activity");
   return (
     <Popover.Content
       width={160}
       {...PLACEMENT_PROPS[placement]}
-      aria-label={t("title")}
+      aria-label={t(KINDS[props.kind].title)}
     >
       <FailedDocsBody {...props} />
     </Popover.Content>

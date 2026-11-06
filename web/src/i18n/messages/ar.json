@@ -3206,6 +3206,8 @@
           "indexingItems": "{count, plural, zero {لم يفشل أي عنصر} one {فشل عنصر واحد} two {فشل عنصران} few {فشلت # عناصر} many {فشل # عنصرًا} other {فشل # عنصر}}",
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
+          "users": "{count, plural, one {تعذرت مزامنة مستخدم واحد} other {تعذرت مزامنة # مستخدمين}}",
+          "groups": "{count, plural, one {تعذرت مزامنة مجموعة واحدة} other {تعذرت مزامنة # مجموعات}}",
           "resolved": "تم الحل",
           "superseded": "مُستبدَل"
         },
@@ -3235,6 +3237,18 @@
           "resolvedGroup": "الأخطاء التي تم حلها",
           "resolvedWithoutRetry": "تم الحل دون إعادة المحاولة",
           "resolvedByLaterRun": "تم الحل في تشغيل لاحق"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "المستخدمون الفاشلون",
+            "search": "ابحث في المستخدمين…",
+            "empty": "لا يوجد مستخدمون فاشلون"
+          },
+          "groups": {
+            "title": "المجموعات الفاشلة",
+            "search": "ابحث في المجموعات…",
+            "empty": "لا توجد مجموعات فاشلة"
+          }
         },
         "trace": {
           "header": "تتبع المكدس • معرّف التشغيل: {id}",
