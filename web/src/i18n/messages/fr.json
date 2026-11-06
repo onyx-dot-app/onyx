@@ -7428,37 +7428,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Ajouter un connecteur",
       "connectorCreated": {
         "toast": "Connecteur créé avec succès"
       },
       "overview": {
-        "connectors": {
-          "caption": "En cours d'indexation / actifs",
-          "label": "Connecteurs"
-        },
-        "documents": {
-          "caption": "Dans l'index",
-          "label": "Documents",
-          "tooltip": "Additionne les documents de chaque connecteur : un document présent dans deux connecteurs compte deux fois."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "Impossible de charger la vue d'ensemble.",
-        "processed": {
-          "caption": "Traités sur la période",
-          "label": "Documents",
-          "tooltip": "Une estimation, car le total de chaque exécution est réparti uniformément sur sa durée. Un document compte à chaque fois qu'une exécution le traite, échecs compris, ce chiffre peut donc dépasser le nombre de documents de l'index."
-        }
+        "activeConnectors": "Connecteurs actifs",
+        "pausedConnectors": "Connecteurs en pause",
+        "indexingConnectors": "Connecteurs en cours d'indexation",
+        "loadError": "Impossible de charger la vue d'ensemble."
       },
       "activities": {
         "title": "Activités",
-        "history": "Historique complet de l'activité",
-        "viewLogs": "Afficher les journaux",
         "panel": {
           "title": "Activités",
           "close": "Fermer le panneau",
           "pairTitle": "Historique de l'activité de {name}"
+        },
+        "panelButton": {
+          "show": "Afficher les activités",
+          "hide": "Masquer les activités"
         }
       },
       "list": {

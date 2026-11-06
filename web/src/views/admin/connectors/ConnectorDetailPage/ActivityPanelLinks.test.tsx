@@ -98,6 +98,19 @@ describe("useActivityChartLinks", () => {
     expect(result.current.panel.focusAttemptId).toBeNull();
     expect(result.current.chart.hoveredAttemptId).toBeNull();
   });
+
+  it("keeps a focused card's row lifted after the pointer hovers and leaves another card", () => {
+    const { result } = renderHook(() => useActivityChartLinks());
+
+    act(() => result.current.panel.onFocusPair(5));
+    expect(result.current.liftedPairId).toBe(5);
+    act(() => result.current.panel.onHoverPair(6));
+    expect(result.current.liftedPairId).toBe(6);
+    act(() => result.current.panel.onHoverPair(null));
+    expect(result.current.liftedPairId).toBe(5);
+    act(() => result.current.panel.onFocusPair(null));
+    expect(result.current.liftedPairId).toBeNull();
+  });
 });
 
 describe("Past Activities", () => {
