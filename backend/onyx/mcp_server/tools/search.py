@@ -432,7 +432,7 @@ async def search_indexed_documents(
         return {"results": results}
     except Exception as err:
         logger.error("Onyx MCP Server: Document search error: %s", err, exc_info=True)
-        return _error_payload(f"Document search failed: {str(err)}")
+        return _error_payload(f"Document search failed: {err!r}")
     finally:
         record_mcp_server_tool_outcome(tool, _start, outcome)
         if result_count is not None:
@@ -489,7 +489,7 @@ async def search_web(
     except Exception as e:
         logger.error("Onyx MCP Server: Web search error: %s", e, exc_info=True)
         return {
-            "error": f"Web search failed: {str(e)}",
+            "error": f"Web search failed: {e!r}",
             "results": [],
             "query": query,
         }
@@ -547,6 +547,6 @@ async def open_urls(
         }
     except Exception as err:
         logger.error("Onyx MCP Server: URL fetch error: %s", err, exc_info=True)
-        return _error_payload(f"URL fetch failed: {str(err)}")
+        return _error_payload(f"URL fetch failed: {err!r}")
     finally:
         record_mcp_server_tool_outcome(tool, _start, outcome)
