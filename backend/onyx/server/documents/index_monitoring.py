@@ -337,13 +337,14 @@ def get_indexing_connectors(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(20, ge=1, le=_CONNECTORS_MAX_PAGE_SIZE),
     q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
-    status: IndexingConnectorStatus | None = Query(None),
+    status: Annotated[list[IndexingConnectorStatus] | None, Query()] = None,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> IndexingConnectorsResponse:
-    """The readable pairs page, sorted by rank, then name. ``q`` matches the name."""
+    """The readable pairs page, sorted by rank, then name. ``q`` matches the
+    name, and ``status`` keeps the pairs in any of its buckets."""
     pairs = _readable_cc_pairs(db_session, user)
     latest = _latest_index_attempts(db_session)
     syncing_ids = get_cc_pair_ids_with_running_permission_sync(
@@ -367,7 +368,7 @@ def get_indexing_connectors(
     filtered = [
         cc_pair
         for cc_pair in searched
-        if status is None or statuses[cc_pair.id] == status
+        if status is None or statuses[cc_pair.id] in status
     ]
     # Over every matching pair, not the page, since the open-errors rank sorts across pages.
     open_error_counts = _open_error_counts(db_session, latest, filtered)

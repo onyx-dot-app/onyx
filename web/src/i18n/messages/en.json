@@ -3080,8 +3080,6 @@
           "title": "No recent indexing runs",
           "filteredTitle": "No runs match these filters.",
           "pastRuns": "{count, plural, one {# Past Run} other {# Past Runs}}",
-          "view": "View",
-          "viewAria": "{count, plural, one {View # past run} other {View # past runs}}",
           "description": "Runs are scheduled in the background and may take a moment to appear."
         },
         "units": "{count, plural, one {run} other {runs}}",
@@ -7487,12 +7485,12 @@
         },
         "statusFilter": {
           "label": "Status",
-          "all": "All Status"
+          "all": "All Status",
+          "running": "In Progress"
         },
         "counts": {
           "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
-          "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
-          "syncing": "{count, plural, one {# connector syncing} other {# connectors syncing}}",
+          "running": "{indexing, plural, other {# indexing}}, {syncing, plural, other {# syncing}}",
           "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
           "paused": "{count, plural, one {# connector paused} other {# connectors paused}}",
           "scheduled": "{count, plural, one {# connector scheduled} other {# connectors scheduled}}",

@@ -1,4 +1,4 @@
-/** The status page's connector list: status pills in rank order, foldable source groups with full counts, and the error button's focus request. */
+/** The status page's connector list: status pills in rank order with one running pill, foldable source groups with full counts, and the error button's focus request. */
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import {
   ConnectorCredentialPairStatus,
@@ -162,8 +162,22 @@ describe("ConnectorList", () => {
     const counts = pills.map((pill) =>
       Number((pill.textContent ?? "").replace(/[^\d]/g, ""))
     );
-    // indexing, syncing, failed, (deleting has none), scheduled, indexed, paused
-    expect(counts).toEqual([2, 7, 1, 3, 5, 4]);
+    // running (indexing + syncing), failed, (deleting has none), scheduled, indexed, paused
+    expect(counts).toEqual([9, 1, 3, 5, 4]);
+  });
+
+  it("D-98: one running pill counts indexing plus syncing and names both counts", async () => {
+    renderList();
+    await loaded();
+
+    const running = screen.getByRole("button", {
+      name: "2 indexing, 7 syncing",
+    });
+    expect(running).toHaveTextContent(/^9$/);
+    expect(running).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.queryByRole("button", { name: /connectors? (indexing|syncing)$/ })
+    ).not.toBeInTheDocument();
   });
 
   it("AC-5: draws one divider per source on the page with the full count from source_counts", async () => {

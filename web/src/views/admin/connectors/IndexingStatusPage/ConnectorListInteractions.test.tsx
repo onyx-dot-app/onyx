@@ -1,4 +1,4 @@
-/** The toolbar pills filter the list by status and toggle off, a private row whose groups the viewer cannot see reads "Private", one row opens at a time, and an expanded row with no runs in its window points to the older ones. */
+/** The toolbar pills filter the list by status and toggle off, one running pill covers indexing and syncing, a private row whose groups the viewer cannot see reads "Private", one row opens at a time, and an expanded row with no runs in its window points to the older ones. */
 import {
   copy,
   makeConnectorRow,
@@ -92,7 +92,8 @@ beforeEach(() => {
     if (url.pathname !== CONNECTORS_PATH) {
       return new Promise<Response>(() => {});
     }
-    statusParams.push(url.searchParams.get("status"));
+    // The running pill sends both live buckets as repeated params.
+    statusParams.push(url.searchParams.getAll("status").join(",") || null);
     return jsonResponse(page);
   }) as typeof fetch;
 });
@@ -132,6 +133,54 @@ describe("ConnectorList pills", () => {
     await waitFor(() =>
       expect(statusParams.slice(callsBefore)).toContain(null)
     );
+  });
+});
+
+describe("ConnectorList running pill", () => {
+  it("filters to indexing and syncing together, shows it pressed, and clears on a second click", async () => {
+    page = makeConnectorsPage([
+      makeConnectorRow({ cc_pair_id: 1, status: "indexing" }),
+      makeConnectorRow({ cc_pair_id: 2, status: "syncing" }),
+    ]);
+    renderList();
+    const name = "1 indexing, 1 syncing";
+    const pill = await screen.findByRole("button", { name });
+    expect(pill).toHaveTextContent(/^2$/);
+
+    await setupUser().click(pill);
+    await waitFor(() => expect(statusParams).toContain("indexing,syncing"));
+    expect(screen.getByRole("button", { name })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByText("In Progress")).toBeInTheDocument();
+
+    const callsBefore = statusParams.length;
+    await setupUser().click(screen.getByRole("button", { name }));
+    await waitFor(() =>
+      expect(statusParams.slice(callsBefore)).toContain(null)
+    );
+  });
+
+  it("shows one pill when only a sync runs", async () => {
+    page = makeConnectorsPage([makeConnectorRow({ status: "syncing" })]);
+    renderList();
+    const pill = await screen.findByRole("button", {
+      name: "0 indexing, 1 syncing",
+    });
+    expect(pill).toHaveTextContent(/^1$/);
+    expect(
+      screen.queryByRole("button", { name: /connectors? (indexing|syncing)$/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it("draws no running pill when nothing indexes or syncs", async () => {
+    page = makeConnectorsPage([makeConnectorRow({ status: "failed" })]);
+    renderList();
+    await screen.findByRole("button", { name: "1 connector failed" });
+    expect(
+      screen.queryByRole("button", { name: /indexing|syncing/ })
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -182,7 +231,7 @@ describe("ConnectorList rows", () => {
     expect(screen.queryByTestId("connector-runs")).toBeNull();
   });
 
-  it("points an expanded row with no runs in its window to the older runs, and shows them on View", async () => {
+  it("points an expanded row with no runs in its window to the older runs, and shows them from the past runs row", async () => {
     page = makeConnectorsPage([makeConnectorRow()]);
     renderList();
     await setupUser().click(
@@ -192,7 +241,7 @@ describe("ConnectorList rows", () => {
     expect(await screen.findByText("120 Past Runs")).toBeInTheDocument();
     expect(screen.queryAllByTestId("run-row")).toHaveLength(0);
     await setupUser().click(
-      screen.getByRole("button", { name: "View 120 past runs" })
+      screen.getByRole("button", { name: /120 Past Runs/ })
     );
 
     expect(await screen.findAllByTestId("run-row")).toHaveLength(1);
